@@ -22,7 +22,7 @@ import {
  * to the permission-checked /api/apps/<key>/bridge route on the user's behalf.
  */
 
-interface BundleResponse {
+export interface BundleResponse {
   entry: string
   entryHtml: string
   /** path → data: URL for every non-entry asset (css/js/img/font). */
@@ -32,9 +32,11 @@ interface BundleResponse {
 export function AppFrame({
   appKey,
   context,
+  previewBundle,
 }: {
   appKey: string
   context: BridgeContext
+  previewBundle?: BundleResponse
 }) {
   const t = useTranslations('apps.frame')
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -43,6 +45,7 @@ export function AppFrame({
 
   // Fetch + assemble the sandboxed document.
   useEffect(() => {
+    if (previewBundle) { setBundle(previewBundle); return }
     let cancelled = false
     setBundle(null)
     setError(null)
@@ -56,7 +59,7 @@ export function AppFrame({
     return () => {
       cancelled = true
     }
-  }, [appKey])
+  }, [appKey, previewBundle])
 
   const srcDoc = useMemo(() => {
     if (!bundle) return null
@@ -76,6 +79,7 @@ export function AppFrame({
       const post = (ok: boolean, payload: unknown) =>
         iframe.contentWindow?.postMessage(makeBridgeResult(req.id, ok, payload), '*')
 
+      if (previewBundle) { post(false, 'Draft preview does not execute backend actions or access live data'); return }
       if (!isBridgeMethod(req.method)) {
         post(false, `unknown bridge method: ${req.method}`)
         return
@@ -96,7 +100,7 @@ export function AppFrame({
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [appKey])
+  }, [appKey, previewBundle])
 
   if (error) {
     return (

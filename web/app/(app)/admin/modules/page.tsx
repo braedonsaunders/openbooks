@@ -1,6 +1,16 @@
+import { notFound } from 'next/navigation'
+import { ApplicationError } from '@/lib/application/errors'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { UrlDrawer } from '@openbooks/ui'
+import { ExtensionRequest } from './ExtensionRequest'
+import { AppDrawer } from '../apps/AppDrawer'
+import { loadAdminApps } from '../apps/view'
+import { ExtensionReview } from './ExtensionReview'
+import { getExtensionDraft } from '@/lib/application/extensions'
+import { applicationContextFromSession } from '@/lib/application/context'
+import { requirePermission } from '@/lib/authz'
+import { isUuid } from '@/lib/list-params'
 import { ModuleActions } from './ModuleActions'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { adminModulesSpec, loadAdminModules, type AdminModulesData } from './view'
@@ -12,6 +22,10 @@ async function ModuleDrawer({ data }: { data: AdminModulesData }) {
   const t = await getTranslations('admin.modules')
   const drawer = data.drawer
   if (!data.drawerOpen || !drawer) return null
+  if (drawer.kind === 'app') {
+    const appData = await loadAdminApps({ app: drawer.key })
+    return appData.drawer ? <AppDrawer {...appData.drawer} closeHref="/admin/modules" /> : null
+  }
   return (
     <UrlDrawer
       open
@@ -150,11 +164,14 @@ export default async function ModulesAdminPage({
   const sp = await searchParams
   const data = await loadAdminModules(sp)
   const t = await getTranslations('admin.modules')
+  const draft = typeof sp.draft === 'string' && isUuid(sp.draft) ? await getExtensionDraft(applicationContextFromSession(await requirePermission('apps.manage'), 'api', crypto.randomUUID()), sp.draft).catch(error => { if (error instanceof ApplicationError && error.status === 404) notFound(); throw error }) : null
   return (
     <>
       <ModuleView spec={adminModulesSpec(data)} data={data} searchParams={sp} trusted />
       <ModuleDrawer data={data} />
-      {sp.new === '1' && !data.drawerOpen && data.canCustomize ? <UrlDrawer open closeHref="/admin/modules" size="xl" title={t('actions.new')}><ModuleActions drawer={null} sandboxes={data.sandboxes} canCustomize /></UrlDrawer> : null}
+      {draft ? <ExtensionReview key={draft.id} draft={draft} /> : null}
+      {sp.import === '1' && !draft && !data.drawerOpen && data.canCustomize ? <UrlDrawer open closeHref="/admin/modules" size="xl" title={t('actions.advanced')}><ModuleActions drawer={null} sandboxes={data.sandboxes} canCustomize={data.canCustomize} /></UrlDrawer> : null}
+      {sp.new === '1' && !draft && !data.drawerOpen && data.canAuthor ? <UrlDrawer open closeHref="/admin/modules" size="xl" title={t('actions.new')}><ExtensionRequest /></UrlDrawer> : null}
     </>
   )
 }

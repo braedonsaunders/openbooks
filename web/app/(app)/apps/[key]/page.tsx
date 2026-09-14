@@ -16,5 +16,6 @@ export default async function AppRuntimePage({
   const { key } = await params
   const sp = (await searchParams) ?? {}
   const data = await loadAppRuntime(key)
+  data.searchParams = sp
   return <ModuleView spec={appRuntimeSpec(data)} data={data} searchParams={sp} trusted />
 }

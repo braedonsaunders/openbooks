@@ -212,7 +212,7 @@ interface AppDetail {
   grantedPermissions: string[]
   version: string | null
   manifest: {
-    frontend?: { entry: string }
+    frontend?: { entry: string; renderer?: 'native' | 'sandbox' }
     endpoints?: { name: string; file: string; method: 'GET' | 'POST' | 'ANY' }[]
   } | null
 }
@@ -231,15 +231,18 @@ export function AppDrawer({
   files,
   runs,
   isPublished,
+  closeHref = '/admin/modules',
 }: {
   app: AppDetail
   files: FileRow[]
   runs: RunRow[]
   isPublished: boolean
+  closeHref?: string
 }) {
   const router = useRouter()
   const t = useTranslations('apps.drawer')
   const tCapabilities = useTranslations('apps.drawer.capabilities')
+  const tExtension = useTranslations('admin.modules')
   const [tab, setTab] = useState<Tab>('overview')
   const [busy, setBusy] = useState(false)
 
@@ -328,7 +331,7 @@ export function AppDrawer({
     const res = await fetch(`/api/apps/${encodeURIComponent(app.key)}`, { method: 'DELETE' })
     if (res.ok) {
       toast.success(t('toasts.uninstalled'))
-      router.push('/admin/apps')
+      router.push(closeHref as never)
       router.refresh()
     } else toast.error(t('errors.uninstallFailed'))
   }
@@ -495,10 +498,23 @@ export function AppDrawer({
     )
   }
 
+  if (app.manifest?.frontend?.renderer === 'native') return <UrlDrawer open closeHref={closeHref} size="xl" title={app.name} description={app.version ?? ''}>
+    <div className="space-y-5">
+      <p>{app.description}</p><Badge variant={app.status === 'installed' ? 'success' : 'outline'}>{app.status}</Badge>
+      <div className="flex flex-wrap gap-2">
+        {app.status === 'installed' ? <Button asChild><Link href={`/apps/${app.key}`}>{t('actions.open')}</Link></Button> : null}
+        <Button asChild variant="outline"><Link href={`/assistant?q=${encodeURIComponent(`Read extension ${app.key} with get_extension_package. Ask what I want changed and prepare an unpublished revision with draft_extension. Do not activate it.`)}`}>{tExtension('draft.revise')}</Link></Button>
+        <Button variant="outline" onClick={() => setStatus(app.status === 'installed' ? 'disabled' : 'installed')}>{app.status === 'installed' ? tExtension('actions.deactivate') : tExtension('actions.reactivate')}</Button>
+      </div>
+      <h3 className="font-semibold">{tExtension('draft.permissions')}</h3><ul className="list-inside list-disc text-sm">{app.grantedPermissions.map(permission => <li key={permission}>{permission}</li>)}</ul>
+      <details><summary>{tExtension('actions.advanced')}</summary><pre className="overflow-auto text-xs">{JSON.stringify(app.manifest, null, 2)}</pre><ul>{files.map(file => <li key={file.path}>{file.path}</li>)}</ul></details>
+    </div>
+  </UrlDrawer>
+
   return (
     <UrlDrawer
       open
-      closeHref="/admin/apps"
+      closeHref={closeHref}
       size="xl"
       title={app.name}
       description={`${app.key}${app.version ? ` · v${app.version}` : ''}`}

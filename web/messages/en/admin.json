@@ -49,8 +49,8 @@
         "description": "Sandboxed automation that runs on ledger events"
       },
       "apps": {
-        "title": "Apps",
-        "description": "Build and install app packages — a sandboxed frontend plus a governed backend"
+        "title": "Extensions",
+        "description": "Build with an agent, review drafts, and manage installed extensions."
       },
       "sandboxes": {
         "title": "Environments",
@@ -3869,9 +3869,9 @@
     }
   },
   "modules": {
-    "title": "Modules",
-    "description": "Installable packages of pages, records, and automation. Review changes, approvals, and complete version history.",
-    "searchPlaceholder": "Search modules…",
+    "title": "Extensions",
+    "description": "Create with an agent, review a draft, and manage installed extensions.",
+    "searchPlaceholder": "Search extensions…",
     "status": "Status",
     "statuses": {
       "installed": "Installed",
@@ -3886,7 +3886,7 @@
       "status": "Status",
       "updated": "Updated"
     },
-    "empty": "No modules match. Create a module or install one from the library.",
+    "empty": "No extensions match. Create an extension to get started.",
     "drawer": {
       "noDescription": "No description.",
       "lifecycle": "Lifecycle",
@@ -3916,7 +3916,7 @@
       "after": "After"
     },
     "actions": {
-      "new": "New module",
+      "new": "New extension",
       "manifest": "Module manifest",
       "reason": "Reason",
       "signature": "Signature (full name)",
@@ -3953,7 +3953,49 @@
       "applyConfirm": "Sign approval for this module version",
       "publish": "Publish to library",
       "publishConfirm": "Publish this module version to the library",
-      "manageApp": "Manage app"
+      "manageApp": "Manage app",
+      "advanced": "Advanced package source"
+    },
+    "request": {
+      "help": "Describe what your team needs. The assistant will build an extension using the shared screens and controls in OpenBooks.",
+      "brief": "What would you like to build?",
+      "placeholder": "For example: an equipment inspection workspace with checklists, notes, and an inspection history.",
+      "reviewHelp": "You can preview and request changes before activating anything. Connected agents can also prepare drafts through the extension tools.",
+      "start": "Build with assistant",
+      "agentInstruction": "Build an extension for this request. Start with describe_extension_vocabulary. Use draft_extension to prepare an unpublished package and give me its review and preview links. Ask only for missing business requirements. Do not activate it until I have reviewed it.",
+      "agentHelp": "How connected agents build extensions",
+      "advanced": "Advanced tools",
+      "import": "Import an existing page-customization package"
+    },
+    "draft": {
+      "title": "Draft review",
+      "failed": "The extension could not be activated.",
+      "previewNotice": "Unpublished preview. Backend actions and live record access are unavailable. No data will be changed.",
+      "unpublished": "This proposal is not active. Review its screens, requested access, and changes before activating it.",
+      "preview": "Preview",
+      "revise": "Request changes",
+      "contents": "Package contents",
+      "recordType": "Record workspace: {name}",
+      "field": "Custom field: {name}",
+      "action": "Backend action: {name}",
+      "files": "{count} package files",
+      "permissions": "Requested access",
+      "noPermissions": "No platform permissions requested.",
+      "source": "Advanced: package source and fingerprint",
+      "confirm": "I have reviewed this version and its requested access.",
+      "activate": "Activate extension",
+      "closed": "This draft has already been applied or replaced.",
+      "changes": "Changes from the installed version",
+      "newPackage": "New extension",
+      "added": "Added",
+      "changed": "Changed",
+      "removed": "Removed",
+      "retainedData": "Removing a definition from the package does not delete existing records or audit history.",
+      "discard": "Discard draft"
+    },
+    "native": {
+      "previewRecords": "Form preview using the proposed record definition. After activation, this workspace uses the shared record list, filters, and drawers.",
+      "existingRecordsPreview": "This screen references an existing record type. Live records are available after activation to users with access."
     }
   }
 }

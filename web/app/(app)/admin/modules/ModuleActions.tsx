@@ -79,7 +79,7 @@ export function ModuleActions({ drawer, sandboxes, canCustomize }: {
       {canCustomize ? drawer.pendingGates.filter(g => g.canApply).map(g => <Button key={g.gateId} size="sm" disabled={busy} onClick={() => sign(g.gateId)}>{t('apply')} {g.version}</Button>) : null}
     </div> : null}
     {canCustomize ? <>
-      <div className="space-y-2"><Label htmlFor="module-manifest">{t('manifest')}</Label><Textarea id="module-manifest" rows={12} className="font-mono text-xs" value={manifest} onChange={e => { setManifest(e.target.value); setDiff(null); setPreviews([]); setResult(null) }} /></div>
+      <details className="space-y-2"><summary className="cursor-pointer text-sm font-medium">{t('advanced')}</summary><div className="space-y-2"><Label htmlFor="module-manifest">{t('manifest')}</Label><Textarea id="module-manifest" rows={12} className="font-mono text-xs" value={manifest} onChange={e => { setManifest(e.target.value); setDiff(null); setPreviews([]); setResult(null) }} /></div></details>
       <div className="space-y-2"><Label htmlFor="module-reason">{t('reason')}</Label><Input id="module-reason" maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></div>
       <div className="flex gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => run('diff')}>{t('diff')}</Button><Button size="sm" disabled={busy || !reason.trim()} onClick={() => run('install')}>{t('install')}</Button></div>
       {sandboxes.length > 0 ? <div className="space-y-2">

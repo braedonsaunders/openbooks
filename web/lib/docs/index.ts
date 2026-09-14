@@ -17,6 +17,7 @@ import { itemRates } from './articles/item-rates'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { propertyManagement } from './articles/property-management'
+import { extensions } from './articles/extensions'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
 import { appApiReference } from './articles/app-api-reference'
@@ -238,6 +239,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   netSuiteBridge,
   apps,
   appBuilder,
+  extensions,
   appApiReference,
   mcpControl,
   scriptingEngine,

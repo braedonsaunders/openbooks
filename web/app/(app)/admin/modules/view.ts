@@ -24,6 +24,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { dateTime } from '../../../../lib/format'
 
 /** Uses the same list composition as admin/apps; the shared UrlDrawer owns authoring and lifecycle actions. */
@@ -91,8 +92,11 @@ export interface AdminModuleDrawer {
 
 export interface AdminModulesData {
   canCustomize: boolean
+  canAuthor: boolean
+  drafts: { id: string; name: string; href: string }[]
   sandboxes: { orgId: string; name: string }[]
   newLabel: string
+  draftLabel: string
   title: string
   description: string
   backHref: string
@@ -134,6 +138,7 @@ export async function loadAdminModules(
   const tHub = await getTranslations('admin.hub')
   const t = await getTranslations('admin.modules')
   const orgId = authz.user.orgId
+  const canAuthor = can(authz, 'admin.customization.manage') && await isFeatureEnabled(orgId, 'apps')
   const params = parseListParams(sp, {
     sort: 'name',
     allowedSorts: ['name'] as const,
@@ -150,6 +155,7 @@ export async function loadAdminModules(
     db.execute(sql`
       select m.key, m.name, m.status, m.updated_at as "updatedAt",
              v.version, v.status as "versionStatus", v.manifest,
+             (select count(*) from app_files f join apps a on a.id=m.app_id and a.org_id=m.org_id where f.org_id=m.org_id and f.version_id=a.active_version_id) as file_count,
              (select count(*) from flow_gates g
                where g.org_id = m.org_id
                  and g.subject_kind = ${MODULE_VERSION_APPROVAL_SUBJECT}
@@ -164,6 +170,11 @@ export async function loadAdminModules(
     db.execute(sql`select status, count(*) as n from modules where org_id = ${orgId} group by 1`),
     db.execute(sql`select count(*) as n from modules m where ${where}`),
   ])
+
+  const drafts = canAuthor ? (await db.execute<{ id: string; name: string }>(sql`
+    select id,bundle->'manifest'->>'name' as name from extension_drafts
+    where org_id=${orgId} and created_by=${authz.user.id} and status='draft' order by created_at desc
+  `)).rows : []
 
   // Drawer payload for the selected module: identity, lifecycle, pending
   // approvals, grant, contents, and the audit evidence — newest first.
@@ -295,8 +306,11 @@ export async function loadAdminModules(
     ? (await db.execute<{ orgId: string; name: string }>(sql`select org_id as "orgId", name from sandboxes where production_org_id = ${orgId} and status = 'ready' order by name`)).rows : []
   return {
     canCustomize: can(authz, 'admin.customization.manage'),
+    canAuthor,
+    drafts: drafts.map(draft => ({ ...draft, href: `/admin/modules?draft=${draft.id}` })),
     sandboxes,
     newLabel: t('actions.new'),
+    draftLabel: t('draft.title'),
     title: t('title'),
     description: t('description'),
     backHref: '/admin',
@@ -324,6 +338,7 @@ export async function loadAdminModules(
       version: string | null
       manifest: unknown
       pending_count: unknown
+      file_count: unknown
     }[]).map((m) => {
       const pending = Number(m.pending_count ?? 0) > 0
       const manifest =
@@ -335,7 +350,7 @@ export async function loadAdminModules(
         name: String(m.name),
         href: buildListDrawerHref('/admin/modules', sp, 'module', String(m.key)),
         versionLabel: m.version ? `v${m.version}` : '—',
-        contributionCount: Array.isArray(manifest?.contributions) ? manifest.contributions.length : 0,
+        contributionCount: Number(m.file_count) || (Array.isArray(manifest?.contributions) ? manifest.contributions.length : 0),
         statusLabel: pending ? t('statuses.awaitingApproval') : t(`statuses.${m.status}`),
         statusVariant: (pending ? 'warning' : m.status === 'installed' ? 'success' : 'outline') as
           | 'success'
@@ -369,7 +384,7 @@ export function adminModulesSpec(data: AdminModulesData): PageSpec {
         back: { href: f('backHref'), label: f('backLabel') },
         title: f('title'),
         description: f('description'),
-        actions: data.canCustomize ? [widget('link-button', { href: '/admin/modules?new=1', label: data.newLabel })] : [],
+        actions: data.canAuthor ? [widget('link-button', { href: '/admin/modules?new=1', label: data.newLabel, iconKey: 'plus' })] : [],
       }),
       grid('flex flex-wrap items-center gap-2', [
         widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
@@ -383,6 +398,10 @@ export function adminModulesSpec(data: AdminModulesData): PageSpec {
       ]),
     ],
     body: [
+      ...(data.drafts.length ? [table({
+        variant: 'app', rows: f('drafts'), rowKey: item('id'),
+        columns: [column(data.draftLabel, link(item('name'), item('href'), LINK_CLASS))],
+      })] : []),
       table({
         variant: 'app',
         rows: f('rows'),

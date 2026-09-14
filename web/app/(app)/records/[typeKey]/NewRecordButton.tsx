@@ -1,5 +1,6 @@
 'use client'
 
+import { buildListDrawerHref } from '@/lib/list-params'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -8,7 +9,7 @@ import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 
 /** Instant-into-draft: allocates the numbered draft record server-side, opens its flyout. */
-export function NewRecordButton({ typeKey, typeName }: { typeKey: string; typeName: string }) {
+export function NewRecordButton({ typeKey, typeName, basePath, currentParams = {} }: { typeKey: string; typeName: string; basePath?: string; currentParams?: Record<string, string | string[] | undefined> }) {
   const t = useTranslations('records.module')
   const tc = useTranslations('common')
   const [busy, setBusy] = useState(false)
@@ -23,7 +24,7 @@ export function NewRecordButton({ typeKey, typeName }: { typeKey: string; typeNa
       setBusy(false)
       return
     }
-    router.push(`/records/${typeKey}?rec=${data.id}`)
+    router.push(buildListDrawerHref(basePath ?? `/records/${typeKey}`, currentParams, 'rec', data.id))
     router.refresh()
     setBusy(false)
   }
