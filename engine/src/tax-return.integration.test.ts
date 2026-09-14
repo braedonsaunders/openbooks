@@ -30,11 +30,14 @@ async function seedTaxedDocument(
   taxCodeId: string,
   amount: string,
   taxAmount: string,
+  tender: { currency?: string; fxRate?: string } = {},
 ): Promise<string> {
   const documentId = randomUUID();
   const lineId = randomUUID();
   const sales = SALES_KINDS.has(kind);
   const accountId = sales ? org.accounts.revenue : org.accounts.cogs;
+  const currency = tender.currency ?? "CAD";
+  const fxRate = tender.fxRate ?? "1";
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into documents
@@ -42,7 +45,7 @@ async function seedTaxedDocument(
          document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
       values (${documentId}, ${org.orgId}, ${kind}, 'draft', ${number}, ${org.subsidiaryId},
               ${sales ? org.customerId : org.vendorId}, ${org.date}, ${org.date},
-              'CAD', '1', ${amount}, ${taxAmount}, ${(Number(amount) + Number(taxAmount)).toFixed(4)})`);
+              ${currency}, ${fxRate}, ${amount}, ${taxAmount}, ${(Number(amount) + Number(taxAmount)).toFixed(4)})`);
     await tx.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
@@ -174,6 +177,56 @@ test("a tax journal in a secondary book does not leak into the return", { skip: 
     // Before the fix the secondary journal doubled both (40.0000 / -40.0000).
     assert.equal(values.get("1"), "20.0000");
     assert.equal(values.get("5"), "-20.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a taxable-base box converts foreign-currency lines at the posted rate", { skip: !DB }, async () => {
+  // Live-Postgres regression: the journal-backed boxes (tax_collected /
+  // tax_paid / tax_amount) sum journal_lines.amount — the kernel's
+  // txn→functional conversion — but the taxable-base box summed
+  // document_lines.amount raw, i.e. in TRANSACTION currency. A USD 200
+  // invoice at 1.35 in a CAD org reported a 200.0000 base next to a 27.0000
+  // collected-tax box. The base must convert each line at the document's
+  // posted header rate (documents.fx_rate), the same rate the kernel applied.
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      insert into currencies (code, name, minor_units)
+      values ('USD', 'US Dollar', 2)
+      on conflict (code) do nothing`);
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'GST-FX', 'FX probe', 'both', 'standard',
+              ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank };
+    await postDocument(
+      await seedTaxedDocument(org, "customer_invoice", "INV-FX", codeId, "200.0000", "20.0000", {
+        currency: "USD",
+        fxRate: "1.3500000000",
+      }),
+      { control },
+    );
+
+    const formCode = "FX-BASE";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'FX base probe', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'BASE', 'Taxable base', ${codeId}, 'taxable_base', 1, 10),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, 'TAX', 'Tax collected', ${codeId}, 'tax_collected', -1, 20)`);
+
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    const values = new Map(result.boxes.map((box) => [box.lineCode, box.value]));
+    // 200 USD × 1.35 = 270 CAD of base; 20 USD × 1.35 = 27 CAD of tax.
+    assert.equal(values.get("BASE"), "270.0000");
+    assert.equal(values.get("TAX"), "27.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -500,9 +500,17 @@ async function computeTaxReturnInSnapshot(
     }
     const salesArray = uuidArray(salesCodes);
     const purchaseArray = uuidArray(purchaseCodes);
+    // Document lines are stored in TRANSACTION currency while every sibling
+    // box in this return sums journal_lines.amount in functional currency.
+    // Convert each line at the document's posted header rate
+    // (documents.fx_rate — the exact txn→functional rate the kernel stamped
+    // when it posted, and the same rate every other downstream reader uses),
+    // rounded per line exactly as the kernel's mulRate converts it. Without
+    // this a foreign-currency invoice lands on the return unconverted next to
+    // a converted collected-tax box.
     const r = (await runner.execute<{ total: string }>(sql`
       select coalesce(sum(
-               case when d.kind in ('customer_credit', 'vendor_credit') then -dl.amount else dl.amount end
+               round(((case when d.kind in ('customer_credit', 'vendor_credit') then -dl.amount else dl.amount end) * d.fx_rate)::numeric, 4)
              ), 0)::text as total
         from document_lines dl
         join documents d on d.id = dl.document_id and d.org_id = dl.org_id
