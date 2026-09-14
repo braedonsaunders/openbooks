@@ -280,12 +280,16 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const allowed = ids?.length ? sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
   const ledgerScope = sql`and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     ${ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`}`
-  const timeScope = ids === null ? sql`` : sql`and exists (
+  // Approved time only, on every labour leg: draft, submitted and rejected
+  // hours are not worked reality — the same approved-only rule as
+  // utilization, project profitability hours and the time drill-down. The
+  // status gate is unconditional; only the subsidiary fence is optional.
+  const timeScope = sql`and t.status = 'approved' ${ids === null ? sql`` : sql`and exists (
     select 1 from parties scope_employee
     left join projects scope_project on scope_project.id = t.project_id and scope_project.org_id = t.org_id
     where scope_employee.id = t.employee_party_id and scope_employee.org_id = t.org_id
       and coalesce(scope_project.subsidiary_id, scope_employee.subsidiary_id) in (${allowed})
-  )`
+  )`}`
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const start = new Date(from + "T00:00:00Z");
