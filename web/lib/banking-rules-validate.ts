@@ -37,6 +37,31 @@ const MAX_SPLIT_LINES = 20
 
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
+/** Split an exact decimal (plain or exponent notation) into integer digits and a base-10 scale. */
+function exactDecimalParts(raw: string): { digits: bigint; scale: number } {
+  let text = raw.trim().toLowerCase()
+  let exp = 0
+  const eIdx = text.indexOf('e')
+  if (eIdx >= 0) {
+    exp = Number.parseInt(text.slice(eIdx + 1), 10)
+    text = text.slice(0, eIdx)
+  }
+  const dot = text.indexOf('.')
+  const int = dot >= 0 ? text.slice(0, dot) : text
+  const frac = dot >= 0 ? text.slice(dot + 1) : ''
+  const digits = BigInt(`${int.replace(/^[+-]/, '') || '0'}${frac}`)
+  return { digits, scale: frac.length - exp }
+}
+
+/** True when the exact decimal sum of `values` exceeds `limit` — no binary-float rounding. */
+function exactDecimalSumExceeds(values: number[], limit: number): boolean {
+  const parts = values.map((v) => exactDecimalParts(String(v)))
+  const limitPart = exactDecimalParts(String(limit))
+  const maxScale = Math.max(limitPart.scale, 0, ...parts.map((p) => p.scale))
+  const at = (p: { digits: bigint; scale: number }) => p.digits * 10n ** BigInt(maxScale - p.scale)
+  return parts.reduce((acc, p) => acc + at(p), 0n) > at(limitPart)
+}
+
 function isUuidLike(v: unknown): v is string {
   return typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 }
@@ -203,6 +228,15 @@ export function validateOutcome(raw: unknown): ValidationResult<RuleOutcome> {
     lines.push(res.value)
   }
   if (remainderCount > 1) return { ok: false, error: 'only one line can be the remainder' }
+  // Percent shares are measured against the same gross the remainder absorbs.
+  // Totals above 100 would drive the remainder (or the last line, without one)
+  // to a flipped sign that still balances numerically — a silent misstatement.
+  // The total is compared as an exact decimal, never a binary float: 33.333 +
+  // 66.667 is exactly 100 and accepted, 60 + 60 is exactly 120 and refused.
+  const percents = lines.flatMap((line) => (line.portion.kind === 'percent' ? [line.portion.value] : []))
+  if (exactDecimalSumExceeds(percents, 100)) {
+    return { ok: false, error: 'percent portions cannot total more than 100' }
+  }
 
   const outcome: Extract<RuleOutcome, { action: 'categorize' }> = { action: 'categorize', version: 2, mode: o.mode, lines }
   if (o.partyId !== undefined && o.partyId !== null && !isUuidLike(o.partyId)) {

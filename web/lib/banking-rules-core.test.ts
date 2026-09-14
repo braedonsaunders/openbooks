@@ -85,6 +85,13 @@ test('date withinDays honours the injected clock', () => {
   assert.equal(evaluateGroup(line({ posted_on: '2026-06-01' }), g, FIXED_NOW), false) // 49 days ago
 })
 
+test('date withinDays never matches lines dated after the clock', () => {
+  const g: RuleConditionGroup = { combinator: 'and', rules: [{ field: 'date', op: 'withinDays', value: 15 }] }
+  assert.equal(evaluateGroup(line({ posted_on: '2026-08-01' }), g, FIXED_NOW), false) // 12 days in the future
+  assert.equal(evaluateGroup(line({ posted_on: '2030-01-01' }), g, FIXED_NOW), false)
+  assert.equal(evaluateGroup(line({ posted_on: '2026-07-20' }), g, FIXED_NOW), true) // today still matches
+})
+
 test('lineMatchesRule evaluates the condition tree', () => {
   assert.equal(lineMatchesRule(line(), { version: 2, match: { combinator: 'and', rules: [{ field: 'flow', op: 'is', value: 'in' }] } }, FIXED_NOW), true)
 })
@@ -141,4 +148,34 @@ test('split: no remainder folds rounding into the last line', () => {
   assert.equal(r[1]!.amount, '-66.6670')
   const sum = r.reduce((a, x) => a + Number(x.amount), 0)
   assert.equal(Math.round(sum * 100) / 100, -100) // still balances despite rounding
+})
+
+test('split: over-allocated percents refuse instead of flipping the remainder', () => {
+  const lines: RuleSplitLine[] = [
+    { accountId: 'a', portion: { kind: 'percent', value: 60 } },
+    { accountId: 'b', portion: { kind: 'percent', value: 60 } },
+    { accountId: 'c', portion: { kind: 'remainder' } },
+  ]
+  // 60 + 60 + remainder on a 100 line would book +20 with the bank's own sign.
+  assert.throws(() => resolveSplitAmounts('100.0000', lines), /over-allocates the line total/)
+})
+
+test('split: fixed portions beyond the line total refuse before posting', () => {
+  const lines: RuleSplitLine[] = [
+    { accountId: 'a', portion: { kind: 'fixed', value: 500 } },
+    { accountId: 'b', portion: { kind: 'remainder' } },
+  ]
+  assert.throws(() => resolveSplitAmounts('100.0000', lines), /over-allocates the line total/)
+})
+
+test('split: even dust-scale overruns refuse rather than flip sign', () => {
+  // Each 50% share of 0.0001 rounds half-up to 0.0001, so the computed
+  // remainder is -0.0001. Dust or not, a wrong-sign remainder never posts —
+  // controlled refusal replaces the flipped line.
+  const lines: RuleSplitLine[] = [
+    { accountId: 'a', portion: { kind: 'percent', value: 50 } },
+    { accountId: 'b', portion: { kind: 'percent', value: 50 } },
+    { accountId: 'c', portion: { kind: 'remainder' } },
+  ]
+  assert.throws(() => resolveSplitAmounts('0.0001', lines), /over-allocates the line total/)
 })
