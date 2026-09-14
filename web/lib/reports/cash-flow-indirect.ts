@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { functionalReportReader } from "./currency-basis";
 import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
@@ -106,6 +106,7 @@ export async function cashFlowIndirect(
   bookId?: string | null,
 ): Promise<CashFlowIndirectResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${to} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   const dim = dimWhere(dims);
   const IF_TYPES = [...CF_INVESTING_TYPES, ...CF_FINANCING_TYPES];
 
@@ -137,18 +138,18 @@ export async function cashFlowIndirect(
   const niBuckets = glSummaryEligibleDims(dims)
     ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [], bookId })
     : null;
-  const ni = (await db.execute<{ ni: string }>(
+  const ni = (await reportDb.execute<{ ni: string }>(
     niBuckets
       // Window P&L from the summary; only months the report boundaries split
       // are read from the lines.
       ? sql`
-          select -coalesce(sum(b.amount), 0) as ni
+          select ${reportDb.censusColumn}, -coalesce(sum(b.amount), 0) as ni
             from ${niBuckets} b
             join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
            where a.type in ${PNL_TYPES}
              ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}`
       : sql`
-          select -coalesce(sum(l.amount), 0) as ni
+          select ${reportDb.censusColumn}, -coalesce(sum(l.amount), 0) as ni
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -164,8 +165,8 @@ export async function cashFlowIndirect(
   const adjustments: CfAdjustmentLine[] = [];
   {
     // (a) Unrealized FX revaluation (paired with the WC origin strip below).
-    const a = (await db.execute<{ impact: string }>(sql`
-      select coalesce(sum(l.amount), 0) as impact
+    const a = (await reportDb.execute<{ impact: string }>(sql`
+      select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as impact
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -180,9 +181,9 @@ export async function cashFlowIndirect(
     // (b) P&L legs of no-bank entries that touch I/F accounts: depreciation
     // and amortization, impairment, non-cash disposal gains/losses. Per
     // account for detail; revaluation origin is excluded (handled at (a)).
-    const b = (await db.execute<{ account_id: string; number: string | null; name: string; impact: string }>(sql`
+    const b = (await reportDb.execute<{ account_id: string; number: string | null; name: string; impact: string }>(sql`
       with ${flaggedCte}
-      select l.account_id, a.number, a.name, sum(l.amount) as impact
+      select ${reportDb.censusColumn}, l.account_id, a.number, a.name, sum(l.amount) as impact
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -209,9 +210,9 @@ export async function cashFlowIndirect(
   //   adjustedDelta = (balance[to] − balance[from−1]) − stripped[window]
   // stripped = re-measurement origins + legs of no-bank entries touching I/F.
   // Asset increases use cash (negative); liability increases provide cash.
-  const wc = (await db.execute<{ account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string }>(sql`
+  const wc = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string }>(sql`
     with ${flaggedCte}
-    select l.account_id, a.number, a.name, a.type,
+    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
            coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as bal_to,
            coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as bal_from,
            coalesce(sum(l.amount) filter (where e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -247,7 +248,7 @@ export async function cashFlowIndirect(
   // investing section presents gross proceeds (NBV movement + gain), matching
   // the disposal add-back in operating. Translation entries are excluded —
   // their non-bank legs are CTA re-measurement, not flows.
-  const contra = (await db.execute<{ account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string }>(sql`
+  const contra = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -261,7 +262,7 @@ export async function cashFlowIndirect(
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
          and e.origin <> 'translation'
     )
-    select l.account_id, a.number, a.name, a.type, e.origin, -sum(l.amount) as cash_effect
+    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type, e.origin, -sum(l.amount) as cash_effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -294,8 +295,8 @@ export async function cashFlowIndirect(
   financing.sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
 
   // FX translation effect on foreign-currency cash balances.
-  const fx = (await db.execute<{ effect: string }>(sql`
-    select coalesce(sum(l.amount), 0) as effect
+  const fx = (await reportDb.execute<{ effect: string }>(sql`
+    select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -323,19 +324,19 @@ export async function cashFlowIndirect(
         bookId,
       })
     : null;
-  const cash = (await db.execute<{ opening: string; closing: string }>(
+  const cash = (await reportDb.execute<{ opening: string; closing: string }>(
     cashBuckets
       // Inception-to-date bank movement from the summary; the two report
       // boundaries are the only months that fall back to the lines.
       ? sql`
-          select coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
+          select ${reportDb.censusColumn}, coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
                  coalesce(sum(b.amount) filter (where b.d <= ${to}), 0) as closing
             from ${cashBuckets} b
             join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
            where a.type = 'asset_bank'
              ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}`
       : sql`
-          select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
+          select ${reportDb.censusColumn}, coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
                  coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')

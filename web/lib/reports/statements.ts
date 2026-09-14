@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { db } from "@openbooks/engine/src/db.ts";
+import { functionalReportReader } from "./currency-basis";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
@@ -32,6 +32,7 @@ export const CREDIT_NORMAL = new Set([
 
 async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = await resolveOrgId(orgId);
+  const reportDb = functionalReportReader(resolvedOrgId, sql`${where} and a.type in ${PNL_TYPES} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   // The qualifying entry set (org + status + the caller's e.* predicates,
   // which reference only e.posting_date / e.org_id) materializes once via an
   // index-only scan and hash-joins to the lines. The predicates MUST live
@@ -40,13 +41,13 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
   // per-line join to journal_entries re-fetched the entry heap for every
   // journal line in the tenant. Statements answer for one accounting book —
   // entries are book-mandatory and an unscoped read would fuse parallel books.
-  const r = (await db.execute(sql`
+  const r = (await reportDb.execute(sql`
     with e as materialized (
       select e.id from journal_entries e
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and ${where}
          and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
-    select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
+    select ${reportDb.censusColumn}, a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
       from accounts a
       left join (journal_lines l join e on e.id = l.entry_id)
@@ -105,7 +106,9 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
  * accountBalances answered from the gl_month_activity summary — same row
  * shape, whole months from the aggregate, split boundary months from lines.
  */
-async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[], bookId?: string | null) {
+async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[], bookId?: string | null, accountTypes?: string[]) {
+  const reportDb = functionalReportReader(orgId, sql`e.posting_date <= ${to} ${from === null ? sql`` : sql`and e.posting_date >= ${from}`}
+    and e.book_id = ${statementBookExpr(orgId, bookId)} and ${dimWhere({ subsidiaryIds })} ${accountTypes ? sql`and a.type in ${accountTypes}` : sql``}`);
   const buckets = glActivityBuckets(orgId, {
     minDate: from,
     maxDate: to,
@@ -120,8 +123,8 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
   // Aggregate the buckets FIRST, then join accounts to the tiny per-account
   // result — joining accounts against the raw union invites a plan that
   // re-executes the union once per account.
-  const r = (await db.execute(sql`
-    select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
+  const r = (await reportDb.execute(sql`
+    select ${reportDb.censusColumn}, a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(s.raw, 0) as raw
       from accounts a
       left join (
@@ -139,7 +142,7 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
 export async function profitAndLoss(from: string, to: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = await resolveOrgId(orgId);
   const rows = glSummaryEligibleDims(dims)
-    ? await summaryAccountBalances(resolvedOrgId, from, to, dims?.subsidiaryIds, bookId)
+    ? await summaryAccountBalances(resolvedOrgId, from, to, dims?.subsidiaryIds, bookId, PNL_TYPES)
     : await accountBalances(
         sql`e.posting_date >= ${from} and e.posting_date <= ${to} and e.org_id = ${resolvedOrgId}`,
         dims,
@@ -195,11 +198,12 @@ export async function balanceSheet(
 
 export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   if (glSummaryEligibleDims(dims)) {
     // Whole months from gl_month_activity, boundary sliver from lines.
     const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [], bookId });
-    const r = (await db.execute(sql`
-      select a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
+    const r = (await reportDb.execute(sql`
+      select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
         from (
           select b.account_id, sum(b.debit_total) as debits, sum(b.credit_total) as credits,
                  sum(b.amount) as balance
@@ -213,14 +217,14 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
     return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
   }
   // Materialized entry set + hash join — see accountBalances.
-  const r = (await db.execute(sql`
+  const r = (await reportDb.execute(sql`
     with e as materialized (
       select id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and posting_date <= ${asOf}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
-    select a.id, a.number, a.name, a.type,
+    select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type,
            sum(case when l.amount > 0 then l.amount else 0 end) as debits,
            sum(case when l.amount < 0 then -l.amount else 0 end) as credits,
            sum(l.amount) as balance
@@ -244,14 +248,15 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
-  const r = (await db.execute(sql`
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${resolvedAsOf} and a.type = ${type} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const r = (await reportDb.execute(sql`
     with e as materialized (
       select id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and posting_date <= ${resolvedAsOf}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
-    select p.id, p.display_name, sum(l.amount) as balance, count(*) as line_count,
+    select ${reportDb.censusColumn}, p.id, p.display_name, sum(l.amount) as balance, count(*) as line_count,
            max(l.due_date) as latest_due
       from journal_lines l
       join e on e.id = l.entry_id

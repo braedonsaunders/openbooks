@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { functionalReportReader } from "./currency-basis";
 import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalIsMaterial, decimalSum, type ExactDecimal } from "../statement-format";
@@ -100,11 +100,12 @@ export async function cashFlow(
   bookId?: string | null,
 ): Promise<CashFlowResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${to} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   const book = statementBookExpr(resolvedOrgId, bookId);
   // Contra movements: non-bank lines on entries that also hit a bank account,
   // grouped by account type. `-sum(amount)` converts debit-signed line amounts
   // into their effect on cash (credit a contra → cash in → positive).
-  const contra = (await db.execute<{ type: string; cash_effect: string }>(sql`
+  const contra = (await reportDb.execute<{ type: string; cash_effect: string }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -117,7 +118,7 @@ export async function cashFlow(
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
     )
-    select a.type, -sum(l.amount) as cash_effect
+    select ${reportDb.censusColumn}, a.type, -sum(l.amount) as cash_effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -155,19 +156,19 @@ export async function cashFlow(
         bookId,
       })
     : null;
-  const cash = (await db.execute<{ opening: string; closing: string }>(
+  const cash = (await reportDb.execute<{ opening: string; closing: string }>(
     cashBuckets
       // Inception-to-date bank movement from the summary; the two report
       // boundaries are the only months that fall back to the lines.
       ? sql`
-          select coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
+          select ${reportDb.censusColumn}, coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
                  coalesce(sum(b.amount) filter (where b.d <= ${to}), 0) as closing
             from ${cashBuckets} b
             join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
            where a.type = 'asset_bank'
              ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}`
       : sql`
-          select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
+          select ${reportDb.censusColumn}, coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
                  coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')

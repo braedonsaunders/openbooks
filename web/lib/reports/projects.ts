@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalCmp, decimalSum, type ExactDecimal } from "../statement-format";
@@ -95,7 +96,15 @@ export async function projectProfitability(
   opts: { dims?: DimFilter; customerId?: string; search?: string; projectScope?: 'active' | 'all'; orgId?: string; bookId?: string | null } = {},
 ): Promise<ProjectProfitResult> {
   const orgId = await resolveOrgId(opts.orgId)
-  const r = (await db.execute<{
+  const reportDb = functionalReportReader(orgId, sql`e.posting_date >= ${from} and e.posting_date <= ${to}
+    and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}
+    and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+    and exists (select 1 from projects prj left join parties customer on customer.id = prj.customer_id and customer.org_id = prj.org_id
+      where prj.id = l.project_id and prj.org_id = ${orgId}
+        ${opts.projectScope === 'all' ? sql`` : sql`and prj.is_active`}
+        ${opts.customerId ? sql`and prj.customer_id = ${opts.customerId}` : sql``}
+        ${opts.search?.trim() ? sql`and (prj.name ilike ${`%${opts.search.trim()}%`} or customer.display_name ilike ${`%${opts.search.trim()}%`})` : sql``})`)
+  const r = (await reportDb.execute<{
       id: string; name: string; customer_id: string | null; customer: string | null; status: string | null; project_type: string | null
       revenue: string; cogs: string; expenses: string; hours: string
     }>(sql`
@@ -122,7 +131,7 @@ export async function projectProfitability(
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
     )
-    select p.id, p.name, p.customer_id, cu.display_name as customer, p.status,
+    select ${reportDb.censusColumn}, p.id, p.name, p.customer_id, cu.display_name as customer, p.status,
            coalesce(pt.key, 'time_and_materials') as project_type,
            coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
            coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
