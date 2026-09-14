@@ -3,6 +3,7 @@ import { db } from "./db.ts";
 import { add, formatMoney } from "./money.ts";
 import { unsealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-error.ts";
+import { isCanadianSin } from "./payroll-roexml.ts";
 import { filingAccountRef, filingAccountsById, type FilingAccountRef } from "./payroll-filing.ts";
 import {
   t4Returns, t4Summary,
@@ -143,7 +144,10 @@ export async function buildT4Xml(
     for (const slip of ret.slips) {
       const sealed = sinByEmployee.get(slip.employeePartyId);
       const sin = sealed ? unsealSecret(sealed) : null;
-      if (!sin || !/^\d{9}$/.test(sin)) {
+      // A SIN carries a Luhn check digit and a US SSN does not reliably pass
+      // it: nine digits alone would transmit a mistyped or foreign identifier
+      // the CRA rejects. Shared with the ROE builder (payroll-roexml.ts).
+      if (!sin || !isCanadianSin(sin)) {
         missingSins.push(slip.employeeName);
         continue;
       }

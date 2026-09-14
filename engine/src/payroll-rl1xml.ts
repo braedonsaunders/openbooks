@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { unsealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-error.ts";
+import { isCanadianSin } from "./payroll-roexml.ts";
 import { rl1Slips, type Rl1Slip } from "./payroll-rl1.ts";
 
 /**
@@ -225,7 +226,9 @@ export async function buildRl1Xml(orgId: string, taxYear: number): Promise<never
   for (const slip of slips) {
     const sealed = sinByEmployee.get(slip.employeePartyId);
     const sin = sealed ? unsealSecret(sealed) : null;
-    if (!sin || !/^\d{9}$/.test(sin)) missingSins.push(slip.employeeName);
+    // Same Luhn gate as the T4 and ROE builders: nine digits alone would
+    // carry a mistyped or foreign identifier into a statutory file.
+    if (!sin || !isCanadianSin(sin)) missingSins.push(slip.employeeName);
   }
   if (missingSins.length > 0) {
     throw new PayrollError(
