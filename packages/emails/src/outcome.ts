@@ -184,15 +184,32 @@ export type DeliveryReconciliation =
  *
  * - One confirmed acceptance closes the job without touching the wire again,
  *   even if later bookkeeping looks confusing — the earliest confirmed id wins.
+ * - A sent record WITHOUT a usable provider id is still acceptance evidence:
+ *   the message may already be delivered, and completing is impossible without
+ *   the id, so it suppresses like uncertainty instead of re-sending blind.
  * - Any unresolved attempt suppresses further transmissions with an explicit
  *   operator-facing reason; nothing here can mint a duplicate email.
  * - Clean lineage (no uncertainty, no acceptance yet) proceeds normally.
  */
 export function reconcileDeliveryAttempts(lineage: readonly AttemptRecord[]): DeliveryReconciliation {
   const byAttempt = [...lineage].sort((a, b) => a.attempt - b.attempt);
+  // The earliest CONFIRMED acceptance wins — confirmed means a usable (non-blank)
+  // provider id. An earlier id-less sent record must not shadow a later confirmed
+  // one: the confirmed id still proves acceptance and closes the delivery.
+  const firstConfirmed = byAttempt.find((r) => r.outcome === "sent" && r.detail?.trim());
+  const usableId = firstConfirmed?.detail?.trim();
+  if (usableId) {
+    return { action: "complete", providerMessageId: usableId };
+  }
   const firstSent = byAttempt.find((r) => r.outcome === "sent");
-  if (firstSent?.detail) {
-    return { action: "complete", providerMessageId: firstSent.detail };
+  if (firstSent) {
+    return {
+      action: "suppress",
+      reason:
+        `attempt ${firstSent.attempt} recorded acceptance without a usable provider message id; whether the message carrying ` +
+        `${EMAIL_DELIVERY_ID_HEADER} was accepted cannot be proven from here — it may have been accepted and ` +
+        `delivered once — so delivery will not be resent until an operator reconciles it`,
+    };
   }
 
   const firstUncertain = byAttempt.find((r) => r.outcome === "uncertain");

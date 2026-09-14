@@ -132,3 +132,59 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
     await dropScratchOrg(org.orgId);
   }
 });
+
+/**
+ * Persistence proof for the crash-gap fix: the full durable path
+ * appendEmailAttemptEvent -> claimEmailDeliveryLog -> reconcileDeliveryAttempts.
+ * A worker lost between its pre-transmission "started" mark and its verdict
+ * must suppress the BullMQ retry (the provider may already have accepted);
+ * a start closed by a definitive failure must still allow it. Pure helper
+ * tests pin the normalization contract; this test proves the row that a real
+ * retry re-claims carries the evidence that drives that decision. No provider
+ * is touched — only email_log rows in the scratch org.
+ */
+test("a dangling start persisted on the canonical row suppresses the retry; a closed failure allows it", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const to = "controller@scratch.test";
+    async function claimRow(suffix: string) {
+      return claimEmailDeliveryLog({
+        orgId: org.orgId,
+        deliveryKey: `obem_${suffix}`,
+        jobId: `email-fanout|crash-gap-${suffix}`,
+        provider: "resend",
+        recipients: [to],
+        subject: "Crash-gap proof",
+      });
+    }
+
+    // Crash gap: attempt 1 persisted its pre-transmission mark, then died.
+    const dangling = await claimRow("c".repeat(38) + "01");
+    await appendEmailAttemptEvent(org.orgId, dangling.id, {
+      attempt: 1,
+      outcome: "started",
+      detail: "sending via resend",
+    });
+    const retryClaim = await claimRow("c".repeat(38) + "01");
+    assert.equal(retryClaim.id, dangling.id, "the retry must land on the same canonical row");
+    const parked = reconcileDeliveryAttempts(retryClaim.attempts);
+    assert.equal(parked.action, "suppress", "a start with no verdict may already be delivered — never re-send blind");
+
+    // Closed failure: attempt 1 started, then definitively never transmitted.
+    const closed = await claimRow("c".repeat(38) + "02");
+    await appendEmailAttemptEvent(org.orgId, closed.id, { attempt: 1, outcome: "started" });
+    await appendEmailAttemptEvent(org.orgId, closed.id, {
+      attempt: 1,
+      outcome: "notSent",
+      detail: "connection refused before transmission",
+    });
+    const closedClaim = await claimRow("c".repeat(38) + "02");
+    assert.deepEqual(
+      reconcileDeliveryAttempts(closedClaim.attempts),
+      { action: "send" },
+      "a definitively failed attempt must not strand the delivery",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

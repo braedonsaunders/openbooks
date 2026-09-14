@@ -341,19 +341,49 @@ async function readAttemptLineage(orgId: string, id: string): Promise<AttemptRec
   return r.rows[0]?.attempts ?? [];
 }
 
-function normalizeAttempts(attempts: unknown): AttemptRecord[] {
+/**
+ * Normalize the append-only attempt lineage stored on an email_log row into
+ * the reconciliation vocabulary. Annotation events ("started", "blocked",
+ * "suppressed") carry no verdict and are dropped — EXCEPT a dangling
+ * "started": the worker appends it immediately BEFORE transmitting, so a
+ * start event with no matching outcome for the same attempt number means the
+ * worker was lost mid-flight (crash, SIGKILL, deploy restart) and the
+ * transmission may already have been accepted. That synthesizes to
+ * "uncertain", never to a clean slate: without this, the crash-gap retry
+ * would see empty lineage and re-send a possibly-delivered message.
+ */
+export function normalizeAttempts(attempts: unknown): AttemptRecord[] {
   if (!Array.isArray(attempts)) return [];
-  return attempts.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") return [];
+  const records: AttemptRecord[] = [];
+  const decided = new Set<number>();
+  for (const entry of attempts) {
+    if (!entry || typeof entry !== "object") continue;
     const record = entry as Record<string, unknown>;
     const outcome = record.outcome === "sent" || record.outcome === "notSent" || record.outcome === "uncertain" ? record.outcome : null;
-    if (!outcome) return [];
-    return [{
-      attempt: typeof record.attempt === "number" ? record.attempt : 1,
+    if (!outcome) continue;
+    const attempt = typeof record.attempt === "number" ? record.attempt : 1;
+    decided.add(attempt);
+    records.push({
+      attempt,
       outcome,
       detail: typeof record.detail === "string" ? record.detail : null,
-    }];
-  });
+    });
+  }
+  for (const entry of attempts) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (record.outcome !== "started" || typeof record.attempt !== "number") continue;
+    if (decided.has(record.attempt)) continue;
+    decided.add(record.attempt);
+    records.push({
+      attempt: record.attempt,
+      outcome: "uncertain",
+      detail:
+        `attempt ${record.attempt} started but never recorded an outcome (worker lost mid-flight); ` +
+        `whether the message was accepted cannot be proven — acceptance state unresolved`,
+    });
+  }
+  return records;
 }
 
 /**
