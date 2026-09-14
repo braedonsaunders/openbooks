@@ -151,10 +151,15 @@ export async function POST(request: Request) {
     if (!DATE_RE.test(cycleAnchor)) return bad('the cycle needs a first day to count from')
     const supplied = Array.isArray(body.days) ? body.days : []
     for (const entry of supplied) {
-      if (!entry || typeof entry !== 'object') continue
+      // Every supplied entry is intentional data: a malformed one is refused
+      // like a malformed hours value, never silently dropped from the pattern
+      // that decides holiday pay.
+      if (!entry || typeof entry !== 'object') return bad('each schedule day must name a day index and hours')
       const raw = entry as Record<string, unknown>
       const dayIndex = Number(raw.dayIndex)
-      if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= cycleDays) continue
+      if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= cycleDays) {
+        return bad(`day index ${String(raw.dayIndex)} is outside this ${cycleDays}-day cycle`)
+      }
       const exact = canonicalDecimal(raw.hours, 4)
       if (exact === null) return bad(`"${String(raw.hours)}" is not a number of hours`)
       let hours: string
