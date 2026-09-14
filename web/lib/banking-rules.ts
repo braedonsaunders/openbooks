@@ -287,7 +287,7 @@ export async function previewRules(
       const stealer = saved.find(
         (r) =>
           r.id !== opts.draftRule?.id &&
-          r.priority < draftPriority &&
+          r.priority <= draftPriority &&
           ruleAppliesToAccount(r.criteria, accountId) &&
           lineMatchesRule(line, r.criteria),
       )
