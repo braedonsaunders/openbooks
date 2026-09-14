@@ -59,6 +59,13 @@ export interface RemittanceGroup {
   partyName: string | null;
   /** The payroll program/EIN account this remittance is filed under. */
   filingAccount: FilingAccountRef;
+  /**
+   * Sorted distinct stub provinces behind this group. The CRA's holiday
+   * calendar is province-sensitive (Saint-Jean-Baptiste Day in Quebec, the
+   * Civic Holiday everywhere but Quebec), so the bill's due date is computed
+   * from these — see `remittanceGroupUsesQuebecCalendar`.
+   */
+  provinces: string[];
   components: RemittanceComponentLine[];
   total: string;
   /** PD7A worksheet context: gross pay and employee count in the period,
@@ -296,6 +303,22 @@ export type RemittanceRow = {
 };
 
 /**
+ * Whether a remittance group's deadline follows the CRA's Québec holiday
+ * calendar (CA-CRA-QC) rather than the federal one (CA-CRA).
+ *
+ * True exactly when every stub province behind the group is Québec: a
+ * Québec-only payroll remits on Québec's schedule, where Saint-Jean-Baptiste
+ * Day is a holiday and the Civic Holiday is not. Anything else — another
+ * province, a mix, or no evidence at all — keeps the federal calendar the
+ * bill always used. A mixed payroll's governing province is the employer's
+ * province of record, which the product does not model, so mixing never
+ * flips the calendar by itself.
+ */
+export function remittanceGroupUsesQuebecCalendar(provinces: readonly string[]): boolean {
+  return provinces.length > 0 && provinces.every((province) => province === "QC");
+}
+
+/**
  * Fold component totals into one group per (destination vendor, filing
  * account). Pure, so the grouping rule that keeps one program account's
  * withholding out of another's PD7A is verifiable without a database.
@@ -308,6 +331,7 @@ export function groupRemittanceRows(input: {
   resolveAccount: (row: RemittanceRow) => string | null;
 }): Map<string, RemittanceGroup> {
   const groups = new Map<string, RemittanceGroup>();
+  const provincesByGroup = new Map<string, Set<string>>();
   for (const row of input.rows) {
     if (cmp(row.amount, "0") === 0) continue;
     const partyId = input.resolveParty(row);
@@ -316,6 +340,7 @@ export function groupRemittanceRows(input: {
     const group = groups.get(key) ?? {
       partyId, partyName: null,
       filingAccount: filingAccountRef(row.filing_account_id, input.filingAccounts),
+      provinces: [],
       components: [], total: "0",
       grossPayroll: runContext?.gross ?? "0",
       employeeCount: runContext?.employees ?? 0,
@@ -338,6 +363,12 @@ export function groupRemittanceRows(input: {
     }
     group.total = add(group.total, row.amount);
     groups.set(key, group);
+    const provinces = provincesByGroup.get(key) ?? new Set<string>();
+    provinces.add(row.province);
+    provincesByGroup.set(key, provinces);
+  }
+  for (const [key, group] of groups) {
+    group.provinces = [...(provincesByGroup.get(key) ?? [])].sort();
   }
   return groups;
 }
@@ -750,7 +781,9 @@ export async function createRemittanceBill(
                              due_date, currency, status, memo, subtotal, tax_total, total, custom,
                              created_by, updated_by)
       values (${orgId}, 'vendor_bill', ${number}, ${input.partyId}, ${sub.rows[0]!.id}, ${input.to},
-              ${remittanceDueDate(input.to, group.filingAccount.remitterType)},
+              ${remittanceDueDate(input.to, group.filingAccount.remitterType, {
+                quebec: remittanceGroupUsesQuebecCalendar(group.provinces),
+              })},
               ${sub.rows[0]!.base_currency}, 'draft',
               ${remittanceMemo(group, input.from, input.to)}, ${total}, '0', ${total},
               ${JSON.stringify({
