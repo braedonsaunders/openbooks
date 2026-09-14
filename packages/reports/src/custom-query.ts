@@ -21,6 +21,8 @@ import {
   type ReportCustomQuery,
   type ReportMeasure,
   type ReportPageRequest,
+  type ReportRule,
+  type ReportRuleGroup,
 } from './types'
 
 export const DEFAULT_REPORT_LIMIT = 1000
@@ -44,6 +46,24 @@ export type CompiledReportQuery = {
   limit: number
   /** Normalized page request. Present only for a rows-mode paged execution. */
   page?: ReportPageRequest
+  /** Static single-denomination pins from the plan's filters (or null). The
+   *  executor combines these with the observed probe census into effective
+   *  single-ness for enforcement and shaping. */
+  txnCurrencyPinned?: string | null
+  baseCurrencyPinned?: string | null
+  bookPinned?: string | null
+  /** True when the server book clamp already restricts the run to one basis
+   *  (singleton allowlist) or no rows (empty allowlist). */
+  bookSingleBasis?: boolean
+  /** True when a single-subsidiary scope already certifies one functional
+   *  currency (one subsidiary owns one base_currency). */
+  baseSingleSubsidiary?: boolean
+  /** True when the compiled SELECT carries the inline `__denom` census
+   *  (reserved `__txn_n`/`__base_n`/`__book_n` columns on every result row).
+   *  False when every money dimension is already certified single (or the
+   *  plan blends no money). */
+  hasDenominationCensus?: boolean
+  denominationDimensions?: ('txn' | 'base' | 'book')[]
   /** Exact same FROM/WHERE as `text`, used only when a nonzero offset returns
    *  no rows and therefore COUNT(*) OVER() has no carrier row. */
   countText?: string
@@ -52,6 +72,11 @@ export type CompiledReportQuery = {
 export type CompileCustomQueryOpts = {
   /** Server-owned allowlist; an empty array grants no entity rows. */
   allowedSubsidiaryIds?: readonly string[] | null;
+  /** Server-owned accounting-book allowlist for book-scoped entities (the
+   *  executor resolves the single active primary by default). null/undefined
+   *  leaves the entity unclamped for explicit cross-book analysis; an empty
+   *  array matches nothing. Ignored by book-independent entities. */
+  allowedBookIds?: readonly string[] | null;
   /** Extra clamp under MAX_REPORT_ROWS (e.g. 50 for studio previews). */
   maxRows?: number
   /** Org fiscal-year start month (1–12) for the `fiscal_*` temporal bins. The
@@ -104,11 +129,189 @@ export function compileSubsidiaryScope(
   return scope.sharedNull ? `(${scope.column} IS NULL OR ${predicate})` : predicate
 }
 
-/** The entity's implicit predicates: org scope + optional baseFilter. */
+/** Shared server-owned accounting-book policy for reports. Only entities
+ *  that declare `bookScope` are clampable; book-independent sources (no
+ *  book_id by design) ignore any allowlist so transaction balances stay
+ *  book-agnostic. */
+export function compileBookScope(
+  entity: ReportEntity,
+  allowedBookIds: readonly string[] | null | undefined,
+  bind: (value: unknown) => string,
+): string | null {
+  if (allowedBookIds == null) return null
+  if (!entity.bookScope) return null
+  if (allowedBookIds.length === 0) return 'FALSE'
+  return `${entity.bookScope.column} = ANY(${bind([...allowedBookIds])}::uuid[])`
+}
+
+/** Column keys that scope or partition the accounting basis. A plan that
+ *  filters, breaks out, or sections by one runs unclamped: the author's own
+ *  book scoping governs instead of the primary-book default. Selecting a book
+ *  column for display alone does NOT lift the clamp. */
+export const REPORT_BOOK_KEYS = ['book', 'book_code', 'book_id'] as const
+
+function isRuleGroupNode(r: ReportRule | ReportRuleGroup): r is ReportRuleGroup {
+  return typeof r === 'object' && r !== null && Array.isArray((r as ReportRuleGroup).rules)
+}
+
+/** True when the plan explicitly scopes or partitions by accounting book —
+ *  a filter leaf on a book column, or a breakout/section on one. The check
+ *  only READS the saved plan; it never rewrites a filter. */
+export function customQueryReferencesBook(q: ReportCustomQuery): boolean {
+  const walk = (node: ReportRuleGroup | null | undefined): boolean => {
+    for (const r of node?.rules ?? []) {
+      if (isRuleGroupNode(r)) {
+        if (walk(r)) return true
+      } else if ((REPORT_BOOK_KEYS as readonly string[]).includes(r.field)) {
+        return true
+      }
+    }
+    return false
+  }
+  if (walk(q.filters)) return true
+  if (q.groupBy && (REPORT_BOOK_KEYS as readonly string[]).includes(q.groupBy)) return true
+  return (q.breakouts ?? []).some((b) => (REPORT_BOOK_KEYS as readonly string[]).includes(b.column))
+}
+
+/** True when the measure aggregates a txn-currency money column (a value
+ *  denominated in the row's transaction currency, not the org base). */
+export function isTxnCurrencyMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
+  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max') return false
+  if (!m.column) return false
+  return entityColumn(entity, m.column)?.txnCurrency === true
+}
+
+/** True when the measure blends money across rows (any aggregate whose value
+ *  mixes denominations or bases when buckets combine). Counts and distinct
+ *  counts never blend. */
+export function isMoneyBlendingMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
+  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max') return false
+  if (!m.column) return false
+  return entityColumn(entity, m.column)?.kind === 'money'
+}
+
+/** True when the measure aggregates functional-base money (GL base amounts
+ *  stamped per line in the owning subsidiary's base_currency). */
+export function isBaseMoneyMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
+  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max') return false
+  if (!m.column) return false
+  return entityColumn(entity, m.column)?.baseMoney === true
+}
+
+/** The single functional currency the plan's filters pin, or null. */
+export function reportBaseCurrencyPin(entity: ReportEntity, q: ReportCustomQuery): string | null {
+  return reportSingleValuePin(q, entity.baseCurrencyColumn)
+}
+
+/** Book columns that positively pin ONE accounting book when filtered with a
+ *  single eq/in value. `book_id` and `book_code` are unique per org; the
+ *  display name (`book`) is not schema-unique, so it scopes rows but never
+ *  certifies a single basis for totals. */
+const BOOK_PIN_KEYS = ['book_id', 'book_code'] as const
+
+/** The single pinned book key value, or null. Positive AND-only eq/in-single
+ *  filters on a unique book key pin; OR branches, negations, multi-value
+ *  sets, and display-name filters do not — conservatively treated as open. */
+export function reportBookPin(entity: ReportEntity, q: ReportCustomQuery): string | null {
+  if (!entity.bookScope) return null
+  const pinKeys = new Set<string>(BOOK_PIN_KEYS)
+  let pinned: string | null = null
+  let certain = true
+  const leafValue = (rule: ReportRule): string | null => {
+    if (!pinKeys.has(rule.field)) return null
+    if (rule.op === 'eq' && typeof rule.value === 'string' && rule.value !== '') return rule.value
+    if (rule.op === 'in' && Array.isArray(rule.value) && rule.value.length === 1 && typeof rule.value[0] === 'string') {
+      return rule.value[0]
+    }
+    return null
+  }
+  const mentionsBook = (n: ReportRuleGroup): boolean =>
+    n.rules.some((r) => (isRuleGroupNode(r) ? mentionsBook(r) : pinKeys.has(r.field)))
+  const walk = (node: ReportRuleGroup | null | undefined): void => {
+    if (!node || !certain) return
+    if (node.not || node.combinator === 'or') {
+      if (mentionsBook(node)) certain = false
+      return
+    }
+    for (const r of node.rules) {
+      if (isRuleGroupNode(r)) {
+        walk(r)
+      } else {
+        const v = leafValue(r)
+        if (v !== null) {
+          if (pinned !== null && pinned !== v) certain = false
+          pinned = v
+        } else if (pinKeys.has(r.field)) {
+          certain = false
+        }
+      }
+      if (!certain) return
+    }
+  }
+  walk(q.filters)
+  return certain ? pinned : null
+}
+
+/** The single value the plan's filters pin a column to (eq/in with one value
+ *  in a positive AND-only context), or null. OR branches, negations, and
+ *  multi-value sets do not pin — conservatively treated as open. */
+function reportSingleValuePin(q: ReportCustomQuery, key: string | undefined, pinKeys?: ReadonlySet<string>): string | null {
+  const column = key
+  if (!column) return null
+  let pinned: string | null = null
+  let certain = true
+  const leafValue = (rule: ReportRule): string | null => {
+    if (rule.field !== column) return null
+    if (pinKeys && !pinKeys.has(rule.field)) return null
+    if (rule.op === 'eq' && typeof rule.value === 'string' && rule.value !== '') return rule.value
+    if (rule.op === 'in' && Array.isArray(rule.value) && rule.value.length === 1 && typeof rule.value[0] === 'string') {
+      return rule.value[0]
+    }
+    return null
+  }
+  const mentions = (n: ReportRuleGroup): boolean =>
+    n.rules.some((r) => (isRuleGroupNode(r) ? mentions(r) : r.field === column && (!pinKeys || pinKeys.has(r.field))))
+  const walk = (node: ReportRuleGroup | null | undefined): void => {
+    if (!node || !certain) return
+    if (node.not || node.combinator === 'or') {
+      // A negated or alternative branch cannot pin — but only matters when
+      // it mentions the column at all.
+      if (mentions(node)) certain = false
+      return
+    }
+    for (const r of node.rules) {
+      if (isRuleGroupNode(r)) {
+        walk(r)
+      } else {
+        const v = leafValue(r)
+        if (v !== null) {
+          if (pinned !== null && pinned !== v) certain = false
+          pinned = v
+        } else if (r.field === column && (!pinKeys || pinKeys.has(r.field))) {
+          certain = false
+        }
+      }
+      if (!certain) return
+    }
+  }
+  walk(q.filters)
+  return certain ? pinned : null
+}
+
+/** The single transaction currency the plan's filters pin, or null. */
+export function reportTxnCurrencyPin(entity: ReportEntity, q: ReportCustomQuery): string | null {
+  return reportSingleValuePin(q, entity.currencyColumn)
+}
+
+/** The entity's implicit predicates: org scope + subsidiary/book allowlists
+ *  + optional baseFilter. Lifting the book clamp (null allowlist) never
+ *  touches the org or subsidiary fences. */
 function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, opts: CompileCustomQueryOpts): string[] {
   const parts = [`${entity.orgColumn} = ${params.add(orgId)}`]
   const subsidiary = compileSubsidiaryScope(entity, opts.allowedSubsidiaryIds, (value) => params.add(value))
   if (subsidiary) parts.push(subsidiary)
+  const book = compileBookScope(entity, opts.allowedBookIds, (value) => params.add(value))
+  if (book) parts.push(book)
   if (entity.baseFilter) {
     const base = compileRuleGroup(entity, entity.baseFilter, params)
     if (base) parts.push(base)
@@ -214,6 +417,23 @@ function compileSummarize(
   measures = measures.filter((m) => REPORT_AGG_FNS.includes(m.fn))
   if (measures.length === 0) measures = [{ fn: 'count' }]
 
+  // Denomination analysis: which money the plan blends, and what already
+  // certifies a single denomination without touching the database —
+  // static filter pins, the server book clamp, or a single-subsidiary scope
+  // (one subsidiary owns one base_currency). Anything still open is measured
+  // at run time by an exact COUNT(DISTINCT) probe over the plan's own
+  // FROM/WHERE: legitimate single-denomination reports run untouched, while
+  // actual mixed aggregates are refused before they materialize.
+  const txnMeasures = measures.filter((m) => isTxnCurrencyMeasure(entity, m))
+  const baseMeasures = measures.filter((m) => isBaseMoneyMeasure(entity, m))
+  const moneyMeasures = measures.filter((m) => isMoneyBlendingMeasure(entity, m))
+  const txnCurrencyPinned = txnMeasures.length > 0 ? reportTxnCurrencyPin(entity, q) : null
+  const baseCurrencyPinned = baseMeasures.length > 0 ? reportBaseCurrencyPin(entity, q) : null
+  const bookPinned = moneyMeasures.length > 0 ? reportBookPin(entity, q) : null
+  const bookSingleBasis = !!entity.bookScope && opts.allowedBookIds != null && opts.allowedBookIds.length <= 1
+  const baseSingleSubsidiary = !!entity.baseCurrencyColumn
+    && opts.allowedSubsidiaryIds != null && opts.allowedSubsidiaryIds.length === 1
+
   const startMonth = opts.fiscalStartMonth && opts.fiscalStartMonth >= 1 && opts.fiscalStartMonth <= 12 ? opts.fiscalStartMonth : 1
   const dimSelect = breakouts.map((b, i) => `${dimExpr(entity, b, startMonth)} AS "d${i}"`)
   const measSelect = measures.map((m, i) => `${measureExpr(entity, m)} AS "m${i}"`)
@@ -250,8 +470,41 @@ function compileSummarize(
 
   const limit = resolveLimit(q.limit, opts.maxRows)
 
+  // Inline denomination census: one CTE over the plan's own FROM/WHERE,
+  // referenced per result row. Guard and result derive from the SAME SQL
+  // snapshot — no separate preflight that a concurrent insertion could slip
+  // between. Only still-open money dimensions are censused; every
+  // COUNT(DISTINCT) shares the main query's bound parameters.
+  const censusInner: string[] = []
+  const txnRef = entity.currencyColumn ? columnRef(entity, entity.currencyColumn) : null
+  if (txnMeasures.length > 0 && !txnCurrencyPinned && txnRef) {
+    censusInner.push(`COUNT(DISTINCT ${txnRef}) AS "txn_n"`, `MIN(${txnRef}) AS "txn_v"`)
+  }
+  const baseRef = entity.baseCurrencyColumn ? columnRef(entity, entity.baseCurrencyColumn) : null
+  if (baseMeasures.length > 0 && !baseCurrencyPinned && !baseSingleSubsidiary && baseRef) {
+    censusInner.push(`COUNT(DISTINCT ${baseRef}) AS "base_n"`, `MIN(${baseRef}) AS "base_v"`)
+  }
+  if (moneyMeasures.length > 0 && entity.bookScope && !bookSingleBasis && !bookPinned) {
+    censusInner.push(`COUNT(DISTINCT ${entity.bookScope.column}) AS "book_n"`, `MIN(${entity.bookScope.column}::text) AS "book_v"`)
+  }
+  // Reserved census aliases — no catalog column may use the __ prefix, so a
+  // plan can never select over them.
+  const censusRefs = [
+    ['txn_n', 'txn_v'],
+    ['base_n', 'base_v'],
+    ['book_n', 'book_v'],
+  ]
+    .filter(([n]) => censusInner.some((part) => part.includes(`AS "${n}"`)))
+    .flatMap(([n, v]) => [`(SELECT "${n}" FROM __denom) AS "__${n}"`, `(SELECT "${v}" FROM __denom) AS "__${v}"`])
+  const censusCTE = censusInner.length > 0
+    ? `WITH __denom AS (SELECT ${censusInner.join(', ')} FROM ${from} WHERE ${whereParts.join(' AND ')}) `
+    : ''
+
+  const bookGroupCount = censusInner.some((part) => part.includes('AS "book_n"'))
+    ? [`COUNT(DISTINCT ${entity.bookScope!.column}) AS "__book_group_n"`]
+    : []
   const text = [
-    `SELECT ${[...dimSelect, ...measSelect].join(', ')}`,
+    `${censusCTE}SELECT ${[...dimSelect, ...measSelect, ...censusRefs, ...bookGroupCount].join(', ')}`,
     `FROM ${from}`,
     `WHERE ${whereParts.join(' AND ')}`,
     breakouts.length > 0 ? `GROUP BY ${breakouts.map((_, i) => i + 1).join(', ')}` : '',
@@ -272,7 +525,141 @@ function compileSummarize(
     groupBy: sectioned ? q.groupBy ?? null : null,
     totals: sectioned ? q.totals ?? null : null,
     limit,
+    txnCurrencyPinned,
+    baseCurrencyPinned,
+    bookPinned,
+    bookSingleBasis,
+    baseSingleSubsidiary,
+    hasDenominationCensus: censusRefs.length > 0,
+    denominationDimensions: (['txn', 'base', 'book'] as const).filter((dim) =>
+      censusInner.some((part) => part.includes(`AS "${dim}_n"`))),
   }
+}
+
+/** One exact denomination census, read from the inline `__denom` columns of
+ *  a result row. Guard and result rows come from the same statement, hence
+ *  the same snapshot — a concurrent insertion cannot slip between them. */
+export type DenominationCounts = {
+  txn?: { distinct: number; sample: string | null }
+  base?: { distinct: number; sample: string | null }
+  book?: { distinct: number; sample: string | null }
+}
+
+/** Per-denomination single-ness for the result shaper: a summary-band total
+ *  over a measure is honest only when its denominations are all single. */
+export type DenominationSingles = { txn: boolean; base: boolean; book: boolean }
+
+function parseProbeCount(value: unknown): number {
+  const n = Number(value)
+  return Number.isSafeInteger(n) && n >= 0 ? n : Number.MAX_SAFE_INTEGER
+}
+
+/** Parse the inline census columns of one result row into exact
+ *  per-dimension counts. A missing census (no rows, or a plan that carries
+ *  none) yields no observations; unparseable counts fail closed (treated as
+ *  mixed, never as single). */
+export function parseDenominationCounts(row: Record<string, unknown> | null | undefined): DenominationCounts {
+  const out: DenominationCounts = {}
+  const dims = [['txn', '__txn_n', '__txn_v'], ['base', '__base_n', '__base_v'], ['book', '__book_n', '__book_v']] as const
+  for (const [dim, countKey, sampleKey] of dims) {
+    if (row == null || !(countKey in row)) continue
+    const sample = row[sampleKey]
+    out[dim] = {
+      distinct: parseProbeCount(row[countKey]),
+      sample: typeof sample === 'string' && sample !== '' ? sample : null,
+    }
+  }
+  return out
+}
+
+function hasEffectiveTotals(totals: ReportCustomQuery['totals']): boolean {
+  return !!totals && (!!totals.sections || !!totals.grand || (totals.derived?.length ?? 0) > 0)
+}
+
+/** Fail-closed denomination enforcement over static pins, server clamps,
+ *  and the observed probe census. Returns per-denomination single-ness for
+ *  the shaper; throws BEFORE any blended row or combined total materializes:
+ *  a dimension with several denominations and no partitioning breakout would
+ *  blend inside single group rows, while section/grand/derived totals
+ *  re-combine breakout buckets and need every blended dimension single.
+ *  Partitions keep labeled per-denomination rows flowing — only the combining
+ *  outputs are gated. Org, subsidiary, and book-clamp fences are ANDed
+ *  upstream and untouched here. */
+export function resolveDenominations(
+  entity: ReportEntity,
+  compiled: {
+    breakouts?: ReportBreakout[]
+    measures?: ReportMeasure[]
+    totals?: ReportCustomQuery['totals']
+    txnCurrencyPinned?: string | null
+    baseCurrencyPinned?: string | null
+    bookPinned?: string | null
+    bookSingleBasis?: boolean
+    baseSingleSubsidiary?: boolean
+  },
+  observed: DenominationCounts,
+): DenominationSingles {
+  const single = (
+    dim: 'txn' | 'base' | 'book',
+    staticPin: string | null | undefined,
+    basisSingle?: boolean,
+  ): boolean => {
+    if (staticPin) return true
+    if (basisSingle) return true
+    const obs = observed[dim]
+    if (!obs) return true
+    return obs.distinct <= 1
+  }
+  const singles: DenominationSingles = {
+    txn: single('txn', compiled.txnCurrencyPinned),
+    base: single('base', compiled.baseCurrencyPinned, compiled.baseSingleSubsidiary),
+    book: single('book', compiled.bookPinned, compiled.bookSingleBasis),
+  }
+  const partitioned = (keys: readonly string[]): boolean =>
+    (compiled.breakouts ?? []).some((b) => !b.bin && (keys as readonly string[]).includes(b.column))
+  const check = (
+    measures: ReportMeasure[],
+    isSingle: boolean,
+    breakoutKeys: readonly string[],
+    blendNoun: string,
+    breakoutLabel: string,
+  ): void => {
+    if (measures.length === 0 || isSingle) return
+    const firstLabel = measureLabel(entity, measures[0]!)
+    if (!partitioned(breakoutKeys)) {
+      throw new Error(
+        `Cannot aggregate '${firstLabel}': rows mix ${blendNoun} — group by ${breakoutLabel} or filter to one`,
+      )
+    }
+    if (hasEffectiveTotals(compiled.totals)) {
+      throw new Error(
+        `Report totals cannot combine ${blendNoun} — filter to one to total`,
+      )
+    }
+  }
+  const measures = compiled.measures ?? []
+  check(
+    measures.filter((m) => isTxnCurrencyMeasure(entity, m)),
+    singles.txn,
+    entity.currencyColumn ? [entity.currencyColumn] : [],
+    'transaction currencies',
+    'Currency',
+  )
+  check(
+    measures.filter((m) => isBaseMoneyMeasure(entity, m)),
+    singles.base,
+    entity.baseCurrencyColumn ? [entity.baseCurrencyColumn] : [],
+    'functional currencies',
+    'Base currency',
+  )
+  check(
+    measures.filter((m) => isMoneyBlendingMeasure(entity, m)),
+    singles.book,
+    REPORT_BOOK_KEYS,
+    'accounting books',
+    'Book',
+  )
+  return singles
 }
 
 /** SQL for a group-by dimension, with optional temporal bucketing. The bin is

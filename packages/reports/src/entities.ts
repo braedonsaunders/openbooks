@@ -70,6 +70,23 @@ export type ReportEntityColumn = {
    * humanized fallback.
    */
   options?: readonly string[]
+  /**
+   * True when values in this money column are denominated in the row's
+   * transaction currency (documents totals, line amounts, GL txn amounts)
+   * rather than the functional base. Aggregating such a column needs a
+   * breakout on the entity's `currencyColumn` or a single observed/pinned
+   * currency — actual mixed-currency aggregates are refused at run time.
+   */
+  txnCurrency?: boolean
+  /**
+   * True when values in this money column are denominated in the row's
+   * FUNCTIONAL currency (GL base amounts are stamped per-line in the owning
+   * subsidiary's base_currency — see posting applySubsidiaries). Aggregating
+   * such a column needs a breakout on the entity's `baseCurrencyColumn` or
+   * a single observed/pinned base currency. Never infer the denomination
+   * from `currency`: that is the transaction currency, not the base.
+   */
+  baseMoney?: boolean
 }
 
 /** One catalog-authored native link on a displayed rows-mode cell. Metadata
@@ -100,6 +117,20 @@ export type ReportEntity = {
   orgColumn: string
   /** Server-owned legal-entity boundary. null explicitly denotes shared org metadata. */
   subsidiaryScope?: { column: string; sharedNull?: boolean } | null
+  /** Server-owned accounting-book boundary (e.g. `je.book_id`). Present only
+   *  on GL sources whose rows inherit an entry's book. Absent by design on
+   *  book-independent sources: documents carry no book_id, so transaction
+   *  balances stay book-agnostic like the standard aging. */
+  bookScope?: { column: string }
+  /** Key of the text column carrying the row's transaction-currency code
+   *  (e.g. `currency`). Set alongside `txnCurrency` money columns so mixed
+   *  transaction-currency aggregates are refused at run time. */
+  currencyColumn?: string
+  /** Key of the text column carrying the row's FUNCTIONAL-currency code
+   *  (e.g. `base_currency` via the owning subsidiary). Set alongside
+   *  `baseMoney` columns; null/absence means the entity has no base-money
+   *  columns. Never the `currency` column — that is transactional. */
+  baseCurrencyColumn?: string
   /** Columns selectable for output AND filterable. Order is preserved. */
   columns: ReportEntityColumn[]
   defaultSort?: { column: string; direction: 'asc' | 'desc' }
@@ -159,14 +190,30 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     from: `journal_lines jl
       JOIN journal_entries je ON je.id = jl.entry_id AND je.org_id = jl.org_id
       JOIN accounts a ON a.id = jl.account_id AND a.org_id = jl.org_id
+      JOIN accounting_books b ON b.id = je.book_id AND b.org_id = je.org_id
       LEFT JOIN parties p ON p.id = jl.party_id AND p.org_id = jl.org_id
       LEFT JOIN departments dep ON dep.id = jl.department_id AND dep.org_id = jl.org_id
       LEFT JOIN projects prj ON prj.id = jl.project_id AND prj.org_id = jl.org_id
       LEFT JOIN equipment_units eq ON eq.id = jl.equipment_unit_id AND eq.org_id = jl.org_id
       LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = jl.org_id
-      LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = jl.org_id`,
+      LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = jl.org_id
+      JOIN subsidiaries sub ON sub.id = jl.subsidiary_id AND sub.org_id = jl.org_id`,
     orgColumn: 'jl.org_id',
     subsidiaryScope: { column: 'jl.subsidiary_id' },
+    // Book boundary: every line inherits its entry's book. The executor
+    // defaults book-scoped entities to the single active primary book (the
+    // standard omitted-book contract); plans that filter, break out, or
+    // section by a book column run unclamped so explicit cross-book analysis
+    // keeps working with each book labeled.
+    bookScope: { column: 'je.book_id' },
+    // Row-level transaction currency (`jl.currency` = document currency).
+    currencyColumn: 'currency',
+    // Functional currency: `jl.amount` is stamped per line in the OWNING
+    // subsidiary's base_currency (posting applySubsidiaries), so base sums
+    // across subsidiaries with different base currencies blend denominations
+    // even within one book. Aggregate base money by `base_currency` or with
+    // a single observed/pinned base.
+    baseCurrencyColumn: 'base_currency',
     columns: [
       { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
       { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
@@ -182,11 +229,12 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'memo', label: 'Memo', kind: 'text', expr: 'coalesce(jl.memo, je.memo)' },
-      { key: 'amount', label: 'Amount (base)', kind: 'money', expr: 'jl.amount' },
-      { key: 'debit', label: 'Debit', kind: 'money', expr: 'greatest(jl.amount, 0)' },
-      { key: 'credit', label: 'Credit', kind: 'money', expr: 'greatest(-jl.amount, 0)' },
+      { key: 'amount', label: 'Amount (base)', kind: 'money', expr: 'jl.amount', baseMoney: true },
+      { key: 'debit', label: 'Debit', kind: 'money', expr: 'greatest(jl.amount, 0)', baseMoney: true },
+      { key: 'credit', label: 'Credit', kind: 'money', expr: 'greatest(-jl.amount, 0)', baseMoney: true },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'jl.currency' },
-      { key: 'txn_amount', label: 'Amount (txn)', kind: 'money', expr: 'jl.txn_amount' },
+      { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'sub.base_currency' },
+      { key: 'txn_amount', label: 'Amount (txn)', kind: 'money', expr: 'jl.txn_amount', txnCurrency: true },
       { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'jl.quantity' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'jl.unit' },
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'jl.due_date' },
@@ -195,6 +243,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'entry_id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
       { key: 'account_id', label: 'Account (id)', kind: 'uuid', expr: 'jl.account_id' },
       { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'jl.party_id' },
+      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
+      { key: 'book_code', label: 'Book code', kind: 'text', expr: 'b.code' },
+      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
     ],
     defaultSort: { column: 'posting_date', direction: 'desc' },
   },
@@ -212,6 +263,12 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN classes cls ON cls.id = d.class_id AND cls.org_id = d.org_id`,
     orgColumn: 'd.org_id',
     subsidiaryScope: { column: 'd.subsidiary_id' },
+    // No bookScope by design: documents carry no book_id, so transaction
+    // balances stay book-agnostic like the standard aging (which reads
+    // documents.open_balance unscoped).
+    // Header money is denominated in the transaction currency: aggregating it
+    // needs a Currency breakout or a single-currency filter.
+    currencyColumn: 'currency',
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
@@ -221,9 +278,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'd.due_date' },
       { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
-      { key: 'subtotal', label: 'Subtotal', kind: 'money', expr: 'd.subtotal' },
-      { key: 'tax_total', label: 'Tax', kind: 'money', expr: 'd.tax_total' },
-      { key: 'total', label: 'Total', kind: 'money', expr: 'd.total' },
+      { key: 'subtotal', label: 'Subtotal', kind: 'money', expr: 'd.subtotal', txnCurrency: true },
+      { key: 'tax_total', label: 'Tax', kind: 'money', expr: 'd.tax_total', txnCurrency: true },
+      { key: 'total', label: 'Total', kind: 'money', expr: 'd.total', txnCurrency: true },
       { key: 'reference_number', label: 'Reference #', kind: 'text', expr: 'd.reference_number' },
       { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'd.billing_method', options: ['time_and_materials', 'fixed_price'] },
       { key: 'is_final_invoice', label: 'Final invoice', kind: 'boolean', expr: 'd.is_final_invoice', options: BOOLEAN_OPTIONS },
@@ -259,6 +316,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id) AND cls.org_id = dl.org_id`,
     orgColumn: 'dl.org_id',
     subsidiaryScope: { column: 'd.subsidiary_id' },
+    // No bookScope by design (see documents): line money follows the header's
+    // book-independent totals. Line money is denominated in the header's
+    // transaction currency: aggregating it needs a Currency breakout or a
+    // single-currency filter.
+    currencyColumn: 'currency',
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
@@ -272,9 +334,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'description', label: 'Description', kind: 'text', expr: 'dl.description' },
       { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'dl.quantity' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'dl.unit' },
-      { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'dl.unit_price' },
-      { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount' },
-      { key: 'tax_amount', label: 'Tax amount', kind: 'money', expr: 'dl.tax_amount' },
+      { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'dl.unit_price', txnCurrency: true },
+      { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount', txnCurrency: true },
+      { key: 'tax_amount', label: 'Tax amount', kind: 'money', expr: 'dl.tax_amount', txnCurrency: true },
       { key: 'is_billable', label: 'Billable', kind: 'boolean', expr: 'dl.is_billable', options: BOOLEAN_OPTIONS },
       { key: 'quantity_fulfilled', label: 'Qty fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
       { key: 'quantity_billed', label: 'Qty billed', kind: 'number', expr: 'dl.quantity_billed' },
@@ -282,15 +344,16 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
       { key: 'equipment', label: 'Equipment', kind: 'text', expr: 'eu.name' },
-      { key: 'cost_rate', label: 'Cost rate', kind: 'money', expr: 'dl.cost_rate' },
-      { key: 'bill_rate', label: 'Bill rate', kind: 'money', expr: 'dl.bill_rate' },
-      { key: 'cost_amount', label: 'Cost amount', kind: 'money', expr: 'dl.cost_amount' },
-      { key: 'bill_amount', label: 'Bill amount', kind: 'money', expr: 'dl.bill_amount' },
+      { key: 'cost_rate', label: 'Cost rate', kind: 'money', expr: 'dl.cost_rate', txnCurrency: true },
+      { key: 'bill_rate', label: 'Bill rate', kind: 'money', expr: 'dl.bill_rate', txnCurrency: true },
+      { key: 'cost_amount', label: 'Cost amount', kind: 'money', expr: 'dl.cost_amount', txnCurrency: true },
+      { key: 'bill_amount', label: 'Bill amount', kind: 'money', expr: 'dl.bill_amount', txnCurrency: true },
       { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'dl.created_at' },
       { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'dl.id' },
       { key: 'document_id', label: 'Transaction (id)', kind: 'uuid', expr: 'dl.document_id' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
     ],
     defaultSort: { column: 'document_date', direction: 'desc' },
   },
@@ -299,9 +362,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'Journal entries',
     category: 'general_ledger',
     description: 'Journal-entry headers — number, posting date, status, origin and memo. Use Ledger lines for line-level GL detail.',
-    from: `journal_entries je`,
+    from: `journal_entries je
+      JOIN accounting_books b ON b.id = je.book_id AND b.org_id = je.org_id`,
     orgColumn: 'je.org_id',
     subsidiaryScope: { column: 'je.subsidiary_id' },
+    // Same book contract as ledger_lines: default to the single active
+    // primary book; explicit book filters/breakouts run unclamped.
+    bookScope: { column: 'je.book_id' },
     columns: [
       { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
       { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
@@ -311,6 +378,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'je.created_at' },
       { key: 'id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
       { key: 'source_document_id', label: 'Source transaction (id)', kind: 'uuid', expr: 'je.source_document_id' },
+      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
+      { key: 'book_code', label: 'Book code', kind: 'text', expr: 'b.code' },
+      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
     ],
     defaultSort: { column: 'posting_date', direction: 'desc' },
   },

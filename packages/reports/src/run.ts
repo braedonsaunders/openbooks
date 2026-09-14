@@ -11,10 +11,16 @@ import { entityColumn, type ReportEntity } from './entities'
 import {
   breakoutLabel,
   compileCustomQuery,
+  isBaseMoneyMeasure,
+  isMoneyBlendingMeasure,
+  isTxnCurrencyMeasure,
   labelFor,
   measureLabel,
+  parseDenominationCounts,
   REPORT_TOTAL_ROWS_COLUMN,
+  resolveDenominations,
   type CompileCustomQueryOpts,
+  type DenominationSingles,
 } from './custom-query'
 import {
   formatLabel,
@@ -106,15 +112,43 @@ export async function runCustomQuery(
     asOf: opts.asOf,
     page: opts.page,
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+    allowedBookIds: opts.allowedBookIds,
   })
+  const labels = opts.labels ?? {}
   const { rows } = await client.query(compiled.text, compiled.values)
 
-  const labels = opts.labels ?? {}
   let result: ReportRunResult
   if (compiled.mode === 'summarize') {
+    for (const row of rows) {
+      for (const dim of compiled.denominationDimensions ?? []) {
+        const count = row[`__${dim}_n`]
+        if (count == null || !Number.isSafeInteger(Number(count)) || Number(count) < 0) {
+          throw new Error('Report returned invalid denomination evidence')
+        }
+      }
+      if (compiled.denominationDimensions?.includes('book')) {
+        const count = row.__book_group_n
+        if (count == null || !Number.isSafeInteger(Number(count)) || Number(count) < 0) {
+          throw new Error('Report returned invalid accounting-book evidence')
+        }
+        // Book names are not unique. Grouping by a shared label must never
+        // silently merge two books even though it appears to be partitioned.
+        if (Number(count) > 1) {
+          throw new Error('Cannot aggregate rows that mix accounting books — group by Book code or Book (id)')
+        }
+      }
+    }
+    // The inline `__denom` census rides on the result rows: guard and result
+    // derive from the same statement and snapshot. Enforcement throws before
+    // any blended row or combined total is shaped.
+    const singles: DenominationSingles = resolveDenominations(
+      entity,
+      compiled,
+      compiled.hasDenominationCensus ? parseDenominationCounts(rows[0]) : {},
+    )
     result = shapeSummarizeResult(
       entity, compiled.breakouts, compiled.measures, rows, labels,
-      compiled.groupBy, compiled.totals ?? null,
+      compiled.groupBy, compiled.totals ?? null, singles,
     )
   } else {
     result = shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
@@ -266,6 +300,7 @@ function shapeSummarizeResult(
   labels: ReportRunLabels,
   groupBy: string | null = null,
   totals: ReportCustomQuery['totals'] = null,
+  singles: DenominationSingles = { txn: true, base: true, book: true },
 ): ReportRunResult {
   const measureHeading = (m: (typeof measures)[number]) =>
     labels.measure?.(entity, m) ?? measureLabel(entity, m)
@@ -540,7 +575,11 @@ function shapeSummarizeResult(
     ]
   }
 
-  // Grand totals for count/sum measures make useful summary cards.
+  // Grand totals for count/sum measures make useful summary cards — except a
+  // sum whose denomination is observably mixed (transaction currencies,
+  // functional bases, or accounting books), which would add foreign money
+  // together. Partitioned group rows stay; the mixed card is omitted (no row
+  // beats a wrong row).
   const summary: ReportRunResult['summary'] = [
     {
       label:
@@ -551,6 +590,9 @@ function shapeSummarizeResult(
     },
   ]
   measures.forEach((m, i) => {
+    if (m.fn === 'sum' && isTxnCurrencyMeasure(entity, m) && !singles.txn) return
+    if (m.fn === 'sum' && isBaseMoneyMeasure(entity, m) && !singles.base) return
+    if (m.fn === 'sum' && isMoneyBlendingMeasure(entity, m) && entity.bookScope && !singles.book) return
     if (m.fn === 'count' || m.fn === 'sum') {
       const total = sumExactDecimals(dataRows.map((row) => row[`m${i}`]))
       summary.push({
