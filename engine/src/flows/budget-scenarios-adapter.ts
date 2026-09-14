@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import { db } from "../db.ts";
+import { ambientTenantOrgId, db } from "../db.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 
@@ -182,8 +182,22 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
   },
 
   async findCandidateIds(limit: number): Promise<string[]> {
+    // Coarse newest-first fetch for scheduled fan-out; the select rule does
+    // the real filtering in JS against each record's loaded context. The
+    // explicit org_id predicate is the tenant boundary — same contract as the
+    // documents adapter. It fails closed when no ambient tenant is active
+    // rather than reading unscoped across organizations.
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
+      throw new Error(
+        `findCandidateIds for "budget_scenario" requires an ambient tenant context (withOrg)`,
+      );
+    }
     const result = (await db.execute<{ id: string }>(sql`
-      select id from budget_scenarios where status <> 'archived' order by created_at desc limit ${limit}
+      select id from budget_scenarios
+       where org_id = ${orgId} and status <> 'archived'
+       order by created_at desc
+       limit ${limit}
     `));
     return result.rows.map((row) => row.id);
   },

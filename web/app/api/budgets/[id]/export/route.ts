@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
 import { can } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { csvResponse, xlsxResponse } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -25,26 +26,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!scenario.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const lines = (await db.execute<Record<string, any>>(sql`
     select a.number, a.name as account_name, p.name as period,
+           s.name as subsidiary,
            d.code as department, pr.code as project, loc.code as location, c.code as class,
            (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note
       from budget_lines bl
       join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
       join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
+      left join subsidiaries s on s.id = bl.subsidiary_id and s.org_id = bl.org_id
       left join departments d on d.id = bl.department_id and d.org_id = bl.org_id
       left join projects pr on pr.id = bl.project_id and pr.org_id = bl.org_id
       left join locations loc on loc.id = bl.location_id and loc.org_id = bl.org_id
       left join classes c on c.id = bl.class_id and c.org_id = bl.org_id
      where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
-     order by a.number nulls last, a.name, p.period_number, d.code, pr.code, loc.code, c.code
+       ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+     order by a.number nulls last, a.name, p.period_number, s.name, d.code, pr.code, loc.code, c.code
   `))
 
   const result: ReportRunResult = {
     groups: [{
       kind: 'results',
       title: scenario.rows[0].name,
-      columns: ['Account Number', 'Account Name', 'Period', 'Department', 'Project', 'Location', 'Class', 'Amount', 'Note'],
+      columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class', 'Amount', 'Note'],
       rows: lines.rows.map((row) => [
-        row.number ?? '', row.account_name, row.period, row.department ?? '', row.project ?? '',
+        row.number ?? '', row.account_name, row.period, row.subsidiary ?? '', row.department ?? '', row.project ?? '',
         row.location ?? '', row.class ?? '', row.amount, row.note ?? '',
       ]),
       isEmpty: lines.rows.length === 0,

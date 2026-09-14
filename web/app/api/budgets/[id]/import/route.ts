@@ -4,7 +4,9 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { subsidiariesInScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { parseImportFile } from '../../../../../lib/data-io/parse'
 import type { ImportFormat } from '../../../../../lib/data-io/types'
 import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from '../../../../../lib/budget-mutations'
@@ -62,9 +64,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
 
-  const [accountsResult, periodsResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
+  const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
     db.execute<Lookup>(sql`select id, coalesce(number, '') as key, name, type from accounts where org_id = ${user.orgId} and is_active and not is_summary`),
     db.execute<Lookup>(sql`select id, name as key, name from accounting_periods where org_id = ${user.orgId} and fiscal_year = ${scenario.fiscal_year} and not is_adjustment`),
+    db.execute<Lookup>(sql`select id, name as key, name from subsidiaries where org_id = ${user.orgId} and is_active and not is_elimination`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from departments where org_id = ${user.orgId} and is_active`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from projects where org_id = ${user.orgId} and is_active`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from locations where org_id = ${user.orgId} and is_active`),
@@ -73,6 +76,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const accounts = lookup(accountsResult.rows)
   const creditAccounts = new Set(accountsResult.rows.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
   const periods = lookup(periodsResult.rows)
+  // Subsidiaries carry no code; rows resolve by id, exact name, then
+  // case-insensitive name. Storage guarantees (org_id, name) uniqueness, but
+  // the folded lookup can still collide on case variants — like the
+  // writer-tools account resolver, an ambiguous name is refused rather than
+  // guessed. A blank cell is the documented unambiguous default: the tenant
+  // root subsidiary, matching the worksheet and its storage trigger for
+  // legacy single-entity files.
+  const subsidiaryIds = new Map(subsidiariesResult.rows.map((row) => [row.id.toLowerCase(), row.id]))
+  const subsidiaryExactNames = new Map<string, string>()
+  const subsidiaryFoldedIds = new Map<string, Set<string>>()
+  for (const row of subsidiariesResult.rows) {
+    const name = row.name.trim()
+    if (!subsidiaryExactNames.has(name)) subsidiaryExactNames.set(name, row.id)
+    const folded = norm(name)
+    const ids = subsidiaryFoldedIds.get(folded) ?? new Set<string>()
+    ids.add(row.id)
+    subsidiaryFoldedIds.set(folded, ids)
+  }
+  const rootSubsidiary = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries
+     where org_id = ${user.orgId}
+       and parent_id is null and is_active and not is_elimination
+     order by created_at, id
+     limit 1
+  `)).rows[0]?.id ?? null
   const dimensions = {
     departmentId: lookup(departmentsResult.rows),
     projectId: lookup(projectsResult.rows),
@@ -91,6 +119,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const periodId = periods.get(norm(periodKey))
     if (!accountId) errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
     if (!periodId) errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+
+    const subsidiaryRaw = first(row, 'Subsidiary', 'subsidiary', 'subsidiaryId')
+    const subsidiaryText = String(subsidiaryRaw ?? '').trim()
+    let subsidiaryId: string | null = null
+    if (!subsidiaryText) {
+      subsidiaryId = rootSubsidiary
+      if (!subsidiaryId) errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
+    } else {
+      subsidiaryId = subsidiaryIds.get(subsidiaryText.toLowerCase())
+        ?? subsidiaryExactNames.get(subsidiaryText)
+        ?? null
+      if (!subsidiaryId) {
+        const candidates = subsidiaryFoldedIds.get(norm(subsidiaryText))
+        if (!candidates) {
+          errors.push({ row: rowNumber, field: 'Subsidiary', message: 'unknown_subsidiary' })
+        } else if (candidates.size > 1) {
+          errors.push({ row: rowNumber, field: 'Subsidiary', message: 'ambiguous_subsidiary' })
+        } else {
+          subsidiaryId = [...candidates][0] ?? null
+        }
+      }
+    }
+    if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
+      errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
+      subsidiaryId = null
+    }
 
     const resolvedDims: Record<keyof typeof dimensions, string | null> = {
       departmentId: null,
@@ -119,13 +173,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     } catch {
       errors.push({ row: rowNumber, field: 'Amount', message: 'invalid_amount' })
     }
-    if (accountId && periodId) {
-      const key = [accountId, periodId, ...Object.values(resolvedDims).map((value) => value ?? '')].join('|')
+    if (accountId && periodId && subsidiaryId) {
+      const key = [accountId, periodId, subsidiaryId, ...Object.values(resolvedDims).map((value) => value ?? '')].join('|')
       if (seen.has(key)) errors.push({ row: rowNumber, field: 'Account Number', message: 'duplicate_cell' })
       seen.add(key)
       cells.push({
         accountId,
         periodId,
+        subsidiaryId,
         ...resolvedDims,
         amount,
         note: String(first(row, 'Note', 'note') ?? '').trim().slice(0, 2_000) || null,
@@ -150,6 +205,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const rows = cells.map((cell) => ({
         account_id: cell.accountId,
         period_id: cell.periodId,
+        subsidiary_id: cell.subsidiaryId,
         department_id: cell.departmentId,
         project_id: cell.projectId,
         location_id: cell.locationId,
@@ -159,12 +215,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }))
       await tx.execute(sql`
         insert into budget_lines
-          (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+          (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
            amount, note, created_by, updated_by)
-        select ${user.orgId}, ${id}, x.account_id, x.period_id, x.department_id, x.project_id, x.location_id,
+        select ${user.orgId}, ${id}, x.account_id, x.period_id, x.subsidiary_id, x.department_id, x.project_id, x.location_id,
                x.class_id, x.amount, x.note, ${user.id}, ${user.id}
           from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
-            account_id uuid, period_id uuid, department_id uuid, project_id uuid,
+            account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
             location_id uuid, class_id uuid, amount numeric(19,4), note text
           )
          where x.amount <> 0 or x.note is not null
@@ -172,18 +228,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
         where budget_lines.org_id = ${user.orgId}
       `)
+      // A zero-amount row clears exactly its own cell: the entity is part of
+      // the key, and rows outside the caller's visible subsidiaries are never
+      // touched — an import cannot clear what it was never allowed to see.
       await tx.execute(sql`
         delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
-          account_id uuid, period_id uuid, department_id uuid, project_id uuid,
+          account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
           location_id uuid, class_id uuid, amount numeric(19,4), note text
         )
         where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
           and x.amount = 0 and x.note is null
           and bl.account_id = x.account_id and bl.period_id = x.period_id
+          and bl.subsidiary_id is not distinct from x.subsidiary_id
           and bl.department_id is not distinct from x.department_id
           and bl.project_id is not distinct from x.project_id
           and bl.location_id is not distinct from x.location_id
           and bl.class_id is not distinct from x.class_id
+          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
       `)
       const revision = expectedRevision + 1
       await tx.execute(sql`

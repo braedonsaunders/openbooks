@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
 
 export const runtime = 'nodejs'
@@ -84,10 +85,10 @@ export async function POST(req: Request) {
         if (!source.rows[0]) throw new Error('source_not_found')
         await tx.execute(sql`
           insert into budget_lines
-            (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
+            (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
              amount, note, created_by, updated_by)
           select ${user.orgId}, ${scenario.id}, bl.account_id, destination.id,
-                 bl.department_id, bl.project_id, bl.location_id, bl.class_id,
+                 bl.subsidiary_id, bl.department_id, bl.project_id, bl.location_id, bl.class_id,
                  bl.amount, bl.note, ${user.id}, ${user.id}
             from budget_lines bl
             join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
@@ -97,6 +98,7 @@ export async function POST(req: Request) {
              and destination.fiscal_year = ${fiscalYear}
              and destination.period_number = source_period.period_number
            where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
+             ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
         `)
       }
 
