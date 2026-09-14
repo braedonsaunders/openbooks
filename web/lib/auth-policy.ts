@@ -41,10 +41,24 @@ export function normalizeLoginEmail(value: string): string | null {
   return normalized;
 }
 
-/** Keep redirects same-origin and bounded; reject protocol-relative values. */
+/**
+ * Keep redirects same-origin and bounded; reject protocol-relative values.
+ * Parsed against a fixed sentinel so backslash-normalized protocol-relative
+ * URLs such as `/\evil.example` fail closed: WHATWG URL parsing treats `\`
+ * as a separator for http(s) URLs, so resolving such a value against the app
+ * origin later (e.g. the OIDC callback redirect) would leave this origin.
+ * Mirrors the login page's safeNextPath.
+ */
+const SAFE_RETURN_TO_ORIGIN = "https://openbooks.invalid";
 export function safeReturnTo(value: string | null | undefined): string {
   if (!value || value.length > 2048 || !value.startsWith("/") || value.startsWith("//")) return "/";
-  return value;
+  try {
+    const parsed = new URL(value, SAFE_RETURN_TO_ORIGIN);
+    if (parsed.origin !== SAFE_RETURN_TO_ORIGIN) return "/";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/";
+  }
 }
 
 function firstValidAddress(value: string | null): string | null {
