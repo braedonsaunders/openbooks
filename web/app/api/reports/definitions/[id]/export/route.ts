@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { guardPermission } from '../../../../../../lib/authz'
+import { isUuid } from '../../../../../../lib/list-params'
 import { guardReportEntity } from '../../../../../../lib/report-authz'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { resolveDefinitionToExportData } from '../../../../../../lib/report-run'
@@ -39,6 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'invalid format' }, { status: 422 })
   }
 
+  if (!isUuid(id)) return NextResponse.json({ error: 'report not found' }, { status: 404 })
   const def = await loadReportDefinition(user.orgId, id)
   if (!def) return NextResponse.json({ error: 'report not found' }, { status: 404 })
 
