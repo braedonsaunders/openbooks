@@ -130,15 +130,22 @@ jobs:
 
   container-security:
     needs: verify
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.SOURCE_COMMIT }}
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -156,26 +163,27 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=AGPL-3.0-or-later
             org.opencontainers.image.revision=${{ env.SOURCE_COMMIT }}
-      - name: Build and push the exact multi-platform candidate
+      - name: Build and push the native candidate
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
+          provenance: false
           push: true
-          tags: ${{ env.IMAGE_NAME }}:scan-${{ github.run_id }}-${{ github.run_attempt }}
+          tags: ${{ env.IMAGE_NAME }}:scan-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
           labels: ${{ steps.scan-meta.outputs.labels }}
           build-args: |
             OPENBOOKS_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,scope=image-${{ matrix.arch }},mode=max,ignore-error=true
       # Debian may publish advisories before patched packages exist. Block the
       # release on every fixable HIGH/CRITICAL finding; the scheduled security
       # workflow continues reporting newly disclosed, not-yet-fixable issues.
-      - name: Scan the exact amd64 manifest for fixable vulnerabilities
+      - name: Scan the native image for fixable vulnerabilities
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         env:
-          TRIVY_PLATFORM: linux/amd64
+          TRIVY_PLATFORM: ${{ matrix.platform }}
         with:
           image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           version: v0.70.0
@@ -184,26 +192,30 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-      - name: Scan the exact arm64 manifest for fixable vulnerabilities
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+      - name: Record the scanned immutable image
         env:
-          TRIVY_PLATFORM: linux/arm64
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p scanned-images
+          jq -n --arg arch "$ARCH" --arg platform "$PLATFORM" --arg digest "$DIGEST" \
+            --arg source "$SOURCE_COMMIT" --arg runId "$GITHUB_RUN_ID" \
+            '{arch:$arch,platform:$platform,digest:$digest,source:$source,runId:$runId}' \
+            > "scanned-images/$ARCH.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          version: v0.70.0
-          skip-setup-trivy: true
-          vuln-type: os,library
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+          name: scanned-image-${{ matrix.arch }}
+          path: scanned-images/${{ matrix.arch }}.json
+          if-no-files-found: error
+          overwrite: true
 
   publish:
     needs: [verify, container-security]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     outputs:
-      digest: ${{ needs.container-security.outputs.digest }}
+      digest: ${{ steps.merge.outputs.digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -214,6 +226,24 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: scanned-image-*
+          path: scanned-images
+          merge-multiple: true
+      - name: Merge and verify both scanned native images
+        id: merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_refs="$(node scripts/scanned-image-manifest.mjs sources scanned-images)"
+          mapfile -t sources <<< "$source_refs"
+          docker buildx imagetools create --metadata-file merged-image.json \
+            --tag "$IMAGE_NAME:scanned-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" "${sources[@]}"
+          digest="$(node scripts/scanned-image-manifest.mjs digest merged-image.json)"
+          docker buildx imagetools inspect "$IMAGE_NAME@$digest" --raw > merged-manifest.json
+          node scripts/scanned-image-manifest.mjs verify scanned-images merged-manifest.json
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
@@ -232,7 +262,7 @@ jobs:
       - name: Publish tags for the exact scanned digest
         env:
           OPENBOOKS_RELEASE_TAGS: ${{ steps.meta.outputs.tags }}
-          OPENBOOKS_SCANNED_IMAGE: ${{ env.IMAGE_NAME }}@${{ needs.container-security.outputs.digest }}
+          OPENBOOKS_SCANNED_IMAGE: ${{ env.IMAGE_NAME }}@${{ steps.merge.outputs.digest }}
         run: |
           # Without pipefail a failing `sed` would yield an empty tag list
           # that only the explicit count check below catches.
@@ -251,5 +281,5 @@ jobs:
         uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
           subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ needs.container-security.outputs.digest }}
+          subject-digest: ${{ steps.merge.outputs.digest }}
           push-to-registry: true

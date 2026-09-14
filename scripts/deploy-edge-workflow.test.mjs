@@ -303,3 +303,16 @@ test("publisher reuses proven merge checks without omitting release policies", (
   assert.match(merge, /npm run build -w web/);
   assert.match(publishWorkflow, /No successful 'test' run for/);
 });
+
+
+test("native builds scan both architectures before assembling the attested release", () => {
+  assert.match(publishWorkflow, /arch: amd64\n\s+platform: linux\/amd64\n\s+runner: ubuntu-latest/);
+  assert.match(publishWorkflow, /arch: arm64\n\s+platform: linux\/arm64\n\s+runner: ubuntu-24.04-arm/);
+  assert.doesNotMatch(publishWorkflow, /setup-qemu-action/);
+  assert.match(publishWorkflow, /TRIVY_PLATFORM: \$\{\{ matrix.platform \}\}/);
+  assert.match(publishWorkflow, /needs: \[verify, container-security\]/);
+  assert.ok(publishWorkflow.indexOf('Scan the native image') < publishWorkflow.indexOf('Record the scanned immutable image'));
+  assert.match(publishWorkflow, /scanned-image-manifest.mjs verify scanned-images merged-manifest.json/);
+  assert.match(publishWorkflow, /subject-digest: \$\{\{ steps.merge.outputs.digest \}\}/);
+  assert.match(publishWorkflow, /push-to-registry: true/);
+});
