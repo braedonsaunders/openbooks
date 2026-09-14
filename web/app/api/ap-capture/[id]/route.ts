@@ -1,9 +1,9 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { exactMoney, jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-config.ts'
-import { normalizeCapturedDecimal, type CaptureLine, type NormalizedCapture } from '@openbooks/engine/src/ap-capture.ts'
+import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents'
@@ -20,19 +20,30 @@ function optionalText(value: unknown, max = 500): string | null {
 }
 
 function optionalUuid(value: unknown): string | null {
-  const text = optionalText(value, 36)
-  return text && UUID.test(text) ? text : null
+  if (value == null || value === '') return null
+  if (typeof value !== 'string') throw new Error('invalid_capture_reference')
+  const text = value.trim()
+  if (!text) return null
+  if (!UUID.test(text)) throw new Error('invalid_capture_reference')
+  return text
 }
 
+const reviewMoney = exactMoney('invalid_capture_amount')
+
+// OCR heuristics belong to provider extraction. A human correction must not
+// strip characters or substitute zero for an invalid amount.
 function money(value: unknown, fallback: string | null = null): string | null {
-  const normalized = normalizeCapturedDecimal(value)
-  return normalized ?? fallback
+  if (value == null || value === '') return fallback
+  const parsed = reviewMoney.safeParse(value)
+  if (!parsed.success) throw new Error('invalid_capture_amount')
+  return parsed.data
 }
 
 function parseNormalized(raw: unknown): NormalizedCapture {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('invalid_capture')
   const row = raw as Record<string, unknown>
-  const sourceLines = Array.isArray(row.lines) ? row.lines : []
+  if (!Array.isArray(row.lines)) throw new Error('invalid_lines')
+  const sourceLines = row.lines
   if (sourceLines.length > 500) throw new Error('too_many_lines')
   const lines: CaptureLine[] = sourceLines.map((value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid_line')
@@ -100,8 +111,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
   let normalized: NormalizedCapture
+  let nextVendorId: string | null | undefined
+  let nextPurchaseOrderId: string | null | undefined
   try {
     normalized = parseNormalized(body.normalized)
+    if (body.documentKind !== undefined && body.documentKind !== 'vendor_bill' && body.documentKind !== 'vendor_credit') {
+      throw new Error('invalid_document_kind')
+    }
+    nextVendorId = body.vendorId === undefined ? undefined : optionalUuid(body.vendorId)
+    nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid_capture' }, { status: 422 })
   }
@@ -147,7 +165,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
   }
-  const nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
   if (
     nextPurchaseOrderId
     && nextPurchaseOrderId !== current.rows[0].purchase_order_id
@@ -156,24 +173,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const settings = await getDocumentCaptureSettings(gate.user.orgId)
-  const resolved = await resolveAndValidateCapture({
-    orgId: gate.user.orgId,
-    captureItemId: id,
-    normalized,
-    confidenceThreshold: settings.confidenceThreshold,
-    vendorId: body.vendorId === undefined ? undefined : optionalUuid(body.vendorId),
-    purchaseOrderId: nextPurchaseOrderId,
-  })
-  const kind = body.documentKind === 'vendor_credit' ? 'vendor_credit' : 'vendor_bill'
+  let saved: { resolved: Awaited<ReturnType<typeof resolveAndValidateCapture>>; kind: 'vendor_bill' | 'vendor_credit' }
   try {
-    await db.transaction(async (tx) => {
-    const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
-      select normalized, status, document_kind, vendor_candidate_id, purchase_order_id
-        from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id} for update
-    `))
-    const live = locked.rows[0]
-    if (!live) throw new Error('capture_not_found')
-    if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')
+    saved = await withOrgTransaction(gate.user.orgId, async () => {
+      const tx = db
+      const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
+        select normalized, status, document_kind, vendor_candidate_id, purchase_order_id
+          from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id} for update
+      `))
+      const live = locked.rows[0]
+      if (!live) throw new Error('capture_not_found')
+      if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')
+      const kind = body.documentKind === undefined ? live.document_kind : body.documentKind
+      if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new Error('invalid_document_kind')
+      // Resolve against the kind being saved, using the same locked snapshot as
+      // the correction audit. Omission preserves a selected vendor credit.
+      const resolved = await resolveAndValidateCapture({
+        orgId: gate.user.orgId, captureItemId: id, normalized,
+        confidenceThreshold: settings.confidenceThreshold,
+        vendorId: nextVendorId, purchaseOrderId: nextPurchaseOrderId, documentKind: kind,
+    })
     const before = live.normalized
     const headerKeys = ['vendorName', 'vendorTaxId', 'invoiceNumber', 'invoiceDate', 'dueDate', 'purchaseOrderNumber', 'currency', 'subtotal', 'taxTotal', 'total', 'memo'] as const
     for (const key of headerKeys) {
@@ -223,8 +242,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       values (${gate.user.orgId}, ${id}, 'review_saved',
               ${JSON.stringify({ status, issueCount: resolved.issues.length })}::jsonb, ${gate.user.id})
     `)
+    return { resolved, kind }
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'invalid_document_kind') {
+      return NextResponse.json({ error: error.message }, { status: 422 })
+    }
     if (error instanceof Error && error.message === 'capture_not_found') {
       return NextResponse.json({ error: 'not_found' }, { status: 404 })
     }
@@ -233,6 +256,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     throw error
   }
+  const { resolved, kind } = saved
   return NextResponse.json({
     normalized: resolved.normalized,
     validationIssues: resolved.issues,
