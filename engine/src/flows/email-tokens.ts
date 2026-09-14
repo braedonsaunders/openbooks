@@ -57,7 +57,7 @@ export function createEmailActionToken(args: {
   gateId: string;
   decision: "approved" | "rejected";
   assigneeUserId: string;
-  /** Override for tests; defaults to now + 7 days. */
+  /** Override for tests; defaults to now + EMAIL_TOKEN_TTL_MS (72 hours). */
   expiresAt?: number;
 }): string {
   const expiresAt = args.expiresAt ?? Date.now() + EMAIL_TOKEN_TTL_MS;

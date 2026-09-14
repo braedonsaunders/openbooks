@@ -92,8 +92,8 @@ export async function listUserDelegations(orgId: string, userId: string): Promis
            d.starts_at as "startsAt", d.ends_at as "endsAt", d.reason,
            (now() >= d.starts_at) as "isActive"
       from approval_delegations d
-      left join users fu on fu.id = d.from_user_id
-      left join users tu on tu.id = d.to_user_id
+      left join users fu on fu.id = d.from_user_id and fu.org_id = d.org_id
+      left join users tu on tu.id = d.to_user_id and tu.org_id = d.org_id
      where d.org_id = ${orgId}
        and (d.from_user_id = ${userId} or d.to_user_id = ${userId})
        and d.revoked_at is null and d.ends_at >= now()

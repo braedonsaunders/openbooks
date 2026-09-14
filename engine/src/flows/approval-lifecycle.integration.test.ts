@@ -12,7 +12,7 @@ import {
   type FlowActors,
 } from "../test-fixtures.ts";
 import { submitForApproval } from "./submit.ts";
-import { decideGate, delegateGate, worklistGates } from "./gates.ts";
+import { decideGate, delegateGate, escalateDueGate, worklistGates } from "./gates.ts";
 import { createDelegation } from "./delegations.ts";
 
 /**
@@ -311,7 +311,7 @@ test("an out-of-office delegate decides on behalf of the principal", { skip: !DB
     const [gate] = await gateRows({ subjectId: docId });
 
     // approver1 is out of office; approver2 covers (active window over now).
-    const now = Date.now();
+    const now = await dbNow();
     await createDelegation({
       orgId: org.orgId,
       fromUserId: actors.approver1Id,
@@ -343,5 +343,131 @@ test("worklistGates surfaces a pending gate to its assignee only", { skip: !DB }
     assert.equal(mine.filter((g) => g.subjectId === docId).length, 1);
     const notMine = await worklistGates(org.orgId, actors.approver2Id);
     assert.equal(notMine.filter((g) => g.subjectId === docId).length, 0);
+  });
+});
+
+/**
+ * Database clock: delegation windows are evaluated by Postgres' now()
+ * (delegations.ts), so anchor test windows to it — never to the app clock,
+ * which may skew from the database in shared environments.
+ */
+async function dbNow(): Promise<number> {
+  const r = (await db.execute<{ now: Date | string }>(sql`select now() as now`));
+  const v = r.rows[0]!.now;
+  return (v instanceof Date ? v : new Date(v)).getTime();
+}
+
+/** Point a seeded flow's gate node at an escalation target (seed helper has no escalateTo). */
+async function setGateEscalateTo(flowId: string, escalateTo: unknown): Promise<void> {
+  const r = (await db.execute<{ graph: { nodes: Array<{ id: string; data: { gate?: Record<string, unknown> } }> } }>(sql`
+    select graph from flows where id = ${flowId}`));
+  const graph = r.rows[0]!.graph;
+  const node = graph.nodes.find((n) => n.id === "gate");
+  node!.data.gate!.escalateTo = escalateTo as never;
+  await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb where id = ${flowId}`);
+}
+
+test("escalation skips the submitter (SoD) and falls through to an eligible approver", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const { flowId } = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    // Escalation aimed at the submitter — who could never decide their own
+    // gate. Scratch actors have no supervisor chain, so the eligible fallback
+    // is the org admin.
+    await setGateEscalateTo(flowId, { type: "user", userId: actors.submitterId });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const [gate] = await gateRows({ subjectId: docId });
+
+    assert.equal(await escalateDueGate(gate!.id), true, "escalation fires");
+    const after = await gateRows({ subjectId: docId });
+    assert.equal(after.find((g) => g.id === gate!.id)!.status, "escalated");
+    const replacements = after.filter((g) => g.status === "pending");
+    assert.equal(replacements.length, 1, "exactly one live replacement");
+    assert.notEqual(replacements[0]!.assigneeUserId, actors.submitterId, "never stranded on the submitter");
+    assert.equal(replacements[0]!.assigneeUserId, actors.adminId, "falls through to the admin");
+
+    // The eligible replacement decides; the run completes instead of stranding.
+    const decision = await decideGate({ gateId: replacements[0]!.id, decision: "approved", userId: actors.adminId });
+    assert.equal(decision.resumed, "approve");
+    assert.equal(await docStatus(docId), "approved");
+  });
+});
+
+test("explicit self-approval opt-out still lets an escalation reach the submitter", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const { flowId } = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      preventSelfApproval: false,
+    });
+    await setGateEscalateTo(flowId, { type: "user", userId: actors.submitterId });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const [gate] = await gateRows({ subjectId: docId });
+
+    assert.equal(await escalateDueGate(gate!.id), true, "escalation fires");
+    const replacements = (await gateRows({ subjectId: docId })).filter((g) => g.status === "pending");
+    assert.equal(replacements.length, 1);
+    assert.equal(replacements[0]!.assigneeUserId, actors.submitterId, "opt-out honors the authored target");
+
+    const decision = await decideGate({ gateId: replacements[0]!.id, decision: "approved", userId: actors.submitterId });
+    assert.equal(decision.resumed, "approve");
+    assert.equal(await docStatus(docId), "approved");
+  });
+});
+
+test("a delegate who is the submitter still cannot decide (SoD survives delegation)", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const [gate] = await gateRows({ subjectId: docId });
+
+    // approver1 hands coverage to the submitter — the grant travels, but the
+    // submitter's own separation-of-duties block still applies.
+    const now = await dbNow();
+    await createDelegation({
+      orgId: org.orgId,
+      fromUserId: actors.approver1Id,
+      toUserId: actors.submitterId,
+      startsAt: new Date(now - 3_600_000),
+      endsAt: new Date(now + 24 * 3_600_000),
+    });
+
+    await assert.rejects(
+      decideGate({ gateId: gate!.id, decision: "approved", userId: actors.submitterId }),
+      /you cannot approve your own submission/,
+      "delegation never raises the submitter above SoD",
+    );
+    assert.equal((await gateRows({ subjectId: docId }))[0]!.status, "pending", "gate stays decidable by an eligible approver");
+    assert.equal(await docStatus(docId), "pending_approval");
+  });
+});
+
+
+test("escalation skips its current assignee before falling through to admins", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const { flowId } = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill", mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    await setGateEscalateTo(flowId, {type:"user",userId:actors.approver1Id});
+    const docId=await seedDraftDocument(org.orgId,{kind:"vendor_bill",createdBy:actors.submitterId});
+    await submitForApproval("vendor_bill",docId);
+    const [gate]=await gateRows({subjectId:docId});
+    assert.equal(await escalateDueGate(gate!.id),true);
+    const replacement=(await gateRows({subjectId:docId})).find(g=>g.status==='pending');
+    assert.equal(replacement?.assigneeUserId,actors.adminId);
+    await decideGate({gateId:replacement!.id,decision:'approved',userId:actors.adminId});
+    assert.equal(await docStatus(docId),'approved');
   });
 });
