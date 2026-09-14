@@ -8,7 +8,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { assembleRl1Slip, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./payroll-rl1.ts";
+import { assembleRl1Slip, openingYtdIntoRl1Aggregates, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./payroll-rl1.ts";
+import type { OpeningYearEndYtd } from "./payroll-yearend.ts";
 import {
   RL1_XML_DOWNLOAD_REFUSAL,
   rl1TransmitterProblems,
@@ -88,6 +89,62 @@ test("box I caps at the QPIP maximum insurable earnings (RL-1.G s. 5.11)", () =>
 
 test("the boxes the data cannot populate are published, not implied", () => {
   assert.match(RL1_UNSUPPORTED_BOXES, /box(es)? D/i);
+});
+
+const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
+  pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
+  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ...overrides,
+});
+
+test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () => {
+  // A mid-year adopter's RL-1 must reconcile to the prior provider's YTD
+  // report exactly as their T4 does: taxable/QPP/QPP2/EI/QPIP/pensionable
+  // ride the same per-employee opening the T4 and W-2 builders fold in.
+  const carried = openingYtdIntoRl1Aggregates(
+    aggregates(),
+    opening({
+      taxableYtd: "21000.50", cppYtd: "700.00", cpp2Ytd: "120.00",
+      eiYtd: "210.75", qpipYtd: "33.25", pensionableYtd: "22000.00",
+      insurableYtd: "11000.25", taxYtd: "3150.75",
+    }),
+  );
+  assert.equal(carried.taxableIncome, "73000.5000");
+  assert.equal(carried.qpp, "3760.0500");
+  assert.equal(carried.qpp2, "120.0000");
+  assert.equal(carried.ei, "886.7500");
+  assert.equal(carried.qpip, "256.8500");
+  assert.equal(carried.pensionable, "74000.0000");
+});
+
+test("RL-1 carry-in leaves boxes E, F and I alone: no opening source exists", () => {
+  // tax_ytd is the T4-box-22 federal money and insurable_ytd the EI base —
+  // neither is Québec income tax, union dues, or the QPIP salary base, so
+  // carrying them into boxes E/F/I would invent a Québec return the same way
+  // the T4 refuses box 44 and box 56.
+  const before = aggregates();
+  const carried = openingYtdIntoRl1Aggregates(
+    before,
+    opening({
+      taxableYtd: "100.00", taxYtd: "20.00", pensionableYtd: "100.00",
+      insurableYtd: "80.00", cppYtd: "5.00", cpp2Ytd: "2.00",
+      eiYtd: "3.00", qpipYtd: "1.00",
+    }),
+  );
+  assert.equal(carried.qcIncomeTax, before.qcIncomeTax);
+  assert.equal(carried.unionDues, before.unionDues);
+  assert.equal(carried.insurable, before.insurable);
+});
+
+test("RL-1 carry-in is capped with the stubs, not after them", () => {
+  // 70,000 of QPP-pensionable salary with the prior provider leaves only
+  // 4,600 of YMPE room: the cap consumes the combined base, so carrying the
+  // opening in after capping would overstate box G by the opening amount.
+  const carried = openingYtdIntoRl1Aggregates(
+    aggregates({ pensionable: "20000.00" }),
+    opening({ pensionableYtd: "70000.00" }),
+  );
+  const slip = assembleRl1Slip(carried, rl1YearCaps(2026));
+  assert.equal(slip.boxG, "74600");
 });
 
 test("RL-1 artifacts pin slips and totals to one repeatable-read snapshot", () => {

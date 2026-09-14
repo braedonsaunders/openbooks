@@ -2,10 +2,15 @@ import { assertPayrollCountryKnown } from "./payroll-country.ts";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool, type SqlExecutor } from "./db.ts";
-import { add, cmp } from "./money.ts";
+import { add, cmp, normalizeMoney } from "./money.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
 import { PayrollError } from "./payroll-error.ts";
 import type { PayrollFilingData } from "./payroll-filing-registry.ts";
+import {
+  carryOpeningYearEndYtd,
+  seedOpeningOnlySlips,
+  type OpeningYearEndYtd,
+} from "./payroll-yearend.ts";
 
 // A return is a statutory artifact, so all of its source reads must come from
 // one pinned snapshot. Keep a dedicated handle: callers such as filing pages
@@ -206,7 +211,7 @@ async function rl1SlipsInSnapshot(
      order by p.display_name
   `));
 
-  return rows.rows.map((row) => assembleRl1Slip({
+  const stubAggregates: Rl1SlipAggregates[] = rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     taxableIncome: num(row.taxable_income),
@@ -219,7 +224,137 @@ async function rl1SlipsInSnapshot(
     pensionable: num(row.pensionable),
     insurable: num(row.insurable),
     stubCount: Number(row.stub_count ?? 0),
-  }, caps));
+  }));
+
+  // Mid-year adopters: fold the prior provider's year-to-date into the
+  // aggregates BEFORE the annual maxima are applied, exactly as the T4 folds
+  // its carry-in before `capAnnualEarnings`. An opening-only employee seeds a
+  // zero slip only on Québec-profile evidence, and the carry lands once per
+  // employee — the RL-1 is already one slip per employee, so no room-sharing
+  // across slips is needed.
+  const openings = await openingRl1YtdByEmployee(runner, orgId, taxYear);
+  const profiles = await openingRl1Profiles(runner, orgId, [...openings.keys()]);
+  // An opening-only employee seeds a zero slip only on Québec-profile
+  // evidence: the RL-1 is Québec employment, and an opening with no QC
+  // evidence anywhere must not conjure a Québec slip. (The T4/W-2 still carry
+  // that employee on their own returns.)
+  const qcOpeningIds = [...openings.keys()].filter(
+    (id) => profiles.get(id)?.province === "QC",
+  );
+  const seeded = seedOpeningOnlySlips(stubAggregates, qcOpeningIds, (employeePartyId) => ({
+    employeePartyId,
+    employeeName: profiles.get(employeePartyId)?.name ?? employeePartyId,
+    taxableIncome: "0", qpp: "0", qpp2: "0", ei: "0", qpip: "0",
+    qcIncomeTax: "0", unionDues: "0", pensionable: "0", insurable: "0",
+    stubCount: 0,
+  }));
+  const carried = carryOpeningYearEndYtd(seeded, openings, openingYtdIntoRl1Aggregates);
+  return carried.map((row) => assembleRl1Slip(row, caps));
+}
+
+/**
+ * Fold one employee's pre-adoption year-to-date into their RL-1 aggregates —
+ * the same carry-in the T4 (`openingYtdIntoT4Slip`) and W-2 builders perform,
+ * so a mid-year adopter's RL-1 reconciles to the prior provider's YTD report
+ * exactly as their T4 does.
+ *
+ * Carried: taxable (box A), QPP/QPP2 (boxes B.A/B.B — `cpp_ytd` is the QPP
+ * column for Québec employment, as the T4's own box-17 mapping reads it), EI
+ * premiums (box C), QPIP premiums (box H), and the QPP-pensionable base (box
+ * G, capped with the stubs by `assembleRl1Slip` below, never after it).
+ *
+ * Deliberately absent, like the T4's boxes 44 and 56: Québec income tax (box
+ * E — `tax_ytd` is the T4-box-22 federal money, not the Québec slice),
+ * union dues (box F — the model collects no union-dues YTD), and the QPIP
+ * salary base (box I — `insurable_ytd` is the EI base, and promoting it to a
+ * QPIP-insurable figure would invent a Québec return).
+ */
+export function openingYtdIntoRl1Aggregates(
+  row: Rl1SlipAggregates,
+  opening: OpeningYearEndYtd,
+): Rl1SlipAggregates {
+  return {
+    ...row,
+    taxableIncome: add(row.taxableIncome, opening.taxableYtd),
+    qpp: add(row.qpp, opening.cppYtd),
+    qpp2: add(row.qpp2, opening.cpp2Ytd),
+    ei: add(row.ei, opening.eiYtd),
+    qpip: add(row.qpip, opening.qpipYtd),
+    pensionable: add(row.pensionable, opening.pensionableYtd),
+  };
+}
+
+/**
+ * The statutory carry-ins for one org-year, keyed by Canadian-pack employee —
+ * the RL-1's read of the same `payroll_opening_balances` rows the T4 folds
+ * in. Queried through the caller's snapshot runner, never a second session:
+ * the RL-1 assembles every source inside one repeatable-read transaction.
+ */
+async function openingRl1YtdByEmployee(
+  runner: SqlExecutor,
+  orgId: string,
+  taxYear: number,
+): Promise<Map<string, OpeningYearEndYtd>> {
+  const rows = (await runner.execute<{
+    employee_party_id: string;
+    pensionable_ytd: unknown; insurable_ytd: unknown;
+    cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
+    taxable_ytd: unknown; tax_ytd: unknown;
+  }>(sql`
+    select b.employee_party_id,
+           b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
+           b.taxable_ytd, b.tax_ytd
+      from payroll_opening_balances b
+      join employee_payroll_profiles prof
+        on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
+       and coalesce(prof.country, 'CA') = 'CA'
+     where b.org_id = ${orgId} and b.tax_year = ${taxYear}
+       and (
+         coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
+         or coalesce(b.cpp_ytd, 0) <> 0 or coalesce(b.cpp2_ytd, 0) <> 0
+         or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
+         or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
+       )
+  `));
+  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
+    insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
+    cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
+    cpp2Ytd: normalizeMoney(String(row.cpp2_ytd ?? "0")),
+    eiYtd: normalizeMoney(String(row.ei_ytd ?? "0")),
+    qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
+    taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
+    taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+  }]));
+}
+
+/**
+ * Display names and employment provinces for opening-only employees, from the
+ * same snapshot. Only Québec-profile employees can seed an RL-1 slip: the
+ * slip is Québec employment, and an opening with no QC evidence anywhere must
+ * not conjure one.
+ */
+async function openingRl1Profiles(
+  runner: SqlExecutor,
+  orgId: string,
+  employeeIds: readonly string[],
+): Promise<Map<string, { name: string; province: string }>> {
+  if (employeeIds.length === 0) return new Map();
+  const rows = (await runner.execute<{
+    employee_party_id: string; display_name: string; province: string | null;
+  }>(sql`
+    select p.id as employee_party_id, p.display_name,
+           coalesce(prof.province, '') as province
+      from parties p
+      left join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+       and coalesce(prof.country, 'CA') = 'CA'
+     where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
+  `));
+  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    name: row.display_name,
+    province: row.province ?? "",
+  }]));
 }
 
 export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
