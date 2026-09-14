@@ -973,9 +973,9 @@ export const RULES: Record<string, RuleFn> = {
         ? custom.discountAccountId
         : null;
     if (toUnits(discount) < 0n)
-      throw new Error("vendor payment discount cannot be negative");
+      throw new PostingError("vendor payment discount cannot be negative");
     if (!isZero(discount) && !discountAccountId)
-      throw new Error("vendor payment discount account is required");
+      throw new PostingError("vendor payment discount account is required");
     const payable = add(cash, discount);
     return [
       // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
@@ -1019,11 +1019,11 @@ export const RULES: Record<string, RuleFn> = {
         ? custom.feeIncomeAccountId
         : null;
     if (toUnits(fee) < 0n)
-      throw new Error("customer payment fee cannot be negative");
+      throw new PostingError("customer payment fee cannot be negative");
     if (cmp(fee, total) > 0)
-      throw new Error("customer payment fee exceeds the receipt");
+      throw new PostingError("customer payment fee exceeds the receipt");
     if (!isZero(fee) && !feeAccountId)
-      throw new Error("customer payment fee income account is required");
+      throw new PostingError("customer payment fee income account is required");
     const receivable = add(total, neg(fee));
     return [
       {
