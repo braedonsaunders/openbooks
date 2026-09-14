@@ -53,6 +53,34 @@ export async function approveSubmittedTimeEntries(
   const days = weekWindow(options.weekStart)
   const week = days[0]!
   return withOrgTransaction(options.orgId, async () => {
+    // The week's header owns the lifecycle: lock it first so a concurrent
+    // submission cannot interleave gate creation with this approval, then
+    // refuse weeks no approval may consume.
+    const header = ((await db.execute<{ id: string }>(sql`
+      select id from timesheet_weeks
+       where org_id = ${options.orgId}
+         and employee_party_id = ${options.employeePartyId}
+         and week_start = ${week}::date
+       for update
+    `)).rows[0])
+    // A flow that raised approval gates OWNS the week until they resolve
+    // (see the submit route): a direct approval past them would let one
+    // approver override the authored routing, quorum, and escalation. Gates
+    // name the header as their subject, so a week with no header yet has
+    // nothing to own it and the check is vacuous.
+    if (header) {
+      const openGates = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from flow_gates
+         where org_id = ${options.orgId}
+           and subject_kind = 'timesheet_week'
+           and subject_id = ${header.id}
+           and status in ('pending', 'escalated')
+      `)).rows[0]?.n ?? 0)
+      if (openGates > 0) {
+        throw new Error('this week is owned by a pending approval workflow — its gates must resolve first')
+      }
+    }
+
     const approved = (await db.execute<{ id: string }>(sql`
       update time_entries
          set status = 'approved',
@@ -68,6 +96,13 @@ export async function approveSubmittedTimeEntries(
        returning id
     `))
 
+    // The conditional UPDATE is the claim: zero flipped rows means there was
+    // nothing submitted to approve (a draft or empty week), and the header
+    // must not be stamped approved over it. This also closes the concurrent
+    // double-approval race — the loser flips nothing and fails closed.
+    if (approved.rows.length === 0) {
+      throw new Error('no submitted entries to approve — submit the week first')
+    }
     const ids = approved.rows.map((row) => row.id)
     await runTimeApprovalEffects(options.orgId, options.actorId, ids)
     await setTimesheetWeekStatus(

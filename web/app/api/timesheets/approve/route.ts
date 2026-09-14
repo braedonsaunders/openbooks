@@ -44,6 +44,16 @@ export async function POST(req: Request) {
       weekStart: week,
     })
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    // Guard rejections carry their own sentence: nothing submitted (422), or
+    // the week's approval workflow still owns it (409). Anything else is a
+    // failed financial-effects unit, rolled back together.
+    if (/no submitted entries|timesheet week not found/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 422 })
+    }
+    if (/pending approval workflow/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 409 })
+    }
     console.error('[timesheets/approve] approval transaction rolled back:', error)
     return NextResponse.json(
       { error: 'Time approval could not complete its configured financial effects. No entries were approved.' },
