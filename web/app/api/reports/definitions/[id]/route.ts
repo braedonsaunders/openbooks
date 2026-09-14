@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
 import { canAccessReportDefinition } from '../../../../../lib/report-execution-context'
 import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../../lib/report-authz'
 import {
@@ -34,6 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const def = await loadReportDefinition(gate.user.orgId, id)
   if (!def) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!(await canRunReportEntity(gate, def.query))) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -56,6 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existing = await loadReportDefinition(user.orgId, id)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -137,6 +140,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existing = await loadReportDefinition(user.orgId, id)
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
