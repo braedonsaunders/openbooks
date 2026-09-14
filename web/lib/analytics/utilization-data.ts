@@ -126,6 +126,10 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
     left join departments d on d.id = t.department_id and d.org_id = t.org_id
     left join items i on i.id = t.item_id and i.org_id = t.org_id
     where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
+      -- Draft, submitted and rejected hours are not worked reality (rejected
+      -- hours never will be) — the same approved-only rule as project
+      -- profitability hours and the time drill-down.
+      and t.status = 'approved'
       ${subsidiaryVisibleFilter(sql`coalesce(project.subsidiary_id, p.subsidiary_id)`, allowed)}
     group by 1, 2, 3, 4, 5, 6
   `);
