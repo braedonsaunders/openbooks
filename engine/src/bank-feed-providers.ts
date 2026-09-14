@@ -161,7 +161,9 @@ const gocardless: BankFeedAdapter = {
           t.debtorName ||
           null,
         counterpartyRef: t.creditorName || t.debtorName || null,
-        bankTransactionId: t.transactionId || t.internalTransactionId || null,
+        // The bank-supplied transactionId is not unique per booking; the
+        // provider's internal id is the stable dedupe identity.
+        bankTransactionId: t.internalTransactionId || t.transactionId || null,
       };
     });
     return { lines, currency, sourceEvidence: bankFeedSourceEvidence("gocardless", [raw]) };
