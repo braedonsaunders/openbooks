@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, pool } from "./db.ts";
 import {
   PropertyManagementError,
   activatePropertyLease,
+  addLeaseCharge,
   addLeaseEscalation,
   applyLeaseEscalation,
   billDueLeaseCharges,
@@ -15,6 +16,7 @@ import {
   recordSecurityDeposit,
   reopenFinalizedCamPool,
   scheduleLeaseCharges,
+  terminatePropertyLease,
   updatePropertyLease,
 } from "./property-management.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
@@ -274,6 +276,230 @@ test("R7: CAM allocation residual and fingerprint are deterministic across physi
     assert.equal(second.fingerprint, first.fingerprint, "fingerprint is independent of row order");
     // Documented convention: the largest weight absorbs the residual, ties to the lowest lease id.
     assert.equal(residualHolder.lease_id, leaseIds[0], "equal weights: the residual lands on the lowest lease id");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("R8: lease, charge, and escalation creation refuse invalid policy as domain errors and persist nothing", { skip: !DB }, async () => {
+  const fx = await seedProperty();
+  try {
+    const orgId = fx.org.orgId;
+    const leaseId = await activeLease(fx, "L-R8", "2026-01-01", "2026-12-31");
+    const counts = async () => (await db.execute<{ leases: number; charges: number; escalations: number }>(sql`
+      select (select count(*)::int from property_leases where org_id = ${orgId}) as leases,
+        (select count(*)::int from lease_charges where org_id = ${orgId}) as charges,
+        (select count(*)::int from lease_escalations where org_id = ${orgId}) as escalations`)).rows[0]!;
+    const before = await counts();
+    const domain = (error: unknown) => error instanceof PropertyManagementError;
+    // Every rejection below used to arrive as a raw storage error (or, for
+    // unknown enums, a miscomputed posting); each must now fail closed
+    // before writing.
+    await assert.rejects(() => createPropertyLease({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      leaseNumber: "L-R8-BAD", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
+      billingDay: 99, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
+      lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
+    }), domain, "billing day 99 is refused");
+    await assert.rejects(() => addLeaseCharge({
+      orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Extra",
+      amount: "10", frequency: "monthly", effectiveFrom: "not-a-date",
+    }), domain, "an invalid charge date is refused");
+    await assert.rejects(() => addLeaseCharge({
+      orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Extra",
+      amount: "10", frequency: "monthly", effectiveFrom: "2026-05-01", effectiveTo: "2026-04-01",
+    }), domain, "an inverted charge window is refused");
+    await assert.rejects(() => addLeaseEscalation({
+      orgId, actorId: fx.actorId, leaseId, effectiveOn: "2026-07-01", method: "bogus" as never, value: "50",
+    }), domain, "an unknown escalation method is refused");
+    assert.deepEqual(await counts(), before, "no refused creation persisted a row");
+    // A none late fee carries no value: creation coerces it exactly like an
+    // update instead of tripping the storage guard.
+    const coerced = await createPropertyLease({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      leaseNumber: "L-R8-NONE", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
+      billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
+      lateFeeType: "none", lateFeeValue: "50", graceDays: 0, autoInvoice: true, autoPost: false,
+    });
+    const stored = (await db.execute<{ late_fee_value: string }>(sql`
+      select late_fee_value::text from property_leases where org_id = ${orgId} and id = ${coerced.id}`)).rows[0]!;
+    assert.equal(stored.late_fee_value, "0.0000");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("R9: a retried deposit import key is refused as a domain error without posting twice", { skip: !DB }, async () => {
+  const fx = await seedProperty();
+  try {
+    const orgId = fx.org.orgId;
+    const leaseId = await activeLease(fx, "L-IMP", "2026-01-01", null);
+    const entries = async () => (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${orgId}`)).rows[0]!.n;
+    const journalsBefore = await entries();
+    const first = await recordSecurityDeposit({
+      orgId, actorId: fx.actorId, leaseId, kind: "received",
+      occurredOn: fx.org.date, amount: "500", importKey: "imp-dup-1",
+    });
+    assert.equal(first.balance, "500.0000");
+    await assert.rejects(
+      () => recordSecurityDeposit({
+        orgId, actorId: fx.actorId, leaseId, kind: "received",
+        occurredOn: fx.org.date, amount: "500", importKey: "imp-dup-1",
+      }),
+      (error: unknown) => error instanceof PropertyManagementError && /already imported/.test(error.message),
+    );
+    const ledger = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from security_deposit_transactions where org_id = ${orgId} and lease_id = ${leaseId}`)).rows[0]!;
+    assert.equal(ledger.n, 1, "the retried import posted nothing");
+    assert.equal(await entries(), journalsBefore + 1, "the retried import left no extra journal");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("R10: concurrent duplicate deposit imports on different leases map to a domain error", { skip: !DB }, async () => {
+  const fx = await seedProperty();
+  const writer = await pool.connect();
+  let pending: Promise<{ status: "fulfilled"; value: { id: string }; } | { status: "rejected"; reason: unknown }> | undefined;
+  try {
+    const orgId = fx.org.orgId;
+    const leaseA = await activeLease(fx, "L-RACE-A", "2026-01-01", null);
+    const leaseB = await activeLease(fx, "L-RACE-B", "2026-01-01", null);
+    // A racing import on another lease: uncommitted, so the lease-scoped
+    // preflight cannot see it and only the storage backstop can refuse it.
+    await writer.query("begin");
+    await writer.query("select set_config('app.bypass_rls','on',true)");
+    const seedEntryId = randomUUID();
+    await writer.query(
+      `insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+       values ($1, $2, $3, $4, $5, $6, $7, 'race seed', 'draft', 'manual')`,
+      [seedEntryId, orgId, fx.org.bookId, fx.org.subsidiaryId, `RACE-${seedEntryId.slice(0, 8)}`, fx.org.date, fx.org.periodId],
+    );
+    await writer.query(
+      `insert into security_deposit_transactions (org_id, lease_id, kind, occurred_on, amount, bank_account_id, journal_entry_id, import_key)
+       values ($1, $2, 'received', $3, 500, $4, $5, 'race-dup-1')`,
+      [orgId, leaseA, fx.org.date, fx.org.accounts.bank, seedEntryId],
+    );
+    const writerPid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+    pending = recordSecurityDeposit({
+      orgId, actorId: fx.actorId, leaseId: leaseB, kind: "received",
+      occurredOn: fx.org.date, amount: "500", importKey: "race-dup-1",
+    }).then(
+      (value) => ({ status: "fulfilled" as const, value: { id: value.id } }),
+      (reason: unknown) => ({ status: "rejected" as const, reason }),
+    );
+    let blocked = false;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const count = (await pool.query<{ n: number }>(
+        "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))", [writerPid])).rows[0]!.n;
+      if (count) { blocked = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(blocked, "the duplicate import must wait for the racing import");
+    await writer.query("commit");
+    const result = await pending;
+    assert.equal(result.status, "rejected");
+    if (result.status !== "rejected") assert.fail("a racing duplicate import must be refused");
+    assert.ok(result.reason instanceof PropertyManagementError && /already imported/.test(result.reason.message),
+      "the storage conflict maps to a domain error, not a raw unique violation");
+  } finally {
+    await writer.query("rollback");
+    writer.release();
+    await pending;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("R11: duplicate lease/escalation identities and invalid charge references fail closed without persisting", { skip: !DB }, async () => {
+  const fx = await seedProperty();
+  try {
+    const orgId = fx.org.orgId;
+    const leaseId = await activeLease(fx, "L-R11", "2026-01-01", "2026-12-31");
+    const counts = async () => (await db.execute<{ leases: number; charges: number; escalations: number }>(sql`
+      select (select count(*)::int from property_leases where org_id = ${orgId}) as leases,
+        (select count(*)::int from lease_charges where org_id = ${orgId}) as charges,
+        (select count(*)::int from lease_escalations where org_id = ${orgId}) as escalations`)).rows[0]!;
+    const before = await counts();
+    const domain = (error: unknown) => error instanceof PropertyManagementError;
+    // Duplicate identities used to arrive as raw unique violations.
+    await assert.rejects(() => createPropertyLease({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      leaseNumber: "L-R11", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
+      billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
+      lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
+    }), domain, "a duplicate lease number is refused");
+    const draft = await createPropertyLease({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      leaseNumber: "L-R11-DRAFT", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
+      billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
+      lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
+    });
+    await assert.rejects(() => updatePropertyLease({
+      orgId, actorId: fx.actorId, leaseId: draft.id, propertyId: fx.propertyId, tenantId: fx.org.customerId,
+      leaseNumber: "L-R11", startsOn: "2026-01-01", endsOn: "2026-12-31", baseRent: "1000",
+      billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none",
+      lateFeeType: "none", lateFeeValue: "0", graceDays: 0, autoInvoice: true, autoPost: false,
+    }), domain, "renaming onto a duplicate lease number is refused");
+    await addLeaseEscalation({
+      orgId, actorId: fx.actorId, leaseId, effectiveOn: "2026-07-01", method: "percent", value: "5",
+    });
+    await assert.rejects(() => addLeaseEscalation({
+      orgId, actorId: fx.actorId, leaseId, effectiveOn: "2026-07-01", method: "fixed", value: "10",
+    }), domain, "a duplicate escalation date is refused");
+    // Charge references used to arrive as raw foreign-key or invalid-text
+    // errors at commit; the deferrable FKs stay as the race backstop.
+    const bogus = randomUUID();
+    for (const [label, ref] of [
+      ["an unknown income account", { incomeAccountId: bogus }],
+      ["a malformed income account", { incomeAccountId: "not-a-uuid" }],
+      ["a bank account as income", { incomeAccountId: fx.org.accounts.bank }],
+      ["an unknown item", { itemId: bogus }],
+      ["an unknown tax code", { taxCodeId: bogus }],
+    ] as const) {
+      await assert.rejects(() => addLeaseCharge({
+        orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Extra",
+        amount: "10", frequency: "monthly", effectiveFrom: "2026-05-01", ...ref,
+      }), domain, `a charge with ${label} is refused`);
+    }
+    // The guards must not over-reject: a fully-referenced charge commits.
+    const valid = await addLeaseCharge({
+      orgId, actorId: fx.actorId, leaseId, chargeType: "other", description: "Valid extra",
+      amount: "10", frequency: "monthly", effectiveFrom: "2026-05-01",
+      incomeAccountId: fx.org.accounts.revenue, itemId: fx.org.items.service,
+    });
+    assert.ok(valid.id);
+    const after = await counts();
+    assert.deepEqual(
+      { leases: after.leases - before.leases, charges: after.charges - before.charges, escalations: after.escalations - before.escalations },
+      { leases: 1, charges: 2, escalations: 1 },
+      "only the valid draft lease with its base rent, the valid charge, and the first escalation persisted",
+    );
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("R12: a blank termination date is refused without mutating the lease", { skip: !DB }, async () => {
+  const fx = await seedProperty();
+  try {
+    const orgId = fx.org.orgId;
+    const leaseId = await activeLease(fx, "L-R12", "2026-01-01", "2026-12-31");
+    // A blank date previously terminated the lease with a null move-out date.
+    await assert.rejects(
+      () => terminatePropertyLease(orgId, fx.actorId, leaseId, "", "Tenant left"),
+      (error: unknown) => error instanceof PropertyManagementError && /Termination date is required/.test(error.message),
+    );
+    const row = (await db.execute<{ status: string; endsOn: string | null; moveOutOn: string | null; scheduled: number }>(sql`
+      select l.status, l.ends_on::text as "endsOn", l.move_out_on::text as "moveOutOn",
+        (select count(*)::int from lease_schedule_lines where org_id = l.org_id and lease_id = l.id and status = 'scheduled') as scheduled
+        from property_leases l where l.org_id = ${orgId} and l.id = ${leaseId}`)).rows[0]!;
+    assert.deepEqual(
+      { status: row.status, endsOn: row.endsOn, moveOutOn: row.moveOutOn },
+      { status: "active", endsOn: "2026-12-31", moveOutOn: null },
+      "the refused termination changed nothing",
+    );
+    assert.ok(row.scheduled > 0, "earned schedules survive the refused termination");
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }

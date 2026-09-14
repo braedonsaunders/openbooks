@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "./db.ts";
 import { toUnits } from "./money.ts";
-import { levelLeaseRentStraightLine } from "./property-management.ts";
+import { PropertyManagementError, levelLeaseRentStraightLine } from "./property-management.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -182,6 +182,38 @@ for (const policy of ["account", "location", "inactive subsidiary", "inactive bo
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
+
+test("rent levelling refuses a GL-closed target period before posting", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const slAccountId = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable,
+                            required_dimensions, custom, subsidiary_include_children)
+      values (${slAccountId}, ${org.orgId}, '1160', 'Straight-Line Rent Receivable', 'asset_current_other',
+              false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    const leaseId = await seedLease(org, slAccountId);
+    await db.execute(sql`
+      insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
+      values (${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', 'closed', now(),
+              'levelling refuses closed periods instead of tripping the storage guard')`);
+    // Before the pre-check this reached the post step and failed as a raw
+    // storage error from the close fence; it must fail closed as a domain
+    // error with nothing written.
+    await assert.rejects(
+      levelLeaseRentStraightLine(org.orgId, null, { asOf: org.date, onlyLeaseId: leaseId }),
+      (error: unknown) => error instanceof PropertyManagementError
+        && /GL period covering .* is closed/.test(error.message),
+    );
+    assert.equal(
+      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,
+      0,
+      "no levelling entry reached the closed period",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("rent levelling rechecks contractual amounts after waiting for a lease edit", { skip: !DB }, async () => {
   const org = await createScratchOrg();

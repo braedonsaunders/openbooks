@@ -148,6 +148,9 @@ export function leaseChargeSchedule(input: {
   effectiveFrom: string; effectiveTo?: string | null; leaseStartsOn: string; leaseEndsOn?: string | null;
   throughOn: string; billingDay: number;
 }): SchedulePeriod[] {
+  if (input.frequency !== "monthly" && input.frequency !== "quarterly" && input.frequency !== "annually" && input.frequency !== "one_time") {
+    throw new PropertyManagementError("Invalid charge frequency");
+  }
   const start = maxDate(input.effectiveFrom, input.leaseStartsOn);
   const end = minDate(input.effectiveTo ?? input.throughOn, input.leaseEndsOn ?? input.throughOn, input.throughOn);
   if (end < start) return [];
@@ -166,6 +169,7 @@ export function leaseChargeSchedule(input: {
 }
 
 export function escalatedRent(current: string, method: "percent" | "fixed" | "new_amount", value: string): string {
+  if (method !== "percent" && method !== "fixed" && method !== "new_amount") throw new PropertyManagementError("Invalid escalation method");
   const base = exactMoney(current, "Current rent"); const v = exactMoney(value, "Escalation value");
   const next = method === "percent" ? add(base, mulPercent(base, v)) : method === "fixed" ? add(base, v) : v;
   if (cmp(next, "0") <= 0) throw new PropertyManagementError("Escalated rent must be positive");
@@ -214,6 +218,20 @@ export function depositBalance(transactions: Array<{ kind: string; amount: strin
   return sum(transactions.map((row) => depositPostingShape(row.kind).liabilitySide === "credit" ? row.amount : neg(row.amount)));
 }
 
+/** Narrow mapper for the deposit import backstop. The import key is org-wide
+ * while the duplicate preflight runs under one lease lock, so a concurrent
+ * import on another lease can only surface as this exact unique violation.
+ * Only that conflict becomes a domain error; every other storage failure
+ * propagates untouched. */
+export function isSecurityDepositImportConflict(error: unknown): boolean {
+  let cursor: unknown = error;
+  for (let depth = 0; cursor instanceof Error && depth < 5; depth += 1) {
+    if ((cursor as { constraint?: unknown }).constraint === "security_deposits_import_key_once") return true;
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
   const result = (await runner.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'propertyManagement')::boolean,false) as enabled from orgs where id=${orgId}
@@ -247,6 +265,9 @@ export async function createManagedProperty(input: {
 }): Promise<{ id: string }> {
   const code = input.code.trim(); const name = input.name.trim();
   if (!code || !name) throw new PropertyManagementError("Property code and name are required");
+  if (!["residential", "commercial", "mixed_use", "industrial", "other"].includes(input.propertyType)) {
+    throw new PropertyManagementError("Invalid property type");
+  }
   const requestedCurrency = (input.currency ?? "").trim().toUpperCase();
   if (requestedCurrency && !/^[A-Z]{3}$/.test(requestedCurrency)) throw new PropertyManagementError("Property currency must be a three-letter ISO code");
   return db.transaction(async (tx) => {
@@ -443,6 +464,9 @@ export async function createPropertyUnit(input: { orgId: string; actorId: string
   if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
   const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : exactMoney(input.rentableArea, "Rentable area");
   if (rentableArea != null && cmp(rentableArea, "0") <= 0) throw new PropertyManagementError("Rentable area must be positive");
+  if (input.bedrooms != null && (!Number.isInteger(input.bedrooms) || input.bedrooms < 0)) {
+    throw new PropertyManagementError("Bedrooms must be a non-negative whole number");
+  }
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
     const result = (await tx.execute<{ id: string }>(sql`
@@ -519,7 +543,7 @@ export async function createPropertyLease(input: {
   const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = exactMoney(input.baseRent, "Base rent");
   const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : exactMoney(input.camSharePercent, "CAM share");
   const deposit = exactMoney(input.securityDepositRequired ?? "0", "Security deposit");
-  const lateFeeValue = exactMoney(input.lateFeeValue ?? "0", "Late-fee value");
+  const lateFeeValue = (input.lateFeeType ?? "none") === "none" ? "0.0000" : exactMoney(input.lateFeeValue ?? "0", "Late-fee value");
   const billingDay = input.billingDay ?? 1;
   const paymentTermsDays = input.paymentTermsDays ?? 0;
   const graceDays = input.graceDays ?? 0;
@@ -529,7 +553,16 @@ export async function createPropertyLease(input: {
   const autoPost = input.autoPost ?? false;
   if (!leaseNumber || !startsOn || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number, start date, and positive base rent are required");
   if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
+  if (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31) throw new PropertyManagementError("Billing day must be between 1 and 31");
+  if (!Number.isInteger(paymentTermsDays) || paymentTermsDays < 0 || !Number.isInteger(graceDays) || graceDays < 0) {
+    throw new PropertyManagementError("Payment terms and grace days must be non-negative whole numbers");
+  }
+  if (cmp(deposit, "0") < 0) throw new PropertyManagementError("Security deposit cannot be negative");
+  if (!["none", "fixed", "pro_rata"].includes(camMethod)) throw new PropertyManagementError("Invalid CAM method");
   if (camShare != null && (cmp(camShare, "0") < 0 || cmp(camShare, "100") > 0)) throw new PropertyManagementError("CAM share must be between 0 and 100");
+  if (!["none", "fixed", "percent"].includes(lateFeeType)) throw new PropertyManagementError("Invalid late-fee type");
+  if (lateFeeType !== "none" && cmp(lateFeeValue, "0") <= 0) throw new PropertyManagementError("Late-fee value must be positive");
+  if (lateFeeType === "percent" && cmp(lateFeeValue, "100") > 0) throw new PropertyManagementError("Late-fee percent cannot exceed 100");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
     const scope = (await tx.execute<{ id: string; rent_income_account_id: string | null; tenant_ok: boolean; unit_ok: boolean }>(sql`
@@ -543,6 +576,8 @@ export async function createPropertyLease(input: {
     if (!property.tenant_ok) throw new PropertyManagementError("Tenant must be an active customer");
     if (!property.unit_ok) throw new PropertyManagementError("Unit does not belong to this property");
     if (!property.rent_income_account_id) throw new PropertyManagementError("Configure the property rent income account first");
+    const duplicateNumber = (await tx.execute(sql`select 1 from property_leases where org_id=${input.orgId} and lease_number=${leaseNumber} limit 1`));
+    if (duplicateNumber.rows.length) throw new PropertyManagementError("Lease number already exists");
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into property_leases(org_id,property_id,unit_id,tenant_id,lease_number,starts_on,ends_on,billing_day,payment_terms_days,
         security_deposit_required,cam_method,cam_share_percent,late_fee_type,late_fee_value,grace_days,auto_invoice,auto_post,created_by,updated_by)
@@ -610,6 +645,9 @@ export async function updatePropertyLease(input: {
     `));
     const current = currentResult.rows[0];
     if (!current || !["draft", "active", "notice"].includes(current.status)) throw new PropertyManagementError("Editable lease not found");
+    const duplicateNumber = (await tx.execute(sql`select 1 from property_leases
+      where org_id=${input.orgId} and lease_number=${leaseNumber} and id<>${input.leaseId} limit 1`));
+    if (duplicateNumber.rows.length) throw new PropertyManagementError("Lease number already exists");
     const draft = current.status === "draft";
     if (!draft && (current.propertyId !== input.propertyId || current.unitId !== (input.unitId ?? null) || current.tenantId !== input.tenantId || current.startsOn !== startsOn)) {
       throw new PropertyManagementError("Property, unit, tenant, and start date cannot change after activation");
@@ -717,16 +755,44 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
   if (input.chargeType === "base_rent") {
     throw new PropertyManagementError("Base rent changes belong on the lease and its controlled escalations");
   }
+  if (!["cam", "parking", "storage", "utility", "late_fee", "other"].includes(input.chargeType)) {
+    throw new PropertyManagementError("Invalid charge type");
+  }
+  if (!["monthly", "quarterly", "annually", "one_time"].includes(input.frequency)) {
+    throw new PropertyManagementError("Invalid charge frequency");
+  }
   const amount = exactMoney(input.amount, "Charge amount");
   if (!input.description.trim() || cmp(amount, "0") <= 0) throw new PropertyManagementError("Charge description and positive amount are required");
+  const effectiveFrom = validDate(input.effectiveFrom, "Charge start");
+  if (!effectiveFrom) throw new PropertyManagementError("Charge start is required");
+  const effectiveTo = validDate(input.effectiveTo, "Charge end");
+  if (effectiveTo && effectiveTo < effectiveFrom) throw new PropertyManagementError("Charge end cannot precede start");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    if (input.incomeAccountId != null) {
+      if (!UUID_RE.test(input.incomeAccountId)) throw new PropertyManagementError("Charge income account is invalid");
+      const income = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from accounts
+        where org_id=${input.orgId} and id=${input.incomeAccountId} and type in ('income','income_other') and is_active and not is_summary) as ok`));
+      if (!income.rows[0]?.ok) throw new PropertyManagementError("Charge income account must be an active income account");
+    }
+    if (input.itemId != null) {
+      if (!UUID_RE.test(input.itemId)) throw new PropertyManagementError("Charge item is invalid");
+      const item = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from items
+        where org_id=${input.orgId} and id=${input.itemId} and is_active) as ok`));
+      if (!item.rows[0]?.ok) throw new PropertyManagementError("Charge item must be an active item");
+    }
+    if (input.taxCodeId != null) {
+      if (!UUID_RE.test(input.taxCodeId)) throw new PropertyManagementError("Charge tax code is invalid");
+      const tax = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from tax_codes
+        where org_id=${input.orgId} and id=${input.taxCodeId} and is_active) as ok`));
+      if (!tax.rows[0]?.ok) throw new PropertyManagementError("Charge tax code must be an active tax code");
+    }
     const result = (await tx.execute<{
       id: string; chargeType: string; description: string; amount: string; frequency: string;
       effectiveFrom: string; effectiveTo: string | null; incomeAccountId: string | null;
     }>(sql`
       insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
-      select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${input.effectiveFrom},${input.effectiveTo ?? null},
+      select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${effectiveFrom},${effectiveTo},
         coalesce(${input.incomeAccountId ?? null},case when ${input.chargeType}='cam' then p.cam_income_account_id else p.rent_income_account_id end)::uuid,
         ${input.itemId ?? null},${input.taxCodeId ?? null},${input.actorId},${input.actorId}
         from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
@@ -812,7 +878,8 @@ export async function activatePropertyLease(orgId: string, actorId: string, leas
 
 export async function terminatePropertyLease(orgId: string, actorId: string, leaseId: string, terminatedOn: string, reason: string): Promise<void> {
   if (!reason.trim()) throw new PropertyManagementError("Termination reason is required");
-  const effectiveOn = validDate(terminatedOn, "Termination date")!;
+  const effectiveOn = validDate(terminatedOn, "Termination date");
+  if (!effectiveOn) throw new PropertyManagementError("Termination date is required");
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     const lease = (await tx.execute<{ starts_on: string; unit_id: string | null }>(sql`select starts_on,unit_id from property_leases where org_id=${orgId} and id=${leaseId} and status in ('active','notice') for update`));
@@ -833,11 +900,16 @@ export async function terminatePropertyLease(orgId: string, actorId: string, lea
 }
 
 export async function addLeaseEscalation(input: { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; requestId?: string | null }): Promise<{ id: string }> {
-  const effectiveOn = validDate(input.effectiveOn, "Escalation date")!;
+  const effectiveOn = validDate(input.effectiveOn, "Escalation date");
+  if (!effectiveOn) throw new PropertyManagementError("Escalation date is required");
   const value = exactMoney(input.value, "Escalation value");
   if (cmp(value, "0") <= 0) throw new PropertyManagementError("Escalation value must be positive");
+  if (!["percent", "fixed", "new_amount"].includes(input.method)) throw new PropertyManagementError("Invalid escalation method");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    const duplicateDate = (await tx.execute(sql`select 1 from lease_escalations
+      where org_id=${input.orgId} and lease_id=${input.leaseId} and effective_on=${effectiveOn} limit 1`));
+    if (duplicateDate.rows.length) throw new PropertyManagementError("An escalation already exists for this date");
     const result = (await tx.execute<{ id: string; method: string; effectiveFrom: string }>(sql`insert into lease_escalations(org_id,lease_id,effective_on,method,value,created_by,updated_by)
       select ${input.orgId},id,${effectiveOn},${input.method},${value},${input.actorId},${input.actorId}
         from property_leases where org_id=${input.orgId} and id=${input.leaseId} and status in ('draft','active','notice')
@@ -1096,6 +1168,14 @@ export async function levelLeaseRentStraightLine(
       `));
       if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No active primary posting book");
       if (!ctx.rows[0]?.period_id) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
+      // Direct journal writes bypass the document posting path, so the GL
+      // close fence that guards documents never sees this accrual: refuse a
+      // closed target period here instead of tripping the storage guard.
+      const closed = (await db.execute<{ closed: boolean }>(sql`
+        select period_module_is_closed(${orgId},${ctx.rows[0].period_id},${ctx.rows[0].book_id},${lease.subsidiaryId},'gl') as closed`));
+      if (closed.rows[0]?.closed) {
+        throw new PropertyManagementError(`The GL period covering ${asOf} is closed; straight-line rent cannot post into it`);
+      }
 
       const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
       const subsidiary = subsidiaryContext.byId.get(lease.subsidiaryId);
@@ -1359,6 +1439,12 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${input.leaseId}`));
     const nextBalance = depositBalance([...prior.rows, { kind: input.kind, amount }]);
     if (cmp(nextBalance, "0") < 0) throw new PropertyManagementError("Deposit transaction exceeds the tenant balance");
+    const importKey = input.importKey?.trim() || null;
+    if (importKey) {
+      const duplicate = (await tx.execute(sql`select 1 from security_deposit_transactions
+        where org_id=${input.orgId} and import_key=${importKey} limit 1`));
+      if (duplicate.rows.length) throw new PropertyManagementError("Security deposit was already imported");
+    }
 
     const increase = shape.liabilitySide === "credit";
     const applied = shape.offsetIsArOpenItem;
@@ -1445,8 +1531,11 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
         values(${input.orgId},${credit.rows[0]!.id},${targetLineId},${amount},${amount},${amount},${row.currency},${amount},${row.currency},1,'same_currency','Security deposit application',${occurredOn},${input.actorId},${input.actorId})`);
     }
     const inserted = (await tx.execute<{ id: string }>(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,import_key,memo,created_by,updated_by)
-      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${input.importKey?.trim() || null},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`));
+      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${importKey},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`));
     return { id: inserted.rows[0]!.id, entryId, balance: nextBalance };
+  }).catch((error: unknown) => {
+    if (isSecurityDepositImportConflict(error)) throw new PropertyManagementError("Security deposit was already imported");
+    throw error;
   });
 }
 
@@ -1588,6 +1677,7 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
   const expenseAccountIds = [...new Set(input.expenseAccountIds)];
   const budgetAmount = exactMoney(input.budgetAmount, "CAM budget");
   if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
+  if (!["rentable_area", "equal", "custom"].includes(input.allocationBasis)) throw new PropertyManagementError("Invalid CAM allocation basis");
   if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
@@ -1617,6 +1707,7 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
   const expenseAccountIds = [...new Set(input.expenseAccountIds)];
   const budgetAmount = exactMoney(input.budgetAmount, "CAM budget");
   if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
+  if (!["rentable_area", "equal", "custom"].includes(input.allocationBasis)) throw new PropertyManagementError("Invalid CAM allocation basis");
   if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
