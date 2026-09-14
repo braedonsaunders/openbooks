@@ -359,6 +359,37 @@ test('account UUID references from another organization are rejected before writ
   assert.equal(importState.transactionCalls, 0)
 })
 
+test('master-data numeric import rejects inexact decimal representations', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('items').write([
+    { code: 'SKU-ROUND', name: 'Over-scale probe', kind: 'service', defaultRate: '12.345678' },
+    { code: 'SKU-HEX', name: 'Hex probe', kind: 'service', defaultRate: '0x10' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 2,
+    errors: [
+      { row: 1, message: 'defaultRate must be an exact decimal with at most 4 decimal places' },
+      { row: 2, message: 'defaultRate must be an exact decimal with at most 4 decimal places' },
+    ],
+  })
+  assert.deepEqual(importState.attemptedMutations, [])
+  assert.deepEqual(importState.committedMutations, [])
+})
+
+test('master-data numeric import still accepts canonical decimals', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('items').write([
+    { code: 'SKU-OK', name: 'Canonical probe', kind: 'service', defaultRate: '12.3456' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+})
+
 test('master-data exports do not resolve account labels through an unscoped lookup', async () => {
   resetImportState(false)
   const foreignAccountId = '22222222-2222-4222-8222-222222222222'
