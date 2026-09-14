@@ -164,10 +164,10 @@ export async function mergedRunChequesPdf(
   documentId: string,
   actorId: string,
 ): Promise<{ pdf: Uint8Array; count: number; issued: number } | null> {
-  const batch = await issuePayRunCheques({ orgId, documentId, actorId })
-  if (batch.cheques.length === 0) return null
   const template = await resolvePdfTemplate(orgId, 'payroll_cheque', null)
   if (!template) return null
+  const batch = await issuePayRunCheques({ orgId, documentId, actorId })
+  if (batch.cheques.length === 0) return null
 
   const merged = await PDFDocument.create()
   let count = 0

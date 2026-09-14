@@ -56,6 +56,8 @@ const state = {
   templateResolveCalls: 0,
   recordLoadCalls: 0,
   transportResolveCalls: 0,
+  chequeIssueCalls: 0,
+  chequeTemplate: { id: 'template-1' } as { id: string } | null,
   encryptionPasswords: [] as string[],
   encryptionError: null as Error | null,
   renderedPdf: plainPdfFixture,
@@ -123,8 +125,16 @@ const mockSources = new Map<string, string>([
   [
     'mock:payroll-cheques',
     `
+      const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function issuePayRunCheques() {
-        throw new Error('cheque output is outside this test')
+        harness.state.chequeIssueCalls += 1
+        return {
+          cheques: [{
+            stubId: 'stub-1', employeePartyId: 'employee-1', employeeName: 'Jordan Sparks',
+            chequeNumber: 'CHQ-0001', amount: '100.00',
+          }],
+          total: '100.00', issued: 1,
+        }
       }
     `,
   ],
@@ -143,7 +153,7 @@ const mockSources = new Map<string, string>([
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function resolvePdfTemplate() {
         harness.state.templateResolveCalls += 1
-        return { id: 'template-1' }
+        return harness.state.chequeTemplate
       }
     `,
   ],
@@ -238,7 +248,7 @@ const hooks = registerHooks({
 })
 
 const payrollOutputsUrl = './payroll-outputs.ts?payroll-ciphertext-test'
-const { emailRunStubs } = await import(payrollOutputsUrl) as typeof import('./payroll-outputs.ts')
+const { emailRunStubs, mergedRunChequesPdf } = await import(payrollOutputsUrl) as typeof import('./payroll-outputs.ts')
 const protectedSenderUrl = './pdf-templates/send.ts?payroll-ciphertext-test'
 const {
   isProtectedPayrollRecordType,
@@ -255,6 +265,8 @@ function reset(stubs: StubRow[], policy: { enabled: boolean; expression: string 
   state.templateResolveCalls = 0
   state.recordLoadCalls = 0
   state.transportResolveCalls = 0
+  state.chequeIssueCalls = 0
+  state.chequeTemplate = { id: 'template-1' }
   state.encryptionPasswords.length = 0
   state.encryptionError = null
   state.renderedPdf = plainPdfFixture
@@ -283,6 +295,17 @@ test('the catalog-derived protection class covers every compensation PDF alias',
     assert.equal(isProtectedPayrollRecordType(recordType), true, `${recordType} must be protected`)
   }
   assert.equal(isProtectedPayrollRecordType('customer_invoice'), false)
+})
+
+test('cheque output checks for a template before consuming cheque numbers', async () => {
+  reset([], { enabled: true, expression: '{surname:3|upper}' })
+  state.chequeTemplate = null
+
+  assert.equal(
+    await mergedRunChequesPdf('org-1', 'run-1', 'actor-1'),
+    null,
+  )
+  assert.equal(state.chequeIssueCalls, 0)
 })
 
 test('a protected payroll PDF cannot be sent without a protection pass', async () => {
