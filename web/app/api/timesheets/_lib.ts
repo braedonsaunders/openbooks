@@ -414,6 +414,44 @@ export async function ensureTimesheetWeek(
   return { id: row.id, status: row.status, rejectionReason: row.rejection_reason }
 }
 
+/**
+ * Refuse a submission that must not dispatch. Called inside the submit
+ * transaction after the header is known and the draft/rejected entries have
+ * been flipped (the flip's row count rides along), before the header stamp
+ * and the flow dispatch — throwing rolls all of it back.
+ *
+ * Two closes in one: a week whose gates are still open stays owned by its
+ * approval workflow (a second submit would raise a duplicate set of gates
+ * beside the live ones), and a week with no movable entries has nothing to
+ * submit (an empty or already-submitted week must not raise runs and gates
+ * for nothing). The header lock serializes concurrent submits so the loser
+ * observes the winner's gates, or zero remaining rows, and fails closed.
+ */
+export async function assertWeekSubmittable(
+  orgId: string,
+  headerId: string,
+  movedEntryCount: number,
+): Promise<void> {
+  await db.execute(sql`
+    select id from timesheet_weeks
+     where org_id = ${orgId} and id = ${headerId}
+     for update
+  `)
+  const openGates = ((await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_gates
+     where org_id = ${orgId}
+       and subject_kind = 'timesheet_week'
+       and subject_id = ${headerId}
+       and status in ('pending', 'escalated')
+  `)).rows[0]?.n ?? 0)
+  if (openGates > 0) {
+    throw new Error('this week is owned by a pending approval workflow — its gates must resolve first')
+  }
+  if (movedEntryCount === 0) {
+    throw new Error('nothing to submit — the week has no draft or rejected entries')
+  }
+}
+
 /** Move a week's header to a new status, stamping the matching audit columns. */
 export async function setTimesheetWeekStatus(
   orgId: string,
