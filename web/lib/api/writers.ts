@@ -594,7 +594,15 @@ async function updateEntity(
   const existingSubsidiary = (
     existing.rows[0] as { subsidiaryId?: string | null }
   ).subsidiaryId;
-  if (!subsidiaryInMutationScope(allowed, existingSubsidiary))
+  // Subsidiary scope only constrains tables carrying the dimension (parties,
+  // projects, fixed assets) — the same contract the platform list/get paths
+  // enforce by checking for a subsidiary_id field first. Dimension-less rows
+  // (items) are org-wide catalog: gating their undefined subsidiary would
+  // 404 every restricted update while create stays open.
+  if (
+    ENTITY_SUBSIDIARY_TABLES.has(table) &&
+    !subsidiaryInMutationScope(allowed, existingSubsidiary)
+  )
     return err(404, "not found");
 
   const gated = await refuseDisabledItemFeatureColumns(
@@ -663,7 +671,11 @@ async function deleteEntity(
       for update`);
   if (!owned.rows[0]) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
+  // Subsidiary scope only constrains tables carrying the dimension (parties,
+  // projects, fixed assets) — the same contract updateEntity enforces above.
+  // Dimension-less rows (items) are org-wide catalog.
   if (
+    ENTITY_SUBSIDIARY_TABLES.has(table) &&
     !subsidiaryInMutationScope(
       allowed,
       (owned.rows[0] as { subsidiaryId?: string | null }).subsidiaryId,
