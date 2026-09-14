@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, UrlDrawer } from '@openbooks/ui'
-import { Download, Pencil } from 'lucide-react'
+import { Badge, Button, Card, CardHeader, CardTitle, CardDescription, CardContent, UrlDrawer } from '@openbooks/ui'
+import { Download, Pencil, ShieldCheck, Settings2, Power, Code2 } from 'lucide-react'
 import { parseManifest, type AppManifest } from '@/lib/apps/manifest'
 import {
   nextAppVersion,
@@ -15,6 +15,7 @@ import { confirmDialog } from '@/lib/confirm'
 import { AppPackageEditor } from './AppPackageEditor'
 import { AppHistory } from './AppHistory'
 import { AppWorkspaceTabs } from './sections'
+import { AppOverviewHero } from './AppOverviewHero'
 
 export function ExtensionDrawer({
   app,
@@ -46,6 +47,7 @@ export function ExtensionDrawer({
 }) {
   const router = useRouter()
   const t = useTranslations('apps.management')
+  const te = useTranslations('apps.editor')
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<
     'overview' | 'package' | 'versions' | 'runs' | 'audit' | 'storage'
@@ -112,24 +114,25 @@ export function ExtensionDrawer({
       title={app.name}
       description={`${app.key} · ${app.version ?? ''}`}
       beforeClose={leave}
+      subtabs={<AppWorkspaceTabs label={t('workspace')} selected={tab}
+          tabs={(['overview', ...(canAuthor ? ['package' as const] : []), 'versions', 'runs', 'storage', 'audit'] as const).map(key => ({ key, label: t(key) }))}
+          onSelect={value => { if (value === 'package' && !editing) void edit(); else setTab(value) }} />}
     >
       <div className="space-y-5">
-        <AppWorkspaceTabs label={t('workspace')} selected={tab}
-          tabs={(['overview', ...(canAuthor ? ['package' as const] : []), 'versions', 'runs', 'storage', 'audit'] as const).map(key => ({ key, label: t(key) }))}
-          onSelect={value => { if (value === 'package' && !editing) void edit(); else setTab(value) }} />
         {tab === 'overview' ? (
           <div className="space-y-5">
-            <div className="flex items-start justify-between gap-4">
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                {app.description}
-              </p>
-              <Badge
-                variant={app.status === 'installed' ? 'success' : 'outline'}
-              >
-                {t(app.status)}
-              </Badge>
-            </div>
-            <div className="flex flex-wrap gap-2">
+            <AppOverviewHero
+              name={app.name}
+              description={app.description}
+              version={app.version}
+              renderer={app.manifest ? app.manifest.frontend.renderer ?? 'sandbox' : undefined}
+              status={<Badge variant={app.status === 'installed' ? 'success' : 'outline'}>{t(app.status)}</Badge>}
+              stats={[
+                { label: te('files'), value: files.length },
+                { label: te('endpoints'), value: app.manifest?.endpoints.length ?? 0 },
+                { label: t('permissions'), value: app.grantedPermissions.length },
+              ]}
+              actions={<>
               {app.status === 'installed' ? (
                 <Button asChild>
                   <Link href={`/apps/${app.key}`}>{t('open')}</Link>
@@ -162,9 +165,13 @@ export function ExtensionDrawer({
                   </Button>
                 </>
               ) : null}
-            </div>
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">{t('contents')}</h3>
+            </>}
+            />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm"><Code2 size={18} aria-hidden />{t('contents')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
               <p className="text-sm">
                 {t('summary', {
                   files: files.length,
@@ -179,10 +186,14 @@ export function ExtensionDrawer({
                   </li>
                 ))}
               </ul>
-            </section>
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">{t('permissions')}</h3>
-              <p className="text-sm text-slate-500">{t('permissionsHelp')}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm"><ShieldCheck size={18} aria-hidden />{t('permissions')}</CardTitle>
+                <CardDescription>{t('permissionsHelp')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
               {app.grantedPermissions.length ? (
                 <ul className="list-inside list-disc text-sm">
                   {app.grantedPermissions.map((permission) => (
@@ -192,9 +203,13 @@ export function ExtensionDrawer({
               ) : (
                 <p className="text-sm">{t('noPermissions')}</p>
               )}
-            </section>
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">{t('configuration')}</h3>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm"><Settings2 size={18} aria-hidden />{t('configuration')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline">
                   <Link href="/admin/navigation">{t('navigation')}</Link>
@@ -208,10 +223,14 @@ export function ExtensionDrawer({
                   <Link href="/admin/roles">{t('roles')}</Link>
                 </Button>
               </div>
-            </section>
-            <section className="space-y-3 border-t pt-5">
-              <h3 className="text-sm font-semibold">{t('lifecycle')}</h3>
-              <p className="text-sm text-slate-500">{t('lifecycleHelp')}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm"><Power size={18} aria-hidden />{t('lifecycle')}</CardTitle>
+                <CardDescription>{t('lifecycleHelp')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 {app.status === 'installed' ? (
                   <Button
@@ -291,7 +310,8 @@ export function ExtensionDrawer({
                   {t('uninstall')}
                 </Button>
               </div>
-            </section>
+              </CardContent>
+            </Card>
           </div>
         ) : tab === 'package' ? (
           !editing ? (
