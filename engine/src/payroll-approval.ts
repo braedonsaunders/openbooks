@@ -3,6 +3,8 @@ import { db } from "./db.ts";
 import { PayrollError } from "./payroll-error.ts";
 import { PAY_RUN_SUBJECT_KIND } from "./flows/pay-runs-adapter.ts";
 
+type Executor = Pick<typeof db, "execute">;
+
 /**
  * Pay-run approval — payroll's segregation-of-duties control.
  *
@@ -74,8 +76,9 @@ const GATING_ON_SUBMIT_FLOW = sql`
 export async function payRunApprovalState(
   orgId: string,
   documentId: string,
+  executor: Executor = db,
 ): Promise<PayRunApprovalState> {
-  const rows = (await db.execute<{ status: string; submitted: boolean; open_gates: number; policies: number }>(sql`
+  const rows = (await executor.execute<{ status: string; submitted: boolean; open_gates: number; policies: number }>(sql`
     select d.status,
            d.submitted_at is not null as submitted,
            (select count(*)::int from flow_gates g
@@ -114,8 +117,9 @@ export async function payRunApprovalState(
 export async function assertPayRunApprovalReleased(
   orgId: string,
   documentId: string,
+  executor: Executor = db,
 ): Promise<void> {
-  const state = await payRunApprovalState(orgId, documentId);
+  const state = await payRunApprovalState(orgId, documentId, executor);
   if (state.released) return;
   if (state.outstandingGates > 0) {
     throw new PayrollError(

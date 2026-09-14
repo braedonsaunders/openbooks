@@ -952,6 +952,63 @@ test("a run already recorded as paid is refused by name", { skip: !DB }, async (
   );
 });
 
+test(
+  "bank-file generation rechecks approval after the outer entitlement read",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    const { documentId } = await mixedRun(fx);
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+
+    // The outer entitlement check sees a committed, released run. Revoke that
+    // release before generation opens its insert transaction: this is the
+    // deterministic stand-in for a concurrent approval rejection/expiry.
+    const originalQuery = pool.query;
+    const pooledQuery = originalQuery.bind(pool) as unknown as (
+      text: unknown,
+      values?: unknown[],
+    ) => Promise<unknown>;
+    const textOf = (query: unknown): string =>
+      typeof query === "string" ? query : String((query as { text?: unknown }).text ?? "");
+    let approvalReads = 0;
+    (pool as unknown as { query: unknown }).query = async (
+      text: unknown,
+      values?: unknown[],
+    ) => {
+      const result = await pooledQuery(text, values);
+      const queryText = textOf(text);
+      if (queryText.includes("from documents d") && queryText.includes("flow_gates g")) {
+        approvalReads += 1;
+        if (approvalReads === 2) {
+          await db.execute(sql`
+            update documents
+               set status = 'pending_approval'
+             where org_id = ${fx.orgId} and id = ${documentId}`);
+        }
+      }
+      return result;
+    };
+
+    try {
+      await assert.rejects(
+        generatePayRunBankFile({
+          orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+        }),
+        /awaiting approval/,
+      );
+    } finally {
+      (pool as unknown as { query: unknown }).query = originalQuery;
+    }
+
+    assert.equal(approvalReads, 2, "the outer entitlement performs both approval checks");
+    assert.equal(
+      (await listPayRunBankFiles(fx.orgId, documentId)).length,
+      0,
+      "a revoked approval must not leave a bank-file artifact behind",
+    );
+  },
+);
+
 test("a voided run is refused by name", { skip: !DB }, async () => {
   const fx = await payrollOrg();
   const { documentId } = await mixedRun(fx);
