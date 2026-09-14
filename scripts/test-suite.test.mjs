@@ -67,9 +67,9 @@ test('a bracketed route path executes its actual tests', () => {
 })
 
 
-test('independent database shards cover the complete manifest exactly once', () => {
-  const files = testManifest().integration
-  const shards = Array.from({ length: 8 }, (_, index) => shardFiles(files, `${index + 1}/8`))
+for (const [suite, count] of [['unit', 4], ['integration', 8]]) test(`${suite} shards cover the complete manifest exactly once`, () => {
+  const files = testManifest()[suite]
+  const shards = Array.from({ length: count }, (_, index) => shardFiles(files, `${index + 1}/${count}`))
   assert.deepEqual(shards.flat().sort(), [...files].sort())
   assert.equal(new Set(shards.flat()).size, files.length)
   assert.ok(shards.every((shard) => shard.length > 0))

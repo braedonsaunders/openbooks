@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
-import { after, test } from "node:test";
+import { test } from "node:test";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, env } from "@openbooks/engine/src/db.ts";
@@ -41,19 +41,6 @@ const actorState: RouteActorState = {
   userId: randomUUID(),
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[actorStateKey] = actorState;
-
-// A real scratch org when a database is available, created lazily (inside the
-// DB-gated tests) so test registration never blocks on the database and the
-// runner's --test-force-exit cannot truncate the file.
-type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
-let scratchPromise: Promise<ScratchOrg> | null = null;
-function ensureScratch(): Promise<ScratchOrg> {
-  scratchPromise ??= createScratchOrg();
-  return scratchPromise;
-}
-after(async () => {
-  if (scratchPromise) await dropScratchOrg((await scratchPromise).orgId);
-});
 
 const featureGatesMock = `
   const state = globalThis[Symbol.for("openbooks.api-key-scopes-test")]
@@ -229,30 +216,32 @@ test(
   "an explicitly narrow key grants exactly its selection against a powerful owner",
   { skip: !DB },
   async () => {
-    const org = await ensureScratch();
-    actorState.orgId = org.orgId;
-    const ownerId = await seedOwner(org.orgId, ["*"]);
-    actorState.userId = ownerId;
-    const key = await insertKey(org.orgId, ownerId, "narrow", '["gl.read"]');
+    const org = await createScratchOrg();
+    try {
+      actorState.orgId = org.orgId;
+      const ownerId = await seedOwner(org.orgId, ["*"]);
+      actorState.userId = ownerId;
+      const key = await insertKey(org.orgId, ownerId, "narrow", '["gl.read"]');
 
-    const auth = await resolveApiKeyAuth(bearer(key.plaintext));
-    assert.ok(auth, "an explicit narrow scope must authenticate");
-    assert.deepEqual([...auth.permissions].sort(), ["gl.read"]);
-    assert.equal(canApi(auth, "gl.read"), true);
-    assert.equal(canApi(auth, "gl.post"), false);
-    assert.equal(canApi(auth, "ap.pay"), false);
+      const auth = await resolveApiKeyAuth(bearer(key.plaintext));
+      assert.ok(auth, "an explicit narrow scope must authenticate");
+      assert.deepEqual([...auth.permissions].sort(), ["gl.read"]);
+      assert.equal(canApi(auth, "gl.read"), true);
+      assert.equal(canApi(auth, "gl.post"), false);
+      assert.equal(canApi(auth, "ap.pay"), false);
 
-    // Through the guarded v1 transport: the narrow permission passes, a
-    // sibling the owner holds is still refused — the key never inherits.
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,apiAccess}', 'true'::jsonb)
-       where id = ${org.orgId}`);
-    const allowed = await guardApiKey("gl.read", bearer(key.plaintext));
-    assert.ok(!(allowed instanceof NextResponse), "gl.read must pass the guarded transport");
-    const denied = await guardApiKey("ap.pay", bearer(key.plaintext));
-    assert.ok(denied instanceof NextResponse, "ap.pay must be refused by the guarded transport");
-    assert.equal((denied as NextResponse).status, 403);
+      // Through the guarded v1 transport: the narrow permission passes, a
+      // sibling the owner holds is still refused — the key never inherits.
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,apiAccess}', 'true'::jsonb)
+         where id = ${org.orgId}`);
+      const allowed = await guardApiKey("gl.read", bearer(key.plaintext));
+      assert.ok(!(allowed instanceof NextResponse), "gl.read must pass the guarded transport");
+      const denied = await guardApiKey("ap.pay", bearer(key.plaintext));
+      assert.ok(denied instanceof NextResponse, "ap.pay must be refused by the guarded transport");
+      assert.equal((denied as NextResponse).status, 403);
+    } finally { await dropScratchOrg(org.orgId); }
   },
 );
 
@@ -260,36 +249,38 @@ test(
   "a minted key stores exactly its explicit selection and fails closed on residual junk",
   { skip: !DB },
   async () => {
-    const org = await ensureScratch();
-    const orgId = org.orgId;
-    actorState.orgId = orgId;
-    const ownerId = await seedOwner(orgId, ["*"]);
-    actorState.userId = ownerId;
+    const org = await createScratchOrg();
+    try {
+      const orgId = org.orgId;
+      actorState.orgId = orgId;
+      const ownerId = await seedOwner(orgId, ["*"]);
+      actorState.userId = ownerId;
 
-    const minted = await POST(jsonRequest({ name: "Sync", scopes: ["ap.pay", "gl.read"] }));
-    assert.equal(minted.status, 201);
-    const { id, plaintext } = (await minted.json()) as { id: string; plaintext: string };
+      const minted = await POST(jsonRequest({ name: "Sync", scopes: ["ap.pay", "gl.read"] }));
+      assert.equal(minted.status, 201);
+      const { id, plaintext } = (await minted.json()) as { id: string; plaintext: string };
 
-    const row = (await db.execute(sql`
-      select scopes from api_keys where id = ${id} and org_id = ${orgId}`)).rows[0] as {
-      scopes: string[];
-    };
-    // The route stores the normalized catalogue-ordered selection.
-    assert.deepEqual(row.scopes, ["gl.read", "ap.pay"]);
+      const row = (await db.execute(sql`
+        select scopes from api_keys where id = ${id} and org_id = ${orgId}`)).rows[0] as {
+        scopes: string[];
+      };
+      // The route stores the normalized catalogue-ordered selection.
+      assert.deepEqual(row.scopes, ["gl.read", "ap.pay"]);
 
-    const auth = await resolveApiKeyAuth(bearer(plaintext));
-    assert.ok(auth);
-    assert.deepEqual([...auth.permissions].sort(), ["ap.pay", "gl.read"]);
+      const auth = await resolveApiKeyAuth(bearer(plaintext));
+      assert.ok(auth);
+      assert.deepEqual([...auth.permissions].sort(), ["ap.pay", "gl.read"]);
 
-    // A direct write can still plant a non-empty array of non-catalogue junk;
-    // the resolver must grant it nothing (no wildcard, no partial credit).
-    await db.execute(sql`update api_keys set scopes = '["*"]'::jsonb where id = ${id}`);
-    assert.equal(await resolveApiKeyAuth(bearer(plaintext)), null);
+      // A direct write can still plant a non-empty array of non-catalogue junk;
+      // the resolver must grant it nothing (no wildcard, no partial credit).
+      await db.execute(sql`update api_keys set scopes = '["*"]'::jsonb where id = ${id}`);
+      assert.equal(await resolveApiKeyAuth(bearer(plaintext)), null);
 
-    // And storage itself refuses to clear the key to an empty scope set.
-    await assert.rejects(
-      db.execute(sql`update api_keys set scopes = '[]'::jsonb where id = ${id} and org_id = ${orgId}`),
-      (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
-    );
+      // And storage itself refuses to clear the key to an empty scope set.
+      await assert.rejects(
+        db.execute(sql`update api_keys set scopes = '[]'::jsonb where id = ${id} and org_id = ${orgId}`),
+        (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
+      );
+    } finally { await dropScratchOrg(org.orgId); }
   },
 );
