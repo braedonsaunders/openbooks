@@ -72,7 +72,13 @@ export async function POST(req: Request) {
   const additionalDifferences: DifferenceInput[] = [];
   if (Array.isArray(body.additionalDifferences)) {
     for (const d of body.additionalDifferences as { category?: unknown; description?: unknown; difference?: unknown }[]) {
-      if (typeof d?.description !== "string" || !d.description.trim() || !DIFF_CATEGORIES.has(String(d.category))) continue;
+      // An undescribed row is an empty grid line, not data — skip it exactly
+      // as permanent differences do. A described row with an unknown category
+      // is a caller error: dropping it would silently understate the run.
+      if (typeof d?.description !== "string" || !d.description.trim()) continue;
+      if (!DIFF_CATEGORIES.has(String(d.category))) {
+        return NextResponse.json({ error: "invalid temporary-difference category" }, { status: 400 });
+      }
       const difference = money(d.difference);
       if (difference === null) return NextResponse.json({ error: "invalid temporary-difference amount" }, { status: 400 });
       additionalDifferences.push({
