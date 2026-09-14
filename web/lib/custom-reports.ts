@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, pool } from '@openbooks/engine/src/db.ts'
 import {
   REPORT_ENTITY_MAP,
+  customQueryReferencesBook,
   runCustomQuery,
   validateCustomQuery,
   type ReportCustomQuery,
@@ -315,6 +316,43 @@ export async function executeReportAllPages(
   return mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels)
 }
 
+/**
+ * Server-owned accounting-book scope for one custom-report plan, mirroring
+ * the standard omitted-book contract (absent selection reads the primary
+ * book) at the custom-report boundary:
+ *
+ * - book-independent entities (no `bookScope`: documents, lines, shared
+ *   metadata) return undefined — never clamped, balances stay book-agnostic;
+ * - plans that filter, break out, or section by a book column return null —
+ *   the author's explicit book scoping governs, unclamped, so intentional
+ *   cross-book analysis keeps working with each book labeled;
+ * - every other plan against a book-scoped entity returns the single active
+ *   primary book id. Zero or several active primaries throw: the basis is
+ *   ambiguous and no first-row fallback may silently pick one.
+ *
+ * The scope only READS the saved plan — filters are never rewritten — and it
+ * never touches the org or subsidiary fences, which the compiler ANDs in
+ * regardless of the book decision.
+ */
+export async function resolveCustomReportBookScope(
+  orgId: string,
+  query: ReportCustomQuery,
+): Promise<readonly string[] | null | undefined> {
+  const entity = REPORT_ENTITY_MAP[query.entity]
+  if (!entity?.bookScope) return undefined
+  if (customQueryReferencesBook(query)) return null
+  const { rows } = await db.execute<{ id: string }>(sql`
+    select id from accounting_books
+     where org_id = ${orgId} and is_primary and is_active
+  `)
+  if (rows.length !== 1) {
+    throw new Error(
+      'This report needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.',
+    )
+  }
+  return [rows[0]!.id]
+}
+
 async function prepareReportExecution(
   orgId: string,
   query: ReportCustomQuery,
@@ -326,11 +364,12 @@ async function prepareReportExecution(
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     throw new Error(`${featureKey} feature is disabled`)
   }
-  const [resolved, startMonth, asOf, runLabels] = await Promise.all([
+  const [resolved, startMonth, asOf, runLabels, allowedBookIds] = await Promise.all([
     resolvePeriodPresets(query, orgId),
     fiscalStartMonth(),
     businessToday(orgId),
     labels ? Promise.resolve(labels) : reportRunLabels(),
+    resolveCustomReportBookScope(orgId, query),
   ])
   return {
     query: resolved,
@@ -338,6 +377,7 @@ async function prepareReportExecution(
       orgId,
       entityMap: REPORT_ENTITY_MAP,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
+      allowedBookIds,
       fiscalStartMonth: startMonth,
       asOf,
       labels: runLabels,
