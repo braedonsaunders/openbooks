@@ -72,6 +72,39 @@ interface PendingApplication {
   functionalCurrency: string;
 }
 
+/**
+ * First unused realized-FX entry number at or after `preferred`, probed on the
+ * caller's connection inside the reconciliation transaction.
+ *
+ * One payment can carry several FX groups (different subsidiary, account, or
+ * party lines whose carrying rates each drifted), and every group mints its
+ * evidence entry from the same payment document id — so the bare
+ * `${documentId}-FX` name collides with its sibling and dies on
+ * journal_entries_org_number, rolling back the whole reconciliation. Stepping
+ * to the next free generation is the same rule entry-number.ts applies to
+ * every other derived entry; the number is cosmetic evidence identity (rows
+ * link by fx_gain_loss_entry_id), while re-runs insert nothing, so numbering
+ * cannot drift. The caller holds the per-org advisory lock, which serializes
+ * same-org reconciliations exactly as the `for update` row lock does there.
+ */
+async function allocateFxEntryNumber(
+  client: { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<{ one: number }> }> },
+  orgId: string,
+  preferred: string,
+): Promise<string> {
+  for (let generation = 1; generation <= 200; generation += 1) {
+    const candidate = generation === 1 ? preferred : `${preferred}-${generation}`;
+    const taken = await client.query(
+      "select 1 as one from journal_entries where org_id = $1 and entry_number = $2 limit 1",
+      [orgId, candidate],
+    );
+    if (taken.rows.length === 0) return candidate;
+  }
+  throw new Error(
+    `could not allocate a realized-FX entry number derived from "${preferred}"`,
+  );
+}
+
 /** Largest transaction-currency amount whose rounded carrying value fits a
  * functional-currency capacity. Both the source link and open-item caps are
  * functional amounts, while the application trigger independently caps each
@@ -355,6 +388,11 @@ export async function reconcileApplications(
         }
         fxAccountByCurrency.set(first.functionalCurrency, fxAccountId);
       }
+      const entryNumber = await allocateFxEntryNumber(
+        client,
+        orgId,
+        `${first.sourceDocumentId}-FX`,
+      );
       const fxEntry = await client.query<{ id: string }>(
         `insert into journal_entries
           (org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -365,7 +403,7 @@ export async function reconcileApplications(
           orgId,
           first.bookId,
           first.subsidiaryId,
-          `${first.sourceDocumentId}-FX`,
+          entryNumber,
           first.date,
           first.periodId,
           `Realized FX settlement — ${first.sourceDocumentId}`,
