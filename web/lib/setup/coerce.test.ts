@@ -120,6 +120,15 @@ test('setup updates distinguish omitted boolean controls from explicit changes',
   for (const column of ['pensionable', 'insurable', 'vacationable', 'is_active', 'include_in_disposable_earnings']) assert.ok(!built.cols.some(entry => entry.column === column))
 })
 
+test('setup date fields reject impossible calendar dates, not just malformed shapes', () => {
+  const field: SetupField = { key: 'effectiveFrom', kind: 'date' }
+  assert.deepEqual(coerceField(field, '2024-02-29'), { column: 'effective_from', value: '2024-02-29' })
+  assert.deepEqual(coerceField(field, '2024-01-31'), { column: 'effective_from', value: '2024-01-31' })
+  for (const bad of ['2023-02-29', '2024-02-30', '2024-04-31', '2024-13-01', '2024-00-10', '0000-01-01', 'not-a-date', '2024-1-1']) {
+    assert.deepEqual(coerceField(field, bad), { error: 'effectiveFrom must be a date' })
+  }
+})
+
 test('setup booleans accept documented scalar spellings and reject malformed controls', () => {
   const field: SetupField = { key: 'taxable', kind: 'boolean' }
   for (const value of [true, 1, 'true', ' YES ', 'y', '1', 't']) assert.deepEqual(coerceField(field, value), { column: 'taxable', value: true })
