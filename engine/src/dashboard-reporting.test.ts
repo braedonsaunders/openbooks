@@ -40,6 +40,7 @@ test("dashboard financial totals match exact per-document FX conversion", { skip
           join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.type = 'asset_bank'
          where e.org_id = ${org.id}
+           and e.posting_date <= ${today}
       `),
     ]);
 
