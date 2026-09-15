@@ -815,8 +815,10 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
 /**
  * Change a subscription's quantity and/or price mid-period and bill (or credit)
  * the prorated difference for the remaining days of the current period. The
- * proration line is a pre-tax net adjustment left as a draft for review; the
- * next full invoice uses the new quantity/price. The proration invoice is
+ * proration line carries the plan/item tax policy exactly like a first-period
+ * proration or a full invoice: a mid-cycle upgrade collects tax on the
+ * remaining slice, and a downgrade credits it back. The next full invoice
+ * uses the new quantity/price. The proration invoice is
  * attributed to `actor.actorId` (the authenticated caller; omitted means
  * engine-initiated system provenance) — never to the subscription itself.
  */
@@ -874,15 +876,14 @@ export async function changeSubscription(
         subsidiaryId: row.subsidiaryId,
         currency: row.planCurrency ?? row.baseCurrency,
         incomeAccountId: row.incomeAccountId,
-        itemId: null,
-        taxCodeId: null,
+        itemId: row.itemId,
+        taxCodeId: row.taxCodeId,
         description: `Proration — plan change (${periodStart} → ${periodEnd})`,
         quantity: "1",
         unitPrice: doc.amount,
         memo: "Subscription proration",
         invoiceDate: today,
         autoPost: false,
-        applyTax: false,
         documentKind: doc.kind,
         custom: subscriptionBillingProvenance(subscriptionId, { actorId, source: "change_proration" }),
         postingAuditSource: POSTING_AUDIT_SOURCES.change_proration,
