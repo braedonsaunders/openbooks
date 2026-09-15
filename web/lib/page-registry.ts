@@ -124,6 +124,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/apps': {
+    route: '/admin/apps',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/apps/view')
+      return {
+        load: (input) => m.loadAdminExtensions(input.searchParams ?? {}),
+        spec: (data) => m.adminExtensionsSpec(data as never),
+      }
+    },
+  },
   '/admin/audit': {
     route: '/admin/audit',
     segments: [],
@@ -193,18 +205,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: () => m.loadEmailSettings(),
         spec: (data) => m.emailSettingsSpec(data as never),
-      }
-    },
-  },
-  '/admin/apps': {
-    route: '/admin/apps',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/admin/apps/view')
-      return {
-        load: (input) => m.loadAdminExtensions(input.searchParams ?? {}),
-        spec: (data) => m.adminExtensionsSpec(data as never),
       }
     },
   },
@@ -613,6 +613,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadSpendVelocity(input.searchParams ?? {}),
         spec: (data) => m.spendVelocitySpec(data as never),
+      }
+    },
+  },
+  '/analytics/true-cost': {
+    route: '/analytics/true-cost',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/analytics/true-cost/view')
+      return {
+        load: (input) => m.loadTrueCost(input.searchParams ?? {}),
+        spec: (data) => m.trueCostSpec(data as never),
       }
     },
   },

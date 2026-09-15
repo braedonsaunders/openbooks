@@ -138,6 +138,7 @@
     "title": "真のコスト",
     "backToHub": "アナリティクス",
     "configureInSetup": "設定で構成 →",
+    "openReport": "レポートを開く",
     "formats": {
       "perHour": "{amount}/時間"
     },
