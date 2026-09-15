@@ -309,6 +309,7 @@ type RevaluationPeriod = {
   period_number: number;
   next_starts_on: string | null;
   next_period_id: string | null;
+  next_name: string | null;
 };
 
 /** The period plus the following regular period its reversal must land in. */
@@ -324,7 +325,11 @@ async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<R
            (select n.id from accounting_periods n
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
                and n.fiscal_calendar_id = p.fiscal_calendar_id
-             order by n.starts_on asc limit 1) as next_period_id
+             order by n.starts_on asc limit 1) as next_period_id,
+           (select n.name from accounting_periods n
+             where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
+               and n.fiscal_calendar_id = p.fiscal_calendar_id
+             order by n.starts_on asc limit 1) as next_name
       from accounting_periods p
      where p.org_id = ${orgId} and p.id = ${periodId}`));
   const period = periodRes.rows[0];
@@ -508,7 +513,7 @@ async function postRevaluationEntry(
     await tx.execute(sql`select id from accounts where org_id=${orgId} order by id for share`);
     const gainLossAccount = await unrealizedAccount(orgId);
     const period = await loadRevaluationPeriod(orgId, periodId);
-    const { ends_on: asOfDate, name: periodName, next_period_id: nextPeriodId, next_starts_on: nextStartsOn } = period;
+    const { ends_on: asOfDate, name: periodName, next_period_id: nextPeriodId, next_starts_on: nextStartsOn, next_name: nextPeriodName } = period;
     const scope = financialClosePeriodScope(period);
     const exposures = await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, asOfDate, scope);
     const positions: RevaluationPosition[] = [];
@@ -525,6 +530,20 @@ async function postRevaluationEntry(
     // no-op; an actual correction still requires an active posting entity.
     if (!subsidiary.isActive) throw new RevaluationError("revaluation subsidiary is inactive");
     if (!nextPeriodId || !nextStartsOn) throw new RevaluationError(missingReversalPeriodReason());
+    // Refuse locked periods here with a named error: the pair posts through
+    // raw draft→posted flips, so without this the je_guard backstop rejects
+    // the flip with a raw driver error instead. Both legs are guarded — the
+    // adjustment and its mandatory next-period reversal commit atomically.
+    // A no-op rerun already returned null above and never reaches this check.
+    const locks = (await tx.execute<{ adjustment_closed: boolean; reversal_closed: boolean }>(sql`
+      select period_module_is_closed(${orgId}, ${periodId}, ${bookId}, ${subsidiaryId}, 'gl') as adjustment_closed,
+             period_module_is_closed(${orgId}, ${nextPeriodId}, ${bookId}, ${subsidiaryId}, 'gl') as reversal_closed`)).rows[0]!;
+    if (locks.adjustment_closed) {
+      throw new RevaluationError(`FX revaluation cannot post into the closed GL period ${periodName}`);
+    }
+    if (locks.reversal_closed) {
+      throw new RevaluationError(`FX revaluation cannot post its reversal into the closed GL period ${nextPeriodName ?? nextStartsOn}`);
+    }
     const netDelta = sum(monetaryLines.map((line) => line.amount));
     const lines = isZero(netDelta) ? monetaryLines
       : [...monetaryLines, { accountId: gainLossAccount, amount: neg(netDelta) }];
