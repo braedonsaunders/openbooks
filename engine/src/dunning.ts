@@ -87,6 +87,19 @@ export function renderTemplate(template: string, vars: Record<string, string | n
   );
 }
 
+/**
+ * Escape rendered template output for the HTML part. Vars are free-text rows
+ * (party names, document numbers) an insider — or a tainted import —
+ * controls; embedding them raw ships arbitrary markup to the customer's
+ * inbox from the org's own authenticated mail domain. The text part carries
+ * the same body unescaped.
+ */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
+}
+
 function daysBetween(fromIso: string, toIsoDate: string): number {
   const [ay, am, ad] = fromIso.split("-").map(Number);
   const [by, bm, bd] = toIsoDate.split("-").map(Number);
@@ -315,7 +328,7 @@ async function runDunningInternal(
                 payload: {
                   to: [to],
                   subject,
-                  html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+                  html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
                   text: body,
                   meta: { category: "dunning" },
                 },
