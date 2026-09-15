@@ -1136,6 +1136,59 @@ export async function postPaymentWithApplications(
       throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} less fee ${feeAmount} must equal applications ${totalAlloc} plus on-account ${onAccountAmount}`);
     }
 
+    // Final compliance gate (mirrors the run-posting final gate): a
+    // block_payment policy stops payment on EVERY path — evaluateBillRelease's
+    // contract names pay-run creation, run readiness, and posting, and this
+    // ad-hoc post is posting. Without it a compliance-blocked bill is payable
+    // by skipping the run entirely. Vendor bills only: credits and non-bill
+    // open items carry no release decision.
+    if (doc.kind === "vendor_payment") {
+      const targetDocIds = [...new Set(
+        allocs
+          .map((allocation) => byLine.get(allocation.openLineId)?.documentId)
+          .filter((id): id is string => Boolean(id)),
+      )];
+      if (targetDocIds.length > 0) {
+        const bills = (await db.execute<{
+          documentId: string; documentNumber: string; partyId: string; vendorName: string;
+          projectId: string | null; documentDate: string; amount: string; currency: string;
+        }>(sql`
+          select d.id as "documentId", d.document_number as "documentNumber", d.party_id as "partyId",
+                 p.display_name as "vendorName", d.project_id as "projectId",
+                 d.document_date::text as "documentDate", d.total::text as amount, d.currency
+            from documents d
+            join parties p on p.id = d.party_id and p.org_id = d.org_id
+           where d.org_id = ${doc.orgId} and d.kind = 'vendor_bill'
+             and d.id in (${sql.join(targetDocIds.map((id) => sql`${id}`), sql`, `)})`));
+        if (bills.rows.length > 0) {
+          const releaseDecisions = await evaluateBillsForRelease({
+            orgId: doc.orgId,
+            bills: bills.rows,
+            asOf: await businessToday(doc.orgId),
+          });
+          const blockedBills = releaseDecisions.filter((decision) => decision.decision === "blocked");
+          for (const decision of blockedBills) {
+            await recordReleaseCheck({
+              orgId: doc.orgId,
+              partyId: decision.partyId,
+              documentId: decision.documentId,
+              stage: "manual",
+              decision: "blocked",
+              snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+              checkedBy: userId ?? null,
+            });
+          }
+          if (blockedBills.length > 0) {
+            throw new PaymentError(
+              `subcontractor compliance blocks payment: ${blockedBills
+                .map((d) => `${d.documentNumber} (${d.vendorName}) — ${d.reasons.join("; ")}`)
+                .join(" | ")}`,
+            );
+          }
+        }
+      }
+    }
+
     const deps = await paymentControlDeps(doc.orgId);
     let controlAccountId = custom.controlAccountId ?? (side === "ap" ? deps.control.ap : deps.control.ar);
     if (!custom.controlAccountId) {
