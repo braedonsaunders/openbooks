@@ -18,6 +18,7 @@ import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { loadRequiredControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
 import { isDocumentRevisionToken } from './api/registry-data'
+import { isUuid } from './list-params'
 import { persistTaxQuote } from '@openbooks/engine/src/tax-rate-providers.ts'
 
 /**
@@ -794,6 +795,23 @@ export async function applyDocumentEdit(
         `${current.kind} lines carry an immutable rate snapshot and cannot be edited here; ` +
           `change them on the source record`,
       )
+    }
+    // Line accounts are the tenant's chart of accounts. The lines FK is
+    // tenant-coherent, so a foreign account dies at the re-insert as an
+    // unhandled storage error; refuse it here with a domain 404 that
+    // reveals nothing about other tenants' charts. Scoped to org ownership
+    // only: posting-time postability (active, non-summary) keeps its own
+    // domain errors later, so drafts holding a since-deactivated account
+    // still save.
+    const lineAccountIds = [...new Set(body.lines.map((l) => l.accountId).filter((v): v is string => typeof v === 'string' && v.length > 0))]
+    const malformedLineAccounts = lineAccountIds.filter((v) => !isUuid(v))
+    const usableLineAccounts = malformedLineAccounts.length === 0 && lineAccountIds.length > 0
+      ? (await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`)).rows
+      : []
+    if (malformedLineAccounts.length > 0 || usableLineAccounts.length !== lineAccountIds.length) {
+      throw new DocumentEditError(404, 'account not found in this organization')
     }
     // Validate, don't filter. The old `filter((l) => l.accountId && cmp(l.amount, '0') > 0)`
     // dropped negative and zero lines before the totals were computed, so any
