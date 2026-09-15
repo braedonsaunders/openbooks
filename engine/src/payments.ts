@@ -797,6 +797,85 @@ function negStr(a: string): string {
 }
 
 /**
+ * Posted, still-open credit-memo lines available as application sources for a
+ * party: the mirror of openItemsForParty, which lists only debit items a
+ * payment can extinguish. Credits carry the opposite sign (AR: amount < 0,
+ * AP: amount > 0) and are consumed from the from_line side of applications.
+ * Only lines with remaining open balance are returned.
+ */
+export async function creditItemsForParty(
+  partyId: string,
+  side: OpenItemSide = "ar",
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<OpenItem[]> {
+  const tenantId = orgId ?? orgContext.getStore()?.orgId;
+  if (!tenantId) throw new PaymentError("organization is required to select credit open items");
+  const bookId = await paymentBookId(tenantId);
+  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  const signFilter = side === "ap" ? sql`jl.amount > 0` : sql`jl.amount < 0`;
+  const r = (await db.execute<{
+    line_id: string;
+    amount: string;
+    due_date: string | null;
+    memo: string | null;
+    entry_id: string;
+    entry_number: string;
+    posting_date: string;
+    document_id: string | null;
+    document_number: string | null;
+    document_kind: string | null;
+    reference_number: string | null;
+    applied: string;
+    currency: string;
+    fx_rate: string;
+    transaction_amount: string;
+    transaction_applied: string;
+  }>(sql`
+    select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
+           jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
+           je.id as entry_id, je.entry_number, je.posting_date,
+           d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
+           coalesce(ap.applied, 0) as applied,
+           coalesce(ap.transaction_applied, 0) as transaction_applied
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      join documents d on d.id = je.source_document_id and d.org_id = je.org_id and d.kind = ${creditKind}
+      left join lateral (
+        select sum(a.source_amount) as applied, sum(a.source_transaction_amount) as transaction_applied
+          from applications a
+         where a.from_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
+      ) ap on true
+     where jl.org_id = ${tenantId} and je.book_id = ${bookId} and jl.party_id = ${partyId}
+       and jl.is_open_item and ${signFilter}
+       ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, allowedSubsidiaryIds)}
+     order by jl.due_date nulls last, je.posting_date, je.entry_number
+  `));
+  return r.rows
+    .map((row) => ({
+      lineId: row.line_id,
+      entryId: row.entry_id,
+      entryNumber: row.entry_number,
+      postingDate: row.posting_date,
+      dueDate: row.due_date,
+      documentId: row.document_id,
+      documentNumber: row.document_number,
+      documentKind: row.document_kind,
+      referenceNumber: row.reference_number,
+      memo: row.memo,
+      amount: row.amount,
+      applied: row.applied,
+      open: sum([row.amount, negStr(String(row.applied))]),
+      currency: row.currency,
+      fxRate: row.fx_rate,
+      transactionAmount: row.transaction_amount,
+      transactionApplied: row.transaction_applied,
+      transactionOpen: sum([row.transaction_amount, negStr(String(row.transaction_applied))]),
+    }))
+    .filter((i) => cmp(i.open, "0") > 0);
+}
+
+/**
  * Full drawer payload for a payment document: header, stored draft
  * allocations, and (once posted) the live applications with their targets.
  */
