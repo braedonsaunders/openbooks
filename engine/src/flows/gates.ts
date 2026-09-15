@@ -312,6 +312,32 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
         );
     }
 
+    // Durable decision evidence, part of the same atomic unit: the flip above
+    // releases or returns a financial document, so who decided it, from what
+    // state, with what rationale (and on whose behalf for delegates) must
+    // commit with the flip — an audit failure rolls the decision back, and a
+    // later resume failure rolls the evidence back with it.
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${gate.orgId}, 'flow_gates', ${gateId}, 'update', ${JSON.stringify({
+        event: decision,
+        actor: { kind: "user", userId },
+        ...(onBehalfOf ? { onBehalfOfUserId: onBehalfOf.id } : {}),
+        before: { status: "pending" },
+        after: {
+          status: decision,
+          comment,
+          signatureProvided: decision === "approved" ? signature !== null : false,
+        },
+        ...(comment ? { reason: comment } : {}),
+        runId: gate.runId,
+        flowId: gate.flowId,
+        subjectKind: gate.subjectKind,
+        subjectId: gate.subjectId,
+        cancelledGateIds: outcome.cancelIds,
+      })}::jsonb, ${userId})
+    `)
+
     if (!outcome.resume) {
       // 'all' quorum still collecting approvals — the run keeps waiting.
       return { ok: true, resumed: null, runStatus: "waiting" };
