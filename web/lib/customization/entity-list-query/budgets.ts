@@ -2,19 +2,25 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { subsidiaryVisibleFilter } from "../../subsidiaries";
 
 /* ------------------------------------------------------------------ */
 /* Budgets                                                             */
 /* ------------------------------------------------------------------ */
 
-export const BUDGET_BASE_JOINS = sql`
-  join accounting_books budget_book on budget_book.id=bs.book_id and budget_book.org_id=bs.org_id
-  left join lateral (
-    select coalesce(sum(case when a.type in ('income','income_other') then -bl.amount else bl.amount end), 0) as amount
-      from budget_lines bl
-      left join accounts a on a.id=bl.account_id and a.org_id=bl.org_id
-     where bl.scenario_id=bs.id and bl.org_id=bs.org_id
-  ) budget_total on true`
+export function budgetBaseJoins(allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
+  const lineSubsidiaryFilter = subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds ?? null)
+  return sql`
+    join accounting_books budget_book on budget_book.id=bs.book_id and budget_book.org_id=bs.org_id
+    left join lateral (
+      select coalesce(sum(case when a.type in ('income','income_other') then -bl.amount else bl.amount end), 0) as amount
+        from budget_lines bl
+        left join accounts a on a.id=bl.account_id and a.org_id=bl.org_id
+       where bl.scenario_id=bs.id and bl.org_id=bs.org_id${lineSubsidiaryFilter}
+    ) budget_total on true`
+}
+
+export const BUDGET_BASE_JOINS = budgetBaseJoins()
 
 export const BUDGET_BUILT_IN_EXPR: Record<string, SQL> = {
   name: sql`bs.name`,
@@ -59,8 +65,18 @@ function budgetFilterPredicate(clause: FilterClause): SQL | null {
   return null
 }
 
-export function budgetWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
+export function budgetWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): SQL {
   const parts: SQL[] = [sql`bs.org_id = ${orgId}`]
+  const visibleLineFilter = subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds ?? null)
+  parts.push(sql`and exists (
+    select 1 from budget_lines bl
+     where bl.org_id = bs.org_id and bl.scenario_id = bs.id${visibleLineFilter}
+  )`)
   for (const filter of view.filters) {
     const predicate = budgetFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
