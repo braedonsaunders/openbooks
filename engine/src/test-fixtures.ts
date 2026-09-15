@@ -1240,6 +1240,12 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
       }
       await tx.execute(sql`delete from tax_group_members where tax_group_id in
         (select id from tax_groups where org_id = ${org.orgId})`);
+      // Password-reset tokens predate tenant scoping: they carry only user_id
+      // and intentionally have no FK, so the user-scoped recycle below would
+      // otherwise leave an orphaned credential record behind — the same purge
+      // the full destructive teardown runs in its prep transaction.
+      await tx.execute(sql`delete from auth_password_resets
+        where user_id in (select id from users where org_id = ${org.orgId})`);
       await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null where org_id = ${org.orgId}`);
       await tx.execute(sql`update payment_schedules set last_payment_run_id = null where org_id = ${org.orgId}`);
       for (const [index, table] of remaining.entries()) {
