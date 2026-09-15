@@ -3,8 +3,10 @@ import { db } from "../db.ts";
 import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
 import { CA_JURISDICTIONS } from "./canada/employment-standards.ts";
 import { caPackFilings } from "./canada/filings.ts";
+import { CA_OPENING_YTD_FIELDS } from "./canada/opening-ytd.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./canada/rates.ts";
 import { usPackFilings } from "./us/filings.ts";
+import { US_OPENING_YTD_FIELDS } from "./us/opening-ytd.ts";
 import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
 import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
 import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
@@ -204,6 +206,32 @@ export interface PayrollContributoryBases {
   insurable: string;
 }
 
+/**
+ * One second-order opening year-to-date amount a country pack declares for
+ * mid-year adopters (see `openingYtdFields` on the pack). The generic
+ * opening-balances layer — the field list, the money validation, the
+ * import/export columns, the grid — iterates these declarations and never
+ * names a pack's columns; the pack's own statutory computation reads its
+ * history back through the same descriptors.
+ */
+export interface PayrollOpeningYtdField {
+  /** camelCase API / import-file key, unique across all packs' declarations. */
+  key: string;
+  /** payroll_opening_balances column holding the amount. */
+  column: string;
+  /** English fallback label; the UI localizes by key and falls back to this. */
+  label: string;
+  /** What the operator copies out of the prior provider's YTD report. */
+  help: string;
+  /**
+   * Key of another opening field this amount cannot exceed (a part-to-whole
+   * bound, e.g. bonus-attributed history against the bonuses). The generic
+   * validation refuses a row that breaks it, which is how a transposed
+   * spreadsheet column shows up. Absent when the amount has no whole.
+   */
+  ceilingKey?: string;
+}
+
 export interface PayrollCountryPack {
   country: PayrollCountry;
   installable: boolean;
@@ -319,6 +347,20 @@ export interface PayrollCountryPack {
   applyEmployerLevies?: (
     ctx: PayrollEmployerLevyContext,
   ) => Promise<PayrollEmployerLevyFactors>;
+  /**
+   * Second-order opening year-to-date the pack's statutory engine reads for a
+   * mid-year adopter: history the BASE opening columns cannot express because
+   * it is attributed to lump-sum payments (T4127 F5B, TP-1015 CSB1) or counts
+   * withheld dollars rather than wages (US FICA). OPTIONAL, like
+   * `applyEmployerLevies`: absent when the pack's engine reads nothing beyond
+   * the base fields, in which case the generic layer offers no extra columns.
+   *
+   * LAZY (a closure), like `filings` and `certificates`: the declaration
+   * lives in the pack's country module, which the engine's country
+   * computations also import for their SQL — a value here would be
+   * dereferenced mid-evaluation.
+   */
+  openingYtdFields?: () => readonly PayrollOpeningYtdField[];
   /**
    * Phase 9 — one re-runnable statutory pass over the current line set.
    * REQUIRED on every installable pack.
@@ -862,6 +904,9 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     taxYears: CA_TAX_YEARS,
     certificates: () => CA_CERTIFICATES,
     withholding: () => CA_WITHHOLDING_JURISDICTIONS,
+    // Bonus-attributed CPP2 (F5B) and additional-QPP (CSB1) history the T4127
+    // and TP-1015 bonus methods read for a mid-year adopter.
+    openingYtdFields: () => CA_OPENING_YTD_FIELDS,
     // No member at all: Canada's provinces have no interprovincial withholding
     // agreements, and an absent declaration says exactly that. See
     // engine/src/payroll/canada/jurisdictions.ts.
@@ -989,6 +1034,9 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     certificates: () => US_CERTIFICATES,
     withholding: () => US_WITHHOLDING,
     reciprocity: () => US_RECIPROCITY,
+    // Withheld FICA dollars the Massachusetts retirement-contribution
+    // subtraction reads for a mid-year adopter.
+    openingYtdFields: () => US_OPENING_YTD_FIELDS,
     statutorySlots: [
       {
         key: "fit",

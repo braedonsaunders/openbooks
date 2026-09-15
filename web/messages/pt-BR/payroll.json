@@ -1,0 +1,9 @@
+{
+  "openingBalances": {
+    "fields": {
+      "cpp2BonusYtd": "Contribuições CPP2 sobre bônus",
+      "qcCsbYtd": "Contribuições QPP adicionais sobre bônus",
+      "ficaWithheldYtd": "Imposto FICA retido"
+    }
+  }
+}

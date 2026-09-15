@@ -1,0 +1,29 @@
+import type { PayrollOpeningYtdField } from "../packs.ts";
+
+/**
+ * Canada's second-order opening year-to-date fields: history a mid-year
+ * adopter's prior provider reports for lump-sum withholding methods but the
+ * base statutory columns cannot express. The T4127 bonus method consumes F5B
+ * (CPP2 attributed to bonuses); Québec TP-1015 consumes CSB1 (additional QPP
+ * attributed to bonuses).
+ *
+ * These declarations live with the CA pack, not in the generic opening
+ * balance layer. The generic layer iterates pack declarations so another
+ * country can add its own carry-in facts without country branching here.
+ */
+export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
+  {
+    key: "cpp2BonusYtd",
+    column: "cpp2_bonus_ytd",
+    label: "CPP2 bonus contributions",
+    help: "Second additional CPP contributions withheld on lump-sum payments before adoption (T4127 factor F5B year-to-date).",
+    ceilingKey: "nonPeriodicYtd",
+  },
+  {
+    key: "qcCsbYtd",
+    column: "qc_csb_ytd",
+    label: "Québec additional-QPP bonus contributions",
+    help: "Additional QPP (CSB) amounts attributed to lump-sum payments before adoption (TP-1015 factor CSB1 year-to-date, Québec).",
+    ceilingKey: "nonPeriodicYtd",
+  },
+];

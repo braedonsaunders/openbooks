@@ -42,6 +42,7 @@ import knowledge from './knowledge.json'
 import parties from './parties.json'
 import payments from './payments.json'
 import projects from './projects.json'
+import payroll from './payroll.json'
 import projectTypes from './projectTypes.json'
 import purchaseOrders from './purchaseOrders.json'
 import query from './query.json'
@@ -100,6 +101,7 @@ export default {
   parties,
   payments,
   projects,
+  payroll,
   projectTypes,
   purchaseOrders,
   query,

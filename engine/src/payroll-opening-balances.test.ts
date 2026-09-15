@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, mulPercent } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
+import { employeeYtd } from "./payroll/canada/compute-statutory.ts";
+import { usEmployeeYtd } from "./payroll/us/compute-statutory.ts";
 import { applyBasisCaps } from "./payroll-limits.ts";
 import {
   componentYearToDate,
@@ -14,6 +16,7 @@ import {
   normalizeOpeningComponents,
   openingBalancesForYear,
   openingComponentFields,
+  OPENING_BALANCE_FIELDS,
   OpeningBalanceSaveError,
   saveOpeningBalances,
   type OpeningComponentField,
@@ -344,6 +347,41 @@ test(
       // Specifically: the remaining CPP room, not a whole second contribution.
       assert.ok(cmp(withCarryIn.cpp, fresh.cpp) < 0);
       assert.ok(cmp(stub.net_pay, "0") > 0);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "country statutory readers include second-order opening YTD before the first run",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: {
+            pensionableYtd: "60000", taxableYtd: "60000", nonPeriodicYtd: "5000",
+            cpp2BonusYtd: "120.50", qcCsbYtd: "85", ficaWithheldYtd: "4000",
+          },
+        }],
+      });
+
+      const ca = await employeeYtd({
+        tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
+        taxYear: 2026, documentId: randomUUID(),
+      });
+      assert.equal(ca.f5b, "120.5000");
+      assert.equal(ca.qc_csb, "85.0000");
+
+      const us = await usEmployeeYtd({
+        tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
+        taxYear: 2026, documentId: randomUUID(),
+      });
+      assert.equal(us.fica_tax, "4000.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -1093,3 +1131,57 @@ test(
     }
   },
 );
+
+/* ------------------------------------------------------------------ */
+/* Second-order year-to-date (0141): bonus-attributed history           */
+/* ------------------------------------------------------------------ */
+
+test("second-order opening amounts normalize, refuse transpositions, and keep a row alive", () => {
+  // A mid-year adopter's prior provider reports what was withheld ON lump
+  // sums, not just the lump sums themselves: T4127's F5B (CPP2 on bonuses),
+  // TP-1015's CSB1 (additional-QPP attributed to bonuses), and the FICA
+  // dollars behind Massachusetts' $2,000 retirement-contribution subtraction.
+  const clean = normalizeOpeningBalance({
+    pensionableYtd: "60000", taxableYtd: "60000", nonPeriodicYtd: "5000",
+    cpp2BonusYtd: "120.50", qcCsbYtd: "85", ficaWithheldYtd: "4000",
+  });
+  assert.equal(clean.cpp2BonusYtd, "120.5000");
+  assert.equal(clean.qcCsbYtd, "85.0000");
+  assert.equal(clean.ficaWithheldYtd, "4000.0000");
+
+  // Part-to-whole, like every other cross-field check: bonus-attributed
+  // history cannot exceed the bonuses, FICA dollars cannot exceed the wages.
+  assert.throws(
+    () => normalizeOpeningBalance({ taxableYtd: "5000", nonPeriodicYtd: "5000", cpp2BonusYtd: "5000.01" }),
+    /exceeds/,
+  );
+  assert.throws(
+    () => normalizeOpeningBalance({ taxableYtd: "5000", nonPeriodicYtd: "5000", qcCsbYtd: "6000" }),
+    /exceeds/,
+  );
+  assert.throws(
+    () => normalizeOpeningBalance({ pensionableYtd: "60000", ficaWithheldYtd: "60000.01" }),
+    /exceeds/,
+  );
+
+  // A row carrying ONLY second-order history is a carry-in, not an empty row
+  // the saver may delete.
+  assert.equal(
+    isEmptyOpeningBalance({ cpp2BonusYtd: "120.5000" }, {}),
+    false,
+  );
+});
+
+test("the pack-declared second-order fields are wired to every consumer", () => {
+  // Country-agnostic rule: the generic layer never names a pack's columns.
+  // Each pack declares its second-order opening fields (key, column, label,
+  // ceiling); OPENING_BALANCE_FIELDS is the base list plus the registry's
+  // declarations, and every reader/writer iterates it.
+  const byKey = new Map(OPENING_BALANCE_FIELDS.map((f) => [f.key, f]));
+  assert.equal(byKey.get("cpp2BonusYtd")?.column, "cpp2_bonus_ytd");
+  assert.deepEqual(byKey.get("cpp2BonusYtd")?.packs, ["CA"]);
+  assert.equal(byKey.get("qcCsbYtd")?.column, "qc_csb_ytd");
+  assert.deepEqual(byKey.get("qcCsbYtd")?.packs, ["CA"]);
+  assert.equal(byKey.get("ficaWithheldYtd")?.column, "fica_withheld_ytd");
+  assert.deepEqual(byKey.get("ficaWithheldYtd")?.packs, ["US"]);
+});

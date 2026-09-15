@@ -578,6 +578,14 @@ export const payrollOpeningBalances = pgTable(
     taxYtd: money("tax_ytd").notNull().default("0"),
     nonPeriodicYtd: money("non_periodic_ytd").notNull().default("0"),
     /**
+     * Second-order bonus history (migration 0141). The pack that reads each
+     * one declares it (see `openingYtdFields` on the country pack); this
+     * model only stores what the declarations name.
+     */
+    cpp2BonusYtd: money("cpp2_bonus_ytd").notNull().default("0"),
+    qcCsbYtd: money("qc_csb_ytd").notNull().default("0"),
+    ficaWithheldYtd: money("fica_withheld_ytd").notNull().default("0"),
+    /**
      * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
      * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
      * against the org's vacation plan, loaded through

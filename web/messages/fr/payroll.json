@@ -1,0 +1,9 @@
+{
+  "openingBalances": {
+    "fields": {
+      "cpp2BonusYtd": "Cotisations CPP2 sur primes",
+      "qcCsbYtd": "Cotisations QPP additionnelles sur primes",
+      "ficaWithheldYtd": "Impôt FICA retenu"
+    }
+  }
+}

@@ -87,6 +87,33 @@ const recognitionEventTenantCoherenceMigrationPath =
   "schema/migrations/generated/0084_recognition_event_tenant_coherence.sql";
 const syncRunConnectionNullableMigrationPath =
   "schema/migrations/generated/0085_sync_run_connection_nullable.sql";
+const payrollOpeningBalanceSecondOrderMigrationPath =
+  "schema/migrations/generated/0141_payroll_opening_balance_second_order_ytd.sql";
+
+test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
+  const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
+  // PostgreSQL refuses CREATE OR REPLACE VIEW when an existing view column's
+  // name changes (the new columns are inserted before vacation_balance). The
+  // upgrade must either drop/recreate the governed view or append the new
+  // columns after every existing column so the replacement keeps names stable.
+  const viewStart = migration.search(
+    /create or replace view openbooks_query\.payroll_opening_balances/i,
+  );
+  if (viewStart >= 0 && !/drop view if exists openbooks_query\.payroll_opening_balances/i.test(migration)) {
+    const view = migration.slice(viewStart);
+    assert.ok(
+      view.indexOf("vacation_balance") < view.indexOf("cpp2_bonus_ytd")
+        && view.indexOf("vacation_balance") < view.indexOf("qc_csb_ytd")
+        && view.indexOf("vacation_balance") < view.indexOf("fica_withheld_ytd"),
+      "new view columns must be appended after the legacy vacation_balance column",
+    );
+  } else {
+    assert.match(
+      migration,
+      /drop view if exists openbooks_query\.payroll_opening_balances/i,
+    );
+  }
+});
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -207,6 +234,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0138_extension_drafts.sql",
     "0139_unified_extensions.sql",
     "0140_extension_draft_author_identity.sql",
+    "0141_payroll_opening_balance_second_order_ytd.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
