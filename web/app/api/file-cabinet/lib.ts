@@ -254,7 +254,7 @@ export async function requireSession(): Promise<Authz | NextResponse> {
  */
 export function fileViewer(authz: Authz): FileViewer {
   const baseline: AccessLevel = can(authz, 'documents.manage') ? 'manager' : can(authz, 'documents.read') ? 'viewer' : 'none'
-  return { userId: authz.user.id, isAdmin: can(authz, '*'), baseline }
+  return { userId: authz.user.id, isAdmin: can(authz, '*'), baseline, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
 }
 
 /** Gate: the caller must have at least `min` access on a folder. */
