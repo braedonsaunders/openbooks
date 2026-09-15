@@ -10,6 +10,7 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "types": ["node"]
   },
   "include": ["./**/*.ts", "../playwright.config.ts"]
