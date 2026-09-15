@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
   if (!/^[A-Z]{3}$/.test(from) || !targets.length || targets.some((currency) => !/^[A-Z]{3}$/.test(currency))) {
     return NextResponse.json({ error: 'valid source and target currencies are required' }, { status: 400 })
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  if (!isIsoCalendarDate(date)) {
     return NextResponse.json({ error: 'valid settlement date is required' }, { status: 400 })
   }
 
