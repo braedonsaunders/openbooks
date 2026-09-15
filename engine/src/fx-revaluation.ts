@@ -441,13 +441,15 @@ export async function runRevaluation(
   periodId: string,
   actorId: string | null,
   allowedSubsidiaryIds?: string[],
+  /** Defaults to the primary book; a secondary (e.g. tax) book revalues its own exposures. */
+  bookId?: string,
 ): Promise<RevaluationRunResult> {
   return withOrgTransaction(orgId, async () => {
     await db.execute(sql`select id from orgs where id=${orgId} for update`);
     if (!(await lockAndCheckOrgFeature(db, orgId, "multiCurrency"))) {
       throw new RevaluationFeatureDisabledError();
     }
-    const bookId = await primaryBookId(orgId);
+    const activeBookId = bookId ?? (await primaryBookId(orgId));
     await unrealizedAccount(orgId);
     const ctx = await loadSubsidiaryContext(db, orgId);
     const result: RevaluationRunResult = { posted: [], skipped: [], problems: [] };
@@ -458,7 +460,7 @@ export async function runRevaluation(
         continue;
       }
       try {
-        const posted = await postRevaluationEntry(orgId, bookId, subsidiaryId, periodId, actorId);
+        const posted = await postRevaluationEntry(orgId, activeBookId, subsidiaryId, periodId, actorId);
         if (!posted) {
           result.skipped.push({ subsidiaryId, reason: "no revaluation needed" });
         } else {
@@ -485,9 +487,16 @@ async function postRevaluationEntry(
   return db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${revaluationLockKey(orgId, bookId, periodId, subsidiaryId)}, 0))`);
-    const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
-      where org_id=${orgId} and id=${bookId} and is_primary and is_active and posts_gl for share`)).rows[0];
-    if (!book) throw new RevaluationError("revaluation requires an active primary posting book");
+    const book = (await tx.execute<{ id: string; is_primary: boolean; is_active: boolean; posts_gl: boolean }>(sql`
+      select id, is_primary, is_active, posts_gl from accounting_books
+       where org_id=${orgId} and id=${bookId} for share`)).rows[0];
+    if (!book || !book.is_active || !book.posts_gl) {
+      throw new RevaluationError(
+        book && !book.is_primary
+          ? "revaluation requires an active posting book"
+          : "revaluation requires an active primary posting book",
+      );
+    }
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     const ctx = await loadSubsidiaryContext(tx, orgId);
     const subsidiary = ctx.byId.get(subsidiaryId);
