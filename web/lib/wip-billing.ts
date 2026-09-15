@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
@@ -332,10 +332,8 @@ export function rateEngineOverhead(
       : mul(source.quantity, rate.rate)))
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-
 function requireDate(value: string, label: string): string {
-  if (!ISO_DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+  if (!isIsoCalendarDate(value)) {
     throw new WipBillingError(`${label} must be a valid date`)
   }
   return value
