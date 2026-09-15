@@ -6,6 +6,7 @@ import {
   getBlockingConnection,
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
+import { isValidEmailAddress } from "@openbooks/emails";
 import { db, withOrgContext } from "../db.ts";
 import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
@@ -124,21 +125,19 @@ async function loadContext(data: {
 }
 
 /**
- * Consumes the `close-delivery` queue: render each report attached to a
- * published run's reporting package (with the package author's saved override
- * params) and email the bundle to the recipients via the email queue. A failed
- * single report is skipped and recorded, not fatal; a total render failure
- * throws so BullMQ retries.
+ * Execute one `close-delivery` queue payload — the exact code the worker
+ * callback runs, extracted (same function, no shadow) so tests can drive a
+ * real payload through it against live Postgres without standing up Redis.
  */
-export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
-  return new Worker<CloseDeliveryJobData>(
-    CLOSE_DELIVERY_QUEUE,
-    async (job) => {
-      const { orgId, runId, packageId } = job.data;
+export async function processCloseDeliveryJobData(
+  data: CloseDeliveryJobData,
+  queueJobId: string | null = null,
+): Promise<unknown> {
+      const { orgId, runId, packageId } = data;
       // Queue callbacks carry no request store; the package's tenant is the
       // only legal scope for the context load, catalog ensure, and close event.
       return await withOrgContext(orgId, async () => {
-      const row = await loadContext(job.data);
+      const row = await loadContext(data);
       if (!row) throw new Error("close run / period or reporting package not found");
 
       const delivery = (row.delivery ?? {}) as Record<string, unknown>;
@@ -148,6 +147,15 @@ export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
         (value): value is string => typeof value === "string" && value.length > 0,
       );
       if (recipients.length === 0) return { skipped: "no recipients" };
+      // Fail closed before any render work: the queue's provider validation
+      // throws on the first invalid address, so letting one through burns a
+      // full render pass and all three queue attempts while the package is
+      // never delivered. The save boundary refuses these first; this guards
+      // rows that predate it or arrived outside the UI.
+      const invalidRecipients = recipients.filter((recipient) => !isValidEmailAddress(recipient));
+      if (invalidRecipients.length > 0) {
+        throw new Error(`reporting package has invalid recipients: ${invalidRecipients.join(", ")}`);
+      }
 
       const attachmentsSpec = normalizeAttachments(row.reports);
       if (attachmentsSpec.length === 0) return { skipped: "no reports" };
@@ -215,7 +223,7 @@ export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
           attachments: files,
           meta: { category: "close-package" },
         },
-        { jobId: `close-package|${job.id}` },
+        { jobId: `close-package|${queueJobId}` },
       );
 
       await db.execute(sql`
@@ -225,7 +233,19 @@ export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
 
       return { reports: rendered.length, files: files.length, recipients: recipients.length, combined, failures, truncated };
       });
-    },
+}
+
+/**
+ * Consumes the `close-delivery` queue: render each report attached to a
+ * published run's reporting package (with the package author's saved override
+ * params) and email the bundle to the recipients via the email queue. A failed
+ * single report is skipped and recorded, not fatal; a total render failure
+ * throws so BullMQ retries.
+ */
+export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
+  return new Worker<CloseDeliveryJobData>(
+    CLOSE_DELIVERY_QUEUE,
+    async (job) => processCloseDeliveryJobData(job.data, job.id ?? null),
     { connection: getBlockingConnection(), concurrency: 2 },
   );
 }
