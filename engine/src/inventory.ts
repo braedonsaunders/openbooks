@@ -32,6 +32,7 @@ import {
   type SubsidiaryContext,
 } from "./subsidiaries.ts";
 import { SYSTEM_ACTOR_ID } from "./banking.ts";
+import { assertPeriodModulesOpen, CloseError } from "./close.ts";
 import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
@@ -1082,6 +1083,22 @@ export async function postInventoryEntry(
   const bal = sum(p.lines.map((l) => l.amount));
   if (!isZero(bal))
     throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
+  // Application-level companion to the je_guard Postgres gate (which refuses
+  // the draft→posted flip in a GL-closed period): fail fast with a named
+  // InventoryError instead of dying at the flip with a raw driver error.
+  // Inventory carries no close module of its own; GL is always implied.
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId: p.orgId,
+      periodId: p.periodId,
+      bookId: p.bookId,
+      subsidiaryIds: [p.subsidiaryId],
+      modules: [],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) throw new InventoryError(error.message);
+    throw error;
+  }
   await assertInventoryAccountsPostable(tx, p.orgId, p.lines.map((line) => line.accountId));
   const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
     where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`)).rows[0];
@@ -2645,6 +2662,24 @@ async function reverseInventoryJournal(
     });
   } catch (error) {
     if (error instanceof SubsidiaryError) throw new InventoryError(error.message);
+    throw error;
+  }
+
+  // Same companion gate as postInventoryEntry: the reversal posts into the
+  // reversal date's period, so a GL-closed target must refuse here with a
+  // named InventoryError, not at the posted flip with a raw driver error.
+  // The mirrored lines keep their own subsidiaries, so judge every leg the
+  // database guard would judge.
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId,
+      periodId: period.rows[0].id,
+      bookId: source.book_id,
+      subsidiaryIds: [...new Set([source.subsidiary_id, ...lines.rows.map((line) => String(line.subsidiary_id))])],
+      modules: [],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) throw new InventoryError(error.message);
     throw error;
   }
 
