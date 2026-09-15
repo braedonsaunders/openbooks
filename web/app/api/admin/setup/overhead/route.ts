@@ -12,6 +12,7 @@ import { acquireFeatureGateLock } from '../../../../../lib/features'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,17 +40,33 @@ export async function POST(req: Request) {
 
   if (body.action === 'publish') {
     const effectiveFrom: string = body.effectiveFrom
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '')) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '') || !isCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
     const rates: { departmentId: string; ratePerHour: string }[] = []
     if (Array.isArray(body.rates)) {
       for (const r of body.rates as { departmentId: string; ratePerHour: string | number }[]) {
+        // A malformed id would surface as a Postgres uuid throw and an
+        // unknown one as a foreign-key throw — both raw 500s. Refuse them
+        // here like the apply branch refuses unknown project types.
+        if (typeof r.departmentId !== 'string' || !isUuid(r.departmentId)) {
+          return NextResponse.json({ error: 'invalid departmentId' }, { status: 400 })
+        }
         const exact = canonicalDecimal(r.ratePerHour, 4)
         if (exact === null || compareDecimal(exact, '0') < 0) {
           return NextResponse.json({ error: 'ratePerHour must be a non-negative amount' }, { status: 400 })
         }
         rates.push({ departmentId: r.departmentId, ratePerHour: exact })
+      }
+    }
+    if (rates.length > 0) {
+      const known = await db.execute<{ id: string }>(sql`
+        select id from departments where org_id = ${orgId} and id in (${sql.join(
+          rates.map((r) => sql`${r.departmentId}`),
+          sql`, `,
+        )})`)
+      if (known.rows.length !== new Set(rates.map((r) => r.departmentId)).size) {
+        return NextResponse.json({ error: 'unknown department' }, { status: 422 })
       }
     }
     const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
