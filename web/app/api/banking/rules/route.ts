@@ -16,6 +16,18 @@ function build(body: Record<string, unknown>): { error: string } | { criteria: u
   return { criteria: c.value, outcome: o.value }
 }
 
+/** Priority funnel: the column is integer, and neither verb catches the
+ *  write — a value the column cannot hold would escape as a raw 500. */
+function priority(body: Record<string, unknown>): { error: string } | { priority: number } {
+  const raw = body.priority
+  if (raw === undefined || raw === null || raw === '') return { priority: 100 }
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n > 2147483647 || n < -2147483648) {
+    return { error: 'priority must be a whole number the rule list can store' }
+  }
+  return { priority: n }
+}
+
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
@@ -28,13 +40,15 @@ export async function POST(req: Request) {
   }
   const built = build(body)
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
+  const prio = priority(body)
+  if ('error' in prio) return NextResponse.json({ error: prio.error }, { status: 400 })
   // Match rules decide how imported bank lines are categorized and posted, so
   // every write lands in the audit trail inside the same transaction.
   const created = await db.transaction(async (tx) => {
     const row = (await tx.execute<Record<string, unknown>>(sql`
       insert into bank_match_rules (org_id, name, criteria, outcome, priority, is_active, created_by)
       values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
-              ${JSON.stringify(built.outcome)}::jsonb, ${Number(body.priority) || 100}, ${body.isActive !== false}, ${user.id})
+              ${JSON.stringify(built.outcome)}::jsonb, ${prio.priority}, ${body.isActive !== false}, ${user.id})
       returning *
     `))
     await tx.execute(sql`
@@ -67,6 +81,8 @@ export async function PATCH(req: Request) {
   }
   const built = build(body)
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
+  const prio = priority(body)
+  if ('error' in prio) return NextResponse.json({ error: prio.error }, { status: 400 })
   const missing = await db.transaction(async (tx) => {
     // Serialize rule edits from the row snapshot that supplies the audit
     // before-image. A concurrent PATCH waits here, then PostgreSQL's
@@ -80,7 +96,7 @@ export async function PATCH(req: Request) {
     const updated = (await tx.execute<Record<string, unknown>>(sql`
       update bank_match_rules set
         name = ${String(body.name).trim()}, criteria = ${JSON.stringify(built.criteria)}::jsonb,
-        outcome = ${JSON.stringify(built.outcome)}::jsonb, priority = ${Number(body.priority) || 100},
+        outcome = ${JSON.stringify(built.outcome)}::jsonb, priority = ${prio.priority},
         is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
       where id = ${body.id} and org_id = ${user.orgId}
       returning *
