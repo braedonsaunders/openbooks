@@ -82,6 +82,48 @@ export async function POST(req: Request) {
   const user = authz.user;
   const totalDebits = sum(lines.map((line) => (toUnits(line.amount) > 0n ? line.amount : "0")));
 
+  // The draft books into the caller's legal-entity scope — the same decision
+  // table POST /api/journals/draft enforces: an unrestricted caller keeps the
+  // root entity; a restricted caller resolves to their single active,
+  // non-elimination entity, and an empty or ambiguous scope is refused before
+  // anything is written. Without this a restricted caller would mint drafts in
+  // the root entity they cannot see, consuming its JE sequence.
+  const scope = authz.allowedSubsidiaryIds === null
+    ? null
+    : new Set([...authz.allowedSubsidiaryIds].map((id) => id.toLowerCase()));
+  let subsidiary: { id: string; base_currency: string };
+  if (scope === null) {
+    const found = (await db.execute<{ id: string; base_currency: string }>(sql`
+      select id, base_currency
+        from subsidiaries
+       where org_id = ${user.orgId}
+         and parent_id is null
+         and is_active
+         and not is_elimination
+       order by created_at
+       limit 1
+    `)).rows[0];
+    if (!found) throw new Error("org has no active root subsidiary");
+    subsidiary = found;
+  } else {
+    const ids = [...scope].filter((id) => /^[0-9a-f-]{36}$/.test(id));
+    const allowed = ids.length === 0 ? [] : (await db.execute<{ id: string; base_currency: string }>(sql`
+      select id, base_currency
+        from subsidiaries
+       where org_id = ${user.orgId}
+         and is_active
+         and not is_elimination
+         and id = any(${`{${ids.join(',')}}`}::uuid[])
+    `)).rows;
+    if (allowed.length === 0) {
+      return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
+    }
+    if (allowed.length !== 1) {
+      return NextResponse.json({ error: "subsidiary_selection_required" }, { status: 409 });
+    }
+    subsidiary = allowed[0]!;
+  }
+
   // The confirmation token is the durable identity of this proposed write.
   // Claiming it through the application idempotency boundary makes a retry or
   // double-click replay the original response instead of creating another
@@ -98,18 +140,6 @@ export async function POST(req: Request) {
     idempotencyKey: body.confirmToken,
     request: { kind: body.kind, preview: p },
     execute: () => db.transaction(async (tx) => {
-      const root = (await tx.execute<{ id: string; base_currency: string }>(sql`
-        select id, base_currency
-          from subsidiaries
-         where org_id = ${user.orgId}
-           and parent_id is null
-           and is_active
-           and not is_elimination
-         order by created_at
-         limit 1
-      `)).rows[0];
-      if (!root) throw new Error("org has no active root subsidiary");
-
       // Allocate the organization-wide JE number on the same transaction
       // connection as the document. A line or header failure therefore rolls
       // the sequence watermark back along with the draft.
@@ -120,8 +150,8 @@ export async function POST(req: Request) {
           memo, subtotal, tax_total, total, created_by
         )
         values (
-          ${user.orgId}, 'journal', ${documentNumber}, ${root.id}, ${p.documentDate},
-          ${root.base_currency}, ${p.memo}, ${totalDebits}, '0', ${totalDebits}, ${user.id}
+          ${user.orgId}, 'journal', ${documentNumber}, ${subsidiary.id}, ${p.documentDate},
+          ${subsidiary.base_currency}, ${p.memo}, ${totalDebits}, '0', ${totalDebits}, ${user.id}
         )
         returning id, document_number
       `));
