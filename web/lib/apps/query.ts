@@ -49,7 +49,12 @@ export async function queryAppRecords(ctx: AppPlatformContext, raw: unknown) {
     const predicates: string[] = []
     if (resolved.dynamic) predicates.push(`r.type_key = ${literal(key)}`)
     if (resolved.documentKinds) predicates.push(`r.kind IN (${resolved.documentKinds.map(literal).join(',')})`)
-    if (!resolved.dynamic && ctx.allowedSubsidiaryIds !== null && type.fields.some(f => f.name === 'subsidiary_id')) predicates.push(ctx.allowedSubsidiaryIds.size ? `r.subsidiary_id IN (${[...ctx.allowedSubsidiaryIds].map(literal).join(',')})` : 'FALSE')
+    if (ctx.allowedSubsidiaryIds !== null && type.fields.some(f => f.name === 'subsidiary_id')) {
+      const values = [...ctx.allowedSubsidiaryIds].map(literal).join(',')
+      predicates.push(resolved.dynamic
+        ? (values ? `r.data ->> 'subsidiary_id' IN (${values})` : 'FALSE')
+        : (values ? `r.subsidiary_id IN (${values})` : 'FALSE'))
+    }
     sources.set(key, { from: `${ident(resolved.table)} r`, orgColumn: 'r.org_id', predicates, columns: [...base, ...fields.filter(f => !base.some(b => b.key === f.key))] })
   }
   let compiled
