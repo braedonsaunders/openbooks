@@ -15,6 +15,8 @@ type Evidence = { fieldKey: string; lineIndex: number | null; confidence: string
 export type CaptureDetail = {
   id: string
   status: string
+  /** Opaque optimistic-concurrency token: the capture's canonical revision when read. */
+  updatedAt: string
   file_id: string
   original_filename: string
   document_kind: 'vendor_bill' | 'vendor_credit'
@@ -47,6 +49,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
   const [purchaseOrderId, setPurchaseOrderId] = useState(initial.purchase_order_id ?? '')
   const [documentKind, setDocumentKind] = useState(initial.document_kind)
   const [status, setStatus] = useState(initial.status)
+  const [revision, setRevision] = useState(initial.updatedAt)
   const [issues, setIssues] = useState<CaptureIssue[]>(Array.isArray(initial.validation_issues) ? initial.validation_issues : [])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -71,9 +74,9 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
       const response = await fetch(`/api/ap-capture/${initial.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ normalized: form, vendorId: vendorId || null, purchaseOrderId: purchaseOrderId || null, documentKind }),
+        body: JSON.stringify({ normalized: form, vendorId: vendorId || null, purchaseOrderId: purchaseOrderId || null, documentKind, expectedUpdatedAt: revision }),
       })
-      const body = (await response.json()) as { normalized?: NormalizedCapture; validationIssues?: CaptureIssue[]; vendorId?: string | null; purchaseOrderId?: string | null; status?: string; error?: string }
+      const body = (await response.json()) as { normalized?: NormalizedCapture; validationIssues?: CaptureIssue[]; vendorId?: string | null; purchaseOrderId?: string | null; status?: string; updatedAt?: string; error?: string }
       if (!response.ok) throw new Error(body.error ?? 'save_failed')
       if (sequence !== saveSequence.current) return true
       if (body.normalized) setForm(body.normalized)
@@ -81,6 +84,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
       setVendorId(body.vendorId ?? '')
       setPurchaseOrderId(body.purchaseOrderId ?? '')
       setStatus(body.status ?? status)
+      if (body.updatedAt) setRevision(body.updatedAt)
       setDirty(false)
       return true
     } catch {
@@ -89,7 +93,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
     } finally {
       if (sequence === saveSequence.current) setSaving(false)
     }
-  }, [dirty, documentKind, editable, form, initial.id, purchaseOrderId, status, t, vendorId])
+  }, [dirty, documentKind, editable, form, initial.id, purchaseOrderId, revision, status, t, vendorId])
 
   useEffect(() => {
     if (!dirty || !editable) return

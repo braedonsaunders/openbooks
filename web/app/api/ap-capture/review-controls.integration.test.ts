@@ -40,9 +40,15 @@ async function fixture() {
     values (${run},${org.orgId},${capture},1,'fixture','fixture','succeeded',now())`)
   await db.execute(sql`insert into ap_capture_fields(org_id,run_id,field_key,raw_value)
     values (${org.orgId},${run},'total','100.00')`)
-  const patch = (body: object) => withOrgContext(org.orgId, () => PATCH(new Request('http://audit.local/api/ap-capture/'+capture, {
-    method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, ...body }),
-  }), { params: Promise.resolve({ id: capture }) }))
+  const revision = async () => (await db.execute<{ updatedAt: string }>(sql`
+    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+      from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!.updatedAt
+  const patch = async (body: object) => {
+    const expectedUpdatedAt = await revision()
+    return withOrgContext(org.orgId, () => PATCH(new Request('http://audit.local/api/ap-capture/'+capture, {
+      method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, expectedUpdatedAt, ...body }),
+    }), { params: Promise.resolve({ id: capture }) }))
+  }
   const snapshot = async () => (await db.execute(sql`select to_jsonb(ci) as item,
     (select count(*) from ap_capture_corrections where org_id=${org.orgId}) as corrections,
     (select count(*) from ap_capture_events where org_id=${org.orgId}) as events
