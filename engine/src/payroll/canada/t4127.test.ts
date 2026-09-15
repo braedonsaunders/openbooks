@@ -210,9 +210,10 @@ test("Quebec employment: QPP + QPIP + abatement, no provincial T2", () => {
   assert.equal(result.qpipEmployer, "12.0400");
   // No provincial tax through T4127; federal abated 16.5%
   assert.equal(result.factors.T2 ?? "0", "0");
-  const t3 = result.factors.T3!;
-  const t1 = result.factors.T1!;
-  assert.ok(Number(t1) < Number(t3)); // display-only sanity on the abatement
+  assert.equal(result.factors.T3, "4212.8800");
+  // Abatement = 16.5% × 4212.88 = 695.13 → T1 = 3517.75. Exact, so any
+  // digit change in the 16.5% rate fails loudly.
+  assert.equal(result.factors.T1, "3517.7500");
 });
 
 test("tax-exempt (claim code E) still pays the Ontario Health Premium", () => {
@@ -267,9 +268,10 @@ test("outside Canada (ZZ): 48% federal surtax, no provincial tax", () => {
     payDate: "2026-02-13", province: "ZZ", periodsPerYear: 26,
     income: "2000.00", federalClaimCode: 1,
   });
-  const t3 = BigInt(result.factors.T3!.replace(".", ""));
-  const t1 = BigInt(result.factors.T1!.replace(".", ""));
-  assert.ok(t1 > t3);
+  assert.equal(result.factors.T3, "4243.9300");
+  // Surtax = 48% × 4243.93 = 2037.09 → T1 = 6281.02. Exact, so any digit
+  // change in the 48% rate fails loudly.
+  assert.equal(result.factors.T1, "6281.0200");
   assert.equal(result.factors.T2, undefined);
 });
 
@@ -290,6 +292,60 @@ test("additional per-period tax L applies even when A is nil", () => {
     federalClaimCode: 1, provincialClaimCode: 1,
   });
   assert.equal(result.periodicTax, "25.0000");
+});
+
+test("single-month CPP proration (PM=1) still contributes and earns credits", () => {
+  // Turning 18/70 or a mid-year CPT30 election can leave one contributory
+  // month: the period contribution and the K2 credit basis must prorate, not
+  // vanish. Zeroing either under-withholds (PM guard) or over-withholds
+  // (credit-basis guard) that employee's whole December.
+  const result = calculateT4127({
+    payDate: "2026-01-15", province: "ON", periodsPerYear: 26, cppMonths: 1,
+    income: "2000.00", federalClaimCode: 1, provincialClaimCode: 1,
+  });
+  // C = min(4230.45/12, 0.0595 × 1865.39) = 110.99 — the PM guard must pass.
+  assert.equal(result.cpp, "110.9900");
+  // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45/12) + 0.14 × 847.60
+  //    = 41.06 + 118.66 = 159.72 — the basis must prorate, not zero.
+  assert.equal(result.factors.K2, "159.7200");
+  assert.equal(result.periodicTax, "270.2700");
+});
+
+test("labour-sponsored funds credit reduces federal tax, capped annually", () => {
+  // $28.85 per biweekly period annualizes to $750.10, capped at the $750
+  // statutory annual maximum: T1 falls by exactly the cap. Adding instead of
+  // subtracting would over-withhold every affected employee by $57.69/pay.
+  const base = {
+    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
+    income: "2000.00", federalClaimCode: 1, provincialClaimCode: 1,
+  } as const;
+  const plain = calculateT4127({ ...base });
+  const credited = calculateT4127({ ...base, labourFundsCreditFederal: "28.85" });
+  assert.equal(plain.factors.T1, "4243.9300");
+  assert.equal(credited.factors.T1, "3493.9300");
+  assert.equal(credited.periodicTax, "225.9800");
+});
+
+test("Ontario surtax applies strictly above its thresholds", () => {
+  const exempt = { cppExempt: true, eiExempt: true } as const;
+  const base = {
+    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
+    federalClaimCode: 0, provincialClaimCode: 0, ...exempt,
+  } as const;
+  // T4 lands EXACTLY on the $5,818 first threshold: no surtax. (A `>=`
+  // comparison would add 20% of zero here — identical output, so the strict
+  // operator is pinned by the thresholds below rather than by this case.)
+  const exact = calculateT4127({ ...base, income: "3374.5269" });
+  assert.equal(exact.factors.T4, "5818.0000");
+  assert.equal(exact.factors.V1, "0.0000");
+  // Just above the first threshold: 20% of the $60.60 excess = $12.12.
+  const above = calculateT4127({ ...base, income: "3400.00" });
+  assert.equal(above.factors.T4, "5878.6000");
+  assert.equal(above.factors.V1, "12.1200");
+  // Above the $7,446 second threshold: 20% of $2,863.20 + 36% of $1,235.20.
+  const high = calculateT4127({ ...base, income: "4500.00" });
+  assert.equal(high.factors.T4, "8681.2000");
+  assert.equal(high.factors.V1, "1017.3100");
 });
 
 test("123rd edition leaves untouched provinces identical to the 122nd", () => {
