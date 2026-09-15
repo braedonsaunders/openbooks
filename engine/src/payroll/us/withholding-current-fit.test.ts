@@ -97,6 +97,96 @@ test('AL and OR state withholding use computed current-period FIT, not stale cer
   } as Parameters<typeof OR_WITHHOLDING.compute>[0]).tax)
 })
 
+function subRegionLevy(
+  region: string,
+  subRegion: string,
+  certificateKey: string | null,
+  reach: 'resident' | 'nonresident' = 'resident',
+): ResolvedWithholdingLevy {
+  return {
+    level: 'sub_region', region, subRegion, label: `${region} ${subRegion}`,
+    basis: 'resident', side: 'work', reach, certificateKey,
+  }
+}
+
+function dispatchInput(
+  region: string,
+  subRegion: string,
+  certificateKey: string | null,
+  certificateFor: (key: string) => ResolvedCertificate | null,
+  tenantRates: (rateKey: string, subRegion: string) => Record<string, string> | undefined,
+  reach: 'resident' | 'nonresident' = 'resident',
+): Parameters<typeof computeUsWithholding>[0] {
+  return {
+    levy: subRegionLevy(region, subRegion, certificateKey, reach),
+    payDate: PAY_DATE,
+    periodEnd: PERIOD_END,
+    periodsPerYear: 26,
+    wages: '2000.0000',
+    certificateFor,
+    tenantRates,
+    federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0]
+}
+
+test('Ohio school-district dispatch applies the IT 4 exemption count', () => {
+  // District 0303 taxes the traditional base at 1.25%: (52,000 − 650) ×
+  // 1.25% ÷ 26 = 24.69 with one exemption, 25.00 without. A dispatch that
+  // reads the count as zero (negated certificate guard) silently
+  // over-withholds every resident of every traditional-base district.
+  const withExemption = certificate('us_oh_it4', { total_exemptions: '1' })
+  const input = dispatchInput('OH', '0303', 'us_oh_it4', () => withExemption, () => undefined)
+  const result = computeUsWithholding(input)
+  assert.equal(result?.code, 'OH-0303')
+  assert.equal(result?.tax, '24.6900')
+
+  const without = computeUsWithholding({
+    ...input, certificateFor: () => certificate('us_oh_it4', {}),
+  })
+  assert.equal(without?.tax, '25.0000')
+})
+
+test('an Ohio school-district number with no tax is refused by name', () => {
+  // 9999 is four digits but on no Department list: the school-district path
+  // must refuse naming the number, not compute a zero. (Negating the
+  // district guard throws on the VALID district instead — covered above.)
+  assert.throws(
+    () => computeUsWithholding(
+      dispatchInput('OH', '9999', 'us_oh_it4', () => certificate('us_oh_it4', {}), () => undefined),
+    ),
+    /Ohio school district 9999 does not levy an income tax/,
+  )
+})
+
+test('PA Act 32 EIT withholds at the winning reach rate and refuses a missing one', () => {
+  // The generic resolver already picked the higher rate; the dispatch applies
+  // the reach it was handed. Swapping resident/nonresident withholds the
+  // wrong jurisdiction's rate on every PA cheque.
+  const tenantRates = () => ({ residentRate: '0.0100', nonresidentRate: '0.0050' })
+  const resident = computeUsWithholding(
+    dispatchInput('PA', '150001', 'us_pa_clgs32_6', () => null, tenantRates, 'resident'),
+  )
+  assert.equal(resident?.code, 'PA-150001')
+  assert.equal(resident?.tax, '20.0000') // 2,000 × 1.00%
+  const nonresident = computeUsWithholding(
+    dispatchInput('PA', '150001', 'us_pa_clgs32_6', () => null, tenantRates, 'nonresident'),
+  )
+  assert.equal(nonresident?.tax, '10.0000') // 2,000 × 0.50%
+
+  // No rate entered: refused naming the PSD and the DCED register — the
+  // refusal sentence itself is load-bearing (a message mutant turns it to
+  // NaN), and a present rate must never take this path.
+  const missing = dispatchInput('PA', '150001', 'us_pa_clgs32_6', () => null, () => undefined)
+  assert.throws(
+    () => computeUsWithholding(missing),
+    /no Act 32 local earned income tax rate has been entered for PSD 150001/,
+  )
+  assert.throws(
+    () => computeUsWithholding(missing),
+    /their own and DCED revises/,
+  )
+})
+
 test('the shared US statutory caller forwards the FIT it just calculated', () => {
   const source = readFileSync('engine/src/payroll/us/compute-statutory.ts', 'utf8')
   const call = source.match(/const withheld = computeUsWithholding\(\{[\s\S]*?\n    \}\)/)?.[0] ?? ''
