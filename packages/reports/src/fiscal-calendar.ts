@@ -137,3 +137,131 @@ export function fiscalQuartersBetween(from: string, to: string, startMonth: numb
   }
   return out
 }
+
+// ---------------------------------------------------------------------------
+// Declared-period helpers — retail/custom fiscal calendars
+// ---------------------------------------------------------------------------
+//
+// Calendar math above assumes every fiscal period is a calendar month. Orgs on
+// a week-based retail calendar (four_four_five / four_five_four /
+// five_four_four / thirteen_period) or a custom calendar declare their real
+// periods in `accounting_periods` instead: 4- and 5-week spans whose
+// boundaries never align to month ends. These pure helpers derive breakout
+// columns and preset windows from those DECLARED periods. Callers load the
+// rows (default active calendar, non-adjustment only) and pass them in; with
+// no rows every consumer falls back to calendar math, so monthly-cadence orgs
+// are unaffected.
+
+/**
+ * One declared fiscal period (an `accounting_periods` row minus its ids):
+ * inclusive ISO bounds plus the stored fiscal year / period number / name.
+ */
+export type FiscalPeriod = {
+  fiscalYear: number
+  periodNumber: number
+  name: string
+  from: string
+  to: string
+}
+
+/** Quarter (1-4) a declared period belongs to within its fiscal year: three
+ *  periods per quarter (Q1 = P1–P3); a trailing remainder (e.g. P13 of a
+ *  thirteen-period year, or extra custom periods) joins Q4 rather than
+ *  opening a phantom Q5. Matches `close.ts` quarter applicability
+ *  (`periodNumber % 3 === 0` closes Q1 at P3, Q2 at P6, …). */
+export function declaredPeriodQuarter(periodNumber: number): number {
+  return Math.min(3, Math.floor((periodNumber - 1) / 3)) + 1
+}
+
+function declaredOverlaps(p: FiscalPeriod, from: string, to: string): boolean {
+  return p.from <= to && p.to >= from
+}
+
+/** The declared period holding `date`, or null when no declared period covers it. */
+export function declaredPeriodContaining(periods: FiscalPeriod[], date: string): FiscalPeriod | null {
+  const sorted = [...periods].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
+  return sorted.find((p) => p.from <= date && date <= p.to) ?? null
+}
+
+/**
+ * Month-breakout columns from declared periods: every declared period
+ * overlapping `[from, to]` is ONE column at its full bounds labelled with the
+ * fiscal period name — so a 5-week period never splits across two calendar
+ * columns. Capped defensively at 60 like `fiscalMonthsBetween`.
+ */
+export function declaredPeriodColumns(periods: FiscalPeriod[], from: string, to: string): DateRange[] {
+  const sorted = [...periods].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
+  return sorted
+    .filter((p) => declaredOverlaps(p, from, to))
+    .slice(0, 60)
+    .map((p) => ({ from: p.from, to: p.to, label: p.name }))
+}
+
+/**
+ * Quarter-breakout columns group the calendar's declared periods: each
+ * `(fiscalYear, quarter)` group with at least one period overlapping
+ * `[from, to]` is one column spanning the group's full bounds, labelled
+ * `Q{q} FY {fy}` exactly like `fiscalQuarterRange`.
+ */
+export function declaredQuarterColumns(periods: FiscalPeriod[], from: string, to: string): DateRange[] {
+  const groups = new Map<string, { fy: number; q: number; from: string; to: string; overlaps: boolean }>()
+  for (const p of periods) {
+    const q = declaredPeriodQuarter(p.periodNumber)
+    const key = `${p.fiscalYear}:${q}`
+    const g = groups.get(key)
+    // Bounds span the whole known group (like calendar quarters span the
+    // full quarter even for a mid-quarter window); the group becomes a
+    // column when at least one member overlaps the window.
+    if (!g) groups.set(key, { fy: p.fiscalYear, q, from: p.from, to: p.to, overlaps: declaredOverlaps(p, from, to) })
+    else {
+      if (p.from < g.from) g.from = p.from
+      if (p.to > g.to) g.to = p.to
+      g.overlaps = g.overlaps || declaredOverlaps(p, from, to)
+    }
+  }
+  return [...groups.values()]
+    .filter((g) => g.overlaps)
+    .sort((a, b) => a.from.localeCompare(b.from))
+    .slice(0, 40)
+    .map((g) => ({ from: g.from, to: g.to, label: `Q${g.q} FY ${g.fy}` }))
+}
+
+/** True when the declared periods fully cover `[from, to]` with no gaps — the
+ *  precondition for using declared columns instead of calendar math (which
+ *  would otherwise silently drop activity dated outside generated periods). */
+export function declaredPeriodsCover(periods: FiscalPeriod[], from: string, to: string): boolean {
+  const overlapping = [...periods].filter((p) => declaredOverlaps(p, from, to)).sort((a, b) => a.from.localeCompare(b.from))
+  if (!overlapping.length || overlapping[0]!.from > from) return false
+  let covered = overlapping[0]!.to
+  if (covered >= to) return true
+  for (const p of overlapping.slice(1)) {
+    if (p.from > addDays(covered, 1)) return false
+    if (p.to > covered) covered = p.to
+    if (covered >= to) return true
+  }
+  return false
+}
+
+/** Whole declared fiscal year holding `date`: P1's start through the year's
+ *  last declared period's end. Null when the year has no declared periods. */
+export function declaredFiscalYearRange(periods: FiscalPeriod[], date: string): (DateRange & { fiscalYear: number }) | null {
+  const holding = declaredPeriodContaining(periods, date)
+  if (!holding) return null
+  const year = periods.filter((p) => p.fiscalYear === holding.fiscalYear)
+  if (!year.length) return null
+  const from = year.reduce((a, b) => (a < b.from ? a : b.from), year[0]!.from)
+  const to = year.reduce((a, b) => (a > b.to ? a : b.to), year[0]!.to)
+  return { from, to, label: `FY ${holding.fiscalYear}`, fiscalYear: holding.fiscalYear }
+}
+
+/** Declared quarter holding `date` (same grouping as `declaredQuarterColumns`). */
+export function declaredQuarterContaining(periods: FiscalPeriod[], date: string): DateRange | null {
+  const holding = declaredPeriodContaining(periods, date)
+  if (!holding) return null
+  const q = declaredPeriodQuarter(holding.periodNumber)
+  const group = periods.filter((p) => p.fiscalYear === holding.fiscalYear && declaredPeriodQuarter(p.periodNumber) === q)
+  if (!group.length) return null
+  const from = group.reduce((a, b) => (a < b.from ? a : b.from), group[0]!.from)
+  const to = group.reduce((a, b) => (a > b.to ? a : b.to), group[0]!.to)
+  return { from, to, label: `Q${q} FY ${holding.fiscalYear}` }
+}
