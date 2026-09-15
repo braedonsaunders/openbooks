@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { formatMoney, sum } from '@openbooks/engine/src/money.ts'
+import { formatMoney, mulRate, sum } from '@openbooks/engine/src/money.ts'
 import {
   evaluateBillsForRelease,
   evaluateVendorCompliance,
@@ -161,7 +161,7 @@ export async function loadComplianceMatrix(args: {
       select p.id as "partyId", p.display_name as "vendorName",
              vr.compliance_class_id as "classId", cc.name as "className",
              coalesce((
-               select sum(d.open_balance) from documents d
+               select sum(round(d.open_balance * d.fx_rate, 4)) from documents d
                 where d.org_id = p.org_id and d.party_id = p.id
                   and d.kind in ('vendor_bill', 'expense_report')
                   and d.status = 'posted' and coalesce(d.open_balance, 0) > 0
@@ -369,6 +369,9 @@ export async function loadVendorWaivers(
 export interface BlockedBillRow extends BillReleaseDecision {
   documentDate: string
   openBalance: string
+  /** Posted txn-to-base rate: the per-bill display stays document currency,
+   *  but cross-bill exposure aggregates convert through this rate. */
+  fxRate: string
   currency: string
   projectName: string | null
 }
@@ -391,10 +394,12 @@ export async function loadBlockedBills(
     document_date: string
     currency: string
     open_balance: string
+    fx_rate: string
     project_name: string | null
   }>(sql`
     select d.id, d.document_number, d.party_id, p.display_name as vendor,
            d.project_id, d.document_date, d.currency, coalesce(d.open_balance, 0) as open_balance,
+           d.fx_rate as fx_rate,
            case when pj.id is null then null
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as project_name
       from documents d
@@ -427,6 +432,7 @@ export async function loadBlockedBills(
       ...decision,
       documentDate: bills.rows[i]!.document_date,
       openBalance: bills.rows[i]!.open_balance,
+      fxRate: bills.rows[i]!.fx_rate,
       currency: bills.rows[i]!.currency,
       projectName: bills.rows[i]!.project_name
     }))
@@ -777,7 +783,11 @@ export async function loadComplianceOverview(
   ])
   const byState = { ...EMPTY_STATES }
   for (const row of matrix.rows) byState[row.overall] += 1
-  const blockedExposure = sum(blocked.filter((b) => b.decision === 'blocked').map((b) => b.openBalance))
+  const blockedExposure = sum(
+    blocked
+      .filter((b) => b.decision === 'blocked')
+      .map((b) => mulRate(b.openBalance, b.fxRate)),
+  )
   return {
     asOf,
     taxYear,
