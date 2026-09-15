@@ -132,12 +132,14 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
     throw new CloseError("week-based calendars require an anchor date");
   const isDefault = bool(body, "isDefault");
   return db.transaction(async (tx) => {
+    let before: Record<string, unknown> | null = null;
     if (id) {
       const current = ((await tx.execute(sql`
         select c.*, exists(select 1 from accounting_periods p where p.fiscal_calendar_id = c.id and p.org_id = ${orgId}) as has_periods
           from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`)));
       const row = current.rows[0];
       if (!row) throw new CloseError("calendar not found");
+      before = row as Record<string, unknown>;
       if (
         row.has_periods &&
         (row.cadence !== cadence ||
@@ -154,7 +156,7 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
         sql`update fiscal_calendars set is_default = false, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId}`,
       );
     if (id) {
-      await tx.execute(sql`
+      const updated = (await tx.execute(sql`
         update fiscal_calendars set name = ${name}, cadence = ${cadence}, year_start_month = ${yearStartMonth},
                week_starts_on = ${weekStartsOn}, anchor_date = ${anchorDate},
                time_zone = ${text(body, "timeZone") ?? "UTC"},
@@ -162,7 +164,14 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
                is_default = ${isDefault}, is_active = ${body.isActive !== false},
                config = ${JSON.stringify(object(body, "config"))}::jsonb,
                updated_at = now(), updated_by = ${actorId}
-         where id = ${id} and org_id = ${orgId}`);
+         where id = ${id} and org_id = ${orgId}
+         returning *`)) as { rows: Array<Record<string, unknown>> };
+      const after = updated.rows[0];
+      if (!after) throw new CloseError("calendar not found");
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'fiscal_calendars', ${id}, 'update',
+                ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
       return id;
     }
     const inserted = (await tx.execute(sql`
@@ -172,8 +181,14 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
       values (${orgId}, ${name}, ${cadence}, ${yearStartMonth}, ${weekStartsOn}, ${anchorDate},
               ${text(body, "timeZone") ?? "UTC"}, ${bool(body, "adjustmentPeriodEnabled")},
               ${isDefault}, ${body.isActive !== false}, ${JSON.stringify(object(body, "config"))}::jsonb,
-              ${actorId}, ${actorId}) returning id`)) as any;
-    return inserted.rows[0].id as string;
+              ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
+    const after = inserted.rows[0];
+    if (!after) throw new CloseError("calendar could not be created");
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'fiscal_calendars', ${after.id}, 'insert',
+              ${JSON.stringify({ before: null, after })}::jsonb, ${actorId})`);
+    return after.id as string;
   });
 }
 
