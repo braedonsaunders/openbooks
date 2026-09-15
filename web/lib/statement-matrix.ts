@@ -412,14 +412,14 @@ async function buildAmountColumns(opts: {
          and exists (
            select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             where l.extra_dims ->> ${segmentKey} = sv.id::text
-              and l.org_id = ${orgId}
+              and l.org_id = ${orgId} and e.status in ('posted', 'reversed')
               and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
          )
        order by sv.name
     `))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-       where l.org_id = ${orgId}
+       where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
          and not (l.extra_dims ? ${segmentKey}) and ${periodWhere} ${bookProbe}
          and ${dimFilterSql(dims, subsidiary)} limit 1
     `))
@@ -460,14 +460,14 @@ async function buildAmountColumns(opts: {
          and exists (
          select 1 from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
+          where l.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
     `))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-       where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
+       where l.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        limit 1
     `))
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
