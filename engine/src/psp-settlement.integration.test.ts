@@ -543,3 +543,27 @@ test(
     }
   },
 );
+
+test(
+  "provider config save refuses an unknown provider instead of a storage 500",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      await assert.rejects(
+        savePspProviderConfig(
+          org.orgId,
+          { provider: "wirecard" as unknown as "stripe", isEnabled: true },
+          actor,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof PspSettlementError);
+          return true;
+        },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
