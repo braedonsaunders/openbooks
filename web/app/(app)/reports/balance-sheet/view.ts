@@ -139,7 +139,9 @@ export async function loadBalanceSheet(
     scale: q.scale,
     currency: subView.currency ?? org?.base_currency,
     drill: {
-      dims: q.dims,
+      // The drill drawer must read the cell's exact entity set (a consolidated
+      // subtree, not just the picker node) — the route re-validates every id.
+      dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       basis: q.basis,
       subsidiaryId: q.subsidiaryId,
       bookId: selectedBook.id,

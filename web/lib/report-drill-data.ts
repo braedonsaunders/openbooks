@@ -129,9 +129,11 @@ async function scopedDims(
   authz: Authz,
 ): Promise<DimFilter> {
   const rawDims = target.dims as StatementDimFilter & { subsidiaryIds?: string[] } | undefined
-  const requested = target.subsidiaryId
-    ? [target.subsidiaryId]
-    : rawDims?.subsidiaryIds
+  // The view's resolved entity set rides in the target's dims (statement
+  // cells aggregate a consolidated subtree); the picker node is only the
+  // fallback for targets built before it did. Either way the allowlist
+  // intersection below keeps a forged set from widening a restricted reader.
+  const requested = rawDims?.subsidiaryIds ?? (target.subsidiaryId ? [target.subsidiaryId] : undefined)
   const subsidiaryIds = authz.allowedSubsidiaryIds === null
     ? requested
     : requested
