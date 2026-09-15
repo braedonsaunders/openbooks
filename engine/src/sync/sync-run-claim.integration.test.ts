@@ -22,10 +22,16 @@ import { claimSyncRun, SyncRunAlreadyActiveError } from "./sync.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-let org: ScratchOrg | null = null;
+/**
+ * Lease a fresh scratch org per top-level test. The suite's fixture lifecycle
+ * hook drains forgotten leases at every top-level test boundary, so an org
+ * memoized across tests is reset — and re-leased to another worker process —
+ * as soon as the first test ends; later tests would then write into a tenant
+ * somebody else owns (that is how CAD invoices from this file surfaced inside
+ * the US nexus ledger test on database shard 16).
+ */
 async function ctx(): Promise<ScratchOrg> {
-  if (!org) org = await createScratchOrg();
-  return org;
+  return createScratchOrg();
 }
 
 async function newConnection(orgId: string): Promise<string> {
