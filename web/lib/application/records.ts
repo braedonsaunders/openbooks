@@ -112,12 +112,16 @@ function subsidiaryWhere(
   if (requested) {
     if (!isUuid(requested)) throw invalidInput("subsidiaryId must be a UUID");
     assertSubsidiaryAccess(context, requested);
-    return sql`subsidiary_id = ${requested}`;
+    return scope.resolved.dynamic
+      ? sql`data ->> ${'subsidiary_id'} = ${requested}`
+      : sql`subsidiary_id = ${requested}`;
   }
   const allowed = context.authz.allowedSubsidiaryIds;
   if (allowed === null) return null;
   if (allowed.size === 0) return sql`false`;
-  return sql`subsidiary_id = any(${pgTextArrayLiteral([...allowed])}::uuid[])`;
+  return scope.resolved.dynamic
+    ? sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...allowed])}::text[])`
+    : sql`subsidiary_id = any(${pgTextArrayLiteral([...allowed])}::uuid[])`;
 }
 
 function baseWhere(
