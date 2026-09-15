@@ -5,6 +5,7 @@ import { payrollTaxYear } from "./payroll/packs.ts";
 import {
   calculatePayRun,
   createPayRun,
+  payRunCalculationSource,
   payrollSubsidiaryScopeFilter,
   type CapturedStub,
   type PayrollSubsidiaryScope,
@@ -639,15 +640,33 @@ async function createRetroPayRunLocked(
   });
 
   {
+    // The quantification baseline, captured per source run in this same
+    // transaction: the exact inputs the simulation above priced into the
+    // settlements' recomputed numbers. Readiness compares live inputs against
+    // THIS, not against the source run's own (older) snapshot — a correction
+    // that predates quantification is already inside the settled numbers and
+    // must not read as stale. One capture per source run mirrors
+    // quantification's one-simulation-per-source-run.
+    const quantificationSnapshots = new Map<string, string | null>();
+    for (const period of paying) {
+      const sourceId = period.candidate.sourcePayRunDocumentId;
+      if (!quantificationSnapshots.has(sourceId)) {
+        const snapshot = await payRunCalculationSource(
+          orgId, sourceId, tx, false, input.allowedSubsidiaryIds,
+        );
+        quantificationSnapshots.set(sourceId, snapshot ? JSON.stringify(snapshot) : null);
+      }
+    }
     for (const period of paying) {
       const difference = period.difference!;
       const buckets = payableRetroBuckets(difference);
+      const snapshot = quantificationSnapshots.get(period.candidate.sourcePayRunDocumentId) ?? null;
       const settlement = (await tx.execute<{ id: string }>(sql`
         insert into payroll_retro_settlements
           (org_id, retro_pay_run_document_id, employee_party_id, source_pay_run_document_id,
            source_period_start, source_period_end, source_pay_date, source_tax_year,
            original_earnings, recomputed_earnings, previously_settled, delta, reasons,
-           created_by, updated_by)
+           quantified_source_snapshot, created_by, updated_by)
         values
           (${orgId}, ${run.documentId}, ${period.candidate.employeePartyId},
            ${period.candidate.sourcePayRunDocumentId},
@@ -655,7 +674,8 @@ async function createRetroPayRunLocked(
            ${period.candidate.payDate}, ${period.candidate.taxYear},
            ${difference.originalEarnings}, ${difference.recomputedEarnings},
            ${difference.previouslySettled}, ${difference.delta},
-           ${JSON.stringify(period.candidate.reasons)}::jsonb, ${actorId}, ${actorId})
+           ${JSON.stringify(period.candidate.reasons)}::jsonb, ${snapshot}::jsonb,
+           ${actorId}, ${actorId})
         returning id
       `));
       const settlementId = settlement.rows[0]!.id;
@@ -998,16 +1018,21 @@ export async function retroRunFindings(
                 and a.effective_from <= st.source_period_end
                 and greatest(a.created_at, a.updated_at) > st.quantified_at) as component_moved,
            -- Time is part of the quantified source, too. Compare the exact
-           -- source snapshot so a row that was deleted, moved, or edited
-           -- without an updated_at bump cannot leave an already-quantified
-           -- retro cheque green. The timestamp arm also catches a newly
-           -- approved/created row that was not present in the source run.
+           -- inputs the QUANTIFICATION saw — the snapshot stored on the
+           -- settlement — so a correction that predates quantification (and is
+           -- already priced into the settled numbers) does not read as stale.
+           -- Rows written before migration 0142 carry no such snapshot and
+           -- fall back to the source run's own snapshot, as before. A row
+           -- that was deleted, moved, or edited without an updated_at bump
+           -- cannot leave an already-quantified retro cheque green. The
+           -- timestamp arm also catches a newly approved/created row that was
+           -- not present in the source run.
            (
              exists (
                select 1
                  from jsonb_array_elements(
-                   case when jsonb_typeof(src.calculation_source_snapshot->'timeEntries') = 'array'
-                        then src.calculation_source_snapshot->'timeEntries'
+                   case when jsonb_typeof(coalesce(st.quantified_source_snapshot, src.calculation_source_snapshot)->'timeEntries') = 'array'
+                        then coalesce(st.quantified_source_snapshot, src.calculation_source_snapshot)->'timeEntries'
                         else '[]'::jsonb end
                  ) as entry(value)
                  left join time_entries t

@@ -99,6 +99,14 @@ export const payrollRetroSettlements = pgTable(
     delta: money("delta").notNull(),
     /** [{ source, detail }] — why detection nominated this cell. */
     reasons: jsonb("reasons").notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Calculation population as the quantification simulation saw it
+     * (migration 0142). Readiness compares live inputs against this, not the
+     * source run's older snapshot, so a pre-quantification correction already
+     * priced into `recomputedEarnings` does not read as stale. NULL on rows
+     * written before 0142, which fall back to the source run snapshot.
+     */
+    quantifiedSourceSnapshot: jsonb("quantified_source_snapshot"),
     /** When the recomputation that produced these numbers was run. */
     quantifiedAt: timestamp("quantified_at", { withTimezone: true }).notNull().defaultNow(),
     ...auditColumns,
