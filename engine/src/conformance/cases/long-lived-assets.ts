@@ -308,4 +308,82 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
       };
     },
   },
+
+  {
+    id: "ppe-partial-disposal",
+    title: "Selling part of an asset derecognises the pro-rata carrying amount",
+    citations: [
+      {
+        standard: "IAS 16",
+        reference: "IAS 16.68",
+        kind: "requirement",
+        requirement:
+          "The gain or loss on derecognition is the difference between the net disposal proceeds, if any, and the carrying amount of the item or part derecognised.",
+      },
+      {
+        standard: "ASC 360",
+        reference: "360-10-40-1",
+        kind: "requirement",
+        requirement:
+          "A gain or loss on disposal of long-lived assets is recognised for the difference between the proceeds and the carrying amount of the assets disposed of.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "Selling forty percent of a machine removes forty percent of its cost and forty percent of its accumulated depreciation, and the gain is measured against the forty-percent carrying amount — the remaining sixty percent keeps depreciating untouched.",
+    facts: [
+      "A machine carried at a cost of 100,000.00 with accumulated depreciation of 40,000.00: carrying amount 60,000.00.",
+      "Forty percent is sold for 30,000.00: derecognised cost 40,000.00, derecognised accumulated depreciation 16,000.00, carrying amount disposed 24,000.00.",
+      "The gain on the partial disposal is 6,000.00 and the retained sixty percent continues at a carrying amount of 36,000.00.",
+    ],
+    gap: "Disposal is whole-asset only: disposeAsset takes the full cost and the full posted accumulated depreciation, with no portion or percentage — a partial sale can only be recorded as a manual journal with no schedule split behind it.",
+    expected: {
+      values: {
+        derecognisedCost: "40000.0000",
+        derecognisedAccumulated: "16000.0000",
+        disposedCarryingAmount: "24000.0000",
+        partialGain: "6000.0000",
+        retainedCarryingAmount: "36000.0000",
+      },
+    },
+  },
+
+  {
+    id: "ppe-intercompany-transfer",
+    title: "Moving an asset between subsidiaries carries its basis and eliminates the internal gain",
+    citations: [
+      {
+        standard: "IAS 16",
+        reference: "IAS 16.67",
+        kind: "requirement",
+        requirement:
+          "The cost of an item of property, plant and equipment is recognised as an asset when future economic benefits are probable and the cost can be measured reliably — a transferred asset keeps a measurable carrying amount across the move.",
+      },
+      {
+        standard: "ASC 360",
+        reference: "360-10-40-1",
+        kind: "requirement",
+        requirement:
+          "A gain or loss on disposal of long-lived assets is recognised for the difference between the proceeds and the carrying amount of the assets disposed of.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "An asset moving between legal entities keeps its carrying amount as the group's basis: the transferor's internal gain is eliminated on consolidation, the transferee depreciates the transferred basis, and no depreciation is lost or double-counted in the move.",
+    facts: [
+      "A subsidiary holds a machine at a cost of 100,000.00 with accumulated depreciation of 40,000.00: carrying amount 60,000.00.",
+      "It transfers the machine to a fellow subsidiary for 70,000.00: the transferor recognises an internal gain of 10,000.00 and the transferee records the asset at 70,000.00.",
+      "On consolidation the 10,000.00 internal gain is eliminated and the group carries the machine at 60,000.00 with its remaining life unchanged.",
+    ],
+    gap: "No transfer path exists: moving an asset between subsidiaries means a manual disposal in one entity and a manual capitalisation in the other, with no linkage, no basis carryover, and no elimination entry for the internal gain.",
+    expected: {
+      values: {
+        transferorGain: "10000.0000",
+        transfereeCost: "70000.0000",
+        consolidatedCarryingAmount: "60000.0000",
+      },
+    },
+  },
 ];
