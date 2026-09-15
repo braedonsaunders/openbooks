@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { delegateGate } from '@openbooks/engine/src/flows/index.ts'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { gateErrorResponse, loadGateHeader, requireFlowsSession } from '../../_lib'
 
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
 
   const gate = await loadGateHeader(body.gateId, authz.user.orgId)
   if (!gate) return NextResponse.json({ error: 'approval not found' }, { status: 404 })
+  const subsidiaryDenied = guardSubsidiaryScope(authz, gate.subsidiary_id)
+  if (subsidiaryDenied) return subsidiaryDenied
   if (gate.status !== 'pending') {
     return NextResponse.json({ error: 'only a pending approval can be delegated' }, { status: 409 })
   }
