@@ -64,10 +64,14 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       export async function withBypassContext(work) { return work() }
+      export function ambientTenantOrgId() { return null }
       const state = globalThis[Symbol.for('openbooks.financial-health-test')]
       export const db = {
         async execute(query) {
           const text = query?.strings?.join('') ?? String(query)
+          // Consolidated presentation reads the org base first; the mock
+          // world is single-currency, so every leg translates 1:1.
+          if (text.includes('from orgs')) return { rows: [{ baseCurrency: 'USD' }] }
           if (!text.includes('from journal_lines l'))
             return { rows: [{ s: 0, c: 0 }] }
 

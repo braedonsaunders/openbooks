@@ -1,6 +1,6 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/src/db.ts";
 import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/actor-subsidiaries.ts";
 import { subsidiaryFeatureEnabled } from "./features";
 
@@ -29,10 +29,17 @@ export async function subsidiaryOptions(
   includeInactive = false,
   includeElimination = false,
 ): Promise<SubsidiaryOption[]> {
+  // Defense in depth: RLS already pins this to one org in production, but the
+  // local/test superuser role bypasses RLS — without the explicit predicate
+  // this list silently spans tenants (and pooled-scratch leftovers), which
+  // corrupts every subtree the consolidation resolver builds from it.
+  const ambient = ambientTenantOrgId();
   const r = (await db.execute<Omit<SubsidiaryOption, "depth">>(sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            country, is_elimination as "isElimination", is_active as "isActive"
-      from subsidiaries order by name`));
+      from subsidiaries
+     ${ambient ? sql`where org_id = ${ambient}` : sql``}
+     order by name`));
   const rows = r.rows.filter((s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination));
   const byParent = new Map<string | null, typeof rows>();
   for (const s of rows) {
