@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, orgContext, schema, withMaintenanceTransaction, withOrg } from "../db.ts";
+import { db, orgContext, schema, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../db.ts";
 import {
   deferredDeletionTables,
   deletionOrder,
@@ -307,12 +307,19 @@ export interface RefreshOptions {
  * makes nested `withOrg(null)` calls participate instead of opening a second
  * transaction that could commit a partial wipe.
  */
-async function inRefreshTransaction<T>(work: () => Promise<T>): Promise<T> {
+async function inRefreshTransaction<T>(
+  work: () => Promise<T>,
+  opts: MaintenanceTransactionOptions = {},
+): Promise<T> {
+  // Repeatable read like the standalone clone: the re-copy inside must see
+  // the same production snapshot for every table even while production posts
+  // around it. Nested clone/wipe calls reuse this transaction (and its
+  // isolation) instead of opening their own.
   return withMaintenanceTransaction(null, async () => {
     const active = orgContext.getStore();
     if (!active?.txDb) throw new Error("refresh transaction was not pinned");
     return await orgContext.run({ ...active, bypass: false }, async () => await work());
-  });
+  }, opts);
 }
 
 /**
@@ -389,6 +396,14 @@ export async function refreshSandbox(
         update sandboxes
            set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
          where id = ${sandboxId} and org_id = ${s.org_id}`);
+    }, {
+      isolationLevel: "REPEATABLE READ",
+      // Same-sandbox refreshes serialize here instead of aborting each other
+      // on the shared status row under repeatable read: the waiter blocks in
+      // autocommit (no snapshot yet), so both succeed serially and the
+      // concurrent-office contract holds. Lock and unlock live in the shared
+      // helper; the key follows the house pg_advisory_xact_lock convention.
+      advisoryLockKey: `openbooks:sandbox-refresh:${sandboxId}`,
     });
   } catch (err) {
     // Never clobber a deleter's mark: losing the race above (or a delete that

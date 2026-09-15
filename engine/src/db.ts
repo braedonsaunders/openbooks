@@ -323,9 +323,31 @@ export async function assertSafeRuntimeDatabaseRole(): Promise<void> {
  * ordinary tenant commands must use `withOrgTransaction` (or `withOrg`, which
  * delegates to it). Pass `null` only for trusted work that must span orgs.
  */
+export interface MaintenanceTransactionOptions {
+  /**
+   * Snapshot isolation for the transaction. Must be requested up front: it is
+   * applied immediately after BEGIN, before any other statement. Repeatable
+   * read gives bulk copies (sandbox clone/refresh) a single consistent view
+   * of production so concurrent posts can neither tear the copy nor fail it.
+   */
+  isolationLevel?: "REPEATABLE READ" | "SERIALIZABLE";
+  /**
+   * Session-level advisory lock key (namespaced, e.g.
+   * `openbooks:sandbox-refresh:<id>`) held on the pinned connection for the
+   * whole transaction. Serializes same-key maintenance units that would
+   * otherwise abort each other under repeatable read by updating shared rows
+   * (two refreshes of one sandbox both mark its status row). Acquired in
+   * autocommit before BEGIN so waiters take their snapshot after the holder
+   * commits; always released before the connection returns to the pool, and
+   * released by the server itself if the process dies.
+   */
+  advisoryLockKey?: string;
+}
+
 export async function withMaintenanceTransaction<T>(
   orgId: string | null,
   fn: () => Promise<T>,
+  opts: MaintenanceTransactionOptions = {},
 ): Promise<T> {
   const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
@@ -334,12 +356,26 @@ export async function withMaintenanceTransaction<T>(
     }
     // Reuse the pinned transaction. Opening a second transaction here would
     // hide the caller's uncommitted aggregate writes and break atomicity.
+    // The outer transaction's isolation level stands; it must already cover
+    // the caller's snapshot needs.
     return fn();
   }
   const client = await rawLongConnect();
   const bypass = orgId === null;
+  // Session lock first, in autocommit: a waiter blocks here holding no
+  // snapshot, so it begins (below) only after the holder commits or rolls
+  // back and therefore sees the holder's outcome.
+  if (opts.advisoryLockKey !== undefined) {
+    await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [opts.advisoryLockKey]);
+  }
   try {
     await client.query("begin");
+    if (opts.isolationLevel !== undefined) {
+      if (opts.isolationLevel !== "REPEATABLE READ" && opts.isolationLevel !== "SERIALIZABLE") {
+        throw new Error(`unsupported maintenance transaction isolation level: ${opts.isolationLevel}`);
+      }
+      await client.query(`SET TRANSACTION ISOLATION LEVEL ${opts.isolationLevel}`);
+    }
     await client.query(
       "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', $2, true)",
       [bypass ? "" : orgId, bypass ? "on" : "off"],
@@ -359,6 +395,13 @@ export async function withMaintenanceTransaction<T>(
     }
     throw err;
   } finally {
+    if (opts.advisoryLockKey !== undefined) {
+      try {
+        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [opts.advisoryLockKey]);
+      } catch {
+        // A broken connection is discarded by pg when released, lock and all.
+      }
+    }
     client.release();
   }
 }

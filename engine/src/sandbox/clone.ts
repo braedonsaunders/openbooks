@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withMaintenanceTransaction } from "../db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
@@ -172,7 +172,13 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   let rowsCopied = 0;
 
   // One transaction, unscoped (RLS bypass) since we span production→sandbox.
-  await withOrg(null, async () => {
+  // Repeatable read pins a single snapshot of production for every table
+  // copy: under read committed, a post landing mid-clone is visible to some
+  // copies and invisible to others, and the torn set dies at commit on a
+  // deferred FK (or worse, commits FK-consistent but incomplete). The clone
+  // only writes sandbox rows, so the pinned snapshot cannot conflict with
+  // concurrent production writers.
+  await withMaintenanceTransaction(null, async () => {
     // As-of trims journal entries past the cutoff but copies every document,
     // so a post-cutoff posted entry would leave its documents pointing at an
     // entry that was never copied — a deferred-FK failure at commit. Refuse up
@@ -222,7 +228,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // stale values left by a refresh before applying the new source snapshot.
     await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
     await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
-  });
+  }, { isolationLevel: "REPEATABLE READ" });
 
   return { tablesCopied: perTable.length, rowsCopied, perTable };
 }
