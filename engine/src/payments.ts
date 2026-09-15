@@ -3488,16 +3488,20 @@ export function buildSepaFile(opts: {
     if (units % 100n !== 0n) {
       throw new PaymentError(`payment amount ${payment.amount} has sub-cent precision`);
     }
+    if (!isValidIban(payment.creditorIban)) {
+      throw new PaymentError(`creditor IBAN for ${payment.creditorName} is invalid`);
+    }
   }
   const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
   const tx = opts.payments.map((p) => {
     const bic = (p.creditorBic ?? "").trim();
+    const iban = p.creditorIban.replace(/\s/g, "").toUpperCase();
     return `      <CdtTrfTxInf>
         <PmtId><EndToEndId>${xmlEsc(p.endToEndId.slice(0, 35))}</EndToEndId></PmtId>
         <Amt><InstdAmt Ccy="EUR">${formatMoney(p.amount, 2)}</InstdAmt></Amt>
 ${bic ? `        <CdtrAgt><FinInstnId><BIC>${xmlEsc(bic)}</BIC></FinInstnId></CdtrAgt>\n` : ""}        <Cdtr><Nm>${xmlEsc(p.creditorName.slice(0, 70))}</Nm></Cdtr>
-        <CdtrAcct><Id><IBAN>${xmlEsc(p.creditorIban.replace(/\s/g, ""))}</IBAN></Id></CdtrAcct>
+        <CdtrAcct><Id><IBAN>${xmlEsc(iban)}</IBAN></Id></CdtrAcct>
         <RmtInf><Ustrd>${xmlEsc((p.remittance ?? p.endToEndId).slice(0, 140))}</Ustrd></RmtInf>
       </CdtTrfTxInf>`;
   }).join("\n");
