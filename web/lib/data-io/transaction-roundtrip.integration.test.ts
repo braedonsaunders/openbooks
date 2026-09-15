@@ -111,6 +111,33 @@ test(
 )
 
 test(
+  'a foreign currency still needs the multi-currency feature',
+  { skip: !DB, timeout: 180_000 },
+  async () => {
+    const fx = await fixture()
+    try {
+      // The base-currency pass-through above must not open the gate: a
+      // genuinely foreign currency on a single-currency org keeps failing.
+      // (The currency check runs before party resolution, so no party setup
+      // is needed for this row to reach the gate.)
+      const outcome = await writeInvoice(fx, {
+        documentDate: fx.date,
+        party: 'Nobody Will Resolve',
+        currency: 'USD',
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: '42.50' }]),
+      })
+      assert.deepEqual(
+        { created: outcome.created, failed: outcome.failed },
+        { created: 0, failed: 1 },
+      )
+      assert.match(outcome.errors[0]?.message ?? '', /currency is not available/)
+    } finally {
+      await dropScratchOrgReporting(fx.orgId)
+    }
+  },
+)
+
+test(
   'an exported invoice re-imports when the party has no short code',
   { skip: !DB, timeout: 180_000 },
   async () => {
