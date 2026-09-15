@@ -255,6 +255,19 @@ test("the CPA-005 credit file refuses a payee account number longer than its fie
   );
 });
 
+test("the CPA-005 credit file refuses a blank payee account number", () => {
+  const run = cpa005Run();
+  assert.throws(
+    () => buildCpa005File({
+      ...run,
+      payments: run.payments.map((payment, index) =>
+        index === 0 ? { ...payment, accountNumber: "   " } : payment,
+      ),
+    }),
+    (error: Error) => error instanceof PaymentError && /payee account number.*blank/.test(error.message),
+  );
+});
+
 test("a data centre that cannot form a valid trace number refuses to write a file", () => {
   for (const originatingDataCentre of ["00000", "543", "FILL-ME"]) {
     assert.throws(
