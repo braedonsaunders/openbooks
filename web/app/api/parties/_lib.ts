@@ -126,7 +126,10 @@ export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds:
   const summary = txnSummary.rows[0] ?? {}
 
   return {
-    party: party.rows[0],
+    // Full tax identifiers are sealed: no directory surface renders them
+    // and the governed query layer withholds them from reportable
+    // projections, so they never leave the server inside this payload.
+    party: withoutPartyRoleSecrets(party.rows[0]!, ['tax_ids']),
     customer: customer.rows[0] ?? null,
     vendor: vendor.rows[0]
       ? withoutPartyRoleSecrets(vendor.rows[0], ['tin_encrypted'])
