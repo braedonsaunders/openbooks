@@ -94,6 +94,7 @@ export {
 
 export {
   BUDGET_BASE_JOINS,
+  budgetBaseJoins,
   BUDGET_BUILT_IN_EXPR,
   BUDGET_SORTS,
   budgetWhere,
