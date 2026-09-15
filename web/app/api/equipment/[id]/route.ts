@@ -13,6 +13,11 @@ import { loadEquipment } from '../_lib'
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
 function bad(error: string) { return NextResponse.json({ error }, { status: 422 }) }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('assets.read', 'equipment')
   if (gate instanceof NextResponse) return gate
@@ -83,13 +88,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const purchasePriceRaw = body.purchasePrice !== undefined
     ? canonicalDecimal(body.purchasePrice || '0', 4)
     : String(current.rows[0].purchase_price)
-  if (purchasePriceRaw === null || compareDecimal(purchasePriceRaw, '0') < 0) {
-    return bad(purchasePriceRaw === null ? 'purchase_price_invalid' : 'purchase_price_negative')
+  if (purchasePriceRaw === null || wholeDigits(purchasePriceRaw) > 15 || compareDecimal(purchasePriceRaw, '0') < 0) {
+    return bad(purchasePriceRaw === null || wholeDigits(purchasePriceRaw) > 15 ? 'purchase_price_invalid' : 'purchase_price_negative')
   }
   const purchasePrice = normalizeMoney(purchasePriceRaw)
   const capacityInput = body.capacityQuantity !== undefined ? text(body.capacityQuantity) : undefined
   const capacityRaw = capacityInput ? canonicalDecimal(capacityInput, 4) : null
-  if (capacityInput && capacityRaw === null) return bad('capacity_invalid')
+  if (capacityInput && (capacityRaw === null || wholeDigits(capacityRaw) > 15)) return bad('capacity_invalid')
   let capacityQuantity: string | null = null
   try {
     capacityQuantity = capacityRaw === null ? null : normalizeMoney(capacityRaw)
