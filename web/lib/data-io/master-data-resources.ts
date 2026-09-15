@@ -436,6 +436,14 @@ async function writeMaster(
         continue
       }
       const nkVal = String(src[m.naturalKey] ?? '').trim()
+      // A master row without its natural key has no identity: it can never
+      // match on re-import, so every import would duplicate it. Refuse it in
+      // every mode with the key named.
+      if (!nkVal) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: `${m.naturalKey} is required` })
+        continue
+      }
       let existingId: string | null = null
       let existingCustom: Record<string, unknown> = {}
       let storedKind: string | undefined
