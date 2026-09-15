@@ -1,10 +1,10 @@
 {
-  "at": "2026-09-01T21:16:26.618Z",
-  "gitSha": "43d710e73cea26fdd84b20091472b6e3d205d10d",
+  "at": "2026-09-15T21:08:55.971Z",
+  "gitSha": "421c40b0806e08dc6087ed8880245646df44566c",
   "totals": {
-    "pass": 42,
+    "pass": 48,
     "fail": 0,
-    "gap": 0,
+    "gap": 5,
     "skipped": 0
   },
   "pass": true,
@@ -40,7 +40,7 @@
         "Standalone selling prices 50.00, 25.00 and 75.00 (total 150.00).",
         "Proportions are 1/3, 1/6 and 1/2 of the transaction price."
       ],
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "rev-allocate-no-lost-cent",
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 172
+      "ms": 190
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 134
+      "ms": 64
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 70
+      "ms": 186
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -302,6 +302,71 @@
       "ms": 0
     },
     {
+      "id": "rev-percent-complete-catch-up",
+      "title": "A change in the progress estimate is caught up in the current period",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-31",
+          "kind": "requirement",
+          "requirement": "Progress toward complete satisfaction of an over-time obligation is remeasured each period with a single method applied consistently."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.39",
+          "kind": "requirement",
+          "requirement": "A single method of measuring progress is applied to each over-time obligation and updated as circumstances change."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Revising the estimated progress restates the cumulative target and books only the delta in the current period — an upward revision recognises more, a downward revision reverses what was already recognised, and prior periods are never restated.",
+      "facts": [
+        "Obligation amount 1,200.00 recognised by percentage of completion.",
+        "In March the estimate rises to 60% complete with 500.00 already recognised: the cumulative target is 720.00, so 220.00 is recognised in March.",
+        "In April the estimate falls to 40% complete with 720.00 recognised: the cumulative target is 480.00, so 240.00 is reversed in April."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "rev-contract-modification",
+      "title": "A contract modification is assessed as a separate contract or as part of the existing one",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-10",
+          "kind": "requirement",
+          "requirement": "A change to the scope or price of a contract is accounted for as a separate contract when the added promises are distinct and priced at their standalone selling prices, and otherwise by remeasuring the existing obligation."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.18",
+          "kind": "requirement",
+          "requirement": "A contract modification is a separate contract only when distinct promises are added for consideration reflecting their standalone selling prices."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.",
+      "facts": [
+        "A twelve-month service for 1,200.00 (100.00 a month); 300.00 is recognised in the first three months.",
+        "In month four the parties add distinct services priced at their standalone selling price of 900.00 over the remaining nine months.",
+        "The modification is a separate contract: the original 100.00 a month continues and 100.00 a month is recognised for the added services."
+      ],
+      "gap": "The revenue engine has no contract-modification assessment: setContractPricing can overwrite a contract's total price but nothing classifies a scope-or-price change as a separate contract, a prospective remeasurement, or a cumulative catch-up, and obligations and schedules are never remapped for it.",
+      "ms": 0
+    },
+    {
       "id": "lease-lessee-initial-recognition",
       "title": "A lessee recognises a right-of-use asset and a lease liability at commencement",
       "standards": [
@@ -338,7 +403,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 29
+      "ms": 8
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -469,7 +534,7 @@
         "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
         "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "ms": 20
+      "ms": 10
     },
     {
       "id": "lease-lessor-classification",
@@ -512,6 +577,40 @@
       "ms": 1
     },
     {
+      "id": "lease-remeasurement",
+      "title": "A change in the lease payments or term remeasures the liability and the right-of-use asset",
+      "standards": [
+        "ASC 842",
+        "IFRS 16"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 842",
+          "reference": "842-10-35-4",
+          "kind": "requirement",
+          "requirement": "When a lease is modified or the assessment of its term or payments changes, the lessee remeasures the lease liability at the revised payments discounted at a current rate and adjusts the right-of-use asset."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.39",
+          "kind": "requirement",
+          "requirement": "After commencement a lessee remeasures the lease liability for changes in future payments or the lease term and recognises the adjustment against the right-of-use asset."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.",
+      "facts": [
+        "A five-year lease of 20,000.00 a year at 5%: opening liability 86,589.5334.",
+        "After the first annual payment the liability stands at 70,919.0101.",
+        "The parties agree the remaining four payments rise to 22,000.00 a year; the discount rate is unchanged.",
+        "The liability remeasures to the present value of four payments of 22,000.00 at 5%, which is 78,010.9111 — an increase of 7,091.9010 carried against the right-of-use asset."
+      ],
+      "gap": "The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.",
+      "ms": 0
+    },
+    {
       "id": "fx-initial-recognition-at-spot",
       "title": "A foreign-currency transaction is recorded at the spot rate on the transaction date",
       "standards": [
@@ -535,7 +634,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 49
+      "ms": 25
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -574,7 +673,7 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "ms": 67
+      "ms": 59
     },
     {
       "id": "fx-long-term-debt-retranslated",
@@ -607,7 +706,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 53
+      "ms": 42
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -689,7 +788,7 @@
         "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
         "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
       ],
-      "ms": 49
+      "ms": 27
     },
     {
       "id": "fx-inverse-rate-statutory-tax-exact",
@@ -715,7 +814,7 @@
         "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
         "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728."
       ],
-      "ms": 58
+      "ms": 46
     },
     {
       "id": "inv-fifo-cost-formula",
@@ -755,7 +854,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 194
+      "ms": 146
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -788,7 +887,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 191
+      "ms": 263
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -819,7 +918,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 124
+      "ms": 56
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -842,7 +941,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 66
+      "ms": 283
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -880,7 +979,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 75
+      "ms": 97
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -913,7 +1012,39 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 87
+      "ms": 62
+    },
+    {
+      "id": "inv-landed-cost-capitalized",
+      "title": "Freight and duty to bring inventory to its location join the cost of the stock",
+      "standards": [
+        "IAS 2",
+        "ASC 330"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.11",
+          "kind": "requirement",
+          "requirement": "The cost of purchase includes transport, handling and other costs to bring inventories to their present location and condition."
+        },
+        {
+          "standard": "ASC 330",
+          "reference": "330-10-30-9",
+          "kind": "requirement",
+          "requirement": "Abnormal amounts of freight and handling are expensed as incurred, which implies ordinary freight to receive the goods is part of inventory cost."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A freight voucher spreads exactly onto the on-hand layers, raising their carrying amount and debiting inventory against the freight account — the quantity on hand does not move and the subledger stays in agreement with the general ledger.",
+      "facts": [
+        "100 units on hand at a cost of 3.00 each, carried at 300.00.",
+        "A freight voucher of 100.00 is allocated on a carrying-value basis.",
+        "The whole 100.00 capitalizes: inventory rises to 400.00 (4.00 a unit) and 100 units remain on hand."
+      ],
+      "ms": 64
     },
     {
       "id": "ppe-impairment-to-fair-value",
@@ -1126,7 +1257,7 @@
         "The deferred tax liability of 200,000 at 25% is 50,000.00, all of it arising this year.",
         "Total tax expense is 262,500.00 — the timing difference shifts tax between current and deferred without changing the total."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "tax-deferred-measured-at-enacted-rate",
@@ -1370,6 +1501,235 @@
         "Current tax is nil, not a 50,000.00 receivable.",
         "The reconciliation shows the current-year loss carrying no current tax."
       ],
+      "ms": 0
+    },
+    {
+      "id": "tax-rate-change-remeasures-opening",
+      "title": "An enacted rate change remeasures opening deferred balances in the period of enactment",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-35-4",
+          "kind": "requirement",
+          "requirement": "Deferred tax balances are adjusted for the effect of a change in enacted rates in the period the change is enacted."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.60",
+          "kind": "requirement",
+          "requirement": "The effect of a change in tax rates on deferred tax is recognised in profit or loss unless it relates to items recognised outside profit or loss."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "When the enacted rate moves, the opening deferred balance is carried to the new rate and the whole remeasurement lands in deferred tax expense of the enactment period — current tax is untouched because no new timing difference arose.",
+      "facts": [
+        "A taxable temporary difference of 400,000.00 carried from last year, when the enacted rate was 25%: the opening deferred tax liability is 100,000.00.",
+        "This year the enacted rate is 21% with no new originating or reversing movement.",
+        "The liability remeasures to 84,000.00; the 16,000.00 reduction is a deferred tax benefit.",
+        "Taxable profit is nil, so current tax is nil and total tax expense is the 16,000.00 benefit."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "con-application-measures-progress",
+      "title": "A progress application measures work done, withholds retainage, and states the amount due",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-27",
+          "kind": "requirement",
+          "requirement": "Revenue is recognised over time as the entity performs, measured by progress toward complete satisfaction of the obligation."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.35",
+          "kind": "requirement",
+          "requirement": "Revenue is recognised over time where performance creates an asset the customer controls as it is created."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Each schedule line reports what was completed this period, the retainage held back on it, and the net now due — and the application's totals are exactly the sum of its lines, so nothing is lost between the detail and the invoice.",
+      "facts": [
+        "Line one: scheduled 100,000.00, previously completed 20,000.00, this period 30,000.00 plus 5,000.00 of materials stored, retainage 10%.",
+        "Line two: scheduled 50,000.00, this period 10,000.00, retainage 5%.",
+        "Line one grosses 35,000.00 with 3,500.00 held (55% complete); line two grosses 10,000.00 with 500.00 held (20% complete).",
+        "The application grosses 45,000.00, holds 4,000.00, and 41,000.00 is currently due."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "con-change-order-revises-capacity",
+      "title": "An approved change order revises the contract value but never below work already billed",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-10",
+          "kind": "requirement",
+          "requirement": "A change to the scope or price of a contract revises the remaining consideration the entity expects for the remaining promises."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.18",
+          "kind": "requirement",
+          "requirement": "A contract modification changes the scope or price (or both) approved by the parties and revises what remains to be performed."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Additions and deductions move the schedule line's capacity by exactly the change amount — but a deduction that would erase already-billed work is refused, so billed revenue can never be stranded without a contract value behind it.",
+      "facts": [
+        "A schedule line of 1,000.00 with 400.00 already billed.",
+        "An additive change of 250.00 revises capacity to 1,250.00.",
+        "A deductive change of 500.00 revises capacity to 500.00.",
+        "A deductive change of 700.00 would leave 300.00 of capacity against 400.00 billed, and is refused."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "con-cost-to-cost-progress",
+      "title": "Cost-to-cost measures progress by the share of budget consumed",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-31",
+          "kind": "requirement",
+          "requirement": "Progress toward complete satisfaction of an over-time obligation is measured by a single input or output method applied consistently."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.39",
+          "kind": "requirement",
+          "requirement": "A single method of measuring progress is applied to each over-time obligation, including input methods based on costs incurred."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when there is no budget or no cost yet, so an unbudgeted project can never report phantom progress.",
+      "facts": [
+        "Budget 500,000.00 with 125,000.00 of cost incurred: 25% complete.",
+        "Cost of 600,000.00 against the same budget: complete, capped at 100%, not 120%.",
+        "No budget, or no cost incurred: 0% complete."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "con-expected-loss-provided",
+      "title": "A contract expected to lose money provides for the full loss immediately",
+      "standards": [
+        "IAS 37",
+        "ASC 450"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 37",
+          "reference": "IAS 37.66",
+          "kind": "requirement",
+          "requirement": "When a contract's unavoidable costs exceed its economic benefits it is onerous, and the present obligation under it is recognised as a provision in full."
+        },
+        {
+          "standard": "ASC 450",
+          "reference": "450-20-25-2",
+          "kind": "requirement",
+          "requirement": "An estimated loss from a loss contingency is accrued when it is probable and reasonably estimable, which a priced construction contract that cannot cover its costs satisfies."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "The moment a contract is forecast to lose money, the entire expected loss is charged to profit or loss at once — it is never spread over the remaining term to flatter early periods.",
+      "facts": [
+        "A fixed-price contract for 1,000,000.00 with 200,000.00 of revenue recognised and 200,000.00 of cost incurred to date.",
+        "Costs to complete are re-estimated at 950,000.00, so total cost will be 1,150,000.00 against 1,000,000.00 of revenue: a 150,000.00 loss.",
+        "A provision of 150,000.00 is recognised immediately, in addition to the costs already incurred."
+      ],
+      "gap": "No engine assesses construction contracts for expected losses: progress billing tracks completed value and billings, but nothing forecasts cost to complete, tests the contract for a loss, or posts a provision for it.",
+      "ms": 0
+    },
+    {
+      "id": "prov-recognition-threshold",
+      "title": "A probable, estimable obligation is recognised as a provision",
+      "standards": [
+        "IAS 37",
+        "ASC 450"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 37",
+          "reference": "IAS 37.14",
+          "kind": "requirement",
+          "requirement": "A provision is recognised when a present obligation from a past event makes an outflow of resources probable and the amount can be estimated reliably."
+        },
+        {
+          "standard": "ASC 450",
+          "reference": "450-20-25-2",
+          "kind": "requirement",
+          "requirement": "An estimated loss from a loss contingency is accrued when it is probable that a liability has been incurred and the amount of loss can be reasonably estimated."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "A lawsuit that will probably cost 50,000.00 appears on the balance sheet now — a probable obligation is never left off the books until the cash leaves.",
+      "facts": [
+        "A past event (a filed claim for defective work) creates a present legal obligation.",
+        "Settlement is judged probable and counsel estimates 50,000.00 reliably.",
+        "A provision of 50,000.00 is recognised: the charge hits profit or loss and the liability sits on the balance sheet."
+      ],
+      "gap": "No provisions engine exists: nothing records a present obligation, tests it against the probable-and-estimable threshold, or posts the resulting liability — such obligations can only be entered as manual journals with no recognition discipline behind them.",
+      "ms": 0
+    },
+    {
+      "id": "prov-best-estimate-measurement",
+      "title": "A provision is measured at the best estimate and reviewed every period",
+      "standards": [
+        "IAS 37"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 37",
+          "reference": "IAS 37.36",
+          "kind": "requirement",
+          "requirement": "The amount recognised as a provision is the best estimate of the expenditure required to settle the present obligation at the reporting date."
+        },
+        {
+          "standard": "IAS 37",
+          "reference": "IAS 37.59",
+          "kind": "requirement",
+          "requirement": "Provisions are reviewed at the end of each reporting period and adjusted to reflect the current best estimate."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "The provision tracks the current best estimate — when new information moves the estimate from 50,000.00 to 65,000.00, a further 15,000.00 is charged in the period the estimate changes.",
+      "facts": [
+        "An opening provision of 50,000.00 for the filed claim.",
+        "Before year end, counsel revises the best estimate of the settlement to 65,000.00.",
+        "The provision is adjusted to 65,000.00 with a 15,000.00 charge in the current period."
+      ],
+      "gap": "With no provisions ledger there is nothing to remeasure: no periodic review of open provisions, no adjustment path for a changed estimate, and no utilisation tracking when the obligation settles.",
       "ms": 0
     }
   ]
