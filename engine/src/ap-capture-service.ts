@@ -566,8 +566,13 @@ export async function materializeCapture(input: {
     }
     const unresolved = capture.lines.findIndex((line) => !line.accountId);
     if (unresolved >= 0) throw new CaptureMaterializationError(`Line ${unresolved + 1} needs an account`);
+    // Serialize on vendor + normalized invoice number, not on the source file:
+    // two uploads of one vendor invoice (different content hashes) must still
+    // exclude each other, or the duplicate check below passes in both and two
+    // draft bills are born for one invoice. The key normalizes exactly like
+    // the documents duplicate check so 'INV-001' and 'inv 001' fence together.
     await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${`ap-capture-materialize:${input.orgId}:${vendorId}:${capture.invoiceNumber}:${item.content_hash}`}, 0))
+      select pg_advisory_xact_lock(hashtextextended(${`ap-capture-materialize:${input.orgId}:${vendorId}:${normalizedKey(capture.invoiceNumber)}`}, 0))
     `);
     const validVendor = (await tx.execute(sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
