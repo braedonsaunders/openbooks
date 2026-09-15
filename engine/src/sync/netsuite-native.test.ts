@@ -1169,3 +1169,137 @@ test("NetSuite account mappings accept sales/purchase tax code fallbacks", () =>
     /must be a source tax-code id or rate/,
   );
 });
+
+test("NetSuite foreign-currency documents carry their transaction currency and rate", () => {
+  // A USD journal in a CAD-base account must state currency + fxRate so the
+  // kernel books base-currency GL instead of the foreign face value. Today
+  // the header currency is fetched and dropped, so the mirror posts 100 USD
+  // as 100 CAD and every foreign account misses trial balance.
+  const built = buildNativeFromNetSuite(
+    { ...context, baseCurrency: "CAD" } as unknown as NativeContext,
+    {
+      ...header,
+      currency: "2",
+      currencylabel: "USA",
+      exchangerate: "1.3687",
+    },
+    [
+      {
+        transaction: "123",
+        id: "1",
+        mainline: "T",
+        taxline: "F",
+        account: "10",
+        netamount: "-100",
+        foreignamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "123",
+        id: "2",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "100",
+        foreignamount: "100",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.currency, "USD");
+  assert.equal(built.doc.fxRate, "1.3687000000");
+});
+
+test("NetSuite base-currency documents omit currency and rate", () => {
+  const built = buildNativeFromNetSuite(
+    { ...context, baseCurrency: "CAD" } as unknown as NativeContext,
+    { ...header, currencylabel: "CAN", exchangerate: "1" },
+    [
+      {
+        transaction: "123",
+        id: "1",
+        mainline: "T",
+        taxline: "F",
+        account: "10",
+        netamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "123",
+        id: "2",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "100",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.currency, undefined);
+  assert.equal(built.doc.fxRate, undefined);
+});
+
+test("NetSuite foreign documents with an unresolvable currency fail closed", () => {
+  const built = buildNativeFromNetSuite(
+    { ...context, baseCurrency: "CAD" } as unknown as NativeContext,
+    { ...header, currencylabel: "Martian Credits", exchangerate: "1.2" },
+    [
+      {
+        transaction: "123",
+        id: "1",
+        mainline: "T",
+        taxline: "F",
+        account: "10",
+        netamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "123",
+        id: "2",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "100",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.ok("skip" in built, "an unstated foreign currency must not post as base");
+});
+
+test("NetSuite foreign documents without a usable rate fail closed", () => {
+  const lines: NsLine[] = [
+    {
+      transaction: "123",
+      id: "1",
+      mainline: "T",
+      taxline: "F",
+      account: "10",
+      netamount: "-100",
+      subsidiary: "1",
+    },
+    {
+      transaction: "123",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "100",
+      subsidiary: "1",
+    },
+  ];
+  for (const hdr of [
+    { ...header, currencylabel: "USD" },
+    { ...header, currencylabel: "USD", exchangerate: "0" },
+    { ...header, currencylabel: "USD", exchangerate: "bogus" },
+  ]) {
+    const built = buildNativeFromNetSuite(
+      { ...context, baseCurrency: "CAD" } as unknown as NativeContext,
+      hdr,
+      lines,
+    );
+    assert.ok("skip" in built, `rate ${hdr.exchangerate ?? "(absent)"} must not post`);
+  }
+});
