@@ -9,6 +9,9 @@ export async function GET(req: Request) {
   const gate = await guardApiKey("api.keys.manage", req);
   if (gate instanceof NextResponse) return gate;
 
-  const schema = await loadApiSchema(gate.user.orgId);
+  const schema = await loadApiSchema(
+    gate.user.orgId,
+    gate.user.roles.map(({ key }) => key),
+  );
   return NextResponse.json({ recordTypes: schema });
 }

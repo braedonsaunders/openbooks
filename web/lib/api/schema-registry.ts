@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { isFeatureEnabled } from "../features";
 import { normalizeSectionsInput } from "../record-schema";
+import { inTypeAudience } from "../records";
 import {
   API_RECORD_TYPES,
   DOCUMENT_REVISION_READ_METADATA,
@@ -50,6 +51,7 @@ interface CustomFieldRow extends Record<string, unknown> {
 }
 interface CustomRecordTypeRow extends Record<string, unknown> {
   key: string; name: string; description: string | null; fields: unknown;
+  allowed_roles: string[] | null;
 }
 interface StoredFormField {
   id?: string; key?: string; type?: string; required?: boolean; label?: string | null;
@@ -61,7 +63,10 @@ interface StoredFormField {
  * custom record types (with their FormField[] definitions). Single source of
  * truth for the OpenAPI spec, the docs browser, and write validation.
  */
-export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[]> {
+export async function loadApiSchema(
+  orgId: string,
+  roleKeys: readonly string[] | null = null,
+): Promise<ApiRecordTypeSchema[]> {
   const builtIn: ApiRecordType[] = []
   for (const t of API_RECORD_TYPES.filter((candidate) => candidate.table)) {
     if (t.featureKey && !(await isFeatureEnabled(orgId, t.featureKey))) continue
@@ -159,12 +164,13 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
 
   // Layer on custom record types (dynamically defined by the org).
   const custom = await db.execute<CustomRecordTypeRow>(sql`
-    select key, name, description, fields
+    select key, name, description, fields, allowed_roles
       from custom_record_types
      where org_id = ${orgId} and status = 'published'
      order by sort_order, name`);
 
   for (const row of custom.rows) {
+    if (roleKeys !== null && !inTypeAudience(roleKeys, row.allowed_roles)) continue;
     // Flatten the canonical FormSection[] definition into the API field list.
     const sections = normalizeSectionsInput(row.fields) as Array<{ fields?: StoredFormField[] }>;
     const flat = sections.flatMap((s) => (Array.isArray(s.fields) ? s.fields : []));

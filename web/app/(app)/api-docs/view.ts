@@ -39,7 +39,10 @@ export async function loadApiDocs(
   await requireFeatureEnabled(authz.user.orgId, 'apiAccess')
   // The console owns the full-height workbench (record-type rail + reference +
   // interactive runner). The schema is plain data — safe to hand to the client.
-  const schema = await loadApiSchema(authz.user.orgId)
+  const schema = await loadApiSchema(
+    authz.user.orgId,
+    authz.user.roles.map(({ key }) => key),
+  )
   return { schema }
 }
 
