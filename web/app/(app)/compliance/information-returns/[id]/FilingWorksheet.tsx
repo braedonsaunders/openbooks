@@ -25,7 +25,7 @@ import { filedBoxAmounts } from '@openbooks/engine/src/information-returns-boxes
 import type { FormBox } from '@openbooks/engine/src/information-returns.ts'
 import { promptDialog } from '../../../../../lib/prompt'
 import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'
-import { formatBoxAmount } from '../../../../../lib/information-return-form'
+import { formatBoxAmount } from '../../../../../lib/information-return-format'
 
 const FILING_CHANNELS = ['iris', 'fire', 'provider', 'paper', 'other'] as const
 
