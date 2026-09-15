@@ -526,3 +526,38 @@ test(
     }
   },
 );
+
+test(
+  "account PATCH preserves omitted required custom fields on a partial edit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      routeState.authz = {
+        user: { orgId: org.orgId, id: adminId },
+        permissions: new Set(),
+        allowedSubsidiaryIds: null,
+      };
+      const accountId = await seedAccount(org.orgId, "9402", false);
+      await db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${randomUUID()}, ${org.orgId}, 'accounts', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${adminId}, ${adminId}),
+          (${randomUUID()}, ${org.orgId}, 'accounts', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${adminId}, ${adminId})
+      `);
+      await db.execute(sql`update accounts set custom = '{"required_code":"R-1"}'::jsonb where id = ${accountId} and org_id = ${org.orgId}`);
+
+      const response = await PATCH(patchRequest({ custom: { optional_note: "updated" } }), {
+        params: Promise.resolve({ id: accountId }),
+      });
+      assert.equal(response.status, 200, JSON.stringify(await response.json()));
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from accounts where id = ${accountId} and org_id = ${org.orgId}`)).rows[0]?.custom;
+      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
