@@ -6,7 +6,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../lib/countries'
 import { isIsoCalendarDate } from '../../../../lib/crm-dates'
@@ -314,6 +314,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // the shared entity-writer contract.
     const v = validateCustomValues(defs, { ...(existingParty.custom ?? {}), ...body.custom })
     if (!v.ok) return bad(Object.values(v.errors)[0]!, v.errors)
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids instead of persisting a cross-tenant pointer.
+    // Supplied values only, so legacy bags cannot lock unrelated edits.
+    const suppliedCustom: Record<string, unknown> = {}
+    for (const key of Object.keys(body.custom)) {
+      if (v.cleaned[key] !== undefined) suppliedCustom[key] = v.cleaned[key]
+    }
+    const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+    if (unowned.length > 0) return bad(`${unowned[0]!.label} not found in this organization`)
     cleanedCustom = { ...(existingParty.custom ?? {}), ...v.cleaned }
   }
 
