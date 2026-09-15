@@ -85,3 +85,42 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
     } finally { await dropScratchOrg(org.orgId) }
   })
 })
+
+test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  // wip_prebill_lines.proposed_bill_amount is numeric(19,4): a pasted
+  // 20-digit figure cleared the exact-decimal check and died in the update
+  // with a storage error. Fail closed with a named error instead.
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      const actors = await seedFlowActors(org.orgId)
+      const preparer = actors.adminId
+      const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
+      const typeId = randomUUID(), project = randomUUID(), employee = randomUUID(), entry = randomUUID()
+      await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+        values (${typeId},${org.orgId},'time_and_materials','Time & Materials','time_and_materials',${JSON.stringify(tm.invoicingProfile)}::jsonb,${JSON.stringify(tm.backupProfile)}::jsonb)`)
+      await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+        values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'magnitude fixture')`)
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
+        values (${project},${org.orgId},${org.subsidiaryId},'WIPMAG','Magnitude WIP job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+      await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Magnitude worker',${org.subsidiaryId})`)
+      await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
+        values (${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
+      const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null)
+      const lineId = (await wip.loadPrebill(org.orgId, prebill.id, null))!.lines[0]!.id
+      const edit: { adjustmentReason: string; adjustmentEvidence: string[] } = { adjustmentReason: 'magnitude', adjustmentEvidence: ['note'] }
+      await assert.rejects(
+        wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '99999999999999999999', ...edit }, null),
+        (error: unknown) => error instanceof wip.WipBillingError && /out of range/.test(error.message),
+        'an oversized proposed amount should fail closed with a named error',
+      )
+      const untouched = await wip.loadPrebill(org.orgId, prebill.id, null)
+      assert.equal(untouched!.lines[0]!.proposedBillAmount, '200.0000')
+      // The column maximum itself still saves with identical read-back.
+      await wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '999999999999999.9999', ...edit }, null)
+      const saved = await wip.loadPrebill(org.orgId, prebill.id, null)
+      assert.equal(saved!.lines[0]!.proposedBillAmount, '999999999999999.9999')
+    } finally { await dropScratchOrg(org.orgId) }
+  })
+})
