@@ -16,6 +16,12 @@ import { divRate, fromUnits, mulRate, toUnits } from "../money.ts";
  * Allocation is capped in-memory against remaining line capacity so the
  * kernel's app_check_open trigger just agrees; genuine source over-applications
  * are reported as `unallocated`, never forced.
+ *
+ * Concurrency boundary: the per-org advisory lock orders overlapping syncs,
+ * the batch's endpoint lines are locked id-ordered before hydration (the same
+ * locks every manual application takes, so no manual commit can slip between
+ * hydration and insert), and every involved entry is re-verified posted just
+ * before writing (a void reverses entries without taking line locks).
  */
 
 export interface SourceLink {
@@ -35,6 +41,7 @@ export interface ApplyStats {
 
 interface OpenLine {
   lineId: string;
+  entryId: string;
   remaining: bigint;
   remainingTransaction: bigint;
   date: string;
@@ -155,6 +162,34 @@ export async function reconcileApplications(
       `sync-applications:${orgId}`,
     ]);
 
+    // Serialize against MANUAL application writers on the same open items.
+    // The advisory lock above orders overlapping syncs, but a manual posting
+    // takes no part in it: it locks the endpoint journal lines (the same
+    // id-ordered row locks the applications trigger takes on every insert)
+    // before reading open state. Take those same locks here — scoped to the
+    // source refs in this batch, in the same id order — before hydrating, so
+    // no committed manual application can slip between the reads below and
+    // this transaction's inserts. A manual posting that arrives first blocks
+    // here and then sees this run's committed applications (its own clean
+    // over-application refusal); one that committed earlier is already
+    // reflected in the hydration. Either way the commit-time open-item guard
+    // stays a backstop instead of the whole run's failure mode.
+    const batchRefs = [...new Set(links.flatMap((l) => [l.paymentRef, l.appliedRef]))];
+    if (batchRefs.length > 0) {
+      await client.query(
+        `select l.id
+           from journal_lines l
+           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+           join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+          where l.org_id = $1
+            and e.status = 'posted'
+            and d.custom->>$2 = any($3)
+          order by l.id
+          for update of l`,
+        [orgId, refKey, batchRefs],
+      );
+    }
+
     // -- open AR/AP lines per source ref ----------------------------------------
     // Current posted entries only: a reversed entry (voided / source-deleted
     // document) no longer carries a settleable open item. Do not filter on
@@ -162,8 +197,8 @@ export async function reconcileApplications(
     // the document's original `document` entry with an append-only `migration`
     // or `intercompany` entry; that replacement is the only legal settlement
     // endpoint and must remain visible to a later source application.
-    const lineRows = await client.query<{ ref: string; line_id: string; pdate: string; line_no: number; amt: string; txn_amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; functional_currency: string; book_id: string; period_id: string; document_id: string; amount_sign: string }>(`
-      select d.custom->>$2 as ref, l.id as line_id, e.posting_date::text as pdate,
+    const lineRows = await client.query<{ ref: string; line_id: string; entry_id: string; pdate: string; line_no: number; amt: string; txn_amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; functional_currency: string; book_id: string; period_id: string; document_id: string; amount_sign: string }>(`
+      select d.custom->>$2 as ref, l.id as line_id, l.entry_id as entry_id, e.posting_date::text as pdate,
              l.line_number as line_no, abs(l.amount) as amt, abs(l.txn_amount) as txn_amt,
              l.account_id as account_id, l.party_id as party_id,
              l.subsidiary_id, l.currency, l.fx_rate, s.base_currency as functional_currency,
@@ -182,6 +217,7 @@ export async function reconcileApplications(
       const arr = linesByRef.get(r.ref) ?? [];
       arr.push({
         lineId: r.line_id,
+        entryId: r.entry_id,
         remaining: toUnits(r.amt),
         remainingTransaction: toUnits(r.txn_amt),
         date: r.pdate,
@@ -369,6 +405,32 @@ export async function reconcileApplications(
       const group = fxGroups.get(groupKey) ?? [];
       group.push(row);
       fxGroups.set(groupKey, group);
+    }
+    // Re-verify every endpoint's entry is still posted, immediately before
+    // writing. The endpoint locks above serialize manual applications, but a
+    // controlled void reverses entries without taking line locks: it can
+    // commit between hydration and these inserts, and the endpoint trigger
+    // does not check entry status — without this gate the run would settle
+    // money onto reversed lines. Fail the batch cleanly instead; the next
+    // run heals from fresh state.
+    if (toInsert.length > 0) {
+      const entryByLine = new Map<string, string>();
+      for (const arr of linesByRef.values()) {
+        for (const ol of arr) entryByLine.set(ol.lineId, ol.entryId);
+      }
+      const involvedEntries = [...new Set(
+        toInsert.flatMap((row) => [entryByLine.get(row.fromLineId), entryByLine.get(row.toLineId)]),
+      )].filter((id): id is string => !!id);
+      const live = await client.query<{ id: string }>(
+        `select e.id from journal_entries e
+          where e.org_id = $1 and e.id = any($2::uuid[]) and e.status = 'posted'`,
+        [orgId, involvedEntries],
+      );
+      if (live.rows.length !== involvedEntries.length) {
+        throw new Error(
+          "a mirrored document was voided or reposted while reconciling applications; retry the sync",
+        );
+      }
     }
     const fxAccountByCurrency = new Map<string, string>();
     for (const group of fxGroups.values()) {
