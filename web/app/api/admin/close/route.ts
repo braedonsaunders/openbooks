@@ -267,15 +267,24 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
   const isDefault = body.isDefault === true;
   return db.transaction(async (tx) => {
     let version = 1;
+    let sourceBefore: Record<string, unknown> | null = null;
     if (sourceId) {
-      const source = ((await tx.execute(
-        sql`select version from close_blueprints where id = ${sourceId} and org_id = ${orgId} for update`,
-      )));
+      const source = (await tx.execute(
+        sql`select * from close_blueprints where id = ${sourceId} and org_id = ${orgId} for update`,
+      ));
       if (!source.rows[0]) throw new CloseError("blueprint not found");
+      sourceBefore = source.rows[0] as Record<string, unknown>;
       version = Number(source.rows[0].version) + 1;
-      await tx.execute(
-        sql`update close_blueprints set is_active = false, is_default = false, updated_at = now(), updated_by = ${actorId} where id = ${sourceId} and org_id = ${orgId}`,
-      );
+      const deactivated = (await tx.execute(sql`
+        update close_blueprints set is_active = false, is_default = false, updated_at = now(), updated_by = ${actorId}
+         where id = ${sourceId} and org_id = ${orgId}
+         returning *`)) as { rows: Array<Record<string, unknown>> };
+      const sourceAfter = deactivated.rows[0];
+      if (!sourceAfter) throw new CloseError("blueprint not found");
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'close_blueprints', ${sourceId}, 'update',
+                ${JSON.stringify({ before: sourceBefore, after: sourceAfter })}::jsonb, ${actorId})`);
     }
     if (isDefault)
       await tx.execute(
@@ -285,8 +294,10 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
       insert into close_blueprints
         (org_id, name, description, period_type, is_default, is_active, version, scope_rules, created_by, updated_by)
       values (${orgId}, ${name}, ${description}, ${periodType}, ${isDefault}, true, ${version},
-              ${JSON.stringify(object(body, "scopeRules"))}::jsonb, ${actorId}, ${actorId}) returning id`)) as any;
-    const blueprintId = inserted.rows[0].id as string;
+              ${JSON.stringify(object(body, "scopeRules"))}::jsonb, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
+    const insertedBlueprint = inserted.rows[0];
+    if (!insertedBlueprint) throw new CloseError("blueprint could not be created");
+    const blueprintId = insertedBlueprint.id as string;
     const ids = new Map<string, string>();
     for (const step of steps) {
       const result = (await tx.execute(sql`
@@ -307,6 +318,10 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
           (org_id, blueprint_id, step_id, depends_on_step_id, created_by, updated_by)
         values (${orgId}, ${blueprintId}, ${ids.get(step.key)!}, ${ids.get(dependency)!}, ${actorId}, ${actorId})`);
       }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'close_blueprints', ${blueprintId}, 'insert',
+              ${JSON.stringify({ before: null, after: insertedBlueprint })}::jsonb, ${actorId})`);
     return blueprintId;
   });
 }

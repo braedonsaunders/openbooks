@@ -218,3 +218,44 @@ test("close calendar saves emit one audit event for each mutation", { skip: !pro
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("close blueprint saves emit audit evidence for versioned mutations", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Close Blueprint Admin", "close-blueprint-admin");
+    state.user = { orgId: org.orgId, id: actorId };
+    await withBypassContext(() =>
+      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
+    );
+
+    const create = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-blueprint",
+      name: "Audit blueprint",
+      periodType: "any",
+      steps: [{ key: "review", title: "Review", workstream: "review", taskType: "check", completionMode: "manual", gateType: "none" }],
+    })));
+    if (create.status !== 200) throw new Error(`create blueprint failed: ${await create.text()}`);
+    const blueprintId = (await create.json()).id as string;
+
+    const update = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-blueprint",
+      id: blueprintId,
+      name: "Updated audit blueprint",
+      periodType: "any",
+      steps: [{ key: "review", title: "Updated review", workstream: "review", taskType: "check", completionMode: "manual", gateType: "none" }],
+    })));
+    if (update.status !== 200) throw new Error(`update blueprint failed: ${await update.text()}`);
+
+    const audit = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from audit_log
+       where org_id = ${org.orgId}
+         and table_name = 'close_blueprints'
+         and action in ('insert', 'update')`));
+    // The update versions the source row, so create + source deactivation + new version are three mutations.
+    assert.equal(audit.rows[0]?.count, 3);
+  } finally {
+    state.user = { orgId: "", id: "" };
+    await dropScratchOrg(org.orgId);
+  }
+});
