@@ -245,3 +245,50 @@ test(
     }
   },
 );
+
+test(
+  "order PATCH refuses another organization's party with a domain error",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDraftQuoteWithLine("Q-ALIEN-1");
+    const foreign = await createScratchOrg();
+    try {
+      const response = await PATCH(await patchRequest(fixture, { partyId: foreign.customerId }), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      });
+      assert.equal(response.status, 422, `alien partyId must be a 422: ${response.status}`);
+      const state = await db.execute<{ party: string }>(sql`
+        select party_id::text as party from documents
+         where org_id = ${fixture.orgId} and id = ${fixture.orderId}`);
+      assert.notEqual(state.rows[0]?.party, foreign.customerId);
+    } finally {
+      gateState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+      await dropScratchOrg(foreign.orgId);
+    }
+  },
+);
+
+test(
+  "order PATCH refuses another organization's account on a line with a domain error",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDraftQuote("Q-ALIEN-2");
+    const foreign = await createScratchOrg();
+    const before = await orderState(fixture);
+    try {
+      const response = await PATCH(
+        await patchRequest(fixture, {
+          lines: [{ accountId: foreign.accounts.revenue, description: "Alien line", quantity: "1", unitPrice: "10" }],
+        }),
+        { params: Promise.resolve({ id: fixture.orderId }) },
+      );
+      assert.equal(response.status, 422, `alien accountId must be a 422: ${response.status}`);
+      assert.deepEqual(await orderState(fixture), before, "the refused save must leave lines and totals intact");
+    } finally {
+      gateState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+      await dropScratchOrg(foreign.orgId);
+    }
+  },
+);

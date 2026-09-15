@@ -432,7 +432,20 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       }
     }
 
-    const mutation = await db.transaction(async (tx) => {
+    // Composite org-scoped storage keys make cross-tenant references
+    // unrepresentable; map their FK refusal to a domain 422 instead of a
+    // raw 500. The whole autosave (lines + header + totals) rolls back.
+    const isTenantReferenceViolation = (error: unknown): boolean => {
+      let cursor: unknown = error;
+      for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === 'object'; depth++) {
+        if ((cursor as { code?: unknown }).code === '23503') return true;
+        cursor = (cursor as { cause?: unknown }).cause;
+      }
+      return false;
+    };
+    let mutation: 'not_found' | 'stale' | 'not_editable' | 'saved';
+    try {
+      mutation = await db.transaction(async (tx) => {
       const locked = (await tx.execute<{ status: string; updated_at: string }>(sql`
         select status, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from documents
@@ -496,6 +509,15 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       }
       return 'saved' as const
     })
+    } catch (error) {
+      if (isTenantReferenceViolation(error)) {
+        return NextResponse.json(
+          { error: 'Referenced party, account, tax profile, or dimension must belong to this organization' },
+          { status: 422 },
+        )
+      }
+      throw error
+    }
 
     if (mutation === 'not_found') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
