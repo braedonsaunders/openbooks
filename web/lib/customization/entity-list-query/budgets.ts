@@ -72,11 +72,13 @@ export function budgetWhere(
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): SQL {
   const parts: SQL[] = [sql`bs.org_id = ${orgId}`]
-  const visibleLineFilter = subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds ?? null)
-  parts.push(sql`and exists (
-    select 1 from budget_lines bl
-     where bl.org_id = bs.org_id and bl.scenario_id = bs.id${visibleLineFilter}
-  )`)
+  if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null) {
+    const visibleLineFilter = subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds)
+    parts.push(sql`and exists (
+      select 1 from budget_lines bl
+       where bl.org_id = bs.org_id and bl.scenario_id = bs.id${visibleLineFilter}
+    )`)
+  }
   for (const filter of view.filters) {
     const predicate = budgetFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
