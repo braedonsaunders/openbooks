@@ -100,6 +100,16 @@ export function decimalScale(value: string, divisor: number): ExactDecimal {
   return fromDecimalUnits(roundDiv(toDecimalUnits(value), BigInt(divisor)))
 }
 
+/** Scale by an integer divisor rounding ONCE to a whole display unit — the
+ *  only sound input for a zero-decimal display (thousands/millions views).
+ *  Scaling to four decimals first and then letting the display round again
+ *  double-rounds: 1499.9999 becomes 1.5000 thousand and prints as 2 instead
+ *  of the true 1. */
+export function decimalScaleWhole(value: string, divisor: number): ExactDecimal {
+  if (!Number.isInteger(divisor) || divisor <= 0) throw new Error('divisor must be a positive integer')
+  return fromDecimalUnits(roundDiv(toDecimalUnits(value), BigInt(divisor) * SCALE) * SCALE)
+}
+
 /** Percent change (current vs prior) as an exact 4dp decimal, or null when the
  *  prior is zero (undefined variance). Kept exact so combined/derived totals
  *  never accumulate float error before display. */

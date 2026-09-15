@@ -9,7 +9,7 @@ import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
 import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
 import { buildDrillTarget, type ReportScale } from '../../../lib/report-filters'
-import { decimalIsMaterial, decimalScale, decimalToNumber, isNegative, scaleDivisor, type StatementValue } from '../../../lib/statement-format'
+import { decimalIsMaterial, decimalScaleWhole, decimalToNumber, isNegative, scaleDivisor, type StatementValue } from '../../../lib/statement-format'
 import { ReportDrillLink } from './ReportDrillLink'
 import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from './report-section-events'
 import { AccountRegisterLink } from '../../../components/account-register-link'
@@ -64,7 +64,8 @@ export function StatementMatrixTable({
         ? format.number(percent / 100, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
         : '–'
     }
-    const scaled = decimalScale(value, scaleDivisor(scale))
+    const divisor = scaleDivisor(scale)
+    const scaled = divisor === 1 ? value : decimalScaleWhole(value, divisor)
     const digits = scale === 'actual' ? undefined : 0
     if (!decimalIsMaterial(scaled, digits === 0 ? '0.5000' : '0.0050')) return '–'
     return money(scaled, {

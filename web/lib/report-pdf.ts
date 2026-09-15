@@ -13,7 +13,7 @@ import {
   type StatementPdfStyle,
 } from '@openbooks/pdf'
 import type { StatementView } from './statement-matrix'
-import { decimalIsMaterial, decimalIsZero, decimalScale, decimalSum, type ExactDecimal } from './statement-format'
+import { decimalIsMaterial, decimalIsZero, decimalScaleWhole, decimalSum, type ExactDecimal } from './statement-format'
 import {
   reportResultToXlsx,
   reportResultToCsv,
@@ -633,7 +633,7 @@ export async function renderStatementViewPdf(
       kind: l.kind,
       label: l.label,
       indent: l.kind === 'account' ? l.depth : 0,
-      values: l.values?.map((v, i) => (view.columns[i]!.kind === 'variance_pct' ? v ?? null : v == null ? null : decimalScale(v, divisor))),
+      values: l.values?.map((v, i) => (view.columns[i]!.kind === 'variance_pct' ? v ?? null : v == null ? null : divisor === 1 ? v : decimalScaleWhole(v, divisor))),
     })),
     style: branding.reportPdfStyle,
     branding,
