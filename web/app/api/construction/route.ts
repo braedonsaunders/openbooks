@@ -227,6 +227,10 @@ export async function POST(req: Request) {
         const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
         if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
         if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
+        // sort_order is integer and unknown errors escape as a raw 500, so a
+        // figure the column cannot hold fails closed here with a named 422.
+        const sortOrder = body.sortOrder === undefined || body.sortOrder === null || body.sortOrder === '' ? 0 : Number(body.sortOrder)
+        if (!Number.isInteger(sortOrder) || sortOrder > 2147483647 || sortOrder < -2147483648) throw new ConstructionBillingError("Sort order must be a whole number the schedule can store");
         const incomeAccountId = await pinIncomeAccount(db, orgId, body.incomeAccountId);
         const id = await db.transaction(async (tx) => {
           const prior = (await tx.execute(sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`));
@@ -235,7 +239,7 @@ export async function POST(req: Request) {
             insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, retainage_percent,
                                    income_account_id, sort_order, created_by, updated_by)
             values (${orgId}, ${body.projectId}, ${body.itemNo ?? null}, ${description}, ${scheduledValue},
-                    ${retainagePercent}, ${incomeAccountId}, ${Number(body.sortOrder ?? 0)}, ${userId}, ${userId})
+                    ${retainagePercent}, ${incomeAccountId}, ${sortOrder}, ${userId}, ${userId})
             returning id
           `));
           const createdId = created.rows[0]!.id;
