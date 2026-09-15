@@ -4,7 +4,8 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { currentUser } from '../../../../lib/auth'
+import { redirect } from 'next/navigation'
+import { can, getAuthz } from '../../../../lib/authz'
 import { listApps } from '../../../../lib/apps/store'
 import { defaultNavConfig, type NavAppOption, type OrgNavConfig } from '../../../../lib/nav/registry'
 
@@ -34,8 +35,14 @@ export interface NavigationAdminData {
 export async function loadNavigationAdmin(
   _sp: Record<string, string | string[] | undefined>,
 ): Promise<NavigationAdminData | null> {
-  const user = await currentUser()
-  if (!user) return null
+  // Navigation editing is an admin surface. The catalogue and admin hub name
+  // admin.nav.manage ("Customize navigation") as its key; holders of the
+  // historical admin.customization.manage keep their access so existing
+  // administrators lose nothing.
+  const authz = await getAuthz()
+  if (!authz) redirect('/login')
+  if (!can(authz, 'admin.nav.manage') && !can(authz, 'admin.customization.manage')) redirect('/')
+  const user = authz.user
   const t = await getTranslations('admin.navigation')
   const tHub = await getTranslations('admin.hub')
 
