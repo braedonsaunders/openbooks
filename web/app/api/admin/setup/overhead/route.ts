@@ -16,6 +16,17 @@ import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const dynamic = 'force-dynamic'
 
+/** Drizzle/node-postgres may expose the server error directly or as `cause`. */
+function postgresErrorCode(error: unknown): string | undefined {
+  let current = error
+  while (current && typeof current === 'object') {
+    const candidate = current as { code?: unknown; cause?: unknown }
+    if (typeof candidate.code === 'string') return candidate.code
+    current = candidate.cause
+  }
+  return undefined
+}
+
 /**
  * Overhead connective tissue — the loop between the rate ENGINE (Overhead
  * Model), the rate CARD (overhead_rates), and the POLICY (project types).
@@ -46,11 +57,12 @@ export async function POST(req: Request) {
     const rates: { departmentId: string; ratePerHour: string }[] = []
     if (Array.isArray(body.rates)) {
       for (const r of body.rates as { departmentId: string; ratePerHour: string | number }[]) {
-        // A malformed id would surface as a Postgres uuid throw and an
-        // unknown one as a foreign-key throw — both raw 500s. Refuse them
-        // here like the apply branch refuses unknown project types.
-        if (typeof r.departmentId !== 'string' || !isUuid(r.departmentId)) {
-          return NextResponse.json({ error: 'invalid departmentId' }, { status: 400 })
+        // Department identity belongs to the publisher (which fails closed
+        // on unknown ids through its foreign key): the route only requires
+        // a present reference and exact money, so validation shapes the
+        // payload without second-guessing the department registry.
+        if (typeof r.departmentId !== 'string' || !r.departmentId) {
+          return NextResponse.json({ error: 'departmentId is required' }, { status: 400 })
         }
         const exact = canonicalDecimal(r.ratePerHour, 4)
         if (exact === null || compareDecimal(exact, '0') < 0) {
@@ -59,19 +71,21 @@ export async function POST(req: Request) {
         rates.push({ departmentId: r.departmentId, ratePerHour: exact })
       }
     }
-    if (rates.length > 0) {
-      const known = await db.execute<{ id: string }>(sql`
-        select id from departments where org_id = ${orgId} and id in (${sql.join(
-          rates.map((r) => sql`${r.departmentId}`),
-          sql`, `,
-        )})`)
-      if (known.rows.length !== new Set(rates.map((r) => r.departmentId)).size) {
+    try {
+      const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
+      if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
+      return NextResponse.json({ ok: true, published: result.published })
+    } catch (e) {
+      // A malformed or unknown department id surfaces as a Postgres input
+      // (22P02) or foreign-key (23503) throw. Refuse the publish as a
+      // request-state failure instead of a raw 500; anything else (overlap
+      // guard, engine errors) keeps its existing behavior.
+      const code = postgresErrorCode(e)
+      if (code === '22P02' || code === '23503') {
         return NextResponse.json({ error: 'unknown department' }, { status: 422 })
       }
+      throw e
     }
-    const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
-    if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
-    return NextResponse.json({ ok: true, published: result.published })
   }
 
   if (body.action === 'apply') {
