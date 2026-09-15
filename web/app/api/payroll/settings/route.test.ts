@@ -460,3 +460,61 @@ test(
     }
   },
 );
+
+test(
+  "changing a statutory payable mapping returns a typed warning",
+  { skip: !DB },
+  async () => {
+    const fixture = await withBypass(async () => {
+      const org = await createScratchOrg();
+      const wsib = randomUUID();
+      await db.execute(
+        sql`insert into accounts(id,org_id,number,name,type,is_active) values(${wsib},${org.orgId},'2320','WSIB Payable','liability_current_other',true)`,
+      );
+      return {
+        ...org,
+        wsib,
+        actorId: await createScratchUser(
+          org.orgId,
+          "Payroll Admin",
+          "payroll_admin",
+        ),
+      };
+    });
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+      // Pointing EI payable at a new account is the risk event: the API
+      // still accepts it, but must carry a typed warning.
+      const changed = await PUT(
+        request("PUT", { eiPayableAccountId: fixture.wsib }),
+      );
+      assert.equal(changed.status, 200);
+      const changedBody = (await changed.json()) as {
+        ok: boolean;
+        warnings?: Array<{ code: string; key: string }>;
+      };
+      assert.equal(changedBody.ok, true);
+      const warnings = changedBody.warnings ?? [];
+      assert.ok(
+        warnings.some(
+          (warning) =>
+            warning.code === "statutory_payable_mapping_changed" &&
+            warning.key === "eiPayableAccountId",
+        ),
+        "statutory mapping change carries a typed warning",
+      );
+      // Re-saving the identical mapping is steady state: no warning.
+      const steady = await PUT(
+        request("PUT", { eiPayableAccountId: fixture.wsib }),
+      );
+      assert.equal(steady.status, 200);
+      assert.deepEqual(
+        ((await steady.json()) as { warnings?: unknown[] }).warnings ?? [],
+        [],
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
