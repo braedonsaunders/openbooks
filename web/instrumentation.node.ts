@@ -7,10 +7,19 @@ export async function registerNodeInstrumentation() {
   const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/db.ts')
   await assertSafeRuntimeDatabaseRole()
   const { ensureScheduler } = await import('@openbooks/engine/src/scheduler.ts')
+  const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduler-mode.ts')
   const { registerContinuousCloseEnricher } = await import('@openbooks/engine/src/continuous-close.ts')
   const { enrichContinuousCloseRun } = await import('./lib/assistant/continuous-close-agent')
   registerContinuousCloseEnricher(enrichContinuousCloseRun)
-  ensureScheduler()
+  // Scheduled work runs in the worker process (npm run worker), which calls
+  // ensureScheduler() unconditionally. This web replica schedules only as an
+  // explicit single-process opt-in (OPENBOOKS_RUN_SCHEDULER=1), and never
+  // under `next dev` — see engine/src/scheduler-mode.ts.
+  const decision = resolveWebSchedulerMode(process.env)
+  if (decision.enabled) {
+    ensureScheduler()
+  }
+  console.log(decision.logLine)
   const { ensureSftpServer } = await import('@openbooks/engine/src/sftp/manager.ts')
   await ensureSftpServer()
 

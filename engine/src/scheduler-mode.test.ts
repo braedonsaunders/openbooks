@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { resolveWebSchedulerMode } from "./scheduler-mode.ts";
+
+const source = (relative: string) =>
+  readFileSync(new URL(relative, import.meta.url), "utf8");
 
 test("web scheduler is off by default — the worker owns scheduled ticks", () => {
   for (const env of [
@@ -63,4 +67,28 @@ test("every decision carries the one boot log line naming the mode", () => {
     assert.ok(!decision.logLine.includes("\n"), "boot line must be a single line");
     assert.match(decision.logLine, pattern);
   }
+});
+
+test("web boots the scheduler only through the gate, never unconditionally", () => {
+  const instrumentation = source("../../web/instrumentation.node.ts");
+  assert.match(instrumentation, /resolveWebSchedulerMode/, "web must consult the scheduler gate");
+  assert.match(
+    instrumentation,
+    /if \(decision\.enabled\)/,
+    "ensureScheduler must run only when the gate allows it",
+  );
+  const gateCall = instrumentation.indexOf("resolveWebSchedulerMode");
+  const startCall = instrumentation.indexOf("ensureScheduler()");
+  assert.ok(gateCall > -1 && startCall > gateCall, "the gate decision precedes the scheduler start");
+  assert.match(instrumentation, /console\.log\(decision\.logLine\)/, "web logs the one mode line at boot");
+});
+
+test("the worker process owns scheduled ticks", () => {
+  const worker = source("./worker/index.ts");
+  assert.match(
+    worker,
+    /from "\.\.\/scheduler\.ts"/,
+    "the worker must import the scheduler it now owns",
+  );
+  assert.match(worker, /ensureScheduler\(\)/, "the worker must start the scheduler at boot");
 });
