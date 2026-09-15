@@ -328,10 +328,20 @@ export async function refreshSandbox(
 
   try {
     await inRefreshTransaction(async () => {
-      await db.execute(sql`
+      // A delete that already marked 'deleting' owns this sandbox: steamrolling
+      // its mark would resurrect a sandbox whose org is being dropped. The
+      // conditional mark makes the race atomic — the loser refuses loudly.
+      const marked = (await db.execute<{ id: string }>(sql`
         update sandboxes
            set status = 'refreshing', last_error = null, updated_at = now()
-         where id = ${sandboxId} and org_id = ${s.org_id}`);
+         where id = ${sandboxId} and org_id = ${s.org_id} and status <> 'deleting'
+         returning id`));
+      if (!marked.rows[0]) {
+        const current = (await db.execute<{ status: string }>(sql`
+          select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0];
+        if (!current) throw new Error(`sandbox not found: ${sandboxId}`);
+        throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
+      }
 
       const { rebaseSet } = await loadCatalog();
       const asOfPeriod = await asOfPeriodOf(s.as_of_period_id, s.production_org_id);
@@ -372,11 +382,13 @@ export async function refreshSandbox(
          where id = ${sandboxId} and org_id = ${s.org_id}`);
     });
   } catch (err) {
+    // Never clobber a deleter's mark: losing the race above (or a delete that
+    // landed mid-refresh) must leave 'deleting' for the deleter to finish.
     await db.execute(sql`
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
-       where id = ${sandboxId} and org_id = ${s.org_id}`);
+       where id = ${sandboxId} and org_id = ${s.org_id} and status <> 'deleting'`);
     throw err;
   }
 }
@@ -399,10 +411,20 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
   const orgId = row.rows[0]?.org_id as string | undefined;
   if (!orgId) return;
-  await db.execute(sql`
+  // A refresh that already marked 'refreshing' owns this sandbox: wiping
+  // under its clone unit corrupts the refresh and strands the status. The
+  // conditional mark makes the race atomic — the loser refuses loudly.
+  const marked = (await db.execute<{ id: string }>(sql`
     update sandboxes
        set status = 'deleting', last_error = null, updated_at = now()
-     where id = ${sandboxId} and org_id = ${orgId}`);
+     where id = ${sandboxId} and org_id = ${orgId} and status <> 'refreshing'
+     returning id`));
+  if (!marked.rows[0]) {
+    const current = (await db.execute<{ status: string }>(sql`
+      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0];
+    if (!current) return;
+    throw new Error(`cannot delete sandbox ${sandboxId} while it is refreshing — retry once the refresh completes`);
+  }
   try {
     const { tenantTables } = await loadCatalog();
     await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
