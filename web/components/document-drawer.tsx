@@ -348,6 +348,19 @@ function positiveAmount(value: unknown): boolean {
   try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
 }
 
+/**
+ * Rows that carry a booking, shared by the footer and the save payload so the
+ * reviewed total is always the booked total. An account plus any entered
+ * amount rides: the server passes signed and zero lines to computeBillTotals
+ * untouched (see validateEditableDocumentLines), rejecting only a missing
+ * account or a malformed amount with a line-named error. Dropping a signed
+ * row here used to book something other than the reviewed footer — silent
+ * data loss on a financial document. Only blank placeholder rows are dropped.
+ */
+export function isPricedDrawerLine(row: { accountId: string; amount: string }): boolean {
+  return Boolean(row.accountId) && String(row.amount ?? '').trim() !== ''
+}
+
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     accountId: l.account_id ?? '',
@@ -395,7 +408,7 @@ export function computeDocumentDrawerTotals(
   hasTax: boolean,
 ): DocumentDrawerTotals {
   const lineTotals = rows
-    .filter((row) => row.accountId && String(row.amount ?? '').trim() !== '')
+    .filter((row) => isPricedDrawerLine(row))
     .map((row) => {
       const amount = String(row.amount)
       const taxConfig = taxByProfile.get(row.taxProfileId) ?? []
@@ -722,7 +735,7 @@ export function DocumentDrawer({
         ? {}
         : {
             lines: rows
-              .filter((r) => r.accountId && positiveAmount(r.amount))
+              .filter((r) => isPricedDrawerLine(r))
               .map((r) => ({
                 accountId: r.accountId,
                 itemId: r.itemId || null,
