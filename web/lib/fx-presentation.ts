@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 
 /**
  * Presentation-currency translation for consolidated operational reads
@@ -85,4 +86,90 @@ export async function presentationRates(
     );
   }
   return rates;
+}
+
+/**
+ * Translate dated functional subtotal rows (flows: spend, revenue, payments,
+ * trends) to presentation and sum. Each row translates at the document-date
+ * spot — the flow doctrine's counterpart to the balance closing spot — so a
+ * 30-day window spanning a rate move translates each day through its own
+ * rate. One rate-timeline query per functional in view; missing coverage
+ * fails closed. Amounts must already carry their first leg (e.g. documents
+ * at `total * fx_rate`); `func` is the posting subsidiary's functional
+ * currency (null = root = base).
+ */
+export interface FlowRates {
+  base: string;
+  /** Latest dated spot for a functional on/before a date ("1" for the base). Throws when uncovered. */
+  rateAt: (func: string | null, date: string) => string;
+}
+
+/**
+ * Rate timelines covering every (functional, date) in `rows` — one
+ * timeline query per functional in view. Callers translating several buckets
+ * (trend weeks) share the one context; `translateFlows` covers single totals.
+ */
+export async function flowRates(
+  orgId: string,
+  rows: ReadonlyArray<{ func: string | null; date: string }>,
+): Promise<FlowRates> {
+  const base = await presentationCurrency(orgId);
+  const dated = rows.filter((r) => lineFunctional(r.func, base) !== base);
+  const timelines = new Map<string, { asOf: string; rate: string }[]>();
+  if (dated.length > 0) {
+    const maxDate = dated.reduce((a, b) => (a > b.date ? a : b.date), dated[0]!.date);
+    const funcs = [...new Set(dated.map((r) => lineFunctional(r.func, base)))];
+    for (const func of funcs) {
+      const r = await db.execute<{ as_of: string; rate: string }>(sql`
+        select s.as_of::text as as_of, s.rate::text as rate from (
+          select as_of, rate, 0 as priority from fx_rates
+           where org_id = ${orgId} and from_currency = ${func}
+             and to_currency = ${base} and rate_type = 'spot'
+             and as_of <= ${maxDate}::date
+          union all
+          select as_of, (1 / rate)::numeric(19,10) as rate, 1 as priority from fx_rates
+           where org_id = ${orgId} and from_currency = ${base}
+             and to_currency = ${func} and rate_type = 'spot'
+             and as_of <= ${maxDate}::date
+        ) s
+       order by s.as_of desc, s.priority asc
+      `);
+      // Direct quotes win ties (same rule as the kernel lookup): keep the
+      // first row per date.
+      const seen = new Set<string>();
+      const timeline: { asOf: string; rate: string }[] = [];
+      for (const row of r.rows) {
+        if (seen.has(row.as_of)) continue;
+        seen.add(row.as_of);
+        timeline.push({ asOf: row.as_of, rate: row.rate });
+      }
+      timelines.set(func, timeline);
+    }
+  }
+  return {
+    base,
+    rateAt: (func, date) => {
+      const resolved = lineFunctional(func, base);
+      if (resolved === base) return "1";
+      const rate = timelines.get(resolved)!.find((t) => t.asOf <= date)?.rate;
+      if (!rate) {
+        throw new Error(
+          `no spot rate for ${resolved}→${base} on or before ${date}`,
+        );
+      }
+      return rate;
+    },
+  };
+}
+
+export async function translateFlows(
+  orgId: string,
+  rows: ReadonlyArray<{ func: string | null; date: string; amount: string }>,
+): Promise<string> {
+  const ctx = await flowRates(orgId, rows);
+  let total = "0";
+  for (const r of rows) {
+    total = add(total, mulDecimal(r.amount, ctx.rateAt(r.func, r.date)));
+  }
+  return total;
 }

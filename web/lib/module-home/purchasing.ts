@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
+import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
 import { isFeatureEnabled } from '../features'
 
 /**
@@ -150,11 +151,13 @@ export async function purchasingHome(
         ? sql` and d.subsidiary_id = any(${subArr})`
         : sql``
 
-  const [apRes, topRes, trendRes, badgeRes, poRowsRes, orgRes] = (await Promise.all([
+  const [apRes, topRes, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
     // Open payables aggregate — open bill/expense items with remaining balance.
+    // Legs are stamped in their line entity's functional: aggregate per
+    // functional and translate to presentation below.
     db.execute(sql`
       with oi as (
-        select jl.party_id, jl.due_date,
+        select jl.party_id, jl.due_date, sub.base_currency as func,
                abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
                   where x.org_id = ${orgId}
@@ -168,18 +171,20 @@ export async function purchasingHome(
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
            and d.open_balance > 0
+          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
          where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       )
-      select coalesce(sum(remaining), 0) as outstanding,
+      select oi.func,
+             coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
              coalesce(sum(remaining) filter (where due_date >= ${today} and due_date < ${in7}), 0) as due_7,
              count(*) filter (where remaining > 0) as open_count
-        from oi where remaining > 0
+        from oi where remaining > 0 group by oi.func
     `),
     // Hero roster — vendor commitments: open POs and open bills side by side.
     db.execute(sql`
       with oi as (
-        select jl.party_id, jl.due_date,
+        select jl.party_id, jl.due_date, sub.base_currency as func,
                abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
                   where x.org_id = ${orgId}
@@ -193,15 +198,16 @@ export async function purchasingHome(
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
            and d.open_balance > 0
+          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
          where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       ), bills as (
-        select party_id, sum(remaining) as billed_open,
+        select party_id, func, sum(remaining) as billed_open,
                sum(remaining) filter (where due_date < ${today}) as overdue,
                count(*) filter (where remaining > 0) as open_bills,
                min(due_date) as oldest_due
-          from oi where remaining > 0 group by party_id
+          from oi where remaining > 0 group by party_id, func
       )
-      select b.party_id,
+      select b.party_id, b.func,
              coalesce(p.display_name, 'Unspecified') as name,
              coalesce(b.open_bills, 0) as open_bills,
              coalesce(b.billed_open, 0) as billed_open,
@@ -210,17 +216,24 @@ export async function purchasingHome(
         from bills b
         left join parties p on p.id = b.party_id and p.org_id = ${orgId}
     `),
-    // 13-week billed-spend trend (posted vendor bills by week).
+    // 13-week billed-spend trend (posted vendor bills by week). Documents
+    // translate txn→functional at their maintained rate; the second leg to
+    // presentation happens per (week, functional) below.
     db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
+             sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
              coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as spend
         from documents d
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
          and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
-       group by 1
+       group by 1, 2
     `),
-    // Directory badges + the remaining vitals.
+    // Directory badges + the remaining vitals (money scalars moved to the
+    // per-(date, functional) row queries below so the second translation leg
+    // can run in JS).
     db.execute(sql`
       select
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
@@ -228,17 +241,33 @@ export async function purchasingHome(
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
-        (select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
-          and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as paid_7d_value,
         ${expensesOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
           and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
-        (select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'vendor_bill'
-          and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= ${ago30}) as spend_30d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
+    `),
+    // 7-day payment value per (date, functional) for presentation translation.
+    db.execute(sql`
+      select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
+             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
+        from documents d
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
+         and d.status = 'posted' and d.voided_at is null${docScope}
+         and coalesce(d.document_date, d.posting_date) >= ${ago7}
+       group by 1, 2
+    `),
+    // 30-day billed spend per (date, functional) for presentation translation.
+    db.execute(sql`
+      select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
+             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
+        from documents d
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where d.org_id = ${orgId} and d.kind = 'vendor_bill'
+         and d.status = 'posted' and d.voided_at is null${docScope}
+         and coalesce(d.document_date, d.posting_date) >= ${ago30}
+       group by 1, 2
     `),
     // Open purchase-order headers translate per-row in JS: POs never post,
     // so they carry no maintained fx_rate and a SQL sum would mix
@@ -256,25 +285,73 @@ export async function purchasingHome(
       select base_currency as "baseCurrency" from orgs where id = ${orgId}`),
   ]))
 
-  const byWeek = new Map(trendRes.rows.map((r) => [String(r.wk).slice(0, 10), Number(r.spend)]))
+  // Presentation: balances translate at the tile-date (closing) spot, flows at
+  // their document-date spot. Missing coverage fails closed.
+  const base = await presentationCurrency(orgId)
+  const balRates = await presentationRates(
+    orgId,
+    base,
+    [...apRes.rows.map((r) => (r.func ?? null) as string | null), ...topRes.rows.map((r) => (r.func ?? null) as string | null)],
+    today,
+  )
+  const trBal = (amount: unknown, func: unknown): number =>
+    Number(mulDecimal(String(amount ?? 0), balRates.get(lineFunctional(typeof func === "string" ? func : null, base))!))
+  // Each week bucket translates at its latest document date, so the rate
+  // lookup never runs ahead of the data it translates.
+  const trendCtx = await flowRates(
+    orgId,
+    trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
+  )
+  const byWeek = new Map<string, number>()
+  for (const r of trendRes.rows) {
+    const wk = String(r.wk).slice(0, 10)
+    const late = String(r.late ?? r.wk).slice(0, 10)
+    const spend = Number(mulDecimal(String(r.spend ?? 0), trendCtx.rateAt((r.func ?? null) as string | null, late)))
+    byWeek.set(wk, (byWeek.get(wk) ?? 0) + spend)
+  }
+  const paid7dValue = Number(await translateFlows(
+    orgId,
+    paidRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
+  ))
+  const spend30d = Number(await translateFlows(
+    orgId,
+    spendRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
+  ))
 
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (!orgCurrency) throw new Error('organization currency is not configured')
   const po = await openPoValueInOrgCurrency(orgId, orgCurrency, today, poRowsRes.rows)
 
   // Hero roster — vendor commitments merged from open bills and translated
-  // open POs, ranked by combined exposure like the query did before.
+  // open POs, ranked by combined exposure like the query did before. Bill
+  // legs translate per (party, functional) at the tile-date spot.
   type BillsRow = {
     party_id: string
+    func: string | null
     name: string
     open_bills: string | number
     billed_open: string | number
     overdue: string | number
     oldest_due: string | null
   }
-  const billedByParty = new Map(
-    topRes.rows.map((r) => [String((r as BillsRow).party_id), r as BillsRow]),
-  )
+  const billedByParty = new Map<string, {
+    name: string
+    openBills: number
+    billedOpen: number
+    overdue: number
+    oldestDue: string | null
+  }>()
+  for (const raw of topRes.rows) {
+    const r = raw as BillsRow
+    const partyId = String(r.party_id)
+    const cur = billedByParty.get(partyId) ?? { name: String(r.name), openBills: 0, billedOpen: 0, overdue: 0, oldestDue: null as string | null }
+    cur.openBills += Number(r.open_bills ?? 0)
+    cur.billedOpen += trBal(r.billed_open, r.func)
+    cur.overdue += trBal(r.overdue, r.func)
+    const due = r.oldest_due ? String(r.oldest_due) : null
+    if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
+    billedByParty.set(partyId, cur)
+  }
   const topExposure = [...new Set([...billedByParty.keys(), ...po.byParty.keys()])]
     .map((partyId) => {
       const b = billedByParty.get(partyId)
@@ -284,32 +361,42 @@ export async function purchasingHome(
         name: String(b?.name ?? p?.name ?? 'Unspecified'),
         openPoValue: Number(p?.value ?? 0),
         openPos: p?.count ?? 0,
-        openBills: Number(b?.open_bills ?? 0),
-        billedOpen: Number(b?.billed_open ?? 0),
+        openBills: Number(b?.openBills ?? 0),
+        billedOpen: Number(b?.billedOpen ?? 0),
         overdue: Number(b?.overdue ?? 0),
-        oldestDue: b?.oldest_due ? String(b.oldest_due) : null,
+        oldestDue: b?.oldestDue ?? null,
       }
     })
     .sort((x, y) => y.billedOpen + y.openPoValue - (x.billedOpen + x.openPoValue))
     .slice(0, 10)
 
-  const ap = apRes.rows[0] ?? {}
+  // Open-payables vitals: per-functional balances summed in presentation.
+  let apOutstanding = 0
+  let apOverdue = 0
+  let openBills = 0
+  let dueNext7 = 0
+  for (const r of apRes.rows) {
+    apOutstanding += trBal(r.outstanding, r.func)
+    apOverdue += trBal(r.overdue, r.func)
+    openBills += Number(r.open_count ?? 0)
+    dueNext7 += trBal(r.due_7, r.func)
+  }
   const badge = badgeRes.rows[0] ?? {}
   return {
-    apOutstanding: Number(ap.outstanding ?? 0),
-    apOverdue: Number(ap.overdue ?? 0),
-    openBills: Number(ap.open_count ?? 0),
-    dueNext7: Number(ap.due_7 ?? 0),
+    apOutstanding,
+    apOverdue,
+    openBills,
+    dueNext7,
     openPoValue: Number(po.total ?? 0),
     openPos: Number(badge.open_pos ?? 0),
-    spend30d: Number(badge.spend_30d ?? 0),
+    spend30d,
     topExposure,
     trend: weekStarts.map((weekStart) => ({ weekStart, spend: byWeek.get(weekStart) ?? 0 })),
     badges: {
       openPos: Number(badge.open_pos ?? 0),
-      openBills: Number(ap.open_count ?? 0),
+      openBills,
       payments7d: Number(badge.payments_7d ?? 0),
-      paid7dValue: Number(badge.paid_7d_value ?? 0),
+      paid7dValue,
       unpostedExpenses: Number(badge.unposted_expenses ?? 0),
       vendors: Number(badge.vendors ?? 0),
     },
