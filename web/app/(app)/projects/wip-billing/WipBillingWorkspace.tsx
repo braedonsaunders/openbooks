@@ -749,6 +749,7 @@ function PrebillLine({
             .split(/[,\n]/)
             .map((value) => value.trim())
             .filter(Boolean),
+          expectedUpdatedAt: line.updatedAt,
         }),
       });
       toast.success(t("lineToasts.saved"));

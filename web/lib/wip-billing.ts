@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { pgTextArrayLiteral } from './pg-array'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
@@ -122,6 +123,8 @@ export type PrebillLineRow = {
   holdId: string | null
   holdReason: string | null
   pricingSnapshot: Record<string, unknown>
+  /** Opaque optimistic-concurrency token: the line's canonical revision when read. */
+  updatedAt: string
 };
 
 export interface WipProjectOption {
@@ -701,6 +704,7 @@ export async function loadPrebill(orgId: string, id: string, scope: SubsidiarySc
              line.adjustment_reason as "adjustmentReason",
              line.adjustment_evidence as "adjustmentEvidence",
              line.pricing_snapshot as "pricingSnapshot", line.disposition,
+             ${documentRevisionSql(sql`line.updated_at`)} as "updatedAt",
              hold.id as "holdId", hold.reason as "holdReason"
         from wip_prebill_lines line
         left join lateral (
@@ -737,15 +741,23 @@ export async function updatePrebillLine(
   lineId: string,
   input: UpdatePrebillLineInput,
   scope: SubsidiaryScope = null,
+  options: { expectedRevision: string },
 ) {
   const proposed = persistMoney(input.proposedBillAmount, 'Proposed bill amount')
   const evidence = evidenceList(input.adjustmentEvidence)
+  // Mandatory optimistic-concurrency evidence (same contract as document and
+  // payment edits): two tabs adjusting one line must 409 instead of silently
+  // overwriting each other's billed amounts.
+  if (!isDocumentRevisionToken(options.expectedRevision)) {
+    throw new WipBillingError('A current line revision is required; reload the worksheet and try again', 409)
+  }
   return db.transaction(async (tx) => {
     await assertWipBillingEnabledTx(tx, orgId)
-    const current = (await tx.execute<{ proposed: string; original: string; status: PrebillStatus; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } }; other_proposed: string }>(sql`
+    const current = (await tx.execute<{ proposed: string; original: string; status: PrebillStatus; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } }; other_proposed: string; revision: string }>(sql`
       select line.proposed_bill_amount::text as proposed, line.original_bill_amount::text as original,
              worksheet.status, worksheet.project_id, worksheet.period_end::text as period_end,
              worksheet.custom,
+             ${documentRevisionSql(sql`line.updated_at`)} as revision,
              coalesce((select sum(other.proposed_bill_amount) from wip_prebill_lines other
                         where other.org_id = line.org_id and other.prebill_id = line.prebill_id
                           and other.id <> line.id and other.disposition = 'bill'), 0)::text as other_proposed
@@ -759,6 +771,9 @@ export async function updatePrebillLine(
     const before = current.rows[0]
     if (!before) throw new WipBillingError('Prebill line not found', 404)
     if (before.status !== 'draft') throw new WipBillingError('Only a draft prebill can be edited')
+    if (before.revision !== options.expectedRevision) {
+      throw new WipBillingError('This line changed after you opened it; reload the worksheet and reapply your adjustment', 409)
+    }
     if ((cmp(before.original, '0') >= 0 && cmp(proposed, '0') < 0) || (cmp(before.original, '0') < 0 && cmp(proposed, '0') > 0)) {
       throw new WipBillingError('A billing adjustment cannot reverse the source line sign')
     }
@@ -780,7 +795,8 @@ export async function updatePrebillLine(
              adjustment_amount = ${proposed}::numeric - original_bill_amount,
              adjustment_reason = ${changed ? reason : null},
              adjustment_evidence = ${JSON.stringify(changed ? evidence : [])}::jsonb,
-             updated_at = now(), updated_by = ${actorId}
+             updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+             updated_by = ${actorId}
        where org_id = ${orgId} and prebill_id = ${prebillId} and id = ${lineId}
     `)
     await refreshTotals(tx, orgId, prebillId, actorId)

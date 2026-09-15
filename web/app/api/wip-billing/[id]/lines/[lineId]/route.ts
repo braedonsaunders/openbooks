@@ -5,6 +5,7 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { isUuid } from '../../../../../../lib/list-params'
 import { holdPrebillLine, updatePrebillLine, WipBillingError } from '../../../../../../lib/wip-billing'
+import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { guardWipBillingFeature } from '../../../../../../lib/wip-billing-gate'
 
 export const runtime = 'nodejs'
@@ -51,11 +52,18 @@ export async function PATCH(
     if (proposedBillAmount === null) {
       return NextResponse.json({ error: 'Proposed bill amount must be an exact decimal' }, { status: 422 })
     }
+    // Mandatory optimistic-concurrency evidence (same contract as document and
+    // payment edits): a stale tab must 409 instead of overwriting a newer
+    // adjustment. Checked after the gates so a missing token never leaks
+    // line existence to an unauthorized caller.
+    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+      return NextResponse.json({ error: 'A current line revision is required; reload the worksheet and try again' }, { status: 409 })
+    }
     const result = await updatePrebillLine(gate.user.orgId, gate.user.id, id, lineId, {
       proposedBillAmount,
       adjustmentReason: body.adjustmentReason == null ? null : String(body.adjustmentReason),
       adjustmentEvidence: Array.isArray(body.adjustmentEvidence) ? body.adjustmentEvidence.map(String) : [],
-    }, gate.allowedSubsidiaryIds)
+    }, gate.allowedSubsidiaryIds, { expectedRevision: body.expectedUpdatedAt })
     return NextResponse.json(result)
   } catch (error) {
     const status = error instanceof WipBillingError ? error.status : 500
