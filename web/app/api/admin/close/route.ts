@@ -64,6 +64,14 @@ function bool(body: Body, key: string): boolean {
   return body[key] === true;
 }
 
+function optionalUuid(body: Body, key: string, label: string): string | undefined {
+  if (body[key] === undefined) return undefined;
+  if (typeof body[key] !== "string" || !isUuid(body[key])) {
+    throw new CloseError(`invalid ${label} id`);
+  }
+  return body[key];
+}
+
 function object(body: Body, key: string): Record<string, unknown> {
   const value = body[key];
   return value && typeof value === "object" && !Array.isArray(value)
@@ -105,8 +113,7 @@ function validateDependencies(
 }
 
 async function saveCalendar(orgId: string, actorId: string, body: Body) {
-  const id =
-    typeof body.id === "string" && isUuid(body.id) ? body.id : undefined;
+  const id = optionalUuid(body, "id", "calendar");
   const name = text(body, "name", true)!;
   const cadence = text(body, "cadence", true)!;
   if (!CADENCES.has(cadence)) throw new CloseError("invalid calendar cadence");
@@ -171,8 +178,7 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
 }
 
 async function saveBlueprint(orgId: string, actorId: string, body: Body) {
-  const sourceId =
-    typeof body.id === "string" && isUuid(body.id) ? body.id : undefined;
+  const sourceId = optionalUuid(body, "id", "blueprint");
   const name = text(body, "name", true)!;
   const description = text(body, "description");
   const periodType = text(body, "periodType") ?? "any";
@@ -313,8 +319,7 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
 }
 
 async function saveAutomation(orgId: string, actorId: string, body: Body) {
-  const id =
-    typeof body.id === "string" && isUuid(body.id) ? body.id : undefined;
+  const id = optionalUuid(body, "id", "automation");
   const trigger = text(body, "trigger", true)!;
   const action = text(body, "automationAction", true)!;
   if (
@@ -366,8 +371,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
     }
     return report as Record<string, unknown>;
   });
-  const id =
-    typeof body.id === "string" && isUuid(body.id) ? body.id : undefined;
+  const id = optionalUuid(body, "id", "reporting package");
   const isDefault = body.isDefault === true;
   return db.transaction(async (tx) => {
     if (isDefault)
