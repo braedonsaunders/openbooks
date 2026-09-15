@@ -188,6 +188,30 @@ test('a malformed or over-precise amount fails closed with its line number', () 
   }
 })
 
+test('a malformed, over-precise, or out-of-range quantity fails closed with its line number', () => {
+  // document_lines.quantity reached the insert unvalidated: junk, blank, and
+  // 9dp quantities either died in Postgres with a storage error (a 500) or —
+  // for 9dp — were silently rounded to the column scale. Fail closed instead.
+  for (const [index, bad] of ['12ab', '', '1.000000001', '99999999999999999999999', '−2'].entries()) {
+    assert.throws(
+      () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: '10.00', quantity: bad }]),
+      (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
+      `quantity ${JSON.stringify(bad)} (case ${index}) should be rejected`,
+    )
+  }
+})
+
+test('well-formed quantities survive editor validation untouched', () => {
+  const lines = validateEditableDocumentLines([
+    { accountId: 'acc-1', amount: '10.00', quantity: '2' },
+    { accountId: 'acc-2', amount: '10.00', quantity: '2.00000000' },
+    { accountId: 'acc-3', amount: '10.00', quantity: '-1.5' },
+    { accountId: 'acc-4', amount: '10.00' },
+    { accountId: 'acc-5', amount: '10.00', quantity: null },
+  ])
+  assert.deepEqual(lines.map((l) => l.quantity), ['2', '2.00000000', '-1.5', undefined, null])
+})
+
 test('computeBillTotals carries negative and zero lines into the totals', () => {
   const computed = computeBillTotals([
     { accountId: 'acc-1', amount: '100.00' },
