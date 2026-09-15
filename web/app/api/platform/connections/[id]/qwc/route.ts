@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
 import { guardPermission } from '../../../../../../lib/authz'
+import { storageIdentityError } from '../../_storage-identity'
 
 export const runtime = 'nodejs'
 
@@ -12,7 +13,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const connection = await getConnection(gate.user.orgId, id)
+  const connection = await getConnection(gate.user.orgId, id).catch((e) => {
+    if (storageIdentityError(e)) return null
+    throw e
+  })
   if (!connection) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (connection.source !== 'qbd') return NextResponse.json({ error: 'not a QuickBooks Desktop connection' }, { status: 400 })
 

@@ -6,6 +6,7 @@ import {
   getConnection,
 } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
+import { storageIdentityError } from "../../_storage-identity";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,8 +23,10 @@ export async function POST(
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-
-  const conn = await getConnection(gate.user.orgId, id);
+  const conn = await getConnection(gate.user.orgId, id).catch((e) => {
+    if (storageIdentityError(e)) return null;
+    throw e;
+  });
   if (!conn) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   try {

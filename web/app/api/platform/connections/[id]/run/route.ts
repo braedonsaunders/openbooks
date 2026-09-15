@@ -5,6 +5,7 @@ import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
 import { db } from "@openbooks/engine/src/db.ts";
 import { getConnection } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
+import { storageIdentityError } from "../../_storage-identity";
 
 export const runtime = "nodejs";
 
@@ -31,8 +32,10 @@ export async function POST(
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const { id } = await params;
-
-  const conn = await getConnection(orgId, id);
+  const conn = await getConnection(orgId, id).catch((e) => {
+    if (storageIdentityError(e)) return null;
+    throw e;
+  });
   if (!conn)
     return NextResponse.json(
       { errorCode: "CONNECTION_NOT_FOUND" },
