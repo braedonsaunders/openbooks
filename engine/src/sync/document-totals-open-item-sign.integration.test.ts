@@ -178,6 +178,14 @@ test(
     // eventually disagrees with it.
     const id = randomUUID();
     const actor = randomUUID();
+    // The posting kernel fails closed on tax amounts without calculation
+    // evidence, so each drifted line carries one real, fully-recoverable
+    // standard component settling exactly to its stored tax — the rounding
+    // drift the test pins lives in the stored amounts, not in missing input.
+    const taxCodeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, calculation_type)
+      values (${taxCodeId}, ${o.orgId}, 'GST13', 'rounding fixture tax', 'standard')`);
     await db.transaction(async (tx) => {
       await tx.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, party_id,
@@ -188,11 +196,20 @@ test(
         [1, "54.5500", "7.0900"],
         [2, "54.5600", "7.1000"],
       ] as const) {
-        await tx.execute(sql`
+        const line = await tx.execute<{ id: string }>(sql`
           insert into document_lines (org_id, document_id, line_number, account_id, description,
                                       quantity, unit_price, amount, tax_amount, created_by)
           values (${o.orgId}, ${id}, ${n}, ${o.accounts.cogs}, 'rounding',
-                  '1', ${amount}, ${amount}, ${tax}, ${actor})`);
+                  '1', ${amount}, ${amount}, ${tax}, ${actor})
+          returning id`);
+        await tx.execute(sql`
+          insert into document_line_tax_components
+            (org_id, document_line_id, tax_code_id, sequence, rate_percent,
+             taxable_amount, tax_amount, recoverable_amount, nonrecoverable_amount,
+             calculation_type, paid_account_id)
+          values (${o.orgId}, ${line.rows[0]!.id}, ${taxCodeId}, 1, '13.0000',
+                  ${amount}, ${tax}, ${tax}, '0',
+                  'standard', ${o.accounts.taxInput})`);
       }
     });
     await db.execute(sql`
