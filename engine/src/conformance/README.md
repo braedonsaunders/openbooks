@@ -111,8 +111,17 @@ cost), IAS 21 foreign currency (including designated monetary items beyond
 trade balances), ASC 360 / IAS 16 long-lived assets, ASC 740 / IAS 12 income
 taxes (including rate-change remeasurement of opening balances), construction
 progress billing / change orders / cost-to-cost (expected-loss provision is a
-published gap), and IAS 37 / ASC 450 provisions (published gaps: no provisions
-engine yet).
+published gap), IAS 37 / ASC 450 provisions (published gaps: no provisions
+engine yet), IAS 21 settlement (realized differences, full-residual
+consumption) and non-monetary historical cost (net-investment OCI is a
+published gap), Canadian payroll deductions and US withholding (CRA T4127
+periodic method including CPP2, EI maxima, QPIP/QPP and the Quebec abatement,
+lump-sum bonus rate; IRS Pub 15-T Worksheet 1A with FICA, supplemental and
+Additional Medicare, plus an Alabama booklet sample — cumulative averaging and
+Quebec provincial tax are published gaps), and sales/consumption tax
+(exclusive/inclusive GST, QST compounding, per-line rounding, partial input
+credits, GST34 payable/refund and VAT100 box walks, US nexus OR/AND/sales-only
+rules — native place-of-supply determination is a published gap).
 
 Not yet covered, and therefore **not claimed**: business combinations,
 consolidation procedure, financial instruments, employee benefits,
