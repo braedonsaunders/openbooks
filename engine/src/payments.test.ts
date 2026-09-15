@@ -242,6 +242,19 @@ test("the NACHA credit file refuses a receiving account number longer than its f
   );
 });
 
+test("the CPA-005 credit file refuses a payee account number longer than its field", () => {
+  const run = cpa005Run();
+  assert.throws(
+    () => buildCpa005File({
+      ...run,
+      payments: run.payments.map((payment, index) =>
+        index === 0 ? { ...payment, accountNumber: "1234567890123" } : payment,
+      ),
+    }),
+    (error: Error) => error instanceof PaymentError && /payee account number.*12 characters/.test(error.message),
+  );
+});
+
 test("a data centre that cannot form a valid trace number refuses to write a file", () => {
   for (const originatingDataCentre of ["00000", "543", "FILL-ME"]) {
     assert.throws(
