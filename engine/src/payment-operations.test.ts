@@ -1617,3 +1617,167 @@ test(
     }
   },
 );
+
+test(
+  "a bank return with an oversized reason fails closed as PaymentError",
+  { skip: !DB },
+  async () => {
+    // The void evidence CHECK caps void_reason at 500 chars, but the
+    // settlement route takes an unbounded returnReason: pasting one longer
+    // than the "Bank return: " prefix leaves room for died at storage as a
+    // raw 500 instead of a named refusal — with the whole settlement unit
+    // rolling back. Fail closed before any write.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Return reason operator", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, async () => {
+        const invoiceId = randomUUID();
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+             document_date, currency, subtotal, tax_total, total, created_by)
+          values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft',
+                  ${`INV-REASON-${invoiceId}`}, ${org.subsidiaryId}, ${org.customerId},
+                  ${org.date}, 'CAD', '100', '0', '100', ${actorId})
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, quantity, unit_price,
+             amount, tax_amount, tax_input_amount)
+          values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1',
+                  '100', '100', '0', '100')
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
+           where id = ${invoiceId} and org_id = ${org.orgId}
+        `);
+        const invoiceEntryId = await postDocument(invoiceId, {
+          control: {
+            ar: org.accounts.ar,
+            ap: org.accounts.ap,
+            bank: org.accounts.bank,
+          },
+        });
+        const invoiceControl = await db.execute<{ id: string }>(sql`
+          select id
+            from journal_lines
+           where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
+        `);
+
+        const payment = await createPaymentDocument({
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: actorId,
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "CAD",
+        });
+        await updateDraftPayment(
+          payment.id,
+          {
+            allocations: [sameCurrencyAllocation(invoiceControl.rows[0]!.id, "100")],
+            bankAccountId: org.accounts.bank,
+          },
+          actorId,
+          org.orgId,
+        );
+        await db.execute(sql`
+          update documents
+             set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
+           where id = ${payment.id} and org_id = ${org.orgId}
+        `);
+        await postPaymentWithApplications(
+          payment.id,
+          undefined,
+          actorId,
+          "ui",
+          { deferEffects: true },
+        );
+
+        const runId = randomUUID();
+        const instructionId = randomUUID();
+        await db.execute(sql`
+          insert into payment_runs
+            (id, org_id, run_number, bank_account_id, subsidiary_id, method,
+             direction, purpose, currency, status, payment_count, total_amount,
+             created_by, updated_by)
+          values (${runId}, ${org.orgId}, ${`REASON-${runId}`},
+                  ${org.accounts.bank}, ${org.subsidiaryId}, 'direct_debit',
+                  'inbound', 'customer_collections', 'CAD', 'confirmed', 1,
+                  '100', ${actorId}, ${actorId})
+        `);
+        await db.execute(sql`
+          insert into payment_instructions
+            (id, org_id, payment_run_id, payee_party_id, amount, currency,
+             payment_document_id, status, created_by, updated_by)
+          values (${instructionId}, ${org.orgId}, ${runId}, ${org.customerId},
+                  '100', 'CAD', ${payment.id}, 'sent', ${actorId}, ${actorId})
+        `);
+        return { instructionId, paymentDocumentId: payment.id };
+      });
+
+      await assert.rejects(
+        () =>
+          recordPaymentSettlement({
+            instructionId: seeded.instructionId,
+            orgId: org.orgId,
+            userId: actorId,
+            status: "returned",
+            effectiveOn: org.date,
+            returnCode: "NSF",
+            returnReason: "x".repeat(600),
+          }),
+        (error: unknown) => {
+          assert.equal(postgresFailure(error), null, "refused by the domain guard, not by the database");
+          assert.ok(error instanceof PaymentError, "a named PaymentError (a 422), not a storage failure");
+          return true;
+        },
+      );
+
+      const state = await withOrgContext(org.orgId, async () =>
+        db.execute<{ document_status: string; instruction_status: string; settlements: number }>(sql`
+          select
+            (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
+            (select status from payment_instructions where id = ${seeded.instructionId}) as instruction_status,
+            (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements
+        `),
+      );
+      assert.deepEqual(state.rows[0], {
+        document_status: "posted",
+        instruction_status: "sent",
+        settlements: 0,
+      });
+
+      // The boundary itself (13-char prefix + 487 = the 500-char CHECK
+      // maximum) still processes: the refusal above poisoned nothing and the
+      // bound is exact, not off by one.
+      await recordPaymentSettlement({
+        instructionId: seeded.instructionId,
+        orgId: org.orgId,
+        userId: actorId,
+        status: "returned",
+        effectiveOn: org.date,
+        returnCode: "NSF",
+        returnReason: "y".repeat(487),
+      });
+      const after = await withOrgContext(org.orgId, async () =>
+        db.execute<{ document_status: string; instruction_status: string }>(sql`
+          select
+            (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
+            (select status from payment_instructions where id = ${seeded.instructionId}) as instruction_status
+        `),
+      );
+      assert.deepEqual(after.rows[0], {
+        document_status: "voided",
+        instruction_status: "returned",
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

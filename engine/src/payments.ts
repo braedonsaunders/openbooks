@@ -1362,7 +1362,15 @@ export async function reversePaymentForReturn(
     `));
     const payment = row.rows[0];
     if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
-    const voidReason = `Bank return: ${reason.trim() || payment.document_number}`;
+    // The void-evidence CHECK caps void_reason at 500 chars, but bank return
+    // reasons arrive unbounded (route text, file memos): a pasted reason
+    // longer than the prefix leaves room for died at storage as a raw 500.
+    // Fail closed here, naming the caller's limit, before any write.
+    const reasonText = reason.trim() || payment.document_number;
+    if (reasonText.length > 500 - "Bank return: ".length) {
+      throw new PaymentError("bank return reason must fit the void evidence (at most 487 characters)");
+    }
+    const voidReason = `Bank return: ${reasonText}`;
     await db.execute(sql`
       update documents
          set void_reason = ${voidReason},
