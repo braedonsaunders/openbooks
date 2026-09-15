@@ -50,6 +50,7 @@
     "toInsert": "To create",
     "toUpdate": "To update",
     "toFail": "Errors",
+    "warnings": "Warnings",
     "commit": "Import {n} rows",
     "committing": "Importing…",
     "row": "Row",

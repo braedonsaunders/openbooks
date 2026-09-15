@@ -7,6 +7,7 @@ import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { assetBankHygieneWarning } from '../../../../lib/accounts-hygiene'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAccount } from '../_lib'
 import { accountInputFields } from '../_input'
@@ -253,5 +254,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     throw error
   }
 
-  return NextResponse.json(await loadAccount(id, gate.user.orgId))
+  const saved = await loadAccount(id, gate.user.orgId)
+  // Effective values after the edit; a statement behind the account counts as
+  // corroboration even when the name says nothing. The warning rides
+  // alongside success — the edit is always saved.
+  const backed = (await db.execute(sql`
+    select 1 from bank_statements where org_id = ${gate.user.orgId} and account_id = ${id} limit 1`))
+  const hygiene = assetBankHygieneWarning({
+    type: nextType,
+    name: name ?? String(existing.name),
+    reconcilable: nextReconcilable,
+    isSummary: nextSummary,
+    hasStatements: Boolean(backed.rows[0]),
+  })
+  return NextResponse.json({ ...saved, warnings: hygiene ? [hygiene] : [] })
 }

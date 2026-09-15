@@ -29,6 +29,7 @@ interface Outcome {
   updated: number
   failed: number
   errors: { row: number; message: string; field?: string }[]
+  warnings?: { row: number; message: string; field?: string }[]
 }
 interface SampleCompanyProfile {
   industryKey: string
@@ -468,6 +469,9 @@ export function ImportWizard() {
             <StatTile label={t('import.toFail')} value={preview.failed} tone="red" />
           </div>
           {preview.errors.length > 0 && <ErrorTable t={t} errors={preview.errors} />}
+          {(preview.warnings?.length ?? 0) > 0 && (
+            <ErrorTable t={t} errors={preview.warnings ?? []} tone="amber" title={t('import.warnings')} />
+          )}
         </div>
       )}
 
@@ -489,6 +493,9 @@ export function ImportWizard() {
               </Button>
               <ErrorTable t={t} errors={result.errors} />
             </>
+          )}
+          {(result.warnings?.length ?? 0) > 0 && (
+            <ErrorTable t={t} errors={result.warnings ?? []} tone="amber" title={t('import.warnings')} />
           )}
         </div>
       )}
@@ -513,14 +520,29 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone: 
 function ErrorTable({
   t,
   errors,
+  tone = 'rose',
+  title,
 }: {
   t: ReturnType<typeof useTranslations>
   errors: { row: number; message: string; field?: string }[]
+  tone?: 'rose' | 'amber'
+  title?: string
 }) {
+  const frame =
+    tone === 'amber'
+      ? 'border-amber-200 dark:border-amber-900'
+      : 'border-rose-200 dark:border-rose-900'
+  const head =
+    tone === 'amber'
+      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+      : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+  const rowLine =
+    tone === 'amber' ? 'border-amber-100 dark:border-amber-900/50' : 'border-rose-100 dark:border-rose-900/50'
   return (
-    <div className="overflow-hidden rounded-lg border border-rose-200 dark:border-rose-900">
+    <div className={`overflow-hidden rounded-lg border ${frame}`}>
+      {title && <div className={`px-3 py-2 text-xs font-semibold uppercase ${head}`}>{title}</div>}
       <table className="w-full text-sm">
-        <thead className="bg-rose-50 text-left text-xs uppercase text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+        <thead className={`text-left text-xs uppercase ${head}`}>
           <tr>
             <th className="w-16 px-3 py-2">{t('import.row')}</th>
             <th className="px-3 py-2">{t('import.message')}</th>
@@ -528,7 +550,7 @@ function ErrorTable({
         </thead>
         <tbody>
           {errors.slice(0, 200).map((e, i) => (
-            <tr key={i} className="border-t border-rose-100 dark:border-rose-900/50">
+            <tr key={i} className={`border-t ${rowLine}`}>
               <td className="px-3 py-2 tabular-nums">{e.row}</td>
               <td className="px-3 py-2">
                 {e.field && (

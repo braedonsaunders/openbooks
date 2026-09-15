@@ -230,6 +230,9 @@ test("account creation replays only the exact request for an idempotency key", a
     id: key,
     name: "Operating cash",
     type: "asset_other",
+    // The success payload now carries typing-hygiene advisories (empty here:
+    // asset_other never warns); the replay contract is otherwise unchanged.
+    warnings: [],
   });
 
   const replay = await post(key, original);
@@ -238,6 +241,7 @@ test("account creation replays only the exact request for an idempotency key", a
     id: key,
     name: "Operating cash",
     type: "asset_other",
+    warnings: [],
   });
 
   const changed = await post(key, {
