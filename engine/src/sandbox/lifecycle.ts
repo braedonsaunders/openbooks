@@ -144,7 +144,8 @@ async function asOfPeriodOf(
     select fiscal_year, period_number from accounting_periods
      where id = ${periodId} and org_id = ${orgId}`);
   const r = res.rows[0];
-  return r ? { fiscalYear: r.fiscal_year, periodNumber: r.period_number } : null;
+  if (!r) throw new Error("as-of cutoff period must belong to the production organization");
+  return { fiscalYear: r.fiscal_year, periodNumber: r.period_number };
 }
 
 /** Delete a sandbox's copied rows for `tables` (org tables + org-less children).
@@ -219,6 +220,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       from orgs where id = ${input.productionOrgId}`));
   const p = prod.rows[0];
   if (!p) throw new Error(`production org not found: ${input.productionOrgId}`);
+  const asOfPeriod = await asOfPeriodOf(input.asOfPeriodId, input.productionOrgId);
+  if (tier === "as_of" && !asOfPeriod) throw new Error("as-of sandbox requires a cutoff period");
 
   // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped). The org
   // row is not cloned, so masking policies never see it: a masked sandbox
@@ -256,7 +259,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       seed,
       tier,
       masked,
-      asOfPeriod: await asOfPeriodOf(input.asOfPeriodId, input.productionOrgId),
+      asOfPeriod,
     });
     await rebaseSandboxControlAccounts({
       productionOrgId: input.productionOrgId,
@@ -331,6 +334,8 @@ export async function refreshSandbox(
          where id = ${sandboxId} and org_id = ${s.org_id}`);
 
       const { rebaseSet } = await loadCatalog();
+      const asOfPeriod = await asOfPeriodOf(s.as_of_period_id, s.production_org_id);
+      if (s.tier === "as_of" && !asOfPeriod) throw new Error("as-of sandbox requires a cutoff period");
       // Which tables to wipe + re-copy. Keeping customizations means leaving the
       // customization layer untouched and refreshing everything else.
       const target = new Set(
@@ -346,7 +351,7 @@ export async function refreshSandbox(
         seed: sandboxSeed,
         tier: s.tier,
         masked: s.masked,
-        asOfPeriod: await asOfPeriodOf(s.as_of_period_id, s.production_org_id),
+        asOfPeriod,
         onlyTables: target,
       });
       await rebaseSandboxControlAccounts({

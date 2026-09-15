@@ -164,6 +164,41 @@ test("an as-of sandbox refuses posted activity after its cutoff instead of faili
   }
 });
 
+test("an as-of sandbox rejects missing or foreign cutoff periods", { skip: !DB }, async () => {
+  const production = await createScratchOrg();
+  const external = await createScratchOrg();
+  const foreignName = `Foreign cutoff ${randomUUID()}`;
+  const missingName = `Missing cutoff ${randomUUID()}`;
+  try {
+    await assert.rejects(
+      createSandbox({
+        productionOrgId: production.orgId,
+        name: foreignName,
+        tier: "as_of",
+        masked: false,
+        asOfPeriodId: external.periodId,
+      }),
+      /as-of cutoff period must belong to the production organization/,
+    );
+    await assert.rejects(
+      createSandbox({
+        productionOrgId: production.orgId,
+        name: missingName,
+        tier: "as_of",
+        masked: false,
+        asOfPeriodId: null,
+      }),
+      /as-of sandbox requires a cutoff period/,
+    );
+  } finally {
+    const failed = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes where production_org_id = ${production.orgId} and name in (${foreignName}, ${missingName})`));
+    for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
+    await dropScratchOrg(production.orgId);
+    await dropScratchOrg(external.orgId);
+  }
+});
+
 test("a failed refresh rolls back the wipe instead of leaving a partial sandbox", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Refresh rollback ${randomUUID()}`;
