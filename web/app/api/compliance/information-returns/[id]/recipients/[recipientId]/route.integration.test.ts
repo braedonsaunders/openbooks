@@ -120,7 +120,10 @@ async function seedComputedFiling(
     await seedInformationReturnPayment(
       org,
       actorId,
-      `${1000 + i}`,
+      // Above the OBBBA $2,000 general threshold for 2026+ filings: the
+      // route tests need INCLUDED recipients, and a $1,000 payment no
+      // longer clears the statutory line for these far-future tax years.
+      `${3000 + i}`,
       `ROUTE-FIXTURE-${taxYear}-${i}`,
       partyId,
       taxYear,
