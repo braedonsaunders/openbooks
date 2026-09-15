@@ -8,6 +8,8 @@ import {
 } from '@openbooks/pdf'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { Authz } from './authz'
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { payrollSubsidiaryInScope } from '@openbooks/engine/src/payroll-scope.ts'
 import { issuePayRunCheques } from '@openbooks/engine/src/payroll-cheques.ts'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { resolvePdfTemplate } from './pdf-templates/store'
@@ -50,14 +52,21 @@ interface RunStub {
   givenName: string | null
   employeeNumber: string | null
   birthDate: string | null
+  subsidiaryId: string | null
 }
 
-async function runStubs(orgId: string, documentId: string): Promise<RunStub[]> {
+async function runStubs(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
+): Promise<RunStub[]> {
   const r = (await db.execute<{
       id: string; name: string; email: string | null; delivery: string
       employee_number: string | null; birth_date: string | null
+      subsidiary_id: string | null
     }>(sql`
     select s.id, p.display_name as name, p.email,
+           p.subsidiary_id,
            coalesce(prof.stub_delivery, 'email') as delivery,
            er.employee_number, er.birth_date::text as birth_date
       from pay_stubs s
@@ -68,7 +77,7 @@ async function runStubs(orgId: string, documentId: string): Promise<RunStub[]> {
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by p.display_name
   `))
-  return r.rows.map((row) => {
+  const stubs: RunStub[] = r.rows.map((row) => {
     const [surname, ...given] = splitName(row.name)
     return {
       id: row.id,
@@ -79,8 +88,16 @@ async function runStubs(orgId: string, documentId: string): Promise<RunStub[]> {
       givenName: given.join(' ') || (surname ?? null),
       employeeNumber: row.employee_number,
       birthDate: row.birth_date,
+      subsidiaryId: row.subsidiary_id,
     }
   })
+  // Stub PDFs carry every employee's wage data, so the whole set is visible
+  // only when every stub is: a scoped caller must own the complete
+  // population before seeing any stub, exactly as the run detail requires.
+  if (!stubs.every((stub) => payrollSubsidiaryInScope(allowedSubsidiaryIds, stub.subsidiaryId))) {
+    throw new PayrollError('pay run not found')
+  }
+  return stubs
 }
 
 /** "First Last" → [surname, ...given]; single token = both. */
@@ -129,9 +146,9 @@ function stubPassword(policy: StubPasswordPolicy, stub: RunStub): string {
 export async function mergedRunStubsPdf(
   orgId: string,
   documentId: string,
-  options: { set?: 'all' | 'print' } = {},
+  options: { set?: 'all' | 'print'; allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'] } = {},
 ): Promise<{ pdf: Uint8Array; count: number } | null> {
-  const all = await runStubs(orgId, documentId)
+  const all = await runStubs(orgId, documentId, options.allowedSubsidiaryIds)
   const stubs = options.set === 'print'
     ? all.filter((stub) => stub.delivery === 'print' || stub.delivery === 'both')
     : all
@@ -199,8 +216,12 @@ export interface EmailStubsResult {
  * a missing policy or a password that cannot be derived FAILS rather than
  * sending an unprotected stub.
  */
-export async function emailRunStubs(orgId: string, documentId: string): Promise<EmailStubsResult> {
-  const stubs = await runStubs(orgId, documentId)
+export async function emailRunStubs(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
+): Promise<EmailStubsResult> {
+  const stubs = await runStubs(orgId, documentId, allowedSubsidiaryIds)
   const policy = await stubPasswordPolicy(orgId)
   const result: EmailStubsResult = { sent: 0, noEmail: [], printOnly: [], failed: [] }
   for (const stub of stubs) {

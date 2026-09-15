@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
@@ -31,11 +32,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
   const set = new URL(req.url).searchParams.get('set') === 'print' ? 'print' : 'all'
-  const merged = await mergedRunStubsPdf(gate.user.orgId, id, { set })
-  if (!merged) return NextResponse.json({ error: 'no stubs to print' }, { status: 404 })
-  const stamp = await businessToday(gate.user.orgId)
-  return pdfResponse(
-    Buffer.from(merged.pdf),
-    safeName(`Pay-stubs${set === 'print' ? '-print-set' : ''}-${id.slice(0, 8)}-${stamp}`),
-  )
+  try {
+    const merged = await mergedRunStubsPdf(gate.user.orgId, id, { set, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
+    if (!merged) return NextResponse.json({ error: 'no stubs to print' }, { status: 404 })
+    const stamp = await businessToday(gate.user.orgId)
+    return pdfResponse(
+      Buffer.from(merged.pdf),
+      safeName(`Pay-stubs${set === 'print' ? '-print-set' : ''}-${id.slice(0, 8)}-${stamp}`),
+    )
+  } catch (error) {
+    // An opaque run fails closed exactly like a missing one: no stub bytes
+    // for a caller who does not own the complete population.
+    if (error instanceof PayrollError) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    throw error
+  }
 }

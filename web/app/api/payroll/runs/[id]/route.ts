@@ -275,7 +275,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'email-stubs') {
-      const result = await emailRunStubs(gate.user.orgId, id)
+      const result = await emailRunStubs(gate.user.orgId, id, gate.allowedSubsidiaryIds)
       return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'record-payment') {
