@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { db } from "./db.ts";
 import { add, mulRate } from "./money.ts";
 import {
+  absorbFxRoundingResidual,
   intercompanyBalancingLegs,
   SubsidiaryError,
   validateSubsidiaryRestrictions,
@@ -161,4 +162,92 @@ test("intercompany balancing derives a rate from rounded mixed-FX totals", async
   assert.equal(counter.amount, "-0.0533");
   assert.equal(counter.amount, mulRate(counter.txnAmount, counter.fxRate));
   assert.equal(add("0.0533", counter.amount), "0.0000");
+});
+
+test("FX residual folds onto the largest eligible line regardless of position", () => {
+  // Transaction amounts balance (100 - 40 - 60) but independent per-line
+  // translation leaves a 0.0001 functional residual. The bucket is chosen by
+  // role (largest magnitude), never by position: here the largest line is
+  // last, and the first two lines must be byte-identical afterwards.
+  const lines = [
+    { ...line(originSubId, "-54.0494", "-40.0000", "1.3512350000"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-81.0741", "-60.0000", "1.3512350000"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "135.1236", "100.0000", "1.3512360000"), taxCodeId: null, isOpenItem: false },
+  ];
+  absorbFxRoundingResidual(lines);
+  assert.equal(lines[0]!.amount, "-54.0494");
+  assert.equal(lines[1]!.amount, "-81.0741");
+  assert.equal(lines[2]!.amount, "135.1235");
+  assert.equal(add(add(lines[0]!.amount, lines[1]!.amount), lines[2]!.amount), "0.0000");
+  // The adjustment touches functional amounts only — transaction evidence is kept.
+  assert.deepEqual(lines.map((l) => l.txnAmount), ["-40.0000", "-60.0000", "100.0000"]);
+});
+
+test("FX residual never lands on a tax control or open-item leg", () => {
+  // The statutory tax leg carries the largest magnitude, yet the residual
+  // must skip it (filed returns sum these lines directly) and the open-item
+  // leg (the subledger settles at that amount), landing on the small plain
+  // line instead.
+  const lines = [
+    { ...line(originSubId, "135.1235", "100.0000", "1.3512350000"), taxCodeId: randomUUID(), isOpenItem: false },
+    { ...line(originSubId, "-81.0741", "-60.0000", "1.3512350000"), taxCodeId: null, isOpenItem: true },
+    { ...line(originSubId, "-54.0493", "-40.0000", "1.3512325000"), taxCodeId: null, isOpenItem: false },
+  ];
+  absorbFxRoundingResidual(lines);
+  assert.equal(lines[0]!.amount, "135.1235");
+  assert.equal(lines[1]!.amount, "-81.0741");
+  assert.equal(lines[2]!.amount, "-54.0494");
+  assert.equal(add(add(lines[0]!.amount, lines[1]!.amount), lines[2]!.amount), "0.0000");
+});
+
+test("FX residual beyond per-line rounding is refused, not flattened", () => {
+  // Two lines can carry at most half a unit of translation error each: a
+  // 0.0002 residual on two lines cannot be rounding and must fail loudly
+  // instead of being absorbed into the ledger.
+  const lines = [
+    { ...line(originSubId, "10.0001", "10.0000", "1"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-9.9999", "-10.0000", "1"), taxCodeId: null, isOpenItem: false },
+  ];
+  assert.throws(
+    () => absorbFxRoundingResidual(lines),
+    (error: unknown) =>
+      error instanceof SubsidiaryError && /exceeds per-line FX rounding/.test(error.message),
+  );
+  assert.deepEqual(lines.map((l) => l.amount), ["10.0001", "-9.9999"]);
+});
+
+test("FX residual with only control legs to take it is refused", () => {
+  // A transaction-balanced group whose every line is a tax control or
+  // open-item leg has no lawful bucket: absorbing would rewrite either a
+  // statutory charge or a subledger settlement amount.
+  const lines = [
+    { ...line(originSubId, "10.0001", "10.0000", "1"), taxCodeId: randomUUID(), isOpenItem: false },
+    { ...line(originSubId, "-10.0000", "-10.0000", "1"), taxCodeId: null, isOpenItem: true },
+  ];
+  assert.throws(
+    () => absorbFxRoundingResidual(lines),
+    (error: unknown) =>
+      error instanceof SubsidiaryError && /no line that may absorb it/.test(error.message),
+  );
+});
+
+test("FX absorber leaves transaction-imbalanced groups for the balancer", () => {
+  // Transaction amounts summing to nonzero are real economics (handled by
+  // intercompany legs or refused by the kernel), never rounding — even when
+  // the functional side carries a small residual.
+  const lines = [
+    { ...line(originSubId, "10.0001", "10.0000", "1"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-9.0000", "-9.0000", "1"), taxCodeId: null, isOpenItem: false },
+  ];
+  absorbFxRoundingResidual(lines);
+  assert.deepEqual(lines.map((l) => l.amount), ["10.0001", "-9.0000"]);
+});
+
+test("FX absorber is a no-op on an already balanced group", () => {
+  const lines = [
+    { ...line(originSubId, "10.0000", "10.0000", "1"), taxCodeId: null, isOpenItem: false },
+    { ...line(originSubId, "-10.0000", "-10.0000", "1"), taxCodeId: null, isOpenItem: false },
+  ];
+  absorbFxRoundingResidual(lines);
+  assert.deepEqual(lines.map((l) => l.amount), ["10.0000", "-10.0000"]);
 });
