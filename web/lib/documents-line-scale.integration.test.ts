@@ -27,7 +27,7 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { applyDocumentEdit, loadDocumentEditCurrent } = await import("./documents.ts");
+const { applyDocumentEdit, DocumentEditError, loadDocumentEditCurrent } = await import("./documents.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -70,6 +70,39 @@ test("applyDocumentEdit round-trips a stored 8dp unit price", { skip: !DB }, asy
       select subtotal::text, total::text from documents where id = ${id} and org_id = ${org.orgId}`)).rows[0]!;
     assert.equal(doc.subtotal, "400.0000");
     assert.equal(doc.total, "400.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("applyDocumentEdit refuses junk quantities with a named error, not a storage failure", { skip: !DB }, async () => {
+  // A sloppy line-grid save used to carry quantity straight into the
+  // numeric(28,8) column: "abc", a blank cell, or a 26-digit paste died in
+  // Postgres with a driver error (a 500). The edit service must fail closed
+  // with the line number instead.
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Quantity guard", "quantity_guard");
+    for (const [index, bad] of ["abc", "", "99999999999999999999999999"].entries()) {
+      const id = randomUUID();
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+        values (${id},${org.orgId},'customer_invoice','draft',${`QTY-${index}-${id.slice(0, 8)}`},${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
+      const current = await loadDocumentEditCurrent(id, org.orgId);
+      assert.ok(current);
+      await assert.rejects(
+        applyDocumentEdit(
+          id,
+          current,
+          {
+            expectedUpdatedAt: current.updatedAt,
+            lines: [{ accountId: org.accounts.revenue, quantity: bad, unitPrice: "200.00", amount: "400.00" }],
+          },
+          { orgId: org.orgId, userId: actor, source: "api" },
+        ),
+        (e: Error) => e instanceof DocumentEditError && (e as { status?: number }).status === 422 && /quantity/i.test(e.message),
+        `quantity ${JSON.stringify(bad)} should fail closed with a named error`,
+      );
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }

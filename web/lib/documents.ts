@@ -686,6 +686,29 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
         `Line ${n}: "${l.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places`,
       )
     }
+    // Quantity is informational beside the amount, but it persists into the
+    // numeric(28,8) column verbatim: junk or blank text died in Postgres with
+    // a storage error (a 500), and anything past 8dp was silently rounded to
+    // the column scale. Validate at the column's own scale — the same 8dp
+    // contract the billing invoice writer (lib/bills.ts
+    // persistInvoiceQuantity) already enforces — and refuse magnitudes the
+    // column cannot hold (twenty whole digits) with the line number.
+    if (l.quantity !== undefined && l.quantity !== null) {
+      const exact = canonicalDecimal(l.quantity, 8)
+      if (exact === null) {
+        throw new DocumentEditError(
+          422,
+          `Line ${n}: "${l.quantity}" is not a valid quantity — enter an exact decimal of at most 8 decimal places`,
+        )
+      }
+      const wholeDigits = exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '')
+      if (wholeDigits.length > 20) {
+        throw new DocumentEditError(
+          422,
+          `Line ${n}: quantity is out of range — at most 20 whole digits fit the ledger`,
+        )
+      }
+    }
     return l
   })
 }
