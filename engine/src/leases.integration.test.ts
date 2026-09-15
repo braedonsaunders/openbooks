@@ -216,6 +216,10 @@ test("invalid lease inputs are refused as LeaseError with no rows written", { sk
       ["garbage date", { commencementOn: "not-a-date" }, /calendar date/],
       ["impossible date", { commencementOn: "2026-02-30" }, /calendar date/],
       ["bad frequency", { paymentFrequency: "fortnightly" }, /payment frequency/],
+      ["junk classification term", { classificationInputs: { leaseTermMonths: "abc", economicLifeMonths: 120 } }, /whole number of months/],
+      ["junk classification threshold", { classificationInputs: { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" } }, /exact decimal/],
+      ["oversized payment", { paymentAmount: "99999999999999999999999" }, /supported ledger magnitude/],
+      ["oversized rate", { annualDiscountRatePercent: "99999999999999999999999" }, /supported ledger magnitude/],
     ];
     let n = 0;
     for (const [label, override, pattern] of cases) {

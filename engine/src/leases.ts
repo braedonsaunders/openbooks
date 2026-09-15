@@ -102,10 +102,40 @@ export interface LeaseClassification {
  * met, else operating. Thresholds are inputs, not hardcodes — 75%/90% are the
  * customary bright lines but an entity's stated policy governs.
  */
+/** Classification month counts arrive from the caller alongside the agreement;
+ * a pasted or computed non-integer would otherwise die inside BigInt with a
+ * raw SyntaxError instead of the domain refusal. */
+function assertClassificationMonths(value: unknown, label: string): void {
+  if (value == null) return;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new LeaseError(`${label} must be a non-negative whole number of months`);
+  }
+}
+
+/** Classification money/threshold strings feed exact BigInt arithmetic; junk
+ * would otherwise die inside the money module with a raw Error. Scale 4
+ * matches the ledger precision every downstream conversion can represent. */
+function assertClassificationDecimal(value: unknown, label: string): void {
+  if (value == null) return;
+  if (canonicalDecimal(value, 4) === null) {
+    throw new LeaseError(`${label} must be an exact decimal`);
+  }
+}
+
+function assertClassificationInputs(inputs: LeaseClassificationInputs): void {
+  assertClassificationMonths(inputs.leaseTermMonths, "lease term months");
+  assertClassificationMonths(inputs.economicLifeMonths, "economic life months");
+  assertClassificationDecimal(inputs.termThresholdPercent, "term threshold percent");
+  assertClassificationDecimal(inputs.pvOfPayments, "present value of payments");
+  assertClassificationDecimal(inputs.fairValue, "fair value");
+  assertClassificationDecimal(inputs.pvThresholdPercent, "present-value threshold percent");
+}
+
 export function classifyLease(
   inputs: LeaseClassificationInputs,
   framework: ReportingFramework,
 ): LeaseClassification {
+  assertClassificationInputs(inputs);
   if (framework === "ifrs") {
     return { model: "finance", criteria: ["ifrs-single-model"], framework };
   }
@@ -259,6 +289,7 @@ export function classifyLessorLease(
   inputs: LeaseClassificationInputs & { thirdPartyResidualGuaranteePv?: string },
 ): { classification: LessorClassification; criteria: string[] } {
   const asLessee = classifyLease(inputs, "us_gaap");
+  assertClassificationDecimal(inputs.thirdPartyResidualGuaranteePv, "third-party residual guarantee");
   if (asLessee.model === "finance") {
     return { classification: "sales_type", criteria: asLessee.criteria };
   }
@@ -525,7 +556,17 @@ export async function createLeaseAgreement(
   if (cmp(paymentAmount, "0") <= 0) {
     throw new LeaseError("Payment amount must be positive");
   }
+  // payment_amount is numeric(19,4): fifteen whole digits. The format check
+  // admits any magnitude, so a pasted 20-digit amount died in Postgres with a
+  // storage error. Fail closed with the same named refusal.
+  if (paymentAmount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+    throw new LeaseError("Payment amount exceeds the supported ledger magnitude");
+  }
   const annualDiscountRatePercent = persistLeaseAnnualDiscountRate(input.annualDiscountRatePercent);
+  // annual_discount_rate_percent is numeric(19,10): nine whole digits.
+  if (annualDiscountRatePercent.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 9) {
+    throw new LeaseError("annual discount rate exceeds the supported ledger magnitude");
+  }
   if (cmp(annualDiscountRatePercent, "0") < 0) {
     throw new LeaseError("annual discount rate must be non-negative");
   }
