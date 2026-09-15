@@ -21,6 +21,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { RemittancesView } = await import('./RemittancesView')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
+import type { RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.ts'
 Object.assign(globalThis, { React })
 
 test('remittance bill payload follows edited dates while preserving unchanged range values', () => {
@@ -52,4 +53,53 @@ test('refused remittance view renders an alert and date form, without an empty b
   assert.ok(html.includes('value="2026-08-31"'))
   assert.ok(!html.includes(messages.remittances.empty))
   assert.ok(!html.includes(messages.remittances.createBill))
+})
+
+test('a scheduled destination names its authority, due date, and rule; legacy groups show none', () => {
+  const rqGroup: RemittanceGroup = {
+    partyId: '11111111-1111-4111-8111-111111111111',
+    partyName: 'Revenu Québec',
+    filingAccount: { id: 'acct-1', accountNumber: '123456789RP0009', name: 'Quebec division', remitterType: 'accelerated_2' },
+    vendorKeys: ['rqRemittancePartyId'],
+    schedule: {
+      vendorSettingsKey: 'rqRemittancePartyId',
+      authority: 'Revenu Québec',
+      frequency: 'monthly',
+      frequencySource: 'default',
+      dueDate: '2026-08-17',
+      rule: 'Revenu Québec monthly remitter (average monthly remittance $3,000 to under $25,000) — the 15th of the month following the month of the pay date',
+    },
+    provinces: ['QC'],
+    components: [
+      {
+        componentId: 'c1', code: 'QPIP', name: 'QPIP', kind: 'deduction',
+        systemKey: 'qpip', liabilityAccountId: 'liab-1', accountLabel: '2320 · RQ payable',
+        amount: '400.0000',
+      },
+    ],
+    total: '400.0000',
+    grossPayroll: '2000.0000',
+    employeeCount: 1,
+    existingBills: [],
+  }
+  const legacyGroup: RemittanceGroup = {
+    ...rqGroup,
+    partyId: '22222222-2222-4222-8222-222222222222',
+    partyName: 'Receiver General',
+    vendorKeys: ['craRemittancePartyId'],
+    schedule: null,
+  }
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={{ payroll: messages }}>
+      <MoneyProvider currency="CAD">
+        <RemittancesView groups={[rqGroup, legacyGroup]} from="2026-07-01" to="2026-07-31" canCreate={false} />
+      </MoneyProvider>
+    </NextIntlClientProvider>,
+  )
+  // The RQ card carries its destination schedule; the CRA card — dated by the
+  // legacy function at bill creation — shows no schedule line.
+  assert.ok(html.includes('Revenu Québec'))
+  assert.ok(html.includes('2026-08-17'))
+  assert.ok(html.includes('Revenu Québec monthly remitter'))
+  assert.equal(html.split('Due ').length - 1, 1)
 })

@@ -113,6 +113,19 @@ export function RemittancesView({
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {t('context', { gross: money(group.grossPayroll), employees: group.employeeCount })}
                 </p>
+                {/* A pack-declared destination schedule (Revenu Québec's) dates
+                    the bill from the destination's own timetable and names the
+                    rule, so an RQ card never shows — or implies — a CRA date.
+                    Destinations without a declared schedule show nothing: the
+                    legacy CRA-function date is stamped at bill creation. */}
+                {group.schedule && (
+                  <>
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {t('dueOn', { dueDate: group.schedule.dueDate, authority: group.schedule.authority })}
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">{group.schedule.rule}</p>
+                  </>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {group.existingBills.map((bill) => (
