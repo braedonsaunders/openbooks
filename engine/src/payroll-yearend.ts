@@ -491,6 +491,10 @@ export async function t4Summary(
      where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'
        and custom ? 'payrollRemittance'
        and custom->'payrollRemittance'->>'to' like ${`${taxYear}-%`}
+       and party_id::text = (
+         select settings->'payroll'->>'craRemittancePartyId'
+           from orgs where id = ${orgId}
+       )
        ${billAccountFilter}
   `));
   const total = (pick: (slip: T4Slip) => string) =>
