@@ -599,3 +599,129 @@ test("different document kinds sharing a number post to distinct journal identit
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("final posting proof catches dust imbalance and cross-subsidiary masking", () => {
+  // A single 0.0001 unit is real money: the kernel trigger would refuse it,
+  // so the application proof must refuse it first with a readable error.
+  assert.throws(
+    () => assertFinalKernelBalance([
+      { subsidiaryId: "A", amount: "10.0000" },
+      { subsidiaryId: "A", amount: "-9.9999" },
+    ]),
+    /does not balance/,
+  );
+  // Whole-entry balance must not mask a per-subsidiary break: +10 on A and
+  // -10 on B sum to zero yet each entity's books are wrong.
+  assert.throws(
+    () => assertFinalKernelBalance([
+      { subsidiaryId: "A", amount: "10.0000" },
+      { subsidiaryId: "B", amount: "-10.0000" },
+    ]),
+    /subsidiary A/,
+  );
+  assert.throws(
+    () => assertFinalKernelBalance([
+      { subsidiaryId: "A", amount: "10.0000" },
+      { subsidiaryId: "A", amount: "-5.0000" },
+      { subsidiaryId: "B", amount: "-5.0000" },
+    ]),
+    /subsidiary A/,
+  );
+  // A guard that only summed the whole entry would pass all three rows above.
+  // Multi-subsidiary balance with every entity at zero still passes.
+  assert.doesNotThrow(() =>
+    assertFinalKernelBalance([
+      { subsidiaryId: "A", amount: "10.0000" },
+      { subsidiaryId: "A", amount: "-10.0000" },
+      { subsidiaryId: "B", amount: "3.0000" },
+      { subsidiaryId: "B", amount: "-3.0000" },
+    ]),
+  );
+  // Degenerate projections never reach the ledger.
+  assert.throws(() => assertFinalKernelBalance([]), /fewer than 2 lines/);
+  assert.throws(
+    () => assertFinalKernelBalance([{ subsidiaryId: "A", amount: "10.0000" }]),
+    /fewer than 2 lines/,
+  );
+});
+
+test("kernel projections are deterministic: the same input posts the same lines twice", () => {
+  // Regeneration compares against the original projection; a rule that reads
+  // a clock, a random id, or iteration order would drift and every repost
+  // would look like an accounting change.
+  const doc = {
+    id: "doc",
+    kind: "vendor_bill",
+    partyId: "vendor",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as unknown as PostingDocument;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "expense",
+    amount: "100.0000",
+    taxAmount: "5.0000",
+    taxCodeId: "tax",
+  } as unknown as PostingDocumentLine;
+  const deps = {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    taxComponentsByLine: new Map([["line", [{
+      taxCodeId: "tax",
+      sequence: 1,
+      taxAmount: "5.0000",
+      recoverableAmount: "5.0000",
+      nonrecoverableAmount: "0",
+      calculationType: "standard" as const,
+      collectedAccountId: "output",
+      paidAccountId: "input",
+      withholdingAccountId: null,
+    }]]]),
+  };
+  const first = RULES.vendor_bill!(doc, [line], deps);
+  const second = RULES.vendor_bill!(doc, [line], deps);
+  assert.deepEqual(second, first);
+  assert.doesNotThrow(() =>
+    assertFinalKernelBalance(first.map((row) => ({ ...row, subsidiaryId: "sub" }))),
+  );
+  const transferFirst = RULES.transfer!(
+    transferDoc,
+    [transferLine(1, "bank-b", "100.0000"), transferLine(2, "bank-a", "0")],
+    { control: { ap: "ap", ar: "ar", bank: "bank" } },
+  );
+  assert.deepEqual(
+    RULES.transfer!(
+      transferDoc,
+      [transferLine(1, "bank-b", "100.0000"), transferLine(2, "bank-a", "0")],
+      { control: { ap: "ap", ar: "ar", bank: "bank" } },
+    ),
+    transferFirst,
+  );
+});
+
+test("open-item gating is a pure function of party presence and control designation", () => {
+  // Truth table: only party-bearing legs on designated control accounts join
+  // the subledger. A dropped party check would age anonymous GL activity; a
+  // dropped designation check would age every expense line.
+  const designated = new Set(["ar", "ap"]);
+  const cases: Array<[string, string | null | undefined, ReadonlySet<string> | undefined, boolean]> = [
+    ["ar", "customer", designated, true],
+    ["ap", "vendor", designated, true],
+    ["ar", null, designated, false],
+    ["ar", undefined, designated, false],
+    ["ar", "customer", undefined, false],
+    ["ar", "customer", new Set(), false],
+    ["expense", "vendor", designated, false],
+    ["bank", "customer", designated, false],
+    ["ap", "", designated, true],
+  ];
+  for (const [accountId, partyId, accounts, expected] of cases) {
+    assert.equal(
+      controlLineIsOpenItem(accountId, partyId, accounts),
+      expected,
+      `controlLineIsOpenItem(${accountId}, ${String(partyId)})`,
+    );
+  }
+});
