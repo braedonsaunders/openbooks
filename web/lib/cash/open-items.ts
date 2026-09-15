@@ -23,10 +23,18 @@ export async function openItems(
   subIds?: string[],
 ): Promise<OpenItem[]> {
   const acctType = side === 'ar' ? 'asset_receivable' : 'liability_payable'
-  const signFilter = side === 'ap' ? sql`jl.amount < 0` : sql`jl.amount > 0`
+  const creditKind = side === 'ap' ? 'vendor_credit' : 'customer_credit'
+  // Bills/invoices carry the side's normal sign; credit memos carry the
+  // opposite sign on the same control account. Both are open items: an
+  // unapplied credit is a negative payable/receivable that nets against the
+  // party's bills (the aging report already nets it — the forecast must too,
+  // or scheduled outflow overstates cash need).
+  const lineFilter = side === 'ap'
+    ? sql`((d.kind = ${creditKind} and jl.amount > 0) or (d.kind <> ${creditKind} and jl.amount < 0))`
+    : sql`((d.kind = ${creditKind} and jl.amount < 0) or (d.kind <> ${creditKind} and jl.amount > 0))`
   const kindFilter = side === 'ap'
-    ? sql`d.kind in ('vendor_bill', 'expense_report')`
-    : sql`d.kind = 'customer_invoice'`
+    ? sql`d.kind in ('vendor_bill', 'expense_report', ${creditKind})`
+    : sql`d.kind in ('customer_invoice', ${creditKind})`
   // `remaining` reconstructs what was still collectible AS OF the forecast
   // date — gross line minus applications dated on/before it (an application
   // unapplied only after the date still counted then). Netting live
@@ -38,17 +46,17 @@ export async function openItems(
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
-             abs(jl.amount) - coalesce((
+             (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - coalesce((
                select sum(x.amount) from applications x
                 where x.org_id = ${orgId}
                   and (x.to_line_id = jl.id or x.from_line_id = jl.id)
                   and x.applied_on <= ${asOf}
                   and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
-             ), 0) as remaining
+             ), 0)) as remaining
         from documents d
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
          and je.posting_date <= ${asOf}
-        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${signFilter}
+        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
@@ -59,7 +67,7 @@ export async function openItems(
            oi.tran_date, oi.due_date, oi.remaining, oi.func
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
-     where oi.remaining > 0
+     where oi.remaining <> 0
   `))
   // `remaining` nets in the line entity's functional currency (legs are
   // stamped functional; applications.amount is target-functional and the sign
