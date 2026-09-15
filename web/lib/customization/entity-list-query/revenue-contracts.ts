@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { dateOrFalse, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Revenue contracts                                                   */
@@ -50,15 +51,23 @@ function revenueContractFilterPredicate(clause: FilterClause): SQL | null {
     if (clause.operator === 'ne') return sql`rc.status <> ${value}`
   }
   if (clause.key === 'customer_id') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`rc.customer_id = ${value}`
     if (clause.operator === 'ne') return sql`rc.customer_id <> ${value}`
   }
   if (clause.key === 'starts_on' || clause.key === 'ends_on') {
     const column = clause.key === 'starts_on' ? sql`rc.starts_on` : sql`rc.ends_on`
+    const refused = dateOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`${column} = ${value}`
     if (clause.operator === 'gte') return sql`${column} >= ${value}`
     if (clause.operator === 'lte') return sql`${column} <= ${value}`
-    if (clause.operator === 'between') return sql`${column} between ${value} and ${String(clause.to ?? '')}`
+    if (clause.operator === 'between') {
+      const refusedTo = dateOrFalse(String(clause.to ?? ''))
+      if (refusedTo) return refusedTo
+      return sql`${column} between ${value} and ${String(clause.to ?? '')}`
+    }
   }
   return null
 }
