@@ -91,3 +91,48 @@ test("applyDocumentEdit validates partial header custom fields against the store
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("applyDocumentEdit refuses line accounts from another organization", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const foreign = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Line account keeper", "line_account_keeper");
+    const id = randomUUID();
+    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+      values (${id},${org.orgId},'vendor_bill','draft','FOREIGN-ACCT-1',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','0','0','0',${actor})`);
+    // A foreign UUID passes the global document_lines FK, so the service
+    // itself must refuse it: otherwise the tenant-coherent lines FK kills
+    // the save at the insert as an unhandled 500 deep in the transaction.
+    const foreignAccount = (await db.execute<{ id: string }>(sql`
+      select id from accounts where org_id = ${foreign.orgId} and is_active and not is_summary limit 1`)).rows[0]!.id;
+    const current = await loadDocumentEditCurrent(id, org.orgId);
+    assert.ok(current);
+    await assert.rejects(
+      applyDocumentEdit(
+        id,
+        current,
+        { lines: [{ accountId: foreignAccount, amount: "10", description: "foreign account" }], expectedUpdatedAt: current.updatedAt },
+        { orgId: org.orgId, userId: actor, source: "api" },
+      ),
+      (error: unknown) => error instanceof DocumentEditError && error.status === 404,
+    );
+    const lines = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from document_lines where document_id = ${id} and org_id = ${org.orgId}`);
+    assert.equal(lines.rows[0]?.n, 0, "the refused save stores no foreign-account line");
+    // An own-org postable account still saves.
+    const reloaded = await loadDocumentEditCurrent(id, org.orgId);
+    assert.ok(reloaded);
+    await applyDocumentEdit(
+      id,
+      reloaded,
+      { lines: [{ accountId: org.accounts.cogs, amount: "10", description: "home account" }], expectedUpdatedAt: reloaded.updatedAt },
+      { orgId: org.orgId, userId: actor, source: "api" },
+    );
+    const stored = await db.execute<{ account_id: string }>(sql`
+      select account_id from document_lines where document_id = ${id} and org_id = ${org.orgId}`);
+    assert.equal(stored.rows[0]?.account_id, org.accounts.cogs);
+  } finally {
+    await dropScratchOrg(org.orgId);
+    await dropScratchOrg(foreign.orgId);
+  }
+});
