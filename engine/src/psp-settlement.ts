@@ -11,8 +11,8 @@ import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./payment-acceptance.t
 /**
  * PSP settlement import — Stripe / Recurly / Chargebee payout batches post
  * through the inventory-style kernel path (balanced journal_entries origin
- * `document` or allocation). Fees, disputes, refunds, and FX legs are
- * evidence-backed settlement_lines. Idempotent on (org, provider, externalRef).
+ * `document` or allocation). Fees, disputes, refunds, adjustments, and FX legs
+ * are evidence-backed settlement_lines. Idempotent on (org, provider, externalRef).
  */
 
 export type PspProvider = "stripe" | "recurly" | "chargebee";
@@ -178,12 +178,7 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
   let fee = 0n;
   let refund = 0n;
   let dispute = 0n;
-  // Reserved bucket for provider adjustment legs (Chargebee amount_adjusted
-  // and its successors): reported separately from refunds so write-offs and
-  // credit-note applications never pollute refund metrics. Deducted from net
-  // by the writer change that persists and posts it; until then it reads
-  // zero and the net formula below is exactly the historical one.
-  const adjustment = 0n;
+  let adjustment = 0n;
   let fx = 0n;
   for (const l of lines) {
     const u = toUnits(l.amount);
@@ -198,6 +193,9 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
       case "refund":
         refund += u < 0n ? -u : u;
         break;
+      case "adjustment":
+        adjustment += u < 0n ? -u : u;
+        break;
       case "dispute":
         dispute += u < 0n ? -u : u;
         break;
@@ -211,8 +209,8 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
         gross += u;
     }
   }
-  // Net = gross − fees − refunds − disputes + fx
-  const net = gross - fee - refund - dispute + fx;
+  // Net = gross − fees − refunds − disputes − adjustments + fx
+  const net = gross - fee - refund - dispute - adjustment + fx;
   return {
     grossAmount: fromUnits(gross),
     feeAmount: fromUnits(fee),
@@ -389,7 +387,33 @@ export function parseRecurlySettlement(payload: {
   };
 }
 
-/** Chargebee invoice / transaction settlement subset. */
+/**
+ * Chargebee invoice settlement subset.
+ *
+ * Contract (item 6A): the receipt books amount_paid — cash the provider
+ * actually collected (successful linked payments) — never the billed total.
+ * amount_adjusted (write-offs, credit-note applications; a non-negative
+ * magnitude here) posts as its own `adjustment` leg against the customer,
+ * carrying adjustment_reason when the export surfaces one, so adjustments
+ * never pollute refund metrics. credits_applied (applied
+ * promotional/excess-payment credits: this subset's scalar for the
+ * provider's applied-credit sums) keeps its existing refund leg.
+ *
+ * Two bigint-exact identities are enforced before any write, each naming the
+ * invoice id on failure:
+ *   1. provider-total foot — total == amount_paid + adjustments + credits
+ *      applied (the provider's own amount_due identity, less taxes withheld,
+ *      which live outside this subset). Catches outstanding dues and
+ *      incoherent provider numbers. This adapter nets no provider fees, so
+ *      the generalized "(+ fees where netted)" term is zero here; the
+ *      shared writer's net identity is the cross-provider form.
+ *   2. booked-net identity — summarizeSettlement(lines).net == amount_paid.
+ *      Catches line-item detail that drifts from the provider total
+ *      (invoice-level discounts/taxes outside this subset shape). Recourse
+ *      is in the error: re-import without line items to book the total.
+ * Together they guarantee the posted bank leg equals amount_paid exactly.
+ * A negative amount_paid is refused outright (the provider minimum is zero).
+ */
 export function parseChargebeeSettlement(payload: {
   id: string;
   date?: number | string;
@@ -416,12 +440,21 @@ export function parseChargebeeSettlement(payload: {
     payload.total == null
       ? null
       : fromChargebeeMinorUnits(payload.total, "Chargebee total", false, currency);
-  if (payload.amount_paid != null) {
-    fromChargebeeMinorUnits(payload.amount_paid, "Chargebee amount paid", false, currency);
+  const paid =
+    payload.amount_paid == null
+      ? null
+      : fromChargebeeMinorUnits(payload.amount_paid, "Chargebee amount paid", false, currency);
+  if (paid != null && cmp(paid, "0") < 0) {
+    throw new PspSettlementError("Chargebee amount paid must not be negative");
   }
-  if (payload.amount_adjusted != null) {
-    fromChargebeeMinorUnits(payload.amount_adjusted, "Chargebee amount adjusted", false, currency);
+  const adjusted =
+    payload.amount_adjusted == null
+      ? null
+      : fromChargebeeMinorUnits(payload.amount_adjusted, "Chargebee amount adjusted", true, currency);
+  if (payload.adjustment_reason != null && typeof payload.adjustment_reason !== "string") {
+    throw new PspSettlementError("Chargebee adjustment reason must be a string");
   }
+  const adjustmentReason = (payload.adjustment_reason ?? "").trim();
   const settlementDate =
     typeof payload.date === "number"
       ? new Date(payload.date * 1000).toISOString().slice(0, 10)
@@ -472,6 +505,44 @@ export function parseChargebeeSettlement(payload: {
       description: "Credits applied",
       currency,
     });
+  }
+  if (adjusted != null && payload.amount_adjusted !== 0) {
+    lines.push({
+      kind: "adjustment",
+      amount: adjusted,
+      externalRef: `${payload.id}_adjustment`,
+      description: adjustmentReason
+        ? `Chargebee adjustment (${adjustmentReason})`
+        : "Chargebee adjustment",
+      currency,
+      meta: adjustmentReason ? { chargebeeReason: adjustmentReason } : {},
+    });
+  }
+  // Fail closed before any write: an unfooted invoice must never book its
+  // billed total as received, nor a bank leg that differs from collected cash.
+  if (total != null && paid != null) {
+    const explained =
+      toUnits(paid) +
+      (adjusted != null ? toUnits(adjusted) : 0n) +
+      (creditsApplied != null ? toUnits(creditsApplied) : 0n);
+    if (toUnits(total) !== explained) {
+      const diff = toUnits(total) - explained;
+      const tail =
+        diff > 0n
+          ? ` (${fromUnits(diff)} still due)`
+          : ` (${fromUnits(-diff)} over-applied)`;
+      throw new PspSettlementError(
+        `Chargebee invoice ${payload.id} does not reconcile: total ${total} != amount paid ${paid} + adjustments ${adjusted ?? fromUnits(0n)} + credits applied ${creditsApplied ?? fromUnits(0n)}${tail}`,
+      );
+    }
+  }
+  if (paid != null) {
+    const net = summarizeSettlement(lines).netAmount;
+    if (toUnits(net) !== toUnits(paid)) {
+      throw new PspSettlementError(
+        `Chargebee invoice ${payload.id} books net ${net} but amount collected is ${paid}: line-item detail does not foot to the provider total; re-import without line items to book the provider total`,
+      );
+    }
   }
   return {
     provider: "chargebee",
