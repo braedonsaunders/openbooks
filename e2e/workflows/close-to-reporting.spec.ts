@@ -8,6 +8,7 @@ import {
   field,
   expect,
   draftSeedDocument,
+  extractPdfText,
   ok,
   postSeedDocument,
   postSeedJournal,
@@ -654,6 +655,97 @@ test.describe.serial("close to reporting", () => {
       await expect(row).toContainText("$5,000.00");
       await expect(row).toContainText("$2,000.00");
       await expect(row).toContainText("$3,000.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("book and subsidiary filters isolate the seeded scopes", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      // Adjusting book: only the 10,000 depreciation entry.
+      await page.goto(`/reports/pnl?${range}&book=${SEED.adjustingBookId}`);
+      const adjusting = page.locator("main");
+      await expect(adjusting.locator("tr", { hasText: "Total Expenses" })).toContainText("$10,000.00");
+      await expect(adjusting.locator("tr", { hasText: "Net income" }).last()).toContainText("($10,000.00)");
+      await expect(adjusting).not.toContainText("$25,000.00");
+      // Root subsidiary consolidates its children: identical to unfiltered.
+      await page.goto(`/reports/pnl?${range}&sub=${SEED.rootSubId}`);
+      const subA = page.locator("main");
+      await expect(subA.locator("tr", { hasText: "Total Revenue" })).toContainText("$25,000.00");
+      await expect(subA.locator("tr", { hasText: "Net income" }).last()).toContainText("$6,500.00");
+      // Child subsidiary isolates its own activity: 8,000 revenue, 6,500 net.
+      await page.goto(`/reports/pnl?${range}&sub=${SEED.subBId}`);
+      const subB = page.locator("main");
+      await expect(subB.locator("tr", { hasText: "Total Revenue" })).toContainText("$8,000.00");
+      await expect(subB.locator("tr", { hasText: "Net income" }).last()).toContainText("$6,500.00");
+      // Row-level partition: the child's aging names only its own customer.
+      await page.goto(`/reports/aging?${range}&sub=${SEED.subBId}`);
+      const subBAging = page.locator("main");
+      await expect(subBAging.locator("tr", { hasText: "Beacon Grocers" })).toContainText("$8,000.00");
+      await expect(subBAging.locator("tr", { hasText: "Harbourlight Foods" })).toHaveCount(0);
+      await page.goto(`/reports/aging?${range}`);
+      await expect(page.locator("main").locator("tr", { hasText: "Harbourlight Foods" })).toContainText("$12,000.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("comparative columns show the prior period beside the closed one", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/pnl?${range}&compare=prior_period`);
+      const main = page.locator("main");
+      // Current period and the 6,000 prior-month revenue side by side.
+      const revenue = main.locator("tr", { hasText: "Total Revenue" });
+      await expect(revenue).toContainText("$25,000.00");
+      await expect(revenue).toContainText("$6,000.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("drill-down lines sum to the statement cell", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/pnl?${range}`);
+      const main = page.locator("main");
+      await main.locator("tr", { hasText: "Total Revenue" }).getByRole("link").click();
+      await page.waitForURL(/reportDrill=/);
+      // The drill drawer (mounted outside main) carries its own net total
+      // equal to the statement cell, and its lines are the three seeded
+      // revenue postings (12,000 + 8,000 + 5,000).
+      await expect(page.getByText(/Net total\s*\$25,000\.00/)).toBeVisible();
+      await expect(page.getByText("INV-00001").first()).toBeVisible();
+      await expect(page.getByText("INV-00002").first()).toBeVisible();
+      const body = page.locator("body");
+      await expect(body).toContainText("$12,000.00");
+      await expect(body).toContainText("$8,000.00");
+      await expect(body).toContainText("$5,000.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("PDF exports render the same numbers as the screen", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      for (const [kind, figures] of [
+        ["pnl", ["25,000.00", "16,500.00", "6,500.00"]],
+        ["balance-sheet", ["32,500.00", "20,000.00", "5,000.00"]],
+        ["trial-balance", ["32,500.00", "20,000.00", "74,500.00"]],
+      ] as [string, string[]][]) {
+        const res = await page.request.get(
+          `${baseURL}/api/reports/statement/${kind}/export?format=pdf&period=custom&from=${P.from}&to=${P.to}`,
+          { headers: { Origin: new URL(baseURL!).origin } },
+        );
+        expect(res.ok(), `${kind} pdf: ${res.status()}`).toBe(true);
+        const text = extractPdfText(await res.body());
+        expect(text.length, `${kind} pdf text`).toBeGreaterThan(100);
+        for (const figure of figures) {
+          expect(text, `${kind} pdf shows ${figure}`).toContain(figure);
+        }
+      }
     } finally {
       await context.close();
     }
