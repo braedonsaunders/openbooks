@@ -33,6 +33,11 @@ function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 type QueryExecutor = Pick<typeof db, 'execute'>
 
 type LockedOpportunityRow = {
@@ -148,6 +153,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const quantity = canonicalDecimal(line.quantity, 4)
         const unitPrice = canonicalDecimal(line.unitPrice, 4)
         if (quantity === null || unitPrice === null) throw new Error('invalid lines')
+        if (wholeDigits(quantity) > 15 || wholeDigits(unitPrice) > 15) {
+          throw new Error('line quantities and prices must fit the ledger (at most 15 whole digits)')
+        }
         return {
           quantity,
           unitPrice: normalizeMoney(unitPrice),
@@ -201,6 +209,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     for (const member of team) {
       const contribution = canonicalDecimal(member.contributionPercent, 4)
       if (contribution === null) return NextResponse.json({ error: 'invalid sales-team contribution' }, { status: 422 })
+      if (wholeDigits(contribution) > 15) return NextResponse.json({ error: 'sales-team contributions must fit the ledger (at most 15 whole digits)' }, { status: 422 })
       teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) })
     }
     try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 422 }) }
@@ -211,11 +220,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (raw == null || raw === '') return null
     const exact = canonicalDecimal(raw, 4)
     if (exact === null || compareDecimal(exact, '0') < 0) return 'invalid'
+    if (wholeDigits(exact) > 15) return 'too-wide'
     return normalizeMoney(exact)
   }
   const rangeLow = body.rangeLow !== undefined ? rangeMoney(body.rangeLow) : undefined
   const rangeHigh = body.rangeHigh !== undefined ? rangeMoney(body.rangeHigh) : undefined
   if (rangeLow === 'invalid' || rangeHigh === 'invalid') return NextResponse.json({ error: 'range must be a non-negative amount' }, { status: 422 })
+  if (rangeLow === 'too-wide' || rangeHigh === 'too-wide') return NextResponse.json({ error: 'range must fit the ledger (at most 15 whole digits)' }, { status: 422 })
 
   try {
     await db.transaction(async (tx) => {
