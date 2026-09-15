@@ -12,6 +12,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../../../lib/features'
+import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const runtime = 'nodejs'
 
@@ -121,6 +122,15 @@ export async function PATCH(req: Request) {
   if (b.invoicingProfile) {
     const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
     if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
+  }
+  // An impossible date ('2026-02-30') would otherwise reach the version
+  // queries, whose ::date casts throw a raw driver error surfaced as a 422
+  // with a Postgres message instead of a field error.
+  if (b.financialProfile && b.financialEffectiveFrom !== undefined) {
+    const financialEffectiveFrom = String(b.financialEffectiveFrom)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(financialEffectiveFrom) || !isCalendarDate(financialEffectiveFrom)) {
+      return NextResponse.json({ error: 'financialEffectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
+    }
   }
   const fieldTicketsEnabled = b.invoicingProfile
     ? await isFeatureEnabled(orgId, 'fieldTickets')
