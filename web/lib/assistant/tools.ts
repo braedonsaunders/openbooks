@@ -372,9 +372,13 @@ const findDocuments: AssistantToolDef = {
       };
     }
     const limit = Math.min(a.limit ?? 20, 50);
+    // The UI documents surfaces scope every listing to the caller's visible
+    // legal entities; the assistant search must match, or a restricted caller
+    // lists cross-subsidiary documents through this tool.
+    const documentScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds);
     let where = a.kind
-      ? sql`d.kind = ${a.kind} and d.org_id = ${authz.user.orgId}`
-      : sql`d.org_id = ${authz.user.orgId} and d.kind in ${kinds}`;
+      ? sql`d.kind = ${a.kind} and d.org_id = ${authz.user.orgId}${documentScope}`
+      : sql`d.org_id = ${authz.user.orgId} and d.kind in ${kinds}${documentScope}`;
     if (a.status) where = sql`${where} and d.status = ${a.status}`;
     if (a.query) {
       const like = `%${a.query}%`;
@@ -440,12 +444,15 @@ const getDocument: AssistantToolDef = {
   inputSchema: z.object({ documentId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { documentId: string };
+    // A document outside the caller's legal-entity scope reads as missing —
+    // the same indistinguishability the UI single-record routes give.
     const doc = (await db.execute<any>(sql`
       select d.*, ${documentRevisionSql(sql.raw("d.updated_at"))} as "documentRevision",
              p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
     `));
     const d = doc.rows[0];
     if (!d) return { ok: false, error: "document_not_found" };
