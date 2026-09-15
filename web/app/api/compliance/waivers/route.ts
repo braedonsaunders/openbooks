@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
@@ -47,6 +47,15 @@ export async function POST(req: Request) {
   }
   const effectiveFrom = body.effectiveFrom ?? (await businessToday(orgId))
   if (!body.expiresOn) return NextResponse.json({ error: 'an exception must have an end date' }, { status: 400 })
+  // Date.parse normalises non-calendar dates (2026-09-31 becomes October
+  // 1st), so the span math below would bless them and the write would die in
+  // the date column, leaking the full INSERT through the catch below. Refuse
+  // anything that is not a real calendar date before any write is attempted.
+  for (const [label, value] of [['start date', effectiveFrom], ['end date', body.expiresOn]] as const) {
+    if (!isIsoCalendarDate(value)) {
+      return NextResponse.json({ error: `the ${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 400 })
+    }
+  }
   const span = Math.round(
     (Date.parse(`${body.expiresOn}T00:00:00Z`) - Date.parse(`${effectiveFrom}T00:00:00Z`)) / 86_400_000,
   )
