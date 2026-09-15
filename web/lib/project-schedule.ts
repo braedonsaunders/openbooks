@@ -11,6 +11,8 @@ import type {
 } from '@braedonsaunders/appkit-scheduling'
 import { wouldCreateDependencyCycle } from '@braedonsaunders/appkit-scheduling'
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-decimal'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { isUuid } from './list-params'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 
 /**
@@ -218,7 +220,24 @@ const TASK_COLUMNS: Record<string, string> = {
   actualEnd: 'schedule_actual_end',
 }
 
+/** Patch keys that write DATE columns (actual* do not end in "Date"). */
+const DATE_KEYS = new Set([
+  'startDate', 'endDate', 'constraintDate', 'deadlineDate', 'actualStart', 'actualEnd',
+])
+
 function patchValue(key: string, value: unknown) {
+  if (value === '' && DATE_KEYS.has(key)) return null
+  // Strict calendar boundary: a shape-valid non-day such as February 30
+  // would otherwise reach the DATE columns and surface as a 500 from
+  // PostgreSQL instead of failing closed here.
+  if (DATE_KEYS.has(key) && value != null && value !== '') {
+    if (!isIsoCalendarDate(value)) throw new ScheduleError(`${key} must be a valid date`, 422)
+  }
+  // Reference columns are uuid-typed: a malformed id would likewise escape
+  // as a cast error instead of failing closed.
+  if ((key === 'parentTaskId' || key === 'calendarId') && value != null && value !== '') {
+    if (!isUuid(String(value))) throw new ScheduleError(`${key} must be a valid id`, 422)
+  }
   if (value === '' && key.endsWith('Date')) return null
   if (key === 'progress') {
     const fraction = Number(value)
@@ -280,6 +299,9 @@ async function applyTaskPatch(
       delete from schedule_task_assignments where org_id = ${orgId} and task_id = ${taskId}`)
     for (const assignment of patch.resourceAssignments) {
       if (!assignment.resourceId) continue
+      if (!isUuid(String(assignment.resourceId))) {
+        throw new ScheduleError('assignment resource must be a valid resource', 422)
+      }
       const units = persistScheduleAssignmentUnits(assignment.units)
       if (units === 'invalid') {
         throw new ScheduleError('assignment units must be a number with no more than four decimal places', 422)
