@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,9 @@ export async function GET(req: Request) {
   const to = url.searchParams.get("to");
   if ((!account && !party) || !from || !to) {
     return NextResponse.json({ error: "account or party, plus from/to required" }, { status: 400 });
+  }
+  if ((account && !isUuid(account)) || (party && !isUuid(party))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
   if (account) {
