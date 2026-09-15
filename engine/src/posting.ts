@@ -1603,13 +1603,20 @@ export async function postDocument(
   }
   // Credit memos are stated in their own direction — positive lines, positive
   // total — with the kernel flipping the sign at posting. A negative-total
-  // credit would post backwards (debit AR, credit income): a shadow invoice
-  // outside every invoice-gated control, from dunning to capacity. A balance
-  // the customer owes is an invoice, not a credit. Migrations replaying
-  // source-system history pass deps.migration and are unaffected.
+  // credit would post backwards: a customer credit becomes a shadow invoice
+  // (debit AR, credit income) outside every invoice-gated control, from
+  // dunning to capacity, and a vendor credit becomes a shadow bill (debit
+  // expense, credit AP). A balance owed by the customer is an invoice; a
+  // balance owed to a vendor is a bill. Migrations replaying source-system
+  // history pass deps.migration and are unaffected.
   if (doc.kind === "customer_credit" && !deps.migration && toUnits(doc.total) < 0n) {
     throw new PostingError(
       `a credit memo must carry a positive total; a negative balance owed by the customer is an invoice`,
+    );
+  }
+  if (doc.kind === "vendor_credit" && !deps.migration && toUnits(doc.total) < 0n) {
+    throw new PostingError(
+      `a credit memo must carry a positive total; a negative balance owed to the vendor is a bill`,
     );
   }
   if (
