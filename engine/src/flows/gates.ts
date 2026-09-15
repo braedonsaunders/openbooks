@@ -1105,6 +1105,24 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     )
     .onConflictDoNothing();
 
+  // Durable routing evidence, part of the same atomic unit: the scheduler
+  // seats new approvers with no human actor, so the before/after must carry
+  // a system identity — a null actor_id that never impersonates a user. An
+  // audit failure rolls the escalation back with it.
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${gate.orgId}, 'flow_gates', ${gateId}, 'update', ${JSON.stringify({
+      event: "escalated",
+      actor: { kind: "system", reason: "overdue-approval-escalation" },
+      before: { status: "pending", assigneeUserId: gate.assigneeUserId },
+      after: { status: "escalated", replacementAssigneeUserIds: replacements.map((u) => u.id) },
+      runId: gate.runId,
+      flowId: gate.flowId,
+      subjectKind: gate.subjectKind,
+      subjectId: gate.subjectId,
+    })}::jsonb, null)
+  `);
+
   // Notify each replacement (fetch the fresh rows so notifyGateAssignee has
   // real gate rows — also skips any that already existed via onConflict).
   const fresh = await db
