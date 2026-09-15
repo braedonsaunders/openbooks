@@ -26,20 +26,22 @@ test('budget scenario rows and totals honor the caller subsidiary scope', { skip
     const mixedScenario = randomUUID()
     const hiddenScenario = randomUUID()
     const emptyScenario = randomUUID()
+    const hiddenYearScenario = randomUUID()
     await withBypass(async () => {
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden budget entity', 'CAD', 'CA')
       `)
-      for (const [id, name] of [
-        [visibleScenario, 'Visible budget'],
-        [mixedScenario, 'Mixed budget'],
-        [hiddenScenario, 'Hidden budget'],
-        [emptyScenario, 'Empty budget'],
+      for (const [id, name, fiscalYear] of [
+        [visibleScenario, 'Visible budget', 2026],
+        [mixedScenario, 'Mixed budget', 2026],
+        [hiddenScenario, 'Hidden budget', 2026],
+        [emptyScenario, 'Empty budget', 2026],
+        [hiddenYearScenario, 'Hidden year budget', 2027],
       ] as const) {
         await db.execute(sql`
           insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-          values (${id}, ${scratch.orgId}, ${scratch.bookId}, 2026, ${`${name}-${id.slice(0, 8)}`}, 'budget', 'draft')
+          values (${id}, ${scratch.orgId}, ${scratch.bookId}, ${fiscalYear}, ${`${name}-${id.slice(0, 8)}`}, 'budget', 'draft')
         `)
       }
       await db.execute(sql`
@@ -84,6 +86,11 @@ test('budget scenario rows and totals honor the caller subsidiary scope', { skip
        where ${unrestrictedWhere}
     `)
     assert.ok(unrestrictedRows.rows.some((row) => row.id === emptyScenario))
+
+    const yearFilter = source.quickFilters.find((filter) => filter.filterKey === 'fiscal_year')
+    assert.ok(yearFilter?.loadOptions)
+    const years = await yearFilter.loadOptions(scratch.orgId, allowed)
+    assert.deepEqual(years.map((option) => option.value), ['2026'])
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
