@@ -17,7 +17,7 @@ import {
 import { undeclaredJurisdictionHolidayConflict } from "./payroll-holidays.ts";
 import { payRunReadiness } from "./payroll-readiness.ts";
 import {
-  calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
+  calculatePayRun, captureCalculatedStubs, commitPayRun, createPayRun, seedPayrollComponents,
   statutoryHolidayLinesForStub,
 } from "./payroll-run.ts";
 import { createScratchOrg, seedFlowActors } from "./test-fixtures.ts";
@@ -467,6 +467,89 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
     }),
     /components looked up before the gate passed/,
   );
+});
+
+test("the holiday calculation honours the caller's subsidiary scope", async () => {
+  // Subsidiary-scope pin: with a restricted caller scope, an in-scope
+  // employee calculates and an out-of-scope (or unknown) one is refused as
+  // not found — before any component lookup. Negating the gate throws on the
+  // in-scope employee instead (blocking every scoped run) and waves the
+  // out-of-scope one through to a cross-subsidiary stub.
+  const scopedTx = {
+    execute: async () => ({ rows: [{ subsidiary_id: "sub-1" }] }),
+  } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
+  const emptyTx = {
+    execute: async () => ({ rows: [] }),
+  } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
+  const need = () => {
+    throw new Error("components looked up before the scope gate passed");
+  };
+  const base = {
+    orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
+    emp: { party_id: "emp-1", display_name: "Ann", labour_jurisdiction: null },
+    country: "CA", province: "ZZ", periodStart: "2026-07-06", periodEnd: "2026-07-18",
+    payRate: null, need,
+  } as Parameters<typeof statutoryHolidayLinesForStub>[1];
+  // In scope (ZZ, no holiday in the period): calculates to no lines.
+  assert.deepEqual(
+    await statutoryHolidayLinesForStub(scopedTx, {
+      ...base, allowedSubsidiaryIds: new Set(["sub-1"]),
+    }),
+    [],
+  );
+  // Out of scope: refused as not found.
+  await assert.rejects(
+    statutoryHolidayLinesForStub(scopedTx, {
+      ...base, allowedSubsidiaryIds: new Set(["sub-9"]),
+    }),
+    /employee not found/,
+  );
+  // Unknown employee: refused as not found.
+  await assert.rejects(
+    statutoryHolidayLinesForStub(emptyTx, {
+      ...base, allowedSubsidiaryIds: new Set(["sub-1"]),
+    }),
+    /employee not found/,
+  );
+});
+
+test("captured stubs aggregate every line row under one employee", async () => {
+  // Capture pin: one stub row per line row must fold into a single stub —
+  // recreating the stub per row keeps only the last line and drops the rest
+  // of the cheque. A lineless stub still exists (the outer join keeps it).
+  const rows = [
+    {
+      employee_party_id: "e1", province: "ON", gross: "100.00", net_pay: "80.00",
+      employer_cost: "110.00", component_id: "c1", system_key: "wages", kind: "earning",
+      description: "Wages", hours: "10", rate: "10.00", amount: "100.00",
+      project_id: null, department_id: null, time_type_id: null, sequence: 1,
+    },
+    {
+      employee_party_id: "e1", province: "ON", gross: "100.00", net_pay: "80.00",
+      employer_cost: "110.00", component_id: "c2", system_key: "income_tax", kind: "deduction",
+      description: "Income tax", hours: null, rate: null, amount: "20.00",
+      project_id: null, department_id: null, time_type_id: null, sequence: 2,
+    },
+    {
+      employee_party_id: "e2", province: "QC", gross: "50.00", net_pay: "40.00",
+      employer_cost: "55.00", component_id: null, system_key: null, kind: null,
+      description: null, hours: null, rate: null, amount: null,
+      project_id: null, department_id: null, time_type_id: null, sequence: null,
+    },
+  ];
+  const tx = {
+    execute: async () => ({ rows }),
+  } as unknown as Parameters<typeof captureCalculatedStubs>[0];
+  const stubs = await captureCalculatedStubs(tx, "o", "d");
+  assert.equal(stubs.length, 2);
+  const first = stubs[0]!;
+  assert.equal(first.employeePartyId, "e1");
+  assert.equal(first.gross, "100.00");
+  assert.equal(first.lines.length, 2);
+  assert.deepEqual(first.lines.map((l) => l.systemKey), ["wages", "income_tax"]);
+  const second = stubs[1]!;
+  assert.equal(second.employeePartyId, "e2");
+  assert.deepEqual(second.lines, [], "a lineless stub exists with no lines");
 });
 
 /* ------------------------------------------------------------------ */
