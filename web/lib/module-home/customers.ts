@@ -5,6 +5,7 @@ import {
 } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
+import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
 import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'
 import { isFeatureEnabled } from '../features'
@@ -141,12 +142,14 @@ export async function customersHome(
   const dsoScope = subArr ? sql` and bl.subsidiary_id = any(${subArr})` : sql``
   const q = calendarQuarterBounds(today)
 
-  const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast, orgRes] = (await Promise.all([
+  const [arRes, dsoRes, topRes, trendRes, badgeRes, collectedRowsRes, forecast, orgRes] = (await Promise.all([
     // Open receivables aggregate — open customer-invoice items with remaining
     // balance (the same open-item shape the cash engine reads, aggregated).
+    // Legs are stamped in their line entity's functional: aggregate per
+    // functional and translate to presentation below.
     db.execute(sql`
       with oi as (
-        select jl.party_id, jl.due_date,
+        select jl.party_id, jl.due_date, sub.base_currency as func,
                abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
                   where x.org_id = ${orgId}
@@ -159,13 +162,15 @@ export async function customersHome(
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
            and d.open_balance > 0
+          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
          where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
-      select coalesce(sum(remaining), 0) as outstanding,
+      select oi.func,
+             coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
              count(*) filter (where remaining > 0) as open_count,
              count(*) filter (where remaining > 0 and due_date < ${today}) as overdue_count
-        from oi where remaining > 0
+        from oi where remaining > 0 group by oi.func
     `),
     // Days-sales-outstanding is its own query so it runs BESIDE the open-item
     // aggregate instead of after it — as a scalar subquery the two costs added
@@ -184,9 +189,10 @@ export async function customersHome(
          and pl.posting_date <= ${today}${dsoScope}
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.
+    // Per (party, functional): the translated ranking happens in JS below.
     db.execute(sql`
       with oi as (
-        select jl.party_id, jl.due_date,
+        select jl.party_id, jl.due_date, sub.base_currency as func,
                abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
                   where x.org_id = ${orgId}
@@ -199,9 +205,10 @@ export async function customersHome(
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
            and d.open_balance > 0
+          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
          where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
-      select oi.party_id, coalesce(p.display_name, 'Unspecified') as name,
+      select oi.party_id, oi.func, coalesce(p.display_name, 'Unspecified') as name,
              sum(oi.remaining) as open,
              sum(oi.remaining) filter (where oi.due_date < ${today}) as overdue,
              count(*) as open_invoices,
@@ -216,23 +223,27 @@ export async function customersHome(
            where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed
              and o.party_id = oi.party_id) opp on true` : sql``}
        where oi.remaining > 0
-       group by oi.party_id, p.display_name${crmOn ? sql`, opp.n` : sql``}
-       order by sum(oi.remaining) desc
-       limit 10
+       group by oi.party_id, oi.func, p.display_name${crmOn ? sql`, opp.n` : sql``}
     `),
     // 13-week collections trend (posted customer payments by week). `total`
     // is denominated in the document's transaction currency, so convert each
-    // receipt with its posting FX rate before adding unlike currencies.
+    // receipt with its posting FX rate (first leg) before adding unlike
+    // currencies; the second leg to presentation runs per (week, functional)
+    // below.
     db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
+             sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
              coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as collected
         from documents d
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status = 'posted'
          and d.voided_at is null${docScope}
          and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
-       group by 1
+       group by 1, 2
     `),
-    // Directory badges — cheap counts for the workspace's other pages.
+    // Directory badges — cheap counts for the workspace's other pages (the
+    // collected-value scalar moved to the row query below for translation).
     db.execute(sql`
       select
         ${crmOn ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
@@ -244,12 +255,20 @@ export async function customersHome(
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as receipts_7d,
-        (select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
-          and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as collected_7d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
+    `),
+    // 7-day collection value per (date, functional) for presentation translation.
+    db.execute(sql`
+      select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
+             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
+        from documents d
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where d.org_id = ${orgId} and d.kind = 'customer_payment'
+         and d.status = 'posted' and d.voided_at is null${docScope}
+         and coalesce(d.document_date, d.posting_date) >= ${ago7}
+       group by 1, 2
     `),
     crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
     db.execute<{ baseCurrency: string }>(sql`
@@ -257,9 +276,75 @@ export async function customersHome(
     `),
   ]))
 
-  const byWeek = new Map(trendRes.rows.map((r) => [String(r.wk).slice(0, 10), Number(r.collected)]))
+  // Presentation: balances translate at the tile-date (closing) spot, flows at
+  // their document-date spot. Missing coverage fails closed.
+  const base = await presentationCurrency(orgId)
+  const balRates = await presentationRates(
+    orgId,
+    base,
+    [...arRes.rows.map((r) => (r.func ?? null) as string | null), ...topRes.rows.map((r) => (r.func ?? null) as string | null)],
+    today,
+  )
+  const trBal = (amount: unknown, func: unknown): number =>
+    Number(mulDecimal(String(amount ?? 0), balRates.get(lineFunctional(typeof func === "string" ? func : null, base))!))
+  // Each week bucket translates at its latest document date, so the rate
+  // lookup never runs ahead of the data it translates.
+  const trendCtx = await flowRates(
+    orgId,
+    trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
+  )
+  const byWeek = new Map<string, number>()
+  for (const r of trendRes.rows) {
+    const wk = String(r.wk).slice(0, 10)
+    const late = String(r.late ?? r.wk).slice(0, 10)
+    const collected = Number(mulDecimal(String(r.collected ?? 0), trendCtx.rateAt((r.func ?? null) as string | null, late)))
+    byWeek.set(wk, (byWeek.get(wk) ?? 0) + collected)
+  }
+  const collected7d = Number(await translateFlows(
+    orgId,
+    collectedRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
+  ))
 
-  const ar = arRes.rows[0] ?? {}
+  // Open-receivables vitals: per-functional balances summed in presentation.
+  let arOutstanding = 0
+  let arOverdue = 0
+  let openInvoices = 0
+  let overdueInvoices = 0
+  for (const r of arRes.rows) {
+    arOutstanding += trBal(r.outstanding, r.func)
+    arOverdue += trBal(r.overdue, r.func)
+    openInvoices += Number(r.open_count ?? 0)
+    overdueInvoices += Number(r.overdue_count ?? 0)
+  }
+
+  // Hero roster: merge per-(party, functional) legs in presentation, then
+  // rank — the translated top 10, not the raw-functional top 10.
+  const byParty = new Map<string, {
+    name: string
+    open: number
+    overdue: number
+    openInvoices: number
+    openOpportunities: number
+    oldestDue: string | null
+  }>()
+  for (const r of topRes.rows) {
+    const partyId = String(r.party_id)
+    const cur = byParty.get(partyId) ?? {
+      name: String(r.name), open: 0, overdue: 0, openInvoices: 0, openOpportunities: 0, oldestDue: null as string | null,
+    }
+    cur.open += trBal(r.open, r.func)
+    cur.overdue += trBal(r.overdue, r.func)
+    cur.openInvoices += Number(r.open_invoices ?? 0)
+    cur.openOpportunities = Math.max(cur.openOpportunities, Number(r.open_opps ?? 0))
+    const due = r.oldest_due ? String(r.oldest_due) : null
+    if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
+    byParty.set(partyId, cur)
+  }
+  const topExposure = [...byParty.entries()]
+    .map(([partyId, b]) => ({ partyId, ...b }))
+    .sort((x, y) => y.open - x.open)
+    .slice(0, 10)
+
   const dso = dsoRes.rows[0] ?? {}
   const badge = badgeRes.rows[0] ?? {}
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
@@ -267,29 +352,21 @@ export async function customersHome(
   const pipeline = await pipelineInOrgCurrency(orgId, orgCurrency, today, forecast)
 
   return {
-    arOutstanding: Number(ar.outstanding ?? 0),
-    arOverdue: Number(ar.overdue ?? 0),
-    openInvoices: Number(ar.open_count ?? 0),
-    overdueInvoices: Number(ar.overdue_count ?? 0),
+    arOutstanding,
+    arOverdue,
+    openInvoices,
+    overdueInvoices,
     activeCustomers: Number(badge.customers ?? 0),
     dsoLite: dso.dso === null || dso.dso === undefined ? null : Number(dso.dso),
     pipeline,
-    topExposure: topRes.rows.map((r: any) => ({
-      partyId: r.party_id,
-      name: r.name,
-      open: Number(r.open),
-      overdue: Number(r.overdue ?? 0),
-      openInvoices: Number(r.open_invoices),
-      openOpportunities: Number(r.open_opps ?? 0),
-      oldestDue: r.oldest_due ? String(r.oldest_due) : null,
-    })),
+    topExposure,
     trend: weekStarts.map((weekStart) => ({ weekStart, collected: byWeek.get(weekStart) ?? 0 })),
     badges: {
       openOpportunities: Number(badge.open_opps ?? 0),
       openQuotes: Number(badge.open_quotes ?? 0),
       openSalesOrders: Number(badge.open_sos ?? 0),
       receipts7d: Number(badge.receipts_7d ?? 0),
-      collected7d: Number(badge.collected_7d ?? 0),
+      collected7d,
       customers: Number(badge.customers ?? 0),
     },
     ordersEnabled: ordersOn,
