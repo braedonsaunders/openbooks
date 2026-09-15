@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
-import { formatFieldValue, type RecordStatus, type RecordTypeStatus } from './record-schema'
+import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
 
 /**
  * Server helpers for the custom-records subsystem: type/record loaders,
@@ -82,6 +82,23 @@ export async function loadRecord(
 /** Whether a custom-record definition carries the conventional subsidiary field. */
 export function hasSubsidiaryField(sections: FormSection[]): boolean {
   return sections.some((section) => section.fields.some((field) => field.id === 'subsidiary_id'))
+}
+
+/**
+ * Ids of the given types whose linted field definitions declare the
+ * conventional subsidiary_id field. Aggregate queries use it to apply the
+ * JSON subsidiary fence only where the field exists (a type that fails to
+ * lint is treated as field-less, never as scoped).
+ */
+export function subsidiaryDeclaredTypeIds(
+  types: Array<{ id: string; name: string; fields: unknown }>,
+): string[] {
+  const out: string[] = []
+  for (const type of types) {
+    const lint = lintRecordFields(type.fields, type.name)
+    if (lint.success && hasSubsidiaryField(lint.sections)) out.push(type.id)
+  }
+  return out
 }
 
 /** Fail-closed visibility check for JSON-backed subsidiary values on custom records. */

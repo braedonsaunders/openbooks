@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { pgTextArrayLiteral } from '../../../../lib/pg-array'
+import { subsidiaryDeclaredTypeIds } from '../../../../lib/records'
 
 export const runtime = 'nodejs'
 
@@ -9,10 +11,28 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
+  // A subsidiary-restricted type manager sees only the records their fence
+  // admits: scoped types count visible rows, field-less types stay
+  // org-visible. The predicate lives inside the aggregate so the (unsorted
+  // here) counts and any consumer stay consistent.
+  const fence = gate.allowedSubsidiaryIds
+  const scopedTypeIds =
+    fence === null
+      ? null
+      : subsidiaryDeclaredTypeIds(
+          (
+            await db.execute<{ id: string; name: string; fields: unknown }>(sql`
+              select id, name, fields from custom_record_types where org_id = ${gate.user.orgId}`)
+          ).rows,
+        )
+  const countScope =
+    fence === null || scopedTypeIds === null
+      ? sql``
+      : sql`and (not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[])) or cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[]))`
   const r = ((await db.execute(sql`
     select t.id, t.key, t.name, t.plural_name, t.icon_key, t.description, t.fields,
            t.status, t.show_in_nav, t.allowed_roles, t.sort_order, t.updated_at,
-           (select count(*) from custom_records cr where cr.type_id = t.id) as record_count
+           (select count(*) from custom_records cr where cr.type_id = t.id ${countScope}) as record_count
       from custom_record_types t
      where t.org_id = ${gate.user.orgId}
      order by t.sort_order, t.name

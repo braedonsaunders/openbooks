@@ -24,7 +24,8 @@ import {
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
-import { loadRecordTypeById, type RecordTypeRow } from '../../../../lib/records'
+import { loadRecordTypeById, subsidiaryDeclaredTypeIds, type RecordTypeRow } from '../../../../lib/records'
+import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { RECORD_TYPE_STATUSES } from '../../../../lib/record-schema'
 
 /**
@@ -120,13 +121,32 @@ export async function loadRecordTypes(
     ${status ? sql` and t.status = ${status}` : sql``}
     ${params.q ? sql` and (t.name ilike ${'%' + params.q + '%'} or t.plural_name ilike ${'%' + params.q + '%'} or t.key ilike ${'%' + params.q + '%'})` : sql``}`
 
+  // A subsidiary-restricted type manager sees only the records their fence
+  // admits: the aggregate counts visible rows for scoped types and stays
+  // org-wide for field-less ones. Inside the subquery so the `records` sort
+  // orders by the same visible numbers the page prints.
+  const fence = authz.allowedSubsidiaryIds
+  const scopedTypeIds =
+    fence === null
+      ? null
+      : subsidiaryDeclaredTypeIds(
+          (
+            await db.execute<{ id: string; name: string; fields: unknown }>(sql`
+              select id, name, fields from custom_record_types where org_id = ${authz.user.orgId}`)
+          ).rows,
+        )
+  const countScope =
+    fence === null || scopedTypeIds === null
+      ? sql``
+      : sql`and (not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[])) or cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[]))`
+
   const [types, counts, openType, roles] = await Promise.all([
     db.execute(sql`
       select t.id, t.key, t.name, t.plural_name, t.icon_key, t.status, t.show_in_nav,
              t.updated_at,
              (select coalesce(sum(coalesce(jsonb_array_length(elem->'fields'), 1)), 0)
                 from jsonb_array_elements(t.fields) elem) as field_count,
-             (select count(*) from custom_records cr where cr.type_id = t.id) as record_count
+             (select count(*) from custom_records cr where cr.type_id = t.id ${countScope}) as record_count
         from custom_record_types t
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
