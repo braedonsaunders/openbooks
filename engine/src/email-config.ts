@@ -316,6 +316,87 @@ export async function markEmailSuppressed(orgId: string, id: string, reason: str
   `);
 }
 
+/** Record one queued payment-remittance attempt without claiming delivery. */
+export async function markPaymentRemittanceAttempt(
+  orgId: string,
+  id: string,
+  attempt: number,
+): Promise<void> {
+  await db.execute(sql`
+    update payment_remittances
+       set attempt_count = greatest(attempt_count, ${attempt}),
+           last_attempt_at = now(), error = null, updated_at = now()
+     where id = ${id} and org_id = ${orgId} and status = 'pending'
+  `);
+}
+
+/**
+ * Mark a payment remittance failed only after a provider/queue attempt has
+ * actually failed. Before the final queue attempt it remains pending so the
+ * existing BullMQ retry can continue; a sent row is never overwritten.
+ */
+export async function markPaymentRemittanceFailed(
+  orgId: string,
+  id: string,
+  error: string,
+  attempt: number,
+  terminal: boolean,
+): Promise<void> {
+  await db.execute(sql`
+    update payment_remittances
+       set status = case when ${terminal} then 'failed' else status end,
+           attempt_count = greatest(attempt_count, ${attempt}),
+           last_attempt_at = now(), error = ${error.slice(0, 500)}, updated_at = now()
+     where id = ${id} and org_id = ${orgId} and status = 'pending'
+  `);
+}
+
+/**
+ * Confirm a queued payment remittance only after the provider accepted the
+ * email. The instruction stamp is best-effort here: a payment run may still
+ * be in its posting claim, in which case its finisher reconciles the stamp
+ * from this sent remittance once that claim commits.
+ */
+export async function markPaymentRemittanceSent(orgId: string, id: string): Promise<void> {
+  const remittance = (await db.execute<{ paymentInstructionId: string }>(sql`
+    update payment_remittances
+       set status = 'sent', sent_at = coalesce(sent_at, now()),
+           last_attempt_at = coalesce(last_attempt_at, now()),
+           error = null, updated_at = now()
+     where id = ${id} and org_id = ${orgId} and status in ('pending', 'failed')
+     returning payment_instruction_id as "paymentInstructionId"
+  `)).rows[0];
+  if (!remittance) {
+    const existing = (await db.execute<{ paymentInstructionId: string }>(sql`
+      select payment_instruction_id as "paymentInstructionId"
+        from payment_remittances
+       where id = ${id} and org_id = ${orgId} and status = 'sent'
+    `)).rows[0];
+    if (!existing) return;
+    try {
+      await db.execute(sql`
+        update payment_instructions
+           set remittance_email_sent_at = coalesce(remittance_email_sent_at, now()), updated_at = now()
+         where id = ${existing.paymentInstructionId} and org_id = ${orgId}
+           and remittance_email_sent_at is null
+      `);
+    } catch (error) {
+      console.error(`[email] payment remittance ${id} sent but instruction stamp deferred:`, error);
+    }
+    return;
+  }
+  try {
+    await db.execute(sql`
+      update payment_instructions
+         set remittance_email_sent_at = coalesce(remittance_email_sent_at, now()), updated_at = now()
+       where id = ${remittance.paymentInstructionId} and org_id = ${orgId}
+         and remittance_email_sent_at is null
+    `);
+  } catch (error) {
+    console.error(`[email] payment remittance ${id} sent but instruction stamp deferred:`, error);
+  }
+}
+
 // --- canonical delivery lineage ----------------------------------------------
 
 /** One attempt's evidence inside meta.attempts — append-only, never rewritten. */

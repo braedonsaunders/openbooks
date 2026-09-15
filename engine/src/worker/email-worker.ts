@@ -14,6 +14,9 @@ import {
   markEmailSent,
   markEmailSuppressed,
   markEmailUncertain,
+  markPaymentRemittanceAttempt,
+  markPaymentRemittanceFailed,
+  markPaymentRemittanceSent,
   resolveOrgEmailTransport,
 } from "../email-config.ts";
 import { sql } from "drizzle-orm";
@@ -55,13 +58,22 @@ export function createEmailWorker(): Worker<EmailJobData> {
       // store, so this scope is what makes those queries legal at all.
       return await withOrgContext(d.orgId, async () => {
       const reportDeliveryId = d.meta?.reportDeliveryId;
+      const paymentRemittanceId = d.meta?.paymentRemittanceId;
+      const queueAttempt = job.attemptsMade + 1;
       if (reportDeliveryId) await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
+      if (paymentRemittanceId) {
+        await markPaymentRemittanceAttempt(d.orgId, paymentRemittanceId, queueAttempt);
+      }
       // The delivery key is derived from durable inputs only — recomputing it
       // after any crash must produce the same identity (and therefore the same
       // canonical log row) instead of minting new mail.
       const deliveryKey = deriveEmailDeliveryKey({
         orgId: d.orgId,
-        scope: reportDeliveryId ? `report:${reportDeliveryId}` : job.id ?? "",
+        scope: reportDeliveryId
+          ? `report:${reportDeliveryId}`
+          : paymentRemittanceId
+            ? `payment-remittance:${paymentRemittanceId}`
+            : job.id ?? "",
         to: d.to,
       });
 
@@ -84,6 +96,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: "sandbox environment — email egress blocked",
         });
         await markEmailSuppressed(d.orgId, claimed.id, "sandbox environment — email egress blocked");
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceFailed(
+            d.orgId,
+            paymentRemittanceId,
+            "sandbox environment — email egress blocked",
+            queueAttempt,
+            true,
+          );
+        }
         if (reportDeliveryId) {
           await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "sandbox environment — email egress blocked");
         }
@@ -108,6 +129,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: "email provider not configured",
         });
         await markEmailSuppressed(d.orgId, claimed.id, "email provider not configured");
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, "email provider not configured", queueAttempt, true);
+        }
         if (reportDeliveryId) {
           await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "email provider not configured");
         }
@@ -138,6 +162,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: `not resent — accepted on a previous attempt (${decision.providerMessageId})`,
         });
         await confirmEmailSentGuarded(d.orgId, canonical.id, decision.providerMessageId);
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
+        }
         if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, decision.providerMessageId);
         return { id: decision.providerMessageId, reconciled: true };
       }
@@ -146,6 +173,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
           outcome: "blocked",
           detail: decision.reason,
         });
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, decision.reason, queueAttempt, true);
+        }
         if (reportDeliveryId) {
           const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
           await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, `delivery pending reconciliation: ${decision.reason}`, finalQueueAttempt);
@@ -188,6 +218,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
             detail: outcome.providerMessageId,
           });
           await markEmailSent(d.orgId, canonical.id, outcome.providerMessageId);
+          if (paymentRemittanceId) {
+            await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
+          }
           if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, outcome.providerMessageId);
           return { id: outcome.providerMessageId };
         }
@@ -200,6 +233,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: outcome.reason,
         });
         await markEmailUncertain(d.orgId, canonical.id, outcome.reason);
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, outcome.reason, queueAttempt, true);
+        }
         if (reportDeliveryId) {
           const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
           await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, outcome.reason, finalQueueAttempt);
@@ -218,6 +254,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
             detail: message,
           });
           await markEmailFailed(d.orgId, canonical.id, message);
+          if (paymentRemittanceId) {
+            await markPaymentRemittanceFailed(
+              d.orgId,
+              paymentRemittanceId,
+              message,
+              queueAttempt,
+              queueAttempt >= (job.opts.attempts ?? 1),
+            );
+          }
           if (reportDeliveryId) {
             const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
             await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, message, finalQueueAttempt);
