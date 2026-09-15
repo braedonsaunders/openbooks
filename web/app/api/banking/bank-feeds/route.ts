@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { sealCredentials } from "@openbooks/engine/src/bank-feed-providers.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -64,7 +65,9 @@ export async function POST(req: Request) {
   if (body.syncCadence !== undefined && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
     return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
   }
-  if (!body.accountId) return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
+  if (typeof body.accountId !== "string" || !isUuid(body.accountId)) {
+    return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
+  }
   const externalAccountId = typeof body.externalAccountId === "string"
     ? body.externalAccountId.trim()
     : "";

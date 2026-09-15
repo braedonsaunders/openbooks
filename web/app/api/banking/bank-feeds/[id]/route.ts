@@ -8,6 +8,7 @@ import {
   testBankFeedConnection,
 } from "@openbooks/engine/src/bank-feed-providers.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import { isUuid } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
+  // A malformed id names nothing: same answer as a missing connection, never
+  // a PostgreSQL uuid cast error escaping as a 500.
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const before = await loadRow(authz.user.orgId, id);
   if (!before) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -96,6 +102,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   await db.transaction(async (tx) => {
     const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
@@ -117,6 +126,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const existing = await loadRow(authz.user.orgId, id);
   if (!existing) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
