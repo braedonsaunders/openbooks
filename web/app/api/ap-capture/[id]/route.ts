@@ -5,6 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-config.ts'
 import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/ap-capture-service.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -114,6 +115,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
+  // Mandatory optimistic-concurrency evidence (same contract as document,
+  // payment, and prebill-line edits): a stale review tab autosaves over a
+  // newer correction otherwise. Checked after the gates so a missing token
+  // never leaks capture existence to an unauthorized caller.
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'A current capture revision is required; reload the capture and try again' }, { status: 409 })
+  }
+  const expectedRevision = body.expectedUpdatedAt as string
   let normalized: NormalizedCapture
   let nextVendorId: string | null | undefined
   let nextPurchaseOrderId: string | null | undefined
@@ -181,13 +190,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     saved = await withOrgTransaction(gate.user.orgId, async () => {
       const tx = db
-      const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
-        select normalized, status, document_kind, vendor_candidate_id, purchase_order_id
+      const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null; revision: string }>(sql`
+        select normalized, status, document_kind, vendor_candidate_id, purchase_order_id,
+               ${documentRevisionSql(sql`updated_at`)} as revision
           from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id} for update
       `))
       const live = locked.rows[0]
       if (!live) throw new Error('capture_not_found')
       if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')
+      // The row lock above serializes concurrent saves; the token decides the
+      // winner. A tab that read before a sibling's save committed refuses
+      // loudly instead of reverting that save's corrections.
+      if (live.revision !== expectedRevision) throw new Error('capture_revision_conflict')
       const kind = body.documentKind === undefined ? live.document_kind : body.documentKind
       if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new Error('invalid_document_kind')
       // Resolve against the kind being saved, using the same locked snapshot as
@@ -233,12 +247,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       `)
     }
     const status = resolved.duplicate ? 'duplicate' : resolved.issues.length ? 'needs_review' : 'ready'
+    // Monotonic revision writer (same discipline as document revisions): every
+    // committed save advances the token, so equal tokens always mean equal
+    // content and a stale tab can never accidentally match.
     await tx.execute(sql`
       update ap_capture_items set normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
              validation_issues = ${JSON.stringify(resolved.issues)}::jsonb, status = ${status},
              document_kind = ${kind}, vendor_candidate_id = ${resolved.vendorId},
              purchase_order_id = ${resolved.purchaseOrderId}, assigned_to = ${gate.user.id},
-             updated_at = now(), updated_by = ${gate.user.id}
+             updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+             updated_by = ${gate.user.id}
        where org_id = ${gate.user.orgId} and id = ${id}
     `)
     await tx.execute(sql`
@@ -258,9 +276,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (error instanceof Error && error.message === 'capture_not_editable') {
       return NextResponse.json({ error: 'not_editable' }, { status: 409 })
     }
+    if (error instanceof Error && error.message === 'capture_revision_conflict') {
+      return NextResponse.json({ error: 'This capture changed after you opened it; reload and reapply your corrections' }, { status: 409 })
+    }
     throw error
   }
   const { resolved, kind } = saved
+  // Fresh token for the next save: the drawer holds no revision otherwise and
+  // every follow-up keystroke would 409 against its own just-committed write.
+  const fresh = (await db.execute<{ updatedAt: string }>(sql`
+    select ${documentRevisionSql(sql`updated_at`)} as "updatedAt"
+      from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id}
+  `)).rows[0]?.updatedAt ?? expectedRevision
   return NextResponse.json({
     normalized: resolved.normalized,
     validationIssues: resolved.issues,
@@ -268,5 +295,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     purchaseOrderId: resolved.purchaseOrderId,
     status: resolved.duplicate ? 'duplicate' : resolved.issues.length ? 'needs_review' : 'ready',
     documentKind: kind,
+    updatedAt: fresh,
   })
 }
