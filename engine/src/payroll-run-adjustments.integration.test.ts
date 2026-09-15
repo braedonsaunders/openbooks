@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { PayrollError } from "./payroll-error.ts";
 import { mutatePayRunAdjustment } from "./payroll-run-adjustments.ts";
 import { createPayRun, seedPayrollComponents } from "./payroll-run.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
@@ -263,6 +264,56 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
       }),
       /pay run is not editable/,
     );
+  } finally {
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
+
+test("pay-run adjustments refuse amounts and hours the ledger columns cannot hold", { skip: !DB }, async () => {
+  // amount is numeric(19,4) and hours numeric(12,2): an oversized paste died
+  // at storage with a driver error, and 4dp hours were silently rounded to
+  // the column scale. Fail closed with a named error before any write.
+  const fixture = await payrollFixture("Magnitude");
+  try {
+    const mutations = [
+      { action: "add", employeePartyId: fixture.employeeId, componentId: fixture.componentId, amount: "9999999999999999" },
+      { action: "add", employeePartyId: fixture.employeeId, componentId: fixture.componentId, amount: "100.00", hours: "9999999999999" },
+      { action: "add", employeePartyId: fixture.employeeId, componentId: fixture.componentId, amount: "100.00", hours: "1.2345" },
+    ] as const;
+    for (const [index, mutation] of mutations.entries()) {
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          orgId: fixture.orgId,
+          documentId: fixture.documentId,
+          actorId: fixture.actorId,
+          mutation: { ...mutation },
+        }),
+        (error: unknown) =>
+          error instanceof PayrollError && /range|decimal places/.test(error.message),
+        `adjustment case ${index} should fail closed with a named error`,
+      );
+    }
+    const rows = await db.execute<{ count: string }>(sql`
+      select count(*) as count from pay_run_adjustments
+       where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}`);
+    assert.equal(rows.rows[0]!.count, "0");
+    // In-range values, including 2dp hours at the column scale, still save.
+    await mutatePayRunAdjustment({
+      orgId: fixture.orgId,
+      documentId: fixture.documentId,
+      actorId: fixture.actorId,
+      mutation: {
+        action: "add",
+        employeePartyId: fixture.employeeId,
+        componentId: fixture.componentId,
+        amount: "100.00",
+        hours: "7.50",
+      },
+    });
+    const saved = await db.execute<{ amount: string; hours: string }>(sql`
+      select amount::text as amount, hours::text as hours from pay_run_adjustments
+       where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}`);
+    assert.deepEqual(saved.rows[0], { amount: "100.0000", hours: "7.50" });
   } finally {
     await dropScratchOrgReporting(fixture.orgId);
   }
