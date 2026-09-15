@@ -54,6 +54,11 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return isUuid(s) ? s : 'invalid'
 }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 async function orgRefExists(
   kind: 'terms' | 'receivable' | 'payable' | 'expense' | 'tax' | 'salesRep' | 'department' | 'trade' | 'workerComp',
   id: string | null,
@@ -438,6 +443,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const creditLimitExact = creditLimitRaw === null ? null : canonicalDecimal(creditLimitRaw, 4)
           if (creditLimitRaw !== null && (creditLimitExact === null || compareDecimal(creditLimitExact, '0') < 0)) {
             throwBad('Credit limit must be a non-negative number')
+          }
+          if (creditLimitExact !== null && wholeDigits(creditLimitExact) > 15) {
+            throwBad('Credit limit is out of range — at most 15 whole digits fit the ledger')
           }
           const creditLimit = creditLimitExact === null ? null : fixedDecimal(creditLimitExact, 4)
           const currency = c.currency !== undefined ? (strOrNull(c.currency)?.toUpperCase() ?? null) : undefined
