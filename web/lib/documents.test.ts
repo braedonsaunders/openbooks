@@ -26,6 +26,7 @@ const {
   buildReversalLinkEvidence,
   createPostedCorrectionDraft,
   DocumentEditError,
+  loadDocumentEditCurrent,
   requireDocumentEditRevision,
   runDocumentVersionedTransaction,
   runPostedCorrectionDraftFlows,
@@ -222,6 +223,48 @@ test('a line amount wider than its ledger column fails closed with its line numb
   )
   const ok = validateEditableDocumentLines([{ accountId: 'acc-1', amount: '999999999999999.9999' }])
   assert.equal(ok[0]!.amount, '999999999999999.9999')
+})
+
+test('a malformed or impossible edit date fails closed before any write', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  // The edit service wrote document_date/due_date/posting_date/
+  // expected_pay_date verbatim: an impossible or garbage date died in
+  // Postgres with a storage error (a 500 when no lines were supplied, a
+  // leaked driver message when tax lookup ran first). Fail closed instead.
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId
+    const id = randomUUID()
+    await withBypass(() => db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, subtotal, tax_total, total, created_by)
+      values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${'EDATE-' + id.slice(0, 8)}, ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '0', '0', '0', ${actorId})`))
+    const patches: Record<string, string>[] = [
+      { documentDate: '2024-02-30' },
+      { documentDate: 'tomorrow' },
+      { dueDate: '2024-13-40' },
+      { postingDate: 'not-a-date' },
+      { expectedPayDate: '2023-02-29' },
+    ]
+    for (const patch of patches) {
+      const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
+      assert.ok(current)
+      await assert.rejects(
+        applyDocumentEdit(id, current, { ...patch, expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' }),
+        (e: unknown) => e instanceof DocumentEditError && e.status === 422,
+        `patch ${JSON.stringify(patch)} should fail closed with a named error`,
+      )
+    }
+    // Nothing persisted, and a well-formed date still saves.
+    const stored = (await withBypass(() => db.execute<{ document_date: string }>(sql`
+      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`))).rows[0]!
+    assert.equal(stored.document_date, org.date)
+    const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
+    assert.ok(current)
+    await applyDocumentEdit(id, current, { documentDate: '2024-02-28', expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' })
+    const moved = (await withBypass(() => db.execute<{ document_date: string }>(sql`
+      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`))).rows[0]!
+    assert.equal(moved.document_date, '2024-02-28')
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
 })
 
 test('computeBillTotals carries negative and zero lines into the totals', () => {
