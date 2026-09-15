@@ -6,7 +6,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid } from '../../../lib/list-params'
-import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
 import { runTimeApprovalEffects } from '../../../lib/time-approval'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
@@ -145,6 +145,11 @@ async function save(req: Request) {
     const isBillable = r.isBillable === true
     const validated = validateCustomValues(lineDefs, r.custom)
     if (!validated.ok) return bad(Object.values(validated.errors)[0] ?? 'Invalid custom field')
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids instead of persisting a cross-tenant pointer.
+    const unowned = await findUnownedCustomReferences(orgId, lineDefs, validated.cleaned)
+    if (unowned.length > 0) return bad(`${unowned[0]!.label} not found in this organization`)
     const custom = validated.cleaned
     const cells = Array.isArray(r.hours) ? r.hours : []
     let ownedRefs: Awaited<ReturnType<typeof pinTimesheetLineRefs>> | undefined
