@@ -836,3 +836,67 @@ test("voiding a quote with a live sales order is fenced without mutation", { ski
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a void refuses cleanly when an application writer holds the entry's lines", { skip: !DB }, async () => {
+  // The void's live-application and reconciliation guards are only truthful
+  // if no application writer can commit between those reads and the reversal
+  // writes, so the void takes the same endpoint row locks every application
+  // insert takes — with NOWAIT. A blocking lock would deadlock against those
+  // writers (their open-balance trigger locks the document row this void
+  // already holds), so contention fails fast with a retryable refusal and
+  // the retry after the writer commits sees the settled state.
+  const org = await createScratchOrg();
+  let releaseHolder: (() => void) | undefined;
+  try {
+    const actorId = await createScratchUser(org.orgId, "Void Race Controller", "admin");
+    const { documentId, entryId } = await seedPostedCheck(org, actorId, "CHECK-VOID-ENDPOINT-RACE-1");
+    const voidInput = {
+      documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Void refuses while endpoints are written",
+      reversalDate: org.date,
+      source: "api" as const,
+    };
+
+    let endpointsHeld!: () => void;
+    const endpointsReady = new Promise<void>((resolve) => {
+      endpointsHeld = resolve;
+    });
+    const holderReleased = new Promise<void>((resolve) => {
+      releaseHolder = resolve;
+    });
+    const holder = withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`
+        select id from journal_lines where entry_id = ${entryId} order by id for update`);
+      endpointsHeld();
+      await holderReleased;
+    });
+    holder.catch(() => {});
+    await endpointsReady;
+
+    // A blocking pre-lock would park here until the holder releases; the
+    // NOWAIT pre-lock must refuse within the timeout instead.
+    const contended = await Promise.race([
+      requestDocumentVoid(voidInput).then(
+        () => ({ settled: true as const }),
+        (error: unknown) => ({ settled: true as const, error }),
+      ),
+      new Promise<{ settled: false }>((resolve) => setTimeout(() => resolve({ settled: false }), 2500)),
+    ]);
+    assert.ok(contended.settled, "the void must not wait on the in-flight endpoint writer");
+    assert.ok("error" in contended, "the void must refuse while the endpoints are written");
+    assert.ok(contended.error instanceof DocumentVoidError, String(contended.error));
+    assert.match(String(contended.error), /in flight/);
+    assert.equal((contended.error as DocumentVoidError).status, 409);
+    releaseHolder?.();
+    await holder;
+
+    // The retry once the writer commits voids normally.
+    const retried = await requestDocumentVoid({ ...voidInput, reason: "Void retry after writer commits" });
+    assert.equal(retried.status, "voided");
+  } finally {
+    releaseHolder?.();
+    await dropScratchOrg(org.orgId);
+  }
+});

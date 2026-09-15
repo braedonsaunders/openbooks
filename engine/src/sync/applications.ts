@@ -174,20 +174,31 @@ export async function reconcileApplications(
     // over-application refusal); one that committed earlier is already
     // reflected in the hydration. Either way the commit-time open-item guard
     // stays a backstop instead of the whole run's failure mode.
+    //
+    // Shape matters: the lock itself is a single-table id-ordered select, the
+    // same statement shape manual posts and the trigger use. Locking through
+    // the join below would acquire the same rows in join-scan order, which
+    // deadlocks against those writers' order. So scope the ids through the
+    // join first (no locks), then lock exactly that set.
     const batchRefs = [...new Set(links.flatMap((l) => [l.paymentRef, l.appliedRef]))];
     if (batchRefs.length > 0) {
-      await client.query(
+      const scoped = await client.query<{ id: string }>(
         `select l.id
            from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            join documents d on d.id = e.source_document_id and d.org_id = e.org_id
           where l.org_id = $1
             and e.status = 'posted'
-            and d.custom->>$2 = any($3)
-          order by l.id
-          for update of l`,
+            and d.custom->>$2 = any($3)`,
         [orgId, refKey, batchRefs],
       );
+      const lockIds = [...new Set(scoped.rows.map((r) => r.id))];
+      if (lockIds.length > 0) {
+        await client.query(
+          `select id from journal_lines where id = any($1::uuid[]) order by id for update`,
+          [lockIds],
+        );
+      }
     }
 
     // -- open AR/AP lines per source ref ----------------------------------------

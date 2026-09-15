@@ -24,6 +24,16 @@ export class DocumentVoidError extends Error {
   constructor(message: string, readonly status = 422) { super(message); }
 }
 
+/** NOWAIT pre-lock contention anywhere in the cause chain (55P03 lock_not_available). */
+function isLockNotAvailable(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    if ((current as { code?: string }).code === "55P03") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /** Provenance ids travel as text; validate the shape before any uuid[] cast. */
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -499,6 +509,39 @@ export async function completeRequestedDocumentVoid(
       let reversalEntryId: string | null = null;
 
       if (entryId) {
+        // Serialize against application writers on this entry's lines before
+        // any guard below reads. Manual posts, the settlement mirror, and the
+        // applications trigger itself all take these same single-table
+        // id-ordered endpoint row locks before reading open state — without
+        // this lock a writer could commit between the reconciliation /
+        // live-application checks and the reversal writes, settling money
+        // onto freshly reversed lines (or failing a whole mirror batch on
+        // the commit-time guard).
+        //
+        // NOWAIT, deliberately: a blocking lock here deadlocks against those
+        // same writers, because every application insert's open-balance
+        // trigger locks the target document row while this void already holds
+        // it (endpoints one way, the document the other — a true cycle no
+        // acquisition order can fix). Failing fast with a retryable refusal
+        // keeps the void deadlock-free: the in-flight writer always finishes
+        // first and the retry then sees its committed state.
+        try {
+          await tx.execute(sql`
+            select id
+              from journal_lines
+             where entry_id = ${entryId} and org_id = ${orgId}
+             order by id
+             for update nowait
+          `);
+        } catch (error) {
+          if (isLockNotAvailable(error)) {
+            throw new DocumentVoidError(
+              "another posting to this transaction is in flight — retry the void once it completes",
+              409,
+            );
+          }
+          throw error;
+        }
         const reconciled = (await tx.execute(sql`
           select 1
             from reconciliation_matches rm
