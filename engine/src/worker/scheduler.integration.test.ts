@@ -160,3 +160,46 @@ test(
     }
   },
 );
+
+test(
+  "two worker replicas racing the web tick claim it exactly once",
+  { skip: !DB },
+  async () => {
+    // The full scheduled-work tick moved to the worker process, so N worker
+    // replicas contend for WEB_TICK_LOCK_KEY on every boundary. Overlap the
+    // two runners deterministically: the first holds the claim open on its own
+    // pooled session while the second attempts it, exactly like a second
+    // replica's tick firing mid-pass.
+    let releaseHolder!: () => void;
+    const holderGate = new Promise<void>((resolve) => {
+      releaseHolder = resolve;
+    });
+    let holderRuns = 0;
+    const holder = withTickClaim(WEB_TICK_LOCK_KEY, async () => {
+      holderRuns += 1;
+      await holderGate;
+      return "holder";
+    });
+    while (holderRuns === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    let racerRuns = 0;
+    const racer = await withTickClaim(WEB_TICK_LOCK_KEY, async () => {
+      racerRuns += 1;
+      return "racer";
+    });
+
+    // The racer must observe the held claim and skip: the tick is not re-run.
+    assert.equal(racer, null);
+    assert.equal(racerRuns, 0);
+
+    releaseHolder();
+    assert.equal(await holder, "holder");
+    assert.equal(holderRuns, 1);
+
+    // The claim is released with the session: the next tick proceeds normally.
+    const after = await withTickClaim(WEB_TICK_LOCK_KEY, async () => "next");
+    assert.equal(after, "next");
+  },
+);
