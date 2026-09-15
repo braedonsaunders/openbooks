@@ -249,8 +249,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       featureRefused = true
       return
     }
-    const locked = (await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id
+    const locked = (await db.execute<{
+      name: string; code: string | null; customer_id: string | null; foreman_id: string | null;
+      manager_id: string | null; subsidiary_id: string | null; subsidiary_include_children: boolean | null;
+      status: string; customer_po_number: string | null; contract_value: string | null;
+      starts_on: string | null; ends_on: string | null; notes: string | null; is_active: boolean;
+      project_type_id: string | null; invoicing_preference: unknown; custom: unknown;
+    }>(sql`
+      select name, code, customer_id, foreman_id, manager_id, subsidiary_id,
+             subsidiary_include_children, status, customer_po_number,
+             contract_value::text as contract_value,
+             starts_on::text as starts_on, ends_on::text as ends_on,
+             notes, is_active, project_type_id, invoicing_preference, custom
         from projects
        where id = ${id} and org_id = ${user.orgId}
        for update
@@ -259,6 +269,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       scopeRefused = true
       return
     }
+    const before = locked.rows[0]
     await db.execute(sql`
     update projects set
       name = ${name !== undefined ? name : sql`name`},
@@ -281,6 +292,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       updated_at = now(), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
   `)
+    // Header edits move billing caps, ownership, and legal-entity scope, so
+    // they carry the same audit row every other material project write does.
+    const changedFields: Array<[string, unknown, unknown]> = []
+    if (name !== undefined) changedFields.push(['name', before.name, name])
+    if (projectTypeId !== undefined) changedFields.push(['project_type_id', before.project_type_id, projectTypeId])
+    if (invoicingPref !== undefined) changedFields.push(['invoicing_preference', before.invoicing_preference, invoicingPref])
+    if (body.code !== undefined) changedFields.push(['code', before.code, strOrNull(body.code)])
+    if (customerId !== undefined) changedFields.push(['customer_id', before.customer_id, customerId])
+    if (foremanId !== undefined) changedFields.push(['foreman_id', before.foreman_id, foremanId])
+    if (managerId !== undefined) changedFields.push(['manager_id', before.manager_id, managerId])
+    if (subsidiaryId !== undefined) changedFields.push(['subsidiary_id', before.subsidiary_id, subsidiaryId])
+    if (body.subsidiaryIncludeChildren !== undefined) changedFields.push(['subsidiary_include_children', before.subsidiary_include_children, body.subsidiaryIncludeChildren])
+    if (body.status != null) changedFields.push(['status', before.status, body.status])
+    if (body.customerPoNumber !== undefined) changedFields.push(['customer_po_number', before.customer_po_number, strOrNull(body.customerPoNumber)])
+    if (contractValue !== undefined) changedFields.push(['contract_value', before.contract_value, contractValue])
+    if (startsOn !== undefined) changedFields.push(['starts_on', before.starts_on, startsOn])
+    if (endsOn !== undefined) changedFields.push(['ends_on', before.ends_on, endsOn])
+    if (body.notes !== undefined) changedFields.push(['notes', before.notes, strOrNull(body.notes)])
+    if (body.isActive !== undefined) changedFields.push(['is_active', before.is_active, body.isActive])
+    if (mergedCustom !== undefined) changedFields.push(['custom', before.custom, mergedCustom])
+    if (changedFields.length > 0) {
+      const image = Object.fromEntries(changedFields.map(([key, was, now]) => [key, { before: was, after: now }]))
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${user.orgId}, 'projects', ${id}, 'update', ${JSON.stringify(image)}::jsonb, ${user.id})
+      `)
+    }
   })
   if (featureRefused) {
     return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
