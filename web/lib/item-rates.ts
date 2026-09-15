@@ -118,6 +118,9 @@ export async function resolveItemRate(input: {
          -- Version scopes gate rates exactly as they gate surcharges
          -- (resolveRateAdjustments): a scoped version prices only matching work.
          and (
+           -- A project-scoped assignment is an explicit card selection; its
+           -- version scope cannot disqualify the project that selected it.
+           ${candidate.priority} = 1 or
            not exists (select 1 from labor_rate_version_scopes s where s.org_id = v.org_id and s.version_id = v.id)
            or exists (select 1 from labor_rate_version_scopes s
              where s.org_id = v.org_id and s.version_id = v.id and (
@@ -285,6 +288,9 @@ export async function snapshotTimeBillRates(
          -- Version scopes gate the snapshot exactly as they gate surcharges
          -- (resolveRateAdjustments): a scoped version bills only matching work.
          and (
+           -- Keep project assignments aligned with resolveRateAdjustments:
+           -- explicit project card selection outranks version dimensions.
+           ${sql`c.priority = 1`} or
            not exists (select 1 from labor_rate_version_scopes s where s.org_id = v.org_id and s.version_id = v.id)
            or exists (select 1 from labor_rate_version_scopes s
              where s.org_id = v.org_id and s.version_id = v.id and (
