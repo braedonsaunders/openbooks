@@ -142,7 +142,16 @@ export function ok(
   return res.json ?? {};
 }
 
-/** Required string field: asserts presence and type (fails the test, not undefined). */
+/** Assert a UI-triggered API response is 200, quoting the body on failure. */
+export async function expectOkResponse(
+  res: { status(): number; text(): Promise<string> },
+  label: string,
+): Promise<string> {
+  const text = await res.text();
+  expect(res.status(), `${label}: ${text}`.slice(0, 500)).toBe(200);
+  return text;
+}
+
 export function field(obj: Record<string, unknown>, key: string, path: string): string {
   const value = obj[key];
   expect(typeof value, `${path}.${key}`).toBe("string");
