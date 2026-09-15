@@ -914,6 +914,9 @@ const partyConcentration: AssistantToolDef = {
       ? ["customer_invoice", "customer_credit"]
       : ["vendor_bill", "vendor_credit"];
     const limit = Math.min(a.limit ?? 20, 50);
+    // Concentration ranks posted documents: scope them to the caller's
+    // visible legal entities like every other document surface, or
+    // hidden-subsidiary revenue and party names leak into the ranking.
     const rows = (await db.execute<Record<string, unknown>>(sql`
       with ranked as (
         select p.id, p.display_name,
@@ -923,6 +926,7 @@ const partyConcentration: AssistantToolDef = {
          where d.org_id = ${authz.user.orgId} and d.status = 'posted'
            and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
            and d.document_date between ${range.from} and ${range.to}
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          group by p.id, p.display_name
       ), totals as (select coalesce(sum(amount), 0) as total from ranked)
       select r.id, r.display_name, r.amount::text, r.document_count,

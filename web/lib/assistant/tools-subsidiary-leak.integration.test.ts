@@ -87,6 +87,46 @@ for (const mode of ['restricted', 'all'] as const) {
   });
 }
 
+test('party_concentration scopes posted documents to the caller subsidiary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // party_concentration summed posted invoices org-wide with no subsidiary
+  // predicate, so a restricted caller saw hidden-subsidiary revenue totals
+  // and party names.
+  const { org, actor, hidden } = await seedScopedOrg();
+  try {
+    const { postDocument } = await import('@openbooks/engine/src/posting.ts');
+    const parties: Record<string, string> = {};
+    for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
+      const partyId = randomUUID();
+      await db.execute(sql`insert into parties(id,org_id,kind,display_name) values (${partyId},${org.orgId},'customer',${`${label} Customer`})`);
+      await db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id) values (${org.orgId},${partyId},${sub})`);
+      parties[label] = partyId;
+      const id = randomUUID();
+      const total = label === 'VISIBLE' ? '1000' : '9000';
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
+        values (${id},${org.orgId},'customer_invoice','draft',${`${label}-CONC`},${sub},${partyId},'2026-07-15','2026-07-15','CAD','1',${total},'0',${total},${actor})`);
+      await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount,created_by)
+        values (${org.orgId},${id},1,${org.accounts.revenue},'1',${total},${total},'0','0',${actor})`);
+      await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
+      await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+    }
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const result = await executeAssistantTool(authz, 'party_concentration', {
+        side: 'customer', fromDate: '2026-07-01', toDate: '2026-07-31',
+      });
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.ok(result.ok);
+      const rows = (result.data as { rows: { display_name: string; amount: string }[] }).rows;
+      assert.deepEqual(rows.map((r) => r.display_name), ['VISIBLE Customer']);
+      assert.equal(rows[0]?.amount, '1000.0000');
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('get_document hides a hidden-subsidiary document from a restricted caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, hidden } = await seedScopedOrg();
   try {
