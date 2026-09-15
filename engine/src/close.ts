@@ -2662,6 +2662,40 @@ export async function decidePeriodReopen(args: {
         reopenExpiresAt: expiresAt,
       });
     }
+    if (row.subsidiary_id == null) {
+      // A scope-wide reopen must dominate every narrower lock, the mirror of
+      // the scope-wide close tightening in setPeriodLockState: storage
+      // prefers the exact subsidiary row, so a closed child would silently
+      // survive the window (and the operator would believe the scope open
+      // while its entities stay fenced). Relax each currently-blocking child
+      // into this same window, mirrored into the audit trail. Non-blocking
+      // children (an active window owned by another request, an unexpired
+      // manual opening) are left alone.
+      for (const module of modules) {
+        const children = (await tx.execute<{ subsidiary_id: string }>(sql`
+          select subsidiary_id from period_locks
+           where org_id = ${args.orgId} and period_id = ${row.period_id}
+             and book_id = ${row.book_id} and module = ${module}
+             and subsidiary_id is not null
+             and (state = 'closed'
+               or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now()))
+           for update`));
+        for (const child of children.rows) {
+          await upsertLock({
+            tx,
+            orgId: args.orgId,
+            periodId: row.period_id,
+            bookId: row.book_id,
+            subsidiaryId: child.subsidiary_id,
+            module,
+            state: "open",
+            actorId: args.actorId,
+            reason: row.reason,
+            reopenExpiresAt: expiresAt,
+          });
+        }
+      }
+    }
     await tx.execute(sql`
       update close_reopen_requests set status = 'approved', approved_by = ${args.actorId},
              approved_at = now(), expires_at = ${expiresAt.toISOString()}, updated_at = now(), updated_by = ${args.actorId}
@@ -2762,6 +2796,36 @@ async function recloseApprovedReopenRow(args: {
       actorId: args.actorId,
       reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
     });
+  }
+  if (args.row.subsidiary_id == null) {
+    // Mirror of the approve-time relaxation above (and of the scope-wide
+    // close tightening in setPeriodLockState): ending an org-wide window
+    // must dominate every narrower lock, or an open child row shadows the
+    // re-closed scope and keeps accepting postings after the window ends.
+    // Only the re-closed modules' rows move; a live window owned by another
+    // request covers different modules by construction of the overlap check.
+    for (const module of modulesToClose) {
+      const children = (await args.tx.execute<{ subsidiary_id: string }>(sql`
+        select subsidiary_id from period_locks
+         where org_id = ${args.row.org_id}
+           and period_id = ${args.row.period_id}
+           and book_id = ${args.row.book_id}
+           and module = ${module} and subsidiary_id is not null and state <> 'closed'
+         for update`));
+      for (const child of children.rows) {
+        await upsertLock({
+          tx: args.tx,
+          orgId: args.row.org_id,
+          periodId: args.row.period_id,
+          bookId: args.row.book_id,
+          subsidiaryId: child.subsidiary_id,
+          module,
+          state: "closed",
+          actorId: args.actorId,
+          reason: `${args.automatic ? "Automatic" : "Controlled"} re-close: ${args.reason}`,
+        });
+      }
+    }
   }
   const finalStatus =
     args.automatic && coveredModules.size > 0 ? "expired" : "reclosed";
