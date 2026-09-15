@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from './exact-decimal'
+import { pgTextArrayLiteral } from './pg-array'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
 import {
   loadTaxComponentConfig,
@@ -246,10 +247,6 @@ async function loadProjectPolicy(
   }
 }
 
-function textList(values: string[]): string {
-  return `{${values.map((value) => value.replaceAll('"', '')).join(',')}}`
-}
-
 /**
  * Contract capacity already CLAIMED on a project — the single definition of
  * "invoiced to date" that every not-to-exceed check uses (billing-request
@@ -273,14 +270,14 @@ export async function projectContractCapacityUsed(
   const excludePrebillId = options.excludePrebillId ?? null
   const used = (await executor.execute<{ used: string }>(sql`
     select coalesce((
-             select sum(case when document.kind = any(${textList(creditKinds)}::text[])
+             select sum(case when document.kind = any(${pgTextArrayLiteral(creditKinds)}::text[])
                              then -line.amount else line.amount end)
                from document_lines line
                join documents document on document.org_id = line.org_id and document.id = line.document_id
               where line.org_id = ${orgId}
                 and coalesce(line.project_id, document.project_id) = ${projectId}
                 and document.status <> 'voided'
-                and document.kind = any(${textList(allKinds)}::text[])
+                and document.kind = any(${pgTextArrayLiteral(allKinds)}::text[])
            ), 0)
            + coalesce((
              select sum(worksheet.proposed_bill_amount)
