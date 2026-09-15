@@ -524,6 +524,44 @@ test("a masked sandbox scrubs custom JSON and copied user credentials", { skip: 
 });
 
 
+test("a full sandbox clones an org with live posted documents and lines", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let sandboxId: string | null = null;
+  try {
+    const userId = await createScratchUser(org.orgId, `CloneLines ${randomUUID()}`, "accountant");
+    const invoiceId = randomUUID();
+    await db.execute(sql`insert into documents
+      (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+       document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${`CLONE-${randomUUID()}`},
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date},
+              'CAD', '1', '100', '0', '100', ${userId})`);
+    await db.execute(sql`insert into document_lines
+      (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+      values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
+    await db.execute(sql`update documents set status='approved' where id=${invoiceId} and org_id=${org.orgId}`);
+    await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+    const created = await createSandbox({ productionOrgId: org.orgId, name: `CloneLines ${randomUUID()}`, tier: "full", masked: false });
+    sandboxId = created.sandboxId;
+    const counts = (await db.execute<{ documents: number; lines: number; entries: number }>(sql`
+      select (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
+             (select count(*)::int from document_lines where org_id = ${created.sandboxOrgId}) as lines,
+             (select count(*)::int from journal_entries where org_id = ${created.sandboxOrgId}) as entries
+    `)).rows[0]!;
+    assert.deepEqual(counts, { documents: 1, lines: 1, entries: 1 });
+  } finally {
+    if (sandboxId) {
+      await deleteSandbox(sandboxId).catch(() => undefined);
+    } else {
+      // A failed create still records a 'failed' sandbox row pinning the org;
+      // remove it so the scratch org can drop.
+      const rows = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id = ${org.orgId}`)).rows;
+      for (const r of rows) await deleteSandbox(r.id).catch(() => undefined);
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a sandbox holding posted documents can be deleted without stranding its org", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `DeletePosted ${randomUUID()}`;
