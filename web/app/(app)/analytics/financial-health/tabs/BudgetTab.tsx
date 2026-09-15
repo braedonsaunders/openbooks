@@ -97,7 +97,7 @@ function RealBudget({ data }: { data: HealthData }) {
             </span>
             <button
               type="button"
-              onClick={() => exportCsv('budget-vs-actual', [t('columns.account'), t('columns.type'), t('columns.budget'), t('columns.actual'), t('columns.variance'), t('columns.variancePct'), t('columns.status')], filtered.map((r) => [r.name, r.type, Math.round(r.budget), Math.round(r.actual), Math.round(r.variance), r.variancePct === null ? '' : (r.variancePct * 100).toFixed(1), statusLabel(r.status)]), today)}
+              onClick={() => exportCsv('budget-vs-actual', [t('columns.account'), t('columns.type'), t('columns.budget'), t('columns.actual'), t('columns.variance'), t('columns.variancePct'), t('columns.status')], filtered.map((r) => [r.name, r.type, r.budget, r.actual, r.variance, r.variancePct === null ? '' : (r.variancePct * 100).toFixed(1), statusLabel(r.status)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> {t('csv')}
