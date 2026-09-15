@@ -286,14 +286,44 @@ export async function partnerStatement(
     agingTotals[row.bucket] = decimalAdd(agingTotals[row.bucket], row.open)
     agingTotals.total = decimalAdd(agingTotals.total, row.open)
   }
+  // The register only surfaces parties with window lines, but a statement is
+  // addressed to one party: with no window activity the opening (= closing)
+  // is still the pre-window control balance, never zero.
+  const opening = p?.opening ?? (await preWindowBalance(opts.side, opts.from, partyId, orgId, opts.dims, opts.bookId))
   return {
     party: { id: partyId, name: nameRow.rows[0]?.display_name ?? p?.partyName ?? null },
     side: opts.side,
     from: opts.from,
     to: opts.to,
-    opening: p?.opening ?? ZERO,
-    closing: p?.closing ?? ZERO,
+    opening,
+    closing: p?.closing ?? opening,
     lines: p?.lines ?? [],
     aging: agingTotals,
   }
+}
+
+/** Pre-window control-account balance for one party — the same posted set the
+ *  register's opening read uses, for statements with no window activity. */
+async function preWindowBalance(
+  side: AgingSide,
+  from: string,
+  partyId: string,
+  orgId: string,
+  dims: DimFilter | undefined,
+  bookId?: string | null,
+): Promise<ExactDecimal> {
+  const acctType = side === 'ap' ? 'liability_payable' : 'asset_receivable'
+  const rows = (await db.execute<{ balance: string }>(sql`
+    select coalesce(sum(l.amount), 0) as balance
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+      join accounts a on a.id = l.account_id
+     where l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId}
+       and e.status in ('posted', 'reversed') and a.type = ${acctType}
+       and e.posting_date < ${from}
+       and e.book_id = ${statementBookExpr(orgId, bookId)}
+       and l.party_id = ${partyId}
+       and ${dimWhere(dims, sql`l`)}
+  `))
+  return (rows.rows[0]?.balance ?? '0') as ExactDecimal
 }
