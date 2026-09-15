@@ -16,6 +16,7 @@ import {
 import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { isValidEmailAddress } from "@openbooks/emails";
 
 export const runtime = "nodejs";
 
@@ -451,6 +452,17 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
   const id = optionalUuid(body, "id", "reporting package");
   const isActive = optionalActive(body);
   const isDefault = body.isDefault === true;
+  // Fail closed at the save boundary: the delivery worker hands this list
+  // straight to the email queue, whose provider validation throws on the
+  // first invalid address only after every attached report was rendered.
+  const recipients = Array.isArray(body.recipients) ? body.recipients : [];
+  for (const recipient of recipients) {
+    if (typeof recipient !== "string" || !isValidEmailAddress(recipient.trim())) {
+      throw new CloseError(
+        `invalid recipient email address: ${typeof recipient === "string" ? recipient.trim() || "(blank)" : "(not an address)"}`,
+      );
+    }
+  }
   return db.transaction(async (tx) => {
     let before: Record<string, unknown> | null = null;
     if (id) {
@@ -468,7 +480,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
     if (id) {
       const updated = (await tx.execute(sql`update close_reporting_packages set name = ${text(body, "name", true)!}, description = ${text(body, "description")},
         reports = ${JSON.stringify(reports)}::jsonb,
-        recipients = ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
+        recipients = ${JSON.stringify(recipients)}::jsonb,
         delivery = ${JSON.stringify(object(body, "delivery"))}::jsonb, is_default = ${isDefault},
         is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
         where id = ${id} and org_id = ${orgId}
@@ -485,7 +497,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
       (org_id, name, description, reports, recipients, delivery, is_default, is_active, created_by, updated_by)
       values (${orgId}, ${text(body, "name", true)!}, ${text(body, "description")},
               ${JSON.stringify(reports)}::jsonb,
-              ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
+              ${JSON.stringify(recipients)}::jsonb,
               ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
     const after = result.rows[0];
     if (!after) throw new CloseError("reporting package could not be created");
