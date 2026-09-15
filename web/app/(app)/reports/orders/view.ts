@@ -26,6 +26,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { orgInfo } from '../../../../lib/data'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import { decimalSum } from '../../../../lib/statement-format'
 
 /**
  * The order pipeline report, split into a loader and a spec.
@@ -139,7 +140,7 @@ export async function loadOrders(): Promise<OrdersData> {
     rows: KINDS.map((kind) => {
       const forKind = pipeline.rows.filter((r) => r.kind === kind)
       const open = forKind.reduce((a: number, r) => a + Number(r.open_n ?? 0), 0)
-      const openValue = forKind.reduce((a: number, r) => a + Number(r.open_value ?? 0), 0)
+      const openValue = decimalSum(forKind.map((r) => String(r.open_value ?? '0')))
       const voided = forKind
         .filter((r) => r.status === 'voided')
         .reduce((a: number, r) => a + Number(r.n), 0)
