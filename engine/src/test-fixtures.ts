@@ -483,27 +483,53 @@ export function hasEphemeralDatabaseMarker(comment: string | null | undefined, e
   return Boolean(expected && expected.startsWith("openbooks-ci-ephemeral-") && comment === expected);
 }
 
+// A checked-out pg client is the cache key: the database comment is stable for
+// the lifetime of a connection, while a pool may hand different sessions to
+// successive fixture calls. This avoids trusting process-local environment
+// flags and avoids repeating the catalog read on every write through a warm
+// connection.
+const verifiedFixtureClients = new WeakMap<object, string>();
+
+export async function assertFixtureDatabase(): Promise<void> {
+  if (!process.env.OPENBOOKS_DB_URL?.trim()) {
+    throw new Error("scratch fixtures require OPENBOOKS_DB_URL");
+  }
+  if (process.env.OPENBOOKS_TEST_ALLOW_UNMARKED_DB === "1") return;
+
+  const expected = process.env.OPENBOOKS_TEST_DB_MARKER;
+  if (!expected) {
+    throw new Error(
+      "scratch fixtures require OPENBOOKS_TEST_DB_MARKER or explicit OPENBOOKS_TEST_ALLOW_UNMARKED_DB=1 opt-in",
+    );
+  }
+  if (!expected.startsWith("openbooks-ci-ephemeral-")) {
+    throw new Error("scratch fixtures require the canonical ephemeral database marker");
+  }
+
+  const client = await pool.connect();
+  try {
+    if (verifiedFixtureClients.get(client) === expected) return;
+    const result = await client.query<{ marker: string | null }>(
+      "select shobj_description(oid, 'pg_database') as marker from pg_database where datname = current_database()",
+    );
+    if (!hasEphemeralDatabaseMarker(result.rows[0]?.marker, expected)) {
+      throw new Error(
+        "scratch fixtures require the canonical ephemeral database marker; refusing shared/non-ephemeral database",
+      );
+    }
+    verifiedFixtureClients.set(client, expected);
+  } finally {
+    client.release();
+  }
+}
+
 export async function assertDedicatedFixtureDatabase(): Promise<void> {
   if (process.env.OPENBOOKS_TEST_DB_ISOLATED !== "1") {
     throw new Error(
       "scratch fixture pooling requires OPENBOOKS_TEST_DB_ISOLATED=1; refusing to mutate a shared database",
     );
   }
-  if (!process.env.OPENBOOKS_DB_URL?.trim()) {
-    throw new Error("scratch fixture pooling requires OPENBOOKS_DB_URL");
-  }
-  const expected = process.env.OPENBOOKS_TEST_DB_MARKER;
-  if (!expected) {
-    throw new Error("scratch fixture pooling requires OPENBOOKS_TEST_DB_MARKER");
-  }
-  const result = await pool.query<{ marker: string | null }>(
-    "select shobj_description(oid, 'pg_database') as marker from pg_database where datname = current_database()",
-  );
-  if (!hasEphemeralDatabaseMarker(result.rows[0]?.marker, expected)) {
-    throw new Error(
-      "scratch fixture pooling requires the canonical ephemeral database marker; refusing shared/non-ephemeral database",
-    );
-  }
+  await assertFixtureDatabase();
 }
 
 export interface FlowActors {
@@ -525,6 +551,7 @@ export async function createScratchUser(
   roleKey: string,
   userId = randomUUID(),
 ): Promise<string> {
+  await assertFixtureDatabase();
   await db.transaction(async (tx) => {
     const role = (await tx.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
@@ -579,6 +606,7 @@ export async function seedApprovalFlow(
     gateTitle?: string;
   },
 ): Promise<{ flowId: string; gateNodeId: string }> {
+  await assertFixtureDatabase();
   const flowId = randomUUID();
   const gateNodeId = "gate";
   const graph = {
@@ -614,6 +642,7 @@ export async function seedDraftDocument(
   orgId: string,
   opts: { kind: string; createdBy: string; total?: string; number?: string },
 ): Promise<string> {
+  await assertFixtureDatabase();
   const id = randomUUID();
   await db.execute(sql`
     insert into documents
@@ -901,6 +930,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
 /** SIM cleanup shares the comprehensive delete machinery, never the Scratch
  * identity exception or fixture-pool lease handling. */
 export async function dropSimOrg(orgId: string): Promise<void> {
+  await assertFixtureDatabase();
   return withBypassContext(() => dropDisposableOrgEscaped(orgId, "sim"));
 }
 
@@ -1373,7 +1403,10 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
     completedFixtureOwnerLeases.delete(response.org.orgId);
     return response.org;
   }
-  if (!fixturePoolingEnabled()) return bootstrapScratchOrg();
+  if (!fixturePoolingEnabled()) {
+    await assertFixtureDatabase();
+    return bootstrapScratchOrg();
+  }
   const org = await (await productionScratchPool()).lease();
   outstandingFixturePoolLeases.add(org.orgId);
   return org;
@@ -1392,6 +1425,7 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     completedFixtureOwnerLeases.add(orgId);
     return;
   }
+  await assertFixtureDatabase();
   if (!fixturePoolingEnabled()) return withBypassContext(() => dropScratchOrgEscaped(orgId));
   const pool = await productionScratchPool();
   if (pool.has(orgId)) {
