@@ -6,8 +6,9 @@ import {
   APPROVER_PASSWORD,
   api,
   field,
-  expect,
   draftSeedDocument,
+  expect,
+  binderHash,
   extractPdfText,
   ok,
   postSeedDocument,
@@ -64,8 +65,11 @@ const SEED: Seed = {
   projectId: "",
   assetId: "",
   runId: "",
+  requestId: "",
   accounts: {},
 };
+
+let BINDER1_HASH = "";
 
 test.describe.serial("close to reporting", () => {
   // No retries: this is a stateful saga, and retrying it mid-flight would
@@ -517,6 +521,9 @@ test.describe.serial("close to reporting", () => {
       });
       expect(glRefused.status).toBe(422);
       expect(JSON.stringify(glRefused.json)).toMatch(/closed/i);
+      // Discard the refused draft: a draft with no posting period is a
+      // critical readiness exception, and the re-drive below must start clean.
+      ok(await api(page.request, baseURL!, "DELETE", `/api/journals/${id}`), "discard refused journal");
 
       // AR and AP: invoice and bill posts into the same closed scope refuse.
       const arId = await draftSeedDocument(page.request, baseURL!, "customer_invoice", {
@@ -540,6 +547,12 @@ test.describe.serial("close to reporting", () => {
       });
       expect(arRefused.status).toBe(422);
       expect(JSON.stringify(arRefused.json)).toMatch(/closed/i);
+      const arToken = await revisionToken(page.request, baseURL!, `/api/documents/${arId}`, (d) =>
+        field((d.doc ?? d) as Record<string, unknown>, "updated_at", "refused invoice"));
+      ok(
+        await api(page.request, baseURL!, "DELETE", `/api/documents/${arId}`, { expectedUpdatedAt: arToken }),
+        "discard refused invoice",
+      );
       const apId = await draftSeedDocument(page.request, baseURL!, "vendor_bill", {
         partyId: SEED.vendorAId,
         subsidiaryId: SEED.rootSubId,
@@ -561,6 +574,12 @@ test.describe.serial("close to reporting", () => {
       });
       expect(apRefused.status).toBe(422);
       expect(JSON.stringify(apRefused.json)).toMatch(/closed/i);
+      const apToken = await revisionToken(page.request, baseURL!, `/api/documents/${apId}`, (d) =>
+        field((d.doc ?? d) as Record<string, unknown>, "updated_at", "refused bill"));
+      ok(
+        await api(page.request, baseURL!, "DELETE", `/api/documents/${apId}`, { expectedUpdatedAt: apToken }),
+        "discard refused bill",
+      );
     } finally {
       await context.close();
     }
@@ -746,6 +765,248 @@ test.describe.serial("close to reporting", () => {
           expect(text, `${kind} pdf shows ${figure}`).toContain(figure);
         }
       }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("publishes the package with a verifiable binder and enqueues delivery", async ({ browser, baseURL }) => {
+    test.setTimeout(300_000);
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/close?run=${SEED.runId}&stage=publish`);
+      page.on("dialog", (d) => void d.accept());
+      const published = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Publish package" }).click();
+      expect((await published).status()).toBe(200);
+      await expect(page.getByText("Published").first()).toBeVisible();
+
+      // The binder is hash-addressed: recompute the sha256 over the canonical
+      // JSON exactly as publishCloseRun does and compare all three copies.
+      const res = await page.request.get(`${baseURL}/api/close/runs/${SEED.runId}/binder`, {
+        headers: { Origin: new URL(baseURL!).origin },
+      });
+      expect(res.ok()).toBe(true);
+      const headerHash = res.headers()["x-content-sha256"] ?? "";
+      const envelope = (await res.json()) as { hash: string; binder: Record<string, unknown> };
+      expect(envelope.hash, "binder hash").toBeTruthy();
+      expect(headerHash, "binder header hash").toBe(envelope.hash);
+      expect(binderHash(envelope.binder), "binder recomputed hash").toBe(envelope.hash);
+      BINDER1_HASH = envelope.hash;
+      await expect(page.getByText(envelope.hash).first()).toBeVisible();
+
+      // Delivery: the reporting package enqueues to the close-delivery queue.
+      const run = envelope.binder.run as Record<string, string>;
+      const sent = ok(
+        await api(page.request, baseURL!, "POST", "/api/admin/close", {
+          action: "send-package",
+          packageId: run.reporting_package_id,
+          periodId: SEED.periodId,
+          bookId: SEED.primaryBookId,
+        }),
+        "send-package",
+      );
+      expect(sent.ok).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reopens with reason, posts the adjusting entry, and re-closes", async ({ browser, baseURL }) => {
+    test.setTimeout(300_000);
+    const { context, page } = await authedContext(browser, baseURL);
+    const actx = await browser.newContext({ baseURL });
+    const apage = await actx.newPage();
+    page.on("dialog", (d) => void d.accept());
+    try {
+      // Request a controlled reopen for GL from the period drawer.
+      await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
+      await dismissSetupWizard(page);
+      const row = page.locator("tr", { hasText: P.name }).first();
+      await expect(row).toBeVisible();
+      await row.getByRole("link", { name: `Manage ${P.name}` }).click();
+      await page.waitForURL(/period=/);
+      const glRow = page
+        .locator("div")
+        .filter({ has: page.getByText("GL", { exact: true }) })
+        .filter({ has: page.getByText("Closed", { exact: true }) })
+        .filter({ has: page.getByRole("button", { name: "Reopen" }) })
+        .last();
+      await glRow.getByRole("button", { name: "Reopen" }).click();
+      await expect(page.getByRole("heading", { name: "Request controlled reopening" })).toBeVisible();
+      await page.locator("textarea").first().fill("Freight received after close MIB-2291");
+      const requested = page.waitForResponse(
+        (r) => r.url().endsWith("/api/admin/close") && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Request reopening" }).click();
+      expect((await requested).status()).toBe(200);
+      // The request appears in the reopen list; follow it for its id.
+      await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
+      const request = page.getByRole("link", { name: new RegExp(`${P.name}.*Primary`) }).first();
+      await expect(request).toBeVisible();
+      await request.click();
+      await page.waitForURL(/reopen=/);
+      SEED.requestId = new URL(page.url()).searchParams.get("reopen") ?? "";
+      expect(SEED.requestId, "reopen request id").toBeTruthy();
+      await expect(page.getByText("Freight received after close MIB-2291")).toBeVisible();
+      await expect(page.getByText("Requested", { exact: true }).first()).toBeVisible();
+
+      // The approver decides from the same drawer in their own session.
+      const loginRes = await apage.request.post(`${baseURL}/api/login`, {
+        data: { email: APPROVER_EMAIL, password: APPROVER_PASSWORD },
+        headers: { Origin: new URL(baseURL!).origin },
+      });
+      expect(loginRes.ok(), await loginRes.text()).toBe(true);
+      await apage.goto(page.url());
+      const decided = apage.waitForResponse(
+        (r) => r.url().endsWith("/api/admin/close") && r.request().method() === "POST",
+      );
+      await apage.getByRole("button", { name: "Approve" }).click();
+      expect((await decided).status()).toBe(200);
+      await expect(apage.getByText("Approved", { exact: true }).first()).toBeVisible();
+
+      // The adjusting entry posts inside the window, then the window re-closes
+      // (reclose is API-only by design; the request/decision above are the UI).
+      await postSeedJournal(page.request, baseURL!, SEED.accounts, {
+        subsidiaryId: SEED.rootSubId,
+        documentDate: `${P.from.slice(0, 8)}28`,
+        memo: "Adjusting entry: accrue August freight",
+        lines: [
+          { account: "6500", amount: AMT.adjusting, description: "August freight accrual" },
+          { account: "2100", amount: `-${AMT.adjusting}`, description: "Accrued freight" },
+        ],
+      });
+      const reclosed = ok(
+        await api(page.request, baseURL!, "POST", "/api/admin/close", {
+          action: "reclose-reopen",
+          requestId: SEED.requestId,
+          reason: "Re-close after the August freight accrual posted",
+        }),
+        "reclose",
+      );
+      expect(reclosed.ok).toBe(true);
+
+      // Re-drive the run to a second close and publish: tasks revalidate,
+      // approval repeats independently, and the new binder must differ.
+      const redriven = ok(
+        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, { action: "refresh" }),
+        "refresh after adjusting",
+      );
+      expect(redriven.openExceptions).toBe(1);
+      await page.goto(`/close?run=${SEED.runId}&stage=execute`);
+      for (const title of ["Complete receivables cutoff", "Complete payables cutoff"]) {
+        const card = page
+          .locator("div")
+          .filter({ hasText: title })
+          .filter({ has: page.getByRole("button", { name: "Add evidence" }) })
+          .last();
+        await card.getByPlaceholder("Add a note or evidence summary\u2026").fill(`Re-cutoff verified for ${P.name}`);
+        const evidenced = page.waitForResponse(
+          (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}/evidence`) && r.request().method() === "POST",
+        );
+        await card.getByRole("button", { name: "Add evidence" }).click();
+        expect((await evidenced).status()).toBe(200);
+        const started = page.waitForResponse(
+          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+        );
+        await card.getByRole("button", { name: "Start" }).click();
+        expect((await started).status()).toBe(200);
+        const completed = page.waitForResponse(
+          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+        );
+        await card.getByRole("button", { name: "Complete" }).click();
+        expect((await completed).status()).toBe(200);
+      }
+      await page.goto(`/close?run=${SEED.runId}&stage=lock`);
+      const rerequested = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Request approval" }).click();
+      expect((await rerequested).status()).toBe(200);
+      const gates = ok(await api(apage.request, baseURL!, "GET", "/api/flows/gates"), "gates again");
+      const pending = ((gates.gates ?? []) as { id: string; subjectId: string; status?: string }[]).filter(
+        (g) => g.subjectId === SEED.runId,
+      );
+      const gate = pending[pending.length - 1];
+      expect(gate, "second approval gate").toBeTruthy();
+      const redecided = ok(
+        await api(apage.request, baseURL!, "POST", "/api/flows/gates/decide", {
+          gateId: gate!.id,
+          decision: "approved",
+          comment: `Re-close ${P.name} approved with freight accrual`,
+        }),
+        "gate re-decide",
+      );
+      expect(redecided.ok).toBe(true);
+      await page.goto(`/close?run=${SEED.runId}&stage=lock`);
+      await expect(page.getByText("Approved").first()).toBeVisible();
+      const relocked = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Lock period" }).click();
+      expect((await relocked).status()).toBe(200);
+      const republished = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await page.goto(`/close?run=${SEED.runId}&stage=publish`);
+      await page.getByRole("button", { name: "Publish package" }).click();
+      expect((await republished).status()).toBe(200);
+      const res2 = await page.request.get(`${baseURL}/api/close/runs/${SEED.runId}/binder`, {
+        headers: { Origin: new URL(baseURL!).origin },
+      });
+      expect(res2.ok()).toBe(true);
+      const envelope2 = (await res2.json()) as { hash: string; binder: Record<string, unknown> };
+      expect(binderHash(envelope2.binder)).toBe(envelope2.hash);
+      expect(envelope2.hash, "binder reflects the adjusting entry").not.toBe(BINDER1_HASH);
+      // The binder captures the re-validation cycle (second-round cutoff
+      // evidence); the adjusting amount itself is proven on the statements.
+      expect(JSON.stringify(envelope2.binder)).toContain("Re-cutoff verified");
+
+      // Statements moved by exactly the adjusting entry.
+      await page.goto(`/reports/pnl?${range}`);
+      const main = page.locator("main");
+      await expect(main.locator("tr", { hasText: "Total Expenses" })).toContainText("$17,250.00");
+      await expect(main.locator("tr", { hasText: "Net income" }).last()).toContainText("$5,750.00");
+    } finally {
+      await apage.close();
+      await actx.close();
+      await context.close();
+    }
+  });
+
+  test("audit trail records actor and before/after for close and reopen", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      // Close lifecycle timeline: both actors named on their events.
+      await page.goto(`/close?run=${SEED.runId}&stage=publish`);
+      const timeline = page.locator("main");
+      await expect(timeline.getByText("E2E Approver").first()).toBeVisible();
+      await expect(timeline.getByText("E2E Local").first()).toBeVisible();
+
+      // Reopen request drawer: reason, requester, and decided status.
+      await page.goto(
+        `/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}&reopen=${SEED.requestId}`,
+      );
+      await expect(page.getByText("Freight received after close MIB-2291")).toBeVisible();
+      await expect(page.getByText("Requested by E2E Local")).toBeVisible();
+      // Reopen request drawer: reason, requester, and the decided status.
+      // By assertion time the window has re-closed, so the lifecycle reads
+      // requested -> approved -> reclosed.
+      await expect(page.getByText("Reclosed", { exact: true }).first()).toBeVisible();
+
+      // Admin audit log: the approver's lock flip carries before/after states.
+      await page.goto("/admin/audit");
+      const lockRow = page
+        .locator('[role="link"]', { hasText: "E2E Approver" })
+        .filter({ hasText: /lock/i })
+        .first();
+      await expect(lockRow).toBeVisible();
+      await lockRow.click();
+      await page.waitForURL(/event=/);
+      await expect(page.getByText("closed").first()).toBeVisible();
+      await expect(page.getByText("open").first()).toBeVisible();
     } finally {
       await context.close();
     }

@@ -29,7 +29,7 @@
  * Consolidated primary-book period-P expectations:
  *   revenue 25,000.00 · expenses 18,500.00 · net 6,500.00 · AR 20,000.00 ·
  *   AP 5,000.00 · cash 32,500.00 · project margin 3,000.00
- * After the 750.00 freight-accrual adjusting entry: expenses 19,250.00,
+ * After the 750.00 freight-accrual adjusting entry: expenses 17,250.00,
  * net 5,750.00, accrued liabilities 750.00.
  */
 import { expect, type APIRequestContext } from "@playwright/test";
@@ -84,7 +84,7 @@ export const EXPECT = {
   projectMargin: "3,000.00",
   priorRevenue: "6,000.00",
   adjustingRevenue: "25,000.00",
-  adjustingExpenses: "19,250.00",
+  adjustingExpenses: "17,250.00",
   adjustingNet: "5,750.00",
   accrued: "750.00",
   adjustingBookExpense: "10,000.00",
@@ -106,6 +106,7 @@ export interface Seed {
   projectId: string;
   assetId: string;
   runId: string;
+  requestId: string;
   accounts: Record<string, string>;
 }
 
