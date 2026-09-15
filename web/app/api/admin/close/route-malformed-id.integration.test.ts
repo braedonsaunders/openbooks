@@ -174,3 +174,47 @@ test("close automation saves emit one audit event for each mutation", { skip: !p
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("close calendar saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Close Calendar Admin", "close-calendar-admin");
+    state.user = { orgId: org.orgId, id: actorId };
+
+    const create = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-calendar",
+      name: "Audit calendar",
+      cadence: "monthly",
+      yearStartMonth: 1,
+      weekStartsOn: 1,
+      isDefault: false,
+      isActive: true,
+    })));
+    if (create.status !== 200) throw new Error(`create calendar failed: ${await create.text()}`);
+    const calendarId = (await create.json()).id as string;
+
+    const update = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-calendar",
+      id: calendarId,
+      name: "Updated audit calendar",
+      cadence: "monthly",
+      yearStartMonth: 1,
+      weekStartsOn: 1,
+      isDefault: false,
+      isActive: true,
+    })));
+    if (update.status !== 200) throw new Error(`update calendar failed: ${await update.text()}`);
+
+    const audit = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from audit_log
+       where org_id = ${org.orgId}
+         and table_name = 'fiscal_calendars'
+         and row_id = ${calendarId}
+         and action in ('insert', 'update')`));
+    assert.equal(audit.rows[0]?.count, 2);
+  } finally {
+    state.user = { orgId: "", id: "" };
+    await dropScratchOrg(org.orgId);
+  }
+});
