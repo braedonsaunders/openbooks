@@ -7,7 +7,13 @@ import { guardPermission } from '@/lib/authz'
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { isUuid, pickString } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
 
 export const runtime = 'nodejs'
 
@@ -75,6 +81,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'a lien waiver is always against a project' }, { status: 400 })
   }
   if (!body.throughDate) return NextResponse.json({ error: 'throughDate is required' }, { status: 400 })
+  // through_date is a date column and this verb's catch surfaces the driver
+  // text, so refuse anything that is not a real calendar day here with a
+  // named 400 before any write is attempted.
+  if (!isIsoCalendarDate(body.throughDate)) {
+    return NextResponse.json({ error: 'throughDate must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+  }
 
   const [org] = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
     .rows
@@ -111,6 +123,11 @@ export async function POST(req: Request) {
   let amount = body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
   if (body.amount != null && body.amount !== '' && amount === null) {
     return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
+  }
+  // amount is numeric(19,4): a wider figure would die in Postgres, surfacing
+  // the full INSERT through the catch below. Refuse it with a named 422.
+  if (amount !== null && wholeDigits(amount) > 15) {
+    return NextResponse.json({ error: 'amount is out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
   }
   let currency = body.currency ?? org?.base_currency ?? 'USD'
   if (body.billDocumentId != null && !isUuid(body.billDocumentId)) {
