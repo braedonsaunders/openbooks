@@ -26,6 +26,7 @@ import {
   MAX_RUN_ATTEMPTS,
   processScheduledReportRun,
 } from "./report-delivery.ts";
+import { enqueueEmail, getEmailQueue } from "@openbooks/jobs";
 import {
   EMAIL_DELIVERY_WORKER_IDENTITY,
   REPORT_RUN_WORKER_IDENTITY,
@@ -708,6 +709,154 @@ test("an undeliverable recipient quarantines without stalling the delivery scan"
       select status, attempt_count from report_delivery_outbox where id = ${poisonId}
     `)).rows[0]!;
     assert.deepEqual(after, { status: "failed", attempt_count: MAX_DELIVERY_ATTEMPTS });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+async function seedSucceededRunWithArtifact(orgId: string, tag: string): Promise<{ runId: string }> {
+  const definitionId = randomUUID();
+  await db.execute(sql`
+    insert into report_definitions
+      (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+    values (${definitionId}, ${orgId}, 'custom', 'query', ${`rebuild-${tag}`},
+            'Rebuild sweep', '{}'::jsonb, null, null)
+  `);
+  const runId = randomUUID();
+  await db.execute(sql`
+    insert into report_runs
+      (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+       recipient_emails, next_attempt_at)
+    values (${runId}, ${orgId}, null, ${definitionId}, 'scheduled', 'succeeded',
+            ${new Date(Date.now() - 3_600_000)}, '[]'::jsonb, now())
+  `);
+  const pdf = Buffer.from(`%PDF-1.7\nrebuild sweep ${tag}`);
+  await db.execute(sql`
+    insert into report_run_artifacts
+      (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
+    values (${orgId}, ${runId}, 'rebuild.pdf', 'application/pdf',
+            ${pdf.length}, ${createHash("sha256").update(pdf).digest("hex")}, ${pdf})
+  `);
+  return { runId };
+}
+
+function rebuildKey(orgId: string, logId: string, to: string): string {
+  // Mirrors the email worker's canonical key for report deliveries exactly.
+  return deriveEmailDeliveryKey({ orgId, scope: `report:${logId}`, to });
+}
+
+test("a stuck enqueued delivery rebuilds: orphan job removed, row redispatched", { skip: !DB }, async () => {
+  if (!process.env.REDIS_URL && !process.env.OPENBOOKS_REDIS_URL) {
+    console.log("  # SKIP redis-backed orphan seeding needs REDIS_URL; row-rebuild half still runs");
+  }
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "lost");
+    // A dispatch that died after the DB mark but before/without a surviving
+    // email job: 'enqueued' with a long-past next_attempt_at and no outcome.
+    const logId = randomUUID();
+    const jobId = `report-delivery|${logId}|1`;
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, dispatch_count, queue_job_id, next_attempt_at)
+      values (${logId}, ${org.orgId}, ${runId}, 'rebuild@example.com', 'enqueued', 1, 1, ${jobId},
+              ${new Date(Date.now() - 3_600_000)})
+    `);
+    let orphanPresent: boolean | null = null;
+    try {
+      await enqueueEmail({
+        orgId: org.orgId,
+        to: "rebuild@example.com",
+        subject: "orphan",
+        html: "<p>orphan</p>",
+        text: "orphan",
+        attachments: [],
+      }, { jobId });
+      orphanPresent = (await getEmailQueue().getJob(jobId)) != null;
+    } catch {
+      orphanPresent = null;
+    }
+    const enqueued: string[] = [];
+    assert.equal(await dispatchReportDeliveries(async (data) => {
+      normalizeEmailDeliveryInput(data);
+      enqueued.push(String(data.to));
+      return [];
+    }, new Date(Date.now() + 60_000)), 1);
+    assert.deepEqual(enqueued, ["rebuild@example.com"]);
+    if (orphanPresent) {
+      assert.equal(await getEmailQueue().getJob(jobId) == null, true, "orphan job must be removed so rebuild cannot double-send");
+    }
+    const row = (await db.execute<{ status: string; dispatch_count: number; error: string | null }>(sql`
+      select status, dispatch_count, error from report_delivery_outbox where id = ${logId}
+    `)).rows[0]!;
+    // The normal scan never takes 'enqueued' rows, so a new generation here
+    // proves the rebuild sweep reset it.
+    assert.equal(row.status, "enqueued");
+    assert.equal(row.dispatch_count, 2);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a stuck enqueued delivery with a sent outcome reconciles to sent", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "sent");
+    const logId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, dispatch_count, next_attempt_at)
+      values (${logId}, ${org.orgId}, ${runId}, 'sent@example.com', 'enqueued', 1, 1,
+              ${new Date(Date.now() - 3_600_000)})
+    `);
+    // The provider accepted the send but the process died before the row
+    // advanced: resending would duplicate, so the sweep must reconcile.
+    const claim = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey: rebuildKey(org.orgId, logId, "sent@example.com"),
+      jobId: rebuildKey(org.orgId, logId, "sent@example.com"),
+      provider: "resend",
+      recipients: ["sent@example.com"],
+      subject: "Rebuild sweep",
+    });
+    await markEmailSent(org.orgId, claim.id, "re_sweep_1");
+    assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
+    const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id = ${logId}
+    `)).rows[0]!;
+    assert.equal(row.status, "sent");
+    assert.equal(row.dispatch_count, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a stuck enqueued delivery with a live job is left alone", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "live");
+    const logId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, dispatch_count, next_attempt_at)
+      values (${logId}, ${org.orgId}, ${runId}, 'live@example.com', 'enqueued', 1, 1,
+              ${new Date(Date.now() - 3_600_000)})
+    `);
+    // A claimed attempt with no outcome means the send may still be in
+    // flight: rebuilding now would risk a duplicate.
+    await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey: rebuildKey(org.orgId, logId, "live@example.com"),
+      jobId: rebuildKey(org.orgId, logId, "live@example.com"),
+      provider: "resend",
+      recipients: ["live@example.com"],
+      subject: "Rebuild sweep",
+    });
+    assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
+    const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id = ${logId}
+    `)).rows[0]!;
+    assert.deepEqual(row, { status: "enqueued", dispatch_count: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
