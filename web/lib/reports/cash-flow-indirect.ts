@@ -68,7 +68,20 @@ export interface CashFlowIndirectResult {
  * stripped here: they are handled by the entry-level I/F classification below,
  * which is robust to disposals that write off working-capital balances.
  */
-const CF_REMEASURE_ORIGINS = ["revaluation", "translation"];
+const CF_REMEASURE_ORIGINS = ["revaluation", "fx_revaluation", "translation"];
+/**
+ * Remeasurement origins whose P&L legs need an operating add-back: asset
+ * remeasurement and unrealized FX revaluation (the FX engine posts
+ * origin='fx_revaluation'). Consolidation translation keeps its existing
+ * treatment and stays out of this list.
+ */
+const CF_REMEASURE_PNL_ORIGINS = ["revaluation", "fx_revaluation"];
+/**
+ * Origins whose bank legs are the effect of exchange-rate changes on cash:
+ * consolidation translation plus unrealized FX revaluation of
+ * foreign-currency cash (a non-cash restatement of the bank balance itself).
+ */
+const CF_FX_CASH_ORIGINS = ["translation", "fx_revaluation"];
 
 const CF_WC_ASSET_TYPES = ["asset_receivable", "asset_current_other"];
 const CF_WC_LIABILITY_TYPES = ["liability_payable", "liability_card", "liability_current_other"];
@@ -94,7 +107,9 @@ const CF_FINANCING_TYPES = ["liability_long_term", "equity"];
  *     current↔long-term reclass)
  *   no bank; WC only (stock on credit,     gross WC movements (net internally)
  *     retainage/deposit reclasses)
- *   origin = revaluation                   P&L added back; WC legs stripped
+ *   origin = revaluation/fx_revaluation    P&L added back; WC legs stripped;
+ *                                          fx_revaluation bank legs are the
+ *                                          "effect of FX on cash" line
  *   origin = translation                   WC legs stripped; bank leg is the
  *                                          "effect of FX on cash" line
  */
@@ -173,7 +188,7 @@ export async function cashFlowIndirect(
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
-         and e.origin = 'revaluation' and a.type in ${PNL_TYPES} and ${dim}
+         and e.origin in ${CF_REMEASURE_PNL_ORIGINS} and a.type in ${PNL_TYPES} and ${dim}
     `));
     const impact = a.rows[0]?.impact ?? ZERO;
     if (decimalIsMaterial(impact)) adjustments.push({ key: "unrealizedFx", amount: impact });
@@ -190,7 +205,7 @@ export async function cashFlowIndirect(
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.id in (select id from flagged)
          and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
-         and e.origin <> 'revaluation'
+         and e.origin not in ${CF_REMEASURE_PNL_ORIGINS}
          and a.type in ${PNL_TYPES} and ${dim}
        group by l.account_id, a.number, a.name
     `));
@@ -303,7 +318,7 @@ export async function cashFlowIndirect(
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
-       and e.origin = 'translation' and a.type = 'asset_bank' and ${dim}
+       and e.origin in ${CF_FX_CASH_ORIGINS} and a.type = 'asset_bank' and ${dim}
   `));
   const fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
 
