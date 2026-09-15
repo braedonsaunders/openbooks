@@ -62,13 +62,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (score !== null && (!Number.isInteger(score) || score < 0 || score > 100)) return NextResponse.json({ error: 'qualification score must be from 0 to 100' }, { status: 422 })
   const employeeCount = body.employeeCount === undefined || body.employeeCount === null || body.employeeCount === ''
     ? null : Number(body.employeeCount)
-  if (employeeCount !== null && (!Number.isInteger(employeeCount) || employeeCount < 0)) return NextResponse.json({ error: 'employee count must be non-negative' }, { status: 422 })
+  if (employeeCount !== null && (!Number.isInteger(employeeCount) || employeeCount < 0 || employeeCount > 2147483647)) return NextResponse.json({ error: 'employee count must be a whole number from 0 to 2147483647' }, { status: 422 })
   const annualRevenueRaw = body.annualRevenue === undefined || body.annualRevenue === null || body.annualRevenue === ''
     ? null
     : canonicalDecimal(body.annualRevenue, 4)
   if (body.annualRevenue !== undefined && body.annualRevenue !== null && body.annualRevenue !== ''
     && (annualRevenueRaw === null || compareDecimal(annualRevenueRaw, '0') < 0)) {
     return NextResponse.json({ error: 'annual revenue must be a non-negative amount' }, { status: 422 })
+  }
+  // annual_revenue is numeric(19,4): refuse wider figures here instead of
+  // dying in Postgres as a raw overflow (HTTP 500 — this verb has no catch).
+  if (annualRevenueRaw !== null && annualRevenueRaw.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    return NextResponse.json({ error: 'annual revenue must fit the ledger (at most 15 whole digits)' }, { status: 422 })
   }
   const annualRevenue = annualRevenueRaw === null ? null : normalizeMoney(annualRevenueRaw)
   if (body.nextActionAt != null && body.nextActionAt !== '' && !isIsoTimestamp(body.nextActionAt)) {
