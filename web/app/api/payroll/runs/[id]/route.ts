@@ -21,6 +21,40 @@ import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decim
 
 export const dynamic = 'force-dynamic'
 
+/** Statutory-holiday attestation facts, mirroring the engine's input shape. */
+interface HolidayEligibilityFacts {
+  paidOnCommission?: boolean
+  absentWithoutConsent?: boolean
+}
+
+/**
+ * Parse the optional `holidayEligibility` map for calculate/dry-run.
+ * Returns the clean map, or null when the input is malformed (a non-object,
+ * a non-uuid key, a non-boolean fact, or an unknown fact name). `undefined`
+ * input yields an empty clean map — absence of attestations is the engine's
+ * fail-closed default, not a request error.
+ */
+function parseHolidayEligibility(
+  value: unknown,
+): Record<string, HolidayEligibilityFacts> | null {
+  if (value === undefined) return {}
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const clean: Record<string, HolidayEligibilityFacts> = {}
+  for (const [employeeId, facts] of Object.entries(value as Record<string, unknown>)) {
+    if (!isUuid(employeeId)) return null
+    if (facts === null || typeof facts !== 'object' || Array.isArray(facts)) return null
+    const entry: HolidayEligibilityFacts = {}
+    for (const [key, fact] of Object.entries(facts as Record<string, unknown>)) {
+      if ((key !== 'paidOnCommission' && key !== 'absentWithoutConsent') || typeof fact !== 'boolean') {
+        return null
+      }
+      entry[key] = fact
+    }
+    clean[employeeId] = entry
+  }
+  return clean
+}
+
 /**
  * One pay run.
  *
@@ -138,11 +172,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
+  // Employer attestations for statutory-holiday rules that read them (the
+  // last-and-first-shift absence assertion, commission-pay status). The
+  // engine fails closed when a declaring rule's fact is missing, and neither
+  // the wizard nor this route could supply it — so any run spanning a paid
+  // holiday in a declaring jurisdiction was incalculable. Keys are employee
+  // ids; unknown ids are refused rather than silently unattested.
+  const holidayEligibility = parseHolidayEligibility(body.holidayEligibility)
+  if (holidayEligibility === null && body.holidayEligibility !== undefined) {
+    return NextResponse.json({ error: 'invalid holidayEligibility' }, { status: 422 })
+  }
   try {
     if (body.action === 'calculate' || body.action === 'dry-run') {
       const result = await calculatePayRun({
         orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
         dryRun: body.action === 'dry-run',
+        holidayEligibility: holidayEligibility ?? undefined,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ ok: true, ...result })
