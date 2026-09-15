@@ -564,4 +564,98 @@ test.describe.serial("close to reporting", () => {
       await context.close();
     }
   });
+
+  const range = `period=custom&from=${P.from}&to=${P.to}`;
+
+  test("reporting package: profit and loss ties to the seeded journals", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/pnl?${range}`);
+      const main = page.locator("main");
+      // Revenue: 12,000 invoice A + 8,000 invoice B + 5,000 project receipt.
+      await expect(main.getByText("Service Revenue").first()).toBeVisible();
+      const revenue = main.locator("tr", { hasText: "Total Revenue" });
+      await expect(revenue).toContainText("$25,000.00");
+      // Cost: 2,000 project materials; gross 23,000.
+      await expect(main.locator("tr", { hasText: "Total Cost of Goods Sold" })).toContainText("$2,000.00");
+      await expect(main.locator("tr", { hasText: "Gross profit" }).last()).toContainText("$23,000.00");
+      // Expenses: 5,000 rent + 1,500 supplies + 10,000 depreciation.
+      await expect(main.locator("tr", { hasText: "Total Expenses" })).toContainText("$16,500.00");
+      // Net: 25,000 - 2,000 - 16,500.
+      await expect(main.locator("tr", { hasText: "Net income" }).last()).toContainText("$6,500.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reporting package: balance sheet ties to the seeded journals", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/balance-sheet?${range}`);
+      const main = page.locator("main");
+      await expect(main.locator("tr", { hasText: "Operating Bank Account" })).toContainText("$32,500.00");
+      await expect(main.locator("tr", { hasText: "Accounts Receivable" })).toContainText("$20,000.00");
+      await expect(main.locator("tr", { hasText: "Accounts Payable" })).toContainText("$5,000.00");
+      await expect(main.locator("tr", { hasText: "Share Capital" })).toContainText("$25,000.00");
+      await expect(main.locator("tr", { hasText: "Total assets" }).last()).toContainText("$42,500.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reporting package: trial balance balances to the seeded journals", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/trial-balance?${range}`);
+      const main = page.locator("main");
+      await expect(main.locator("tr", { hasText: "Accounts Receivable" })).toContainText("$20,000.00");
+      await expect(main.locator("tr", { hasText: "Service Revenue" })).toContainText("$23,000.00");
+      await expect(main.locator("tr", { hasText: "Operating Bank Account" })).toContainText("$32,500.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reporting package: cash flow follows the seeded bank activity", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/cash-flow?${range}`);
+      const main = page.locator("main");
+      await expect(main).toContainText("$26,500.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reporting package: AR and AP aging show the unpaid seeded balances", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      // As-of pinned to period end: deterministic buckets however late the run is.
+      await page.goto(`/reports/aging?${range}`);
+      const main = page.locator("main");
+      await expect(main.locator("tr", { hasText: "Harbourlight Foods" })).toContainText("$12,000.00");
+      await expect(main.locator("tr", { hasText: "Beacon Grocers" })).toContainText("$8,000.00");
+      await expect(main).toContainText("$20,000.00");
+      await page.goto(`/reports/aging?${range}&side=ap`);
+      const payables = page.locator("main");
+      await expect(payables.locator("tr", { hasText: "Northbeam Supplies" })).toContainText("$5,000.00");
+      await expect(payables).toContainText("$5,000.00");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("reporting package: project profitability shows the seeded project margin", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      await page.goto(`/reports/project-profitability?${range}`);
+      const main = page.locator("main");
+      const row = main.locator("tr", { hasText: "Harbour Kitchen Refit" });
+      await expect(row).toContainText("$5,000.00");
+      await expect(row).toContainText("$2,000.00");
+      await expect(row).toContainText("$3,000.00");
+    } finally {
+      await context.close();
+    }
+  });
 });
