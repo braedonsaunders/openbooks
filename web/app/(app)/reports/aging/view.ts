@@ -137,7 +137,13 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
   const subView = await reportSubsidiaryView(q.subsidiaryId, asOf)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
+  const dims = {
+    ...q.dims,
+    subsidiaryIds: subView.subsidiary?.ids,
+    // Unrestricted root-covering views read root-owned (null subsidiary)
+    // documents alongside attributed ones; restricted views stay fail-closed.
+    includeNullSubsidiary: subView.subsidiary?.includeNullSubsidiary === true,
+  }
   const [summary, detailResult, opts, org] = await Promise.all([
     agingByParty(side, asOf, dims),
     detail ? agingDetail(side, asOf, dims) : null,

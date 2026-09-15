@@ -106,7 +106,11 @@ export async function loadCustomers(
 
   const subView = await reportSubsidiaryView(sp.sub, await resolveAsOf(authz.user.orgId))
   const [data, navGroups] = await Promise.all([
-    customersHome(authz.user.orgId, subView.subsidiary?.ids),
+    customersHome(
+      authz.user.orgId,
+      subView.subsidiary?.ids,
+      subView.subsidiary?.includeNullSubsidiary,
+    ),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),

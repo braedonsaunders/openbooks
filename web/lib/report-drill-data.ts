@@ -124,10 +124,10 @@ function budgetSubsidiaryFilter(authz: Authz): ReturnType<typeof sql> {
  * that allowlist (an empty allowlist reads no rows). Shared by every drill
  * kind that reads subsidiary-tagged rows.
  */
-function scopedDims(
+async function scopedDims(
   target: { dims?: StatementDimFilter; subsidiaryId?: string },
   authz: Authz,
-): DimFilter {
+): Promise<DimFilter> {
   const rawDims = target.dims as StatementDimFilter & { subsidiaryIds?: string[] } | undefined
   const requested = target.subsidiaryId
     ? [target.subsidiaryId]
@@ -140,7 +140,26 @@ function scopedDims(
   return {
     ...target.dims,
     ...(subsidiaryIds ? { subsidiaryIds } : {}),
+    includeNullSubsidiary: await scopedNullLimb(authz, subsidiaryIds),
   }
+}
+
+/**
+ * Whether a drill's document-side predicates must also match root-owned
+ * (null subsidiary) rows: unrestricted callers whose viewed set covers the
+ * org root — the same population the line-side drill sees. Restricted
+ * callers stay fail-closed, and an explicitly branch-scoped drill keeps
+ * hiding root-owned rows exactly like its statement cell does. Derived
+ * server-side from the allowlist and the org root: never trusted from the
+ * URL-parsed target.
+ */
+async function scopedNullLimb(authz: Authz, subsidiaryIds: string[] | undefined): Promise<boolean> {
+  if (authz.allowedSubsidiaryIds !== null) return false
+  if (!subsidiaryIds) return true
+  if (subsidiaryIds.length === 0) return false
+  const roots = await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${authz.user.orgId} and parent_id is null limit 1`)
+  return roots.rows.some((row) => subsidiaryIds.includes(row.id))
 }
 
 function paginate<T>(rows: T[], page: number): T[] {
@@ -150,7 +169,7 @@ function paginate<T>(rows: T[], page: number): T[] {
 
 async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>, authz: Authz, page: number, scenarioBookId?: string): Promise<ReportDrillResponse> {
   const { money } = await getMoneyFormatter(authz.user.orgId)
-  const dims = scopedDims(target, authz)
+  const dims = await scopedDims(target, authz)
   // A scenario's persisted, tenant-verified book remains its historical basis
   // even after retirement. URL-selected statement books use the active picker.
   const bookId = scenarioBookId ?? (target.bookId === undefined ? undefined : (await reportBookSelection(authz.user.orgId, target.bookId)).selectedBook.id)
@@ -215,10 +234,11 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
 
 async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
   const { money } = await getMoneyFormatter(authz.user.orgId)
+  const dims = await scopedDims(target, authz)
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
-    agingDetail(target.side, target.asOf, scopedDims(target, authz), authz.user.orgId),
+    agingDetail(target.side, target.asOf, dims, authz.user.orgId),
   ])
   const rows = result.rows.filter((row) => (!target.partyId || row.partyId === target.partyId) && (!target.bucket || row.bucket === target.bucket))
   return {

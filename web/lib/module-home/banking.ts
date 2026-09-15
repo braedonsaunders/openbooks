@@ -50,7 +50,16 @@ export interface BankingHome {
 
 const TREND_WEEKS = 13
 
-export async function bankingHome(orgId: string, subIds?: string[]): Promise<BankingHome> {
+export async function bankingHome(
+  orgId: string,
+  subIds?: string[],
+  /**
+   * Server-set: the caller is unrestricted AND the viewed set contains the
+   * org root, so document-side counts also match root-owned (null
+   * subsidiary) rows. Restricted callers never receive it.
+   */
+  includeNullSubsidiary?: boolean,
+): Promise<BankingHome> {
   const today = await businessToday(orgId)
   const ago7 = addCalendarDays(today, -7)
   const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
@@ -67,6 +76,14 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  // Document-side counts match root-owned rows only for unrestricted
+  // root-covering views; the limb never widens an empty scope (see filters).
+  const docScope =
+    subArr && includeNullSubsidiary === true && (subIds?.length ?? 0) > 0
+      ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))`
+      : subArr
+        ? sql` and d.subsidiary_id = any(${subArr})`
+        : sql``
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
 
   const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
@@ -134,7 +151,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}
             and d.document_date >= ${ago7}
-            ${subArr ? sql`and d.subsidiary_id = any(${subArr})` : sql``}) as txns_7d
+            ${docScope}) as txns_7d
     `),
   ]))
 

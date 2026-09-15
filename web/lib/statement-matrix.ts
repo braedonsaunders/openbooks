@@ -87,6 +87,14 @@ export type StatementSubsidiaryContext = {
   /** Exact ownership multiplier. Equity-method entities are excluded upstream;
    * proportionately consolidated entities carry a factor below one. */
   weights?: { subsidiaryId: string; factor: string }[]
+  /**
+   * Server-set by resolveSubsidiaryView: the caller is unrestricted AND the
+   * viewed set contains the org root, so document-side readers built from
+   * these ids must also match root-owned (null subsidiary) rows. Line-side
+   * readers ignore it (journal legs are never null). Restricted callers
+   * never receive it — their nulls fail closed.
+   */
+  includeNullSubsidiary?: boolean
 }
 
 export type StatementColumnKind = 'amount' | 'variance_abs' | 'variance_pct'

@@ -128,7 +128,11 @@ export async function loadBanking(
   const subView = await reportSubsidiaryView(sp.sub as string | undefined, await resolveAsOf(authz.user.orgId))
 
   const [data, rosterPrefs, navGroups] = await Promise.all([
-    bankingHome(authz.user.orgId, subView.subsidiary?.ids),
+    bankingHome(
+      authz.user.orgId,
+      subView.subsidiary?.ids,
+      subView.subsidiary?.includeNullSubsidiary,
+    ),
     userPageLayout(authz.user.id, 'banking-accounts'),
     resolveNav(
       authz.user.orgId,

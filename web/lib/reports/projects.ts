@@ -141,7 +141,11 @@ export async function projectProfitability(
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
       left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
      where p.org_id = ${orgId}
-       ${opts.dims?.subsidiaryIds ? sql`and p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[])` : sql``}
+       ${opts.dims?.subsidiaryIds
+         ? opts.dims.subsidiaryIds.length > 0 && opts.dims.includeNullSubsidiary === true
+           ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[]))`
+           : sql`and p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[])`
+         : sql``}
        and (pl.project_id is not null or hrs.project_id is not null)
        ${opts.projectScope === 'all' ? sql`` : sql`and p.is_active`}
        ${opts.customerId ? sql`and p.customer_id = ${opts.customerId}` : sql``}
