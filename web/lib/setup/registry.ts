@@ -647,6 +647,11 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // it cannot drift once books exist.
     key: 'subsidiaries',
     table: 'subsidiaries',
+    // Subsidiary names are unique per org (subsidiaries_org_name), so the
+    // name is the import identity: re-imports dedupe with a friendly refusal
+    // instead of a raw unique-violation, and upserts cannot silently restate
+    // the locked baseCurrency (buildRow skips lockedOnEdit fields on edit).
+    naturalKey: 'name',
     actorCols: true,
     groupKey: 'company',
     iconKey: 'building',
