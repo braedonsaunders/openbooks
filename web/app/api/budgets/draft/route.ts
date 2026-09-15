@@ -24,7 +24,10 @@ export async function POST(req: Request) {
   const requestedBook = typeof body.bookId === 'string' ? body.bookId : null
   const requestedYear = Number(body.fiscalYear)
   const kind = BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? (body.kind as string) : 'budget'
-  const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId) ? body.sourceScenarioId : null
+  if (body.sourceScenarioId !== undefined && (typeof body.sourceScenarioId !== 'string' || !isUuid(body.sourceScenarioId))) {
+    return NextResponse.json({ error: 'invalid_source_scenario_id' }, { status: 422 })
+  }
+  const sourceScenarioId = typeof body.sourceScenarioId === 'string' ? body.sourceScenarioId : null
 
   const today = await businessToday(user.orgId)
   const defaults = (await db.execute<{ book_id: string | null; fiscal_year: number | null }>(sql`
