@@ -2072,6 +2072,19 @@ export async function runSync(
       if (u.reason === "cancelled" && have?.posted && have.status !== "voided")
         deletedAtSource.add(u.ref);
     }
+    // A source cancellation is terminal state, not a transient build failure:
+    // the adapter reports it unbuildable on every pull until the cursor moves
+    // past it. It fails verification only while it still names live local
+    // state this run neither mirrored nor saw controller-dispositioned.
+    // Anything else is converged (mirrored, retained, never imported, or
+    // already voided) and must not hold the cursor red forever.
+    const cancelledRefs = new Set(
+      changes.unbuildable
+        .filter((row) => row.reason === "cancelled")
+        .map((row) => row.ref),
+    );
+    const mirroredCancelledRefs = new Set<string>();
+    const dispositionedRefs = new Set<string>();
     const autoResolvedDeletions: string[] = [];
     if (deletedAtSource.size > 0) {
       // Recorded controller dispositions (retain / manual void) are
@@ -2082,6 +2095,7 @@ export async function runSync(
              where org_id = ${org.id} and connection_id = ${connectionId}
                and source_ref in ${[...deletedAtSource]}`))).rows
         : [];
+      for (const row of resolvedRows) dispositionedRefs.add(row.source_ref);
       for (const ref of unresolvedSourceDeletionCandidates(
         deletedAtSource,
         resolvedRows.map((row) => row.source_ref),
@@ -2093,6 +2107,7 @@ export async function runSync(
             sourceRef: ref,
           });
           autoResolvedDeletions.push(ref);
+          if (cancelledRefs.has(ref)) mirroredCancelledRefs.add(ref);
           deletedAtSource.delete(ref);
         } catch (deletionError) {
           skipped.push(
@@ -2101,6 +2116,19 @@ export async function runSync(
         }
       }
       for (const row of resolvedRows) deletedAtSource.delete(row.source_ref);
+    }
+    const convergedCancelledRefs = new Set<string>();
+    for (const ref of cancelledRefs) {
+      if (deletedAtSource.has(ref)) continue;
+      const have = existing.get(ref);
+      if (
+        mirroredCancelledRefs.has(ref) ||
+        dispositionedRefs.has(ref) ||
+        !have ||
+        have.status === "voided"
+      ) {
+        convergedCancelledRefs.add(ref);
+      }
     }
 
     // -- 6. applications ----------------------------------------------------------
@@ -2211,7 +2239,9 @@ export async function runSync(
       docsUnchanged,
       ordersNew,
       docsFailed,
-      sourceUnbuildable: changes.unbuildable.length,
+      sourceUnbuildable: changes.unbuildable.filter(
+        (row) => !convergedCancelledRefs.has(row.ref),
+      ).length,
       skipped: skipped.slice(0, 200),
       deletedAtSource: [...deletedAtSource].sort(),
       autoResolvedDeletions: autoResolvedDeletions.sort(),
