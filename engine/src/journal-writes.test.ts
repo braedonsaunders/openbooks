@@ -121,6 +121,19 @@ test("bad dates are refused; a missing date is refused rather than defaulted to 
   );
 });
 
+test("impossible calendar dates are refused, never passed to the database", () => {
+  // A format-only check let "2024-02-30" through validation; the draft insert
+  // then died in Postgres with a raw driver error (DrizzleQueryError, a
+  // 500-class failure) instead of a named JournalWriteError.
+  for (const documentDate of ["2024-02-30", "2023-02-29", "2024-04-31", "2024-13-01", "0000-01-01"]) {
+    assert.throws(
+      () => validateJournalInput({ documentDate, lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),
+      (e: Error) => e instanceof JournalWriteError && /invalid documentDate/.test(e.message),
+      `expected ${documentDate} to be refused`,
+    );
+  }
+});
+
 test("4dp rounding keeps a float-noise journal balanced", () => {
   // 0.1 + 0.2 - 0.3 = 5.55e-17 in floats; must still count as balanced.
   const v = validateJournalInput({
