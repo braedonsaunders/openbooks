@@ -391,7 +391,20 @@ function normalizeAmount(raw: string, label: string): string {
   } catch {
     throw new BankingError(`${label}: unparseable amount "${raw}"`);
   }
-  return fromUnits(negative ? -units : units);
+  units = negative ? -units : units;
+  assertLedgerRange(units, `${label}: amount "${raw}" is out of range for the ledger`);
+  return fromUnits(units);
+}
+
+/**
+ * Statement money lands in numeric(19,4) columns (lines and balances alike):
+ * fifteen whole digits. A pasted figure wider than that normalized fine and
+ * died only at the insert with a storage error. Fail closed at parse time,
+ * once, for every format that funnels through here.
+ */
+function assertLedgerRange(units: bigint, message: string): void {
+  const whole = (units < 0n ? -units : units) / 10_000n;
+  if (whole > 999_999_999_999_999n) throw new BankingError(message);
 }
 
 /**
@@ -788,7 +801,9 @@ function baiAmount(cents: string): string {
   const match = cents.match(/^([+-]?)(\d+)$/);
   if (!match) throw new BankingError(`BAI2: unparseable amount "${cents}"`);
   const sign = match[1] === "-" ? -1n : 1n;
-  return fromUnits(sign * BigInt(match[2]!) * 100n);
+  const units = sign * BigInt(match[2]!) * 100n;
+  assertLedgerRange(units, `BAI2: amount "${cents}" is out of range for the ledger`);
+  return fromUnits(units);
 }
 
 /**
