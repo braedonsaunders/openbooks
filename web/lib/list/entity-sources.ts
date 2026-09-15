@@ -503,17 +503,24 @@ const SOURCES: Record<string, EntityListSource> = {
       {
         paramKey: 'year',
         filterKey: 'fiscal_year',
-        loadOptions: async (orgId) => {
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
           // GROUP BY, not DISTINCT: ordering a DISTINCT by a column that only
           // appears cast in the select list is rejected by Postgres, and this
           // filter never loaded. Grouping also keeps the sort numeric — a text
           // sort would put 2030 before 999 and 9999 before 10000.
+          const visibleLineFilter = allowedSubsidiaryIds == null
+            ? sql``
+            : sql`and exists (
+                select 1 from budget_lines bl
+                 where bl.org_id = bs.org_id and bl.scenario_id = bs.id
+                   ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds)}
+              )`
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
-            select fiscal_year::text as value, fiscal_year::text as label
-              from budget_scenarios
-             where org_id = ${orgId}
-             group by fiscal_year
-             order by fiscal_year desc`)
+            select bs.fiscal_year::text as value, bs.fiscal_year::text as label
+              from budget_scenarios bs
+             where bs.org_id = ${orgId} ${visibleLineFilter}
+             group by bs.fiscal_year
+             order by bs.fiscal_year desc`)
           return result.rows
         },
       },
