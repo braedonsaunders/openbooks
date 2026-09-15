@@ -89,7 +89,7 @@ export async function loadEstimates(
   const openId = pickString(sp[PARAM])
 
   const [openOrder, pickers] = await Promise.all([
-    openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND) : null,
+    openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
     openId && openId !== 'new'
       ? Promise.all([
           db.execute(sql`

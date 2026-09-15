@@ -6,6 +6,7 @@ import { add, mul, normalizeDecimal, normalizeMoney, sum } from '@openbooks/engi
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
 import { taxProfileMap, type TaxProfiles } from '../../../lib/bills'
 import { canonicalDecimal } from '../../../lib/exact-decimal'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import type { OrderKind } from '../../../lib/order-cycle'
 
 /** Exact numeric(19,4) money string, or 'invalid'. */
@@ -89,12 +90,20 @@ export { taxProfileMap as orderTaxProfileMap }
  * (with item/account/tax display names resolved for read-only rendering), and
  * the document_links graph (origin + converted-into edges).
  */
-export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
+export async function loadOrder(
+  id: string,
+  orgId: string,
+  kind: OrderKind,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+) {
+  const orderScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)
+  const linkScope = subsidiaryVisibleFilter(sql`d2.subsidiary_id`, allowedSubsidiaryIds)
   const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, ${documentRevisionSql(sql`d.updated_at`)} as updated_at, p.display_name as party_name
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${kind}
+       ${orderScope}
   `))
   if (!doc.rows[0]) return null
 
@@ -118,11 +127,13 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
       from document_links dl
       join documents d2 on d2.id = dl.from_document_id and d2.org_id = dl.org_id
      where dl.to_document_id = ${id} and dl.org_id = ${orgId}
+       ${linkScope}
     union all
     select 'to' as direction, dl.link_type, d2.id, d2.kind, d2.document_number, d2.status
       from document_links dl
       join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
      where dl.from_document_id = ${id} and dl.org_id = ${orgId}
+       ${linkScope}
     order by 1
   `))
 
