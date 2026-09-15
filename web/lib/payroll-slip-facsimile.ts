@@ -14,6 +14,9 @@ import { TAX_FORM_LAYOUTS, type TaxFormLayout } from './tax-form-facsimile-html'
 export function payrollSlipFacsimile(
   slip: PayrollFilingSlipData,
   taxYear: number,
+  /** The currency the payroll ran in (org base) — slips carry no currency of
+   *  their own, so every caller passes the real value, never a guess. */
+  currency: string,
 ): { result: TaxReturnResult; layout: TaxFormLayout } {
   const base = TAX_FORM_LAYOUTS[slip.formCode]
   const layout: TaxFormLayout = {
@@ -34,8 +37,13 @@ export function payrollSlipFacsimile(
       submissionChannel: 'none',
       watermark: 'Working copy — not for filing',
       // Slips identify via the layout's per-slip header fields (employee,
-      // account, year) — they carry no indirect-tax registration identity.
+      // account, year) — they carry no indirect-tax registration identity,
+      // no subsidiary breakdown, and no translation (single payroll currency).
       registrationNumber: null,
+      functionalCurrency: currency,
+      subsidiaryIds: [],
+      registrationId: null,
+      translation: null,
       boxes: slip.boxes.map((box) => ({
         lineCode: box.code,
         label: box.label,

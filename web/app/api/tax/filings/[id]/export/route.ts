@@ -12,6 +12,11 @@ import { exportDataToCsv, exportDataToPdf, exportDataToXlsx, orgBranding, resolv
 
 export const runtime = 'nodejs'
 
+/** Fail closed: no base currency means no honest denomination for a reprint. */
+function missingBaseCurrency(): never {
+  throw new Error('organisation has no base currency — refusing the reprint')
+}
+
 /** Export the frozen snapshot, never a recomputation of today's ledger. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
@@ -32,9 +37,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       boxes: { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }[]
       snapshot_hash: string
       version: number
+      functional_currency: string | null
     }>(sql`
     select form_code, form_name, period_from::text, period_to::text, submission_channel,
-           boxes, snapshot_hash, version
+           boxes, snapshot_hash, version,
+           (select base_currency from orgs where id = ${gate.user.orgId}) as functional_currency
       from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`))
   const row = saved.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -48,7 +55,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     watermark: t('history.snapshotWatermark', { hash: row.snapshot_hash }),
     // The snapshot stores boxes only; a historical reprint carries no live
     // registration identity rather than a number that may have changed since.
+    // Its denomination is the org base — pre-entity snapshots keep no per-
+    // entity breakdown, so subsidiaryIds stays empty rather than inventing one.
+    // A missing base is an internal inconsistency: refuse the reprint rather
+    // than print a fabricated currency on a government form.
     registrationNumber: null,
+    functionalCurrency: row.functional_currency ?? missingBaseCurrency(),
+    subsidiaryIds: [],
+    registrationId: null,
+    translation: null,
     boxes: row.boxes.map((box) => ({ ...box, pdfField: null })),
   }
   const data = taxReturnExportData(result, t)

@@ -24,6 +24,10 @@ const result: TaxReturnResult = {
   submissionChannel: 'portal_manual',
   watermark: 'Working copy',
   registrationNumber: null,
+  functionalCurrency: 'CAD',
+  subsidiaryIds: [],
+  registrationId: null,
+  translation: null,
   boxes: [
     { lineCode: '101', label: 'Sales and other revenue', value: '9007199254740.9938', computed: false, editable: false, pdfField: null },
     { lineCode: '109', label: 'Net tax', value: '9007199254740.9938', computed: true, editable: false, pdfField: null },

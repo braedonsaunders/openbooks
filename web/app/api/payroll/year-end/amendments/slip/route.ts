@@ -54,7 +54,7 @@ export async function GET(req: Request) {
     )
     const branding = await orgBranding()
     if ((url.searchParams.get('format') ?? 'json') === 'pdf') {
-      const { result, layout } = payrollSlipFacsimile(slip, year)
+      const { result, layout } = payrollSlipFacsimile(slip, year, branding.baseCurrency)
       return pdfResponse(
         await renderTaxFormFacsimilePdf(
           result,
@@ -64,7 +64,7 @@ export async function GET(req: Request) {
         `${safeName(slip.formCode)}-${year}-${safeName(row)}-${await businessToday(gate.user.orgId)}`,
       )
     }
-    return NextResponse.json({ slip, orgName: branding.orgName })
+    return NextResponse.json({ slip, orgName: branding.orgName, currency: branding.baseCurrency })
   } catch (e) {
     if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
