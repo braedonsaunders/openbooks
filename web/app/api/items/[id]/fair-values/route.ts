@@ -28,10 +28,17 @@ async function itemExists(id: string, orgId: string) {
   return Boolean(r.rows[0])
 }
 
-function money(value: unknown): string | null {
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
+function money(value: unknown): string | null | 'range' {
   if (value === null || value === undefined || String(value).trim() === '') return null
   const exact = canonicalDecimal(value, 4)
-  return exact === null ? null : normalizeMoney(exact)
+  if (exact === null) return null
+  if (wholeDigits(exact) > 15) return 'range'
+  return normalizeMoney(exact)
 }
 
 function dateOrNull(value: unknown): string | null {
@@ -62,14 +69,19 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
   const currency = String(body.currency ?? '').trim().toUpperCase()
   if (!/^[A-Z]{3}$/.test(currency)) return { error: 'Currency must be a three-letter code' }
   const unitPrice = money(body.unitPrice)
+  if (unitPrice === 'range') return { error: 'Unit price is out of range — at most 15 whole digits fit the ledger' }
   if (unitPrice === null || !isPositiveDecimal(unitPrice)) return { error: 'Enter a unit price greater than zero' }
+  const lowValue = money(body.lowValue)
+  if (lowValue === 'range') return { error: 'Low value is out of range — at most 15 whole digits fit the ledger' }
+  const highValue = money(body.highValue)
+  if (highValue === 'range') return { error: 'High value is out of range — at most 15 whole digits fit the ledger' }
   const effectiveFrom = dateOrNull(body.effectiveFrom)
   const effectiveTo = dateOrNull(body.effectiveTo)
   if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) {
     return { error: 'The end date cannot precede the start date' }
   }
   return {
-    currency, unitPrice, lowValue: money(body.lowValue), highValue: money(body.highValue),
+    currency, unitPrice, lowValue, highValue,
     effectiveFrom, effectiveTo, isActive: body.isActive === undefined ? true : Boolean(body.isActive),
   }
 }
