@@ -302,5 +302,24 @@ test('expense DELETE with the exact revision deletes the draft', { skip: !DB }, 
   })
 })
 
+test('expense PATCH refuses a malformed document date with a domain error instead of a storage 500', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    // A shape-invalid date must fail closed at the route boundary — sibling
+    // PATCH routes (journals, payments) validate with isoDate, but this one
+    // forwarded the raw string into coalesce(document_date), where Postgres
+    // raised 22P02 and the caller received a raw 500.
+    const malformed = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: 'not-a-date' })
+    assert.equal(malformed.status, 422, JSON.stringify(await malformed.clone().json()))
+    // A shape-valid but impossible calendar day must fail closed too.
+    const impossible = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: '2026-02-30' })
+    assert.equal(impossible.status, 422, JSON.stringify(await impossible.clone().json()))
+    const stored = (await db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${org.orgId}`)).rows[0]!.d
+    assert.equal(stored, org.date, 'refused dates write nothing')
+    // A real calendar day still saves.
+    const saved = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: '2026-02-27' })
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
+  })
+})
+
 
 test.after(async () => { await pool.end() })
