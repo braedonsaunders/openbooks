@@ -36,6 +36,7 @@ import {
 import { guardPermission } from "../../../lib/authz";
 import type { Authz } from "../../../lib/authz";
 import {
+  findUnownedCustomReferences,
   loadFieldDefs,
   validateCustomValues,
 } from "../../../lib/custom-fields";
@@ -389,12 +390,35 @@ export async function POST(request: Request) {
   try {
     let result: unknown;
     switch (action) {
-      case "createProperty":
-        result = await createManagedProperty({ ...body, ...common } as unknown as { orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; });
+      case "createProperty": {
+        // createManagedProperty stores body.custom verbatim, so shape AND
+        // ownership are fenced here before anything persists.
+        const createDefs = await loadFieldDefs("managed_properties");
+        const createValidation = validateCustomValues(createDefs, body.custom);
+        if (!createValidation.ok) {
+          return NextResponse.json(
+            {
+              error:
+                Object.values(createValidation.errors)[0] ?? "Invalid custom fields",
+              errors: createValidation.errors,
+            },
+            { status: 400 },
+          );
+        }
+        const unownedCreateRefs = await findUnownedCustomReferences(common.orgId, createDefs, createValidation.cleaned);
+        if (unownedCreateRefs.length > 0) {
+          return NextResponse.json(
+            { error: `${unownedCreateRefs[0]!.label} not found in this organization` },
+            { status: 404 },
+          );
+        }
+        result = await createManagedProperty({ ...body, custom: createValidation.cleaned, ...common } as unknown as { orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
         break;
+      }
       case "updateProperty": {
+        const updateDefs = await loadFieldDefs("managed_properties");
         const validation = validateCustomValues(
-          await loadFieldDefs("managed_properties"),
+          updateDefs,
           body.custom,
         );
         if (!validation.ok) {
@@ -405,6 +429,16 @@ export async function POST(request: Request) {
               errors: validation.errors,
             },
             { status: 400 },
+          );
+        }
+        // The engine replaces the bag whole, so the full cleaned bag is
+        // newly stored: refuse foreign or dangling reference ids with a
+        // tenant-opaque 404 instead of persisting a cross-tenant pointer.
+        const unownedUpdateRefs = await findUnownedCustomReferences(common.orgId, updateDefs, validation.cleaned);
+        if (unownedUpdateRefs.length > 0) {
+          return NextResponse.json(
+            { error: `${unownedUpdateRefs[0]!.label} not found in this organization` },
+            { status: 404 },
           );
         }
         result = await updateManagedProperty({

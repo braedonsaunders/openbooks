@@ -286,6 +286,7 @@ export async function createManagedProperty(input: {
   orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null;
   code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>;
   rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null;
+  custom?: Record<string, unknown>;
 }): Promise<{ id: string }> {
   const code = input.code.trim(); const name = input.name.trim();
   if (!code || !name) throw new PropertyManagementError("Property code and name are required");
@@ -344,10 +345,10 @@ export async function createManagedProperty(input: {
     ]);
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into managed_properties(org_id,subsidiary_id,location_id,fixed_asset_id,code,name,property_type,currency,address,
-        rent_income_account_id,cam_income_account_id,deposit_liability_account_id,default_bank_account_id,created_by,updated_by)
+        rent_income_account_id,cam_income_account_id,deposit_liability_account_id,default_bank_account_id,custom,created_by,updated_by)
       values(${input.orgId},${input.subsidiaryId},${input.locationId ?? null},${input.fixedAssetId ?? null},${code},${name},${input.propertyType},
         ${requestedCurrency || row.currency},${JSON.stringify(input.address ?? {})}::jsonb,${input.rentIncomeAccountId ?? null},${input.camIncomeAccountId ?? null},
-        ${input.depositLiabilityAccountId ?? null},${input.defaultBankAccountId ?? null},${input.actorId},${input.actorId}) returning id
+        ${input.depositLiabilityAccountId ?? null},${input.defaultBankAccountId ?? null},${JSON.stringify(input.custom ?? {})}::jsonb,${input.actorId},${input.actorId}) returning id
     `));
     const id = inserted.rows[0]!.id;
     await audit(tx, input.orgId, "managed_properties", id, "insert", input.actorId, { code, name });

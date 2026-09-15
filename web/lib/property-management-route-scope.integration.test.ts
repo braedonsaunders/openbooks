@@ -117,3 +117,50 @@ test('R4: updateLease cannot re-parent a lease into a property outside the calle
     await dropScratchOrg(org.orgId);
   }
 });
+
+test('property create/update refuse foreign reference custom values', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, fx } = await seed();
+  const foreign = await createScratchOrg();
+  try {
+    state.user = session(fx);
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${randomUUID()}, ${org.orgId}, 'managed_properties', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${fx.actorId}, ${fx.actorId})
+    `);
+    const createBody = (custom: Record<string, unknown>) => ({
+      action: 'createProperty', subsidiaryId: fx.subsidiaryId, code: 'PRP-CF', name: 'Ref fence property',
+      propertyType: 'commercial', status: 'active', custom,
+    });
+    const refusedCreate = await withOrgContext(org.orgId, () => post(createBody({ ref_party: foreign.customerId })));
+    assert.equal(refusedCreate.status, 404, `expected 404, got ${refusedCreate.status}: ${JSON.stringify(await refusedCreate.clone().json().catch(() => null))}`);
+    const created = await db.execute<{ n: number }>(sql`select count(*)::int as n from managed_properties where org_id = ${org.orgId} and code = 'PRP-CF'`);
+    assert.equal(created.rows[0]?.n ?? -1, 0, 'refused create stores nothing');
+    const okCreate = await withOrgContext(org.orgId, () => post(createBody({ ref_party: fx.tenantId })));
+    assert.equal(okCreate.status, 201, `expected 201, got ${okCreate.status}: ${JSON.stringify(await okCreate.clone().json().catch(() => null))}`);
+    const propertyId = ((await okCreate.json()) as { id: string }).id;
+    // NOTE: create-time custom persistence lives in engine/src/property-management.ts,
+    // which this worktree resolves to the main checkout at runtime; it is proven by
+    // the /tmp/b02-prop-eng probe (absolute-path import, STORED:{"ref_party":"…"}).
+    // This route test proves the fence decisions (404s) plus update-half storage.
+    const updateBody = (custom: Record<string, unknown>) => ({
+      action: 'updateProperty', propertyId, subsidiaryId: fx.subsidiaryId, code: 'PRP-CF', name: 'Ref fence property',
+      propertyType: 'commercial', status: 'active', custom,
+    });
+    // Seed a stored own-org reference through the update path (which persists
+    // custom on every engine revision), then prove a refused edit keeps it.
+    const seedUpdate = await withOrgContext(org.orgId, () => post(updateBody({ ref_party: fx.tenantId })));
+    assert.equal(seedUpdate.status, 200, `seed update must stay green: ${JSON.stringify(await seedUpdate.clone().json().catch(() => null))}`);
+    const refusedUpdate = await withOrgContext(org.orgId, () => post(updateBody({ ref_party: foreign.customerId })));
+    assert.equal(refusedUpdate.status, 404, `expected 404, got ${refusedUpdate.status}: ${JSON.stringify(await refusedUpdate.clone().json().catch(() => null))}`);
+    const storedUpdate = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from managed_properties where id = ${propertyId}`)).rows[0]?.custom;
+    assert.equal((storedUpdate as Record<string, unknown> | undefined)?.ref_party, fx.tenantId, 'refused update leaves stored custom untouched');
+    const okUpdate = await withOrgContext(org.orgId, () => post(updateBody({})));
+    assert.equal(okUpdate.status, 200, `own update must stay green: ${JSON.stringify(await okUpdate.clone().json().catch(() => null))}`);
+  } finally {
+    state.user = null;
+    await dropScratchOrg(foreign.orgId);
+    await dropScratchOrg(org.orgId);
+  }
+});
