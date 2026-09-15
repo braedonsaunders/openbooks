@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { inTypeAudience, loadRecordTypeByKey } from '../../../../lib/records'
 import { clamp } from '../../../../lib/list-params'
+import { pgTextArrayLiteral } from '../../../../lib/pg-array'
+import { lintRecordFields } from '../../../../lib/record-schema'
 
 export const runtime = 'nodejs'
 
@@ -21,6 +23,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
   if (!type || type.status !== 'published' || !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  const lint = lintRecordFields(type.fields, type.name)
+  const hasSubsidiaryField = lint.success && lint.sections.some((section) =>
+    section.fields.some((field) => field.id === 'subsidiary_id'),
+  )
 
   const url = new URL(req.url)
   const q = url.searchParams.get('q')?.trim()
@@ -29,6 +35,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
   const perPage = clamp(Number(url.searchParams.get('perPage') ?? '25'), 5, 100)
 
   const where = sql`r.org_id = ${user.orgId} and r.type_key = ${typeKey}
+    ${!hasSubsidiaryField || gate.allowedSubsidiaryIds === null
+      ? sql``
+      : gate.allowedSubsidiaryIds.size === 0
+        ? sql` and false`
+        : sql` and r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...gate.allowedSubsidiaryIds])}::text[])`}
     ${status ? sql` and r.status = ${status}` : sql``}
     ${q ? sql` and (r.search_text ilike ${'%' + q.toLowerCase() + '%'} or r.record_number ilike ${'%' + q + '%'})` : sql``}`
 
