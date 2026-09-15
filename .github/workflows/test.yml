@@ -469,6 +469,8 @@ jobs:
       ADMIN_PASSWORD: e2e-test-password-123
       E2E_EMAIL: e2e@openbooks.test
       E2E_PASSWORD: e2e-test-password-123
+      E2E_APPROVER_EMAIL: approver@openbooks.test
+      E2E_APPROVER_PASSWORD: approver-test-password-123
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -481,6 +483,18 @@ jobs:
         # bootstrap creates the first org, roles, calendars, and — because
         # ADMIN_EMAIL is set — the admin login the specs authenticate with.
         run: npx tsx scripts/bootstrap.ts
+
+      - name: Seed workflow approver
+        # The close-to-reporting workflow (e2e/workflows) requires a second
+        # actor: independent close approval and the controlled-reopen decision
+        # both refuse the requesting user, and no HTTP endpoint creates users.
+        # Both sessions log in through the real /api/login; the extra user is
+        # inert for every other spec.
+        env:
+          E2E_SEED_APPROVER: "1"
+          E2E_APPROVER_EMAIL: approver@openbooks.test
+          E2E_APPROVER_PASSWORD: approver-test-password-123
+        run: node --import tsx e2e/workflows/support/seed-e2e-approver.ts
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

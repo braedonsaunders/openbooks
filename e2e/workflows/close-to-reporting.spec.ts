@@ -9,6 +9,7 @@ import {
   draftSeedDocument,
   expect,
   binderHash,
+  expectOkResponse,
   extractPdfText,
   ok,
   postSeedDocument,
@@ -442,7 +443,7 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Request approval" }).click();
-      expect((await requested).status()).toBe(200);
+      await expectOkResponse(await requested, "request approval");
       await expect(page.getByText("In review").first()).toBeVisible();
 
       // Second actor through the real login — no bypass, no shared session.
@@ -482,7 +483,7 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Lock period" }).click();
-      expect((await locked).status()).toBe(200);
+      await expectOkResponse(await locked, "lock period");
       await expect(page.getByText("Closed").first()).toBeVisible();
       await expect(page.getByText(/Period locked by/).first()).toBeVisible();
     } finally {
@@ -780,7 +781,7 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Publish package" }).click();
-      expect((await published).status()).toBe(200);
+      await expectOkResponse(await published, "publish package");
       await expect(page.getByText("Published").first()).toBeVisible();
 
       // The binder is hash-addressed: recompute the sha256 over the canonical
@@ -841,7 +842,7 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith("/api/admin/close") && r.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Request reopening" }).click();
-      expect((await requested).status()).toBe(200);
+      await expectOkResponse(await requested, "request approval");
       // The request appears in the reopen list; follow it for its id.
       await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
       const request = page.getByRole("link", { name: new RegExp(`${P.name}.*Primary`) }).first();
@@ -924,7 +925,7 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Request approval" }).click();
-      expect((await rerequested).status()).toBe(200);
+      await expectOkResponse(await rerequested, "re-request approval");
       const gates = ok(await api(apage.request, baseURL!, "GET", "/api/flows/gates"), "gates again");
       const pending = ((gates.gates ?? []) as { id: string; subjectId: string; status?: string }[]).filter(
         (g) => g.subjectId === SEED.runId,
@@ -946,13 +947,13 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Lock period" }).click();
-      expect((await relocked).status()).toBe(200);
+      await expectOkResponse(await relocked, "re-lock period");
       const republished = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.goto(`/close?run=${SEED.runId}&stage=publish`);
       await page.getByRole("button", { name: "Publish package" }).click();
-      expect((await republished).status()).toBe(200);
+      await expectOkResponse(await republished, "re-publish package");
       const res2 = await page.request.get(`${baseURL}/api/close/runs/${SEED.runId}/binder`, {
         headers: { Origin: new URL(baseURL!).origin },
       });
