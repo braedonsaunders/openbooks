@@ -112,3 +112,53 @@ test("formula TAX_RATE resolves each org default and fails closed", () => {
 test("forecast buckets place a 90-day-old item in 90+", () => {
   assert.match(coreSource, /if \(daysPastDue < 90\) return "61-90";/);
 });
+
+test("cash forecast horizon caps at 26 weeks with a 13-week standard preset", () => {
+  // 13 weeks is the industry-standard rolling forecast; 26 is the supported
+  // cap. Both loaders and both switchers derive from this contract.
+  assert.match(coreSource, /export const MAX_CASH_HORIZON_WEEKS = 26;/);
+  assert.match(coreSource, /export const CASH_HORIZON_PRESETS = \[4, 8, 13, 26\]/);
+  assert.match(coreSource, /export function normalizeCashHorizonWeeks/);
+});
+
+test("horizon normalizer accepts the cap range and fails closed to the fallback", () => {
+  // core.ts is server-only in production, so run the behavior check under
+  // React's server condition (the same pattern used by other web tests).
+  const source = `
+    import assert from "node:assert/strict";
+    import { CASH_HORIZON_PRESETS, MAX_CASH_HORIZON_WEEKS, normalizeCashHorizonWeeks } from "./web/lib/cash/core.ts";
+
+    assert.deepEqual([...CASH_HORIZON_PRESETS], [4, 8, 13, 26]);
+    assert.equal(MAX_CASH_HORIZON_WEEKS, 26);
+    assert.equal(normalizeCashHorizonWeeks(13, 8), 13);
+    assert.equal(normalizeCashHorizonWeeks(26, 8), 26);
+    assert.equal(normalizeCashHorizonWeeks("13", 8), 13);
+    assert.equal(normalizeCashHorizonWeeks(12, 8), 12);
+    assert.equal(normalizeCashHorizonWeeks(27, 8), 8);
+    assert.equal(normalizeCashHorizonWeeks(0, 8), 8);
+    assert.equal(normalizeCashHorizonWeeks("soon", 4), 4);
+    assert.equal(normalizeCashHorizonWeeks(undefined, 4), 4);
+    console.log("cash horizon behavior passed: presets inside the cap, out-of-range and garbage fall back");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("cash cockpit switchers offer the core horizon presets", () => {
+  // The client switchers cannot import the server-only core, so they carry
+  // the preset literal — pinned here to the single source of truth.
+  const cockpit = readFileSync(join(import.meta.dirname, "../../app/(app)/banking/cash/CashCockpit.tsx"), "utf8");
+  assert.match(cockpit, /HORIZONS = \[4, 8, 13, 26\]/);
+  const control = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/HorizonControl.tsx"), "utf8");
+  assert.match(control, /<option value="13">13 Weeks<\/option>/);
+  assert.match(control, /<option value="26">26 Weeks<\/option>/);
+  assert.doesNotMatch(control, /<option value="12">/);
+  const bankingView = readFileSync(join(import.meta.dirname, "../../app/(app)/banking/cash/view.ts"), "utf8");
+  assert.match(bankingView, /normalizeCashHorizonWeeks\(sp\.horizon, 8\)/);
+  const analyticsView = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/view.ts"), "utf8");
+  assert.match(analyticsView, /normalizeCashHorizonWeeks\(sp\.horizon, 4\)/);
+});

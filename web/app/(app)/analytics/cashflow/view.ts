@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { cashflowData } from '../../../../lib/analytics/cashflow-data'
-import { withoutWeekEntries } from '../../../../lib/cash/core'
+import { normalizeCashHorizonWeeks, withoutWeekEntries } from '../../../../lib/cash/core'
 import type { CashflowView } from './CashflowView'
 
 /**
@@ -19,11 +19,12 @@ import type { CashflowView } from './CashflowView'
  * control. A widget taking a `control` name string would be a component
  * reference smuggled through a spec, which the language forbids.
  *
- * Loader work copied VERBATIM: the `reports.read` gate, the 4/8/12 horizon
- * whitelist (anything else falls back to 4), and the `withoutWeekEntries`
- * trim. That trim is the interesting one, and its native comment is kept
- * below: week totals travel with the page, the transactions behind them do
- * not — the week flyout fetches whichever week is opened at full detail.
+ * Loader work copied VERBATIM: the `reports.read` gate, the horizon normalizer
+ * (any whole week count inside the core cap, else the dashboard default 4),
+ * and the `withoutWeekEntries` trim. That trim is the interesting one, and
+ * its native comment is kept below: week totals travel with the page, the
+ * transactions behind them do not — the week flyout fetches whichever week
+ * is opened at full detail.
  */
 
 type CashflowProps = Parameters<typeof CashflowView>[0]
@@ -40,8 +41,7 @@ export async function loadCashflow(sp: Record<string, string | undefined>): Prom
   const t = await getTranslations('analytics.cashflow')
   const authz = await requirePermission('reports.read')
 
-  const parsed = Number(sp.horizon)
-  const horizon = parsed === 8 || parsed === 12 ? parsed : 4
+  const horizon = normalizeCashHorizonWeeks(sp.horizon, 4)
 
   const position = await cashflowData(authz.user.orgId, horizon, undefined, authz.allowedSubsidiaryIds)
   // Week totals, counts and the per-counterparty aggregate travel with the
