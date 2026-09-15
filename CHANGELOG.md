@@ -4,6 +4,88 @@ OpenBooks follows [Semantic Versioning](https://semver.org/) while its public
 API and deployment format stabilize. Alpha releases may contain breaking
 changes; each release documents required operator action.
 
+## [0.1.0-alpha.5] - 2026-09-15
+
+A hardening release. A multi-agent audit read the engine, API, and application
+layers end to end and shipped about 350 atomic defect fixes, each with a
+regression test that failed before the fix and passes after it. No feature
+work is included. Operator action: none beyond the normal migration step; the
+three payroll migrations below are additive.
+
+### Financial integrity
+
+- Posting: source corrections can no longer over-apply live settlements;
+  negative-total credit memos and vendor credits are refused at the posting
+  boundary; FX spot lookups break direct/inverse ties deterministically; line
+  accounts and parties are checked against the tenant and subsidiary before
+  any write; the vendor-payment "total is the cash amount" contract is pinned.
+- Payments and receipts: allocation totals use exact money everywhere the UI
+  or engine summed them; provider over-collection stays on account instead of
+  being dropped; early-payment discounts are vendor-only; settlement evidence
+  is scoped to the run's bank account; CPA-005, NACHA and SEPA writers refuse
+  blank, oversized or checksum-invalid account and creditor identifiers.
+- Banking: Plaid pending authorizations are no longer imported as statement
+  truth; GoCardless and CAMT.053 lines are keyed by provider-unique ids;
+  inactive reconciliation rules cannot be applied; SFTP statements are parsed
+  from exact bytes.
+- Payroll: signed stub lines net the deduction-protection base; WCB and
+  employer QPIP caps consume committed stubs only; staleness watches pay
+  schedules, statutory rates and union fringes; US state withholding engines
+  receive YTD supplemental wages and current federal tax; RL-1 slips carry
+  opening YTD; Quebec-only remittances use the Revenu Quebec calendar; SINs
+  are Luhn-checked on T4/RL-1 transmission; bank-file generation re-verifies
+  approval inside its transaction; opening balances now carry second-order YTD
+  history and capped employer levies (migrations 0141 and 0143); retro
+  readiness compares against a persisted quantification snapshot (0142).
+- Tax: taxable-base return boxes convert at the posted FX rate; MACRS pool
+  runs refuse short-year factors; nexus rates compare at ledger scale;
+  provision reconciliation percents round half away from zero; filing boxes
+  keep exact decimals; 1099 thresholds and box rules follow the IRS
+  instructions (fishing boat proceeds, OBBBA 2026 threshold, corporate boxes).
+- Consolidation and FX: proportionate interests are eliminated; source-to-
+  elimination rate pairs are derived; test FX syncs no longer move the
+  production schedule cursor.
+- Reports and analytics: quarter breakouts follow the organization's fiscal
+  start month; cash-basis drill-downs tie to settlement-share recognition;
+  utilization and true-cost bases count approved time only; project margins
+  scale identically in tables and exports; CSV exports keep exact decimals;
+  cockpit tiles are scoped to the primary book and visible subsidiaries and
+  translate mixed-currency totals.
+
+### Isolation, authorization, and audit
+
+- Subsidiary scope is enforced on budgets, journals, timesheets, approvals,
+  flows, custom records, file-cabinet folders, parties, assistant and MCP
+  tools, payroll run populations, and every module cockpit that read past it.
+- Feature gates for field tickets, WIP billing, work breakdown and project
+  scheduling are enforced in services, not only in navigation.
+- Configuration saves (close policy, automation, calendars, reporting
+  packages, sandbox schedules), timesheet decisions, and approval gate
+  decisions write actor-attributed before/after audit evidence.
+- Sealed tax identifiers are omitted from directory payloads; sandbox clones
+  scrub masked custom data and users and rebuild derived aggregates.
+
+### API contracts
+
+- Malformed ids answer 404 on every verb instead of surfacing database errors;
+  PATCH and DELETE validate what POST validates (dates, booleans, enums,
+  referenced ids, custom fields on partial updates); document edits and voids
+  carry the exact revision token so stale writes are refused.
+
+### Sync
+
+- Open-item verification compares expense reports alongside invoices, bills
+  and credits (the NetSuite mirror had failed the financial gate on a clean
+  ledger since the previous release); QuickBooks report dates are normalized
+  at the adapter boundary; realized-FX groups get their own entry numbers;
+  master-data upserts type their JSON parameters; tax-rate mirrors touch only
+  the open current window.
+
+### Test infrastructure
+
+- Test fixtures refuse databases that do not carry the ephemeral marker, so a
+  stray test run cannot write to a real database.
+
 ## [0.1.0-alpha.4] - 2026-08-20
 
 ### Time and timesheets
