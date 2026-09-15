@@ -8,6 +8,8 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
+import { flowRates, translateFlows } from "../fx-presentation";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 
 /**
  * Customer Intelligence — the data behind /analytics/customer-intelligence.
@@ -267,19 +269,23 @@ interface ProfitabilitySqlRow {
 interface CustomerBaseSqlRow {
   id: string;
   name: string;
+  func: string | null;
   revenue: CustomerSqlNumeric;
   prior_revenue: CustomerSqlNumeric;
   txn_count: CustomerSqlNumeric;
-  avg_value: CustomerSqlNumeric;
+  late: string | null;
+  late_prior: string | null;
   first_txn: unknown;
   last_txn: unknown;
 }
 
 interface CustomerFrictionSqlRow {
   id: string;
+  func: string | null;
   credit_count: CustomerSqlNumeric;
   order_count: CustomerSqlNumeric;
   credit_value: CustomerSqlNumeric;
+  late: string | null;
 }
 
 interface CustomerPaymentSqlRow {
@@ -292,10 +298,12 @@ interface CustomerPaymentSqlRow {
 
 interface CustomerGrowthSqlRow {
   month: string;
+  func: string | null;
   revenue: CustomerSqlNumeric;
   unique_customers: CustomerSqlNumeric;
   txn_count: CustomerSqlNumeric;
   new_customers: CustomerSqlNumeric;
+  late: string | null;
 }
 
 function profitTierOf(marginPct: number): ProfitTier {
@@ -333,7 +341,7 @@ export async function customerProfitability(period: { from: string; to: string }
   // the tenant before the date filter narrows anything.
   const r = ((await db.execute(sql`
     with ew as materialized (
-      select id, org_id from journal_entries
+      select id, org_id, posting_date from journal_entries
        where posting_date >= ${from} and posting_date <= ${to}
          ${orgId ? sql`and org_id = ${orgId}` : sql``}
          and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
@@ -342,6 +350,8 @@ export async function customerProfitability(period: { from: string; to: string }
       coalesce(cp.display_name, 'Unknown') as customer_name,
       pr.id as job_id,
       coalesce(pr.name, 'Untitled project') as job_name,
+      sub.base_currency as func,
+      max(e.posting_date)::text as late,
       -sum(case when a.type in ('income','income_other') then l.amount else 0 end) as revenue,
       sum(case when a.type in ('cogs','expense','expense_deferred') then l.amount else 0 end) as costs,
       count(distinct e.id) as txns
@@ -350,34 +360,56 @@ export async function customerProfitability(period: { from: string; to: string }
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
     join parties cp on cp.id = pr.customer_id and cp.org_id = pr.org_id
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.project_id is not null and pr.customer_id is not null
       ${orgFilter}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       ${subsidiaryVisibleFilter(sql`pr.subsidiary_id`, allowed)}
-    group by pr.customer_id, cp.display_name, pr.id, pr.name
+    group by pr.customer_id, cp.display_name, pr.id, pr.name, sub.base_currency
   `)));
 
+  // Legs are stamped in their line entity's functional: translate each
+  // (job, functional) leg at its latest posting date, then merge per job.
+  interface ProfitLeg extends ProfitabilitySqlRow { func: string | null; late: string | null }
+  const legs = r.rows as unknown as ProfitLeg[];
+  const profitCtx = await flowRates(orgId, legs.map((leg) => ({
+    func: leg.func ?? null,
+    date: (leg.late ?? to).slice(0, 10),
+  })));
   const byCustomer = new Map<string, ProfitCustomer>();
-  for (const row of r.rows as unknown as ProfitabilitySqlRow[]) {
-    const revenue = Number(row.revenue);
-    const costs = Number(row.costs);
+  const byJob = new Map<string, { customer_id: string; customer_name: string; job_id: string; job_name: string; revenue: string; costs: string; txns: number }>();
+  for (const leg of legs) {
+    const key = `${leg.customer_id} ${leg.job_id}`;
+    const date = (leg.late ?? to).slice(0, 10);
+    const cur = byJob.get(key) ?? {
+      customer_id: leg.customer_id, customer_name: leg.customer_name,
+      job_id: leg.job_id, job_name: leg.job_name, revenue: "0", costs: "0", txns: 0,
+    };
+    cur.revenue = add(cur.revenue, mulDecimal(String(leg.revenue ?? 0), profitCtx.rateAt(leg.func ?? null, date)));
+    cur.costs = add(cur.costs, mulDecimal(String(leg.costs ?? 0), profitCtx.rateAt(leg.func ?? null, date)));
+    cur.txns += Number(leg.txns ?? 0);
+    byJob.set(key, cur);
+  }
+  for (const merged of byJob.values()) {
+    const revenue = Number(merged.revenue);
+    const costs = Number(merged.costs);
     const profit = revenue - costs;
     // Skip empty projects (no revenue and no cost).
     if (revenue === 0 && costs === 0) continue;
     const job: ProfitJob = {
-      jobId: row.job_id,
-      jobName: row.job_name,
+      jobId: merged.job_id,
+      jobName: merged.job_name,
       revenue,
       costs,
       profit,
       marginPct: revenue > 0 ? (profit / revenue) * 100 : 0,
-      transactionCount: Number(row.txns),
+      transactionCount: merged.txns,
     };
-    let c = byCustomer.get(row.customer_id);
+    let c = byCustomer.get(merged.customer_id);
     if (!c) {
-      c = { customerId: row.customer_id, customerName: row.customer_name, totalRevenue: 0, totalCost: 0, grossProfit: 0, marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
-      byCustomer.set(row.customer_id, c);
+      c = { customerId: merged.customer_id, customerName: merged.customer_name, totalRevenue: 0, totalCost: 0, grossProfit: 0, marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
+      byCustomer.set(merged.customer_id, c);
     }
     c.jobs.push(job);
     c.totalRevenue += revenue;
@@ -455,42 +487,49 @@ export async function customerData(period: { from: string; to: string; label: st
   const hhiCritical = cfg.hhiCritical!;
   const clvYears = cfg.clvYears!;
 
-  const [baseRows, frictionRows, paymentRows, growthRows, cohortRows, profitData] = await Promise.all([
+  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, profitData] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer count / revenue / avg / first / last / recency / tenure.
     // Prior-year revenue added for YoY context (openbooks extension).
+    // documents.total is transaction currency: the first leg translates at
+    // the posted document rate to the posting subsidiary's functional; the
+    // second leg to presentation runs per (party, functional) below.
     (db.execute(sql`
       select d.party_id as id, coalesce(p.display_name, 'Unknown') as name,
+        sub.base_currency as func,
         count(*) filter (where d.posting_date >= ${from}) as txn_count,
-        -- documents.total is transaction currency: translate at the posted
-        -- document rate so multi-currency revenue adds in functional terms.
         sum(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${from}) as revenue,
-        avg(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${from}) as avg_value,
         sum(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo}) as prior_revenue,
+        max(d.posting_date) filter (where d.posting_date >= ${from})::text as late,
+        max(d.posting_date) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo})::text as late_prior,
         min(d.posting_date) filter (where d.posting_date >= ${from}) as first_txn,
         max(d.posting_date) filter (where d.posting_date >= ${from}) as last_txn
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
         and d.voided_at is null and d.party_id is not null
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         and d.posting_date >= ${pFrom} and d.posting_date <= ${to}
-      group by d.party_id, p.display_name
+      group by d.party_id, p.display_name, sub.base_currency
       having sum(abs(d.total)) filter (where d.posting_date >= ${from}) > 0
     `)),
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
+    // Credit value translates per (party, functional) below.
     (db.execute(sql`
-      select d.party_id as id,
+      select d.party_id as id, sub.base_currency as func,
         count(*) filter (where d.kind = 'customer_credit') as credit_count,
         coalesce(sum(abs(d.total) * d.fx_rate) filter (where d.kind = 'customer_credit'), 0) as credit_value,
+        max(d.posting_date) filter (where d.kind = 'customer_credit')::text as late,
         count(*) filter (where d.kind = 'customer_invoice') as order_count
       from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind in ('customer_credit', 'customer_invoice')
         and d.status = 'posted' and d.voided_at is null and d.party_id is not null
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         and d.posting_date >= ${from} and d.posting_date <= ${to}
-      group by d.party_id
+      group by d.party_id, sub.base_currency
       having count(*) filter (where d.kind = 'customer_invoice') > 0
     `)),
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
@@ -553,9 +592,31 @@ export async function customerData(period: { from: string; to: string; label: st
          group by party_id
       )
       select to_char(d.posting_date, 'YYYY-MM') as month,
+        sub.base_currency as func,
+        sum(abs(d.total) * d.fx_rate) as revenue,
+        max(d.posting_date)::text as late
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+        and d.voided_at is null and d.party_id is not null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+        and d.posting_date >= ${from} and d.posting_date <= ${to}
+      group by 1, 2 order by 1
+    `)),
+    // Growth counts — distinct customers never merge across functionals, so
+    // they stay on their own month grain while revenue translates above.
+    (db.execute(sql`
+      with first_doc as (
+        select party_id, min(date_trunc('month', posting_date)) as first_month
+          from documents
+         where org_id = ${orgId} and kind in ('customer_invoice', 'sales_order')
+           and voided_at is null and party_id is not null
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
+         group by party_id
+      )
+      select to_char(d.posting_date, 'YYYY-MM') as month,
         count(distinct d.party_id) as unique_customers,
         count(*) as txn_count,
-        sum(abs(d.total) * d.fx_rate) as revenue,
         count(distinct d.party_id) filter (
           where f.first_month = date_trunc('month', d.posting_date)) as new_customers
       from documents d
@@ -568,14 +629,18 @@ export async function customerData(period: { from: string; to: string; label: st
     `)),
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
+    // Lifetime revenue translates per (party, functional) below.
     (db.execute(sql`
-      select party_id as id, max(posting_date) as last_order, min(posting_date) as first_order,
+      select party_id as id, sub.base_currency as func,
+        max(posting_date) as last_order, min(posting_date) as first_order,
+        max(posting_date)::text as late,
         sum(abs(total) * fx_rate) as lifetime_revenue
-      from documents
-      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
-        and voided_at is null and party_id is not null
-        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
-      group by party_id
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+        and d.voided_at is null and d.party_id is not null
+        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+      group by party_id, sub.base_currency
     `)),
     customerProfitability(period, orgId, allowed),
   ]);
@@ -585,20 +650,41 @@ export async function customerData(period: { from: string; to: string; label: st
     id: string; name: string; revenue: number; priorRevenue: number; txns: number;
     avgValue: number; first: string | null; last: string | null; recency: number; tenure: number;
   }
-  const base: Base[] = (baseRows.rows as unknown as CustomerBaseSqlRow[]).map((r) => {
-    const last = r.last_txn ? String(r.last_txn) : null;
-    const first = r.first_txn ? String(r.first_txn) : null;
+  // Revenue arrives per (party, functional) at the posted document rate;
+  // translate each leg to presentation at its latest posting date, then
+  // merge per party. Average = translated revenue per invoice.
+  const baseLegs = baseRows.rows as unknown as CustomerBaseSqlRow[];
+  const baseCtx = await flowRates(orgId, [
+    ...baseLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...baseLegs.filter((r) => r.prior_revenue != null).map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
+  ]);
+  const baseByParty = new Map<string, { name: string; revenue: string; priorRevenue: string; txns: number; first: string | null; last: string | null }>();
+  for (const r of baseLegs) {
+    const cur = baseByParty.get(r.id) ?? { name: String(r.name), revenue: "0", priorRevenue: "0", txns: 0, first: null as string | null, last: null as string | null };
+    cur.revenue = add(cur.revenue, mulDecimal(String(r.revenue ?? 0), baseCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    if (r.prior_revenue != null) {
+      cur.priorRevenue = add(cur.priorRevenue, mulDecimal(String(r.prior_revenue), baseCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
+    }
+    cur.txns += Number(r.txn_count ?? 0);
+    const first = r.first_txn ? String(r.first_txn).slice(0, 10) : null;
+    const last = r.last_txn ? String(r.last_txn).slice(0, 10) : null;
+    if (first && (!cur.first || first < cur.first)) cur.first = first;
+    if (last && (!cur.last || last > cur.last)) cur.last = last;
+    baseByParty.set(r.id, cur);
+  }
+  const base: Base[] = [...baseByParty.entries()].map(([id, c]) => {
+    const revenue = Number(c.revenue);
     return {
-      id: r.id,
-      name: r.name,
-      revenue: Number(r.revenue ?? 0),
-      priorRevenue: Number(r.prior_revenue ?? 0),
-      txns: Number(r.txn_count ?? 0),
-      avgValue: Number(r.avg_value ?? 0),
-      first,
-      last,
-      recency: last ? Math.max(0, daysBetween(last, ref)) : 9999,
-      tenure: first && last ? daysBetween(first, last) : 0,
+      id,
+      name: c.name,
+      revenue,
+      priorRevenue: Number(c.priorRevenue),
+      txns: c.txns,
+      avgValue: c.txns > 0 ? revenue / c.txns : 0,
+      first: c.first,
+      last: c.last,
+      recency: c.last ? Math.max(0, daysBetween(c.last, ref)) : 9999,
+      tenure: c.first && c.last ? daysBetween(c.first, c.last) : 0,
     };
   });
 
@@ -673,17 +759,31 @@ export async function customerData(period: { from: string; to: string; label: st
   };
 
   /* ---- friction / payment lookups ---- */
+  // Credit value arrives per (party, functional): translate each leg at its
+  // latest posting date, then merge per party.
+  const frictionLegs = frictionRows.rows as unknown as CustomerFrictionSqlRow[];
+  const frictionCtx = await flowRates(orgId, frictionLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+  })));
+  const frictionByParty = new Map<string, { credits: number; orders: number; creditValue: string }>();
+  for (const r of frictionLegs) {
+    const cur = frictionByParty.get(r.id) ?? { credits: 0, orders: 0, creditValue: "0" };
+    cur.credits += Number(r.credit_count ?? 0);
+    cur.orders += Number(r.order_count ?? 0);
+    cur.creditValue = add(cur.creditValue, mulDecimal(String(r.credit_value ?? 0), frictionCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    frictionByParty.set(r.id, cur);
+  }
   const frictionMap = new Map<string, { points: number; level: RiskLevel; credits: number; creditValue: number; returnRate: number }>();
-  for (const r of frictionRows.rows as unknown as CustomerFrictionSqlRow[]) {
-    const credits = Number(r.credit_count ?? 0);
-    const orders = Number(r.order_count ?? 0);
+  for (const [id, f] of frictionByParty) {
+    const credits = f.credits;
+    const orders = f.orders;
     const points = credits * 2; // returns×3 unavailable — no return-auth kind
     const returnRate = orders > 0 ? (credits / orders) * 100 : 0;
     let level: RiskLevel = "low";
     if (points >= 10 || returnRate >= 20) level = "critical";
     else if (points >= 5 || returnRate >= 10) level = "high";
     else if (points >= 2 || returnRate >= 5) level = "medium";
-    if (points > 0) frictionMap.set(r.id, { points, level, credits, creditValue: Math.round(Number(r.credit_value ?? 0)), returnRate: Math.round(returnRate * 10) / 10 });
+    if (points > 0) frictionMap.set(id, { points, level, credits, creditValue: Math.round(Number(f.creditValue)), returnRate: Math.round(returnRate * 10) / 10 });
   }
 
   const paymentMap = new Map<string, { score: number; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number }>();
@@ -867,13 +967,33 @@ export async function customerData(period: { from: string; to: string; label: st
   });
 
   /* ---- growth () ---- */
-  const gRows = growthRows.rows as unknown as CustomerGrowthSqlRow[];
-  const revenues = gRows.map((r) => Number(r.revenue ?? 0)).sort((a, b) => a - b);
+  // Monthly revenue arrives per (month, functional): translate each leg at
+  // its latest posting date, then merge per month. Distinct counts ride the
+  // separate month-grain query (they never merge across functionals).
+  const gLegs = growthRows.rows as unknown as CustomerGrowthSqlRow[];
+  const gCtx = await flowRates(orgId, gLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
+  })));
+  const gRevenue = new Map<string, string>();
+  for (const r of gLegs) {
+    const key = String(r.month);
+    gRevenue.set(key, add(gRevenue.get(key) ?? "0",
+      mulDecimal(String(r.revenue ?? 0), gCtx.rateAt(r.func ?? null, String(r.late ?? `${r.month}-01`).slice(0, 10)))));
+  }
+  interface GrowthCountRow { month: string; unique_customers: CustomerSqlNumeric; txn_count: CustomerSqlNumeric; new_customers: CustomerSqlNumeric }
+  const gCounts = new Map<string, GrowthCountRow>();
+  for (const r of growthCounts.rows as unknown as GrowthCountRow[]) {
+    gCounts.set(String(r.month), r);
+  }
+  const gRows = [...gRevenue.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, revenue]) => ({ month, revenue, counts: gCounts.get(month) }));
+  const revenues = gRows.map((r) => Number(r.revenue)).sort((a, b) => a - b);
   const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : 0;
   const minRevenueThreshold = medianRevenue * 0.1;
   let prevRevenue: number | null = null;
   const monthly: MonthlyGrowth[] = gRows.map((r) => {
-    const revenue = Number(r.revenue ?? 0);
+    const revenue = Number(r.revenue);
     const isMature = revenue >= minRevenueThreshold;
     let growthRate: number | null = 0;
     if (prevRevenue !== null && prevRevenue > minRevenueThreshold) {
@@ -889,9 +1009,9 @@ export async function customerData(period: { from: string; to: string; label: st
       month: r.month,
       label: monthLabel(r.month),
       revenue: Math.round(revenue),
-      uniqueCustomers: Number(r.unique_customers ?? 0),
-      transactionCount: Number(r.txn_count ?? 0),
-      newCustomers: Number(r.new_customers ?? 0),
+      uniqueCustomers: Number(r.counts?.unique_customers ?? 0),
+      transactionCount: Number(r.counts?.txn_count ?? 0),
+      newCustomers: Number(r.counts?.new_customers ?? 0),
       growthRate,
       isMature,
     };
@@ -924,18 +1044,37 @@ export async function customerData(period: { from: string; to: string; label: st
   const sixMonthsAgo = new Date(ref + "T00:00:00Z");
   sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 6);
   const activeCut = sixMonthsAgo.toISOString().slice(0, 10);
+  // Lifetime revenue arrives per (party, functional): translate each leg at
+  // its latest posting date, merge per party, then run the cohort logic on
+  // parties (never on legs).
+  interface CohortLeg { id: string; func: string | null; first_order: unknown; last_order: unknown; late: string | null; lifetime_revenue: CustomerSqlNumeric }
+  const cohortLegs = cohortRows.rows as unknown as CohortLeg[];
+  const cohortCtx = await flowRates(orgId, cohortLegs.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+  })));
+  const cohortByParty = new Map<string, { first: string; last: string; revenue: string }>();
+  for (const r of cohortLegs) {
+    const first = String(r.first_order).slice(0, 10);
+    const last = String(r.last_order).slice(0, 10);
+    const cur = cohortByParty.get(r.id) ?? { first, last, revenue: "0" };
+    if (first < cur.first) cur.first = first;
+    if (last > cur.last) cur.last = last;
+    cur.revenue = add(cur.revenue, mulDecimal(String(r.lifetime_revenue ?? 0),
+      cohortCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    cohortByParty.set(r.id, cur);
+  }
   const cohortMap = new Map<string, Cohort>();
   let lifetimeCustomers = 0, lifetimeActive = 0;
-  for (const r of (cohortRows.rows)) {
-    const year = String(r.first_order).slice(0, 4);
-    const isActive = String(r.last_order) >= activeCut;
+  for (const p of cohortByParty.values()) {
+    const year = p.first.slice(0, 4);
+    const isActive = p.last >= activeCut;
     lifetimeCustomers++;
     if (isActive) lifetimeActive++;
     let c = cohortMap.get(year);
     if (!c) { c = { year, totalCustomers: 0, activeCustomers: 0, retentionRate: 0, totalRevenue: 0, avgRevenue: 0 }; cohortMap.set(year, c); }
     c.totalCustomers++;
     if (isActive) c.activeCustomers++;
-    c.totalRevenue += Number(r.lifetime_revenue ?? 0);
+    c.totalRevenue += Number(p.revenue);
   }
   const cohortList = [...cohortMap.values()]
     .map((c) => ({
