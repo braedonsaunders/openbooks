@@ -52,13 +52,33 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
              -- Ledger scale is 4dp but the translation carries up to 14; round
              -- once here so bucket sums and the JS exact-decimal rollup below
              -- agree (unrounded values throw past 4dp) and always tie.
+             -- The open is reconstructed AS OF the report date — gross
+             -- open-item lines minus applications dated on/before it — never
+             -- the live cached balance: a later settlement must not rewrite a
+             -- past aging (or month-end history would never reproduce).
              round((case when d.kind = ${creditKind} then -1 else 1 end)
-               * d.open_balance * d.fx_rate, 4) as open,
+               * (gross.gross - coalesce(applied.applied, 0)) * d.fx_rate, 4) as open,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days
         from documents d
+        left join lateral (
+          select coalesce(sum(abs(jl.txn_amount)), 0) as gross
+            from journal_lines jl
+           where jl.entry_id = d.posted_entry_id and jl.is_open_item
+        ) gross on true
+        left join lateral (
+          select sum(case when a.from_line_id = jl.id
+                          then a.source_transaction_amount
+                          else a.target_transaction_amount end) as applied
+            from journal_lines jl
+            join applications a on a.org_id = ${resolvedOrgId}
+              and (a.from_line_id = jl.id or a.to_line_id = jl.id)
+           where jl.entry_id = d.posted_entry_id and jl.is_open_item
+             and a.applied_on <= ${asOf}
+             and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+        ) applied on true
        where d.org_id = ${resolvedOrgId}
          and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and d.open_balance > 0
+         and (gross.gross - coalesce(applied.applied, 0)) > 0
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     )
@@ -148,14 +168,32 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
       select d.id, d.kind, d.party_id, d.document_number,
              coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
              -- Same 4dp ledger-scale rounding as the summary so detail rows
-             -- never carry precision the exact-decimal rollup cannot hold.
+             -- never carry precision the exact-decimal rollup cannot hold, and
+             -- the same as-of reconstruction: gross lines minus applications
+             -- dated on/before the report date, never the live cached balance.
              round((case when d.kind = ${creditKind} then -1 else 1 end)
-               * d.open_balance * d.fx_rate, 4) as open,
+               * (gross.gross - coalesce(applied.applied, 0)) * d.fx_rate, 4) as open,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days
         from documents d
+        left join lateral (
+          select coalesce(sum(abs(jl.txn_amount)), 0) as gross
+            from journal_lines jl
+           where jl.entry_id = d.posted_entry_id and jl.is_open_item
+        ) gross on true
+        left join lateral (
+          select sum(case when a.from_line_id = jl.id
+                          then a.source_transaction_amount
+                          else a.target_transaction_amount end) as applied
+            from journal_lines jl
+            join applications a on a.org_id = ${resolvedOrgId}
+              and (a.from_line_id = jl.id or a.to_line_id = jl.id)
+           where jl.entry_id = d.posted_entry_id and jl.is_open_item
+             and a.applied_on <= ${asOf}
+             and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+        ) applied on true
        where d.org_id = ${resolvedOrgId}
          and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and d.open_balance > 0
+         and (gross.gross - coalesce(applied.applied, 0)) > 0
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     )
