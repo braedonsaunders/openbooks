@@ -173,6 +173,15 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
     }
     for (const [table, columns] of Object.entries(SANDBOX_CYCLE_BREAKERS)) {
       if (!byName.has(table)) continue;
+      // Tables in the deferred tail are removed after SET CONSTRAINTS ALL
+      // DEFERRED with commit-time validation, so pre-nulling their cycle
+      // links buys nothing — and on posted rows it is actively harmful: a
+      // posted document's links are covered by CHECK constraints (e.g.
+      // documents_posted_period_required) that fire immediately on UPDATE,
+      // failing every delete of a sandbox that holds posted documents and
+      // stranding its org behind orgs_sandbox_of_fkey. Keep the pre-null only
+      // for tables deleted under immediate constraints.
+      if (deferred.has(table)) continue;
       await db.execute(sql.raw(
         `update "${table}" set ${columns.map((column) => `"${column}" = null`).join(", ")} `
           + `where org_id = '${sandboxOrgId}'`,
