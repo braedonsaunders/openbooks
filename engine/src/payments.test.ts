@@ -228,6 +228,22 @@ test("the SEPA credit file refuses a creditor IBAN with an invalid checksum", ()
   );
 });
 
+test("the SEPA credit file refuses a malformed creditor BIC when supplied", () => {
+  assert.throws(
+    () => buildSepaFile({
+      settings: SEPA_SETTINGS,
+      messageId: "MSG-0001",
+      creationDateTime: "2026-03-03T00:00:00",
+      executionDate: "2026-03-05",
+      payments: [{
+        ...sepaPayment("125.00"),
+        creditorBic: "NOT-A-BIC",
+      }],
+    }),
+    (error: Error) => error instanceof PaymentError && /creditor BIC/.test(error.message),
+  );
+});
+
 test("the NACHA credit file refuses a blank receiving account number", () => {
   assert.throws(
     () => nachaFile("   "),
