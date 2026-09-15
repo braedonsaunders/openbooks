@@ -525,6 +525,23 @@ export class SyncRunAlreadyActiveError extends Error {
   }
 }
 
+/**
+ * A source line carries tax money but no resolved tax code. Thrown at the
+ * mirror boundary before any document row, line, or tax evidence is written,
+ * so the failure names the source transaction and never reaches the posting
+ * kernel's evidence guard (which can only name a line number). Adapters that
+ * cannot resolve a code must either map it or skip the document upstream;
+ * the mirror refuses to persist codeless tax money.
+ */
+export class SyncTaxCodeError extends Error {
+  constructor(sourceRef: string, lineNumber: number, taxAmount: string) {
+    super(
+      `source transaction ${sourceRef} line ${lineNumber} carries tax amount ${taxAmount} with no resolved tax code`,
+    );
+    this.name = "SyncTaxCodeError";
+  }
+}
+
 /** One-click migration: master data, then every native transaction, verified. */
 export function runFullMigration(
   source: MigrationSource,
@@ -1156,7 +1173,13 @@ async function importedTaxEvidence(
   orgId: string,
   documentDate: string,
   lines: NativeDocLine[],
+  sourceRef: string,
 ): Promise<Map<number, ComputedTaxComponent[]>> {
+  for (const line of lines) {
+    if (toUnits(line.taxAmount) !== 0n && !line.taxCodeId) {
+      throw new SyncTaxCodeError(sourceRef, line.lineNumber, line.taxAmount);
+    }
+  }
   const configs = new Map<
     string,
     Awaited<ReturnType<typeof loadTaxComponentConfig>>
@@ -1640,6 +1663,7 @@ export async function runSync(
           org.id,
           doc.documentDate,
           doc.lines,
+          doc.sourceRef,
         );
         const have = existing.get(doc.sourceRef);
         const sourceDocumentNumber = resolveSourceDocumentNumber(
