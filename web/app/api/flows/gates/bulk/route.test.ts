@@ -3,15 +3,15 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 interface RouteState {
-  authz: { user: { id: string; orgId: string } } | Response
-  gates: Map<string, { status: string }>
+  authz: { user: { id: string; orgId: string }; allowedSubsidiaryIds: Set<string> | null } | Response
+  gates: Map<string, { status: string; subsidiary_id: string | null }>
   loadCalls: Array<{ gateId: string; orgId: string }>
   decideCalls: Array<Record<string, unknown>>
 }
 
 const stateKey = Symbol.for('openbooks.bulk-gates-route-test')
 const routeState: RouteState = {
-  authz: { user: { id: 'user-1', orgId: 'org-1' } },
+  authz: { user: { id: 'user-1', orgId: 'org-1' }, allowedSubsidiaryIds: null },
   gates: new Map(),
   loadCalls: [],
   decideCalls: [],
@@ -61,6 +61,19 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    'mock:authz',
+    `
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        if (authz.allowedSubsidiaryIds !== null &&
+            (subsidiaryId === null || subsidiaryId === undefined ||
+             !authz.allowedSubsidiaryIds.has(subsidiaryId))) {
+          return new Response(JSON.stringify({ error: 'approval not found' }), { status: 404 })
+        }
+        return null
+      }
+    `,
+  ],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -68,6 +81,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../_lib', 'mock:flows-lib'],
+  ['../../../../../lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({
@@ -90,8 +104,8 @@ const routeUrl = './route.ts?bulk-gates-boundary-test'
 const { MAX_BULK_ITEMS, POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-function reset(): void {
-  routeState.authz = { user: { id: 'user-1', orgId: 'org-1' } }
+function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
+  routeState.authz = { user: { id: 'user-1', orgId: 'org-1' }, allowedSubsidiaryIds }
   routeState.gates.clear()
   routeState.loadCalls.length = 0
   routeState.decideCalls.length = 0
@@ -124,7 +138,7 @@ test('rejects a bulk request above the cap before any per-item database work', a
 test('processes a request at the cap and preserves result order', async () => {
   reset()
   const items = Array.from({ length: MAX_BULK_ITEMS }, (_, index) => ({ gateId: gateId(index + 1) }))
-  for (const item of items) routeState.gates.set(item.gateId, { status: 'pending' })
+  for (const item of items) routeState.gates.set(item.gateId, { status: 'pending', subsidiary_id: null })
 
   const response = await post({ items, decision: 'rejected', comment: 'batch review' })
 
@@ -138,14 +152,49 @@ test('processes a request at the cap and preserves result order', async () => {
     gateId: gateId(1),
     decision: 'rejected',
     userId: 'user-1',
+    allowedSubsidiaryIds: null,
     comment: 'batch review',
   })
   assert.deepEqual(routeState.decideCalls.at(-1), {
     gateId: gateId(MAX_BULK_ITEMS),
     decision: 'rejected',
     userId: 'user-1',
+    allowedSubsidiaryIds: null,
     comment: 'batch review',
   })
+})
+
+test('a restricted approver cannot bulk-decide a gate for another subsidiary', async () => {
+  reset(new Set(['11111111-1111-4111-8111-111111111111']))
+  const id = gateId(1)
+  routeState.gates.set(id, { status: 'pending', subsidiary_id: '22222222-2222-4222-8222-222222222222' })
+
+  const response = await post({ items: [{ gateId: id }], decision: 'approved' })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { results: [{ ok: false, error: 'approval not found' }] })
+  assert.deepEqual(routeState.decideCalls, [])
+})
+
+test('an in-scope bulk decision carries the subsidiary scope into the engine', async () => {
+  const subsidiary = '22222222-2222-4222-8222-222222222222'
+  reset(new Set([subsidiary]))
+  const id = gateId(1)
+  routeState.gates.set(id, { status: 'pending', subsidiary_id: subsidiary })
+
+  const response = await post({ items: [{ gateId: id }], decision: 'approved' })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { results: [{ ok: true }] })
+  assert.deepEqual(routeState.decideCalls, [
+    {
+      gateId: id,
+      decision: 'approved',
+      userId: 'user-1',
+      allowedSubsidiaryIds: new Set([subsidiary]),
+      comment: undefined,
+    },
+  ])
 })
 
 test('invalid gate IDs fail individually without reaching the database', async () => {
