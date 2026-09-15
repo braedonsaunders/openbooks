@@ -8,8 +8,8 @@ import {
   parseFlowGraph,
   runRecordFlows,
 } from '@openbooks/engine/src/flows/index.ts'
-import { can, type Authz } from '../../../../lib/authz'
-import { requireFlowsSession } from '../_lib'
+import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
+import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -42,6 +42,15 @@ async function availableButtons(
 ): Promise<ManualButton[] | NextResponse> {
   const adapter = getFlowAdapter(subjectKind)
   if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
+
+  // Manual flows can mutate their subject. Resolve its legal entity before
+  // loading any values or evaluating buttons so a restricted caller cannot
+  // use a forged id to run an action on a hidden subsidiary's record.
+  const denied = guardSubsidiaryScope(
+    authz,
+    await loadFlowSubjectSubsidiary(subjectKind, subjectId, authz.user.orgId),
+  )
+  if (denied) return denied
 
   const subject = await adapter.loadContext(subjectId)
   if (!subject) return NextResponse.json({ error: 'record not found' }, { status: 404 })
