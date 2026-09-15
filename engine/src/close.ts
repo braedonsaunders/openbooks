@@ -2368,6 +2368,35 @@ export async function closeApprovedRun(
           actorId,
           reason: `Close run ${runId}`,
         });
+        if (subsidiaryId === undefined) {
+          // Storage prefers an exact subsidiary row over the org-wide
+          // fallback. Tighten every existing child row in the same close
+          // transaction or an older open child lock would shadow this new
+          // org-wide lock and keep accepting postings.
+          const children = (await tx.execute<{ subsidiary_id: string }>(sql`
+            select subsidiary_id
+              from period_locks
+             where org_id = ${orgId}
+               and period_id = ${row.period_id}
+               and book_id = ${row.book_id}
+               and module = ${module}
+               and subsidiary_id is not null
+               and state <> 'closed'
+             for update`));
+          for (const child of children.rows) {
+            await upsertLock({
+              tx,
+              orgId,
+              periodId: row.period_id,
+              bookId: row.book_id,
+              subsidiaryId: child.subsidiary_id,
+              module,
+              state: "closed",
+              actorId,
+              reason: `Close run ${runId}`,
+            });
+          }
+        }
       }
       await upsertLock({
         tx,
@@ -2380,6 +2409,31 @@ export async function closeApprovedRun(
         actorId,
         reason: `Close run ${runId}`,
       });
+      if (subsidiaryId === undefined) {
+        const children = (await tx.execute<{ subsidiary_id: string }>(sql`
+          select subsidiary_id
+            from period_locks
+           where org_id = ${orgId}
+             and period_id = ${row.period_id}
+             and book_id = ${row.book_id}
+             and module = 'gl'
+             and subsidiary_id is not null
+             and state <> 'closed'
+           for update`));
+        for (const child of children.rows) {
+          await upsertLock({
+            tx,
+            orgId,
+            periodId: row.period_id,
+            bookId: row.book_id,
+            subsidiaryId: child.subsidiary_id,
+            module: "gl",
+            state: "closed",
+            actorId,
+            reason: `Close run ${runId}`,
+          });
+        }
+      }
     }
     await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
