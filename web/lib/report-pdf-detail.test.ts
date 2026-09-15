@@ -16,9 +16,27 @@ registerHooks({
   },
 })
 
-const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx } = await import('./report-pdf.ts')
+const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData } = await import('./report-pdf.ts')
 
 const t = (key: string) => key
+
+test('project profitability export renders ratio margins at the correct percent scale', () => {
+  const data = projectProfitabilityExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    rows: [],
+    customers: [{
+      customerName: 'Exact Customer',
+      rows: [{ projectName: 'Exact Job', revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin: '2500.0000', hours: 1 }],
+      totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin: '2500.0000', hours: 1 },
+    }],
+    totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin: '2500.0000', hours: 1 },
+  }, t)
+
+  assert.equal(data.groups[0]?.rows[0]?.[6], '25.0%')
+  assert.equal(data.groups[0]?.rows[1]?.[6], '25.0%')
+  assert.equal(data.groups[0]?.rows[2]?.[6], '25.0%')
+})
 
 test('general-ledger export mirrors the paper view with one section per account', () => {
   const data = generalLedgerExportData({
