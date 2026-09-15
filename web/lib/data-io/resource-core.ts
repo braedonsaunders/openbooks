@@ -136,6 +136,12 @@ export class RefResolver {
     if (target.resource === 'accounting-periods') {
       return { table: 'accounting_periods', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
     }
+    if (target.resource === 'subsidiaries') {
+      // Subsidiary names are unique per org (subsidiaries_org_name), so the
+      // name is a deterministic natural key for transaction and setup
+      // imports. UUID resolution is unaffected (it keys on idCol).
+      return { table: 'subsidiaries', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+    }
     const entity = SETUP_ENTITY_BY_KEY.get(target.resource)
     if (entity) {
       const keyCol = entity.naturalKey ? toSnake(entity.naturalKey) : idColumn(entity)

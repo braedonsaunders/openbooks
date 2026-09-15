@@ -53,6 +53,15 @@ function transactionFields(cfg: DocKindConfig): ResourceField[] {
       required: true,
       ref: { resource: 'parties', by: 'short_code' },
     })
+  // Cutover attribution: the legal entity this document belongs to. Hidden
+  // unless the org runs more than one subsidiary (see fields() below); the
+  // writer resolves it whenever a row carries it.
+  fields.push({
+    key: 'subsidiary',
+    label: 'subsidiary',
+    kind: 'reference',
+    ref: { resource: 'subsidiaries', by: 'name' },
+  })
   if (cfg.hasReference) fields.push({ key: 'reference', label: 'reference', kind: 'text' })
   fields.push({ key: 'currency', label: 'currency', kind: 'text' })
   fields.push({ key: 'memo', label: 'memo', kind: 'long_text' })
@@ -139,8 +148,15 @@ export function transactionResource(
   return {
     descriptor: transactionDescriptor(cfg),
     async fields() {
-      if (await orgFeatureEnabled(orgId, 'multiCurrency')) return cols
-      return cols.filter((f) => f.key !== 'currency')
+      const [multiCurrency, multiSubsidiary] = await Promise.all([
+        orgFeatureEnabled(orgId, 'multiCurrency'),
+        orgFeatureEnabled(orgId, 'multiSubsidiary'),
+      ])
+      return cols.filter(
+        (f) =>
+          (f.key !== 'currency' || multiCurrency) &&
+          (f.key !== 'subsidiary' || multiSubsidiary),
+      )
     },
     async columns() {
       // Export shape: header fields + a JSON `lines` column (skip the flat
@@ -154,12 +170,14 @@ export function transactionResource(
       const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds
       const docs = (await db.execute(sql`
         select d.id, d.document_number, d.document_date, d.due_date, d.currency, d.memo,
-               d.reference_number, d.status,
+               d.reference_number, d.status, s.name as subsidiary,
                -- The importer resolves parties by short code with a display-name
                -- fallback (see PARTY_ID_LOOKUP); export that same key or rows
                -- for parties without a short code come back unresolvable.
+               -- Subsidiary names are unique per org, so the name round-trips.
                coalesce(nullif(p.short_code, ''), p.display_name) as party
           from documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id
+          left join subsidiaries s on s.id = d.subsidiary_id and s.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = ${cfg.kind}
            ${transactionSubsidiaryFilter(subsidiaryScope)}
          order by d.document_date desc, d.document_number
@@ -174,6 +192,7 @@ export function transactionResource(
           reference_number: string | null
           status: string
           party: string | null
+          subsidiary: string | null
         }[]
       }
       const rows: Record<string, CellValue>[] = []
@@ -191,6 +210,7 @@ export function transactionResource(
           documentDate: d.document_date,
           dueDate: d.due_date,
           party: d.party,
+          subsidiary: d.subsidiary,
           reference: d.reference_number,
           currency: d.currency,
           memo: d.memo,
@@ -211,6 +231,7 @@ export function transactionResource(
         { key: 'documentDate', label: 'documentDate' },
         { key: 'dueDate', label: 'dueDate' },
         { key: 'party', label: 'party' },
+        { key: 'subsidiary', label: 'subsidiary' },
         { key: 'reference', label: 'reference' },
         { key: 'currency', label: 'currency' },
         { key: 'memo', label: 'memo' },
@@ -236,6 +257,14 @@ async function writeTransactions(
     rows: { base_currency: string }[]
   }).rows[0]?.base_currency ?? 'CAD'
   const multiCurrencyOn = await orgFeatureEnabled(ctx.orgId, 'multiCurrency')
+  // The kernel posts a NULL-subsidiary document's legs to the org root, so an
+  // omitted subsidiary defaults to the root explicitly: document and GL agree,
+  // and subsidiary-fenced surfaces can see the row. Exactly one root exists
+  // (subsidiaries_org_root); without one the insert keeps today's NULL.
+  const rootSubsidiaryId = ((await db.execute(sql`
+    select id from subsidiaries where org_id = ${ctx.orgId} and parent_id is null limit 1`)) as {
+    rows: { id: string }[]
+  }).rows[0]?.id ?? null
   const deps = ctx.post ? await controlDeps(ctx.orgId) : null
 
   for (let i = 0; i < rows.length; i++) {
@@ -274,6 +303,22 @@ async function writeTransactions(
           outcome.errors.push({ row: rowNo, message: `${cfg.partyRole} "${String(human)}" not found` })
           continue
         }
+      }
+
+      // Subsidiary (cutover attribution by name). Unknown names fail the row
+      // closed — silently dropping the legal entity would misattribute the
+      // subsidiary trial balance. Omitted means the root (see above).
+      let subsidiaryId: string | null = null
+      const subsidiaryHuman = String(src.subsidiary ?? '').trim()
+      if (subsidiaryHuman) {
+        subsidiaryId = await resolver.resolveId({ resource: 'subsidiaries', by: 'name' }, subsidiaryHuman)
+        if (!subsidiaryId) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: `subsidiary "${subsidiaryHuman}" not found` })
+          continue
+        }
+      } else {
+        subsidiaryId = rootSubsidiaryId
       }
 
       // Assemble lines (JSON `lines` wins; else the flat single-line columns).
@@ -365,6 +410,10 @@ async function writeTransactions(
               kind: cfg.kind,
               documentNumber: number,
               partyId,
+              // Written only when a subsidiary resolved: NULL stays the
+              // column default in the degenerate no-root case, and the
+              // insert shape is unchanged otherwise (unit atomicity suite).
+              ...(subsidiaryId ? { subsidiaryId } : {}),
               documentDate,
               dueDate: cfg.hasDueDate && src.dueDate ? String(src.dueDate) : null,
               currency,
