@@ -15,11 +15,18 @@ import {
 } from "./payroll-holidays.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
+  allRemittanceSchedules,
+  remittanceFrequencyBand,
+  remittanceScheduleInForce,
+  statutoryRemittanceDeclaration,
+  type PayrollRemittanceFrequencyBand,
+  type PayrollRemittanceSchedule,
+} from "./payroll/packs.ts";
+import {
   payrollSubsidiaryInScope,
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
-import { statutoryRemittanceDeclaration } from "./payroll/packs.ts";
 
 type RemittanceExecutor = Pick<typeof db, "execute">;
 
@@ -60,6 +67,22 @@ export interface RemittanceGroup {
   /** The payroll program/EIN account this remittance is filed under. */
   filingAccount: FilingAccountRef;
   /**
+   * The vendor settings keys that routed rows into this group (the pack or
+   * regional declaration each row resolved through — never a jurisdiction).
+   * Sorted, distinct, without nulls. Downstream schedule resolution keys off
+   * this provenance, so a group whose rows arrived through a scheduled
+   * destination's key is governed by that schedule whatever its party is.
+   */
+  vendorKeys: string[];
+  /**
+   * The destination's declared remittance schedule for the queried period —
+   * authority, frequency, and the due date the bill will carry — or null when
+   * no pack declares the destination (the legacy CRA-function path). A
+   * scheduled destination NEVER inherits the filing account's CRA remitter
+   * type: that registration is with another agency.
+   */
+  schedule: RemittanceGroupSchedule | null;
+  /**
    * Sorted distinct stub provinces behind this group. The CRA's holiday
    * calendar is province-sensitive (Saint-Jean-Baptiste Day in Quebec, the
    * Civic Holiday everywhere but Quebec), so the bill's due date is computed
@@ -74,6 +97,27 @@ export interface RemittanceGroup {
   employeeCount: number;
   /** Remittance bills already raised for this destination and period. */
   existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
+}
+
+/**
+ * The destination schedule governing one remittance group: which declared
+ * schedule, at which frequency, producing which bill due date. Every field is
+ * data the pack declared or configuration the org set — the generic layer
+ * names no jurisdiction to build it.
+ */
+export interface RemittanceGroupSchedule {
+  /** The vendor settings key whose schedule governs (e.g. `rqRemittancePartyId`). */
+  vendorSettingsKey: string;
+  /** The receiving authority (e.g. `Revenu Québec`). */
+  authority: string;
+  /** The frequency the bill is dated under. */
+  frequency: string;
+  /** Whether the frequency is the org's configured value or the schedule default. */
+  frequencySource: "configured" | "default";
+  /** The bill due date for the group's period, from the destination's schedule. */
+  dueDate: string;
+  /** The statutory rule applied, carried onto the bill like the CRA rules. */
+  rule: string;
 }
 
 /** The raw orgs.settings.payroll blob — indexed by whatever settings keys the
@@ -205,24 +249,45 @@ export async function payrollRemittanceSummary(
     const vendor = rawSettings[settingsKey];
     return typeof vendor === "string" && vendor ? vendor : null;
   };
-  const resolveParty = (row: (typeof rows.rows)[0]): string | null => {
+  const resolveDestination = (row: (typeof rows.rows)[0]): { partyId: string | null; vendorKey: string | null } => {
     const regionalKey = row.system_key
       ? declaration.regionalVendorSettingsKeyBySystemKey.get(row.system_key)?.[row.province]
       : undefined;
-    if (regionalKey) return settingsVendor(regionalKey);
-    if (row.remittance_party_id) return row.remittance_party_id;
+    // The regional key is provenance even when the org has not configured the
+    // vendor yet: an unconfigured RQ destination is still an RQ destination —
+    // it surfaces unassigned under the RQ schedule, never under the CRA one.
+    if (regionalKey) return { partyId: settingsVendor(regionalKey), vendorKey: regionalKey };
+    if (row.remittance_party_id) return { partyId: row.remittance_party_id, vendorKey: null };
     const vendorKey = row.system_key
       ? declaration.vendorSettingsKeyBySystemKey.get(row.system_key)
       : undefined;
-    if (!vendorKey) return null;
-    return settingsVendor(vendorKey);
+    if (!vendorKey) return { partyId: null, vendorKey: null };
+    return { partyId: settingsVendor(vendorKey), vendorKey };
   };
+  const resolveParty = (row: (typeof rows.rows)[0]): string | null => resolveDestination(row).partyId;
+  const resolveVendorKey = (row: (typeof rows.rows)[0]): string | null => resolveDestination(row).vendorKey;
   const resolveAccount = (row: (typeof rows.rows)[0]): string | null =>
     row.liability_account_id;
 
   const groups = groupRemittanceRows({
-    rows: rows.rows, contextByAccount, filingAccounts, resolveParty, resolveAccount,
+    rows: rows.rows, contextByAccount, filingAccounts, resolveParty, resolveAccount, resolveVendorKey,
   });
+
+  // One group, one destination, one schedule. Provenance first: rows that
+  // arrived through a scheduled destination's vendor key are governed by that
+  // schedule. Otherwise a group whose PARTY is a scheduled destination's
+  // configured vendor (an `external` component pointed at the RQ vendor)
+  // resolves through the party. Anything else keeps the legacy CRA path.
+  const schedules = allRemittanceSchedules();
+  for (const group of groups.values()) {
+    group.schedule = scheduleForRemittanceGroup({
+      vendorKeys: group.vendorKeys,
+      partyId: group.partyId,
+      periodTo: range.to,
+      payrollSettings: rawSettings,
+      schedules,
+    });
+  }
 
   // Names + account labels + prior bills for the same destination and any
   // overlapping period. Loading the complete marker window lets callers show
@@ -428,9 +493,16 @@ export function groupRemittanceRows(input: {
   filingAccounts: Map<string, PayrollFilingAccount>;
   resolveParty: (row: RemittanceRow) => string | null;
   resolveAccount: (row: RemittanceRow) => string | null;
+  /**
+   * The vendor settings key the row resolved through, or null for
+   * per-component destinations. Optional so existing callers keep their
+   * shape; absent means no provenance, and no group carries a schedule key.
+   */
+  resolveVendorKey?: (row: RemittanceRow) => string | null;
 }): Map<string, RemittanceGroup> {
   const groups = new Map<string, RemittanceGroup>();
   const provincesByGroup = new Map<string, Set<string>>();
+  const vendorKeysByGroup = new Map<string, Set<string>>();
   for (const row of input.rows) {
     if (cmp(row.amount, "0") === 0) continue;
     const partyId = input.resolveParty(row);
@@ -439,6 +511,8 @@ export function groupRemittanceRows(input: {
     const group = groups.get(key) ?? {
       partyId, partyName: null,
       filingAccount: filingAccountRef(row.filing_account_id, input.filingAccounts),
+      vendorKeys: [],
+      schedule: null,
       provinces: [],
       components: [], total: "0",
       grossPayroll: runContext?.gross ?? "0",
@@ -465,9 +539,16 @@ export function groupRemittanceRows(input: {
     const provinces = provincesByGroup.get(key) ?? new Set<string>();
     provinces.add(row.province);
     provincesByGroup.set(key, provinces);
+    const vendorKey = input.resolveVendorKey?.(row);
+    if (vendorKey) {
+      const vendorKeys = vendorKeysByGroup.get(key) ?? new Set<string>();
+      vendorKeys.add(vendorKey);
+      vendorKeysByGroup.set(key, vendorKeys);
+    }
   }
   for (const [key, group] of groups) {
     group.provinces = [...(provincesByGroup.get(key) ?? [])].sort();
+    group.vendorKeys = [...(vendorKeysByGroup.get(key) ?? [])].sort();
   }
   return groups;
 }
@@ -493,9 +574,19 @@ function remittanceMemo(group: RemittanceGroup, from: string, to: string): strin
  * Source: https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html
  */
 function craCalendar(around: string, quebec: boolean): ReadonlySet<string> {
+  return scheduleCalendar(around, quebec ? "CA-CRA-QC" : "CA-CRA");
+}
+
+/**
+ * The working-day calendar a declared destination schedule moves deadlines
+ * against. The jurisdiction is the schedule's own declaration — a
+ * `tax_administration` calendar, never an employment one — so the generic
+ * layer executes any pack's schedule without naming it.
+ */
+function scheduleCalendar(around: string, jurisdiction: string): ReadonlySet<string> {
   const year = Number(around.slice(0, 4));
   return holidayDateSet(resolveObservedHolidays({
-    jurisdiction: quebec ? "CA-CRA-QC" : "CA-CRA",
+    jurisdiction,
     from: `${year - 1}-01-01`,
     to: `${year + 1}-12-31`,
   }));
@@ -624,6 +715,140 @@ export function remittanceDueDate(
   options: { quebec?: boolean } = {},
 ): string {
   return remittanceDueDateExplained(periodTo, remitterType, options).dueDate;
+}
+
+/**
+ * Which frequency of a declared destination schedule governs: the org's
+ * configured value under the schedule's frequency settings key, or the
+ * schedule's own default when unconfigured or naming nothing declared.
+ * Falling back rather than throwing is deliberate — an unconfigured schedule
+ * still dates the bill, and readiness (not the bill path) nags the org to
+ * confirm the frequency against the agency's notice.
+ */
+export function scheduledRemittanceFrequency(
+  schedule: PayrollRemittanceSchedule,
+  payrollSettings: Record<string, unknown>,
+): { frequency: string; source: "configured" | "default" } {
+  const configured = payrollSettings[schedule.frequencySettingsKey];
+  if (typeof configured === "string" && remittanceFrequencyBand(schedule, configured)) {
+    return { frequency: configured, source: "configured" };
+  }
+  return { frequency: schedule.defaultFrequency, source: "default" };
+}
+
+/**
+ * The due date for a remittance period under a pack-declared destination
+ * schedule (Revenu Québec's, today) — the counterpart to
+ * `remittanceDueDateExplained`, which remains the legacy path for
+ * destinations no pack declares. The rule shapes are the schedule's data;
+ * this function only executes them against the schedule's own calendar, so a
+ * second agency's timetable is a second declaration, never a branch.
+ *
+ * An unknown frequency falls back to the schedule default rather than
+ * throwing: the caller already reports whether the frequency was configured,
+ * and a bill must date itself even when configuration drifted.
+ */
+export function scheduledRemittanceDueDateExplained(
+  schedule: PayrollRemittanceSchedule,
+  frequency: string,
+  periodTo: string,
+): RemittanceDue {
+  // The default is validated into the declaration (see allRemittanceSchedules),
+  // so this fallback cannot itself miss.
+  const band: PayrollRemittanceFrequencyBand =
+    remittanceFrequencyBand(schedule, frequency)
+    ?? remittanceFrequencyBand(schedule, schedule.defaultFrequency)!;
+  const date = periodTo.slice(0, 10);
+  const holidays = scheduleCalendar(date, schedule.calendar);
+  const day = Number(date.slice(8, 10));
+  switch (band.due.kind) {
+    case "month_day":
+      return {
+        dueDate: nextBusinessDay(
+          dayOfMonth(date, band.due.monthsAfterPeriodMonth, band.due.day), holidays,
+        ),
+        rule: band.rule,
+      };
+    case "quarter_day": {
+      const month = Number(date.slice(5, 7));
+      const monthsToQuarterEnd = 2 - ((month - 1) % 3);
+      return {
+        dueDate: nextBusinessDay(
+          dayOfMonth(date, monthsToQuarterEnd + band.due.monthsAfterQuarterEnd, band.due.day),
+          holidays,
+        ),
+        rule: band.rule,
+      };
+    }
+    case "split_month":
+      return day <= band.due.cutoffDay
+        ? {
+            dueDate: nextBusinessDay(
+              dayOfMonth(date, band.due.firstDueMonthOffset, band.due.firstDueDay), holidays,
+            ),
+            rule: band.rule,
+          }
+        : {
+            dueDate: nextBusinessDay(
+              dayOfMonth(date, band.due.secondDueMonthOffset, band.due.secondDueDay), holidays,
+            ),
+            rule: band.ruleSecondHalf ?? band.rule,
+          };
+  }
+}
+
+/**
+ * The schedule governing one remittance group for one period end — the
+ * destination-keyed counterpart to the CRA-function path. Resolution order:
+ *
+ * 1. Provenance: a row that arrived through a scheduled destination's vendor
+ *    key is governed by that schedule, even when the org left the vendor
+ *    unconfigured (an unassigned RQ destination is still an RQ destination).
+ *    A declared schedule always beats the legacy path, so a misconfigured org
+ *    pointing two keys at one party still gets the declared date.
+ * 2. Party: an `external` component pointed at a scheduled destination's
+ *    configured vendor (Québec income tax remitted to the RQ vendor).
+ *
+ * Null when no pack declares the destination — the caller keeps the legacy
+ * CRA-function behaviour. Pure over an explicit schedule list, so the
+ * precedence is verifiable without a database.
+ */
+export function scheduleForRemittanceGroup(input: {
+  vendorKeys: readonly string[];
+  partyId: string | null;
+  periodTo: string;
+  payrollSettings: Record<string, unknown>;
+  schedules?: readonly PayrollRemittanceSchedule[];
+}): RemittanceGroupSchedule | null {
+  const schedules = input.schedules ?? allRemittanceSchedules();
+  const dated = input.vendorKeys
+    .map((vendorSettingsKey) => ({
+      vendorSettingsKey,
+      schedule: remittanceScheduleInForce(vendorSettingsKey, input.periodTo, schedules),
+    }))
+    .find((candidate) => candidate.schedule);
+  const byParty = (): { vendorSettingsKey: string; schedule: PayrollRemittanceSchedule } | null => {
+    if (!input.partyId) return null;
+    for (const schedule of schedules) {
+      const configured = input.payrollSettings[schedule.vendorSettingsKey];
+      if (typeof configured !== "string" || !configured || configured !== input.partyId) continue;
+      const inForce = remittanceScheduleInForce(schedule.vendorSettingsKey, input.periodTo, schedules);
+      if (inForce) return { vendorSettingsKey: schedule.vendorSettingsKey, schedule: inForce };
+    }
+    return null;
+  };
+  const resolved = dated ?? byParty();
+  if (!resolved || !resolved.schedule) return null;
+  const { frequency, source } = scheduledRemittanceFrequency(resolved.schedule, input.payrollSettings);
+  const due = scheduledRemittanceDueDateExplained(resolved.schedule, frequency, input.periodTo);
+  return {
+    vendorSettingsKey: resolved.vendorSettingsKey,
+    authority: resolved.schedule.authority,
+    frequency,
+    frequencySource: source,
+    dueDate: due.dueDate,
+    rule: due.rule,
+  };
 }
 
 /**
@@ -875,22 +1100,38 @@ export async function createRemittanceBill(
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
 
     const total = sum(group.components.map((c) => c.amount));
+    // The bill's due date comes from the DESTINATION's schedule when a pack
+    // declares one (Revenu Québec's, today) — the filing account's CRA
+    // remitter type is a registration with another agency and never applies
+    // to a scheduled destination. Undeclared destinations keep the legacy
+    // CRA-function behaviour.
+    const dueDate = group.schedule?.dueDate
+      ?? remittanceDueDate(input.to, group.filingAccount.remitterType, {
+        quebec: remittanceGroupUsesQuebecCalendar(group.provinces),
+      });
     const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, memo, subtotal, tax_total, total, custom,
                              created_by, updated_by)
       values (${orgId}, 'vendor_bill', ${number}, ${input.partyId}, ${sub.rows[0]!.id}, ${input.to},
-              ${remittanceDueDate(input.to, group.filingAccount.remitterType, {
-                quebec: remittanceGroupUsesQuebecCalendar(group.provinces),
-              })},
+              ${dueDate},
               ${sub.rows[0]!.base_currency}, 'draft',
               ${remittanceMemo(group, input.from, input.to)}, ${total}, '0', ${total},
               ${JSON.stringify({
                 payrollRemittance: {
                   partyId: input.partyId, from: input.from, to: input.to, filingAccountId,
-                  // Why the due date may be blank: only a regular remitter has
-                  // a calendar-only deadline this product can compute.
+                  // The filing account's CRA registration, for operators
+                  // reconciling the bill against the PD7A. It did NOT date
+                  // this bill when a destination schedule governs — see
+                  // `schedule`, which names what did.
                   remitterType: group.filingAccount.remitterType,
+                  schedule: group.schedule
+                    ? {
+                        vendorSettingsKey: group.schedule.vendorSettingsKey,
+                        authority: group.schedule.authority,
+                        frequency: group.schedule.frequency,
+                      }
+                    : null,
                 },
               })}::jsonb,
               ${actorId}, ${actorId})
