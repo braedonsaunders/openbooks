@@ -32,12 +32,12 @@ interface BenfordDrillDocument {
   docId: string | null
   docNumber: string | null
   partyName: string | null
-  amount: number
+  amount: string
 }
 
 interface BenfordDrillData {
   count: number
-  total: number
+  total: string
   documents: BenfordDrillDocument[]
 }
 
@@ -426,7 +426,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
 function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '1d' | '2d'; from: string; to: string; onClose: () => void }) {
   const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<BenfordDrillData | null>(null)
   const [error, setError] = useState(false)
   useEffect(() => {

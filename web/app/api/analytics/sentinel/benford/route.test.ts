@@ -163,7 +163,7 @@ test("restricted Benford drill applies the subsidiary predicate to detail and to
     digit: 4,
     dim: "1d",
     count: 1,
-    total: 42.5,
+    total: "42.5000",
     documents: [
       {
         docId: "doc-1",
@@ -171,7 +171,7 @@ test("restricted Benford drill applies the subsidiary predicate to detail and to
         entryId: "entry-1",
         docNumber: "VB-1",
         date: "2026-02-03",
-        amount: 42.5,
+        amount: "42.5000",
         partyName: "Allowed Vendor",
       },
     ],
@@ -204,6 +204,30 @@ test("unrestricted Benford drill keeps the shared filter empty", async () => {
   assert.ok(
     routeState.calls.every((text) => !text.includes("d.subsidiary_id")),
   );
+});
+
+test("Benford drill preserves unsafe-size monetary decimals", async () => {
+  reset();
+  routeState.allowedSubsidiaryIds = null;
+  routeState.detailRows = [
+    {
+      doc_id: "doc-large",
+      doc_kind: "vendor_bill",
+      document_number: "VB-LARGE",
+      date: "2026-02-03",
+      amount: "9007199254740993.1234",
+      party_name: "Large Vendor",
+      entry_id: "entry-large",
+    },
+  ];
+  routeState.aggregateRow = { n: "1", total: "9007199254740993.1234" };
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.total, "9007199254740993.1234");
+  assert.equal(body.documents[0].amount, "9007199254740993.1234");
 });
 
 const invalidFilters: Record<string, string>[] = [
