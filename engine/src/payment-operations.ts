@@ -15,6 +15,7 @@ import {
   loadRunFile,
   reversePaymentForReturn,
   validateNachaSettings,
+  validateSepaSettings,
   type NachaSettings,
   type SepaSettings,
 } from "./payments.ts";
@@ -636,10 +637,16 @@ export function sepaOriginator(secrets: Record<string, unknown>): SepaSettings &
     if (text === "" || text.includes("FILL-ME")) throw new PaymentError(`SEPA debit profile is missing ${key}`);
     values[key] = text;
   }
+  const originator = validateSepaSettings({
+    originatorName: values.originatorName,
+    originatorIban: values.originatorIban,
+    originatorBic: values.originatorBic,
+  });
+  if (!originator.ok) {
+    throw new PaymentError(`SEPA debit profile has invalid: ${originator.missing.join(", ")}`);
+  }
   return {
-    originatorName: values.originatorName!,
-    originatorIban: values.originatorIban!,
-    originatorBic: values.originatorBic!,
+    ...originator.settings,
     creditorId: values.creditorId!,
   };
 }

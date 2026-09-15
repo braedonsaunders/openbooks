@@ -1365,3 +1365,17 @@ test("an unfinished SEPA debit profile is named, never collected against", () =>
     (error: Error) => error instanceof PaymentError && error.message.includes("originatorIban"),
   );
 });
+
+test("a SEPA debit profile refuses an originator IBAN with an invalid checksum", () => {
+  assert.throws(
+    () => sepaOriginator({ ...SEPA_ORIGINATOR, originatorIban: "DE89370400440532013001" }),
+    (error: Error) => error instanceof PaymentError && error.message.includes("originatorIban"),
+  );
+});
+
+test("a SEPA debit profile refuses a malformed originator BIC", () => {
+  assert.throws(
+    () => sepaOriginator({ ...SEPA_ORIGINATOR, originatorBic: "NOT-A-BIC" }),
+    (error: Error) => error instanceof PaymentError && error.message.includes("originatorBic"),
+  );
+});
