@@ -329,7 +329,9 @@ export function PaymentDrawer({
     const res = await fetch('/api/payments/post-with-applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId: doc.id, allocations: validAllocations }),
+      // Same revision evidence as the draft save: the route fences its
+      // final allocation write on this token and 409s a stale drawer.
+      body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations }),
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? t('toasts.postFailed'))

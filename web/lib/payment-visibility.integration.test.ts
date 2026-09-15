@@ -526,11 +526,23 @@ for (const boundary of [
                 params,
               )
               assert.equal(stale.status, 409)
+              const stalePost = await postPayment(
+                new Request('http://test.local', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    documentId: payment.id,
+                    expectedUpdatedAt: body.expectedUpdatedAt,
+                    allocations: body.allocations,
+                  }),
+                }),
+              )
+              assert.equal(stalePost.status, 409, 'a stale Pay & post must fence before it can overwrite the reviewed allocation set')
               const posted = await postPayment(
                 new Request('http://test.local', {
                   method: 'POST',
                   body: JSON.stringify({
                     documentId: payment.id,
+                    expectedUpdatedAt: result.doc.updated_at,
                     allocations: body.allocations,
                   }),
                 }),

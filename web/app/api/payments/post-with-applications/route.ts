@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
+  PaymentRevisionConflictError,
   postPaymentWithApplications,
   updateDraftPayment,
   type PaymentKind,
@@ -10,6 +11,10 @@ import {
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
+import {
+  DocumentEditError,
+  requireDocumentEditRevision,
+} from '../../../../lib/documents'
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
 
@@ -33,6 +38,8 @@ const postWithApplicationsBody = z.object({
     (v) => uuidId.safeParse(v).success,
     'documentId is required',
   ),
+  /** Optimistic concurrency token from documents.updated_at (exact form). */
+  expectedUpdatedAt: z.string().optional(),
   allocations: z.array(allocationInput).optional(),
 })
 
@@ -63,6 +70,21 @@ export async function POST(req: Request) {
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
   }
+  // Mandatory optimistic-concurrency evidence — same contract as
+  // PATCH /api/payments/[id]: the draft branch below saves the final
+  // allocation set while the document is still draft, so a stale caller
+  // must 409 here instead of silently overwriting a newer allocation set
+  // that approval then reviews and posts. Checked after the gates so a
+  // missing token never leaks document existence to an unauthorized caller.
+  let expectedRevision: string
+  try {
+    expectedRevision = requireDocumentEditRevision(parsed.data.expectedUpdatedAt)
+  } catch (e) {
+    if (e instanceof DocumentEditError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
+    throw e
+  }
 
   try {
     const outcome = await withOrgTransaction(authz.user.orgId, async () => {
@@ -89,6 +111,9 @@ export async function POST(req: Request) {
             { allocations },
             authz.user.id,
             authz.user.orgId,
+            // The OCC token is route-level evidence; it never enters the
+            // engine's financial patch shape.
+            { expectedRevision },
           )
         }
         const submission = await submitAndReleaseIfUngated(
@@ -138,6 +163,10 @@ export async function POST(req: Request) {
     await runPostDocumentEffects(documentId, outcome.previousStatus)
     return NextResponse.json({ ok: true, ...outcome.result })
   } catch (e) {
+    // The engine fence fired under the row lock: someone saved first.
+    if (e instanceof PaymentRevisionConflictError) {
+      return NextResponse.json({ error: e.message }, { status: 409 })
+    }
     return paymentErrorResponse(e)
   }
 }
