@@ -160,6 +160,68 @@ async function runOwnershipConsolidationIn(
      order by subsidiary_id, effective_from
      for share
   `));
+  // Same-acquisition handover continuity: an ownership change closes the used
+  // policy and opens a new effective-dated one for the same acquisition, so
+  // consecutive policies must be contiguous (successor.from = predecessor.to
+  // + 1 day). The storage guard refuses overlaps but not gaps, and profit is
+  // windowed per policy with no completeness fence — a one-day gap would
+  // silently exclude that day's activity from NCI and equity income. A first
+  // policy starting after its acquisition date is the blessed pre-coverage
+  // model, a closed policy with no successor is a disposal, and a genuine
+  // re-acquisition carries a new date, so only mid-chain handovers are
+  // policed — in both directions, since the predecessor or the successor may
+  // live outside this run's period.
+  const chain = (await tx.execute<{
+    id: string; subsidiary_id: string; acquisition_date: string;
+    effective_from: string; effective_to: string | null; is_active: boolean;
+  }>(sql`
+    select p.id, p.subsidiary_id, p.acquisition_date::text as acquisition_date,
+           p.effective_from::text as effective_from, p.effective_to::text as effective_to, p.is_active
+      from subsidiary_ownership_interests p
+     where p.org_id = ${orgId}
+       and (p.subsidiary_id, p.acquisition_date) in (
+         select distinct q.subsidiary_id, q.acquisition_date
+           from subsidiary_ownership_interests q
+          where q.org_id = ${orgId} and q.is_active and q.effective_from <= ${period.ends_on}
+            and (q.effective_to is null or q.effective_to >= ${period.starts_on})
+       )
+     order by p.subsidiary_id, p.acquisition_date, p.effective_from, p.id
+     for share`)).rows;
+  const byChain = new Map<string, typeof chain>();
+  for (const row of chain) {
+    const key = `${row.subsidiary_id} ${row.acquisition_date}`;
+    const list = byChain.get(key) ?? [];
+    list.push(row);
+    byChain.set(key, list);
+  }
+  const nextDay = (iso: string): string => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y!, m! - 1, d!) + 86_400_000).toISOString().slice(0, 10);
+  };
+  // select * returns DATE columns as Date objects; the chain rows above are
+  // ::text. Normalize before keying so the lookup cannot silently miss.
+  const isoDate = (value: string | Date): string =>
+    typeof value === "string" ? value : value.toISOString().slice(0, 10);
+  for (const interest of interests.rows) {
+    const group = byChain.get(`${interest.subsidiary_id} ${isoDate(interest.acquisition_date)}`);
+    if (!group) continue;
+    const idx = group.findIndex((row) => row.id === interest.id);
+    if (idx < 0) continue;
+    const here = group[idx]!;
+    const label = context.byId.get(interest.subsidiary_id)?.name ?? interest.subsidiary_id;
+    const gap = (from: string, to: string | null, succFrom: string): string =>
+      `ownership coverage for ${label} has a gap: the policy ending ${from} is not followed by a policy starting ${to} (next starts ${succFrom}) — close the gap before consolidating`;
+    const prev = idx > 0 ? group[idx - 1]! : null;
+    if (prev && prev.effective_from < here.effective_from && prev.effective_to
+        && here.effective_from !== nextDay(prev.effective_to)) {
+      throw new ConsolidationError(gap(prev.effective_to, nextDay(prev.effective_to), here.effective_from));
+    }
+    const succ = idx + 1 < group.length ? group[idx + 1]! : null;
+    if (succ && succ.is_active && succ.effective_from > here.effective_from && here.effective_to
+        && succ.effective_from !== nextDay(here.effective_to)) {
+      throw new ConsolidationError(gap(here.effective_to, nextDay(here.effective_to), succ.effective_from));
+    }
+  }
   const run = (await tx.execute<{ id: string }>(sql`
     insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
     values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id
