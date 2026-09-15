@@ -61,6 +61,34 @@ const ACCOUNT_TYPES_BY_KEY: Record<typeof ACCOUNT_KEYS[number], readonly string[
 }
 
 /**
+ * Legacy statutory payable mappings: still accepted for back-compat, but the
+ * payroll pack slots (slotAccounts, written onto the components) are the
+ * authoritative mapping. Re-pointing one of these keys changes where a
+ * statutory liability posts, so the API answers with a typed warning naming
+ * the new account — silent acceptance once posted income tax to an RRSP
+ * holding account and EI to a WSIB account on a live tenant.
+ */
+const STATUTORY_PAYABLE_KEYS = [
+  'cppPayableAccountId',
+  'eiPayableAccountId',
+  'taxPayableAccountId',
+  'vacationPayableAccountId',
+] as const
+const STATUTORY_PAYABLE_LABELS: Record<(typeof STATUTORY_PAYABLE_KEYS)[number], string> = {
+  cppPayableAccountId: 'CPP payable',
+  eiPayableAccountId: 'EI payable',
+  taxPayableAccountId: 'Income tax payable',
+  vacationPayableAccountId: 'Vacation payable',
+}
+export interface PayrollSettingsWarning {
+  code: 'statutory_payable_mapping_changed'
+  key: (typeof STATUTORY_PAYABLE_KEYS)[number]
+  accountId: string
+  accountLabel: string
+  message: string
+}
+
+/**
  * Payroll jurisdiction packs the org can install — the pack REGISTRY's own
  * `installable` declaration, never a second list. A pack that exists but is
  * not yet installable (in development, superseded) is known for validation
@@ -74,23 +102,27 @@ const installableCountries = (): string[] =>
 async function validatePayrollAccounts(
   orgId: string,
   body: Record<string, unknown>,
-): Promise<NextResponse | null> {
+): Promise<NextResponse | Map<string, string>> {
   const requested = ACCOUNT_KEYS.flatMap((key) => {
     const value = body[key]
     return value == null ? [] : [[key, value as string] as const]
   })
-  if (requested.length === 0) return null
+  if (requested.length === 0) return new Map<string, string>()
   const rows = await db.execute<{
     id: string
     type: string
     isActive: boolean
     isSummary: boolean
+    number: string | null
+    name: string
   }>(sql`
-    select id::text as id, type, is_active as "isActive", is_summary as "isSummary"
+    select id::text as id, type, is_active as "isActive", is_summary as "isSummary",
+           number, name
       from accounts
      where org_id = ${orgId}
        and id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
   const byId = new Map(rows.rows.map((row) => [row.id, row]))
+  const labels = new Map<string, string>()
   for (const [key, id] of requested) {
     const row = byId.get(id)
     if (!row) {
@@ -105,8 +137,9 @@ async function validatePayrollAccounts(
     if (!ACCOUNT_TYPES_BY_KEY[key].includes(row.type)) {
       return NextResponse.json({ error: `invalid ${key}: account type ${row.type} is not compatible with payroll` }, { status: 422 })
     }
+    labels.set(id, row.number ? `${row.number} · ${row.name}` : row.name)
   }
-  return null
+  return labels
 }
 
 async function validateRemittanceVendors(
@@ -270,10 +303,28 @@ export async function PUT(req: Request) {
     const v = body[key] ?? null
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
   }
-  const accountError = await validatePayrollAccounts(orgId, body)
-  if (accountError) return accountError
+  const validated = await validatePayrollAccounts(orgId, body)
+  if (validated instanceof NextResponse) return validated
+  const warnings: PayrollSettingsWarning[] = []
   for (const key of ACCOUNT_KEYS) {
     if (key in body) settings[key] = body[key] ?? null
+  }
+  // A statutory payable key re-pointed at a new account changes where that
+  // liability posts. Accept it (back-compat) but say so, naming the account:
+  // only an actual change warns, so routine re-saves stay quiet.
+  for (const key of STATUTORY_PAYABLE_KEYS) {
+    if (!(key in body)) continue
+    const next = settings[key] ?? null
+    if (typeof next !== 'string' || (before[key] ?? null) === next) continue
+    warnings.push({
+      code: 'statutory_payable_mapping_changed',
+      key,
+      accountId: next,
+      accountLabel: validated.get(next) ?? next,
+      message: `${STATUTORY_PAYABLE_LABELS[key]} now points at ${validated.get(next) ?? next}. `
+        + 'Statutory liabilities post to this account — confirm it is the intended remittance account '
+        + 'in Payroll setup → Accounts before the next pay run commits.',
+    })
   }
   // Statutory remittance vendors — exactly the settings keys the pack
   // declarations name (the CRA vendor, the Revenu Québec vendor for the CA
@@ -428,7 +479,7 @@ export async function PUT(req: Request) {
   }
 
   await writePayrollBlob(orgId, gate.user.id, before, settings)
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, warnings })
   })
 }
 
