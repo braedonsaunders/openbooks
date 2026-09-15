@@ -111,7 +111,7 @@ export async function cashFlow(
   // foreign-currency bank balance moves no cash, and their P&L contra leg
   // would otherwise read as an operating receipt. Their bank legs surface
   // below as the effect of exchange-rate changes on cash instead.
-  const contra = (await reportDb.execute<{ type: string; cash_effect: string }>(sql`
+  const contra = (await reportDb.execute<{ type: string; cash_effect: string; disposal_gain: boolean }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -125,21 +125,30 @@ export async function cashFlow(
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
     )
-    select ${reportDb.censusColumn}, a.type, -sum(l.amount) as cash_effect
+    select ${reportDb.censusColumn}, a.type, -sum(l.amount) as cash_effect,
+           -- A cash disposal's gain/loss is part of investing proceeds (the
+           -- indirect statement reclassifies it the same way), never an
+           -- operating receipt — even though its account types read operating.
+           -- Grouped, not merely flagged: a shared gain/loss account carries
+           -- genuine operating flows too, and those must stay operating.
+           (e.origin = 'disposal' and a.type in
+             ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')) as disposal_gain
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.id in (select id from cash_entries)
        and e.book_id = ${book}
        and l.org_id = ${resolvedOrgId} and a.type <> 'asset_bank' and ${dimWhere(dims)}
-     group by a.type
+     group by a.type,
+           (e.origin = 'disposal' and a.type in
+             ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred'))
   `));
 
   const bySection: Record<CashFlowSection, CashFlowLine[]> = { operating: [], investing: [], financing: [] };
   for (const row of contra.rows) {
     const amount = row.cash_effect;
     if (!decimalIsMaterial(amount)) continue;
-    const section = CASH_FLOW_SECTION[row.type] ?? "operating";
+    const section = row.disposal_gain ? "investing" : (CASH_FLOW_SECTION[row.type] ?? "operating");
     bySection[section].push({
       type: row.type,
       label: CASH_FLOW_TYPE_LABEL[row.type] ?? row.type,
