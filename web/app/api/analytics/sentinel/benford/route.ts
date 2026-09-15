@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
@@ -65,10 +66,10 @@ export async function GET(req: Request) {
     digit,
     dim,
     count: Number(agg.rows[0]?.n ?? 0),
-    total: Number(agg.rows[0]?.total ?? 0),
+    total: normalizeMoney(String(agg.rows[0]?.total ?? "0")),
     documents: ((detail.rows)).map((r) => ({
       docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "",
-      date: r.date, amount: Number(r.amount), partyName: r.party_name,
+      date: r.date, amount: normalizeMoney(String(r.amount ?? "0")), partyName: r.party_name,
     })),
   });
 }
