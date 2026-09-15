@@ -583,4 +583,44 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       },
     },
   },
+
+  {
+    id: "lease-early-termination",
+    title: "Terminating a lease early derecognises both balances and recognises the net difference",
+    citations: [
+      {
+        standard: "ASC 842",
+        reference: "842-10-40-1",
+        kind: "requirement",
+        requirement:
+          "On termination of a lease the lessee derecognises the lease liability and the right-of-use asset and recognises any difference, including termination penalties, in profit or loss.",
+      },
+      {
+        standard: "IFRS 16",
+        reference: "IFRS 16.46",
+        kind: "requirement",
+        requirement:
+          "A modification that ends the lease removes both the liability and the right-of-use asset from the balance sheet, with the difference recognised in profit or loss.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.",
+    facts: [
+      "A five-year finance lease of 20,000.00 a year at 5%: opening liability and right-of-use asset 86,589.5334.",
+      "After the third annual payment the liability stands at 37,188.2086 and three years of amortisation at 17,317.9067 leave the right-of-use asset at 34,635.8133.",
+      "The lease terminates with a 3,000.00 penalty: the 37,188.2086 liability is derecognised, the 34,635.8133 asset is derecognised, and the penalty is paid.",
+      "The net difference is a termination loss of 447.6047.",
+    ],
+    gap: "The lease engine has no termination path: nothing derecognises the liability and right-of-use asset before term, books a termination penalty, or measures the termination gain or loss — an ended lease keeps its frozen schedule on the books.",
+    expected: {
+      values: {
+        liabilityDerecognised: "37188.2086",
+        rouAssetDerecognised: "34635.8133",
+        terminationPenalty: "3000.0000",
+        terminationLoss: "447.6047",
+      },
+    },
+  },
 ];
