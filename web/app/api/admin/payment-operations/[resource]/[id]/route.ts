@@ -78,6 +78,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
       }
     } else if (resource === 'schedules') {
+      // POST allowlists the scheduler action; PATCH must enforce the same
+      // contract instead of storing an unknown action that silently degrades
+      // to draft behaviour (auto-submit never fires).
+      if (
+        body.action !== undefined &&
+        body.action !== 'submit_for_approval' &&
+        body.action !== 'create_draft'
+      ) {
+        return NextResponse.json({ error: 'action must be submit_for_approval or create_draft' }, { status: 400 })
+      }
       const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`))
       if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
       const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current.rows[0].cron, new Date(), body.timezone?.trim() || current.rows[0].timezone) : undefined
@@ -108,6 +118,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
       })
     } else {
+      // POST allowlists the mandate status; PATCH must enforce the same
+      // contract instead of storing an unknown status that silently disables
+      // direct-debit collection (only 'active' mandates join payment runs).
+      if (
+        body.status !== undefined &&
+        !['pending', 'active', 'suspended', 'revoked', 'expired'].includes(body.status)
+      ) {
+        return NextResponse.json({ error: 'status must be pending, active, suspended, revoked, or expired' }, { status: 400 })
+      }
       await db.transaction(async (tx) => {
         const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
