@@ -101,6 +101,18 @@ three payroll migrations below are additive.
 - Test fixtures refuse databases that do not carry the ephemeral marker, so a
   stray test run cannot write to a real database.
 
+### Payroll
+
+- Remittance bills for Revenu Québec destinations are now due on Revenu
+  Québec's own timetable. The Canada pack declares the RQ schedule
+  (quarterly, monthly, or twice-monthly by average monthly remittance, per
+  Guide TP-1015.G and form TPZ-1015.R): Québec income tax, QPP, and QPIP bills
+  carry RQ due dates and rules instead of inheriting the filing account's CRA
+  remitter type, which previously stamped CRA accelerated-threshold dates on
+  RQ bills. Set the frequency from your Revenu Québec notice under Setup →
+  Payroll (new employers remit monthly, the default); Setup readiness warns
+  while it is unconfirmed and when last year's average points at another band.
+
 ## [0.1.0-alpha.4] - 2026-08-20
 
 ### Time and timesheets
