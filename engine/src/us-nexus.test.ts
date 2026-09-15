@@ -71,3 +71,23 @@ test('a penny under the dollar threshold is not met', () => {
   const exact = evaluateUsNexus([{ state: 'FL', salesUsd: '100000', txnCount: 0 }])[0]!
   assert.equal(exact.status, 'met')
 })
+
+test('injected thresholds evaluate in the working currency (entity ledger)', () => {
+  // A CAD entity ledger converts the CA $500k sales-only trigger at its
+  // policy rate (×1.35 → $675k) and injects it; the decision is exact in CAD.
+  const cad = new Map([['CA', { state: 'CA', salesUsd: 675_000, txnCount: null, measure: 'sales_only' as const }]])
+  const below = evaluateUsNexus([{ state: 'CA', salesUsd: '400000.0000', txnCount: 3 }], { thresholds: cad })[0]!
+  assert.equal(below.status, 'none')
+  assert.equal(below.threshold.salesUsd, 675_000)
+  const above = evaluateUsNexus([{ state: 'CA', salesUsd: '700000.0000', txnCount: 3 }], { thresholds: cad })[0]!
+  assert.equal(above.status, 'met')
+  // States without an injected entry keep the USD reference threshold.
+  const mixed = evaluateUsNexus(
+    [
+      { state: 'CA', salesUsd: '400000.0000', txnCount: 3 },
+      { state: 'FL', salesUsd: '120000.0000', txnCount: 3 },
+    ],
+    { thresholds: cad },
+  )
+  assert.deepEqual(mixed.map((r) => [r.state, r.status]), [['FL', 'met'], ['CA', 'none']])
+})

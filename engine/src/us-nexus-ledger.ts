@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm'
 import { db } from './db.ts'
-import { add, mulRate, normalizeDecimal } from './money.ts'
-import { evaluateUsNexus, type NexusEvaluation, type StateSales } from './us-nexus.ts'
+import { add, mulRate, normalizeDecimal, roundMoney } from './money.ts'
+import { IncomeTaxProvisionError, spotRateToPresentation } from './income-tax-provision.ts'
+import { uuidArray } from './subsidiaries.ts'
+import { evaluateUsNexus, thresholdForState, type NexusEvaluation, type StateNexusThreshold, type StateSales } from './us-nexus.ts'
 
 /** Role-derived subsidiary visibility; null/undefined means unrestricted. */
 export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined
@@ -20,21 +22,116 @@ function subsidiaryScopeFilter(allowedSubsidiaryIds: UsNexusSubsidiaryScope) {
 }
 
 /**
+ * Options for a filing-entity nexus ledger. Nexus obligations attach to legal
+ * entities, not to the org blend: `subsidiaryIds` scopes the aggregation to
+ * one filing entity and the ledger measures in that entity's working currency
+ * instead of the org-wide USD default.
+ */
+export interface UsNexusLedgerOptions {
+  /** Subsidiaries forming the filing entity; ANDed with visibility scope. */
+  subsidiaryIds?: string[]
+  /**
+   * Working currency: row conversion target and threshold expression currency.
+   * Defaults to the entity's single functional currency (an entity spanning
+   * several functional currencies must declare one explicitly); unscoped
+   * ledgers default to USD, the threshold reference currency.
+   */
+  currency?: string
+  /** fx_rates `rate_type` for row conversion and threshold translation. */
+  rateType?: string
+  /** Rate effective date (ISO); defaults to the window end (`to`). */
+  rateDate?: string
+}
+
+export interface UsNexusTranslation {
+  rateType: string
+  rateDate: string
+  /** Effective date of the applied USD→working rate row. */
+  rateAsOf: string
+  /** The policy rate the USD reference thresholds were translated at. */
+  usdToCurrencyRate: string
+}
+
+const NEXUS_CURRENCY_RE = /^[A-Z]{3}$/
+const NEXUS_RATE_TYPE_RE = /^[a-z][a-z0-9_]{1,31}$/
+const NEXUS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+async function resolveEntityScope(
+  orgId: string,
+  opts: UsNexusLedgerOptions,
+): Promise<{ subsidiaryIds: string[] | null; currency: string }> {
+  const rateType = opts.rateType ?? 'spot'
+  if (!NEXUS_RATE_TYPE_RE.test(rateType)) {
+    throw new Error(`nexus rateType "${opts.rateType}" is not a valid rate source`)
+  }
+  if (opts.rateDate !== undefined && !NEXUS_DATE_RE.test(opts.rateDate)) {
+    throw new Error(`nexus rateDate "${opts.rateDate}" is not an ISO date (YYYY-MM-DD)`)
+  }
+  if (opts.currency !== undefined && !NEXUS_CURRENCY_RE.test(opts.currency)) {
+    throw new Error(`nexus currency "${opts.currency}" is not a valid 3-letter currency code`)
+  }
+  if (!opts.subsidiaryIds) return { subsidiaryIds: null, currency: opts.currency ?? 'USD' }
+  if (opts.subsidiaryIds.length === 0) {
+    throw new Error('nexus filing entity must name at least one subsidiary')
+  }
+  const ids = [...new Set(opts.subsidiaryIds)]
+  try {
+    uuidArray(ids)
+  } catch (e) {
+    throw new Error(`nexus filing entity names an invalid subsidiary id (${e instanceof Error ? e.message : String(e)})`)
+  }
+  const rows = (await db.execute<{ id: string; base_currency: string; is_elimination: boolean }>(sql`
+    select id, base_currency, is_elimination from subsidiaries
+     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`))
+  const known = new Set(rows.rows.map((r) => r.id))
+  const unknown = ids.filter((id) => !known.has(id))
+  if (unknown.length > 0) {
+    throw new Error(`nexus filing entity references subsidiaries outside this organization: ${unknown.join(', ')}`)
+  }
+  const elimination = rows.rows.filter((r) => r.is_elimination)
+  if (elimination.length > 0) {
+    throw new Error('nexus filing entity cannot include an elimination entity — only legal filers hold nexus')
+  }
+  if (!opts.currency) {
+    const currencies = [...new Set(rows.rows.map((r) => r.base_currency))]
+    if (currencies.length > 1) {
+      throw new Error(
+        `nexus filing entity spans functional currencies (${currencies.sort().join(' and ')}) — pass currency to declare the working currency`,
+      )
+    }
+    return { subsidiaryIds: ids, currency: currencies[0]! }
+  }
+  return { subsidiaryIds: ids, currency: opts.currency }
+}
+
+/**
  * Aggregate US sales by destination state and evaluate economic nexus.
  *
  * Destination is taken from the customer's default US shipping address (the
  * ship-to state drives sales-tax nexus). Sales = posted customer invoices net of
- * credit memos over the window, converted to USD; the transaction count is
- * invoices only. Sales to customers with no (or an unknown) shipping country
- * cannot be placed and are returned separately, while known non-US destinations
- * are outside this US ledger.
+ * credit memos over the window, converted to the working currency; the
+ * transaction count is invoices only. Sales to customers with no (or an unknown)
+ * shipping country cannot be placed and are returned separately, while known
+ * non-US destinations are outside this US ledger.
+ *
+ * The working currency is USD for the org-wide ledger (thresholds apply
+ * directly, byte-identical to the historical behaviour). A filing-entity ledger
+ * measures in the entity's working currency with the USD reference thresholds
+ * translated at the declared policy rate — reported back as `translation`
+ * evidence — and fails closed when rate coverage is missing.
  */
 export interface UsNexusResult {
   from: string
   to: string
+  /** Working currency: `states`/`unattributed` amounts are denominated here. */
+  currency: string
+  /** The filing entity measured, or null for the org-wide ledger. */
+  subsidiaryIds: string[] | null
   states: NexusEvaluation[]
   /** Posted US sales that could not be attributed to a state (no ship-to on file). */
   unattributed: { salesUsd: string; txnCount: number }
+  /** Threshold-translation evidence; null when thresholds applied directly (USD). */
+  translation: UsNexusTranslation | null
 }
 
 export async function computeUsNexusStatus(
@@ -42,7 +139,16 @@ export async function computeUsNexusStatus(
   from: string,
   to: string,
   allowedSubsidiaryIds?: UsNexusSubsidiaryScope,
+  opts: UsNexusLedgerOptions = {},
 ): Promise<UsNexusResult> {
+  const rateType = opts.rateType ?? 'spot'
+  const rateDate = opts.rateDate ?? to
+  const entity = await resolveEntityScope(orgId, opts)
+  const target = entity.currency
+  const entityFilter =
+    entity.subsidiaryIds === null
+      ? sql``
+      : sql`and d.subsidiary_id in (${sql.join(entity.subsidiaryIds.map((id) => sql`${id}`), sql`, `)})`
   const rows = (await db.execute<{
     state: string
     currency: string
@@ -79,6 +185,7 @@ export async function computeUsNexusStatus(
        and d.status = 'posted'
        and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
        ${subsidiaryScopeFilter(allowedSubsidiaryIds)}
+       ${entityFilter}
        -- Foreign destinations are outside US nexus. Keep missing/unknown
        -- country rows unattributed, but never treat a known non-US address as
        -- an unplaceable US sale.
@@ -89,60 +196,96 @@ export async function computeUsNexusStatus(
        )
   `))
 
-  const usdByState = new Map<string, { sales: string; txnCount: number }>()
-  const rateCache = new Map<string, string>()
+  const byState = new Map<string, { sales: string; txnCount: number }>()
+  const rateCache = new Map<string, Promise<string>>()
 
-  const usdRate = async (fromCurrency: string, asOf: string): Promise<string> => {
+  const rateToTarget = (fromCurrency: string, asOf: string): Promise<string> => {
     const key = `${fromCurrency}|${asOf}`
     const cached = rateCache.get(key)
     if (cached) return cached
-    const r = (await db.execute<{ rate: string }>(sql`
-      select rate::text from (
-        select rate, as_of from fx_rates
-         where org_id = ${orgId} and from_currency = ${fromCurrency}
-           and to_currency = 'USD' and rate_type = 'spot' and as_of <= ${asOf}
-        union all
-        select (1 / rate)::numeric(19,10) as rate, as_of from fx_rates
-         where org_id = ${orgId} and from_currency = 'USD'
-           and to_currency = ${fromCurrency} and rate_type = 'spot' and as_of <= ${asOf}
-      ) candidates order by as_of desc limit 1`))
-    const rate = r.rows[0]?.rate
-    if (!rate) {
-      throw new Error(`no spot rate for ${fromCurrency}→USD on or before ${asOf} — nexus thresholds are USD`)
-    }
-    rateCache.set(key, rate)
-    return rate
+    const lookup = (async () => {
+      try {
+        return (await spotRateToPresentation(db, orgId, fromCurrency, target, asOf, rateType)).rate
+      } catch (e) {
+        if (e instanceof IncomeTaxProvisionError) {
+          throw new Error(
+            `no ${rateType} rate for ${fromCurrency}→${target} on or before ${asOf} — configure exchange rates before measuring nexus in ${target}`,
+          )
+        }
+        throw e
+      }
+    })()
+    rateCache.set(key, lookup)
+    return lookup
   }
 
   for (const row of rows.rows) {
-    let usd: string
-    if (row.currency === 'USD') {
-      usd = row.amount
+    let converted: string
+    if (row.currency === target) {
+      converted = row.amount
     // A stored rate is authoritative only when it differs from the column
     // default at the column's own ten-decimal scale. The numeric(19,10) value
     // reads back as '1.0000000000', so a raw string comparison against '1'
     // treated every unstamped legacy rate as a real 1:1 peg and converted at
-    // 1.0 instead of resolving the spot rate below — the same default-vs-set
+    // 1.0 instead of resolving the rate below — the same default-vs-set
     // distinction the posting kernel draws before honouring a header rate.
-    } else if (row.base_currency === 'USD' && row.fx_rate && normalizeDecimal(row.fx_rate, 10) !== '1.0000000000') {
-      usd = mulRate(row.amount, row.fx_rate)
+    } else if (row.base_currency === target && row.fx_rate && normalizeDecimal(row.fx_rate, 10) !== '1.0000000000') {
+      converted = mulRate(row.amount, row.fx_rate)
     } else {
-      usd = mulRate(row.amount, await usdRate(row.currency, row.as_of))
+      converted = mulRate(row.amount, await rateToTarget(row.currency, row.as_of))
     }
     const key = row.state.trim()
-    const prev = usdByState.get(key) ?? { sales: '0', txnCount: 0 }
-    usdByState.set(key, {
-      sales: add(prev.sales, usd),
+    const prev = byState.get(key) ?? { sales: '0', txnCount: 0 }
+    byState.set(key, {
+      sales: add(prev.sales, converted),
       txnCount: prev.txnCount + Number(row.is_invoice),
     })
   }
 
   const attributed: StateSales[] = []
   let unattributed = { salesUsd: '0', txnCount: 0 }
-  for (const [state, agg] of usdByState) {
+  for (const [state, agg] of byState) {
     if (state) attributed.push({ state: state.toUpperCase(), salesUsd: agg.sales, txnCount: agg.txnCount })
     else unattributed = { salesUsd: agg.sales, txnCount: agg.txnCount }
   }
 
-  return { from, to, states: evaluateUsNexus(attributed), unattributed }
+  // Thresholds are USD reference data. In the USD working currency they apply
+  // directly (the historical path — no lookup, no evidence object). Otherwise
+  // each state's dollar trigger translates once at the declared policy rate;
+  // the coarse whole-dollar figures round to cents for the numeric threshold
+  // field while the measured sales keep full ledger precision.
+  if (target === 'USD') {
+    return { from, to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: evaluateUsNexus(attributed), unattributed, translation: null }
+  }
+  let policyRate: string
+  let policyAsOf: string
+  try {
+    ({ rate: policyRate, asOf: policyAsOf } = await spotRateToPresentation(db, orgId, 'USD', target, rateDate, rateType))
+  } catch (e) {
+    if (e instanceof IncomeTaxProvisionError) {
+      throw new Error(
+        `cannot translate nexus thresholds USD→${target} (${e.message})`,
+      )
+    }
+    throw e
+  }
+  const thresholds = new Map<string, StateNexusThreshold>()
+  for (const sale of attributed) {
+    const reference = thresholdForState(sale.state)
+    thresholds.set(
+      sale.state,
+      reference.measure === 'none' || reference.salesUsd === 0
+        ? reference
+        : { ...reference, salesUsd: Number(roundMoney(mulRate(String(reference.salesUsd), policyRate), 2)) },
+    )
+  }
+  return {
+    from,
+    to,
+    currency: target,
+    subsidiaryIds: entity.subsidiaryIds,
+    states: evaluateUsNexus(attributed, { thresholds }),
+    unattributed,
+    translation: { rateType, rateDate, rateAsOf: policyAsOf, usdToCurrencyRate: policyRate },
+  }
 }
