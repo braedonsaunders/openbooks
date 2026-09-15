@@ -7,7 +7,7 @@ export const payroll: DocArticle = {
   order: 6,
   summary:
     "Run payroll with installable country packs: CRA T4127 (Canada) and IRS Pub 15-T (US) statutory engines, pay schedules, TD1/W-4 profiles, pay runs, union fringes, and GL posting.",
-  updated: "2026-08-22",
+  updated: "2026-09-15",
   keywords: [
     "payroll",
     "pay run",
@@ -15,6 +15,8 @@ export const payroll: DocArticle = {
     "EI",
     "QPP",
     "QPIP",
+    "Revenu Québec",
+    "remittance frequency",
     "income tax",
     "TD1",
     "T4127",
@@ -72,8 +74,10 @@ incomplete stubs.
   the flat-rate rule for annual incomes of 5,000 dollars or less.
 - TD1 claim codes 0 through 10 or exact claim amounts, additional requested
   tax, prescribed-zone deductions, and authorized deductions or credits.
-- Quebec provincial income tax is administered by Revenu Quebec and is out of
-  scope; QPP, QPIP, and the federal side of Quebec employment are handled.
+- Quebec provincial income tax (TP-1015) is computed for Québec employment
+  alongside QPP, QPIP, and the federal side with the Quebec abatement.
+  Québec-source amounts remit to Revenu Québec on its own schedule — see
+  Remitting source deductions below.
 
 ## What the US engine covers
 
@@ -124,6 +128,36 @@ projection, and hands the run to the standard document posting flow. Hourly
 earnings come from approved time entries at the employee wage times the time
 type multiplier; salaried employees pay the annual rate over the schedule's
 periods.
+
+## Remitting source deductions
+
+Committing a pay run accrues withholding liabilities; getting the money to
+the agency is a separate step under Payroll → Remittances. The cockpit groups
+accrued amounts by destination vendor and payroll program account — one card
+per destination (the CRA vendor, the Revenu Québec vendor, union funds) — and
+each group materializes as one draft vendor bill debiting the liability
+accounts. The bill then rides the normal AP review, post, and pay flow.
+
+CRA and Revenu Québec destinations remit on different timetables, and a bill's
+due date always comes from its own destination's schedule:
+
+- CRA bills follow the filing account's CRA remitter type (regular,
+  quarterly, and the two accelerated thresholds), moved off weekends and
+  CRA-recognized holidays to the next business day. Québec-only payrolls use
+  the CRA's Québec holiday calendar.
+- Revenu Québec bills (Québec income tax, QPP, and QPIP on Québec employment)
+  follow the RQ schedule declared by the Canada pack — quarterly, monthly, or
+  twice-monthly by average monthly remittance, transcribed from Revenu Québec
+  Guide TP-1015.G and form TPZ-1015.R — never the CRA registration on the
+  filing account. Deadlines move to the next business day on the Québec
+  calendar.
+
+Your RQ frequency is the one on your Revenu Québec notice: set it under Setup
+→ Payroll (Revenu Québec remittance frequency). New employers remit monthly,
+which is also the default until a frequency is set. Setup readiness warns
+while the frequency is unconfirmed, and when last year's average monthly
+remittance points at a different band. Every bill stamps the rule that dated
+it, so a due date is always explainable.
 
 ## Union construction payroll
 
