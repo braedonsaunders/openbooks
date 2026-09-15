@@ -38,7 +38,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!attachedAsset.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // The attachment relation above limits this exception to evidence on an
     // asset the caller can see; it does not grant cabinet-wide visibility.
-    viewer = { userId: gate.user.id, isAdmin: can(gate, '*'), baseline: 'viewer' }
+    viewer = { userId: gate.user.id, isAdmin: can(gate, '*'), baseline: 'viewer', allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   }
 
   const url = new URL(req.url)

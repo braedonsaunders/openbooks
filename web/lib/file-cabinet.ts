@@ -33,6 +33,14 @@ export interface FileViewer {
   userId: string
   isAdmin: boolean
   baseline?: AccessLevel
+  /**
+   * The caller's role-derived subsidiary fence (null = organization-wide).
+   * Record-folder files/folders evidence a single record, so restricted
+   * callers see them only when the folder's record target is inside this
+   * set — the same rule the attachment surfaces enforce. Unset behaves as
+   * unrestricted (pre-fence callers and tests keep current behavior).
+   */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
 }
 
 /** Access tiers, low → high. 'none' means no access. */
@@ -210,6 +218,90 @@ function visibleFilePredicate(scope: ReadScope, folderIdCol: SQL, fileIdCol: SQL
   if (scope.grantedFileIds.length === 0) return folderOk
   return sql`(${folderOk} or ${fileIdCol} in (
     select value::uuid from jsonb_array_elements_text(${JSON.stringify(scope.grantedFileIds)}::jsonb) as _g(value)
+  ))`
+}
+
+/**
+ * Record-entity fence for cabinet reads, mirroring attachmentTargetInScope
+ * (web/app/api/file-cabinet/lib.ts) table by table: a file or folder inside a
+ * per-record folder (record_id set) evidences that record, so a
+ * subsidiary-restricted caller sees it only when the folder's record target
+ * is inside their fence. Non-record folders and item-rate versions (org-wide
+ * setup) are unaffected. Returns null when the caller is unrestricted.
+ */
+function recordTargetVisiblePredicate(
+  orgId: string,
+  allowed: ReadonlySet<string> | null | undefined,
+  recordTableCol: SQL,
+  recordIdCol: SQL,
+): SQL | null {
+  if (allowed === null || allowed === undefined) return null
+  const fence = `{${[...allowed].join(',')}}`
+  return sql`(
+    ${recordIdCol} is null
+    or ${recordTableCol} = 'item_rate_versions'
+    or exists (select 1 from documents d
+                 where d.org_id = ${orgId} and d.id = ${recordIdCol} and ${recordTableCol} = 'documents'
+                   and d.subsidiary_id = any(${fence}::uuid[]))
+    or exists (select 1 from parties p
+                 where p.org_id = ${orgId} and p.id = ${recordIdCol} and ${recordTableCol} = 'parties'
+                   and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[])))
+    or exists (select 1 from fixed_assets a
+                 where a.org_id = ${orgId} and a.id = ${recordIdCol} and ${recordTableCol} = 'fixed_assets'
+                   and a.subsidiary_id = any(${fence}::uuid[]))
+    or exists (select 1 from compliance_records cr
+                 join parties p on p.id = cr.party_id and p.org_id = cr.org_id
+                 left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
+                where cr.org_id = ${orgId} and cr.id = ${recordIdCol} and ${recordTableCol} = 'compliance_records'
+                  and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
+                  and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
+    or exists (select 1 from lien_waivers lw
+                 join parties p on p.id = lw.party_id and p.org_id = lw.org_id
+                 left join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
+                where lw.org_id = ${orgId} and lw.id = ${recordIdCol} and ${recordTableCol} = 'lien_waivers'
+                  and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
+                  and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
+  )`
+}
+
+/**
+ * File-level record fence: the folder-record target must be visible, unless
+ * the file itself was explicitly shared with the caller (a grant re-opens its
+ * file exactly like a grant re-opens a private subtree).
+ */
+function recordScopeFilePredicate(
+  orgId: string,
+  scope: ReadScope,
+  allowed: ReadonlySet<string> | null | undefined,
+  fileIdCol: SQL,
+  recordTableCol: SQL,
+  recordIdCol: SQL,
+): SQL {
+  const targetVisible = recordTargetVisiblePredicate(orgId, allowed, recordTableCol, recordIdCol)
+  if (!targetVisible) return sql`true`
+  if (scope.grantedFileIds.length === 0) return targetVisible
+  return sql`(${targetVisible} or ${fileIdCol} in (
+    select value::uuid from jsonb_array_elements_text(${JSON.stringify(scope.grantedFileIds)}::jsonb) as _rg(value)
+  ))`
+}
+
+/**
+ * Folder-level record fence for record-leaf folders. An explicit folder grant
+ * re-opens its folder, matching the file-level rule.
+ */
+function recordScopeFolderPredicate(
+  orgId: string,
+  viewer: FileViewer,
+  folderIdCol: SQL,
+  recordTableCol: SQL,
+  recordIdCol: SQL,
+): SQL {
+  const targetVisible = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, recordTableCol, recordIdCol)
+  if (!targetVisible) return sql`true`
+  return sql`(${targetVisible} or exists (
+    select 1 from resource_grants g
+     where g.org_id = ${orgId} and g.resource_type = 'folder' and g.resource_id = ${folderIdCol}
+       and ${grantAppliesTo(orgId, viewer)}
   ))`
 }
 
@@ -625,15 +717,16 @@ export async function getFolderPath(
 ): Promise<{ id: string; name: string; systemKind: string | null }[]> {
   const scope = await resolveReadScope(orgId, viewer)
   const visible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)
+  const recordVisible = recordScopeFolderPredicate(orgId, viewer, sql`f.id`, sql`f.record_table`, sql`f.record_id`)
   const r = (await db.execute<{ id: string; name: string; systemKind: string | null }>(sql`
     with recursive chain as (
       select id, name, system_kind, parent_folder_id, 0 as depth
         from folders f
-       where f.id = ${folderId} and f.org_id = ${orgId} and ${visible}
+       where f.id = ${folderId} and f.org_id = ${orgId} and ${visible} and ${recordVisible}
       union all
       select f.id, f.name, f.system_kind, f.parent_folder_id, c.depth + 1
         from folders f join chain c on f.id = c.parent_folder_id and f.org_id = ${orgId}
-       where ${visible}
+       where ${visible} and ${recordVisible}
     )
     select id, name, system_kind as "systemKind" from chain order by depth desc
   `))
@@ -658,6 +751,9 @@ export async function getFolder(
     ? visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)
     : sql`true`
   const childVisible = scope ? visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`) : sql`true`
+  const recordVisible = viewer
+    ? recordScopeFolderPredicate(orgId, viewer, sql`f.id`, sql`f.record_table`, sql`f.record_id`)
+    : sql`true`
   const r = (await db.execute<FolderNode & { ownerId: string | null }>(sql`
     select f.id, f.name,
            case when ${parentVisible} then f.parent_folder_id end as "parentId",
@@ -670,6 +766,7 @@ export async function getFolder(
            (select count(*)::int from files fi where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
       from folders f
      where f.id = ${id} and f.org_id = ${orgId} and ${selfVisible}
+       and ${recordVisible}
   `))
   return r.rows[0] ?? null
 }
@@ -1249,6 +1346,7 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
        where fi.org_id = ${orgId} and fi.is_inactive
          and (fo.id is null or not fo.is_inactive)
          and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
+         and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
        order by fi.updated_at desc`),
   ])
   const folderRows = folders.rows as unknown as Array<{ id: string; name: string; updatedAt: string }>
@@ -1304,6 +1402,7 @@ export async function listFiles(
     sql`fi.org_id = ${orgId}`,
     sql`not fi.is_inactive`,
     visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`),
+    recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`),
   ]
   if (opts.folderId) whereParts.push(sql`fi.folder_id = ${opts.folderId}`)
   if (opts.q) whereParts.push(sql`fi.name ilike ${'%' + opts.q + '%'}`)
@@ -1330,7 +1429,7 @@ export async function listFiles(
        order by ${sortColumn} ${dir} nulls last
        limit ${opts.limit ?? 50} offset ${opts.offset ?? 0}
     `),
-    db.execute(sql`select count(*) as n from files fi where ${where}`),
+    db.execute(sql`select count(*) as n from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where ${where}`),
   ])
   const files = (rows).rows as FileMeta[]
   const total = Number((count).rows[0]?.n ?? 0)
@@ -1399,6 +1498,7 @@ export async function listFolderContents(
       from folders f
      where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
        and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
+       and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`, sql`f.record_table`, sql`f.record_id`)}
   `))
   const folderTotal = folderCount.rows[0]?.n ?? 0
 
@@ -1419,6 +1519,7 @@ export async function listFolderContents(
             from folders f
            where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
              and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
+             and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`, sql`f.record_table`, sql`f.record_id`)}
            order by f.is_system desc, f.name asc
            limit ${limit} offset ${offset}
         `))).rows
@@ -1457,6 +1558,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
       left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where fi.id = ${id} and fi.org_id = ${orgId}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
+       and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
   `))
   if (meta.rows.length === 0) return null
   const f = meta.rows[0]
@@ -2007,8 +2109,10 @@ export async function getFileBlob(
         on fv.file_id = fi.id
        and fv.id = coalesce(${versionId ?? null}, fi.current_version_id)
       left join file_blobs fb on fb.version_id = fv.id
+      left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where fi.id = ${id} and fi.org_id = ${orgId}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
+       and ${recordScopeFilePredicate(orgId, scope, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
   `))
   if (r.rows.length === 0) return null
   const row = r.rows[0]!
