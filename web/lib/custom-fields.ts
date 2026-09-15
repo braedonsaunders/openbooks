@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { CUSTOM_FIELD_REFERENCE_TABLES } from '@openbooks/customization'
 import { isIsoCalendarDate as isValidIsoDate } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
@@ -161,4 +162,56 @@ export function validateCustomValues(
     }
   }
   return { ok: Object.keys(errors).length === 0, errors, cleaned }
+}
+
+const REFERENCE_OWNER_TABLES: ReadonlySet<string> = new Set(
+  CUSTOM_FIELD_REFERENCE_TABLES as readonly string[],
+)
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Tenant ownership for `reference`-type custom values. `validateCustomValues`
+ * proves uuid SHAPE only, so without this a caller can persist another org's
+ * row id (or a dangling uuid) blind into tenant jsonb — the master-data
+ * import path already resolves the same fields through an org-scoped resolver
+ * and refuses unknown ids. Batched per table, mirroring the document line-ref
+ * precheck: one query per referenced table, only for values actually present.
+ * Returns the defs whose value is not owned by `orgId` (callers map to a
+ * tenant-opaque 404). Shape-invalid values are left to `validateCustomValues`;
+ * defs pointing outside the designer whitelist cannot be scoped and are
+ * skipped.
+ */
+export async function findUnownedCustomReferences(
+  orgId: string,
+  defs: CustomFieldDef[],
+  values: Record<string, unknown>,
+): Promise<CustomFieldDef[]> {
+  const wanted = new Map<string, { def: CustomFieldDef; value: string }[]>()
+  for (const def of defs) {
+    if (def.fieldType !== 'reference') continue
+    const table = def.config?.referenceTable
+    if (typeof table !== 'string' || !REFERENCE_OWNER_TABLES.has(table)) continue
+    const raw = values[def.key]
+    if (typeof raw !== 'string' || !UUID_RE.test(raw)) continue
+    const list = wanted.get(table) ?? []
+    list.push({ def, value: raw })
+    wanted.set(table, list)
+  }
+  const unowned: CustomFieldDef[] = []
+  for (const [table, refs] of wanted) {
+    const ids = [...new Set(refs.map((r) => r.value))]
+    const owned = new Set(
+      (
+        await db.execute<{ id: string }>(sql`
+          select id from ${sql.raw(`"${table}"`)}
+           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)
+      ).rows.map((r) => r.id),
+    )
+    for (const ref of refs) {
+      if (!owned.has(ref.value)) unowned.push(ref.def)
+    }
+  }
+  return unowned
 }
