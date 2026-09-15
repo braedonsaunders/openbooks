@@ -28,6 +28,13 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
+  export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
+    const allowed = authz.allowedSubsidiaryIds
+    if (allowed === null) return null
+    if ((subsidiaryId === null || subsidiaryId === undefined) && opts.orgWideNull === true) return null
+    if (typeof subsidiaryId === 'string' && allowed.has(subsidiaryId)) return null
+    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+  }
 `;
 
 const mockCompliance = `
