@@ -9,7 +9,7 @@ import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset, loadAssetWithRunner } from '../_lib'
 
@@ -212,6 +212,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const validated = validateCustomValues(defs, { ...existingCustom, ...body.custom })
     if (!validated.ok) {
       return NextResponse.json({ error: 'Invalid custom fields', fields: validated.errors }, { status: 422 })
+    }
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids instead of persisting a cross-tenant pointer.
+    // Supplied values only, so legacy bags cannot lock unrelated edits.
+    const suppliedCustom: Record<string, unknown> = {}
+    for (const key of Object.keys(body.custom)) {
+      if (validated.cleaned[key] !== undefined) suppliedCustom[key] = validated.cleaned[key]
+    }
+    const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+    if (unowned.length > 0) {
+      return NextResponse.json({ error: `${unowned[0]!.label} not found in this organization` }, { status: 422 })
     }
     // Replace only tenant-defined keys. Connector provenance and account
     // overrides share this JSON object and must survive an ordinary UI edit.
