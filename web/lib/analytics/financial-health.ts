@@ -4,9 +4,12 @@ import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
+import { ReportCurrencyBasisError } from "../reports/currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
+import { flowRates } from "../fx-presentation";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 import { decimalSum, type ExactDecimal } from '../statement-format'
 
 /**
@@ -228,13 +231,6 @@ function scoreOf(value: number | null, benchmark: number, inverse?: boolean): nu
   return Math.min(100, Math.max(0, ratio * 100));
 }
 
-/** Sum reader-signed statement rows of the given types at the top level. */
-function totalOf(items: StatementRow[], types: string[]): ExactDecimal {
-  return decimalSum(items
-    .filter((r) => types.includes(r.type) && r.depth === 0)
-    .map((row) => row.balance));
-}
-
 /** Shift an ISO date back one year (prior-year comparison period). */
 function priorYear(iso: string): string {
   return addMonthsIso(iso, -12);
@@ -246,6 +242,14 @@ function monthsBetween(from: string, to: string): number {
   const days = (b.getTime() - a.getTime()) / 86_400_000 + 1;
   return Math.max(1, days / 30.4375);
 }
+
+/** Sum reader-signed statement rows of the given types at the top level. */
+function totalOf(items: StatementRow[], types: string[]): ExactDecimal {
+  return decimalSum(items
+    .filter((r) => types.includes(r.type) && r.depth === 0)
+    .map((row) => row.balance));
+}
+
 
 async function depreciationAmortization(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<number> {
   const r = ((await db.execute(sql`
@@ -265,10 +269,12 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
         from lease_agreements l
        where l.org_id = ${orgId}
     )
-    select coalesce(sum(l.amount), 0) as s
+    select sub.base_currency as func, coalesce(sum(l.amount), 0) as s,
+      max(e.posting_date)::text as late
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where l.org_id = ${orgId}
        and a.type in ('expense', 'expense_other', 'expense_deferred')
        and e.status in ('posted', 'reversed')
@@ -278,9 +284,17 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
          select 1 from da_accounts d where d.account_id = a.id
        ))
        and e.posting_date >= ${from} and e.posting_date <= ${to}
+     group by sub.base_currency
   `)));
-  // expense accounts are debit-positive → already the D&A magnitude
-  return Number(r.rows[0]?.s ?? 0);
+  // expense accounts are debit-positive → already the D&A magnitude; each
+  // functional leg translates at its latest posting date.
+  const legs = r.rows as unknown as { func: string | null; s: string | number; late: string | null }[];
+  const ctx = await flowRates(orgId, legs.map((leg) => ({ func: leg.func ?? null, date: String(leg.late ?? to).slice(0, 10) })));
+  let total = "0";
+  for (const leg of legs) {
+    total = add(total, mulDecimal(String(leg.s ?? 0), ctx.rateAt(leg.func ?? null, String(leg.late ?? to).slice(0, 10))));
+  }
+  return Number(total);
 }
 
 // Employment dates govern the selected period, including an employee
@@ -315,10 +329,26 @@ export async function financialHealth(
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
 
-  const [pl, priorPl, bs, da, headcount] = await Promise.all([
-    profitAndLoss(from, to, dims, resolvedOrgId),
-    profitAndLoss(pFrom, pTo, dims, resolvedOrgId),
-    balanceSheet(to, resolvedOrgId, undefined, dims),
+  // Single-functional scopes read the refusing statement primitives (figures
+  // tie to the reports exactly). A multi-functional scope refuses loudly —
+  // catch that declared outcome and translate through the matrix instead.
+  let pl: Awaited<ReturnType<typeof profitAndLoss>>;
+  let priorPl: typeof pl;
+  let bs: Awaited<ReturnType<typeof balanceSheet>>;
+  try {
+    [pl, priorPl, bs] = await Promise.all([
+      profitAndLoss(from, to, dims, resolvedOrgId),
+      profitAndLoss(pFrom, pTo, dims, resolvedOrgId),
+      balanceSheet(to, resolvedOrgId, undefined, dims),
+    ]);
+  } catch (e) {
+    if (!(e instanceof ReportCurrencyBasisError)) throw e;
+    // Loaded dynamically: the consolidation chain pulls Next-server modules
+    // that the unit-test loader graphs must never see on the hot path.
+    const { translatedHealthStatements } = await import("./health-translated-statements");
+    ({ pl, priorPl, bs } = await translatedHealthStatements(resolvedOrgId, from, to, pFrom, pTo, dims, allowedSubsidiaryIds));
+  }
+  const [da, headcount] = await Promise.all([
     depreciationAmortization(resolvedOrgId, from, to, allowedSubsidiaryIds),
     activeHeadcount(resolvedOrgId, to, allowedSubsidiaryIds),
   ]);
