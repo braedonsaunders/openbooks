@@ -544,4 +544,43 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       };
     },
   },
+
+  {
+    id: "lease-remeasurement",
+    title: "A change in the lease payments or term remeasures the liability and the right-of-use asset",
+    citations: [
+      {
+        standard: "ASC 842",
+        reference: "842-10-35-4",
+        kind: "requirement",
+        requirement:
+          "When a lease is modified or the assessment of its term or payments changes, the lessee remeasures the lease liability at the revised payments discounted at a current rate and adjusts the right-of-use asset.",
+      },
+      {
+        standard: "IFRS 16",
+        reference: "IFRS 16.39",
+        kind: "requirement",
+        requirement:
+          "After commencement a lessee remeasures the lease liability for changes in future payments or the lease term and recognises the adjustment against the right-of-use asset.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.",
+    facts: [
+      "A five-year lease of 20,000.00 a year at 5%: opening liability 86,589.5334.",
+      "After the first annual payment the liability stands at 70,919.0101.",
+      "The parties agree the remaining four payments rise to 22,000.00 a year; the discount rate is unchanged.",
+      "The liability remeasures to the present value of four payments of 22,000.00 at 5%, which is 78,010.9111 — an increase of 7,091.9010 carried against the right-of-use asset.",
+    ],
+    gap: "The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.",
+    expected: {
+      values: {
+        liabilityAfterYearOne: "70919.0101",
+        remeasuredLiability: "78010.9111",
+        rouAdjustment: "7091.9010",
+      },
+    },
+  },
 ];
