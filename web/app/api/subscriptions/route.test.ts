@@ -13,6 +13,9 @@ interface RouteState {
   normalizedMoney: string[];
   normalizedCadences: Array<{ interval: string; intervalCount: number }>;
   engineCalls: Array<{ fn: string; args: unknown[] }>;
+  mrrRows: Array<Record<string, unknown>>;
+  orgCurrency: string;
+  fxRate: string | null;
   authz: {
     user: { orgId: string; id: string };
     allowedSubsidiaryIds: Set<string> | null;
@@ -32,6 +35,9 @@ const routeState: RouteState & {
   normalizedMoney: [],
   normalizedCadences: [],
   engineCalls: [],
+  mrrRows: [],
+  orgCurrency: "CAD",
+  fxRate: null,
   authz: {
     user: { orgId: "org-1", id: "user-1" },
     allowedSubsidiaryIds: null,
@@ -78,6 +84,9 @@ const mockSources = new Map<string, string>([
         const text = sqlText(query)
         if (text.includes('insert into subscription_plans')) return { rows: [{ id: 'plan-1' }] }
         if (text.includes('insert into subscriptions')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('from orgs') && text.includes('base_currency')) return { rows: [{ baseCurrency: state.orgCurrency }] }
+        if (text.includes('from fx_rates')) return { rows: state.fxRate ? [{ rate: state.fxRate }] : [] }
+        if (text.includes('planCurrency')) return { rows: state.mrrRows }
         if (text.includes('from parties c')) return { rows: [{ subsidiaryId: state.customerSubsidiaryId }] }
         if (text.includes('from subscriptions s') && text.includes('join parties c')) {
           return { rows: [{ subsidiaryId: state.subscriptionSubsidiaryId }] }
@@ -114,7 +123,7 @@ const mockSources = new Map<string, string>([
         state.engineCalls.push({ fn: 'changeSubscription', args })
         return { invoiceId: null, documentNumber: null, adjustment: '0.0000' }
       }
-      export function monthlyRecurringRevenue() { return '0.0000' }
+      export function monthlyRecurringRevenue(amount) { return String(amount) }
       export async function prorateFirstInvoice(...args) {
         state.engineCalls.push({ fn: 'prorateFirstInvoice', args })
         return { invoiceId: 'invoice-2', documentNumber: 'INV-0002', posted: false, amount: '42.0000' }
@@ -143,7 +152,7 @@ const mockSources = new Map<string, string>([
      }`,
   ],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
-  ["mock:money", "export function add(left) { return left }"],
+  ["mock:money", "export function add(left, right) { return (Number(left) + Number(right)).toFixed(4) }\nexport function mulDecimal(amount, rate) { return (Number(amount) * Number(rate)).toFixed(4) }"],
   ["mock:business-date", "export async function businessToday() { return '2026-08-26' }"],
 ]);
 
@@ -180,6 +189,9 @@ function reset(): void {
   routeState.normalizedMoney.length = 0;
   routeState.normalizedCadences.length = 0;
   routeState.engineCalls.length = 0;
+  routeState.mrrRows = [];
+  routeState.orgCurrency = "CAD";
+  routeState.fxRate = null;
   routeState.authz = {
     user: { orgId: "org-1", id: "user-1" },
     allowedSubsidiaryIds: null,
@@ -280,6 +292,57 @@ test("subscription API preserves valid exact-decimal plan and subscription value
   });
   assert.equal(subscriptionResponse.status, 201);
   assert.deepEqual(routeState.normalizedMoney, ["1.2345", "0.0001"]);
+});
+
+test("subscription MRR translates each active plan into the organization currency", async () => {
+  reset();
+  routeState.orgCurrency = "CAD";
+  routeState.fxRate = "1.3500000000";
+  routeState.mrrRows = [
+    {
+      id: "subscription-cad",
+      status: "active",
+      priceOverride: null,
+      planAmount: "100.0000",
+      interval: "monthly",
+      intervalCount: 1,
+      quantity: "1",
+      planCurrency: "CAD",
+    },
+    {
+      id: "subscription-usd",
+      status: "active",
+      priceOverride: null,
+      planAmount: "100.0000",
+      interval: "monthly",
+      intervalCount: 1,
+      quantity: "1",
+      planCurrency: "USD",
+    },
+  ];
+
+  const response = await GET();
+  assert.equal(response.status, 200);
+  const body = await response.json() as { mrr: string };
+  assert.equal(body.mrr, "235.0000", "CAD 100 + USD 100 at 1.35 must be CAD 235");
+});
+
+test("subscription MRR refuses a foreign plan when no dated spot rate exists", async () => {
+  reset();
+  routeState.mrrRows = [{
+    id: "subscription-usd",
+    status: "active",
+    priceOverride: null,
+    planAmount: "100.0000",
+    interval: "monthly",
+    intervalCount: 1,
+    quantity: "1",
+    planCurrency: "USD",
+  }];
+
+  const response = await GET();
+  assert.equal(response.status, 422);
+  assert.match(String((await response.json() as { error: string }).error), /no spot rate/);
 });
 
 test("subsidiary-restricted callers cannot create, list, or bill another customer's subscriptions", async () => {
