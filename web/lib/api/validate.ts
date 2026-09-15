@@ -114,6 +114,13 @@ export function validateEntityBody(
       errors.push({ field: key, message: c.message });
       continue;
     }
+    if (opts.stage === "update" && field.required && c.value === null) {
+      // Partial PATCH: omitted keys stay untouched, but an explicit clear of
+      // a required column must fail closed with a typed error — never ride
+      // the NOT NULL constraint (or silently NULL a nullable column).
+      errors.push({ field: key, message: "required" });
+      continue;
+    }
     columns[key] = c.value;
   }
 
