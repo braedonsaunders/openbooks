@@ -55,11 +55,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (status === 'active' && (!name || name === 'New equipment unit')) return bad('name_required')
   const chargeItemId = body.chargeItemId !== undefined ? text(body.chargeItemId) : current.rows[0].charge_item_id
   if (status === 'active' && !chargeItemId) return bad('charge_item_required')
+  // fixedAssetId/rateBookId get an isUuid check below; subsidiary and charge
+  // references need the same gate or a malformed value throws 22P02 (500).
+  if (chargeItemId && (typeof chargeItemId !== 'string' || !isUuid(chargeItemId))) return bad('charge_item_not_found')
   if (chargeItemId) {
     const item = ((await db.execute(sql`select 1 from items where id = ${chargeItemId} and org_id = ${gate.user.orgId} and kind = 'equipment_charge' and is_active`)))
     if (!item.rows[0]) return bad('charge_item_not_found')
   }
   const subsidiaryId = body.subsidiaryId !== undefined ? text(body.subsidiaryId) : current.rows[0].subsidiary_id
+  if (subsidiaryId && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) return bad('invalid_subsidiary')
   const sub = ((await db.execute(sql`select 1 from subsidiaries where id = ${subsidiaryId} and org_id = ${gate.user.orgId} and is_active and not is_elimination`)))
   if (!sub.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(subsidiaryId)))) return bad('invalid_subsidiary')
   const fixedAssetId = body.fixedAssetId !== undefined ? text(body.fixedAssetId) : current.rows[0].fixed_asset_id
