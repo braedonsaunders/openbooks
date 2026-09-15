@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { AdjustmentCalculation, AdjustmentCategory, AdjustmentPresentation, AdjustmentTarget, ResolvedAdjustment } from './rate-adjustment-pricing'
+import { versionScopePredicate } from './item-rates'
 
 export * from './rate-adjustment-pricing'
 
@@ -89,15 +90,15 @@ export async function resolveRateAdjustments(input: {
          -- scopes cannot then disqualify it.
          and (s.priority = 1
            or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
-           or exists (select 1 from labor_rate_version_scopes vs
-                       where vs.version_id = v.id and vs.org_id = v.org_id
-                         and case vs.scope_type
-                               when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
-                               when 'subsidiary' then vs.scope_value_id = ${ctx.subsidiary_id}::uuid
-                               when 'location' then vs.scope_value_id = ${input.locationId ?? null}::uuid
-                               when 'class' then vs.scope_value_id = ${input.classId ?? null}::uuid
-                               else false end))
-    ),
+           or exists (select 1 from labor_rate_version_scopes s
+                       where s.version_id = v.id and s.org_id = v.org_id
+                         and ${versionScopePredicate(input.orgId, {
+                           departmentId: input.departmentId,
+                           subsidiaryId: ctx.subsidiary_id,
+                           locationId: input.locationId,
+                           classId: input.classId,
+                         })})
+    )),
     ranked as (
       select version_id,
              row_number() over (order by priority, dimension_specificity desc,
@@ -195,13 +196,12 @@ export async function findLapsedRateCard(input: {
             and (s.priority = 1
               or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
               or exists (
-                select 1 from labor_rate_version_scopes vs
-                 where vs.version_id = v.id and vs.org_id = v.org_id
-                   and case vs.scope_type
-                         when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
-                         when 'subsidiary' then vs.scope_value_id = (select subsidiary_id from context)
-                         else false
-                       end
+                select 1 from labor_rate_version_scopes s
+                 where s.version_id = v.id and s.org_id = v.org_id
+                   and ${versionScopePredicate(input.orgId, {
+                     departmentId: input.departmentId,
+                     subsidiaryId: sql`(select subsidiary_id from context)`,
+                   })}
               ))
        )
     ),
@@ -230,13 +230,12 @@ export async function findLapsedRateCard(input: {
          and (s.priority = 1
            or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
            or exists (
-             select 1 from labor_rate_version_scopes vs
-              where vs.version_id = v.id and vs.org_id = v.org_id
-                and case vs.scope_type
-                      when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
-                      when 'subsidiary' then vs.scope_value_id = (select subsidiary_id from context)
-                      else false
-                    end
+             select 1 from labor_rate_version_scopes s
+              where s.version_id = v.id and s.org_id = v.org_id
+                and ${versionScopePredicate(input.orgId, {
+                  departmentId: input.departmentId,
+                  subsidiaryId: sql`(select subsidiary_id from context)`,
+                })}
            ))
     )
     select c.customer_id, coverage.last_effective_to

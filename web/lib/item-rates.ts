@@ -1,5 +1,5 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp, mul, normalizeDecimal } from '@openbooks/engine/src/money.ts'
 import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/item-rate-pricing.ts'
@@ -30,6 +30,72 @@ export interface ResolvedItemRate {
   rateUnits: ResolvedRateUnit[]
   cost: RatePrice
   bill: RatePrice
+}
+
+/** Match a version scope to a work dimension, including descendants when the
+ * scope explicitly opts into child values. The scope tables are hierarchical
+ * dimensions, so exact equality alone would silently fall through to a less
+ * specific rate card for work in a child department/location/class/subsidiary.
+ * Callers use the alias `s` for the scope row. */
+export function versionScopePredicate(
+  orgId: string,
+  input: {
+    departmentId?: string | null
+    subsidiaryId?: string | null | SQL
+    locationId?: string | null
+    classId?: string | null
+  },
+) {
+  return sql`(
+    (s.scope_type = 'department' and (
+      s.scope_value_id = ${input.departmentId ?? null}
+      or (s.include_children and exists (
+        with recursive descendants(id) as (
+          select d.id from departments d where d.org_id = ${orgId} and d.id = s.scope_value_id
+          union all
+          select child.id from departments child join descendants parent on parent.id = child.parent_id
+           where child.org_id = ${orgId}
+        )
+        select 1 from descendants where id = ${input.departmentId ?? null}
+      ))
+    ))
+    or (s.scope_type = 'subsidiary' and (
+      s.scope_value_id = ${input.subsidiaryId ?? null}
+      or (s.include_children and exists (
+        with recursive descendants(id) as (
+          select sub.id from subsidiaries sub where sub.org_id = ${orgId} and sub.id = s.scope_value_id
+          union all
+          select child.id from subsidiaries child join descendants parent on parent.id = child.parent_id
+           where child.org_id = ${orgId}
+        )
+        select 1 from descendants where id = ${input.subsidiaryId ?? null}
+      ))
+    ))
+    or (s.scope_type = 'location' and (
+      s.scope_value_id = ${input.locationId ?? null}
+      or (s.include_children and exists (
+        with recursive descendants(id) as (
+          select l.id from locations l where l.org_id = ${orgId} and l.id = s.scope_value_id
+          union all
+          select child.id from locations child join descendants parent on parent.id = child.parent_id
+           where child.org_id = ${orgId}
+        )
+        select 1 from descendants where id = ${input.locationId ?? null}
+      ))
+    ))
+    or (s.scope_type = 'class' and (
+      s.scope_value_id = ${input.classId ?? null}
+      or (s.include_children and exists (
+        with recursive descendants(id) as (
+          select c.id from classes c where c.org_id = ${orgId} and c.id = s.scope_value_id
+          union all
+          select child.id from classes child join descendants parent on parent.id = child.parent_id
+           where child.org_id = ${orgId}
+        )
+        select 1 from descendants where id = ${input.classId ?? null}
+      ))
+    ))
+  )`
 }
 
 /** Resolve project > customer > unit > org assignment > org default, then snapshot the
@@ -117,18 +183,20 @@ export async function resolveItemRate(input: {
          and exists (select 1 from item_rate_lines l where l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${input.itemId})
          -- Version scopes gate rates exactly as they gate surcharges
          -- (resolveRateAdjustments): a scoped version prices only matching work.
-         and (
+        and (
            -- A project-scoped assignment is an explicit card selection; its
            -- version scope cannot disqualify the project that selected it.
            ${candidate.priority} = 1 or
            not exists (select 1 from labor_rate_version_scopes s where s.org_id = v.org_id and s.version_id = v.id)
            or exists (select 1 from labor_rate_version_scopes s
-             where s.org_id = v.org_id and s.version_id = v.id and (
-               (s.scope_type = 'department' and s.scope_value_id = ${input.departmentId ?? null}) or
-               (s.scope_type = 'subsidiary' and s.scope_value_id = ${ctx.subsidiary_id}) or
-               (s.scope_type = 'location' and s.scope_value_id = ${input.locationId ?? null}) or
-               (s.scope_type = 'class' and s.scope_value_id = ${input.classId ?? null})
-             )))
+             where s.org_id = v.org_id and s.version_id = v.id
+               and ${versionScopePredicate(input.orgId, {
+                 departmentId: input.departmentId,
+                 subsidiaryId: ctx.subsidiary_id,
+                 locationId: input.locationId,
+                 classId: input.classId,
+               })})
+        )
        order by v.effective_from desc limit 1
     `))
     const rateVersionId = version.rows[0]?.id
@@ -295,10 +363,12 @@ export async function snapshotTimeBillRates(
            ${sql`c.priority = 1`} or
            not exists (select 1 from labor_rate_version_scopes s where s.org_id = v.org_id and s.version_id = v.id)
            or exists (select 1 from labor_rate_version_scopes s
-             where s.org_id = v.org_id and s.version_id = v.id and (
-               (s.scope_type = 'department' and s.scope_value_id = ${te.department_id ?? null}) or
-               (s.scope_type = 'subsidiary' and s.scope_value_id = ${te.subsidiary_id ?? null})
-             )))
+             where s.org_id = v.org_id and s.version_id = v.id
+               and ${versionScopePredicate(orgId, {
+                 departmentId: te.department_id,
+                 subsidiaryId: te.subsidiary_id,
+               })})
+        )
         join item_rate_lines l on l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${te.item_id}
         join item_rate_books b on b.id=c.rate_book_id and b.org_id = ${orgId} and b.is_active
        order by c.priority, c.dimension_specificity desc, c.effective_from desc nulls last, v.effective_from desc,
