@@ -381,6 +381,104 @@ test(
   },
 );
 
+test(
+  "concurrent materializes of one vendor invoice number admit only one draft",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const folderId = randomUUID();
+    const fileA = randomUUID();
+    const fileB = randomUUID();
+    const invoiceNumber = "INV-DUP-RACE";
+    const normalized = {
+      vendorName: "Acme Vendor",
+      vendorTaxId: null,
+      invoiceNumber,
+      invoiceDate: "2026-07-15",
+      dueDate: null,
+      purchaseOrderNumber: null,
+      currency: "CAD",
+      subtotal: "100.0000",
+      taxTotal: "0.0000",
+      total: "100.0000",
+      memo: null,
+      lines: [{
+        description: "Race line",
+        productCode: null,
+        quantity: "10.0000",
+        unit: "ea",
+        unitPrice: "10.0000",
+        amount: "100.0000",
+        taxAmount: "0.0000",
+        accountId: org.accounts.cogs,
+        itemId: null,
+        purchaseOrderLineId: null,
+        confidence: "1.0000",
+      }],
+    };
+    async function insertCapture(fileId: string): Promise<string> {
+      const captureId = randomUUID();
+      await db.execute(sql`
+        insert into ap_capture_items
+          (id, org_id, file_id, status, original_filename, content_hash,
+           document_kind, normalized, validation_issues, vendor_candidate_id,
+           created_by, updated_by)
+        values (${captureId}, ${org.orgId}, ${fileId}, 'ready', ${invoiceNumber + '.pdf'},
+                ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'vendor_bill',
+                ${JSON.stringify(normalized)}::jsonb, '[]'::jsonb, ${org.vendorId},
+                null, null)
+      `);
+      return captureId;
+    }
+    try {
+      await db.execute(sql`
+        insert into vendor_roles (org_id, party_id, ap_account_id, default_expense_account_id)
+        values (${org.orgId}, ${org.vendorId}, ${org.accounts.ap}, ${org.accounts.cogs})
+      `);
+      await db.execute(sql`
+        insert into folders (id, org_id, name)
+        values (${folderId}, ${org.orgId}, 'AP capture race')
+      `);
+      for (const fileId of [fileA, fileB]) {
+        await db.execute(sql`
+          insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+          values (${fileId}, ${org.orgId}, ${folderId}, 'race.pdf', 'application/pdf', 4)
+        `);
+      }
+      // Same vendor, same invoice number, two different source files — the
+      // only thing standing between these and two draft bills for one invoice
+      // is the materialize fence.
+      const [itemA, itemB] = [await insertCapture(fileA), await insertCapture(fileB)];
+      const raced = await Promise.allSettled([
+        materializeCapture({ orgId: org.orgId, captureItemId: itemA, actorId: null }),
+        materializeCapture({ orgId: org.orgId, captureItemId: itemB, actorId: null }),
+      ]);
+      assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
+      const rejected = raced.filter((result) => result.status === "rejected");
+      assert.equal(rejected.length, 1);
+      assert.match(
+        String((rejected[0] as PromiseRejectedResult).reason),
+        /already uses this source or vendor invoice number/,
+      );
+      const drafts = (await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from documents
+         where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
+           and party_id = ${org.vendorId}
+           and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g') = 'invduprace'
+      `)).rows[0]!.count;
+      assert.equal(drafts, "1", "exactly one draft bill survives the race");
+    } finally {
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`alter table public.ap_capture_events disable trigger ap_capture_events_append_only`);
+        await tx.execute(sql`delete from ap_capture_events where org_id = ${org.orgId}`);
+        await tx.execute(sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`);
+        await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
+      });
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 test("PO match requires a receipt when an item-backed line has no kind", () => {
   assert.equal(lineRequiresReceipt(null), true);
   assert.deepEqual(
