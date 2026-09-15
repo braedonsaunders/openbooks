@@ -1146,38 +1146,43 @@ async function loadSubsidiaries(orgId: string): Promise<SubsidiaryRow[]> {
 }
 
 /**
- * Latest spot rate from a functional currency into the presentation currency
- * on or before the provisioning date — the same direct-then-inverted lookup
- * the posting kernel uses. Missing coverage fails closed: consolidating at an
- * invented rate would misstate every translated figure.
+ * Latest FX rate from a functional currency into the presentation currency
+ * on or before the given date — the same direct-then-inverted lookup the
+ * posting kernel uses. Shared by the provision and the tax-return / nexus
+ * translated views so one pair/date always converts alike. Missing coverage
+ * fails closed: consolidating at an invented rate would misstate every
+ * translated figure. Reads through the caller's runner so snapshot-pinned
+ * callers (the tax return's repeatable-read snapshot) stay atomic.
  */
-async function spotRateToPresentation(
+export async function spotRateToPresentation(
+  runner: Pick<typeof db, "execute">,
   orgId: string,
   fromCurrency: string,
   toCurrency: string,
   onDate: string,
-): Promise<string> {
-  if (fromCurrency === toCurrency) return "1";
-  const r = (await db.execute<{ rate: string }>(sql`
-    select rate::text from (
+  rateType = "spot",
+): Promise<{ rate: string; asOf: string }> {
+  if (fromCurrency === toCurrency) return { rate: "1", asOf: onDate };
+  const r = (await runner.execute<{ rate: string; as_of: string }>(sql`
+    select rate::text, as_of::text from (
       select rate, as_of from fx_rates
        where org_id = ${orgId} and from_currency = ${fromCurrency}
-         and to_currency = ${toCurrency} and rate_type = 'spot'
+         and to_currency = ${toCurrency} and rate_type = ${rateType}
          and as_of <= ${onDate}
       union all
       select (1 / rate)::numeric(19,10) as rate, as_of from fx_rates
        where org_id = ${orgId} and from_currency = ${toCurrency}
-         and to_currency = ${fromCurrency} and rate_type = 'spot'
+         and to_currency = ${fromCurrency} and rate_type = ${rateType}
          and as_of <= ${onDate}
     ) candidates order by as_of desc limit 1
   `));
-  const rate = r.rows[0]?.rate;
-  if (!rate) {
+  const row = r.rows[0];
+  if (!row?.rate) {
     throw new IncomeTaxProvisionError(
-      `no spot FX rate for ${fromCurrency}→${toCurrency} on or before ${onDate} — configure exchange rates before computing a multi-currency provision`,
+      `no ${rateType} FX rate for ${fromCurrency}→${toCurrency} on or before ${onDate} — configure exchange rates before computing a multi-currency provision`,
     );
   }
-  return rate;
+  return { rate: row.rate, asOf: row.as_of };
 }
 
 /** Compute (or recompute) the draft run for a fiscal year. Prior DRAFT runs
@@ -1360,7 +1365,8 @@ export async function computeProvisionRun(
         },
         priorNetTemporaryDifference: prior.netTemporaryDifference,
       });
-      const fxRate = await spotRateToPresentation(
+      const { rate: fxRate } = await spotRateToPresentation(
+        db,
         orgId,
         sub.currency,
         presentationCurrency ?? sub.currency,
