@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrg, withOrgTransaction } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import { businessToday } from "./business-date.ts";
+import { roundCurrencyMoney } from "./currencies.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, normalizeDecimal, sum, toUnits } from "./money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
@@ -1842,6 +1843,24 @@ async function createPaymentRunWithinTransaction(
     ? profile.settings.discountAccountId
     : null;
   const paymentDate = opts.scheduledFor ?? await businessToday(opts.orgId);
+  // Discount legs are currency money: round them to the bill currency's own
+  // minor units (whole yen, whole fils), never whole cents by default — the
+  // same roundCurrencyMoney project billing already applies. Resolved from
+  // the tenant currencies table, like billing; an unknown currency refuses
+  // the discount rather than posting sub-unit dust.
+  const minorUnitsByCurrency = new Map<string, number>();
+  const minorUnitsFor = async (currency: string): Promise<number> => {
+    const cached = minorUnitsByCurrency.get(currency);
+    if (cached !== undefined) return cached;
+    const row = (await db.execute<{ minor_units: number }>(sql`
+      select minor_units from currencies where code = ${currency}`)).rows[0];
+    const minorUnits = row?.minor_units;
+    if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+      throw new PaymentError(`the ${currency} currency has unsupported minor-unit precision`);
+    }
+    minorUnitsByCurrency.set(currency, minorUnits);
+    return minorUnits;
+  };
 
   for (const vendorBills of byVendor.values()) {
     const first = vendorBills[0]!;
@@ -1910,7 +1929,7 @@ async function createPaymentRunWithinTransaction(
         if (paymentDate <= deadline.toISOString().slice(0, 10)) {
           const numerator = toUnits(remainingTxn) * toUnits(bill.discount_percent);
           const rawDiscount = (numerator + 500_000n) / 1_000_000n;
-          discountTxn = fromUnits(((rawDiscount + 50n) / 100n) * 100n);
+          discountTxn = roundCurrencyMoney(fromUnits(rawDiscount), await minorUnitsFor(bill.currency));
           if (!isZero(discountTxn) && !discountAccountId) {
             throw new PaymentError("an early-payment discount is available but the bank profile has no discount account");
           }
