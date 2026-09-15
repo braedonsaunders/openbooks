@@ -181,3 +181,59 @@ test(
     runIntegrationSource(source);
   },
 );
+
+test(
+  'project charges reject active non-expense target accounts before creating a draft',
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    const source = `
+      import assert from 'node:assert/strict';
+      import { randomUUID } from 'node:crypto';
+      import { sql } from 'drizzle-orm';
+      import { db } from './engine/src/db.ts';
+      import { installTrustedTestDatabaseBypass } from './engine/src/test-database-bypass.ts';
+      import { createScratchOrg, dropScratchOrg, seedFlowActors } from './engine/src/test-fixtures.ts';
+      import { ChargeError, createProjectCharge } from './web/lib/project-charges.ts';
+
+      installTrustedTestDatabaseBypass();
+      const org = await createScratchOrg();
+      try {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        const projectId = randomUUID();
+        const itemId = randomUUID();
+        await db.execute(sql\`
+          insert into projects
+            (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+          values
+            (\${projectId}, \${org.orgId}, \${org.subsidiaryId}, 'CHARGE-BANK',
+             'Charge bank target', \${org.customerId}, 'active', true, '{}'::jsonb)
+        \`);
+        await db.execute(sql\`
+          insert into items
+            (id, org_id, kind, code, name, default_cost, default_rate,
+             expense_account_id, cost_recovery_account_id, income_account_id,
+             is_active, custom)
+          values
+            (\${itemId}, \${org.orgId}, 'service', 'CHG-BANK', 'Charge bank service',
+             '10.0000', '15.0000', \${org.accounts.cogs}, \${org.accounts.adjustment},
+             \${org.accounts.revenue}, true, '{}'::jsonb)
+        \`);
+
+        await assert.rejects(
+          createProjectCharge(org.orgId, actorId, {
+            projectId,
+            documentDate: org.date,
+            lines: [{ itemId, quantity: '1', accountId: org.accounts.bank, costRate: '10', billRate: '15' }],
+          }, { post: false }),
+          (error) => error instanceof ChargeError && new RegExp('expense/COGS account', 'i').test(error.message),
+        );
+        assert.equal((await db.execute(sql\`
+          select count(*)::int as count from documents where org_id = \${org.orgId} and kind = 'project_charge'
+        \`)).rows[0].count, 0);
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    `;
+    runIntegrationSource(source);
+  },
+);

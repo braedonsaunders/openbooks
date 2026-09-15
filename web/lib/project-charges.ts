@@ -270,7 +270,9 @@ export async function createProjectCharge(
       }
       const account = (await tx.execute(sql`
         select 1 from accounts
-         where org_id = ${orgId} and id = ${accountId} and is_active and not is_summary
+         where org_id = ${orgId} and id = ${accountId}
+           and type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
+           and is_active and not is_summary
       `))
       if (!account.rows.length) {
         throw new ChargeError(`Item "${it.name}" must use an active, non-summary expense/COGS account in this organization`)
