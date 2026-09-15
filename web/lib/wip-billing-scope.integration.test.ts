@@ -63,7 +63,7 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
       assert.equal(detail?.lines.length, 1)
       const lineId = detail!.lines[0]!.id
       // Line edits and holds
-      await assert.rejects(wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '150.0000', adjustmentReason: 'scope', adjustmentEvidence: ['note'] }, restricted), notFound)
+      await assert.rejects(wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '150.0000', adjustmentReason: 'scope', adjustmentEvidence: ['note'] }, restricted, { expectedRevision: detail!.lines[0]!.updatedAt }), notFound)
       await assert.rejects(wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Disputed', [], restricted), notFound)
       const hold = await wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Disputed', [], visible)
       await assert.rejects(wip.releaseWipHold(org.orgId, preparer, hold.id, 'Resolved', restricted), notFound)
@@ -108,17 +108,19 @@ test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {ski
       await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
         values (${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
       const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null)
-      const lineId = (await wip.loadPrebill(org.orgId, prebill.id, null))!.lines[0]!.id
+      const loadedLine = (await wip.loadPrebill(org.orgId, prebill.id, null))!.lines[0]!
+      const lineId = loadedLine.id
+      const revision = { expectedRevision: loadedLine.updatedAt }
       const edit: { adjustmentReason: string; adjustmentEvidence: string[] } = { adjustmentReason: 'magnitude', adjustmentEvidence: ['note'] }
       await assert.rejects(
-        wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '99999999999999999999', ...edit }, null),
+        wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '99999999999999999999', ...edit }, null, revision),
         (error: unknown) => error instanceof wip.WipBillingError && /out of range/.test(error.message),
         'an oversized proposed amount should fail closed with a named error',
       )
       const untouched = await wip.loadPrebill(org.orgId, prebill.id, null)
       assert.equal(untouched!.lines[0]!.proposedBillAmount, '200.0000')
       // The column maximum itself still saves with identical read-back.
-      await wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '999999999999999.9999', ...edit }, null)
+      await wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '999999999999999.9999', ...edit }, null, revision)
       const saved = await wip.loadPrebill(org.orgId, prebill.id, null)
       assert.equal(saved!.lines[0]!.proposedBillAmount, '999999999999999.9999')
     } finally { await dropScratchOrg(org.orgId) }
