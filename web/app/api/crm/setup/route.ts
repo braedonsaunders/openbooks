@@ -300,6 +300,13 @@ export async function POST(req: NextRequest) {
           },
           { status: 422 },
         );
+      // The quota amount persists into numeric(19,4): refuse wider figures
+      // here instead of dying in Postgres as a raw overflow (HTTP 500).
+      if (amountRaw.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15)
+        return NextResponse.json(
+          { error: "quota amount must fit the ledger (at most 15 whole digits)" },
+          { status: 422 },
+        );
       const amount = normalizeMoney(amountRaw);
       if (
         currency !== undefined &&
