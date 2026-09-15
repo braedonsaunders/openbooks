@@ -242,7 +242,12 @@ async function writeTransactions(
     const rowNo = i + 1
     const src = rows[i]!
     try {
-      if (src.currency !== undefined && !multiCurrencyOn) {
+      // Restating the org's own base currency is identical to omitting the
+      // column (see below) — the export always emits it, so rejecting it
+      // would make the system's own exports unimportable. Only a genuinely
+      // foreign currency needs the multi-currency feature.
+      const incomingCurrency = String(src.currency ?? '').trim()
+      if (incomingCurrency && !multiCurrencyOn && incomingCurrency.toUpperCase() !== baseCurrency.toUpperCase()) {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: 'currency is not available' })
         continue
