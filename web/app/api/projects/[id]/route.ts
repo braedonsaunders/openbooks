@@ -216,7 +216,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.custom !== undefined) {
     const base = { ...(existing.rows[0].custom ?? {}) }
     const defs = await loadFieldDefs('projects')
-    const result = validateCustomValues(defs, body.custom)
+    // PATCH custom values are partial: validate the effective bag so an
+    // omitted required field can be satisfied by its stored value.
+    const result = validateCustomValues(defs, { ...base, ...body.custom })
     if (!result.ok) return bad(Object.values(result.errors)[0]!, result.errors)
     for (const d of defs) delete base[d.key]
     Object.assign(base, result.cleaned)
