@@ -235,6 +235,13 @@ test("the NACHA credit file refuses a blank receiving account number", () => {
   );
 });
 
+test("the NACHA credit file refuses a receiving account number longer than its field", () => {
+  assert.throws(
+    () => nachaFile("123456789012345678"),
+    (error: Error) => error instanceof PaymentError && /17 characters/.test(error.message),
+  );
+});
+
 test("a data centre that cannot form a valid trace number refuses to write a file", () => {
   for (const originatingDataCentre of ["00000", "543", "FILL-ME"]) {
     assert.throws(

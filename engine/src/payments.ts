@@ -3320,6 +3320,7 @@ export function buildNachaFile(opts: {
   opts.entries.forEach((e, i) => {
     if (e.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
     if (e.accountNumber.trim() === "") throw new PaymentError("payment account number must not be blank");
+    if (e.accountNumber.length > 17) throw new PaymentError("payment account number must be 17 characters or fewer");
     if (!/^\d{8,9}$/.test(e.routingNumber)) {
       throw new PaymentError("payment routing number must contain eight or nine digits");
     }
