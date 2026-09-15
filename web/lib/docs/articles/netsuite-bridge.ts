@@ -69,6 +69,10 @@ supported keys are:
   },
   "projectBillingTypes": {
     "FBM": "not_to_exceed"
+  },
+  "taxCodeFallbacks": {
+    "sales": "4123",
+    "purchase": "4124"
   }
 }
 ~~~
@@ -85,6 +89,16 @@ in the job price. Map that member here so those jobs import as Not-to-Exceed
 and bill time and materials up to the ceiling, instead of reporting the ceiling
 as earned contract revenue. Valid targets are **time_and_materials**,
 **fixed_price**, **cost_plus** and **not_to_exceed**.
+
+**taxCodeFallbacks** names the tax code to carry when a source line posts tax
+money but resolves to no mirrored tax code (for example a hand-adjusted total
+whose code was never mapped). Configure the source tax-code internal id per
+transaction side — **sales** for customer invoices, credits and sales orders,
+**purchase** for everything else. A rate string is also accepted. With no
+usable value for the transaction's side the import fails closed: the
+transaction is reported unbuildable, naming the source transaction and line,
+so the mapping can be corrected and the pull replayed. The shared connector
+ships no default; every account's tax identities are its own configuration.
 
 ## Daily mirror guarantees
 
