@@ -165,6 +165,30 @@ test("US GAAP classification criteria (842-10-25-2)", () => {
   );
 });
 
+test("classification refuses junk numerics with a named LeaseError", () => {
+  // Sloppy-operator pastes previously fell through to raw throws (a BigInt
+  // SyntaxError, a money-module Error) instead of the domain error.
+  const junk: [string, Record<string, unknown>][] = [
+    ["junk term months", { leaseTermMonths: "abc", economicLifeMonths: 120 }],
+    ["fractional term months", { leaseTermMonths: 2.5, economicLifeMonths: 120 }],
+    ["negative life months", { leaseTermMonths: 60, economicLifeMonths: -72 }],
+    ["junk term threshold", { leaseTermMonths: 60, economicLifeMonths: 72, termThresholdPercent: "high" }],
+    ["junk pv", { pvOfPayments: "1e5", fairValue: "100000" }],
+    ["junk threshold", { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" }],
+  ];
+  for (const [label, inputs] of junk) {
+    assert.throws(
+      () => classifyLease(inputs as never, "us_gaap"),
+      (e) => e instanceof LeaseError,
+      label,
+    );
+  }
+  assert.throws(
+    () => classifyLessorLease({ pvOfPayments: "91000", fairValue: "100000", thirdPartyResidualGuaranteePv: "junk" }),
+    (e) => e instanceof LeaseError,
+  );
+});
+
 test("short-term exemption eligibility (842-20-25-2 / IFRS 16.5)", () => {
   assert.equal(shortTermExemptionEligible({ leaseTermMonths: 9 }), true);
   assert.equal(shortTermExemptionEligible({ leaseTermMonths: 12 }), true);
