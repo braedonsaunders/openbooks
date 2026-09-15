@@ -25,11 +25,14 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
+import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { can, requirePermission } from '../../../../lib/authz'
 import {
+  hasSubsidiaryField,
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
+  recordSubsidiaryScopeAllows,
   resolveEntityLabels,
 } from '../../../../lib/records'
 import {
@@ -178,7 +181,12 @@ export async function loadRecordWorkspace(
     .map((f) => ({ field: f, value: pickString(sp[`f_${f.id}`]) }))
     .filter((x): x is { field: FormField; value: string } => Boolean(x.value))
 
-  const scope = sql`r.org_id = ${authz.user.orgId} and r.type_key = ${typeKey}`
+  const subsidiaryScope = !hasSubsidiaryField(sections) || authz.allowedSubsidiaryIds === null
+    ? sql``
+    : authz.allowedSubsidiaryIds.size === 0
+      ? sql` and false`
+      : sql` and r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...authz.allowedSubsidiaryIds])}::text[])`
+  const scope = sql`r.org_id = ${authz.user.orgId} and r.type_key = ${typeKey}${subsidiaryScope}`
   let where = sql`${scope}
     ${showInactive || status === 'inactive' ? sql`` : sql` and r.status <> 'inactive'`}
     ${status ? sql` and r.status = ${status}` : sql``}
@@ -240,7 +248,14 @@ export async function loadRecordWorkspace(
     rows.rows.map((r: any) => r.data),
   )
 
-  const openRecord = recId ? await loadRecord(authz.user.orgId, typeKey, recId) : null
+  const loadedOpenRecord = recId ? await loadRecord(authz.user.orgId, typeKey, recId) : null
+  const openRecord = loadedOpenRecord && recordSubsidiaryScopeAllows(
+    sections,
+    loadedOpenRecord.data,
+    authz.allowedSubsidiaryIds,
+  )
+    ? loadedOpenRecord
+    : null
 
   const statusOptions = statusCounts.rows.map((r: any) => ({
     value: r.status,
