@@ -132,6 +132,20 @@ async function ownsProject(orgId: string, projectId: string): Promise<boolean> {
   return (await projectScope(orgId, projectId)) !== null;
 }
 
+/** Residual simultaneous-insert race against change_orders_project_number.
+ * Drizzle wraps PostgreSQL errors, so inspect the full cause chain and only
+ * claim the violation this route owns. */
+function isDuplicateChangeOrderNumber(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { constraint?: unknown; message?: unknown; cause?: unknown };
+    if (candidate.constraint === "change_orders_project_number") return true;
+    if (typeof candidate.message === "string" && candidate.message.includes("change_orders_project_number")) return true;
+    current = candidate.cause;
+  }
+  return false;
+}
+
 /**
  * Resolve the project an action touches — directly, or through the parent of
  * the child row it names — together with that project's subsidiary, so the
@@ -276,6 +290,15 @@ export async function POST(req: Request) {
         if (!number || cmp(amount, "0") === 0) throw new ConstructionBillingError("Change-order number and a non-zero amount are required");
         if (cmp(amount, "0") < 0 && !targetSovLineId) throw new ConstructionBillingError("A deductive change order must identify the schedule line it reduces");
         const id = await db.transaction(async (tx) => {
+          // Numbers are unique per project in storage: fail closed with the
+          // domain error here so a double submit or retry never escapes as
+          // a unique violation (the route maps the residual race below).
+          const duplicate = (await tx.execute(sql`
+            select 1 from change_orders
+             where org_id = ${orgId} and project_id = ${body.projectId} and number = ${number}
+             limit 1
+          `));
+          if (duplicate.rows.length) throw new ConstructionBillingError("A change order with this number already exists for this project");
           if (targetSovLineId) {
             const target = (await tx.execute(sql`
               select 1 from sov_lines
@@ -476,6 +499,11 @@ export async function POST(req: Request) {
     }
   } catch (e) {
     if (e instanceof ConstructionBillingError) return NextResponse.json({ error: e.message }, { status: 422 });
+    // Residual simultaneous-insert race against change_orders_project_number:
+    // the pre-check above already answered, so report its verdict.
+    if (isDuplicateChangeOrderNumber(e)) {
+      return NextResponse.json({ error: "A change order with this number already exists for this project" }, { status: 409 });
+    }
     throw e;
   }
 }
