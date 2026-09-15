@@ -107,3 +107,40 @@ test("applyDocumentEdit refuses junk quantities with a named error, not a storag
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("applyDocumentEdit refuses line money wider than its column with a named error", { skip: !DB }, async () => {
+  // document_lines.amount is numeric(19,4) and unit_price numeric(28,8): a
+  // pasted figure wider than the column cleared the format checks and died in
+  // Postgres with a driver error (a 500). The edit service must fail closed
+  // with the line number instead.
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Money range guard", "money_range_guard");
+    const cases = [
+      { unitPrice: "200.00", amount: "9999999999999999" },
+      { unitPrice: "99999999999999999999999", amount: "400.00" },
+    ];
+    for (const [index, line] of cases.entries()) {
+      const id = randomUUID();
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+        values (${id},${org.orgId},'customer_invoice','draft',${`RNG-${index}-${id.slice(0, 8)}`},${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
+      const current = await loadDocumentEditCurrent(id, org.orgId);
+      assert.ok(current);
+      await assert.rejects(
+        applyDocumentEdit(
+          id,
+          current,
+          {
+            expectedUpdatedAt: current.updatedAt,
+            lines: [{ accountId: org.accounts.revenue, quantity: "2", ...line }],
+          },
+          { orgId: org.orgId, userId: actor, source: "api" },
+        ),
+        (e: Error) => e instanceof DocumentEditError && (e as { status?: number }).status === 422 && /Line 1/.test(e.message),
+        `line ${JSON.stringify(line)} should fail closed with a named error`,
+      );
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

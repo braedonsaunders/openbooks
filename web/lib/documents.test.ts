@@ -212,6 +212,18 @@ test('well-formed quantities survive editor validation untouched', () => {
   assert.deepEqual(lines.map((l) => l.quantity), ['2', '2.00000000', '-1.5', undefined, null])
 })
 
+test('a line amount wider than its ledger column fails closed with its line number', () => {
+  // document_lines.amount is numeric(19,4): fifteen whole digits. A pasted
+  // 16-digit amount cleared the format check and died in Postgres with a
+  // storage error (a 500). The column maximum itself must still save.
+  assert.throws(
+    () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: '9999999999999999' }]),
+    (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
+  )
+  const ok = validateEditableDocumentLines([{ accountId: 'acc-1', amount: '999999999999999.9999' }])
+  assert.equal(ok[0]!.amount, '999999999999999.9999')
+})
+
 test('computeBillTotals carries negative and zero lines into the totals', () => {
   const computed = computeBillTotals([
     { accountId: 'acc-1', amount: '100.00' },
