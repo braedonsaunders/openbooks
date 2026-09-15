@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { dateOrFalse, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Inventory                                                           */
@@ -27,6 +28,8 @@ function inventoryRefFilter(clause: FilterClause, itemColumn: SQL, locationColum
   const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
   const column = clause.key === 'item_id' ? itemColumn : clause.key === 'stock_location_id' ? locationColumn : null
   if (!column) return null
+  const refused = uuidOrFalse(value)
+  if (refused) return refused
   if (clause.operator === 'eq') return sql`${column} = ${value}`
   if (clause.operator === 'ne') return sql`${column} <> ${value}`
   return null
@@ -85,10 +88,18 @@ export function inventoryMovementWhere(view: ListViewConfig, adhoc: EntityAdhoc,
       if (filter.operator === 'eq') parts.push(sql`and m.kind = ${value}`)
       else if (filter.operator === 'ne') parts.push(sql`and m.kind <> ${value}`)
     } else if (filter.key === 'moved_at') {
+      const refused = dateOrFalse(value)
+      if (refused) {
+        parts.push(sql`and ${refused}`)
+        continue
+      }
       if (filter.operator === 'eq') parts.push(sql`and m.moved_at::date = ${value}`)
       else if (filter.operator === 'gte') parts.push(sql`and m.moved_at::date >= ${value}`)
       else if (filter.operator === 'lte') parts.push(sql`and m.moved_at::date <= ${value}`)
-      else if (filter.operator === 'between') parts.push(sql`and m.moved_at::date between ${value} and ${String(filter.to ?? '')}`)
+      else if (filter.operator === 'between') {
+        const refusedTo = dateOrFalse(String(filter.to ?? ''))
+        parts.push(refusedTo ? sql`and ${refusedTo}` : sql`and m.moved_at::date between ${value} and ${String(filter.to ?? '')}`)
+      }
     }
   }
   if (adhoc.filters?.kind) parts.push(sql`and m.kind = ${adhoc.filters.kind}`)
