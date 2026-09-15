@@ -15,6 +15,10 @@ const RETURN_WITH_EDITABLE_BOXES: TaxReturnResult = {
     { lineCode: "9", label: "Adjustment 9", value: "0.0000", computed: false, editable: true, pdfField: null },
     { lineCode: "10", label: "Adjustment 10", value: "0.0000", computed: false, editable: true, pdfField: null },
   ],
+  functionalCurrency: "CAD",
+  subsidiaryIds: [],
+  registrationId: null,
+  translation: null,
 };
 
 function adjustmentsWithKeyOrder(order: readonly string[]): Record<string, string> {
