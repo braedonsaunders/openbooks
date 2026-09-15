@@ -99,6 +99,11 @@ export async function GET(req: Request) {
   });
 }
 
+/** Whole-digit width of a canonical decimal, for column-range guards. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 async function pinIncomeAccount(exec: SqlExecutor, orgId: string, accountId: unknown): Promise<string | null> {
   if (accountId == null || accountId === "") return null;
   const id = String(accountId);
@@ -211,6 +216,10 @@ export async function POST(req: Request) {
         const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
         if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
         const scheduledValue = normalizeMoney(scheduledRaw);
+        // scheduled_value is numeric(19,4): fifteen whole digits. The shape
+        // check admits any magnitude, so a pasted 20-digit figure died in
+        // the insert with a storage error.
+        if (wholeDigits(scheduledValue) > 15) throw new ConstructionBillingError("Scheduled value is out of range — at most 15 whole digits fit the ledger");
         const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
         if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
           throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
@@ -247,6 +256,7 @@ export async function POST(req: Request) {
           const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
           if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
           const scheduledValue = normalizeMoney(scheduledRaw);
+          if (wholeDigits(scheduledValue) > 15) throw new ConstructionBillingError("Scheduled value is out of range — at most 15 whole digits fit the ledger");
           const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
           if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
             throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
@@ -283,6 +293,8 @@ export async function POST(req: Request) {
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
         if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         const amount = normalizeMoney(amountRaw);
+        // change_orders.amount is numeric(19,4): same bound, same refusal.
+        if (wholeDigits(amount) > 15) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         const targetSovLineId = typeof body.targetSovLineId === "string" && body.targetSovLineId ? body.targetSovLineId : null;
         if (targetSovLineId && !isUuid(targetSovLineId)) {
           throw new ConstructionBillingError("The target schedule line id must be a valid UUID");
