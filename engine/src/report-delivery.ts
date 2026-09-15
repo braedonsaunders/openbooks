@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
-import { isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
+import { deriveEmailDeliveryKey, isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
+import { getEmailQueue } from "@openbooks/jobs";
 import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
 import {
@@ -292,11 +293,98 @@ async function quarantineUndeliverableReportDelivery(
   }
 }
 
+/**
+ * Stuck-'enqueued' rebuild horizon. A dispatch marks the row 'enqueued' and
+ * hands the email queue a deterministic job; the row only advances when that
+ * job's worker reports back. Worst-case legitimate processing (five queue
+ * attempts on exponential backoff) finishes well inside fifteen minutes, so
+ * a row still 'enqueued' past it lost its email job to a worker crash or a
+ * Redis loss — and the dispatch scan below only takes pending/failed rows,
+ * so without this sweep the delivery is silently lost.
+ */
+const STUCK_ENQUEUED_REBUILD_MINUTES = 15;
+/**
+ * A claimed-but-undecided email send younger than this may still be in
+ * flight; rebuilding it now would risk a duplicate.
+ */
+const REBUILD_LIVE_ACTIVITY_MINUTES = 5;
+
+/**
+ * Crash-rebuild sweep for deliveries stuck 'enqueued'. For each stuck row:
+ * a recorded provider acceptance reconciles the row to 'sent' (resending
+ * would duplicate); a live attempt is left alone; otherwise the orphaned
+ * queue job is removed best-effort by its deterministic id and the row goes
+ * back to 'failed' so the normal scan redispatches it with a new
+ * generation. The canonical email log is keyed per delivery independent of
+ * generation, so even a surviving orphan converges to a single send — and
+ * per-row isolation keeps one bad row from stalling the sweep.
+ */
+async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
+  const horizon = new Date(now.getTime() - STUCK_ENQUEUED_REBUILD_MINUTES * 60_000);
+  const liveAfter = new Date(now.getTime() - REBUILD_LIVE_ACTIVITY_MINUTES * 60_000);
+  const stale = (await db.execute<{
+    id: string; org_id: string; recipient: string; dispatch_count: number; queue_job_id: string | null;
+  }>(sql`
+    select d.id, d.org_id, d.recipient, d.dispatch_count, d.queue_job_id
+      from report_delivery_outbox d
+     where d.status = 'enqueued' and d.next_attempt_at < ${horizon}
+       and d.terminal_failed_at is null
+     order by d.next_attempt_at
+     limit 100
+  `));
+  let rebuilt = 0;
+  for (const row of stale.rows) {
+    try {
+      const deliveryKey = deriveEmailDeliveryKey({ orgId: row.org_id, scope: `report:${row.id}`, to: row.recipient });
+      const log = (await db.execute<{ id: string; status: string; provider_message_id: string | null; updated_at: string | Date }>(sql`
+        select id, status, provider_message_id, updated_at from email_log
+         where org_id = ${row.org_id} and delivery_key = ${deliveryKey}
+         order by updated_at desc
+         limit 5
+      `));
+      const sent = log.rows.find((entry) => entry.status === "sent");
+      if (sent) {
+        await markReportDeliverySent(row.org_id, row.id, sent.id, sent.provider_message_id ?? "unknown");
+        continue;
+      }
+      // The driver returns timestamptz as a string; compare as Dates (a raw
+      // string >= Date comparison is always false and would rebuild live rows).
+      if (log.rows.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
+        continue;
+      }
+      try {
+        const queue = getEmailQueue();
+        const candidates = new Set(
+          [row.queue_job_id, `report-delivery|${row.id}|${row.dispatch_count - 1}`].filter((id): id is string => typeof id === "string" && id.length > 0),
+        );
+        for (const jobId of candidates) {
+          await queue.remove(jobId);
+        }
+      } catch {
+        // Redis down: the redispatch below fails too and retries — never a duplicate.
+      }
+      await db.execute(sql`
+        update report_delivery_outbox set status='failed',
+               error='delivery job lost before send; rebuilt for redispatch',
+               next_attempt_at=${now}, updated_at=${now}
+         where id=${row.id} and org_id=${row.org_id} and status='enqueued'
+      `);
+      rebuilt++;
+    } catch (error) {
+      console.error(`[reports] rebuild of stuck delivery ${row.id} failed:`, error);
+    }
+  }
+  return rebuilt;
+}
+
 /** Dispatch per-recipient outbox rows; deterministic generation ids close the DB/Redis crash gap. */
 export async function dispatchReportDeliveries(
   enqueue: (data: EnqueueEmailData, options?: { jobId?: string }) => Promise<unknown> = enqueueEmail,
   now = new Date(),
 ): Promise<number> {
+  // Crash-rebuild first: deliveries whose email job died after the 'enqueued'
+  // mark would otherwise sit outside the pending/failed scan forever.
+  await rebuildStuckEnqueuedDeliveries(now);
   const due = (await db.execute<{
     id: string; org_id: string; run_id: string; recipient: string; dispatch_count: number;
     filename: string; content_type: string; bytes: Buffer; report_name: string; org_name: string;
@@ -348,13 +436,14 @@ export async function markReportDeliveryStarted(orgId: string, deliveryId: strin
   `);
 }
 
-// Only 'sending' (the state markReportDeliveryStarted set) may complete as
-// 'sent'; a stale retry/racing callback must not rewrite an enqueued, failed
-// or already-sent row into a second recorded send.
+// Only a dispatched row ('sending', or 'enqueued' when the rebuild sweep
+// reconciles a recorded provider acceptance after a crash) may complete as
+// 'sent'; a stale retry/racing callback must not rewrite a failed or
+// already-sent row into a second recorded send.
 export async function markReportDeliverySent(orgId: string, deliveryId: string, emailLogId: string, providerMessageId: string): Promise<void> {
   await db.execute(sql`
     update report_delivery_outbox set status='sent', email_log_id=${emailLogId}, provider_message_id=${providerMessageId},
-           sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId} and status='sending'
+           sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId} and status in ('sending','enqueued')
   `);
 }
 
