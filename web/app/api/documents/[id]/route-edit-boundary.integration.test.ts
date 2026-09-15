@@ -109,4 +109,30 @@ test('documents PATCH refuses a malformed reference id with a domain error', { s
   }
 })
 
+test('documents PATCH refuses a foreign-organization party with a tenant-opaque domain error', { skip: !DB }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    state.orgId = orgA.orgId
+    state.actorId = randomUUID()
+    const id = await makeDraftBill(orgA)
+    // orgB's real vendor: well-formed, but another tenant's. The composite
+    // FK refuses it at storage; the boundary must translate that into a
+    // domain 404/422 instead of a raw 500.
+    const refused = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), partyId: orgB.vendorId })
+    assert.ok(
+      refused.status === 404 || refused.status === 422,
+      `expected a domain 4xx, got ${refused.status}: ${JSON.stringify(refused.json)}`,
+    )
+    const stored = (await db.execute<{ p: string | null }>(sql`select party_id as p from documents where id=${id} and org_id=${orgA.orgId}`)).rows[0]!.p
+    assert.equal(stored, null, 'refused foreign references store nothing')
+    // An own-org party still saves.
+    const saved = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), partyId: orgA.vendorId })
+    assert.equal(saved.status, 200, `own-org party must stay green: ${JSON.stringify(saved.json)}`)
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
+  }
+})
+
 
