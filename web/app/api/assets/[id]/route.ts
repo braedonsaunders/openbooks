@@ -201,7 +201,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (body.custom !== undefined) {
     const defs = await loadFieldDefs('fixed_assets')
-    const validated = validateCustomValues(defs, body.custom)
+    // PATCH custom values are partial: validate the effective bag so an
+    // omitted required field can be satisfied by its stored value. The
+    // in-transaction merge below applies the cleaned submitted values onto
+    // the locked row, so unknown/system keys survive either way.
+    const existingCustom =
+      existing.custom && typeof existing.custom === 'object'
+        ? (existing.custom as Record<string, unknown>)
+        : {}
+    const validated = validateCustomValues(defs, { ...existingCustom, ...body.custom })
     if (!validated.ok) {
       return NextResponse.json({ error: 'Invalid custom fields', fields: validated.errors }, { status: 422 })
     }

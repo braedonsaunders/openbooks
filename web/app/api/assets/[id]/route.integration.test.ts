@@ -234,3 +234,31 @@ test(
     }
   },
 );
+
+test(
+  "asset PATCH preserves omitted required custom fields on a partial edit",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedAsset();
+    try {
+      await db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${fixture.actorId}, ${fixture.actorId}),
+          (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${fixture.actorId}, ${fixture.actorId})
+      `);
+      await db.execute(sql`update fixed_assets set custom = '{"required_code":"R-1"}'::jsonb where id = ${fixture.assetId} and org_id = ${fixture.orgId}`);
+
+      const response = await PATCH(await patchRequest(fixture, { custom: { optional_note: "updated" } }), {
+        params: Promise.resolve({ id: fixture.assetId }),
+      });
+      assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId} and org_id = ${fixture.orgId}`)).rows[0]?.custom;
+      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(fixture.orgId);
+    }
+  },
+);
