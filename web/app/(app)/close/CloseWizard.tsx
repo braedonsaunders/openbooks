@@ -575,6 +575,7 @@ function TaskCard(props: Props & { task: Row }) {
     try {
       const result = await call("/api/close/run-revaluation", {
         periodId: props.run.period_id,
+        bookId: props.run.book_id,
       });
       if (result.problems.length > 0) {
         toast.error(result.problems.join("\n"), {

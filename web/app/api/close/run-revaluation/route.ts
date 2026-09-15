@@ -8,6 +8,8 @@ export const runtime = 'nodejs'
 
 interface Body {
   periodId?: string
+  /** Defaults to the primary book; pass a secondary (e.g. tax) book to revalue it. */
+  bookId?: string
 }
 
 /**
@@ -31,6 +33,9 @@ export async function POST(req: Request) {
   if (!body.periodId || !isUuid(body.periodId)) {
     return NextResponse.json({ error: 'invalid period' }, { status: 422 })
   }
+  if (body.bookId !== undefined && !isUuid(body.bookId)) {
+    return NextResponse.json({ error: 'invalid book' }, { status: 422 })
+  }
 
   try {
     const result = await runRevaluation(
@@ -38,6 +43,7 @@ export async function POST(req: Request) {
       body.periodId,
       user.id,
       gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+      body.bookId,
     )
     return NextResponse.json(result)
   } catch (e: unknown) {
