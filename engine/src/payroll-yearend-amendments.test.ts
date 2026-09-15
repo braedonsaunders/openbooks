@@ -1461,3 +1461,157 @@ test(
     }
   },
 );
+
+/* ------------------------------------------------------------------ */
+/* Concurrent issues never fork the submission history                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A pack filing whose artifact builds pause on demand, so two issues can be
+ * held in the check-then-insert gap deterministically: the first waits inside
+ * its artifact build while the second runs to completion. No pool
+ * interception, no timing luck — the barrier is the filing's own async build.
+ */
+async function raceFilingFixture(filingKey: string) {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const country = "ZX";
+  let downloadCalls = 0;
+  let amendCalls = 0;
+  let armed = false;
+  let releaseFirst!: () => void;
+  let signalEntered!: () => void;
+  const entered = new Promise<void>((resolve) => { signalEntered = resolve; });
+  const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const pauseFirst = () => { signalEntered(); return gate; };
+  const marker = async (): Promise<string> => (await db.execute<{ m: string | null }>(sql`
+    select settings->>'zxRaceMarker' as m from orgs where id = ${org.orgId}
+  `)).rows[0]?.m ?? "";
+  registerPayrollFilings({
+    country,
+    programTypes: [],
+    yearEnd: [{
+      key: filingKey,
+      label: "Race filing",
+      cadence: "annual",
+      population: async () => ({
+        rowKey: "rowId",
+        columns: [{ key: "marker", label: "Marker" }],
+        rows: [{ rowId: "row-1", marker: await marker() }],
+      }),
+      slip: {
+        build: async () => ({
+          formCode: "ZX_RACE",
+          formName: "Race filing",
+          headerFields: [{ label: "Marker", value: await marker() }],
+          boxes: [],
+        }),
+      },
+      download: {
+        label: "Download race original",
+        build: async () => {
+          downloadCalls += 1;
+          if (armed && downloadCalls === 1) await pauseFirst();
+          return { filename: "race.txt", contentType: "text/plain", body: await marker() };
+        },
+      },
+      amendment: {
+        supported: true,
+        revisions: ["amended"],
+        vehicle: "same_form",
+        download: {
+          label: "Download race correction",
+          build: async ({ rows }) => {
+            amendCalls += 1;
+            if (armed && amendCalls === 1) await pauseFirst();
+            return {
+              filename: "race-amended.txt",
+              contentType: "text/plain",
+              body: rows[0]!.current.headerFields[0]!.value,
+            };
+          },
+        },
+      },
+    }],
+  });
+  return {
+    orgId: org.orgId, actorId, country, filingKey,
+    setMarker: (value: string) => db.execute(sql`
+      update orgs set settings = coalesce(settings, '{}'::jsonb)
+        || ${JSON.stringify({ zxRaceMarker: value })}::jsonb
+       where id = ${org.orgId}`),
+    arm: () => { armed = true; },
+    entered: Promise.race([
+      entered,
+      new Promise<never>((_, reject) => setTimeout(
+        () => reject(new Error("first issue never reached its artifact build")), 15000,
+      )),
+    ]),
+    release: () => releaseFirst(),
+    done: async () => { unregisterPayrollFilings(country); await dropScratchOrgReporting(org.orgId); },
+  };
+}
+
+test(
+  "concurrent original issues cannot file two competing returns",
+  { skip: !DB },
+  async () => {
+    const fx = await raceFilingFixture(`race-original-${randomUUID()}`);
+    const issue = () => recordFilingIssue({
+      orgId: fx.orgId, actorId: fx.actorId, country: fx.country, filingKey: fx.filingKey,
+      taxYear: 2026, revision: "original",
+    });
+    try {
+      await fx.setMarker("A");
+      fx.arm();
+      // A double-click, a retried request: the second issue runs to
+      // completion while the first is still building its artifact. Both saw
+      // an unissued filing; only one may persist an original.
+      const first = issue();
+      await fx.entered;
+      const second = await issue();
+      assert.equal(second.submission.revisionNumber, 1);
+      fx.release();
+      await assert.rejects(first, /already been issued/);
+      const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
+      assert.equal(
+        submissions.filter((s) => s.revision === "original").length,
+        1,
+        "exactly one original may exist — a second original gives the agency two competing returns",
+      );
+    } finally { fx.release(); await fx.done(); }
+  },
+);
+
+test(
+  "concurrent corrections cannot fork the revision history",
+  { skip: !DB },
+  async () => {
+    const fx = await raceFilingFixture(`race-correction-${randomUUID()}`);
+    const amend = () => recordFilingIssue({
+      orgId: fx.orgId, actorId: fx.actorId, country: fx.country, filingKey: fx.filingKey,
+      taxYear: 2026, revision: "amended", rowIds: ["row-1"],
+    });
+    try {
+      await fx.setMarker("A");
+      await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country: fx.country, filingKey: fx.filingKey,
+        taxYear: 2026, revision: "original",
+      });
+      await fx.setMarker("B");
+      fx.arm();
+      const first = amend();
+      await fx.entered;
+      const second = await amend();
+      assert.equal(second.submission.revisionNumber, 2);
+      fx.release();
+      await assert.rejects(first, /another correction|concurrent|review the filing/i);
+      const submissions = await filingSubmissions(fx.orgId, fx.country, fx.filingKey, 2026);
+      assert.equal(
+        submissions.filter((s) => s.revisionNumber === 2).length,
+        1,
+        "exactly one revision 2 may exist — two corrections superseding the same revision fork the filed truth",
+      );
+    } finally { fx.release(); await fx.done(); }
+  },
+);
