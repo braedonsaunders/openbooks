@@ -146,6 +146,10 @@
       "title": "Depreciation remains unposted",
       "message": "{count, plural, one {# scheduled depreciation line remains unposted.} other {# scheduled depreciation lines remain unposted.}}"
     },
+    "recognition-unposted": {
+      "title": "Revenue recognition remains unposted",
+      "message": "{count, plural, one {# scheduled recognition line remains unposted.} other {# scheduled recognition lines remain unposted.}}"
+    },
     "fx-missing": {
       "title": "Foreign-exchange rates are missing",
       "message": "{count, plural, one {# transaction currency has no usable period-end spot rate.} other {# transaction currencies have no usable period-end spot rate.}}"
@@ -320,6 +324,10 @@
     "depreciation-posted": {
       "title": "Post fixed-asset depreciation",
       "description": "Run scheduled depreciation and resolve exceptions."
+    },
+    "recognition-posted": {
+      "title": "Post revenue recognition",
+      "description": "Run scheduled revenue recognition and resolve exceptions."
     },
     "fx-ready": {
       "title": "Validate foreign-exchange coverage",

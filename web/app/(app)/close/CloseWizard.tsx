@@ -486,6 +486,7 @@ function closeExceptionActionHref(code: string): string | null {
     "posting-period-missing": "/journal",
     "bank-unreconciled": "/banking",
     "depreciation-unposted": "/assets",
+    "recognition-unposted": "/revenue",
     "fx-missing": "/admin/setup/fx-rates",
     "fx-unrevalued": "/admin/setup/fx-rates",
     "intercompany-residual": "/reports/trial-balance",
