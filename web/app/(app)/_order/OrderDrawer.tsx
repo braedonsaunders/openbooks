@@ -14,6 +14,7 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
+import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { promptDialog } from '../../../lib/prompt'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
@@ -296,8 +297,13 @@ export function OrderDrawer({
   // request echoes it; the server refuses any mutation whose view of the
   // order is not the stored revision. A ref — not state — so a save and the
   // issue that immediately follows it share the exact same revision without
-  // waiting on a re-render.
-  const revisionOf = (value: unknown) => new Date(value as string | number | Date).toISOString()
+  // waiting on a re-render. The token is opaque microsecond wire form: never
+  // round it through Date (toISOString truncates to millis and every
+  // mutation fails closed with a 409).
+  const revisionOf = (value: unknown) => {
+    if (!isDocumentRevisionToken(value)) throw new Error('DOCUMENT_REVISION_REQUIRED')
+    return value
+  }
   const revisionRef = useRef<string>(revisionOf(doc.updated_at))
 
   const apiBase = `/api/${
