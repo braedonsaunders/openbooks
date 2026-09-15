@@ -108,18 +108,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = parsedBody.data
   const expectedRevision = requireRevision(body.expectedRevision)
   if (expectedRevision instanceof NextResponse) return expectedRevision
+  // Present-but-malformed header inputs fail closed here. Silently dropping
+  // them (or coercing a bad id to null) would answer 200 while the ticket
+  // keeps its old date or loses its foreman — the caller can never tell the
+  // save did not land. Explicit nulls still clear/keep their nullable fields.
+  if ('documentDate' in body && (typeof body.documentDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.documentDate))) {
+    return NextResponse.json({ error: 'invalid documentDate — expected YYYY-MM-DD' }, { status: 422 })
+  }
+  if ('projectId' in body && body.projectId !== null && !isUuid(body.projectId)) {
+    return NextResponse.json({ error: 'invalid projectId' }, { status: 422 })
+  }
+  if ('foremanPartyId' in body && body.foremanPartyId !== null && !isUuid(body.foremanPartyId)) {
+    return NextResponse.json({ error: 'invalid foremanPartyId' }, { status: 422 })
+  }
+  if ('period' in body && !['shift', 'daily', 'weekly'].includes(body.period)) {
+    return NextResponse.json({ error: 'invalid period' }, { status: 422 })
+  }
   if ('projectId' in body && isUuid(body.projectId)) {
     const projectDenied = await guardProjectScope(gate, body.projectId)
     if (projectDenied) return projectDenied
   }
   try {
     await updateTicketHeader(gate.user.orgId, gate.user.id, id, {
-      ...(('projectId' in body) ? { projectId: isUuid(body.projectId) ? body.projectId : null } : {}),
-      ...(/^\d{4}-\d{2}-\d{2}$/.test(body.documentDate ?? '') ? { documentDate: body.documentDate } : {}),
+      ...(('projectId' in body) ? { projectId: body.projectId as string | null } : {}),
+      ...(('documentDate' in body) ? { documentDate: body.documentDate as string } : {}),
       ...(('referenceNumber' in body) ? { referenceNumber: body.referenceNumber ? String(body.referenceNumber).slice(0, 100) : null } : {}),
       ...(('memo' in body) ? { memo: body.memo ? String(body.memo).slice(0, 2000) : null } : {}),
-      ...(['shift', 'daily', 'weekly'].includes(body.period) ? { period: body.period } : {}),
-      ...(('foremanPartyId' in body) ? { foremanPartyId: isUuid(body.foremanPartyId) ? body.foremanPartyId : null } : {}),
+      ...(('period' in body) ? { period: body.period as 'shift' | 'daily' | 'weekly' } : {}),
+      ...(('foremanPartyId' in body) ? { foremanPartyId: body.foremanPartyId as string | null } : {}),
     }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     return NextResponse.json(await loadFieldTicket(gate.user.orgId, id, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds ?? null,
@@ -163,6 +179,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await saveCrewGrid(orgId, userId, id, Array.isArray(body.rows) ? body.rows : [], expectedRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (action === 'patch') {
       const expectedRevision = preflightRevision as string
+      // Same fail-closed contract as PATCH above: a malformed foreman id
+      // must not coerce to null and silently clear the stored foreman.
+      if ('foremanPartyId' in body && body.foremanPartyId !== null && !isUuid(body.foremanPartyId)) {
+        return NextResponse.json({ error: 'invalid foremanPartyId' }, { status: 422 })
+      }
       await updateTicketHeader(orgId, userId, id, {
         ...(('workDescription' in body)
           ? { memo: body.workDescription ? String(body.workDescription).slice(0, 2000) : null }
@@ -171,7 +192,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           ? { referenceNumber: body.poNumber ? String(body.poNumber).slice(0, 100) : null }
           : {}),
         ...(('foremanPartyId' in body)
-          ? { foremanPartyId: isUuid(body.foremanPartyId) ? body.foremanPartyId : null }
+          ? { foremanPartyId: body.foremanPartyId as string | null }
           : {}),
       }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (action === 'add-line') {
