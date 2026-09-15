@@ -596,6 +596,24 @@ function generatedPeriods(
       adjustment: true,
     });
   }
+  // Date-derived period resolution picks one covering period per posting
+  // date, so overlapping regular ranges would scope those postings — and
+  // the close locks evaluated for them — arbitrarily. Adjustment rows are
+  // exempt: the adjustment day intentionally coincides with the final
+  // regular day, and date-derived resolution never selects adjustments.
+  // Gaps stay legal (posting fails closed with "no accounting period").
+  const regular = rows.filter((row) => !row.adjustment);
+  for (let i = 0; i < regular.length; i++) {
+    for (let j = i + 1; j < regular.length; j++) {
+      const a = regular[i]!;
+      const b = regular[j]!;
+      if (!(a.endsOn < b.startsOn || b.endsOn < a.startsOn)) {
+        throw new CloseError(
+          `calendar periods overlap: ${a.name} (${a.startsOn}..${a.endsOn}) overlaps ${b.name} (${b.startsOn}..${b.endsOn})`,
+        );
+      }
+    }
+  }
   return rows;
 }
 
