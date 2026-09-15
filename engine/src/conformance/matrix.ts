@@ -14,6 +14,7 @@
 import { toUnits } from "../money.ts";
 import { CONSTRUCTION_CASES } from "./cases/construction.ts";
 import { FOREIGN_CURRENCY_CASES } from "./cases/foreign-currency.ts";
+import { FX_SETTLEMENT_CASES } from "./cases/fx-settlement.ts";
 import { INCOME_TAX_CASES } from "./cases/income-tax.ts";
 import { INVENTORY_CASES } from "./cases/inventory.ts";
 import { LEASE_CASES } from "./cases/leases.ts";
@@ -26,6 +27,7 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...REVENUE_CASES,
   ...LEASE_CASES,
   ...FOREIGN_CURRENCY_CASES,
+  ...FX_SETTLEMENT_CASES,
   ...INVENTORY_CASES,
   ...LONG_LIVED_ASSET_CASES,
   ...INCOME_TAX_CASES,
@@ -53,6 +55,7 @@ export const REGISTERED_FLOORS: readonly {
   { area: "revenue", source: REVENUE_CASES, minimum: 11 },
   { area: "leases", source: LEASE_CASES, minimum: 7 },
   { area: "foreign currency", source: FOREIGN_CURRENCY_CASES, minimum: 7 },
+  { area: "fx settlement", source: FX_SETTLEMENT_CASES, minimum: 4 },
   { area: "inventory", source: INVENTORY_CASES, minimum: 7 },
   { area: "long-lived assets", source: LONG_LIVED_ASSET_CASES, minimum: 5 },
   { area: "income tax", source: INCOME_TAX_CASES, minimum: 10 },
