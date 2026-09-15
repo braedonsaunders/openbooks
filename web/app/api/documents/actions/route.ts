@@ -85,19 +85,36 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `document is ${doc.status}, not draft` }, { status: 422 })
       }
       await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id, authz.allowedSubsidiaryIds)
-      const { gated, runId, flowError, autoApproved } =
-        await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
-      if (gated) {
-        return NextResponse.json({ ok: true, requestId: runId })
+      // Submit/release is one command under the document row lock (same shape
+      // as the posting branch below). Two concurrent submitters both pass the
+      // unlocked pre-read above; without this lock the loser races the engine
+      // into a raw failure instead of meeting a lifecycle refusal.
+      const submission = await withOrgTransaction(user.orgId, async () => {
+        const locked = (await db.execute<{ status: string }>(sql`
+          select status from documents
+           where id = ${doc.id} and org_id = ${user.orgId}
+           for update
+        `))
+        const current = locked.rows[0]?.status
+        if (current !== 'draft') {
+          return { kind: 'invalid_status' as const, status: current ?? 'missing' }
+        }
+        return { kind: 'submitted' as const, ...(await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)) }
+      })
+      if (submission.kind === 'invalid_status') {
+        return NextResponse.json({ error: `document is ${submission.status}, not draft` }, { status: 422 })
       }
-      if (flowError) {
+      if (submission.gated) {
+        return NextResponse.json({ ok: true, requestId: submission.runId })
+      }
+      if (submission.flowError) {
         // An approval flow matched but errored — fail closed, never auto-approve.
         return NextResponse.json(
-          { error: `approval could not be routed: ${flowError}` },
+          { error: `approval could not be routed: ${submission.flowError}` },
           { status: 422 },
         )
       }
-      return NextResponse.json({ ok: true, requestId: null, autoApproved })
+      return NextResponse.json({ ok: true, requestId: null, autoApproved: submission.autoApproved })
     }
     // Posting a draft submits it first, so the same evidence rule applies —
     // assembled BEFORE the transaction opens (rendering three reports inside a
