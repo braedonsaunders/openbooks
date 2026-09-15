@@ -386,4 +386,41 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
       },
     },
   },
+
+  {
+    id: "ppe-depreciation-445-calendar",
+    title: "Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns",
+    citations: [
+      {
+        standard: "IAS 16",
+        reference: "IAS 16.60",
+        kind: "requirement",
+        requirement:
+          "The depreciable amount of an asset is allocated on a systematic basis over its useful life, in periods that follow the entity's reporting calendar.",
+      },
+      {
+        standard: "ASC 360",
+        reference: "360-10-35-4",
+        kind: "requirement",
+        requirement:
+          "The cost of a long-lived asset, less any salvage value, is depreciated in a systematic and rational manner over the asset's useful life.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "An entity reporting on a 4-4-5 retail calendar depreciates week-based periods — four weeks, four weeks, five weeks — with each period carrying its share of the annual charge, so the full useful life is covered with nothing skipped and nothing doubled.",
+    facts: [
+      "A retail entity reports on a 4-4-5 calendar anchored 2026-02-01: the 2026 year runs 2026-02-01 to 2027-01-30 in twelve week-based periods.",
+      "A 5-week period such as 2026-06-28 to 2026-08-01 spans two calendar month-starts, so two native monthly charges map onto one accounting period.",
+      "The book engine plans one charge per calendar month and refuses when two months land in one period — the schedule cannot be built on this calendar at all.",
+    ],
+    gap: "Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.",
+    expected: {
+      values: {
+        periodsIn445Year: "12",
+        scheduleBuildable: "false",
+      },
+    },
+  },
 ];
