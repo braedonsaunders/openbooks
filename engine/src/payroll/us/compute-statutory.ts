@@ -176,6 +176,7 @@ export async function computeUsStatutory(
       periodsPerYear: P,
       wages: income,
       supplemental: nonPeriodic,
+      federalIncomeTax: statutory.fit,
       taxQualifiedDeductions,
       certificateFor,
       regionTax,

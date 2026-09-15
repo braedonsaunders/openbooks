@@ -127,10 +127,10 @@ test("OR Example 1 — annual $25,000 single 0 allowances: $1,789 (Rev. 12-31-25
   // 9,690 × 0.0875 = 848.375, printed as $848 — the dollar-rounding pin.
   const result = OR_WITHHOLDING.compute({
     payDate: "2026-03-13", periodsPerYear: 1, wages: "25000.00", basis: "resident",
+    federalIncomeTax: "1000.00",
     certificate: cert({
       marital_status: "single",
       allowances: "0",
-      federal_income_tax_withheld: "1000.00",
     }),
   });
   assert.equal(result.factors.OR_ANNUAL_WAGES, money("25000"));
@@ -168,10 +168,10 @@ test("OR Example 2 — $1,789 de-annualized is $149 / $75 / $69 / $34 / $7", () 
   // Example 2's monthly split to that same $1,789.
   const monthly = OR_WITHHOLDING.compute({
     payDate: "2026-03-31", periodsPerYear: 12, wages: "2083.3333", basis: "resident",
+    federalIncomeTax: "83.3333",
     certificate: cert({
       marital_status: "single",
       allowances: "0",
-      federal_income_tax_withheld: "83.3333",
     }),
   });
   assert.equal(monthly.factors.OR_BASE, money("21090"));
@@ -253,10 +253,10 @@ test("OR FAQ 7 — single with 3+ allowances uses the single phase-out and $5,82
 test("OR extra withholding is added AFTER the formula; exempt is zero", () => {
   const extra = OR_WITHHOLDING.compute({
     payDate: "2026-03-13", periodsPerYear: 1, wages: "25000.00", basis: "resident",
+    federalIncomeTax: "1000.00",
     certificate: cert({
       marital_status: "single",
       allowances: "0",
-      federal_income_tax_withheld: "1000.00",
       additional_per_period: "25.00",
     }),
   });
@@ -264,9 +264,9 @@ test("OR extra withholding is added AFTER the formula; exempt is zero", () => {
 
   const exempt = OR_WITHHOLDING.compute({
     payDate: "2026-03-13", periodsPerYear: 1, wages: "25000.00", basis: "resident",
+    federalIncomeTax: "1000.00",
     certificate: cert({
       marital_status: "single",
-      federal_income_tax_withheld: "1000.00",
       exempt: "true",
     }),
   });
@@ -293,7 +293,7 @@ test("OR refuses without this period's federal income tax withheld", () => {
       payDate: "2026-03-13", periodsPerYear: 1, wages: "25000.00", basis: "resident",
       certificate: cert({ marital_status: "single", allowances: "0" }),
     }),
-    /requires this period's federal income tax withheld/,
+    /requires this period's federal income tax/,
   );
 });
 
@@ -301,11 +301,10 @@ test("OR optional supplemental flat is 8%; compute aggregates (FAQ 5)", () => {
   assert.equal(orSupplementalFlat("2026-03-13", "4000.00"), money("320"));
   const withBonus = OR_WITHHOLDING.compute({
     payDate: "2026-03-13", periodsPerYear: 1, wages: "21000.00", supplemental: "4000.00",
-    basis: "resident",
+    basis: "resident", federalIncomeTax: "1000.00",
     certificate: cert({
       marital_status: "single",
       allowances: "0",
-      federal_income_tax_withheld: "1000.00",
     }),
   });
   // Same annual wages as Example 1 — bonuses are wages.
@@ -351,7 +350,7 @@ test("OR refuses a year it has not transcribed, and never extrapolates", () => {
   assert.throws(
     () => OR_WITHHOLDING.compute({
       payDate: "2027-01-15", periodsPerYear: 1, wages: "25000", basis: "resident",
-      certificate: cert({ federal_income_tax_withheld: "1000" }),
+      certificate: cert(),
     }),
     /2027 Oregon income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
   );

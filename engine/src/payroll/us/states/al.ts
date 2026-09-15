@@ -148,11 +148,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     throw new Error(`Alabama exemption "${code}" is not 0, S, MS, M, or H`);
   }
   const dependents = certificateCount(input.certificate, "dependents") ?? 0;
-  const periodFederal = certificateAmount(input.certificate, "federal_income_tax_withheld");
-  if (periodFederal == null) {
+  const periodFederal = input.federalIncomeTax;
+  if (periodFederal == null || periodFederal.trim() === "") {
     throw new Error(
       "Alabama withholding (ALDOR formula line 2B) requires this period's federal "
-      + "income tax withheld. The engine will not assume $0.",
+      + "income tax withheld from the current Pub 15-T calculation. The engine will not assume $0.",
     );
   }
 
@@ -256,17 +256,6 @@ export const AL_CERTIFICATE: PayrollCertificate = {
         "Each dependent is $1,000 / $500 / $300 a year depending on annualized GI "
         + "(≤ $50,000 / ≤ $100,000 / above). Not the spouse — M already covers both "
         + "personal exemptions.",
-    },
-    {
-      key: "federal_income_tax_withheld",
-      label: "Federal income tax withheld this period (formula line 2B)",
-      kind: "amount",
-      decimals: 4,
-      min: "0",
-      help:
-        "Not an A-4 line. The formula subtracts this period's federal withholding "
-        + "annualized. A missing amount is refused — assuming zero would over-withhold. "
-        + "Do not include FICA.",
     },
     {
       key: "additional_per_period",

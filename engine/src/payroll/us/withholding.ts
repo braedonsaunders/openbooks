@@ -92,6 +92,8 @@ export interface UsWithholdingInput {
   wages: string;
   /** Supplemental wages this period. */
   supplemental?: string;
+  /** Current paycheck's computed federal income-tax withholding. */
+  federalIncomeTax: string;
   /** Tax-qualified deductions from this period, used by Nebraska's floor. */
   taxQualifiedDeductions?: string;
   /**
@@ -144,6 +146,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      federalIncomeTax: input.federalIncomeTax,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
@@ -172,6 +175,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      federalIncomeTax: input.federalIncomeTax,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
