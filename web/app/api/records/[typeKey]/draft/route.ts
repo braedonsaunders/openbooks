@@ -5,7 +5,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { resolveDefaultValue, type FieldValueMap } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
 import { nextDocumentNumber } from '../../../../../lib/bills'
-import { buildSearchText, inTypeAudience, loadRecordTypeByKey } from '../../../../../lib/records'
+import { buildSearchText, hasSubsidiaryField, inTypeAudience, loadRecordTypeByKey } from '../../../../../lib/records'
 import {
   lintRecordFields,
   recordNumberPrefix,
@@ -57,6 +57,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
       const v = resolveDefaultValue(field.defaultValue, ctx)
       if (v !== undefined && v !== null && v !== '') values[field.id] = v
     }
+  }
+  if (gate.allowedSubsidiaryIds !== null && hasSubsidiaryField(lint.sections)) {
+    const allowed = [...gate.allowedSubsidiaryIds]
+    if (allowed.length !== 1) {
+      return NextResponse.json({ error: 'A single subsidiary must be selected before creating this record' }, { status: 422 })
+    }
+    values.subsidiary_id = allowed[0]
   }
   const data = withComputedFormulas(lint.sections, values)
 
