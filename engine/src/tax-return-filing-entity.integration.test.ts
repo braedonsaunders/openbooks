@@ -301,6 +301,147 @@ test("an unknown or elimination subsidiary fails closed", { skip: !DB }, async (
   }
 });
 
+test("an unscoped return with activity in one currency reports that currency", { skip: !DB }, async () => {
+  // Posture pin: a single active currency takes the activity's currency, not
+  // the org base. A USD-only return in a CAD-base org reporting "CAD" would
+  // silently re-denominate every box.
+  const org = await createScratchOrg();
+  try {
+    const usSub = await createUsdSubsidiary(org);
+    const usCode = await makeTaxCode(org.orgId, "USD-ONLY", org.accounts);
+    await seedEntityDocument(org, {
+      subsidiaryId: usSub, kind: "customer_invoice", number: "INV-USD-ONLY",
+      taxCodeId: usCode, amount: "1000.0000", taxAmount: "100.0000", currency: "USD",
+    });
+    const formCode = "ONE-CCY";
+    await makeEntityForm(org.orgId, formCode, [
+      { lineCode: "BASE", taxCodeId: usCode, basis: "taxable_base", sign: 1, sequence: 10 },
+      { lineCode: "TAX", taxCodeId: usCode, basis: "tax_collected", sign: -1, sequence: 20 },
+    ]);
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    assert.equal(result.functionalCurrency, "USD");
+    const values = boxesOf(result);
+    assert.equal(values.get("BASE"), "1000.0000");
+    assert.equal(values.get("TAX"), "100.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("pre-stamping legacy documents attribute to the in-scope root", { skip: !DB }, async () => {
+  // The kernel stamps every document it posts; a posted NULL-subsidiary
+  // document predates stamping and attributes to the root fallback — but only
+  // when the root is in the filing-entity scope, so an explicit entity never
+  // absorbs unattributable history it did not ask for.
+  const org = await createScratchOrg();
+  try {
+    const code = await makeTaxCode(org.orgId, "LEGACY-BASE", org.accounts);
+    await seedEntityDocument(org, {
+      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-ROOT",
+      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+    });
+    const legacyId = randomUUID();
+    const legacyLineId = randomUUID();
+    // A posted document needs its period and its GL entry: the backdated
+    // entry lives in the root subsidiary (the kernel's ?? root fallback) and
+    // carries the code so the return sees root activity.
+    const legacyEntryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${legacyEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'LEGACY-JE-1',
+              ${org.date}, ${org.periodId}, 'pre-stamping legacy entry', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, tax_code_id)
+      values (${randomUUID()}, ${org.orgId}, ${legacyEntryId}, 1, ${org.accounts.revenue}, ${org.subsidiaryId},
+              '300.0000', 'CAD', '300.0000', 1, ${code}),
+             (${randomUUID()}, ${org.orgId}, ${legacyEntryId}, 2, ${org.accounts.ar}, ${org.subsidiaryId},
+              '-300.0000', 'CAD', '-300.0000', 1, null)`);
+    await db.execute(sql`
+      update journal_entries set status = 'posted'
+       where id = ${legacyEntryId} and org_id = ${org.orgId}`);
+    // Lines land while the document is a draft (line immutability), then the
+    // pre-stamping document flips to posted with its period and entry pinned.
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
+      values (${legacyId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-LEGACY', null,
+              ${org.customerId}, ${org.date}, ${org.date}, 'CAD', '1', '300.0000', '30.0000', '330.0000')`);
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+         tax_amount, tax_code_id, quantity, unit_price)
+      values (${legacyLineId}, ${org.orgId}, ${legacyId}, 1, ${org.accounts.revenue}, '300.0000',
+              '300.0000', '30.0000', ${code}, '1', '300.0000')`);
+    await db.execute(sql`
+      insert into document_line_tax_components
+        (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+         tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+         price_includes_tax, compound_on_previous, rounding_scale, collected_account_id,
+         paid_account_id, withholding_account_id, overridden)
+      values (${org.orgId}, ${legacyLineId}, ${code}, 1, '10', '300.0000', '30.0000',
+              '30.0000', '0.0000', 'standard', false, false, 2, ${org.accounts.taxOutput},
+              null, null, false)`);
+    await db.execute(sql`
+      update documents set status = 'approved'
+       where id = ${legacyId} and org_id = ${org.orgId}`);
+    await db.execute(sql`
+      update documents
+         set status = 'posted', posting_period_id = ${org.periodId}, posted_entry_id = ${legacyEntryId}
+       where id = ${legacyId} and org_id = ${org.orgId}`);
+    const formCode = "LEGACY-ARM";
+    await makeEntityForm(org.orgId, formCode, [
+      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+    ]);
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
+      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+    });
+    // Root invoice 200 + legacy 300: the null-subsidiary arm attributes
+    // unattributable history to the in-scope root.
+    assert.equal(boxesOf(result).get("BASE"), "500.0000");
+    assert.equal(result.functionalCurrency, "CAD");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a registration effective on the window end clamps the return to its first day", { skip: !DB }, async () => {
+  // Calendar-match pin: an obligation matches when periodStart <= to. The
+  // August monthly period opens exactly on `to` (2026-08-01) and the
+  // registration is effective that day, so the return clamps to [08-01,
+  // 08-01] and the July invoice stays out. A strict `<` misses the only
+  // obligation, the window stays wide, and July activity lands in an
+  // August-effective return.
+  const org = await createScratchOrg();
+  try {
+    const code = await makeTaxCode(org.orgId, "CLAMP-BASE", org.accounts);
+    await seedEntityDocument(org, {
+      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-JUL",
+      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+    });
+    const formCode = "CLAMP-WIN";
+    await makeEntityForm(org.orgId, formCode, [
+      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+    ]);
+    const jurisdictionId = randomUUID();
+    await db.execute(sql`
+      insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
+      values (${jurisdictionId}, ${org.orgId}, 'CLAMP', 'Clamp jurisdiction', 'CA', 'country', 'gst')`);
+    await db.execute(sql`
+      insert into tax_registrations
+        (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active, effective_from)
+      values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, 'CLAMP 1', 'monthly', ${formCode}, true, '2026-08-01')`);
+    const result = await computeTaxReturn(org.orgId, formCode, "2026-07-15", "2026-08-01");
+    assert.equal(result.from, "2026-08-01");
+    assert.equal(result.to, "2026-08-01");
+    assert.equal(boxesOf(result).get("BASE"), "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a registration-only pin keeps the org-wide return with the pinned number", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
