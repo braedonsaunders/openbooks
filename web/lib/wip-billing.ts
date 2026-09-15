@@ -54,11 +54,19 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 function persistMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4)
   if (exact === null) throw new WipBillingError(`${label} must be an exact decimal`)
+  let amount: string
   try {
-    return normalizeMoney(exact)
+    amount = normalizeMoney(exact)
   } catch {
     throw new WipBillingError(`${label} must be an exact decimal`)
   }
+  // Proposed amounts land in numeric(19,4) columns: fifteen whole digits. A
+  // pasted wider figure normalized fine and died only in the update with a
+  // storage error — fail closed here with a named error.
+  if (amount.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    throw new WipBillingError(`${label} is out of range — at most 15 whole digits fit the ledger`)
+  }
+  return amount
 }
 
 export interface CreatePrebillInput {
