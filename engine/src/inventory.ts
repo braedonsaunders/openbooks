@@ -669,12 +669,13 @@ export async function revalueOpenLayersToStandardCost(
     const layers = (await tx.execute<{
         id: string;
         subsidiary_id: string;
+        stock_location_id: string;
         remaining_quantity: string;
         unit_cost: string;
         remaining_original_cost: string | null;
         evidence: string;
       }>(sql`
-      select id, subsidiary_id, remaining_quantity, unit_cost, remaining_original_cost,
+      select id, subsidiary_id, stock_location_id, remaining_quantity, unit_cost, remaining_original_cost,
              to_jsonb(cost_layers)::text as evidence
         from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
@@ -684,18 +685,20 @@ export async function revalueOpenLayersToStandardCost(
     if (allowedSubsidiaryIds != null && layers.rows.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
       throw new InventoryError("revaluation requires access to every subsidiary holding this item");
     }
-    // Measure per owner while rewriting every layer onto standard cost.
-    const deltasByOwner = new Map<string, bigint>();
+    // Measure per owner AND stock location while rewriting every layer onto
+    // standard cost: each position revalues into its own location-stamped
+    // journal below, so location-sliced statements keep tying to the layers.
+    const deltasByOwner = new Map<string, { subsidiaryId: string; stockLocationId: string; delta: bigint }>();
     for (const layer of layers.rows) {
       const delta =
         toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
         toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
-      deltasByOwner.set(
-        layer.subsidiary_id,
-        (deltasByOwner.get(layer.subsidiary_id) ?? 0n) + delta,
-      );
+      const key = `${layer.subsidiary_id} ${layer.stock_location_id}`;
+      const slot = deltasByOwner.get(key) ?? { subsidiaryId: layer.subsidiary_id, stockLocationId: layer.stock_location_id, delta: 0n };
+      slot.delta += delta;
+      deltasByOwner.set(key, slot);
     }
-    const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
+    const changed = [...deltasByOwner.values()].filter((slot) => slot.delta !== 0n);
     const standardCost = p.standardCost;
     const memo = p.memo ?? "Costing method revaluation to standard";
     const repriceLayers = async () => {
@@ -719,7 +722,7 @@ export async function revalueOpenLayersToStandardCost(
         await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
           values(${orgId},'cost_layers',${layer.id},'update',jsonb_build_object(
             'reason',${memo}::text,'before',${layer.evidence}::jsonb,'after',${after.evidence}::jsonb,
-            'ownerRevaluationAmount',${fromUnits(deltasByOwner.get(layer.subsidiary_id) ?? 0n)}::text
+            'ownerRevaluationAmount',${fromUnits(deltasByOwner.get(`${layer.subsidiary_id} ${layer.stock_location_id}`)?.delta ?? 0n)}::text
           ),${actorId})`);
       }
     };
@@ -744,11 +747,11 @@ export async function revalueOpenLayersToStandardCost(
     const accountIds = [p.assetAccountId, p.varianceAccountId];
     await tx.execute(sql`select id from accounts where org_id=${orgId}
       and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
-    for (const [ownerSubsidiaryId] of changed) {
+    for (const slot of changed) {
       try {
         await validateSubsidiaryRestrictions(tx, {
-          orgId, ctx, docSubsidiaryId: ownerSubsidiaryId,
-          lines: accountIds.map((accountId) => ({ accountId, subsidiaryId: ownerSubsidiaryId, amount: "0" })),
+          orgId, ctx, docSubsidiaryId: slot.subsidiaryId,
+          lines: accountIds.map((accountId) => ({ accountId, subsidiaryId: slot.subsidiaryId, amount: "0" })),
         });
       } catch (error) {
         if (error instanceof SubsidiaryError) throw new InventoryError(error.message);
@@ -761,13 +764,19 @@ export async function revalueOpenLayersToStandardCost(
     const bookId = await primaryBookId(orgId, tx);
     await repriceLayers();
 
+    const locationDims = new Map<string, string | null>();
     const entryIds: string[] = [];
-    for (const [ownerSubsidiaryId, deltaUnits] of changed) {
-      const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
+    for (const slot of changed) {
+      const currency = await subsidiaryCurrency(orgId, slot.subsidiaryId, tx);
+      let locationId = locationDims.get(slot.stockLocationId);
+      if (locationId === undefined) {
+        locationId = await stockLocationDim(tx, orgId, slot.stockLocationId, null);
+        locationDims.set(slot.stockLocationId, locationId);
+      }
       entryIds.push(await postInventoryEntry(tx, {
         orgId,
         bookId,
-        subsidiaryId: ownerSubsidiaryId,
+        subsidiaryId: slot.subsidiaryId,
         actorId,
         currency,
         periodId,
@@ -775,10 +784,11 @@ export async function revalueOpenLayersToStandardCost(
         entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
         memo,
         lines: [
-          { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
+          { accountId: p.assetAccountId, amount: fromUnits(slot.delta), locationId, memo },
           {
             accountId: p.varianceAccountId,
-            amount: fromUnits(-deltaUnits),
+            amount: fromUnits(-slot.delta),
+            locationId,
             memo,
           },
         ],
@@ -1023,6 +1033,25 @@ interface JournalLineInput {
 
 type Runner = Pick<typeof db, "execute">;
 
+/**
+ * Business (GL-dimension) location behind a stock location. Direct inventory
+ * movements resolve this exactly like transferInventoryTx does, so every
+ * inventory-originated leg carries the location dimension and location-sliced
+ * statements tie to the subledger. An explicit caller location always wins; a
+ * stock location without a mapped business location stays unstamped.
+ */
+export async function stockLocationDim(
+  runner: SqlExecutor,
+  orgId: string,
+  stockLocationId: string,
+  explicit: string | null | undefined,
+): Promise<string | null> {
+  if (explicit) return explicit;
+  const r = await runner.execute<{ location_id: string | null }>(sql`
+    select location_id from stock_locations where org_id = ${orgId} and id = ${stockLocationId}`);
+  return r.rows[0]?.location_id ?? null;
+}
+
 async function assertInventoryAccountsPostable(
   tx: Runner,
   orgId: string,
@@ -1207,13 +1236,19 @@ export async function receiveInventory(
   const dims = {
     departmentId: input.departmentId ?? null,
     projectId: input.projectId ?? null,
-    locationId: input.locationId ?? null,
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
     await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    // The GL location dimension defaults to the receiving stock location's
+    // business location (transferInventoryTx resolves the same mapping), so
+    // location-sliced statements tie to the subledger. Explicit dims win.
+    const locDims = {
+      ...dims,
+      locationId: await stockLocationDim(tx, orgId, input.stockLocationId, input.locationId),
+    };
     // Costing policy is locked and re-read after the position lock. The
     // costing-policy writer takes the same profile lock before revaluing
     // layers, so a receipt cannot carry a stale pre-transaction policy.
@@ -1350,7 +1385,7 @@ export async function receiveInventory(
           {
             accountId: profile.assetAccountId,
             amount: assetDelta,
-            ...dims,
+            ...locDims,
             memo: input.memo,
           },
           ...(!isZero(correction)
@@ -1358,7 +1393,7 @@ export async function receiveInventory(
                 {
                   accountId: profile.cogsAccountId,
                   amount: correction,
-                  ...dims,
+                  ...locDims,
                   memo: "Negative inventory receipt cost true-up",
                 },
               ]
@@ -1368,7 +1403,7 @@ export async function receiveInventory(
                 {
                   accountId: profile.varianceAccountId!,
                   amount: variance,
-                  ...dims,
+                  ...locDims,
                   memo: "PPV",
                 },
               ]
@@ -1376,7 +1411,7 @@ export async function receiveInventory(
           {
             accountId: input.offsetAccountId!,
             amount: neg(offsetTotal),
-            ...dims,
+            ...locDims,
             memo: input.memo,
           },
         ]
@@ -1385,13 +1420,13 @@ export async function receiveInventory(
             {
               accountId: profile.cogsAccountId,
               amount: correction,
-              ...dims,
+              ...locDims,
               memo: "Negative inventory receipt cost true-up",
             },
             {
               accountId: profile.assetAccountId,
               amount: neg(correction),
-              ...dims,
+              ...locDims,
               memo: "Negative inventory receipt cost true-up",
             },
           ]
@@ -1528,13 +1563,18 @@ export async function issueInventory(
   const dims = {
     departmentId: input.departmentId ?? null,
     projectId: input.projectId ?? null,
-    locationId: input.locationId ?? null,
   };
 
   const apply = async (tx: Runner): Promise<MovementResult> => {
     await assertInventoryFeature(tx, orgId);
     const bookId = await primaryBookId(orgId, tx);
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    // Same location default as receipts: the issuing stock location's
+    // business location, so location-sliced statements tie to the subledger.
+    const locDims = {
+      ...dims,
+      locationId: await stockLocationDim(tx, orgId, input.stockLocationId, input.locationId),
+    };
     // Re-read the policy under the movement transaction's lock boundary so a
     // concurrent costing-policy revision cannot price this issue from stale
     // standard-cost or tracking settings.
@@ -1620,11 +1660,11 @@ export async function issueInventory(
       );
 
     const lines: JournalLineInput[] = [
-      { accountId: offset, amount: cost, ...dims, memo: input.memo },
+      { accountId: offset, amount: cost, ...locDims, memo: input.memo },
       {
         accountId: profile.assetAccountId,
         amount: neg(cost),
-        ...dims,
+        ...locDims,
         memo: input.memo,
       },
     ];
@@ -3261,10 +3301,15 @@ export async function buildAssembly(
       consumeLines.push({
         accountId: c.profile.assetAccountId,
         amount: neg(cost),
+        // Stamp the build's business location below (see buildLocationId).
         memo: "Assembly component",
       });
       perComponent.push({ itemId: c.itemId, cost, consumptions });
     }
+    // Builds name no explicit dims; the stock location's business location is
+    // the only honest attribution, matching receipts, issues and transfers.
+    const buildLocationId = await stockLocationDim(tx, orgId, input.stockLocationId, null);
+    for (const consumeLine of consumeLines) consumeLine.locationId = buildLocationId;
 
     // Standard costing values the finished good at ITS standard; the
     // difference to the consumed components' carried cost is a production
@@ -3283,6 +3328,7 @@ export async function buildAssembly(
       {
         accountId: assembly.assetAccountId,
         amount: fgValue,
+        locationId: buildLocationId,
         memo: input.memo ?? "Assembly build",
       },
       ...consumeLines,
@@ -3297,6 +3343,7 @@ export async function buildAssembly(
       lines.push({
         accountId: assembly.varianceAccountId,
         amount: buildVariance,
+        locationId: buildLocationId,
         memo: "Build variance",
       });
     }
@@ -4415,7 +4462,9 @@ async function settleReceivedBillLineVariance(
   const dims = {
     departmentId: line.departmentId,
     projectId: line.projectId,
-    locationId: line.locationId,
+    // Document lines without an explicit location inherit the received stock
+    // location, matching direct receipts.
+    locationId: await stockLocationDim(runner, orgId, line.stockLocationId, line.locationId),
   };
   await postInventoryEntry(runner, {
     orgId,
@@ -4668,7 +4717,9 @@ async function returnVendorCreditInventoryLine(
   const dims = {
     departmentId: line.departmentId,
     projectId: line.projectId,
-    locationId: line.locationId,
+    // A return without an explicit line location leaves from the received
+    // stock location, like the receipt it reverses.
+    locationId: await stockLocationDim(runner, orgId, line.stockLocationId, line.locationId),
   };
   const journalLines: JournalLineInput[] = [
     {
@@ -5362,13 +5413,30 @@ async function postInTransitReclass(
     const accountProblem = inventoryOffsetAccountProblem(amount.assetAccountId, inTransit, "in-transit");
     if (accountProblem) throw new InventoryError(accountProblem);
   }
+  // Asset legs stay at the endpoint stock location's business location so the
+  // location's inventory GL keeps tying to its layers; the in-transit legs
+  // share the transit location on both directions so they net to zero there.
+  const endpointDim =
+    p.direction === "ship"
+      ? await stockLocationDim(tx, p.orgId, p.order.from_stock_location_id, null)
+      : await stockLocationDim(tx, p.orgId, p.order.to_stock_location_id, null);
+  // Orders without any transit stock location keep the endpoint attribution
+  // rather than failing: resolveTransitLocation refuses those outright.
+  let transitDim: string | null = null;
+  try {
+    transitDim = await stockLocationDim(tx, p.orgId, await resolveTransitLocation(tx, p.orgId, p.order), null);
+  } catch {
+    transitDim = null;
+  }
+  transitDim ??= endpointDim;
   const lines: JournalLineInput[] =
     p.direction === "ship"
       ? [
-          { accountId: inTransit, amount: total, memo: "Goods in transit" },
+          { accountId: inTransit, amount: total, locationId: transitDim, memo: "Goods in transit" },
           ...amounts.map((a) => ({
             accountId: a.assetAccountId,
             amount: neg(a.value),
+            locationId: endpointDim,
             memo: a.memo,
           })),
         ]
@@ -5376,11 +5444,13 @@ async function postInTransitReclass(
           ...amounts.map((a) => ({
             accountId: a.assetAccountId,
             amount: a.value,
+            locationId: endpointDim,
             memo: a.memo,
           })),
           {
             accountId: inTransit,
             amount: neg(total),
+            locationId: transitDim,
             memo: "Goods received from transit",
           },
         ];
@@ -5882,20 +5952,29 @@ export async function postLandedCostVoucher(
           }
         }
       }
+      // Each target capitalizes at its own stock location, so each leg carries
+      // that stock location's business location — otherwise location-sliced
+      // statements could not tie a location's inventory GL to its layers.
+      const targetLocationId = await stockLocationDim(tx, orgId, r.target.stockLocationId, null);
       entryLines.push({
         accountId:
           r.profile.costingMethod === "standard"
             ? r.profile.varianceAccountId!
             : r.profile.assetAccountId,
         amount: shareAmount,
+        locationId: targetLocationId,
+        memo: input.memo ?? `Landed cost ${documentNumber}`,
+      });
+      // The freight offset splits across the same targets, so every leg of
+      // the entry stays location-stamped even for multi-location vouchers.
+      // Target shares apportion the voucher amount exactly, hence so do these.
+      entryLines.push({
+        accountId: input.freightAccountId,
+        amount: neg(shareAmount),
+        locationId: targetLocationId,
         memo: input.memo ?? `Landed cost ${documentNumber}`,
       });
     }
-    entryLines.push({
-      accountId: input.freightAccountId,
-      amount: neg(input.amount),
-      memo: input.memo ?? `Landed cost ${documentNumber}`,
-    });
 
     const entryId = await postInventoryEntry(tx, {
       orgId,
