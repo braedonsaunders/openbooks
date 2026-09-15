@@ -102,18 +102,6 @@ function isConflict(error: unknown): boolean {
   return error instanceof DocumentEditError && error.status === 409
 }
 
-function errorChainIncludes(error: unknown, pattern: RegExp): boolean {
-  let current: unknown = error
-  const seen = new Set<unknown>()
-  while (current && !seen.has(current)) {
-    seen.add(current)
-    if (current instanceof Error && pattern.test(current.message)) return true
-    current = typeof current === 'object' && current !== null && 'cause' in current
-      ? (current as { cause?: unknown }).cause
-      : null
-  }
-  return false
-}
 
 async function loadStoredDocument(orgId: string, id: string): Promise<StoredDocument> {
   const result = await withOrgContext(orgId, async () => db.execute<StoredDocument>(sql`
@@ -655,7 +643,12 @@ test(
         assert.notEqual(saved.updatedAt, opened.updatedAt)
       })
 
-      await t.test('a failed second replacement line rolls the entire edit back', async () => {
+      await t.test('an unknown replacement line account is refused before any edit write', async () => {
+        // The editor now verifies every line account against the tenant's
+        // chart before touching storage (a foreign account is a domain 404,
+        // never a foreign-key crash), so the failed-second-line scenario is
+        // refused up front; the assertions below still prove that nothing —
+        // header, revision or lines — was written.
         const opened = await loadStoredDocument(org.orgId, rollbackId)
         const invalidAccountId = randomUUID()
         await assert.rejects(
@@ -672,10 +665,10 @@ test(
             },
             editContext,
           )),
-          (error: unknown) => errorChainIncludes(
-            error,
-            /document_lines_account_id_fkey|violates foreign key constraint/,
-          ),
+          (error: unknown) =>
+            error instanceof DocumentEditError
+            && error.status === 404
+            && error.message === 'account not found in this organization',
         )
 
         const retained = await loadStoredDocument(org.orgId, rollbackId)
