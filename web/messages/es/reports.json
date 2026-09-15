@@ -196,6 +196,7 @@
     "openingCash": "Efectivo inicial",
     "closingCash": "Efectivo final",
     "netChange": "Variación neta de efectivo",
+    "fxEffect": "Efecto de las variaciones cambiarias sobre el efectivo",
     "empty": "No hay movimientos de efectivo en este período.",
     "sections": {
       "operating": "Actividades de operación",

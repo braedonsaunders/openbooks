@@ -196,6 +196,7 @@
     "openingCash": "Anfangsbestand Zahlungsmittel",
     "closingCash": "Endbestand Zahlungsmittel",
     "netChange": "Nettoveränderung der Zahlungsmittel",
+    "fxEffect": "Wechselkurseffekte auf den Zahlungsmittelbestand",
     "empty": "Keine Zahlungsmittelbewegungen in dieser Periode.",
     "sections": {
       "operating": "Betriebliche Tätigkeit",

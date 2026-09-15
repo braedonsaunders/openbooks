@@ -196,6 +196,7 @@
     "openingCash": "Caixa inicial",
     "closingCash": "Caixa final",
     "netChange": "Variação líquida do caixa",
+    "fxEffect": "Efeito das variações cambiais sobre o caixa",
     "empty": "Nenhuma movimentação de caixa neste período.",
     "sections": {
       "operating": "Atividades operacionais",

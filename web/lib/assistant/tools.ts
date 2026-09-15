@@ -770,6 +770,7 @@ const cashFlowTool: AssistantToolDef = {
           lines: s.lines.map((l) => ({ label: l.label, amount: money(l.amount) })),
         })),
         netChange: money(r.netChange),
+        fxEffectOnCash: money(r.fxEffectOnCash),
         openingCash: money(r.openingCash),
         closingCash: money(r.closingCash),
         reconciliationGap: money(r.reconciliationGap),

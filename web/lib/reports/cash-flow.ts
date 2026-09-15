@@ -50,6 +50,8 @@ export interface CashFlowLine {
 
 export interface CashFlowResult {
   sections: { section: CashFlowSection; lines: CashFlowLine[]; subtotal: ExactDecimal }[];
+  /** Translation effect on foreign-currency cash (usually zero). */
+  fxEffectOnCash: ExactDecimal;
   netChange: ExactDecimal;
   openingCash: ExactDecimal;
   closingCash: ExactDecimal;
@@ -105,6 +107,10 @@ export async function cashFlow(
   // Contra movements: non-bank lines on entries that also hit a bank account,
   // grouped by account type. `-sum(amount)` converts debit-signed line amounts
   // into their effect on cash (credit a contra → cash in → positive).
+  // Unrealized FX revaluation entries are excluded: restating a
+  // foreign-currency bank balance moves no cash, and their P&L contra leg
+  // would otherwise read as an operating receipt. Their bank legs surface
+  // below as the effect of exchange-rate changes on cash instead.
   const contra = (await reportDb.execute<{ type: string; cash_effect: string }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
@@ -115,6 +121,7 @@ export async function cashFlow(
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id = ${book}
+         and e.origin <> 'fx_revaluation'
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
     )
@@ -145,7 +152,22 @@ export async function cashFlow(
     const lines = bySection[section].sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
     return { section, lines, subtotal: decimalSum(lines.map((line) => line.amount)) };
   });
-  const netChange = decimalSum(sections.map((section) => section.subtotal));
+
+  // FX translation effect on foreign-currency cash balances: the bank legs of
+  // unrealized revaluation entries, kept out of the sections above.
+  const fx = (await reportDb.execute<{ effect: string }>(sql`
+    select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as effect
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+       and e.posting_date >= ${from} and e.posting_date <= ${to}
+       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+       and e.origin = 'fx_revaluation' and a.type = 'asset_bank' and ${dimWhere(dims)}
+  `));
+  const fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
+
+  const netChange = decimalSum([...sections.map((section) => section.subtotal), fxEffectOnCash]);
 
   // Opening/closing cash straight from the bank accounts, proving the tie-out.
   const cashBuckets = glSummaryEligibleDims(dims)
@@ -181,6 +203,7 @@ export async function cashFlow(
 
   return {
     sections,
+    fxEffectOnCash,
     netChange,
     openingCash,
     closingCash,

@@ -196,6 +196,7 @@
     "openingCash": "期首現金",
     "closingCash": "期末現金",
     "netChange": "現金の純増減",
+    "fxEffect": "為替変動による現金への影響",
     "empty": "この期間に現金の増減はありません。",
     "sections": {
       "operating": "営業活動",
