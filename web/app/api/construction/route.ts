@@ -366,7 +366,7 @@ export async function POST(req: Request) {
               String(billed.rows[0]?.amount ?? "0"),
             );
             await tx.execute(sql`
-              update sov_lines set scheduled_value = ${revisedValue}, updated_at = now(), updated_by = ${userId}
+              update sov_lines set scheduled_value = ${revisedValue}, change_order_id = ${body.id}, updated_at = now(), updated_by = ${userId}
                where id = ${row.target_sov_line_id} and org_id = ${orgId}
             `);
             sovLineId = row.target_sov_line_id;
