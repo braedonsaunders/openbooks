@@ -141,7 +141,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
     // 13-week billed-spend trend (posted vendor bills by week).
     db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
-             coalesce(sum(abs(d.total)), 0) as spend
+             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as spend
         from documents d
        where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
          and d.voided_at is null${docScope}
@@ -158,12 +158,12 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
-        (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
+        (select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as paid_7d_value,
         ${expensesOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
           and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
-        (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'vendor_bill'
+        (select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'vendor_bill'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago30}) as spend_30d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
