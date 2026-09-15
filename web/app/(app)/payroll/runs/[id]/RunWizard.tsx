@@ -39,6 +39,7 @@ import { PagedTable, type PagedColumn } from '../../../../../components/paged-ta
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 import { SeparationIssuePanel } from '../../_ui/filing-workspace'
 import { BankFilePanel } from './BankFilePanel'
+import { decimalAbs, decimalAdd, decimalCmp, decimalNeg, decimalPercentChange, decimalSum } from '../../../../../lib/statement-format'
 
 export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
 
@@ -311,8 +312,7 @@ function statutory(stub: StubRow) {
 }
 
 function add(a?: string, b?: string): string {
-  const n = (Number(a ?? 0) || 0) + (Number(b ?? 0) || 0)
-  return n.toFixed(2)
+  return decimalAdd(a ?? '0', b ?? '0')
 }
 
 /**
@@ -1345,10 +1345,14 @@ function ReviewStep({
   const changeByEmployee = new Map(changes.map((c) => [c.employeePartyId, c]))
 
   const variance = (stub: StubRow): { percent: number; flagged: boolean } | null => {
-    const prev = Number(previousNet[stub.employee_party_id] ?? NaN)
-    if (!Number.isFinite(prev) || prev === 0) return null
-    const percent = ((Number(stub.net_pay) - prev) / prev) * 100
-    return { percent, flagged: Math.abs(percent) > VARIANCE_FLAG_PERCENT }
+    const prev = previousNet[stub.employee_party_id]
+    if (prev == null || decimalCmp(prev, '0') === 0) return null
+    const exactPercent = decimalPercentChange(stub.net_pay, prev)
+    if (exactPercent === null) return null
+    return {
+      percent: Number(exactPercent),
+      flagged: decimalCmp(decimalAbs(exactPercent), `${VARIANCE_FLAG_PERCENT}.0000`) > 0,
+    }
   }
 
   const flagged = stubs.filter((stub) => variance(stub)?.flagged)
@@ -1357,7 +1361,7 @@ function ReviewStep({
   // expects, so it can never be a silent difference between two stubs.
   const protectionShortfalls = stubs
     .map((stub) => ({ stub, amount: stub.factors?.PROT_SHORT ?? '0' }))
-    .filter((entry) => Number(entry.amount) > 0)
+    .filter((entry) => decimalCmp(entry.amount, '0') > 0)
   const allSelected = stubs.length > 0 && stubs.every((s) => selected.has(s.employee_party_id))
   const toggle = (id: string) =>
     setSelected((current) => {
@@ -2022,9 +2026,9 @@ function GlStep({
     )
   }
 
-  const debits = gl.legs.filter((leg) => Number(leg.amount) > 0)
-  const credits = gl.legs.filter((leg) => Number(leg.amount) < 0)
-  const creditTotal = credits.reduce((sum, leg) => sum + Math.abs(Number(leg.amount)), 0)
+  const debits = gl.legs.filter((leg) => decimalCmp(leg.amount, '0') > 0)
+  const credits = gl.legs.filter((leg) => decimalCmp(leg.amount, '0') < 0)
+  const creditTotal = decimalNeg(decimalSum(credits.map((leg) => leg.amount)))
 
   const legRows = (legs: GlLeg[], negate: boolean) =>
     legs.map((leg, index) => (
@@ -2042,7 +2046,7 @@ function GlStep({
           {negate ? '' : fmt(leg.amount)}
         </TableCell>
         <TableCell className="text-right tabular-nums">
-          {negate ? fmt(Math.abs(Number(leg.amount))) : ''}
+          {negate ? fmt(decimalAbs(leg.amount)) : ''}
         </TableCell>
       </TableRow>
     ))
@@ -2085,11 +2089,11 @@ function GlStep({
               { key: 'description', header: t('wizard.gl.description'), cell: (leg) => leg.description },
               {
                 key: 'debit', header: t('wizard.gl.debits'), align: 'right',
-                cell: (leg) => (Number(leg.amount) > 0 ? fmt(leg.amount) : ''),
+                cell: (leg) => (decimalCmp(leg.amount, '0') > 0 ? fmt(leg.amount) : ''),
               },
               {
                 key: 'credit', header: t('wizard.gl.credits'), align: 'right',
-                cell: (leg) => (Number(leg.amount) < 0 ? fmt(Math.abs(Number(leg.amount))) : ''),
+                cell: (leg) => (decimalCmp(leg.amount, '0') < 0 ? fmt(decimalAbs(leg.amount)) : ''),
               },
             ] as PagedColumn<GlLeg>[])}
             pageSize={25}
@@ -2414,7 +2418,7 @@ function FinishStep({
                 },
                 {
                   key: 'amount', header: t('wizard.finish.amount'), align: 'right',
-                  cell: (row) => fmt(Math.abs(Number(row.amount))),
+                  cell: (row) => fmt(decimalAbs(row.amount)),
                 },
               ] as PagedColumn<RemittanceRow>[])}
               pageSize={15}
