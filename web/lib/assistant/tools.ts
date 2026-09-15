@@ -523,7 +523,13 @@ const findParties: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { query?: string; includeInactive?: boolean; limit?: number };
     const limit = Math.min(a.limit ?? 20, 50);
-    let where = sql`org_id = ${authz.user.orgId} and ${a.includeInactive ? sql`true` : sql`is_active`}`;
+    // Party directory visibility follows the primary subsidiary assignment;
+    // org-wide master records with a null assignment remain visible. Without
+    // this predicate a restricted caller can enumerate hidden party names and
+    // contact data even though the UI directory hides them.
+    let where = sql`org_id = ${authz.user.orgId}
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+      and ${a.includeInactive ? sql`true` : sql`is_active`}`;
     if (a.query) {
       const like = `%${a.query}%`;
       where = sql`${where} and (display_name ilike ${like} or short_code ilike ${like} or email ilike ${like})`;
