@@ -560,11 +560,18 @@ function exactMoney(value: unknown): string | null {
 function exactUnitPrice(value: unknown): string | null {
   const exact = canonicalDecimal(value, 8)
   if (exact === null) return null
+  // Twenty whole digits fit numeric(28,8); anything wider dies in Postgres.
+  if (wholeDigits(exact) > 20) return null
   try {
     return normalizeDecimal(exact, 8)
   } catch {
     return null
   }
+}
+
+/** Whole-digit width of a canonical decimal, for column-range guards. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 /** A validation/period failure with the HTTP status the callers should return. */
@@ -680,10 +687,21 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
     if (l.amount === undefined || l.amount === null || String(l.amount).trim() === '') {
       throw new DocumentEditError(422, `Line ${n}: an amount is required`)
     }
-    if (exactMoney(l.amount) === null) {
+    const exactAmount = exactMoney(l.amount)
+    if (exactAmount === null) {
       throw new DocumentEditError(
         422,
         `Line ${n}: "${l.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places`,
+      )
+    }
+    // document_lines.amount is numeric(19,4): fifteen whole digits. The
+    // format check above admits any magnitude, so a pasted 16-digit figure
+    // died in Postgres with a storage error (a 500). Refuse it here with
+    // the line number.
+    if (wholeDigits(exactAmount) > 15) {
+      throw new DocumentEditError(
+        422,
+        `Line ${n}: amount is out of range — at most 15 whole digits fit the ledger`,
       )
     }
     // Quantity is informational beside the amount, but it persists into the
