@@ -118,3 +118,27 @@ test('GST34 without a registration prints a blank business number, not zeros', (
   const html = renderTaxFormFacsimileBody(result({ registrationNumber: null }), { orgName: 'Example Organization' })
   assert.doesNotMatch(html, /00000 0000 000000/)
 })
+
+test('GST34 unsigned lines never hide a negative sign', () => {
+  // Net refunds can drive an unsigned line (sales base, collected tax, their
+  // subtotal) negative, and the API accepts negative adjustments — the
+  // bespoke renderer must surface the sign like the generic path does, never
+  // collapse it to the absolute value. Only the NET TAX balance line keeps
+  // the CRA minus-box convention.
+  const r = result({
+    boxes: [
+      { lineCode: '101', label: 'Sales and other revenue', value: '-50.0000', computed: false, editable: false, pdfField: null },
+      { lineCode: '103', label: 'GST/HST collected', value: '-6.5000', computed: false, editable: false, pdfField: null },
+      { lineCode: '105', label: 'Total GST/HST and adjustments', value: '-56.5000', computed: true, editable: false, pdfField: null },
+      { lineCode: '109', label: 'Net tax', value: '-10.0000', computed: true, editable: false, pdfField: null },
+    ],
+  })
+  const html = renderTaxFormFacsimileBody(r, { orgName: 'Example Organization' })
+  assert.match(html, /\(50\.00\)/)
+  assert.match(html, /\(6\.50\)/)
+  assert.match(html, /\(56\.50\)/)
+  assert.doesNotMatch(html, />50\.00</)
+  assert.doesNotMatch(html, />56\.50</)
+  // The balance line still uses the CRA minus box, not parentheses.
+  assert.match(html, /&minus;/)
+})
