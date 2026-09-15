@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Equipment units                                                     */
@@ -44,6 +45,10 @@ function equipmentFilterPredicate(clause: FilterClause): SQL | null {
     : clause.key === 'charge_item_id' ? sql`eu.charge_item_id`
       : clause.key === 'fixed_asset_id' ? sql`eu.fixed_asset_id` : null
   if (!column) return null
+  if (clause.key !== 'status') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
+  }
   if (clause.operator === 'eq') return sql`${column} = ${value}`
   if (clause.operator === 'ne') return sql`${column} <> ${value}`
   return null
