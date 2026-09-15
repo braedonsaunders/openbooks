@@ -1522,6 +1522,13 @@ export async function handleProviderWebhook(
  * (journal_entry_id is null) — the crash-between-claim-and-finalize window.
  * Without it, collected money would strand as unbookable forever and the
  * customer's retry would mint a second charge.
+ *
+ * The same exception covers succeeded-after-refund: a chargeback that beat
+ * its settlement event claims the initiated attempt as refunded, and the
+ * real settlement event landing afterwards must still book the receipt
+ * (the clawback audit note stays for the controller to reverse against).
+ * Deduping it instead strands a collected payment with no journal, no
+ * recovery path, and a 200 to the provider.
  */
 export const CLAIMABLE_FROM: Record<WebhookEvent["status"], string[]> = {
   succeeded: ["initiated"],
@@ -1654,7 +1661,10 @@ async function processWebhookEvent(
   // row is reclaimable by another succeeded event: settleAttempt resumes
   // exactly-once (reusing any reserved receipt draft, minting one when the
   // crash preceded the reservation). A fully settled attempt — journal entry
-  // written — stays terminal. The conditional update is also the resume lock:
+  // written — stays terminal. The same reclaim covers a succeeded event
+  // landing after a chargeback that beat it (refunded, journal unset): the
+  // collection is still real money and must book, with the clawback note
+  // left for the controller. The conditional update is also the resume lock:
   // concurrent resumers serialize on the row lock for the whole settlement,
   // and the loser rechecks journal_entry_id after the winner commits.
   const claimableFrom = CLAIMABLE_FROM[event.status];
@@ -1668,7 +1678,7 @@ async function processWebhookEvent(
              updated_at = now()
        where id = ${found.id} and org_id = ${orgId}
          and (status in (${sql.join(claimableFrom.map((s) => sql`${s}`), sql`, `)})
-              ${event.status === "succeeded" ? sql`or (status = 'succeeded' and journal_entry_id is null)` : sql``})
+              ${event.status === "succeeded" ? sql`or (status in ('succeeded', 'refunded') and journal_entry_id is null)` : sql``})
        returning id
     `));
   } catch (err) {
