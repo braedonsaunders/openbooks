@@ -871,3 +871,77 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
     await dropScratchOrgReporting(f.orgId);
   }
 });
+
+test("save-rate rejects an impossible calendar date with a field error, not a driver error", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const res = await POST(postRequest(saveRateBody({ effectiveFrom: "2026-02-30" })));
+    assert.equal(res.status, 422);
+    const body = await res.json() as { error: string };
+    // Exact documented client error — Drizzle's driver-error wrapper also
+    // names the "effectiveFrom" column alias, so a substring match cannot
+    // distinguish the two.
+    assert.equal(body.error, "effectiveFrom (YYYY-MM-DD) required");
+    assert.deepEqual(await storedRates(f.orgId), []);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("end-rate rejects an impossible calendar date with a field error, not a driver error", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const saved = await POST(postRequest(saveRateBody()));
+    assert.equal(saved.status, 200);
+    const rateId = (await storedRates(f.orgId))[0]!.id;
+    const res = await POST(postRequest({ action: "end-rate", id: rateId, effectiveTo: "2026-02-30" }));
+    assert.equal(res.status, 422);
+    const body = await res.json() as { error: string };
+    assert.equal(body.error, "invalid effectiveTo");
+    assert.equal((await storedRates(f.orgId))[0]!.effectiveTo, null);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("reconcile rejects an impossible calendar date with a 422, never a 500", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const put = await PUT(putRequest({
+      settings: { mode: "post", hoursPerDay: 8, annualHours: 2000, components: [] },
+      laborWip: f.wipAccount,
+      laborClearing: f.clearingAccount,
+      payrollVariance: f.varianceAccount,
+    }));
+    assert.equal(put.status, 200);
+    const res = await POST(postRequest({
+      action: "reconcile", periodStart: "2026-02-30", periodEnd: "2026-03-31", subsidiaryId: f.subsidiaryId,
+    }));
+    assert.equal(res.status, 422);
+    const body = await res.json() as { error: string };
+    assert.match(body.error, /periodStart\/periodEnd/);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
