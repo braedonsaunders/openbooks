@@ -154,9 +154,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   let custom: Record<string, unknown> | undefined
   if (body.custom !== undefined) {
-    const validated = validateCustomValues(await loadFieldDefs('accounts'), body.custom)
+    // PATCH custom values are partial: validate the effective bag so an
+    // omitted required field can be satisfied by its stored value. Keep
+    // unknown/system keys intact while applying the cleaned submitted
+    // values, matching the shared entity-writer contract. The OCC guard on
+    // updated_at below rejects the write if a concurrent edit moved the
+    // stored bag after this read.
+    const existingCustom =
+      existing.custom && typeof existing.custom === 'object'
+        ? (existing.custom as Record<string, unknown>)
+        : {}
+    const validated = validateCustomValues(await loadFieldDefs('accounts'), { ...existingCustom, ...body.custom })
     if (!validated.ok) return bad('invalid_custom_fields', 'custom')
-    custom = validated.cleaned
+    custom = { ...existingCustom, ...validated.cleaned }
   }
 
   try {
