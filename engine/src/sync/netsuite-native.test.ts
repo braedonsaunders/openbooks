@@ -815,6 +815,7 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
       timeEntryFieldTicketNumberField: "custcol_field_ticket",
       projectStatuses: { "substantially complete": "substantially_complete" },
       projectBillingTypes: undefined,
+      taxCodeFallbacks: undefined,
     },
   );
   assert.throws(
