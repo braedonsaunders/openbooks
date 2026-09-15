@@ -190,6 +190,48 @@ test("a failed action releases its claim so a retry resumes from it", { skip: !D
   });
 });
 
+test("a checkpoint orphaned before its side effect is retried", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const run = await createRun(org.orgId, actors.submitterId);
+    const effectKey = `${run.flowId}:action:notify_1`;
+    // A process can die after the claim INSERT commits but before the
+    // notification is persisted. The empty detail is the durable marker for
+    // that in-flight (not completed) checkpoint.
+    await db.execute(sql`
+      insert into flow_run_effects (org_id, run_id, effect_key)
+      values (${org.orgId}, ${run.runId}, ${effectKey})
+    `);
+
+    const params = {
+      flow: { id: run.flowId, name: "Orphan probe", subjectKind: "vendor_bill", graph: {} },
+      runId: run.runId,
+      subjectId: run.subjectId,
+      plan: notifyPlan([{ type: "user", userId: actors.approver1Id }]),
+      evalCtx: { values: {}, rows: {} },
+    };
+    const results = await Promise.all([
+      executeFlowPlan({ orgId: org.orgId }, adapter, params),
+      executeFlowPlan({ orgId: org.orgId }, adapter, params),
+    ]);
+
+    assert.ok(results.every((result) => result.failed.length === 0));
+    assert.equal(
+      results.reduce((count, result) => count + result.completed.length, 0),
+      1,
+      "the orphaned effect is retried by exactly one concurrent execution",
+    );
+    assert.equal(
+      await countRows(sql`select count(*) as n from notifications where org_id = ${org.orgId} and kind = 'flow'`),
+      1,
+      "the resumed effect persists its notification",
+    );
+    const checkpoint = (await db.execute<{ detail: Record<string, unknown> }>(sql`
+      select detail from flow_run_effects where run_id = ${run.runId} and effect_key = ${effectKey}
+    `)).rows[0]!;
+    assert.equal(checkpoint.detail.action, "notify", "the retried checkpoint is completed");
+  });
+});
+
 test("two concurrent executions of one run create a gate's approval notifications once", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     const run = await createRun(org.orgId, actors.submitterId);

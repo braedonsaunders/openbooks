@@ -8,7 +8,7 @@ import {
   type GateData,
 } from "@openbooks/forms-core";
 import { businessToday } from "../business-date.ts";
-import { db, schema } from "../db.ts";
+import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter } from "./types.ts";
 import {
   resolveAssigneeUsers,
@@ -30,13 +30,12 @@ import { loadRequiredControlAccounts } from "../control-accounts.ts";
  *   • Checkpoints live in flow_run_effects keyed `${flowId}:action:${nodeId}`
  *     — re-executing a run
  *     (a resume after a gate, or a retry after a failure) skips completed
- *     effects instead of double-sending. A checkpoint is CLAIMED with an
- *     atomic INSERT … ON CONFLICT DO NOTHING RETURNING before its side
- *     effect runs, so two concurrent executions of one run can never both
- *     fire the same notification/email/gate — exactly one claim wins; the
- *     loser sees zero returned rows and skips the node. On failure the claim
- *     is released (no checkpoint is left behind — unchanged semantics: a
- *     failed node leaves no effect row, so retries resume from it).
+ *     effects instead of double-sending. A checkpoint and its side effect are
+ *     committed in one transaction: two concurrent executions of one run
+ *     cannot both fire the same notification/email/gate, and a process death
+ *     before completion rolls the claim back (or leaves an empty orphan that
+ *     the next attempt row-locks and replays). On failure the transaction
+ *     rolls back, so retries resume from the failed node.
  *   • Emails are DEFERRED through the durable scheduler_outbox, never handed
  *     to Redis inline. The outbox row is written through whatever database
  *     transaction the caller owns, so a rolled-back business unit (void
@@ -102,10 +101,15 @@ export async function executeFlowPlan(
   const completedEffects = new Set<string>();
   {
     const rows = await db
-      .select({ effectKey: schema.flowRunEffects.effectKey })
+      .select({ effectKey: schema.flowRunEffects.effectKey, detail: schema.flowRunEffects.detail })
       .from(schema.flowRunEffects)
       .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.orgId, ctx.orgId)));
-    for (const row of rows) completedEffects.add(row.effectKey);
+    // A claim is inserted before its side effect. An empty detail therefore
+    // means the process may have died in that gap, not that the effect is
+    // complete; only a stamped outcome suppresses a resumed attempt.
+    for (const row of rows) {
+      if (row.detail && Object.keys(row.detail).length > 0) completedEffects.add(row.effectKey);
+    }
   }
 
   // Atomically CLAIM a checkpoint BEFORE performing its side effect. The
@@ -118,16 +122,17 @@ export async function executeFlowPlan(
       .values({ orgId: ctx.orgId, runId, effectKey })
       .onConflictDoNothing()
       .returning({ effectKey: schema.flowRunEffects.effectKey });
-    return claimed.length > 0;
-  };
-
-  // Failure semantics unchanged: a failed node leaves NO checkpoint behind,
-  // so a future retry re-runs it. If even the release fails, the lingering
-  // claim fails that node closed on retries (logged for operators).
-  const releaseEffect = async (effectKey: string): Promise<void> => {
-    await db
-      .delete(schema.flowRunEffects)
-      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)));
+    if (claimed.length > 0) return true;
+    // A committed empty row is an orphaned claim from a crashed attempt. Lock
+    // it while this transaction replays the side effect. A concurrent retry
+    // waits here; after the winner stamps detail it observes a completed row
+    // and skips, while a rolled-back winner leaves the row retryable.
+    const [existing] = await db
+      .select({ detail: schema.flowRunEffects.detail })
+      .from(schema.flowRunEffects)
+      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)))
+      .for("update");
+    return Boolean(existing && Object.keys(existing.detail ?? {}).length === 0);
   };
 
   // Stamp the outcome onto the already-claimed checkpoint (never inserts).
@@ -136,8 +141,16 @@ export async function executeFlowPlan(
       .update(schema.flowRunEffects)
       .set({ detail })
       .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)));
-    completedEffects.add(effectKey);
   };
+
+  // Every claim and its database side effect share one transaction. When the
+  // caller already owns a larger unit, the savepoint rolls back only this
+  // effect on failure so the flow can record the failure without poisoning the
+  // caller's transaction. A hard process kill rolls back the transaction and
+  // leaves no claim; a previously committed orphan is row-locked by
+  // claimEffect and safely replayed.
+  const runEffectTransaction = async <T>(fn: () => Promise<T>): Promise<T> =>
+    withOrgTransaction(ctx.orgId, () => withTransactionSavepoint(db, fn));
 
   const brand = await orgName(ctx.orgId);
 
@@ -314,23 +327,23 @@ export async function executeFlowPlan(
   for (const { nodeId, action } of plan.actionNodes) {
     const effectKey = `${flow.id}:action:${nodeId}`;
     if (completedEffects.has(effectKey)) continue;
-    // Claim before acting — a racing execution of this run gets zero rows
-    // and skips, so the effect fires exactly once.
-    if (!(await claimEffect(effectKey))) continue;
     try {
-      const desc = await runAction(nodeId, action);
-      completed.push(desc);
-      if (!completedEffects.has(effectKey)) {
+      // Claim before acting — a racing execution of this run waits on the
+      // winner's transaction and then gets zero rows, so the effect fires
+      // exactly once.
+      const outcome = await runEffectTransaction(async () => {
+        if (!(await claimEffect(effectKey))) return { claimed: false, desc: "" };
+        const desc = await runAction(nodeId, action);
         await markEffectComplete(effectKey, { action: action.action, detail: desc });
-      }
+        return { claimed: true, desc };
+      });
+      if (!outcome.claimed) continue;
+      completedEffects.add(effectKey);
+      completed.push(outcome.desc);
     } catch (e) {
-      // defined semantics: record the failure and STOP the chain — later
-      // actions likely depend on this one; effects allow resuming here.
-      try {
-        await releaseEffect(effectKey);
-      } catch (releaseError) {
-        console.error(`[flows] effect claim release failed for ${effectKey} (run ${runId}):`, releaseError);
-      }
+      // The effect transaction/savepoint rolled back the claim and any
+      // partial side effect. Record the failure and STOP the chain — later
+      // actions likely depend on this one; a retry can claim it again.
       const reason = e instanceof Error ? e.message : String(e);
       failed.push(`${action.action} (${reason})`);
       break;
@@ -344,27 +357,29 @@ export async function executeFlowPlan(
     for (const { nodeId, gate } of plan.gates) {
       const effectKey = `${flow.id}:gate:${nodeId}`;
       if (completedEffects.has(effectKey)) continue;
-      if (!(await claimEffect(effectKey))) continue;
       try {
-        const n = await createGate(ctx, adapter, {
-          flow,
-          runId,
-          subjectId,
-          nodeId,
-          gate,
-          evalCtx,
-          submitterUserId: params.submitterUserId,
-          brand,
+        const outcome = await runEffectTransaction(async () => {
+          if (!(await claimEffect(effectKey))) return { claimed: false, count: 0 };
+          const count = await createGate(ctx, adapter, {
+            flow,
+            runId,
+            subjectId,
+            nodeId,
+            gate,
+            evalCtx,
+            submitterUserId: params.submitterUserId,
+            brand,
+          });
+          await markEffectComplete(effectKey, { gate: gate.title, assignees: count });
+          return { claimed: true, count };
         });
-        gatesCreated += n;
-        await markEffectComplete(effectKey, { gate: gate.title, assignees: n });
-        completed.push(`gate "${gate.title}"→${n}`);
+        if (!outcome.claimed) continue;
+        completedEffects.add(effectKey);
+        gatesCreated += outcome.count;
+        completed.push(`gate "${gate.title}"→${outcome.count}`);
       } catch (e) {
-        try {
-          await releaseEffect(effectKey);
-        } catch (releaseError) {
-          console.error(`[flows] effect claim release failed for ${effectKey} (run ${runId}):`, releaseError);
-        }
+        // The effect transaction/savepoint rolled back the claim and any
+        // partial gate fan-out; a retry can claim it again.
         const reason = e instanceof Error ? e.message : String(e);
         failed.push(`gate (${reason})`);
         break;
