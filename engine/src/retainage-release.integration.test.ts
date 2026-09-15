@@ -77,6 +77,36 @@ test("reversed retainage is not available for release", enabled, async () => fix
   await assert.rejects(release("1"), /exceeds available retained funds/);
 }));
 
+for (const invalidity of ["inactive", "summary"] as const) {
+  test(`retainage release refuses ${invalidity} control account without creating an invoice`, enabled, async () => fixture(async ({ org, hold, release }) => {
+    let controlAccount = org.accounts.invAsset;
+    if (invalidity === "inactive") {
+      await hold();
+    } else {
+      controlAccount = randomUUID();
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${controlAccount}, ${org.orgId}, '1399', 'Summary retainage control', 'asset_current_other', true, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
+      `);
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{controlAccounts,retainageReceivable}', to_jsonb(${controlAccount}::text))
+        where id = ${org.orgId}
+      `);
+    }
+    const before = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from documents where org_id = ${org.orgId}
+    `)).rows[0]!.count;
+    if (invalidity === "inactive") {
+      await db.execute(sql`update accounts set is_active = false where org_id = ${org.orgId} and id = ${controlAccount}`);
+    }
+    await assert.rejects(release("50"), /No Retainage Receivable control account is configured/);
+    const after = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from documents where org_id = ${org.orgId}
+    `)).rows[0]!.count;
+    assert.equal(after, before, "invalid control account must not create a release invoice");
+  }));
+}
+
 test("pending releases with a changed currency fail closed", enabled, async () => fixture(async ({ org, hold, release }) => {
   await hold();
   const first = await release("25");

@@ -258,6 +258,8 @@ async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promi
       from orgs o
       join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
                      and a.org_id = o.id
+                     and a.is_active
+                     and not a.is_summary
      where o.id = ${orgId}
   `));
   return r.rows[0]?.acct ?? null;
