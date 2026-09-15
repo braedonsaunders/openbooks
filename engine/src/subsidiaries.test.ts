@@ -6,6 +6,7 @@ import { add, mulRate } from "./money.ts";
 import {
   intercompanyBalancingLegs,
   SubsidiaryError,
+  validateSubsidiaryRestrictions,
   type SubLine,
   type SubsidiaryContext,
 } from "./subsidiaries.ts";
@@ -69,6 +70,43 @@ async function balancingLegs(lines: SubLine[]) {
     lines,
   });
 }
+
+test("posting refuses a line party outside that line's subsidiary", async () => {
+  const linePartyId = randomUUID();
+  let calls = 0;
+  const runner = {
+    execute: async () => {
+      calls += 1;
+      if (calls === 1) return { rows: [] };
+      return {
+        rows: [{
+          id: linePartyId,
+          name: "Root-only customer",
+          subsidiaryId: originSubId,
+          extra: [],
+        }],
+      };
+    },
+  } as unknown as Pick<typeof db, "execute">;
+
+  await assert.rejects(
+    validateSubsidiaryRestrictions(runner, {
+      orgId: randomUUID(),
+      ctx,
+      docSubsidiaryId: originSubId,
+      lines: [{
+        accountId: randomUUID(),
+        amount: "10.0000",
+        subsidiaryId: counterSubId,
+        partyId: linePartyId,
+      }],
+    }),
+    (error: unknown) =>
+      error instanceof SubsidiaryError &&
+      /Root-only customer/.test(error.message) &&
+      /Counter/.test(error.message),
+  );
+});
 
 test("intercompany balancing blends differing subsidiary FX rates", async () => {
   const legs = await balancingLegs([
