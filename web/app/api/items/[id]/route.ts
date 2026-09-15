@@ -264,12 +264,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   // -- custom fields -------------------------------------------------------
   let cleanedCustom: Record<string, unknown> | null = null
-  if (body.custom !== undefined) {
-    const defs = await loadFieldDefs('items')
-    const v = validateCustomValues(defs, body.custom)
-    if (!v.ok) return bad(Object.values(v.errors)[0]!, v.errors)
-    cleanedCustom = v.cleaned
-  }
 
   const reason = strOrNull(body.reason ?? body.changeReason)
 
@@ -283,6 +277,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       `)
       const before = locked.rows[0]
       if (!before) throw new PatchNotFound()
+
+      if (body.custom !== undefined) {
+        const defs = await loadFieldDefs('items')
+        // PATCH custom values are partial: validate the effective bag so an
+        // omitted required field can be satisfied by its stored value. Keep
+        // unknown/system keys intact while applying the cleaned submitted
+        // values, matching the shared entity-writer contract.
+        const existingCustom =
+          before.custom && typeof before.custom === 'object'
+            ? (before.custom as Record<string, unknown>)
+            : {}
+        const v = validateCustomValues(defs, { ...existingCustom, ...body.custom })
+        if (!v.ok) throw new PatchInvalid(Object.values(v.errors)[0]!)
+        cleanedCustom = { ...existingCustom, ...v.cleaned }
+      }
 
       if (bodyTouchesRevenueRecognition(body) && !(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
         throw new PatchNotFound()
