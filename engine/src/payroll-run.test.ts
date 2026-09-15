@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, env } from './db.ts'
-import { allocateProportionally, createPayRun } from './payroll-run.ts'
+import { allocateProportionally, calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from './payroll-run.ts'
+import { createRetroPayRun, proposeRetroPay } from './payroll-retro-store.ts'
 import { PayrollError } from './payroll-error.ts'
 import { abs, add, cmp, div, neg, sum } from './money.ts'
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from './test-fixtures.ts'
@@ -89,6 +90,227 @@ test('allocateProportionally refuses a sub-cent amount instead of misallocating 
 })
 
 const DB = !!env.OPENBOOKS_DB_URL
+
+/* Calculation-path pins: one minimal hourly fixture serves the run-type,
+// pay-rate, and net-pay guards below. A second salaried employee covers the
+// unusable-rate refusal. */
+async function hourlyCalcFixture(label: string, days: { workedOn: string; hours: string }[]) {
+  const org = await createScratchOrg()
+  const actorId = (await seedFlowActors(org.orgId)).adminId
+  const account = async (number: string, name: string, type: string) => {
+    const id = randomUUID()
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                            reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+              '[]'::jsonb, '{}'::jsonb, true)`)
+    return id
+  }
+  const wageExpense = await account('6000', 'Wages expense', 'expense')
+  const netPayable = await account('2300', 'Wages payable', 'liability_current')
+  const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
+  await db.execute(sql`
+    update orgs set settings = settings || ${JSON.stringify({
+      payroll: {
+        wageExpenseAccountId: wageExpense,
+        netPayAccountId: netPayable,
+        cppPayableAccountId: craPayable,
+        eiPayableAccountId: craPayable,
+        taxPayableAccountId: craPayable,
+        wagesTo: 'expense',
+      },
+    })}::jsonb where id = ${org.orgId}`)
+  await seedPayrollComponents(org.orgId, actorId, 'CA')
+  const scheduleId = randomUUID()
+  await db.execute(sql`
+    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                               pay_date_offset_days, is_active, created_by, updated_by)
+    values (${scheduleId}, ${org.orgId}, ${`${label} Schedule`}, 'biweekly', 26, '2026-07-18',
+            3, true, ${actorId}, ${actorId})`)
+  const employeeId = randomUUID()
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${employeeId}, ${org.orgId}, 'person', ${`${label} Employee`}, true, '{}'::jsonb)`)
+  await db.execute(sql`
+    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                  is_active, created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true,
+            ${actorId}, ${actorId})`)
+  await db.execute(sql`
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                           pay_basis, federal_claim_code, provincial_claim_code,
+                                           vacation_method, is_active, created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+            'accrue', true, ${actorId}, ${actorId})`)
+  for (const day of days) {
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                billing_status, costing_basis, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${day.workedOn}, ${day.hours}, 'approved', false,
+              'unbilled', 'actual', ${actorId}, ${actorId})`)
+  }
+  const run = await createPayRun({
+    orgId: org.orgId, actorId, payScheduleId: scheduleId,
+    periodStart: '2026-07-05', periodEnd: '2026-07-18',
+  })
+  return { orgId: org.orgId, actorId, employeeId, scheduleId, documentId: run.documentId }
+}
+
+test('a retro run settles quantified back pay; a regular run never does', { skip: !DB }, async () => {
+  // Run-type pin: only a retro run pulls quantified retro earnings onto the
+  // stub (CA taxes them non-periodically, factor B). Treating a retro run as
+  // regular silently drops the back pay; treating a regular run as retro
+  // would pull another run's settlement onto this cheque.
+  const org = await createScratchOrg()
+  const actorId = (await seedFlowActors(org.orgId)).adminId
+  try {
+    const account = async (number: string, name: string, type: string) => {
+      const id = randomUUID()
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                              reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                '[]'::jsonb, '{}'::jsonb, true)`)
+      return id
+    }
+    const wageExpense = await account('6000', 'Wages expense', 'expense')
+    const netPayable = await account('2300', 'Wages payable', 'liability_current')
+    const craPayable = await account('2310', 'CRA remittances payable', 'liability_current')
+    const vacationPayable = await account('2320', 'Vacation payable', 'liability_current')
+    await db.execute(sql`
+      update orgs set settings = settings || ${JSON.stringify({
+        payroll: {
+          wageExpenseAccountId: wageExpense,
+          netPayAccountId: netPayable,
+          cppPayableAccountId: craPayable,
+          eiPayableAccountId: craPayable,
+          taxPayableAccountId: craPayable,
+          vacationPayableAccountId: vacationPayable,
+          wagesTo: 'expense',
+        },
+      })}::jsonb where id = ${org.orgId}`)
+    await seedPayrollComponents(org.orgId, actorId, 'CA')
+    const scheduleId = randomUUID()
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active, created_by, updated_by)
+      values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
+              ${actorId}, ${actorId})`)
+    const employeeId = randomUUID()
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employeeId}, ${org.orgId}, 'person', 'Retro Rita', true, '{}'::jsonb)`)
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                    effective_from, is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2025-06-01', true,
+              ${actorId}, ${actorId})`)
+    await db.execute(sql`
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                             pay_basis, federal_claim_code, provincial_claim_code,
+                                             vacation_percent, vacation_method, is_active,
+                                             created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+              '4', 'accrue', true, ${actorId}, ${actorId})`)
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                billing_status, costing_basis, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, '2026-01-06', '8', 'approved', false,
+              'unbilled', 'actual', ${actorId}, ${actorId})`)
+    const source = await createPayRun({
+      orgId: org.orgId, actorId, payScheduleId: scheduleId,
+      periodStart: '2026-01-05', periodEnd: '2026-01-18', payDate: '2026-01-21',
+    })
+    const first = await calculatePayRun({ orgId: org.orgId, documentId: source.documentId, actorId })
+    assert.deepEqual(first.errors, [])
+    assert.equal(first.gross, '240.0000', '8 h x $30.00')
+    await commitPayRun({ orgId: org.orgId, documentId: source.documentId, actorId })
+
+    // Backdated raise to $33.00/h over the paid period: 8 h x $3.00 = $24.00.
+    await db.execute(sql`
+      update labor_cost_rates set effective_to = '2025-12-31', updated_at = now()
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+         and effective_from = '2025-06-01'`)
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                    effective_from, is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, 'CAD', '33', 'hour', '2026-01-01', true,
+              ${actorId}, ${actorId})`)
+    const proposal = await proposeRetroPay({
+      orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: '2026-08-20',
+    })
+    assert.equal(proposal.payableTotal, '24.0000')
+    const retro = await createRetroPayRun({
+      orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: '2026-08-20',
+    })
+    const calculated = await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId })
+    assert.deepEqual(calculated.errors, [])
+    assert.equal(calculated.gross, '24.0000', 'the retro cheque IS the difference')
+    const stub = (await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
+      select gross, factors from pay_stubs
+       where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}`))
+    assert.equal(stub.rows[0]!.gross, '24.0000')
+    assert.equal(stub.rows[0]!.factors.B, '24.0000', 'CA taxes retro pay non-periodically')
+  } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+test('a fixed deduction larger than earnings fails the stub instead of paying negative', { skip: !DB }, async () => {
+  // Net-pay pin: $30.00 of earnings against a $250.00 assigned deduction must
+  // surface a per-employee negative-net error, never a negative cheque. Never
+  // refusing (the relaxed comparison) would persist and post a -$220 stub.
+  const f = await hourlyCalcFixture('Garnished', [{ workedOn: '2026-07-06', hours: '1' }])
+  try {
+    const componentId = randomUUID()
+    await db.execute(sql`
+      insert into pay_components (id, org_id, code, name, kind, is_active, created_by, updated_by)
+      values (${componentId}, ${f.orgId}, 'GARN', 'Garnishment', 'deduction', true,
+              ${f.actorId}, ${f.actorId})`)
+    await db.execute(sql`
+      insert into employee_pay_components (org_id, employee_party_id, component_id, value,
+                                           effective_from, is_active, created_by, updated_by)
+      values (${f.orgId}, ${f.employeeId}, ${componentId}, '250', '2026-01-01', true,
+              ${f.actorId}, ${f.actorId})`)
+    const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    assert.equal(calculated.errors.length, 1)
+    assert.match(calculated.errors[0]!.message, /net pay is negative/)
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
+
+test('a salaried employee holding only an hourly rate is refused before calculation', { skip: !DB }, async () => {
+  // Pay-rate pin: salary basis needs an annual rate. Calculating anyway would
+  // divide an hourly wage as if it were a salary (or crash on the missing
+  // annual figure); refusing the usable-rate gate the other way would block
+  // every correctly-rated run, which the passing calculations above already
+  // disprove on every run.
+  const f = await hourlyCalcFixture('Salaried', [])
+  try {
+    const employeeId = randomUUID()
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employeeId}, ${f.orgId}, 'person', 'Salaried Sam', true, '{}'::jsonb)`)
+    await db.execute(sql`
+      insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                    is_active, created_by, updated_by)
+      values (${f.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true,
+              ${f.actorId}, ${f.actorId})`)
+    await db.execute(sql`
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                             pay_basis, federal_claim_code, provincial_claim_code,
+                                             vacation_method, is_active, created_by, updated_by)
+      values (${f.orgId}, ${employeeId}, ${f.scheduleId}, 'ON', 'salary', 1, 1,
+              'accrue', true, ${f.actorId}, ${f.actorId})`)
+    const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
+    const refusal = calculated.errors.find((e) => e.employee === 'Salaried Sam')
+    assert.ok(refusal, 'the unusable rate is a per-employee calculation error')
+    assert.match(refusal!.message, /no annual labor cost rate/)
+  } finally {
+    await dropScratchOrgReporting(f.orgId)
+  }
+})
 
 test(
   'createPayRun enforces a restricted subsidiary scope inside its transaction',
