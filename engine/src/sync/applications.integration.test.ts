@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withOrgTransaction } from "../db.ts";
 import { reconcileApplications } from "./applications.ts";
 import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
 
@@ -636,6 +637,169 @@ test(
       const total = await db.execute<{ total: string }>(sql`
         select sum(amount)::text as total from applications where org_id = ${org.orgId}`);
       assert.equal(total.rows[0]!.total, "50.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a manual application that commits mid-mirror is honored, not double-settled",
+  { skip: !DB },
+  async () => {
+    // Two users at once: the connector mirror hydrates a 100 open payment
+    // and a 100 open invoice while a manual application for the same pair
+    // commits underneath it. The mirror must converge on the manual win —
+    // resolve cleanly with the pair already settled — never die on the
+    // open-item guard (losing the whole batch) and never double-settle.
+    const org = await createScratchOrg();
+    const paymentDocumentId = randomUUID();
+    const appliedDocumentId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const appliedEntryId = randomUUID();
+    const paymentLineId = randomUUID();
+    const appliedLineId = randomUUID();
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => { resolve = done; });
+      return { promise, resolve };
+    };
+    try {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-RACE',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 100, 0, 100, '{"sourceId":"payment-race"}'::jsonb),
+          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-RACE',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 100, 0, 100, '{"sourceId":"invoice-race"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-RACE', ${org.date}, ${org.periodId}, 'Race payment',
+           'draft', ${paymentDocumentId}, 'document'),
+          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-RACE', ${org.date}, ${org.periodId}, 'Race invoice',
+           'draft', ${appliedDocumentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${paymentLineId}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
+          (${appliedLineId}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (${paymentEntryId}, ${appliedEntryId})
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${paymentDocumentId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${appliedDocumentId}
+      `);
+
+      // The manual writer: inserts the full application, then holds its
+      // transaction open (and its endpoint row locks with it) until the
+      // mirror has demonstrably contended with it.
+      const inserted = deferred();
+      const release = deferred();
+      let manualPid = 0;
+      let manualError: unknown = null;
+      const manual = withOrgTransaction(org.orgId, async () => {
+        manualPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+        await db.execute(sql`
+          insert into applications
+            (org_id, from_line_id, to_line_id, amount, source_amount,
+             source_transaction_amount, source_transaction_currency,
+             target_transaction_amount, target_transaction_currency,
+             settlement_rate, settlement_rate_source, settlement_rate_reference,
+             applied_on)
+          values
+            (${org.orgId}, ${paymentLineId}, ${appliedLineId}, 100, 100,
+             100, 'CAD', 100, 'CAD', 1, 'same_currency', 'manual race edit',
+             ${org.date})
+        `);
+        inserted.resolve();
+        await release.promise;
+      }).then(
+        () => null,
+        (error: unknown) => {
+          manualError = error;
+          inserted.resolve();
+          release.resolve();
+          return error;
+        },
+      );
+
+      const mirror = reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-race", appliedRef: "invoice-race", amount: "100" },
+      ]).then(
+        (stats) => ({ ok: true as const, stats }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+      try {
+        await inserted.promise;
+        // The mirror cannot finish while the manual transaction holds the
+        // endpoints: it must arrive blocked on this backend, whether at its
+        // hydration-time endpoint lock or at its insert. Poll for that
+        // contention instead of sleeping a fixed amount.
+        let contended = false;
+        for (let attempt = 0; attempt < 150 && !contended; attempt++) {
+          const waiting = (await db.execute(sql`
+            select pid from pg_stat_activity
+             where datname = current_database()
+               and ${manualPid} = any(pg_blocking_pids(pid))
+          `)).rows;
+          contended = waiting.length > 0;
+          if (!contended) await delay(20);
+        }
+        assert.ok(contended, "the mirror must contend with the manual application");
+      } finally {
+        // Commit the manual win underneath the waiting mirror, then settle
+        // both sides before any fixture cleanup.
+        release.resolve();
+        await manual;
+      }
+      assert.equal(manualError, null);
+
+      const outcome = await mirror;
+      assert.equal(outcome.ok, true, outcome.ok ? "" : String(outcome.error));
+      assert.deepEqual(outcome.ok ? outcome.stats : null, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 1,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const settled = await db.execute<{ total: string; count: string }>(sql`
+        select sum(amount)::text as total, count(*)::text as count
+          from applications
+         where org_id = ${org.orgId} and unapplied_at is null`);
+      assert.deepEqual(settled.rows[0], { total: "100.0000", count: "1" });
     } finally {
       await dropScratchOrg(org.orgId);
     }
