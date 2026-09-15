@@ -27,6 +27,35 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
 }
 
 /**
+ * Origins posted as standalone GL-native journals with no subledger document:
+ * every engine that writes its own journal_entries rows without a source
+ * document must appear here or its journals vanish from the Journal list
+ * (reports still tie — the entries exist — but the audit trail does not show
+ * them). Entries posted from a subledger document (bills, invoices, payments,
+ * pay runs, …) live in their own module and stay out. The Journal page count
+ * consumes this same list; keep the two in sync by construction, not by copy.
+ */
+export const JOURNAL_GL_NATIVE_ORIGINS = [
+  "manual",
+  "closing",
+  "allocation",
+  "revaluation",
+  "fx_revaluation",
+  "labor_burden",
+  "payroll_variance",
+  "overhead_applied",
+  "depreciation",
+  "disposal",
+  "revenue_recognition",
+  "fx_settlement",
+  "translation",
+  "intercompany",
+  "inventory",
+  "lease",
+  "tax_provision",
+];
+
+/**
  * The journal list's backing relation: entries visible in the journal are the
  * union of (a) standalone engine journals by origin and (b) entries posted by
  * a journal-kind document. Both legs are index-driven ((org_id, origin,
@@ -36,7 +65,7 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
  */
 export const JOURNAL_ENTRY_TABLE = `(
   select je.* from journal_entries je
-   where je.origin in ('manual','closing','allocation','revaluation','labor_burden','depreciation','revenue_recognition','fx_settlement','translation')
+   where je.origin in (${JOURNAL_GL_NATIVE_ORIGINS.map((origin) => `'${origin}'`).join(",")})
   union
   select je.* from journal_entries je
     join documents jd on jd.posted_entry_id = je.id and jd.kind = 'journal' and jd.org_id = je.org_id
