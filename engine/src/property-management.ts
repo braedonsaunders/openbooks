@@ -280,7 +280,25 @@ export async function createManagedProperty(input: {
     }
     const scope = (await tx.execute<{ currency: string; location_ok: boolean; asset_ok: boolean; rent_account_ok: boolean; cam_account_ok: boolean; deposit_account_ok: boolean; bank_account_ok: boolean }>(sql`
       select s.base_currency as currency,
-        (${input.locationId ?? null}::uuid is null or exists(select 1 from locations where org_id=${input.orgId} and id=${input.locationId ?? null})) as location_ok,
+        (${input.locationId ?? null}::uuid is null or exists(
+          select 1 from locations l
+           where l.org_id=${input.orgId} and l.id=${input.locationId ?? null}
+             and (l.subsidiary_id is null or l.subsidiary_id=s.id or
+               (l.subsidiary_include_children and exists(
+                 with recursive ancestors(id) as (
+                   select s0.parent_id
+                     from subsidiaries s0
+                    where s0.org_id=${input.orgId} and s0.id=s.id
+                   union all
+                   select s0.parent_id
+                     from subsidiaries s0
+                     join ancestors a on a.id=s0.id
+                    where s0.org_id=${input.orgId}
+                 )
+                 select 1 from ancestors where id=l.subsidiary_id
+               ))
+             )
+        )) as location_ok,
         (${input.fixedAssetId ?? null}::uuid is null or exists(select 1 from fixed_assets where org_id=${input.orgId} and id=${input.fixedAssetId ?? null} and subsidiary_id=s.id)) as asset_ok,
         (${input.rentIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.rentIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as rent_account_ok,
         (${input.camIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.camIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as cam_account_ok,
@@ -366,7 +384,25 @@ export async function updateManagedProperty(input: {
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id and status in ('active','notice')) as has_active_leases,
         exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId}) as subsidiary_ok,
-        (${input.locationId ?? null}::uuid is null or exists(select 1 from locations where org_id=${input.orgId} and id=${input.locationId ?? null})) as location_ok,
+        (${input.locationId ?? null}::uuid is null or exists(
+          select 1 from locations l
+           where l.org_id=${input.orgId} and l.id=${input.locationId ?? null}
+             and (l.subsidiary_id is null or l.subsidiary_id=${input.subsidiaryId} or
+               (l.subsidiary_include_children and exists(
+                 with recursive ancestors(id) as (
+                   select s.parent_id
+                     from subsidiaries s
+                    where s.org_id=${input.orgId} and s.id=${input.subsidiaryId}
+                   union all
+                   select s.parent_id
+                     from subsidiaries s
+                     join ancestors a on a.id=s.id
+                    where s.org_id=${input.orgId}
+                 )
+                 select 1 from ancestors where id=l.subsidiary_id
+               ))
+             )
+        )) as location_ok,
         (${nextAssetSql} is null or exists(select 1 from fixed_assets where org_id=${input.orgId} and id=${nextAssetSql} and subsidiary_id=${input.subsidiaryId})) as asset_ok,
         (${input.rentIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.rentIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as rent_account_ok,
         (${input.camIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.camIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as cam_account_ok,
