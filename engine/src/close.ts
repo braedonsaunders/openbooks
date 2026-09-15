@@ -200,6 +200,17 @@ const DEFAULT_STEPS = [
     evidence: true,
   },
   {
+    key: "recognition-posted",
+    title: "close.defaultSteps.recognition-posted.title",
+    description: "close.defaultSteps.recognition-posted.description",
+    workstream: "gl",
+    taskType: "journal",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 2,
+    evidence: true,
+  },
+  {
     key: "fx-ready",
     title: "close.defaultSteps.fx-ready.title",
     description: "close.defaultSteps.fx-ready.description",
@@ -316,6 +327,7 @@ const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["ar-cutoff", "drafts-cleared"],
   ["ap-cutoff", "drafts-cleared"],
   ["depreciation-posted", "drafts-cleared"],
+  ["recognition-posted", "drafts-cleared"],
   ["fx-ready", "drafts-cleared"],
   ["fx-revalued", "fx-ready"],
   ["intercompany-balanced", "drafts-cleared"],
@@ -326,6 +338,7 @@ const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["variance-review", "ap-cutoff"],
   ["variance-review", "bank-reconciled"],
   ["variance-review", "depreciation-posted"],
+  ["variance-review", "recognition-posted"],
   ["variance-review", "consolidation"],
   ["controller-approval", "variance-review"],
   ["lock-subledgers", "controller-approval"],
@@ -338,6 +351,7 @@ type DefaultCloseFeatureContext = {
   advancedClose: boolean;
   banking: boolean;
   fixedAssets: boolean;
+  revenueRecognition: boolean;
   multiCurrency: boolean;
   multiSubsidiary: boolean;
 };
@@ -351,13 +365,15 @@ async function defaultCloseFeatureContext(
       entities: number;
       has_fx: boolean;
       has_assets: boolean;
+      has_recognition: boolean;
     }>(sql`
     select coalesce(o.settings->'features', '{}'::jsonb) as features,
            (select count(*)::int from subsidiaries s
              where s.org_id=o.id and s.is_active and not s.is_elimination) as entities,
            (exists(select 1 from journal_lines jl where jl.org_id=o.id and jl.fx_rate <> 1)
              or exists(select 1 from fx_rates f where f.org_id=o.id)) as has_fx,
-           exists(select 1 from fixed_assets fa where fa.org_id=o.id) as has_assets
+           exists(select 1 from fixed_assets fa where fa.org_id=o.id) as has_assets,
+           exists(select 1 from recognition_schedules rs where rs.org_id=o.id) as has_recognition
       from orgs o where o.id=${orgId}
   `));
   const row = result.rows[0];
@@ -368,6 +384,7 @@ async function defaultCloseFeatureContext(
     advancedClose: flows && features.advancedClose === true,
     banking: features.banking ?? true,
     fixedAssets: (features.fixedAssets ?? true) || row.has_assets,
+    revenueRecognition: (features.revenueRecognition ?? true) || row.has_recognition,
     multiCurrency: features.multiCurrency === true || row.has_fx,
     multiSubsidiary: features.multiSubsidiary === true || Number(row.entities) > 1,
   };
@@ -383,6 +400,7 @@ function defaultCloseStepEnabled(
   if (key === "financial-review") return !features.advancedClose;
   if (key === "bank-reconciled") return features.banking;
   if (key === "depreciation-posted") return features.fixedAssets;
+  if (key === "recognition-posted") return features.revenueRecognition;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;
@@ -1216,7 +1234,7 @@ async function readinessChecks(
   const documentScope = sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)})`;
   const statementScope = closeBankStatementScope(orgId, subsidiaryIds);
 
-  const [drafts, missingPeriod, bank, depreciation, fx, fxReval, intercompany, variancePolicy] =
+  const [drafts, missingPeriod, bank, depreciation, recognition, fx, fxReval, intercompany, variancePolicy] =
     (await Promise.all([
       db.execute(sql`
       select
@@ -1271,6 +1289,31 @@ async function readinessChecks(
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
          and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0
          and ${inScope(sql`a.subsidiary_id`)}`),
+      // Unposted revenue recognition, measured the way runRevenueRecognition
+      // measures due lines: unposted, nonzero, non-cancelled, non-forecast,
+      // and due by period end (percent-complete catch-up is due as soon as
+      // its period has started). Subsidiary attribution follows the runner's
+      // own coalesce chain so entity-scoped runs see the same population.
+      db.execute(sql`
+      select count(*) as count
+        from recognition_schedule_lines l
+        join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+        join performance_obligations o on o.id = s.obligation_id and o.org_id = s.org_id
+        join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
+        join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+        left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+        left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
+        left join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+        left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
+        left join lateral (
+          select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1
+        ) sub0 on true
+       where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
+         and s.book_id = ${ctx.book_id} and l.journal_entry_id is null and l.planned_amount <> 0
+         and o.status <> 'cancelled' and not r.is_forecast
+         and (p.ends_on <= ${ctx.ends_on}
+              or (r.method = 'percent_complete' and p.starts_on <= ${ctx.ends_on}))
+         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id)`)}`),
       db.execute(sql`
       select count(*) as count
         from (
@@ -1406,6 +1449,15 @@ async function readinessChecks(
       title: "close.diagnostics.depreciation-unposted.title",
       message: "close.diagnostics.depreciation-unposted.message",
       count: Number(depreciation.rows[0]?.count ?? 0),
+    },
+    {
+      code: "recognition-unposted",
+      taskKey: "recognition-posted",
+      category: "revenue",
+      severity: "error",
+      title: "close.diagnostics.recognition-unposted.title",
+      message: "close.diagnostics.recognition-unposted.message",
+      count: Number(recognition.rows[0]?.count ?? 0),
     },
     {
       code: "fx-missing",
