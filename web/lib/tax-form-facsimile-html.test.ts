@@ -142,3 +142,18 @@ test('GST34 unsigned lines never hide a negative sign', () => {
   // The balance line still uses the CRA minus box, not parentheses.
   assert.match(html, /&minus;/)
 })
+
+test('GST34 leaves unconfigured lines blank instead of printing zero', () => {
+  // Only configured boxes are computed measurements — a line the return never
+  // produced (e.g. rebates, deleted from the org's form config) must not
+  // print a fabricated 0.00 that reads as a computed zero. The row stays so
+  // the form keeps its shape; only the amount cell is blank.
+  const r = result({
+    boxes: [
+      { lineCode: '101', label: 'Sales and other revenue', value: '1000.0000', computed: false, editable: false, pdfField: null },
+    ],
+  })
+  const html = renderTaxFormFacsimileBody(r, { orgName: 'Example Organization' })
+  assert.match(html, />111</) // the rebates row is still on the form
+  assert.doesNotMatch(html, />0\.00</) // …but no uncomputed line prints zero
+})

@@ -216,9 +216,12 @@ function fmtGrid(value: string): string {
 }
 
 /** Absolute magnitude for the NET TAX / BALANCE lines, whose sign lives in
- *  the CRA minus box beside the chip (see signCell). */
-function absGrid(value: string): string {
+ *  the CRA minus box beside the chip (see signCell). Null (uncomputed line)
+ *  stays null so the cell renders blank. */
+function absGrid(value: string | null): string | null {
+  if (value == null) return null
   const normalized = value.trim()
+  if (normalized === '') return null
   const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
   return negative ? normalized.slice(1) : normalized.replace(/^\+/, '')
 }
@@ -234,19 +237,22 @@ export function renderGst34Facsimile(
   result: TaxReturnResult,
   branding?: { orgName?: string; primaryColor?: string | null } | null,
 ): string {
-  const v = (code: string): string => {
+  // Null when the return never produced the line (unconfigured box): the row
+  // stays so the form keeps its shape, but the amount cell renders blank —
+  // never a fabricated zero.
+  const v = (code: string): string | null => {
     const b = result.boxes.find((x) => x.lineCode === code)
-    return b?.value ?? '0'
+    return b?.value ?? null
   }
   const isEditable = (code: string): boolean =>
     result.boxes.find((x) => x.lineCode === code)?.editable ?? false
 
-  const box = (value: string, editable = false) =>
-    `<td style="width:150px;border:1px solid #000;border-left:none;padding:3px 6px;text-align:right;font-family:'Courier New',monospace;font-size:11px;background:${editable ? '#fffef5' : '#fff'};">${fmtGrid(value)}</td>`
+  const box = (value: string | null, editable = false) =>
+    `<td style="width:150px;border:1px solid #000;border-left:none;padding:3px 6px;text-align:right;font-family:'Courier New',monospace;font-size:11px;background:${editable ? '#fffef5' : '#fff'};">${value == null || value.trim() === '' ? '' : fmtGrid(value)}</td>`
   const chip = (code: string, reversed: boolean) =>
     `<td style="width:30px;padding:0 3px;text-align:center;vertical-align:middle;"><div style="border:1px solid #000;background:${reversed ? '#000' : '#fff'};color:${reversed ? '#fff' : '#000'};font-weight:700;font-size:11px;padding:1px 0;">${code}</div></td>`
-  const signCell = (value: string) => {
-    const normalized = value.trim()
+  const signCell = (value: string | null) => {
+    const normalized = (value ?? '').trim()
     const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
     return `<td style="width:16px;text-align:center;font-weight:700;font-family:'Courier New',monospace;">${negative ? '&minus;' : ''}</td>`
   }
