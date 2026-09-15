@@ -43,6 +43,10 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
   if (v === null || v === undefined || v === '') return null
   const exact = canonicalDecimal(v, 4)
   if (exact === null) return 'invalid'
+  // canonicalDecimal bounds scale, not magnitude: a pasted 20-digit figure
+  // would otherwise sail through and die in Postgres as a raw numeric
+  // overflow (HTTP 500). contract_value is numeric(19,4): 15 whole digits.
+  if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return 'invalid'
   try {
     return normalizeMoney(exact)
   } catch {
