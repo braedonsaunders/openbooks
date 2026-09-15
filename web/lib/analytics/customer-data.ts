@@ -8,7 +8,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
-import { flowRates, translateFlows } from "../fx-presentation";
+import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 
 /**
