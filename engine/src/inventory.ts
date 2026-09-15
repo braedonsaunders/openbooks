@@ -2564,6 +2564,16 @@ async function reverseInventoryJournal(
   if (reversalDate < source.posting_date) {
     throw new InventoryError("reversal date cannot precede the source inventory journal");
   }
+  const book = (await tx.execute<{ id: string }>(sql`
+    select id
+      from accounting_books
+     where org_id = ${orgId} and id = ${source.book_id}
+       and is_active and posts_gl
+     for share
+  `)).rows[0];
+  if (!book) {
+    throw new InventoryError("the source inventory journal book is not active for posting");
+  }
   const period = (await tx.execute<{ id: string }>(sql`
     select id
       from accounting_periods
@@ -2587,6 +2597,46 @@ async function reverseInventoryJournal(
   `));
   if (!lines.rows.length)
     throw new InventoryError("the source inventory journal has no lines");
+
+  const accountIds = [...new Set(lines.rows.map((line) => String(line.account_id)))];
+  const accounts = (await tx.execute<{
+    id: string;
+    name: string;
+    is_active: boolean;
+    is_summary: boolean;
+  }>(sql`
+    select id, name, is_active, is_summary
+      from accounts
+     where org_id = ${orgId}
+       and id = any(${uuidArray(accountIds)}::uuid[])
+     for share
+  `)).rows;
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+  for (const accountId of accountIds) {
+    const account = accountById.get(accountId);
+    if (!account || !account.is_active || account.is_summary) {
+      throw new InventoryError("the source inventory journal uses an inactive or summary account");
+    }
+  }
+  try {
+    await validateSubsidiaryRestrictions(tx, {
+      orgId,
+      ctx: await loadSubsidiaryContext(tx, orgId),
+      docSubsidiaryId: source.subsidiary_id,
+      lines: lines.rows.map((line) => ({
+        accountId: String(line.account_id),
+        amount: String(line.amount),
+        subsidiaryId: String(line.subsidiary_id),
+        departmentId: line.department_id == null ? null : String(line.department_id),
+        projectId: line.project_id == null ? null : String(line.project_id),
+        locationId: line.location_id == null ? null : String(line.location_id),
+        classId: line.class_id == null ? null : String(line.class_id),
+      })),
+    });
+  } catch (error) {
+    if (error instanceof SubsidiaryError) throw new InventoryError(error.message);
+    throw error;
+  }
 
   const reversal = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
