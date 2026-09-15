@@ -123,7 +123,12 @@ const mockSources = new Map<string, string>([
   ['mock:json', `export const jsonObject = {}; export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }`],
   ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }; export function can() { return true }`],
   ['mock:features', `export async function isFeatureEnabled() { return true }`],
-  ['mock:business-date', `export async function businessToday() { return '2026-08-26' }`],
+  ['mock:business-date', `export async function businessToday() { return '2026-08-26' }
+    export function isIsoCalendarDate(value) {
+      if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
+      const date = new Date(value + 'T00:00:00.000Z')
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+    }`],
   ['mock:list-params', `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`],
 ])
 
@@ -243,6 +248,19 @@ test('audit failure rolls back POST, PATCH, and DELETE mutations', async () => {
   routeState.auditFailure = true
   await assert.rejects(route.DELETE(request('DELETE', undefined, deleted.id)), /forced audit failure/)
   assert.deepEqual(routeState.assignments.get(deleted.id), deleted)
+})
+
+test('impossible calendar dates are rejected before any SQL write', async () => {
+  reset()
+  const badFrom = await route.POST(request('POST', assignmentBody('2026-02-30', '2026-12-31')))
+  assert.equal(badFrom.status, 400)
+  assert.equal((await badFrom.json()).errorCode, 'dates')
+  const badTo = await route.POST(request('POST', assignmentBody('2026-01-01', '2026-02-30')))
+  assert.equal(badTo.status, 400)
+  assert.equal((await badTo.json()).errorCode, 'dates')
+  assert.equal(routeState.writes, 0)
+  assert.equal(routeState.assignments.size, 0)
+  assert.equal(routeState.audits.length, 0)
 })
 
 test('DELETE records the complete locked before-state and a null after-state', async () => {

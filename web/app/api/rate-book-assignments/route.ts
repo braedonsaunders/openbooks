@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -24,7 +24,10 @@ function dateValue(value: unknown): string | null | undefined {
   if (value === undefined) return undefined
   if (value === null || value === '') return null
   const text = String(value)
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) ? text : undefined
+  // Strict calendar validation: V8's Date.parse rolls February 30 into
+  // March, which would pass a naive guard and reach the daterange cast as a
+  // 22008 from PostgreSQL (a 500 path) instead of the dates domain error.
+  return isIsoCalendarDate(text) ? text : undefined
 }
 
 async function projectGate(permission: 'projects.read' | 'projects.manage') {
