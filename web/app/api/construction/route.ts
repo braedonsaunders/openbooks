@@ -84,7 +84,7 @@ export async function GET(req: Request) {
     retainageAccountId
       ? db.execute<{ held: string }>(projectRetainageHeldSql(orgId, projectId, retainageAccountId))
       : Promise.resolve({ rows: [{ held: "0" }] }),
-    projectCostSummary(orgId, projectId).catch(() => null),
+    projectCostSummary(orgId, projectId, authz.allowedSubsidiaryIds).catch(() => null),
   ]);
 
   const contractSum = sum(sov.rows.map((line) => String(line.scheduledValue ?? "0")));
