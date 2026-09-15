@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { sum } from '@openbooks/engine/src/money.ts'
 import { SortTh } from '../../../components/sortable-th'
 /**
  * Payment-run builder: select posted vendor bills with an open balance
@@ -77,10 +78,12 @@ export function RunBuilder({
 
   const selectedList = Object.values(selected)
   const selectedTotals = selectedList.reduce((totals, bill) => {
-    totals.set(bill.currency, (totals.get(bill.currency) ?? 0) + Number(bill.open))
+    const amounts = totals.get(bill.currency) ?? []
+    amounts.push(bill.open)
+    totals.set(bill.currency, amounts)
     return totals
-  }, new Map<string, number>())
-  const selectedAmount = [...selectedTotals].map(([currency, total]) => money(total, { currency })).join(' + ')
+  }, new Map<string, string[]>())
+  const selectedAmount = [...selectedTotals].map(([currency, amounts]) => money(sum(amounts), { currency })).join(' + ')
   const selectedProfile = bankProfiles.find((profile) => profile.id === paymentBankProfileId)
   const currencyMismatch = !!selectedProfile && selectedList.some((bill) => bill.currency !== selectedProfile.currency)
   const allOnPage = bills.length > 0 && bills.every((b) => selected[b.id])
