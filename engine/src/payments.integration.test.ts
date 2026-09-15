@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db, pool, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
+import { toUnits } from "./money.ts";
 import {
   generatePaymentFileArtifact,
   recordPaymentSettlement,
@@ -19,6 +20,7 @@ import {
   postPaymentRun,
   postPaymentWithApplications,
   reversePaymentForReturn,
+  suggestApplications,
   updateDraftPayment,
 } from "./payments.ts";
 import { postDocument } from "./posting.ts";
@@ -2523,3 +2525,105 @@ for (const boundary of ['another run', 'missing parent', 'concurrent retry', 'st
     }
   });
 }
+
+test(
+  "payment suggestion leaves the excess on account and conserves the payment amount",
+  { skip: !DB },
+  async () => {
+    // An 80-open invoice with a 100 payment suggests 80 and leaves 20
+    // on account (fifo); an 80 payment matches exactly; a memo naming the
+    // invoice resolves by reference. In every case allocations sum to the
+    // applied amount and applied + remaining equals the payment.
+    const org = await createScratchOrg();
+    const documentId = randomUUID();
+    const entryId = randomUUID();
+    const openLineId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${documentId}, ${org.orgId}, 'customer_invoice', 'INV-ONACC',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 80, 0, 80, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-ONACC', ${org.date}, ${org.periodId}, 'On-account fixture',
+           'draft', ${documentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${openLineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 80, 'CAD', 80, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue},
+           ${org.subsidiaryId}, -80, 'CAD', -80, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id = ${entryId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${documentId}
+      `);
+
+      const over = await suggestApplications(org.customerId, "100.0000", "ar", {
+        sourceCurrency: "CAD",
+        orgId: org.orgId,
+      });
+      assert.equal(over.strategy, "fifo");
+      assert.equal(over.applied, "80.0000");
+      assert.equal(over.remaining, "20.0000");
+      assert.deepEqual(over.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
+        [openLineId, "80.0000"],
+      ]);
+
+      const exact = await suggestApplications(org.customerId, "80.0000", "ar", {
+        sourceCurrency: "CAD",
+        orgId: org.orgId,
+      });
+      assert.equal(exact.strategy, "exact");
+      assert.equal(exact.applied, "80.0000");
+      // The exact-match branch returns a literal zero remainder (the fifo
+      // branch returns fromUnits zero); both spell zero in ledger units.
+      assert.equal(toUnits(exact.remaining), 0n);
+
+      const byRef = await suggestApplications(org.customerId, "100.0000", "ar", {
+        sourceCurrency: "CAD",
+        orgId: org.orgId,
+        reference: "inv-onacc",
+      });
+      assert.equal(byRef.strategy, "reference");
+      assert.equal(byRef.applied, "80.0000");
+      assert.equal(byRef.remaining, "20.0000");
+
+      for (const [result, amount] of [
+        [over, "100.0000"],
+        [exact, "80.0000"],
+        [byRef, "100.0000"],
+      ] as const) {
+        const allocated = result.allocations.reduce((sum, a) => sum + toUnits(a.sourceTransactionAmount), 0n);
+        assert.equal(allocated, toUnits(result.applied), "allocations sum to the applied amount");
+        assert.equal(
+          allocated + toUnits(result.remaining),
+          toUnits(amount),
+          "applied plus remaining conserves the payment",
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
