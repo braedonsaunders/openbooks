@@ -132,7 +132,11 @@ function post(body: Record<string, unknown>): Promise<Response> {
   )
 }
 
-function remove(id = 'report-1'): Promise<Response> {
+// Body ids must be uuid-shaped: the route fails closed (400) on malformed ids
+// before ownership is consulted, so these tests use a real uuid.
+const REPORT_ID = '00000000-0000-4000-8000-0000000000a1'
+
+function remove(id = REPORT_ID): Promise<Response> {
   return DELETE(
     new Request('http://openbooks.test/api/saved-reports', {
       method: 'DELETE',
@@ -179,7 +183,7 @@ test('only the saved-report owner or an administrator can delete it', async () =
 
   reset()
   state.granted = new Set(['reports.create'])
-  state.deleteRows = [{ id: 'report-1' }]
+  state.deleteRows = [{ id: REPORT_ID }]
 
   const ownerDeleted = await remove()
 
@@ -187,7 +191,7 @@ test('only the saved-report owner or an administrator can delete it', async () =
 
   reset()
   state.granted = new Set(['*'])
-  state.deleteRows = [{ id: 'report-1' }]
+  state.deleteRows = [{ id: REPORT_ID }]
 
   const adminDeleted = await remove()
 

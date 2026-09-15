@@ -14,7 +14,7 @@ const state: RouteState = {
   updateResults: [],
   revision: "2026-08-24T12:00:00.300001Z",
   definition: {
-    id: "definition-1",
+    id: "00000000-0000-4000-8000-0000000000d1",
     org_id: "org-1",
     kind: "custom",
     report_type: "query",
@@ -150,7 +150,7 @@ const { GET, PATCH } =
   (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const DEFINITION_ID = "definition-1";
+const DEFINITION_ID = "00000000-0000-4000-8000-0000000000d1";
 const REVISION = "2026-08-24T12:00:00.300001Z";
 
 function reset(): void {
