@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../../lib/authz'
+import { isUuid } from '../../../../../../lib/list-params'
 import { canAccessReportArtifact } from '../../../../../../lib/report-execution-context'
 import { blobResponse } from '../../../../../../lib/blob-response'
 
@@ -12,6 +13,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const result = (await db.execute<{ filename: string; content_type: string; bytes: Buffer; content_hash: string; authorization_snapshot: unknown }>(sql`
     select a.filename, a.content_type, a.bytes, a.content_hash, r.authorization_snapshot
       from report_run_artifacts a

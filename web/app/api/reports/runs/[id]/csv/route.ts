@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../../lib/authz'
+import { isUuid } from '../../../../../../lib/list-params'
 import { canAccessReportArtifact } from '../../../../../../lib/report-execution-context'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
@@ -13,6 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const r = (await db.execute<{ result_csv: string | null; status: string; slug: string; authorization_snapshot: unknown }>(sql`
     select run.result_csv, run.status, def.slug, run.authorization_snapshot
