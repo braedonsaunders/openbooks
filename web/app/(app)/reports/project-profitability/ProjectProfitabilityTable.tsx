@@ -6,7 +6,7 @@ import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { isNegative } from '../../../../lib/statement-format'
+import { decimalToNumber, isNegative, marginRatioToPercent } from '../../../../lib/statement-format'
 import type { ExactDecimal } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { ReportDrillLink } from '../ReportDrillLink'
@@ -61,7 +61,7 @@ function ValueCells({ values, drills, currency, weight }: { values: Values; dril
     const target = drills[key]
     const negative = value !== null && isNegative(value, key === 'margin' ? 'variance_pct' : 'amount')
     const text = key === 'margin'
-      ? value === null ? '—' : format.number(Number(value), { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
+      ? value === null ? '—' : format.number(decimalToNumber(marginRatioToPercent(String(value))) / 100, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
       : key === 'hours'
         ? format.number(Number(value ?? 0), { maximumFractionDigits: 2 })
         : money(value ?? '0', { currency: currency || undefined, accounting: true })

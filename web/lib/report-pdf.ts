@@ -13,7 +13,7 @@ import {
   type StatementPdfStyle,
 } from '@openbooks/pdf'
 import type { StatementView } from './statement-matrix'
-import { decimalIsMaterial, decimalIsZero, decimalScale, decimalScaleWhole, decimalSum, decimalToNumber, type ExactDecimal } from './statement-format'
+import { decimalIsMaterial, decimalIsZero, decimalScaleWhole, decimalSum, decimalToNumber, marginRatioToPercent, type ExactDecimal } from './statement-format'
 import {
   reportResultToXlsx,
   reportResultToCsv,
@@ -326,10 +326,10 @@ export function projectProfitabilityExportData(
   },
   t: Translator,
 ): ExportData {
-  // Project margins are stored as exact percentage-point units (2500.0000 =
-  // 25%). Scale the decimal before the one-cell Intl/Number presentation so
-  // the export cannot print 250000% or round a large exact ratio first.
-  const pct = (m: ExactDecimal | null) => (m === null ? '' : `${decimalToNumber(decimalScale(m, 100)).toFixed(1)}%`)
+  // Margins are canonical decimalRatio ratios (0.2500 = 25%). Scale exactly
+  // once through the shared helper so the export prints what the table
+  // displays; toFixed(1) then only formats the already-scaled percent units.
+  const pct = (m: ExactDecimal | null) => (m === null ? '' : `${decimalToNumber(marginRatioToPercent(m)).toFixed(1)}%`)
   const cols = [
     t('projectProfitability.columns.customerJob'),
     t('projectProfitability.columns.revenue'),

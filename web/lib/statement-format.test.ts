@@ -9,6 +9,7 @@ import {
   decimalScaleWhole,
   decimalSum,
   fromDecimalUnits,
+  marginRatioToPercent,
   toDecimalUnits,
 } from './statement-format.ts'
 
@@ -44,4 +45,14 @@ test('scaled whole-unit display rounds once from the ledger value', () => {
   assert.equal(decimalScaleWhole('1499999.9999', 1000000), '1.0000')
   assert.equal(decimalScaleWhole('2500000.0000', 1000000), '3.0000')
   assert.equal(decimalScaleWhole('0.0000', 1000), '0.0000')
+})
+
+test('margin ratios scale exactly once to percent units for presentation', () => {
+  // decimalRatio returns a canonical ratio (0.2500 = 25%). Display (Intl
+  // percent style) and export (toFixed) must share this single scaling so
+  // they cannot diverge again.
+  assert.equal(marginRatioToPercent('0.2500'), '25.0000')
+  assert.equal(marginRatioToPercent('0.0000'), '0.0000')
+  assert.equal(marginRatioToPercent('-0.2500'), '-25.0000')
+  assert.equal(marginRatioToPercent('1.0000'), '100.0000')
 })
