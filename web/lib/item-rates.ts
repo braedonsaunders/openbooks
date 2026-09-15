@@ -115,6 +115,15 @@ export async function resolveItemRate(input: {
          and v.status = 'active' and (( ${candidate.rate_version_id}::uuid is not null and v.id=${candidate.rate_version_id}) or
            (${candidate.rate_version_id}::uuid is null and v.effective_from <= ${input.onDate} and (v.effective_to is null or v.effective_to >= ${input.onDate})))
          and exists (select 1 from item_rate_lines l where l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${input.itemId})
+         -- Version scopes gate rates exactly as they gate surcharges
+         -- (resolveRateAdjustments): a scoped version prices only matching work.
+         and (
+           not exists (select 1 from labor_rate_version_scopes s where s.org_id = v.org_id and s.version_id = v.id)
+           or exists (select 1 from labor_rate_version_scopes s
+             where s.org_id = v.org_id and s.version_id = v.id and (
+               (s.scope_type = 'department' and s.scope_value_id = ${input.departmentId ?? null}) or
+               (s.scope_type = 'subsidiary' and s.scope_value_id = ${ctx.subsidiary_id})
+             )))
        order by v.effective_from desc limit 1
     `))
     const rateVersionId = version.rows[0]?.id
@@ -273,6 +282,15 @@ export async function snapshotTimeBillRates(
         from candidates c
         join item_rate_versions v on v.rate_book_id = c.rate_book_id and v.org_id = ${orgId} and v.status = 'active'
          and ((c.rate_version_id is not null and v.id=c.rate_version_id) or (c.rate_version_id is null and v.effective_from <= ${te.worked_on} and (v.effective_to is null or v.effective_to >= ${te.worked_on})))
+         -- Version scopes gate the snapshot exactly as they gate surcharges
+         -- (resolveRateAdjustments): a scoped version bills only matching work.
+         and (
+           not exists (select 1 from labor_rate_version_scopes s where s.org_id = v.org_id and s.version_id = v.id)
+           or exists (select 1 from labor_rate_version_scopes s
+             where s.org_id = v.org_id and s.version_id = v.id and (
+               (s.scope_type = 'department' and s.scope_value_id = ${te.department_id ?? null}) or
+               (s.scope_type = 'subsidiary' and s.scope_value_id = ${te.subsidiary_id ?? null})
+             )))
         join item_rate_lines l on l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${te.item_id}
         join item_rate_books b on b.id=c.rate_book_id and b.org_id = ${orgId} and b.is_active
        order by c.priority, c.dimension_specificity desc, c.effective_from desc nulls last, v.effective_from desc,
