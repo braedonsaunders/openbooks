@@ -127,6 +127,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const current = ((await db.execute(sql`select status, subsidiary_id from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(current.rows[0].subsidiary_id))) {
