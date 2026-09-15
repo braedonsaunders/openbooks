@@ -14,6 +14,7 @@ import {
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
   getOnHand,
+  postLandedCostVoucher,
 } from "../../inventory.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory-nrv.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
@@ -589,6 +590,76 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
           ifrsCarryingAmount: ifrsOnHand.value,
           usGaapReversalRefused: String(refused),
         },
+      };
+    },
+  },
+
+  {
+    id: "inv-landed-cost-capitalized",
+    title: "Freight and duty to bring inventory to its location join the cost of the stock",
+    citations: [
+      {
+        standard: "IAS 2",
+        reference: "IAS 2.11",
+        kind: "requirement",
+        requirement:
+          "The cost of purchase includes transport, handling and other costs to bring inventories to their present location and condition.",
+      },
+      {
+        standard: "ASC 330",
+        reference: "330-10-30-9",
+        kind: "requirement",
+        requirement:
+          "Abnormal amounts of freight and handling are expensed as incurred, which implies ordinary freight to receive the goods is part of inventory cost.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "A freight voucher spreads exactly onto the on-hand layers, raising their carrying amount and debiting inventory against the freight account — the quantity on hand does not move and the subledger stays in agreement with the general ledger.",
+    facts: [
+      "100 units on hand at a cost of 3.00 each, carried at 300.00.",
+      "A freight voucher of 100.00 is allocated on a carrying-value basis.",
+      "The whole 100.00 capitalizes: inventory rises to 400.00 (4.00 a unit) and 100 units remain on hand.",
+    ],
+    expected: {
+      entries: [
+        {
+          step: "landed cost",
+          lines: [
+            { role: "inventory", amount: "100.0000" },
+            { role: "freight", amount: "-100.0000" },
+          ],
+        },
+      ],
+      values: { remainingQuantity: "100.0000", remainingValue: "400.0000" },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const item = ledger.items.fifo;
+      await receiveViaBill(ctx, {
+        number: "CONF-INV-L1",
+        itemId: item,
+        quantity: "100",
+        unitCost: "3",
+        amount: "300",
+      });
+
+      const landed = await capture(ctx, "landed cost", async () => {
+        await postLandedCostVoucher(ledger.orgId, ledger.actorId, {
+          amount: "100",
+          basis: "value",
+          freightAccountId: ctx.roles.freight,
+          subsidiaryId: ledger.subsidiaryId,
+          voucherDate: ledger.date,
+          targets: [{ itemId: item, stockLocationId: ledger.stockLocationId }],
+        });
+      });
+
+      const onHand = await getOnHand(ledger.orgId, item, ledger.stockLocationId);
+      return {
+        entries: [landed],
+        values: { remainingQuantity: onHand.quantity, remainingValue: onHand.value },
       };
     },
   },
