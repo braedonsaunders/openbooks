@@ -213,3 +213,69 @@ test(
     }
   },
 );
+
+test(
+  "a declaring jurisdiction outside Ontario/Quebec still demands the last-and-first assertion",
+  { skip: !DB },
+  async () => {
+    // Alberta's own rule (Employment Standards Code, Part 2 Div. 5) makes an
+    // unconsented absence on the adjacent shifts an entitlement condition, and
+    // the pack declares `lastAndFirstScheduledShift: true` for CA-AB — but the
+    // demand fired only for CA-ON/CA-QC, so an Alberta run paid the holiday
+    // without ever asking the employer the question the statute requires.
+    await assert.rejects(
+      resolveStatutoryHolidayPay(db, {
+        orgId: randomUUID(),
+        employeePartyId: randomUUID(),
+        employeeName: "Alberta Employee",
+        jurisdiction: "CA-AB",
+        periodStart: "2026-10-11",
+        periodEnd: "2026-10-17",
+        holidayComponentId: randomUUID(),
+        premiumComponentId: randomUUID(),
+        excludeDocumentId: randomUUID(),
+        hourlyRate: "25.00",
+      }),
+      /Alberta Employee[\s\S]*last-and-first-shift[\s\S]*absence assertion/,
+    );
+  },
+);
+
+test(
+  "jurisdictions that do not declare the test are not asked for it",
+  { skip: !DB },
+  async () => {
+    // British Columbia declares no last-and-first condition and no commission
+    // window, so a BC run with no facts supplied must keep computing (here:
+    // no wages, no pay) rather than trip a demand driven by another
+    // province's statute. BC does declare its own 30-day employment
+    // qualifier, so the employee gets a hire date to isolate this question.
+    const orgId = randomUUID();
+    const employeePartyId = randomUUID();
+    const actorId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${employeePartyId}, ${orgId}, 'person', 'BC Employee', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into employee_roles (org_id, party_id, hired_on, created_by, updated_by)
+      values (${orgId}, ${employeePartyId}, '2020-01-01', ${actorId}, ${actorId})`);
+    try {
+      const lines = await resolveStatutoryHolidayPay(db, {
+        orgId,
+        employeePartyId,
+        employeeName: "BC Employee",
+        jurisdiction: "CA-BC",
+        periodStart: "2026-10-11",
+        periodEnd: "2026-10-17",
+        holidayComponentId: randomUUID(),
+        premiumComponentId: randomUUID(),
+        excludeDocumentId: randomUUID(),
+        hourlyRate: "25.00",
+      });
+      assert.deepEqual(lines, []);
+    } finally {
+      await db.execute(sql`delete from employee_roles where org_id = ${orgId}`);
+      await db.execute(sql`delete from parties where org_id = ${orgId}`);
+    }
+  },
+);

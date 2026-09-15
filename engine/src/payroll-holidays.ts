@@ -1010,14 +1010,16 @@ export async function resolveStatutoryHolidayPay(
         }
       : window;
     const lookbackBasis = holidayPayLookbackBasis(rule.basis);
-    // Federal and Quebec law use a different divisor/window for commission
-    // earners. Ontario and Quebec also make the last-and-first scheduled-shift
-    // test an entitlement condition. Neither fact is inferable from earnings
+    // A commission window changes the lookback's shape, and the
+    // last-and-first scheduled-shift test is an entitlement condition
+    // wherever the rule declares it. Neither fact is inferable from earnings
     // or a missing time entry, so a real pay run must provide an explicit
-    // assertion and stops when it cannot.
+    // assertion and stops when it cannot. Both demands follow the rule's own
+    // declaration, never a list of jurisdiction keys — gating them on two
+    // keys let every other declaring province pay the holiday without ever
+    // asking the question its statute requires.
     if (
-      (input.jurisdiction === "CA" || input.jurisdiction === "CA-QC")
-      && lookbackBasis.kind === "fixed_divisor"
+      lookbackBasis.kind === "fixed_divisor"
       && lookbackBasis.commission
       && input.paidOnCommission === undefined
     ) {
@@ -1028,8 +1030,7 @@ export async function resolveStatutoryHolidayPay(
       );
     }
     if (
-      (input.jurisdiction === "CA-ON" || input.jurisdiction === "CA-QC")
-      && rule.qualifying.lastAndFirstScheduledShift
+      rule.qualifying.lastAndFirstScheduledShift
       && input.absentWithoutConsent === undefined
     ) {
       throw new PayrollHolidayError(
