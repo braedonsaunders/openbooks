@@ -308,6 +308,38 @@ async function remainingContractCapacity(
   return cmp(remaining, '0') > 0 ? remaining : '0.0000'
 }
 
+/**
+ * Whether the CURRENT policy prices this project under an NTE ceiling as of
+ * a date — independent of the worksheet's creation-time snapshot. A project
+ * type switch after approval would otherwise silently drop a ceiling the
+ * sibling billing path still enforces. Soft read: a missing type or
+ * unpublished policy is simply not NTE here (the snapshot branch keeps its
+ * own strict accounting), so this check can never strand a worksheet that
+ * the snapshot branch would have let through.
+ */
+async function currentPolicyIsNte(
+  executor: Executor,
+  orgId: string,
+  projectId: string,
+  asOf: string,
+): Promise<boolean> {
+  const row = (await executor.execute<{ project_type_id: string | null }>(sql`
+    select project_type_id from projects where id = ${projectId} and org_id = ${orgId}
+  `));
+  const typeId = row.rows[0]?.project_type_id;
+  if (!typeId) return false;
+  const versions = (await executor.execute<WipPolicyVersion>(sql`
+    select id, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
+           financial_profile as "financialProfile"
+      from project_financial_profile_versions
+     where org_id = ${orgId} and project_type_id = ${typeId}
+     order by effective_from desc
+  `));
+  const latest = versions.rows[0];
+  if (!latest) return false;
+  return effectiveWipPolicy(versions.rows, latest.financialProfile, asOf).financialProfile.totalPrice.method === 'not_to_exceed';
+}
+
 export function rateEngineOverhead(
   source: RawWipSource,
   profile: FinancialProfile,
@@ -718,7 +750,8 @@ export async function updatePrebillLine(
     const reason = input.adjustmentReason?.trim() || null
     if (changed && !reason) throw new WipBillingError('A reason is required for a write-up or write-down')
     if (changed && evidence.length === 0) throw new WipBillingError('Evidence is required for a write-up or write-down')
-    if (before.custom?.policy?.totalPriceMethod === 'not_to_exceed') {
+    if (before.custom?.policy?.totalPriceMethod === 'not_to_exceed'
+        || (await currentPolicyIsNte(tx, orgId, before.project_id, before.period_end))) {
       const policy = await loadProjectPolicy(tx, orgId, before.project_id, false, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, before.period_end, prebillId)
       if (capacity != null && cmp(add(before.other_proposed, proposed), capacity) > 0) {
@@ -894,7 +927,9 @@ export async function transitionPrebill(
     if ((action === 'submit' || action === 'approve') && worksheet.unsupported_adjustments > 0) {
       throw new WipBillingError('Every write-up and write-down requires a reason and evidence')
     }
-    if ((action === 'submit' || action === 'approve') && header.custom?.policy?.totalPriceMethod === 'not_to_exceed') {
+    if ((action === 'submit' || action === 'approve')
+        && (header.custom?.policy?.totalPriceMethod === 'not_to_exceed'
+          || (await currentPolicyIsNte(tx, orgId, header.project_id, header.period_end)))) {
       const policy = await loadProjectPolicy(tx, orgId, header.project_id, false, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, header.period_end, id)
       if (capacity != null && cmp(worksheet.proposed_total, capacity) > 0) {
@@ -977,7 +1012,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     if (!policySnapshot || policySnapshot.billingProcedure !== 'standard' || !['tm_actual', 'cost_plus'].includes(policySnapshot.lineBuilder ?? '')) {
       throw new WipBillingError('This worksheet does not contain an eligible source-line billing policy snapshot')
     }
-    if (policySnapshot.totalPriceMethod === 'not_to_exceed') {
+    if (policySnapshot.totalPriceMethod === 'not_to_exceed'
+        || (await currentPolicyIsNte(tx, orgId, worksheet.project_id, worksheet.period_end))) {
       const policy = await loadProjectPolicy(tx, orgId, worksheet.project_id, false, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, worksheet.period_end, id)
       if (cmp(String(worksheet.proposed_bill_amount), capacity ?? '0') > 0) {
