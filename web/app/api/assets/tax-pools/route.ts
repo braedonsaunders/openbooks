@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
@@ -58,7 +59,21 @@ export async function POST(req: Request) {
   const yearStart = body.yearStart && DATE_RE.test(body.yearStart) ? body.yearStart : `${taxYear}-01-01`
   const yearEnd = body.yearEnd && DATE_RE.test(body.yearEnd) ? body.yearEnd : `${taxYear}-12-31`
 
-  const bookId = body.bookId || (await primaryBook(gate.user.orgId))
+  let bookId: string | null
+  if (body.bookId !== undefined) {
+    if (typeof body.bookId !== 'string' || !isUuid(body.bookId)) {
+      return NextResponse.json({ error: 'invalid bookId' }, { status: 422 })
+    }
+    const book = await db.execute<{ id: string }>(sql`
+      select id
+        from accounting_books
+       where id = ${body.bookId} and org_id = ${gate.user.orgId} and is_active
+       limit 1`)
+    if (!book.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    bookId = book.rows[0].id
+  } else {
+    bookId = await primaryBook(gate.user.orgId)
+  }
 
   // An explicit subsidiary is a write target, not merely a run parameter.
   // Resolve it inside this org before applying the caller's subsidiary scope;

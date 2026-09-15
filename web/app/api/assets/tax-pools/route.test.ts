@@ -7,6 +7,8 @@ interface TaxPoolRouteState {
   allowedSubsidiaryIds: Set<string> | null;
   explicitSubsidiaryExists: boolean;
   requestedSubsidiaryId: string | undefined;
+  explicitBookExists: boolean;
+  requestedBookId: string | undefined;
   filterCalls: (string[] | null)[];
   queries: string[];
   runCalls: {
@@ -23,6 +25,8 @@ const routeState: TaxPoolRouteState = {
   allowedSubsidiaryIds: null,
   explicitSubsidiaryExists: true,
   requestedSubsidiaryId: undefined,
+  explicitBookExists: true,
+  requestedBookId: undefined,
   filterCalls: [],
   queries: [],
   runCalls: [],
@@ -62,6 +66,9 @@ const mockSources = new Map<string, string>([
         const data = await request.json()
         state.requestedSubsidiaryId = data && typeof data.subsidiaryId === 'string'
           ? data.subsidiaryId
+          : undefined
+        state.requestedBookId = data && typeof data.bookId === 'string'
+          ? data.bookId
           : undefined
         return { ok: true, data }
       }
@@ -116,7 +123,12 @@ const mockSources = new Map<string, string>([
         async execute(query) {
           const text = sqlText(query)
           state.queries.push(text)
-          if (text.includes('from accounting_books')) return { rows: [{ id: 'book-1' }] }
+          if (text.includes('from accounting_books')) {
+            if (state.requestedBookId) {
+              return state.explicitBookExists ? { rows: [{ id: state.requestedBookId }] } : { rows: [] }
+            }
+            return { rows: [{ id: 'book-1' }] }
+          }
           if (text.includes('from tax_pool_periods')) {
             return { rows: [{ tax_year: '2026', class_code: '8', regime: 'ca_cca' }] }
           }
@@ -185,6 +197,8 @@ function reset(allowed: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowed;
   routeState.explicitSubsidiaryExists = true;
   routeState.requestedSubsidiaryId = undefined;
+  routeState.explicitBookExists = true;
+  routeState.requestedBookId = undefined;
   routeState.filterCalls = [];
   routeState.queries = [];
   routeState.runCalls = [];
@@ -255,4 +269,19 @@ test("POST runs an in-scope explicit subsidiary", async () => {
       taxYear: 2026,
     },
   ]);
+});
+
+test("POST refuses an explicit book outside the caller org before running the pool", async () => {
+  reset(null);
+  routeState.explicitBookExists = false;
+
+  const response = await post({
+    taxYear: 2026,
+    bookId: "11111111-1111-4111-8111-111111111111",
+    subsidiaryId: "sub-visible",
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(routeState.runCalls, [], "a foreign-org book must never reach the engine");
 });
