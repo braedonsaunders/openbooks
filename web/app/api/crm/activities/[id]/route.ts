@@ -90,7 +90,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const endsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(current.rows[0].ends_at)
   if (await endsPrecedeStarts(db, startsAt, endsAt)) return NextResponse.json({ error: 'end must not precede start' }, { status: 422 })
   const duration = body.durationMinutes === undefined || body.durationMinutes === null || body.durationMinutes === '' ? null : Number(body.durationMinutes)
-  if (duration !== null && (!Number.isInteger(duration) || duration < 0)) return NextResponse.json({ error: 'duration must be non-negative minutes' }, { status: 422 })
+  // duration_minutes is integer: a value the column cannot hold would die in
+  // Postgres as a raw failure (HTTP 500 with the full UPDATE — this verb has
+  // no catch), so refuse it here with a named 422 and nothing written.
+  if (duration !== null && (!Number.isInteger(duration) || duration < 0 || duration > 2147483647)) return NextResponse.json({ error: 'duration must be non-negative whole minutes the activity can store' }, { status: 422 })
   const links = body.links as Array<{ subjectKind: string; subjectId: string }> | undefined
   if (links) {
     if (!Array.isArray(links)) return NextResponse.json({ error: 'links must be an array' }, { status: 422 })
