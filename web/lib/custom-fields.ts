@@ -133,7 +133,9 @@ export function validateCustomValues(
         break
       }
       case 'boolean':
-        cleaned[def.key] = raw === true || raw === 'true'
+        if (raw === true || raw === 'true') cleaned[def.key] = true
+        else if (raw === false || raw === 'false') cleaned[def.key] = false
+        else errors[def.key] = `${def.label} must be a boolean`
         break
       case 'select': {
         const opts = def.config.options ?? []
