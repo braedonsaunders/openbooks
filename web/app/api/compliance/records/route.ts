@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
@@ -10,10 +11,16 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
-function optionalCoverageMoney(value: unknown): string | null | 'invalid' {
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
+function optionalCoverageMoney(value: unknown): string | null | 'invalid' | 'range' {
   if (value == null || value === '') return null
   const exact = canonicalDecimal(value, 4)
   if (exact === null) return 'invalid'
+  if (wholeDigits(exact) > 15) return 'range'
   return normalizeMoney(exact)
 }
 
@@ -56,6 +63,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'requirementId is required' }, { status: 400 })
   }
   if (!body.effectiveFrom) return NextResponse.json({ error: 'effectiveFrom is required' }, { status: 400 })
+  // Both ends land in date columns and this verb's catch surfaces the driver
+  // text, so refuse anything that is not a real calendar day here with a
+  // named 400 before any write is attempted.
+  if (!isIsoCalendarDate(body.effectiveFrom)) {
+    return NextResponse.json({ error: 'effectiveFrom must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+  }
+  if (body.expiresOn != null && body.expiresOn !== '' && !isIsoCalendarDate(body.expiresOn)) {
+    return NextResponse.json({ error: 'expiresOn must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+  }
 
   // The requirement must belong to this org, and to the vendor's class — a
   // certificate against an inapplicable policy would never be evaluated and
@@ -85,6 +101,11 @@ export async function POST(req: Request) {
   }
   if (aggregateAmount === 'invalid') {
     return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+  }
+  // Both columns are numeric(19,4): a wider figure would die in Postgres,
+  // surfacing the full INSERT through the catch below. Refuse it named.
+  if (coverageAmount === 'range' || aggregateAmount === 'range') {
+    return NextResponse.json({ error: 'coverage figures are out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
   }
 
   try {
