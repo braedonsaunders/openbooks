@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { deriveEmailDeliveryKey, reconcileDeliveryAttempts } from "@openbooks/emails";
+import { deriveEmailDeliveryKey, isValidEmailAddress, normalizeEmailDeliveryInput, reconcileDeliveryAttempts } from "@openbooks/emails";
+import { normalizeReportRecipientEmails } from "@openbooks/reports";
 import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
 import {
@@ -624,6 +625,89 @@ test("happy pre-accept retry succeeds after definite failure", { skip: !DB }, as
     if (thirdDecision.action === "complete") {
       assert.equal(thirdDecision.providerMessageId, "re_success_456");
     }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an undeliverable recipient quarantines without stalling the delivery scan", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // The schedule write path accepts this address while the dispatch-time
+    // provider validation refuses it, so it can reach a materialized outbox
+    // row through the front door. Lock both halves of that divergence here.
+    const poison = ".leading-dot@example.com";
+    assert.deepEqual(normalizeReportRecipientEmails([poison]), [poison]);
+    assert.equal(isValidEmailAddress(poison), false);
+
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions
+        (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'poison-quarantine',
+              'Poison quarantine', '{}'::jsonb, null, null)
+    `);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into report_runs
+        (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+         recipient_emails, next_attempt_at)
+      values (${runId}, ${org.orgId}, null, ${definitionId}, 'scheduled', 'succeeded',
+              ${new Date(Date.now() - 3_600_000)}, '[]'::jsonb, now())
+    `);
+    const pdf = Buffer.from("%PDF-1.7\npoison quarantine evidence");
+    await db.execute(sql`
+      insert into report_run_artifacts
+        (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
+      values (${org.orgId}, ${runId}, 'poison-quarantine.pdf', 'application/pdf',
+              ${pdf.length}, ${createHash("sha256").update(pdf).digest("hex")}, ${pdf})
+    `);
+    // The poison row sorts FIRST so a pre-fix dispatch dies on it before the
+    // healthy row is ever reached — the exact production stall shape.
+    const poisonId = randomUUID();
+    const healthyId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, next_attempt_at)
+      values (${poisonId}, ${org.orgId}, ${runId}, ${poison}, 'pending', 0,
+              ${new Date(Date.now() - 3_000_000)}),
+             (${healthyId}, ${org.orgId}, ${runId}, 'healthy@example.com', 'pending', 0,
+              ${new Date(Date.now() - 60_000)})
+    `);
+
+    const enqueued: string[] = [];
+    const asOf = new Date(Date.now() + 60_000);
+    // The stub stands in for the Redis queue, but production validation lives
+    // inside enqueueEmail before queue.add — reproduce it so the poison row
+    // throws exactly as it does on a live tick.
+    assert.equal(await dispatchReportDeliveries(async (data) => {
+      normalizeEmailDeliveryInput(data);
+      enqueued.push(String(data.to));
+      return [];
+    }, asOf), 1);
+    assert.deepEqual(enqueued, ["healthy@example.com"]);
+
+    const rows = (await db.execute<{
+      id: string; recipient: string; status: string; attempt_count: number;
+      error: string | null; terminal_failed_at: Date | null; terminal_failed_by: string | null;
+    }>(sql`
+      select id, recipient, status, attempt_count, error, terminal_failed_at, terminal_failed_by
+        from report_delivery_outbox where run_id = ${runId} order by recipient
+    `));
+    const poisonRow = rows.rows.find((row) => row.id === poisonId)!;
+    assert.equal(poisonRow.status, "failed");
+    assert.equal(poisonRow.attempt_count, MAX_DELIVERY_ATTEMPTS);
+    assert.match(poisonRow.error ?? "", /invalid recipient/i);
+    assert.ok(poisonRow.terminal_failed_at, "poison row must carry a terminal stamp");
+    assert.equal(poisonRow.terminal_failed_by, EMAIL_DELIVERY_WORKER_IDENTITY);
+
+    // The quarantine is stable: a later scan dispatches nothing and leaves the
+    // poison row untouched instead of retrying it forever.
+    assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 120_000)), 0);
+    const after = (await db.execute<{ status: string; attempt_count: number }>(sql`
+      select status, attempt_count from report_delivery_outbox where id = ${poisonId}
+    `)).rows[0]!;
+    assert.deepEqual(after, { status: "failed", attempt_count: MAX_DELIVERY_ATTEMPTS });
   } finally {
     await dropScratchOrg(org.orgId);
   }
