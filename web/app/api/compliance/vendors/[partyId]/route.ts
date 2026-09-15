@@ -107,6 +107,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
   if (body.tinType && !TIN_TYPES.has(body.tinType)) {
     return NextResponse.json({ error: 'unknown TIN type' }, { status: 400 })
   }
+  // Both toggles ride into coalesce() against boolean columns: Postgres would
+  // parse 'yes'/'no' but die on anything else, surfacing the full vendor_roles
+  // UPDATE through the catch below. Refuse non-booleans with a named 400.
+  for (const key of ['backupWithholding', 'reportable'] as const) {
+    if (body[key] !== undefined && body[key] !== null && typeof body[key] !== 'boolean') {
+      return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 })
+    }
+  }
 
   // A TIN is digits; separators are cosmetic. Reject anything else rather than
   // storing a half-typed number that will fail at the filing channel in January.
