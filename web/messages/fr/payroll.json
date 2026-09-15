@@ -3,7 +3,9 @@
     "fields": {
       "cpp2BonusYtd": "Cotisations CPP2 sur primes",
       "qcCsbYtd": "Cotisations QPP additionnelles sur primes",
-      "ficaWithheldYtd": "Impôt FICA retenu"
+      "ficaWithheldYtd": "Impôt FICA retenu",
+      "qpipEmployerYtd": "Cotisations QPIP de l'employeur",
+      "wcbAssessableYtd": "Gains assurables WCB"
     }
   }
 }

@@ -3,7 +3,9 @@
     "fields": {
       "cpp2BonusYtd": "賞与CPP2拠出",
       "qcCsbYtd": "賞与追加QPP拠出",
-      "ficaWithheldYtd": "源泉徴収FICA税"
+      "ficaWithheldYtd": "源泉徴収FICA税",
+      "qpipEmployerYtd": "雇用主QPIP保険料",
+      "wcbAssessableYtd": "WCB算定対象賃金"
     }
   }
 }
