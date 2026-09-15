@@ -1159,6 +1159,18 @@ test(
          where org_id = ${fx.orgId} and document_id = ${fx.documentId}`);
       lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(lifecycle.rows[0]!.status, "resurrected");
+
+      // A cancelled slip that the ledger produces again is an additional
+      // original, not an amendment to the cancellation. The correction path
+      // must refuse rather than send an agency-invalid amended slip.
+      await assert.rejects(
+        recordFilingIssue({
+          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+          taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+        }),
+        /cancelled.*additional original/,
+      );
+      assert.equal((await filingSubmissions(fx.orgId, "CA", "t4", 2026)).length, 2);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
