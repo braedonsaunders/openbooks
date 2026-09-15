@@ -289,9 +289,14 @@ export function verifyOpenItems(
   truth: readonly SourceOpenItem[],
   target: readonly SourceOpenItem[],
 ): NonNullable<SyncResult["openItems"]> {
-  const mineByRef = new Map(
-    target.map((row) => [row.ref, toUnits(row.unpaid)]),
-  );
+  // Sum per ref: two local documents can carry the same source ref (a double
+  // import nothing forbids), and keeping only the last row would report a
+  // clean match on a doubled ledger. Summing flags the double and stays
+  // order-independent where last-wins is not.
+  const mineByRef = new Map<string, bigint>();
+  for (const row of target) {
+    mineByRef.set(row.ref, (mineByRef.get(row.ref) ?? 0n) + toUnits(row.unpaid));
+  }
   const truthRefs = new Set(truth.map((item) => item.ref));
   const mismatches: NonNullable<SyncResult["openItems"]>["mismatches"] = [];
   let matches = 0;
