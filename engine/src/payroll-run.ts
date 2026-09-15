@@ -3762,6 +3762,14 @@ export async function commitPayRun(input: {
       `);
     }
 
+    // An approved pay run commits after its release (migration 0145): the
+    // document-line freeze permits this transaction's own line replacement
+    // while openbooks.payroll_commit names the committing document. Set only
+    // here, only for approved runs, transaction-local so it dies with the
+    // commit — draft commits keep the ordinary path bit for bit.
+    if (run.doc_status === "approved") {
+      await tx.execute(sql`select set_config('openbooks.payroll_commit', ${String(documentId)}, true)`);
+    }
     await tx.execute(sql`delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
     let lineNumber = 1;
     for (const leg of legs) {
