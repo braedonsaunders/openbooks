@@ -378,7 +378,13 @@ async function writeSetup(
       // Drizzle wraps the driver error, so the storage guard's message lives
       // on `cause` — surface that, never the wrapper's query echo.
       const cause = (e as { cause?: { message?: string } })?.cause
-      outcome.errors.push({ row: rowNo, message: cause?.message ?? (e as { message?: string })?.message ?? 'write failed' })
+      const raw = cause?.message ?? (e as { message?: string })?.message ?? 'write failed'
+      // A unique violation on import unambiguously means the row is already
+      // there: the natural-key lookup found nothing only because the entity's
+      // identity is composite (stock-locations, bom-components). Refuse it as
+      // a duplicate naming the constraint instead of echoing storage text.
+      const dup = /duplicate key value violates unique constraint "([^"]+)"/.exec(raw)
+      outcome.errors.push({ row: rowNo, message: dup ? `already exists (${dup[1]})` : raw })
     }
   }
   return outcome
