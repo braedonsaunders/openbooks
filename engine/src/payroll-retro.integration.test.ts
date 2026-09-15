@@ -393,6 +393,140 @@ test(
 );
 
 test(
+  "retro readiness ignores a time correction made before quantification",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable,
+            taxPayableAccountId: craPayable,
+            vacationPayableAccountId: vacationPayable,
+            wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+
+      const jobA = randomUUID();
+      await db.execute(sql`
+        insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom)
+        values (${jobA}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-A', 'Job A', 'active', true, '{}'::jsonb)`);
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Robin Field', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2025-06-01', true,
+                ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_percent, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                '4', 'accrue', true, ${actorId}, ${actorId})`);
+
+      // One committed period: 20 h + 10 h on job A at $30.00/h = $900.00.
+      for (const [day, hours] of [["2026-01-06", 20], ["2026-01-13", 10]] as const) {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id,
+                                    status, is_billable, billing_status, costing_basis,
+                                    created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${day}, ${hours}, ${jobA}, 'approved',
+                  false, 'unbilled', 'actual', ${actorId}, ${actorId})`);
+      }
+      const source = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-01-05", periodEnd: "2026-01-18", payDate: "2026-01-21",
+      });
+      const calculated = await calculatePayRun({
+        orgId: org.orgId, documentId: source.documentId, actorId,
+      });
+      assert.deepEqual(calculated.errors, []);
+      assert.equal(calculated.gross, "900.0000", "30 h x $30.00");
+      await commitPayRun({ orgId: org.orgId, documentId: source.documentId, actorId });
+
+      // A late correction arrives BEFORE quantification: the 6 January sheet
+      // understated the day by one hour (20 h -> 21 h). The source run's own
+      // snapshot still shows 20 h; the quantification below will see 21 h.
+      await db.execute(sql`
+        update time_entries
+           set hours = '21', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and worked_on = '2026-01-06' and project_id = ${jobA}
+           and payroll_batch_ref = ${source.documentId}`);
+      // The raise that nominates the period for retro: $33.00/h effective
+      // 1 January, entered the operator's way (close the old row, open the
+      // new one behind it).
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = '2025-12-31', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2025-06-01'`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '33', 'hour', '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+
+      // Quantification re-runs the period on today's inputs: 31 h x $33.00.
+      const proposal = await proposeRetroPay({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+      });
+      assert.equal(proposal.periods.length, 1);
+      assert.equal(proposal.periods[0]!.difference!.originalEarnings, "900.0000");
+      assert.equal(proposal.periods[0]!.difference!.recomputedEarnings, "1023.0000");
+      assert.equal(proposal.periods[0]!.difference!.delta, "123.0000");
+
+      const retro = await createRetroPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+      });
+      assert.equal(retro.total, "123.0000");
+
+      // The corrected hour is already inside the settlement's recomputed
+      // numbers, so readiness must NOT cry stale: the run is payable as
+      // quantified and there is nothing newer to review.
+      assert.deepEqual(
+        await retroRunFindings(org.orgId, retro.documentId),
+        [],
+        "a correction that predates quantification is priced in, not stale",
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
   "retro pay refuses what it cannot evidence: unscoped runs, empty proposals, overpayments",
   { skip: !DB },
   async () => {

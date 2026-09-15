@@ -235,6 +235,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0139_unified_extensions.sql",
     "0140_extension_draft_author_identity.sql",
     "0141_payroll_opening_balance_second_order_ytd.sql",
+    "0142_payroll_retro_settlement_quantification_snapshot.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
