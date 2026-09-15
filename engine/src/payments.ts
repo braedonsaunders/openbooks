@@ -3495,6 +3495,10 @@ export function buildSepaFile(opts: {
     if (!isValidIban(payment.creditorIban)) {
       throw new PaymentError(`creditor IBAN for ${payment.creditorName} is invalid`);
     }
+    const creditorBic = (payment.creditorBic ?? "").trim();
+    if (creditorBic && !isValidBic(creditorBic)) {
+      throw new PaymentError(`creditor BIC for ${payment.creditorName} is invalid`);
+    }
   }
   const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
