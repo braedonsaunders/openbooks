@@ -4,6 +4,7 @@ import { calculateT4127, type T4127Input } from "./t4127.ts";
 import { calculateTp1015 } from "./quebec/tp1015.ts";
 import type { Province } from "./rates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
 export type CanadaYtdRow = {
   pensionable: string;
@@ -26,6 +27,8 @@ export async function employeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
 ): Promise<CanadaYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
+  const cpp2BonusColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "cpp2BonusYtd")!.column;
+  const qcCsbColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qcCsbYtd")!.column;
   const r = (await tx.execute<CanadaYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
@@ -49,8 +52,12 @@ export async function employeeYtd(
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,
-      coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
-      coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
+      coalesce((select ${sql.raw(cpp2BonusColumn)} from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
+      coalesce((select ${sql.raw(qcCsbColumn)} from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
     from pay_stubs s
     join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
     join documents d on d.id = r.document_id and d.org_id = r.org_id

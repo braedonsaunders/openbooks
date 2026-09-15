@@ -1117,7 +1117,10 @@
       "qpipYtd": "QPIP premiums",
       "taxableYtd": "Taxable earnings",
       "taxYtd": "Income tax withheld",
-      "nonPeriodicYtd": "Bonus / supplemental earnings"
+      "nonPeriodicYtd": "Bonus / supplemental earnings",
+      "cpp2BonusYtd": "CPP2 bonus contributions",
+      "qcCsbYtd": "Québec additional-QPP bonus contributions",
+      "ficaWithheldYtd": "FICA tax withheld"
     },
     "componentHelp": "How much of this component's annual cap the employee has already used this year, at your previous payroll system. Without it the cap restarts at zero and the employee can contribute a second full annual limit.",
     "componentCap": "Annual cap",

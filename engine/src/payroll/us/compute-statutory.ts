@@ -10,6 +10,7 @@ import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { computeUsWithholding, usSubRegionRateIndex } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
+import { US_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
 export type UsYtdRow = {
   fica: string;
@@ -27,6 +28,7 @@ export async function usEmployeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
+  const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
@@ -38,7 +40,9 @@ export async function usEmployeeYtd(
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
-      coalesce(sum((s.factors->>'SS')::numeric), 0)
+      coalesce((select ${sql.raw(ficaWithheldColumn)} from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum((s.factors->>'SS')::numeric), 0)
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
       + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax
     from pay_stubs s

@@ -5,6 +5,7 @@ import { add, cmp, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
 import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "./payroll-fences.ts";
 import type { PayrollSubsidiaryScope } from "./payroll-run.ts";
+import { PACK_OPENING_BALANCE_FIELDS } from "./payroll/opening-ytd-registry.ts";
 
 function openingSubsidiaryScopeFilter(
   column: SQL,
@@ -76,6 +77,8 @@ export interface OpeningBalanceField {
   label: string;
   /** What the operator copies out of the prior provider's YTD report. */
   help: string;
+  /** Optional whole-field key that bounds this amount. */
+  ceilingKey?: string;
 }
 
 /**
@@ -86,6 +89,14 @@ export interface OpeningBalanceField {
  * because an opening vacation balance is now an entitlement_ledger row against
  * a pay bank. Offering it as an editable field would be a setting that changes
  * nothing.
+ */
+/**
+ * Second-order opening history, declared by the country packs — never named
+ * here. Each pack's `openingYtdFields` names the bonus-attributed or
+ * withheld-dollars history its own statutory engine reads
+ * (engine/src/payroll/canada/opening-ytd.ts,
+ * engine/src/payroll/us/opening-ytd.ts); the generic layer below only
+ * iterates the registry, so a third pack's history arrives with the pack.
  */
 export const OPENING_BALANCE_FIELDS: readonly OpeningBalanceField[] = [
   {
@@ -133,6 +144,7 @@ export const OPENING_BALANCE_FIELDS: readonly OpeningBalanceField[] = [
     label: "Bonus / supplemental earnings",
     help: "Bonuses and other non-periodic earnings paid this year — the bonus-method year-to-date.",
   },
+  ...PACK_OPENING_BALANCE_FIELDS,
 ] as const;
 
 const FIELD_BY_KEY = new Map(OPENING_BALANCE_FIELDS.map((f) => [f.key, f]));
@@ -261,6 +273,14 @@ export function normalizeOpeningBalance(input: Record<string, unknown>): Opening
   over("eiYtd", "insurableYtd", "EI premiums", "insurable earnings");
   over("taxYtd", "taxableYtd", "Income tax withheld", "taxable earnings");
   over("nonPeriodicYtd", "taxableYtd", "Bonus / supplemental earnings", "taxable earnings");
+  for (const field of OPENING_BALANCE_FIELDS) {
+    if (!field.ceilingKey) continue;
+    const ceiling = FIELD_BY_KEY.get(field.ceilingKey);
+    if (!ceiling) {
+      throw new PayrollError(`${field.label} has an invalid ceiling configuration`);
+    }
+    over(field.key, ceiling.key, field.label, ceiling.label);
+  }
   return amounts;
 }
 
