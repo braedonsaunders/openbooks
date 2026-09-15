@@ -595,15 +595,40 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       id = root.rows[0]?.id ?? null;
     }
     if (id) {
+      // A functional-currency change reinterprets translated history:
+      // billing, inventory, assets, and tax all read base_currency, so
+      // restating it rewrites what past postings mean. Adopt the source
+      // currency on first load (a row with no connector identity yet,
+      // including the reused posting root), but never restate it silently
+      // afterwards: hold the stored value, converge the descriptive fields,
+      // and report the held change for controller review.
+      const current = ((await db.execute(sql`
+        select base_currency, custom->>${refKey} as ns from subsidiaries
+         where id = ${id} and org_id = ${orgId}`)) as {
+        rows: { base_currency: string; ns: string | null }[];
+      }).rows[0];
+      const storedCurrency = String(current?.base_currency ?? "").toUpperCase();
+      const heldCurrency =
+        current?.ns != null && storedCurrency !== baseCurrency;
       await db.execute(sql`
         update subsidiaries set name = ${name}, legal_name = ${legalName},
-          base_currency = ${baseCurrency}, country = ${country},
+          base_currency = ${heldCurrency ? storedCurrency : baseCurrency}, country = ${country},
           is_elimination = ${!!f.isElimination}, is_active = ${f.isActive !== false},
           custom = (${custom}::jsonb || subsidiaries.custom)
             || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text),
           updated_at = now()
          where id = ${id} and org_id = ${orgId}`);
       s.updated++;
+      if (heldCurrency) {
+        s.failed++;
+        s.errors.push({
+          sourceRef: rec.sourceRef,
+          message:
+            `subsidiary ${rec.sourceRef} base currency change ${storedCurrency} → ${baseCurrency} held; ` +
+            `stored functional currency kept while descriptive fields updated — ` +
+            `a functional-currency change reinterprets history and needs controller review`,
+        });
+      }
       return id;
     }
     if (rec.parentRef && !parentId) throw new Error(`subsidiary parent ${rec.parentRef} is not loaded`);
