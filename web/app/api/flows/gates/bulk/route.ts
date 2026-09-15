@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadGateHeader, requireFlowsSession } from '../../_lib'
 
@@ -57,9 +58,21 @@ export async function POST(req: Request) {
       if (!isUuid(item.gateId)) throw new Error('invalid gateId')
       const gate = await loadGateHeader(item.gateId, authz.user.orgId)
       if (!gate) throw new Error('approval not found')
+      // A gate assignment is not a grant to every legal entity — the same
+      // direct-record subsidiary boundary the single decide route enforces,
+      // per item, before the engine resumes a consequential branch.
+      if (guardSubsidiaryScope(authz, gate.subsidiary_id)) throw new Error('approval not found')
       if (gate.status !== 'pending') throw new Error('this approval was already resolved')
       // decideGate is the single authority (assignee / admin / delegate).
-      await decideGate({ gateId: item.gateId, decision, userId: authz.user.id, comment })
+      // The caller's scope rides along so the engine re-checks the boundary
+      // at its own write authority.
+      await decideGate({
+        gateId: item.gateId,
+        decision,
+        userId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        comment,
+      })
       results.push({ ok: true })
     } catch (e) {
       results.push({ ok: false, error: e instanceof Error ? e.message : 'failed' })
