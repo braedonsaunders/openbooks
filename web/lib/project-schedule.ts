@@ -402,13 +402,21 @@ export async function createScheduleTask(
 ) {
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     await assertProjectSchedulingEnabledTx(tx, orgId)
+    // A crafted display order reaches an integer column: fail closed instead
+    // of escaping as a cast error.
+    let order: number | null = null
+    if (input.order !== undefined && input.order !== null) {
+      const n = Number(input.order)
+      order = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null
+      if (order === null) throw new ScheduleError('task order must be a number', 422)
+    }
     const next = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
        where org_id = ${orgId} and project_id = ${projectId}`))
     const created = (await tx.execute<{ id: string }>(sql`
       insert into project_tasks (org_id, project_id, name, schedule_order, created_by, updated_by)
       values (${orgId}, ${projectId}, ${input.name || 'New task'},
-              ${input.order ?? next.rows[0]?.n ?? 1}, ${userId}, ${userId})
+              ${order ?? next.rows[0]?.n ?? 1}, ${userId}, ${userId})
       returning id`))
     const id = created.rows[0]?.id
     if (!id) throw new ScheduleError('could not create task', 500)
@@ -454,6 +462,19 @@ export async function createScheduleDependency(
   await assertProjectSchedulingEnabled(orgId)
   await assertTaskInProject(orgId, projectId, input.predecessorId)
   await assertTaskInProject(orgId, projectId, input.successorId)
+  // The storage CHECK only knows FS/SS/FF/SF and an integer lag: reject
+  // anything else here so a crafted value fails closed instead of escaping
+  // as a PostgreSQL error (a 500).
+  const type = input.type ?? 'FS'
+  if (!['FS', 'SS', 'FF', 'SF'].includes(type)) {
+    throw new ScheduleError('dependency type must be FS, SS, FF, or SF', 422)
+  }
+  const rawLag = Number(input.lagDays ?? 0)
+  if (!Number.isFinite(rawLag)) throw new ScheduleError('lag days must be a finite number', 422)
+  const lagDays = Math.trunc(rawLag) || 0
+  if (lagDays < -2147483648 || lagDays > 2147483647) {
+    throw new ScheduleError('lag days are out of range', 422)
+  }
 
   // Refuse loops at the boundary: a cycle makes the critical path undefined for
   // the whole project, and the UI can only prevent the ones it can see.
@@ -474,7 +495,7 @@ export async function createScheduleDependency(
   await db.execute(sql`
     insert into schedule_dependencies (org_id, project_id, predecessor_id, successor_id, type, lag_days, created_by, updated_by)
     values (${orgId}, ${projectId}, ${input.predecessorId}, ${input.successorId},
-            ${input.type ?? 'FS'}, ${Math.trunc(Number(input.lagDays ?? 0)) || 0}, ${userId}, ${userId})
+            ${type}, ${lagDays}, ${userId}, ${userId})
     on conflict (predecessor_id, successor_id)
       do update set type = excluded.type, lag_days = excluded.lag_days, updated_at = now(), updated_by = ${userId}
       where schedule_dependencies.org_id = ${orgId}`)
