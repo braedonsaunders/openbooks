@@ -62,6 +62,16 @@ const DOCUMENT_CLOSE_MODULES = {
   journal: "gl",
 } as const satisfies Record<string, CloseModule>;
 
+/**
+ * Every document kind the engine knows — derived from the close-module
+ * decisions above, which is the one table that must name a kind for it to
+ * post at all. This is the single source of truth for the kind universe:
+ * engine consumers (flows profiles, kind allow-lists) derive from it instead
+ * of keeping their own mirrors, so a new kind cannot exist in one place and
+ * be rejected as unknown in another.
+ */
+export const DOCUMENT_KINDS: readonly string[] = Object.keys(DOCUMENT_CLOSE_MODULES);
+
 export function closeModuleForDocument(kind: string): CloseModule {
   const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];
   if (!decided) {

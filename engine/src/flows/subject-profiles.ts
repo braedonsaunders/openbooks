@@ -1,4 +1,5 @@
 import type { FlowFieldDef, FlowSubjectProfile } from "@openbooks/forms-core";
+import { DOCUMENT_KINDS } from "../close.ts";
 
 /**
  * FlowSubjectProfiles for document kinds — the author-time vocabulary the
@@ -11,29 +12,21 @@ import type { FlowFieldDef, FlowSubjectProfile } from "@openbooks/forms-core";
  * The profile is collapsed onto the single `documents` supertype.
  */
 
-/**
- * Document kinds flows can run over. The posting kinds mirror
- * engine/src/posting.ts RULES; the order kinds (sales_order, purchase_order,
- * quote) live in the same documents table without a posting rule, so their
- * profiles omit `post_document`.
- */
-export const POSTING_DOC_KINDS = [
-  "vendor_bill",
-  "vendor_credit",
-  "vendor_payment",
-  "expense_report",
-  "customer_invoice",
-  "customer_credit",
-  "customer_payment",
-  "card_charge",
-  "card_refund",
-  "journal",
-  "check",
-  "deposit",
-  "transfer",
-] as const;
-
 export const NON_POSTING_DOC_KINDS = ["sales_order", "purchase_order", "quote"] as const;
+
+/**
+ * Document kinds flows can run over. The posting kinds are derived from the
+ * engine kind universe (engine/src/close.ts DOCUMENT_KINDS) minus the
+ * explicitly non-posting order kinds — never a hand mirror of
+ * engine/src/posting.ts RULES, which drifted before (pay_run and
+ * project_charge posted in the kernel with no flow profile). The order kinds
+ * live in the same documents table without a posting rule, so their profiles
+ * omit `post_document`. A parity test pins POSTING_DOC_KINDS to the RULES
+ * keys from both sides.
+ */
+export const POSTING_DOC_KINDS: readonly string[] = DOCUMENT_KINDS.filter(
+  (kind) => !(NON_POSTING_DOC_KINDS as readonly string[]).includes(kind),
+);
 
 export const DOCUMENT_FLOW_KINDS: readonly string[] = [
   ...POSTING_DOC_KINDS,
