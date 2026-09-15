@@ -88,6 +88,12 @@ export async function POST(request: Request) {
     `))
     if (!currency.rows[0]) return bad('invalid_currency', 'currencyRestriction')
   }
+  // Storage requires reconcilable accounts to carry a settlement currency
+  // (accounts_reconcilable_currency_required). Refuse the combination here
+  // as a request-state failure instead of surfacing a raw constraint error.
+  if (reconcilable && !currencyRestriction) {
+    return bad('reconcilable_currency_required', 'currencyRestriction')
+  }
 
   const subsidiaryId = textOrNull(body.subsidiaryId)
   if (subsidiaryId) {
