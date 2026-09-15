@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
-import { add, cmp, fromUnits, mulPercent, toUnits } from "./money.ts";
+import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import {
   ATTR_KIND,
@@ -834,9 +834,28 @@ export function providerPaymentMethod(provider: AcceptanceProvider): "card" | "b
  *  deterministic: the provider-configured rule first, then provider-specific,
  *  then global — each tier newest-effective first, id breaking any remaining
  *  tie. */
+/**
+ * Provider minor-unit quantization for quoted fees. Provider boundaries only
+ * accept whole minor units, so a computed fee with sub-minor dust (3% of
+ * $11.11 is $0.3333) must be rounded here at quote time — every adapter
+ * refuses it later, failing the whole checkout. Halves away from zero,
+ * matching the ledger's rounding; zero-decimal currencies quantize to whole
+ * units, three-decimal ones to millis.
+ */
+function quantizeSurchargeToMinorUnits(amount: string, currency: string): string {
+  const units = toUnits(amount);
+  const code = currency.toUpperCase();
+  const divisor = ZERO_DECIMAL_CURRENCIES.has(code)
+    ? 10_000n
+    : THREE_DECIMAL_CURRENCIES.has(code)
+      ? 10n
+      : 100n;
+  return fromUnits(roundDiv(units, divisor) * divisor);
+}
+
 export async function resolveSurcharge(
   orgId: string,
-  opts: { provider: AcceptanceProvider; amount: string; onDate: string; configuredRuleId?: string | null },
+  opts: { provider: AcceptanceProvider; amount: string; currency: string; onDate: string; configuredRuleId?: string | null },
 ): Promise<SurchargeResolution> {
   if (opts.configuredRuleId !== undefined && opts.configuredRuleId !== null) {
     assertAcceptanceUuid(opts.configuredRuleId, "surcharge rule");
@@ -859,7 +878,10 @@ export async function resolveSurcharge(
   const rule = r.rows[0];
   if (!rule) return { amount: "0", ruleId: null, feeIncomeAccountId: null };
   await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
-  return { amount: computeSurcharge(opts.amount, rule), ruleId: rule.id, feeIncomeAccountId: rule.fee_income_account_id };
+  // The quote must be collectible: currency is required so the fee arrives
+  // in whole minor units rather than stranding checkout at the adapter.
+  const amount = quantizeSurchargeToMinorUnits(computeSurcharge(opts.amount, rule), opts.currency);
+  return { amount, ruleId: rule.id, feeIncomeAccountId: rule.fee_income_account_id };
 }
 
 // ---------------------------------------------------------------------------
@@ -929,6 +951,7 @@ export async function createPaymentLink(
     const surcharge = await resolveSurcharge(orgId, {
       provider: input.provider,
       amount: doc.open_balance,
+      currency: doc.currency,
       onDate: await businessToday(orgId),
       configuredRuleId: config.surcharge_rule_id,
     });
@@ -1103,6 +1126,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
         await resolveSurcharge(link.orgId, {
           provider: link.provider,
           amount: row.openBalance,
+          currency: link.currency,
           onDate: await businessToday(link.orgId),
           configuredRuleId: config?.surcharge_rule_id ?? null,
         })
@@ -1191,6 +1215,7 @@ export async function createCheckoutSession(
         const resolvedSurcharge = await resolveSurcharge(link.orgId, {
           provider: link.provider,
           amount: openBalance,
+          currency: link.currency,
           onDate: await businessToday(link.orgId),
           configuredRuleId: config.surcharge_rule_id,
         });
@@ -1200,6 +1225,7 @@ export async function createCheckoutSession(
       const resolvedSurcharge = await resolveSurcharge(link.orgId, {
         provider: link.provider,
         amount: openBalance,
+        currency: link.currency,
         onDate: await businessToday(link.orgId),
         configuredRuleId: config.surcharge_rule_id,
       });
