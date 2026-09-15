@@ -69,6 +69,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       ) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
+      // POST requires a non-empty name and formatter script. A blank PATCH
+      // value would otherwise store '' / NULL: an empty name corrupts the
+      // format contract, and a nulled script fails the next payment run
+      // (renderPaymentFile throws for custom rails with no script).
+      if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim())) {
+        return NextResponse.json({ error: 'name cannot be empty' }, { status: 400 })
+      }
+      if (body.formatterScript !== undefined
+        && (typeof body.formatterScript !== 'string' || !body.formatterScript.trim())) {
+        return NextResponse.json({ error: 'formatterScript cannot be empty' }, { status: 400 })
+      }
       const formatWrite = await db.transaction(async (tx) => {
         // Lock the row before taking the audit snapshot. This serializes
         // concurrent edits so each audit event records the state immediately
