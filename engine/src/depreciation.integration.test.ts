@@ -228,6 +228,60 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
   }
 });
 
+test("a schedule split across fiscal calendars fails closed instead of picking one", { skip: !DB }, async () => {
+  // Calendar-retention pin: when an asset's lines reference periods of two
+  // fiscal calendars, rebuilding must refuse — silently keeping the first
+  // calendar found would post every subsequent month to the wrong fiscal
+  // spine. (Two calendars must throw; tolerating two picks one arbitrarily.)
+  const { org, assetId, actorId } = await seedAsset("manual");
+  try {
+    const schedule = (await db.execute<{ id: string }>(sql`
+      select id from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId} and book_id=${org.bookId}`));
+    const scheduleId = schedule.rows[0]!.id;
+    const calB = randomUUID();
+    await db.execute(sql`
+      insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
+                                    adjustment_period_enabled, is_default, is_active, config)
+      values (${calB}, ${org.orgId}, 'Second', 'monthly', 1, 1, 'UTC', false, false, true, '{}'::jsonb)`);
+    const periodB = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${periodB}, ${org.orgId}, 2026, 7, '2026-07-B', '2026-07-01', '2026-07-31', false, ${calB})`);
+    // Manual-method schedules carry no formula lines, so one line per calendar:
+    // the schedule is genuinely split across the default calendar and calB.
+    await db.execute(sql`
+      insert into depreciation_schedule_lines (id, org_id, schedule_id, period_id, sequence, planned_amount, source, created_by, updated_by)
+      values (${randomUUID()}, ${org.orgId}, ${scheduleId}, ${org.periodId}, 998, '0.0000', 'imported', ${actorId}, ${actorId}),
+             (${randomUUID()}, ${org.orgId}, ${scheduleId}, ${periodB}, 999, '0.0000', 'imported', ${actorId}, ${actorId})`);
+    await assert.rejects(
+      buildSchedule(assetId, org.orgId, actorId, org.bookId),
+      /spans multiple fiscal calendars/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a non-hex evidence file id is refused before any schedule work", { skip: !DB }, async () => {
+  // Evidence-gate strictness pin: the file id must be a hex UUID, so a
+  // mistyped id fails closed up front with the evidence error instead of
+  // failing deep in the input path (or attaching to the wrong file).
+  const { org, assetId, actorId, evidenceFileId } = await seedAsset("manual");
+  try {
+    const plusId = `${evidenceFileId.slice(0, 30)}+${evidenceFileId.slice(31)}`;
+    assert.equal(plusId.length, 36);
+    await assert.rejects(
+      recordDepreciationInput({
+        orgId: org.orgId, assetId, effectiveDate: org.date, kind: "manual", value: "100.0000",
+        memo: "Mistyped evidence reference", evidenceFileId: plusId, actorId,
+      }),
+      /an attached evidence file is required/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("depreciation reloads accounts and dimensions after a concurrent asset edit", { skip: !DB }, async () => {
   const { org, assetId, actorId, evidenceFileId } = await seedAsset("manual");
   const fence: PoolClient = await pool.connect();
