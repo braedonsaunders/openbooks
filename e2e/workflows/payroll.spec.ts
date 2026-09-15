@@ -186,7 +186,15 @@ async function ensureApprovalFlow(
           kind: "gate",
           gate: {
             title: name,
-            assignees: [{ type: "user", userId: ctx.approver.id }],
+            // Role-routed, never direct-to-user: these flows match by
+            // subject KIND tenant-wide, so they also fire on sibling
+            // suites' subjects (a later suite's bank details or pay runs).
+            // A gate assigned to this suite's throwaway approver parks those
+            // foreign subjects behind an unanswerable gate (proven: a P2P
+            // bank account stuck pending). Role fan-out gives every
+            // approver-role holder their own quorum-any row, so any suite's
+            // approver can clear what these flows gate — including ours.
+            assignees: [{ type: "role", role: "approver" }],
             mode: "any",
             preventSelfApproval: true,
           },
