@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Overhead publish must fail closed on invalid input like its sibling
-// actions do: an impossible effectiveFrom or a malformed department id
-// currently escapes as a raw Postgres throw (HTTP 500), and a well-formed
-// but unknown department id inserts an orphan rate row yet reports
-// ok:true with published:1.
+// actions do: an impossible effectiveFrom is refused before any read, and a
+// malformed or unknown department id is refused as a 422 instead of escaping
+// as a raw Postgres throw (HTTP 500). Department identity itself belongs to
+// the publisher, which fails closed through its foreign key — the route only
+// shapes the payload and maps storage input failures.
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __overheadPublishState: state })
@@ -94,6 +95,21 @@ test('publish rejects a malformed department id instead of throwing', { skip: !D
       action: 'publish',
       effectiveFrom: '2026-03-01',
       rates: [{ departmentId: 'not-a-uuid', ratePerHour: '10.5' }],
+    })
+    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.deepEqual(await publishedRates(org.orgId), [], 'refused publish must store no rate rows')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('publish rejects a missing department id before any write', { skip: !DB }, async () => {
+  const { org } = await fixture()
+  try {
+    const result = await post({
+      action: 'publish',
+      effectiveFrom: '2026-03-01',
+      rates: [{ departmentId: null, ratePerHour: '10.5' }],
     })
     assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.deepEqual(await publishedRates(org.orgId), [], 'refused publish must store no rate rows')
