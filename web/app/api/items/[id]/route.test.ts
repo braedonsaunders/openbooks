@@ -158,6 +158,7 @@ const mockSources = new Map<string, string>([
     `
       export async function loadFieldDefs() { return [] }
       export function validateCustomValues(_defs, values) { return { ok: true, errors: {}, cleaned: values ?? {} } }
+      export async function findUnownedCustomReferences() { return [] }
     `,
   ],
   [

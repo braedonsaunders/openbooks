@@ -92,3 +92,25 @@ test('PATCH still saves a column-maximum default rate with identical read-back',
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('PATCH refuses a foreign reference custom value instead of storing it', { skip: !DB }, async () => {
+  const { org, itemId } = await fixture()
+  const foreign = await createScratchOrg()
+  try {
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${randomUUID()}, ${org.orgId}, 'items', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
+    `)
+    const refused = await patch(itemId, { custom: { ref_party: foreign.vendorId } })
+    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refused.json)}`)
+    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`)).rows[0]?.custom
+    assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused references store nothing')
+    const saved = await patch(itemId, { custom: { ref_party: org.vendorId } })
+    assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(saved.json)}`)
+  } finally {
+    await dropScratchOrg(foreign.orgId)
+    await dropScratchOrg(org.orgId)
+  }
+})
