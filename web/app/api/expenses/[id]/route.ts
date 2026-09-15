@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
@@ -89,6 +90,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       extraDims?: Record<string, string | null>
       custom?: Record<string, unknown>
     })[]
+  }
+  // The document date reaches coalesce(document_date) uncast: a malformed
+  // value dies at the storage layer as a raw 500 instead of a domain 422
+  // (sibling PATCH routes validate with isoDate). Fail closed here, covering
+  // both shape-invalid strings and impossible calendar days.
+  if (body.documentDate !== undefined && !isIsoCalendarDate(body.documentDate)) {
+    return NextResponse.json({ error: 'invalid documentDate — expected YYYY-MM-DD' }, { status: 422 })
   }
   // The party is the employee being reimbursed. The documents FK is global,
   // so without an org-scoped check this save would persist another tenant's
