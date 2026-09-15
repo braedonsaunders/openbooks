@@ -37,6 +37,15 @@ test("2026 constants match the publication's principal-changes tables", () => {
   assert.equal(QC_RATES_2026.basicPersonalAmount, "18952"); // p. 5
   assert.equal(QC_RATES_2026.workersDeductionMax, "1450");  // p. 6
   assert.equal(QC_RATES_2026.lumpSumThreshold, "18952");    // p. 6
+  // Step factors: worker 6%, credit 14% on E, labour-funds 15%, flat 7%,
+  // CS ratio 1.00 / 6.30 — each behaviorally pinned by the appendix goldens
+  // below, restated here so any digit change fails by name.
+  assert.equal(QC_RATES_2026.workersDeductionRate, "0.06");
+  assert.equal(QC_RATES_2026.creditRate, "0.14");
+  assert.equal(QC_RATES_2026.labourFundsCreditRate, "0.15");
+  assert.equal(QC_RATES_2026.lumpSumRate, "0.07");
+  assert.equal(QC_RATES_2026.qppFirstAdditionalRate, "0.01");
+  assert.equal(QC_RATES_2026.qppTotalRate, "0.0630");
 });
 
 /**
