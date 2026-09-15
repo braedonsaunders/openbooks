@@ -47,6 +47,19 @@ function validStages(raw: unknown): StageInput[] | null {
   return stages;
 }
 
+/**
+ * Grace days are stored into an integer column. Anything that is not a
+ * non-negative integer — non-numeric strings, booleans, fractions,
+ * negatives — is a client error, never a storage error surfacing as a 500.
+ */
+function parseGracePeriodDays(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === '') return 0;
+  if (typeof raw === 'boolean') return null;
+  const days = Number(raw);
+  if (!Number.isInteger(days) || days < 0) return null;
+  return days;
+}
+
 export async function GET() {
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
@@ -92,13 +105,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
   }
   const minBalance = normalizeMoney(minBalanceRaw);
+  const gracePeriodDays = parseGracePeriodDays(body.gracePeriodDays);
+  if (gracePeriodDays === null) {
+    return NextResponse.json({ error: "gracePeriodDays must be a non-negative integer" }, { status: 400 });
+  }
 
   const id = await db.transaction(async (tx) => {
     const created = (await tx.execute<Record<string, unknown>>(sql`
       insert into dunning_policies (org_id, name, applies_to_kind, grace_period_days, min_balance,
                                     reply_to, is_active, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${appliesToKind},
-              ${Number(body.gracePeriodDays ?? 0)}, ${minBalance},
+              ${gracePeriodDays}, ${minBalance},
               ${(body.replyTo as string | null) ?? null}, ${body.isActive !== false},
               ${authz.user.id}, ${authz.user.id})
       returning *
