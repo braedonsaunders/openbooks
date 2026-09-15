@@ -10,6 +10,7 @@ import {
 import { loadReportDefinition } from '../../../../../lib/custom-reports'
 import { canAccessReportArtifact, canAccessReportDefinition, snapshotReportAuthorization } from '../../../../../lib/report-execution-context'
 import { guardPermission } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
@@ -39,6 +40,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -131,6 +133,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   let reason: unknown
   // DELETE historically accepted an empty body; only invoke the strict JSON
