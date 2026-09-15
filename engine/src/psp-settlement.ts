@@ -22,6 +22,7 @@ export type SettlementLineKind =
   | "fee"
   | "dispute"
   | "dispute_reversal"
+  | "adjustment"
   | "fx_adjustment"
   | "transfer"
   | "other";
@@ -169,6 +170,7 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
   feeAmount: string;
   refundAmount: string;
   disputeAmount: string;
+  adjustmentAmount: string;
   fxAmount: string;
   netAmount: string;
 } {
@@ -176,6 +178,12 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
   let fee = 0n;
   let refund = 0n;
   let dispute = 0n;
+  // Reserved bucket for provider adjustment legs (Chargebee amount_adjusted
+  // and its successors): reported separately from refunds so write-offs and
+  // credit-note applications never pollute refund metrics. Deducted from net
+  // by the writer change that persists and posts it; until then it reads
+  // zero and the net formula below is exactly the historical one.
+  const adjustment = 0n;
   let fx = 0n;
   for (const l of lines) {
     const u = toUnits(l.amount);
@@ -210,6 +218,7 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
     feeAmount: fromUnits(fee),
     refundAmount: fromUnits(refund),
     disputeAmount: fromUnits(dispute < 0n ? 0n : dispute),
+    adjustmentAmount: fromUnits(adjustment),
     fxAmount: fromUnits(fx),
     netAmount: fromUnits(net),
   };
@@ -388,6 +397,9 @@ export function parseChargebeeSettlement(payload: {
   total?: number;
   amount_paid?: number;
   amount_adjusted?: number;
+  /** Operator-surfaced provider reason for the adjustment (e.g. the
+   *  adjustment credit-note reason); carried onto the adjustment leg. */
+  adjustment_reason?: string | null;
   credits_applied?: number;
   line_items?: {
     id?: string;
