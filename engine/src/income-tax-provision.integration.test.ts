@@ -487,7 +487,9 @@ test("consolidation translates each entity before summing — never a raw unit s
   assert.equal(consolidated.totalExpense, "78250.0000");
   assert.notEqual(consolidated.totalExpense, "73000.0000");
   assert.equal(consolidated.pretaxBookIncome, "325000.0000");
-  assert.equal(consolidated.effectiveRatePercent, "24.07");
+  // 78,250 / 325,000 = 24.0769…% → 24.08 rounded half away from zero (the
+  // display path used to truncate to 24.07).
+  assert.equal(consolidated.effectiveRatePercent, "24.08");
   // With no timing differences the merged reconciliation still lands on total.
   const statutory = consolidated.rateReconciliation.find((s) => s.key === "statutory")!;
   const total = consolidated.rateReconciliation.find((s) => s.key === "total")!;

@@ -156,10 +156,13 @@ test(
       const documentId = randomUUID();
       const lineId = randomUUID();
       await db.execute(sql`
+        -- A service item with no income account: inventory items now fail
+        -- closed earlier (no costing profile), so the account-resolution
+        -- refusal under test needs a non-inventory kind.
         insert into items
           (id, org_id, kind, name, show_on_timesheet, is_active, custom,
            create_plans_on, revenue_allocation, income_account_id)
-        values (${itemId}, ${org.orgId}, 'inventory', 'Unconfigured Widget',
+        values (${itemId}, ${org.orgId}, 'service', 'Unconfigured Widget',
                 false, true, '{}'::jsonb, 'billing', 'normal', null)`);
       await db.execute(sql`
         insert into documents
