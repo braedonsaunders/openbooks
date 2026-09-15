@@ -1117,6 +1117,115 @@ test(
 );
 
 test(
+  "a correction keeps one repeatable-read snapshot through its artifact",
+  { skip: !DB },
+  async () => {
+    const fx = await seedT4Year();
+    const country = "ZX";
+    const filingKey = `correction-repeatable-read-${randomUUID()}`;
+    const settingKey = `payrollCorrectionRepeatableRead-${randomUUID()}`;
+    let populationCalls = 0;
+    let populationPaused!: () => void;
+    const populationReady = new Promise<void>((resolve) => { populationPaused = resolve; });
+    let releasePopulation!: () => void;
+    const populationRelease = new Promise<void>((resolve) => { releasePopulation = resolve; });
+
+    const readMarker = async (): Promise<string> => {
+      const result = await db.execute<{ marker: string | null }>(sql`
+        select settings->>${settingKey} as marker
+          from orgs
+         where id = ${fx.orgId}
+      `);
+      return result.rows[0]?.marker ?? "";
+    };
+
+    registerPayrollFilings({
+      country,
+      programTypes: [],
+      yearEnd: [{
+        key: filingKey,
+        label: "Repeatable-read correction filing",
+        cadence: "annual",
+        population: async () => {
+          populationCalls += 1;
+          // Calls 1 and 2 issue the original and validate the amendment. Pause
+          // call 3, the correction's second population read, before it reads
+          // the source marker so a concurrent commit can land in the gap.
+          if (populationCalls === 3) {
+            populationPaused();
+            await populationRelease;
+          }
+          const marker = await readMarker();
+          return {
+            rowKey: "rowId",
+            columns: [{ key: "marker", label: "Marker" }],
+            rows: [{ rowId: "row-1", marker }],
+          };
+        },
+        slip: {
+          build: async () => ({
+            formCode: "ZX_SNAPSHOT",
+            formName: "Repeatable-read correction filing",
+            headerFields: [{ label: "Marker", value: await readMarker() }],
+            boxes: [],
+          }),
+        },
+        amendment: {
+          supported: true,
+          revisions: ["amended"],
+          vehicle: "same_form",
+          download: {
+            label: "Download repeatable-read correction",
+            build: async ({ rows }) => ({
+              filename: "repeatable-read-correction.txt",
+              contentType: "text/plain",
+              body: rows[0]!.current.headerFields[0]!.value,
+            }),
+          },
+        },
+      }],
+    });
+
+    try {
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "A" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+      await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
+        taxYear: 2026, revision: "original",
+      });
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "B" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+
+      const correcting = recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
+        taxYear: 2026, revision: "amended", rowIds: ["row-1"],
+      });
+      await populationReady;
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "C" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+      releasePopulation();
+
+      const amended = await correcting;
+      assert.equal(amended.file?.body, "B");
+      assert.equal(amended.submission.slips[0]?.reported.fields[0]?.value, "B");
+    } finally {
+      releasePopulation();
+      unregisterPayrollFilings(country);
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
   "a wrong SIN shows as a change without the number ever being displayed",
   { skip: !DB },
   async () => {
