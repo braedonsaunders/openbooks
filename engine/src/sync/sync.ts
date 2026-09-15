@@ -1598,8 +1598,21 @@ export async function runSync(
 
     const totalDocs = changes.documents.length;
     let docIndex = 0;
+    // One pull must apply one state per external id. A repeated sourceRef
+    // would otherwise silently overwrite its first copy through the amend
+    // path — churning non-posting documents on every run and failing posting
+    // ones closed — with no deterministic winner. The first occurrence wins;
+    // repeats are reported, never applied.
+    const appliedSourceRefs = new Set<string>();
     for (const sourceDoc of changes.documents) {
       docIndex++;
+      if (appliedSourceRefs.has(sourceDoc.sourceRef)) {
+        skipped.push(
+          `${sourceDoc.sourceRef}: duplicate source transaction in this pull; only the first occurrence was applied`,
+        );
+        continue;
+      }
+      appliedSourceRefs.add(sourceDoc.sourceRef);
       await setProgress(org.id, run!.id, {
         phase: "post",
         message: "Posting transactions…",
