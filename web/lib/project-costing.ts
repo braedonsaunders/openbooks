@@ -94,6 +94,8 @@ async function projectCostSummaryInSnapshot(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+        and e.book_id = (select b.id from accounting_books b
+                           where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
     `),
     // committed: open order remainders tagged to the project. Order amounts
     // are transaction-currency facts; translate each contribution through the
@@ -123,6 +125,8 @@ async function projectCostSummaryInSnapshot(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+        and e.book_id = (select b.id from accounting_books b
+                           where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
         and a.type in ${COST_SET}
       group by a.id, a.number, a.name, a.type
       having sum(l.amount) <> 0
