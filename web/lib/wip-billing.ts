@@ -291,7 +291,7 @@ async function remainingContractCapacity(
   return cmp(remaining, '0') > 0 ? remaining : '0.0000'
 }
 
-function rateEngineOverhead(
+export function rateEngineOverhead(
   source: RawWipSource,
   profile: FinancialProfile,
   rates: OverheadRateRow[],
@@ -304,9 +304,13 @@ function rateEngineOverhead(
       && (rate.effective_to == null || rate.effective_to >= source.source_date)
       && (rate.department_id == null || rate.department_id === source.department_id)
   ))
-  const hasSpecific = effective.some((rate) => rate.department_id === source.department_id && source.department_id != null)
+  // Department specificity is per rate KIND, mirroring the posting rule
+  // (`overheadRateAppliesToTimeEntry`): a department row steps aside only the
+  // org-wide rows of its own kind, so rows of one scope still stack.
+  const hasSpecificOfKind = (rateKind: OverheadRateRow['rate_kind']) => source.department_id != null
+    && effective.some((rate) => rate.rate_kind === rateKind && rate.department_id === source.department_id)
   return sum(effective
-    .filter((rate) => !hasSpecific || rate.department_id === source.department_id)
+    .filter((rate) => rate.department_id != null || !hasSpecificOfKind(rate.rate_kind))
     .map((rate) => rate.rate_kind === 'percent'
       ? mulPercent(source.direct_cost_amount, rate.rate)
       : mul(source.quantity, rate.rate)))
