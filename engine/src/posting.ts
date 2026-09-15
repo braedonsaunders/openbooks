@@ -38,6 +38,7 @@ import {
   applyInventoryReceiptsForBill,
   applyVendorCreditInventoryReturns,
   assertBillReceiptsPostable,
+  assertInvoiceIssuesPostable,
   assertVendorCreditInventoryReturnsPostable,
   resolveBillInventoryAccounts,
   resolveVendorCreditInventoryAccounts,
@@ -1685,6 +1686,16 @@ export async function postDocument(
   if (doc.kind === "vendor_bill" && !deps.migration) {
     try {
       await assertBillReceiptsPostable(db, doc.orgId, doc.id);
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      throw new PostingError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+  if (doc.kind === "customer_invoice" && !deps.migration) {
+    try {
+      await assertInvoiceIssuesPostable(db, doc.orgId, doc.id);
     } catch (error) {
       if (error instanceof PostingError) throw error;
       throw new PostingError(

@@ -4083,6 +4083,45 @@ export async function assertVendorCreditInventoryReturnsPostable(
 }
 
 /**
+ * Inventory-kind lines (inventory / assembly / kit) move stock only through
+ * a costing profile. The governed paths (purchase-order receipt, sales
+ * fulfillment) refuse profile-less lines outright; the profile join below
+ * would otherwise skip them silently on the legacy bill/invoice paths.
+ */
+async function unprofiledInventoryLines(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<{ line_number: number; item_id: string }[]> {
+  return ((await runner.execute<{ line_number: number; item_id: string }>(sql`
+    select dl.line_number, dl.item_id
+      from document_lines dl
+      join items i on i.id = dl.item_id and i.org_id = dl.org_id
+     where dl.document_id = ${documentId} and dl.org_id = ${orgId}
+       and dl.item_id is not null and dl.quantity <> 0
+       and i.kind in ('inventory', 'assembly', 'kit')
+       and not exists (
+         select 1 from item_inventory_profiles p
+          where p.item_id = dl.item_id and p.org_id = dl.org_id
+       )
+     order by dl.line_number`))).rows;
+}
+
+/** Fail before the document transaction when an inventory line has no costing
+ * profile to receive it. Without this, the legacy bill-is-the-receipt path
+ * posts the line as pure expense and the stock is never recorded. */
+function assertNoUnprofiledInventoryLines(
+  rows: { line_number: number; item_id: string }[],
+): void {
+  const first = rows[0];
+  if (first) {
+    throw new InventoryError(
+      `document line ${first.line_number} (item ${first.item_id}) is an inventory item without a costing profile`,
+    );
+  }
+}
+
+/**
  * A vendor bill may only post into a state its receipt effects can satisfy.
  * Document lines carry no lot or serial evidence, so a tracked line cannot be
  * received. A standard-cost variance likewise needs a received-not-billed
@@ -4094,6 +4133,7 @@ export async function assertBillReceiptsPostable(
   documentId: string,
 ): Promise<void> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return;
+  assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
   if (lines.length === 0) return;
   const profiles = (await runner.execute<{
@@ -4131,6 +4171,22 @@ export async function assertBillReceiptsPostable(
       }
     }
   }
+}
+
+/**
+ * A standalone invoice may only post when its issue effects can relieve
+ * stock: an inventory-kind line without a costing profile would otherwise
+ * post revenue with no COGS and no stock movement. Governed invoices (sold
+ * through fulfillment) already clear this at shipment; this is the backstop
+ * for the legacy ship-and-bill path. Fail before posting, like the bill leg.
+ */
+export async function assertInvoiceIssuesPostable(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) return;
+  assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
 }
 
 /**
