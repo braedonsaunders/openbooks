@@ -447,6 +447,14 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
       throw new WipBillingError('The project has reached its not-to-exceed contract cap')
     }
 
+    // The project lock above serialises source reservation, but worksheet
+    // numbers are unique per ORGANIZATION (wip_prebills_org_number): two
+    // creates for different projects would read the same max()+1 and the
+    // loser would die on the unique index. This org-scoped lock serialises
+    // the read below — the billing-request-number:{org} pattern. (The
+    // feature-gate fence taken first also serialises org-wide today, but
+    // numbering correctness must not depend on that coincidence.)
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`wip-prebill-number:${orgId}`}, 0))`)
     const numberRow = (await tx.execute<{ n: string }>(sql`
       select coalesce(max((regexp_replace(worksheet_number, '\\D', '', 'g'))::bigint), 0) as n
         from wip_prebills
