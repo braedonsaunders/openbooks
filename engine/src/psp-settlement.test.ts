@@ -4,6 +4,7 @@ import {
   parseChargebeeSettlement,
   parseStripeBalanceTransactions,
   PspSettlementError,
+  summarizeSettlement,
 } from "./psp-settlement.ts";
 
 const stripeRow = {
@@ -325,4 +326,191 @@ test("Chargebee converts exact minor-unit totals and credits", () => {
       { kind: "refund", amount: "0.2500" },
     ],
   );
+});
+
+// Item 6A: the receipt books amount_paid and amount_adjusted posts as its own
+// line. Real-shaped Chargebee payloads (unix date, minor-unit ints,
+// entity-typed line items) per the provider invoice contract: amount_paid is
+// cash collected (successful linked payments), amount_adjusted totals what was
+// adjusted off, and total == paid + adjustments + applied credits.
+test("Chargebee books amount_paid with amount_adjusted as its own line", () => {
+  const parsed = parseChargebeeSettlement(
+    {
+      id: "cb_adj_1",
+      date: 1720000000,
+      currency_code: "USD",
+      total: 10_000,
+      amount_paid: 8_000,
+      amount_adjusted: 2_000,
+      adjustment_reason: "write_off",
+      line_items: [
+        { id: "li_plan", description: "Standard plan", amount: 9_000, entity_type: "plan" },
+        { id: "li_tax", description: "Sales tax", amount: 1_000, entity_type: "tax" },
+      ],
+    },
+    "2026-07-01",
+  );
+
+  assert.equal(parsed.provider, "chargebee");
+  assert.equal(parsed.currency, "USD");
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "charge", amount: "90.0000" },
+      { kind: "other", amount: "10.0000" },
+      { kind: "adjustment", amount: "20.0000" },
+    ],
+  );
+  const adjustment = parsed.lines.find((line) => line.kind === "adjustment")!;
+  assert.equal(adjustment.description, "Chargebee adjustment (write_off)");
+  assert.equal(adjustment.externalRef, "cb_adj_1_adjustment");
+  assert.equal(adjustment.currency, "USD");
+  assert.deepEqual(adjustment.meta, { chargebeeReason: "write_off" });
+  // The receipt is what was collected: gross − adjustments == amount_paid.
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "80.0000");
+});
+
+test("Chargebee adjustment without a provider reason still posts its own line", () => {
+  const parsed = parseChargebeeSettlement(
+    {
+      id: "cb_adj_noreason",
+      currency_code: "USD",
+      total: 10_000,
+      amount_paid: 8_000,
+      amount_adjusted: 2_000,
+    },
+    "2026-07-01",
+  );
+
+  const adjustment = parsed.lines.find((line) => line.kind === "adjustment")!;
+  assert.equal(adjustment.amount, "20.0000");
+  assert.equal(adjustment.description, "Chargebee adjustment");
+  assert.deepEqual(adjustment.meta, {});
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "80.0000");
+});
+
+test("Chargebee partial cash payment covered by applied credits settles at amount_paid", () => {
+  const parsed = parseChargebeeSettlement(
+    {
+      id: "cb_credits_1",
+      date: 1720000000,
+      currency_code: "USD",
+      total: 10_000,
+      amount_paid: 8_000,
+      credits_applied: 2_000,
+    },
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "charge", amount: "100.0000" },
+      { kind: "refund", amount: "20.0000" },
+    ],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "80.0000");
+});
+
+test("Chargebee total that does not foot to paid plus adjustments fails closed naming the invoice", () => {
+  assert.throws(
+    () =>
+      parseChargebeeSettlement(
+        {
+          id: "cb_mismatch_1",
+          currency_code: "USD",
+          total: 10_000,
+          amount_paid: 8_000,
+          amount_adjusted: 1_000,
+        },
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("cb_mismatch_1") &&
+      error.message.includes("does not reconcile"),
+  );
+});
+
+test("Chargebee partial payment with an outstanding due fails closed instead of booking short", () => {
+  assert.throws(
+    () =>
+      parseChargebeeSettlement(
+        {
+          id: "cb_partial_1",
+          currency_code: "USD",
+          total: 10_000,
+          amount_paid: 6_000,
+        },
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("cb_partial_1") &&
+      error.message.includes("40.0000") &&
+      error.message.includes("still due"),
+  );
+});
+
+test("Chargebee line items that drift from the provider total fail closed even when provider totals reconcile", () => {
+  // total 100.00 == paid 80.00 + adjusted 20.00, but the detail sums to 90.00
+  // (invoice-level discount outside this subset shape): booking the detail
+  // would receipt 70.00 against 80.00 collected, so import must refuse.
+  assert.throws(
+    () =>
+      parseChargebeeSettlement(
+        {
+          id: "cb_drift_1",
+          currency_code: "USD",
+          total: 10_000,
+          amount_paid: 8_000,
+          amount_adjusted: 2_000,
+          line_items: [
+            { id: "li_plan", description: "Standard plan", amount: 9_000, entity_type: "plan" },
+          ],
+        },
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("cb_drift_1") &&
+      error.message.includes("books net"),
+  );
+});
+
+test("Chargebee negative amount paid is refused instead of booking a negative receipt", () => {
+  assert.throws(
+    () =>
+      parseChargebeeSettlement(
+        {
+          id: "cb_negpaid",
+          currency_code: "USD",
+          total: 5_000,
+          amount_paid: -100,
+        },
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message === "Chargebee amount paid must not be negative",
+  );
+});
+
+test("Chargebee zero adjustment emits no adjustment line", () => {
+  const parsed = parseChargebeeSettlement(
+    {
+      id: "cb_zeroadj",
+      currency_code: "USD",
+      total: 5_000,
+      amount_paid: 5_000,
+      amount_adjusted: 0,
+    },
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [{ kind: "charge", amount: "50.0000" }],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "50.0000");
 });
