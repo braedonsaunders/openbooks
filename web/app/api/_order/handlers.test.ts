@@ -495,6 +495,7 @@ const mockSources = new Map<string, string>([
     }
     export function exactOrderMoney(value) { return String(value) }
     export function exactOrderQuantity(value) { return String(value) }
+    export function exactOrderUnitPrice(value) { return String(value) }
     export function loadOrder() { return state.loadOrder() }
     export async function orderTaxProfileMap() { return new Map() }
   `],
@@ -1126,6 +1127,7 @@ const poolMockSources = new Map<string, string>([
     export function computeOrderTotals() { return { lines: [], subtotal: '0', taxTotal: '0', total: '0' } }
     export function exactOrderMoney(value) { return String(value) }
     export function exactOrderQuantity(value) { return String(value) }
+    export function exactOrderUnitPrice(value) { return String(value) }
     export function loadOrder(id) { return state.loadOrder(id) }
     export async function orderTaxProfileMap() { return new Map() }
   `],

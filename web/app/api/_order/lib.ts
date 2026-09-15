@@ -31,6 +31,19 @@ export function exactOrderQuantity(v: unknown): string | 'invalid' {
   }
 }
 
+/** unit_price columns are numeric(28,8): a saved line reads back at storage
+ * scale, so validation must accept it — otherwise no saved order can ever be
+ * re-saved. Ledger totals stay 4dp (exactOrderMoney below). */
+export function exactOrderUnitPrice(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 8)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeDecimal(exact, 8)
+  } catch {
+    return 'invalid'
+  }
+}
+
 /**
  * Shared loader + line-save helpers for the order-cycle documents
  * (quote / sales_order / purchase_order). These live in `documents` with

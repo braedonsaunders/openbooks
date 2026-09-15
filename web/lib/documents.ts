@@ -4,7 +4,7 @@ import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 export { documentRevisionSql }
 import { sql, type SQL } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
@@ -554,6 +554,19 @@ function exactMoney(value: unknown): string | null {
   }
 }
 
+/** unit_price columns are numeric(28,8): a saved line reads back at storage
+ * scale, so validation must accept it — otherwise no saved document can ever
+ * be re-saved. Line amounts and totals stay 4dp (exactMoney above). */
+function exactUnitPrice(value: unknown): string | null {
+  const exact = canonicalDecimal(value, 8)
+  if (exact === null) return null
+  try {
+    return normalizeDecimal(exact, 8)
+  } catch {
+    return null
+  }
+}
+
 /** A validation/period failure with the HTTP status the callers should return. */
 export class DocumentEditError extends Error {
   status: number
@@ -861,7 +874,7 @@ export async function applyDocumentEdit(
       if (!lineDims.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${lineDims.error}`)
       let unitPrice: string | null = null
       if (l.unitPrice != null && String(l.unitPrice).trim() !== '') {
-        unitPrice = exactMoney(l.unitPrice)
+        unitPrice = exactUnitPrice(l.unitPrice)
         if (unitPrice === null) {
           throw new DocumentEditError(422, `Line ${i + 1}: unit price is not a valid amount`)
         }
