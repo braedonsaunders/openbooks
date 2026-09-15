@@ -79,7 +79,7 @@ test('analytics drill GET serializes account and party amounts without numeric c
     { rows: [{ name: 'No party', amount: '9007199254740993.1234', n: '1' }] },
     { rows: [{ total: '9007199254740993.1234', n: '1' }] },
   ]
-  const accountResponse = await GET(new Request('https://books.example.test/api/analytics/drill?account=account-1&from=2026-01-01&to=2026-01-31'))
+  const accountResponse = await GET(new Request('https://books.example.test/api/analytics/drill?account=00000000-0000-4000-8000-000000000001&from=2026-01-01&to=2026-01-31'))
   const account = await accountResponse.json() as { total: string; entries: { amount: string }[]; monthly: { amount: string }[]; breakdown: { amount: string }[] }
   assert.equal(account.total, '9007199254740993.1234')
   assert.equal(account.entries[0]?.amount, '-9007199254740993.1234')
@@ -92,7 +92,7 @@ test('analytics drill GET serializes account and party amounts without numeric c
     { rows: [{ name: 'invoice', amount: '1.2345', n: '1' }] },
     { rows: [{ total: '1.2345', n: '1' }] },
   ]
-  const partyResponse = await GET(new Request('https://books.example.test/api/analytics/drill?party=party-1&from=2026-01-01&to=2026-01-31'))
+  const partyResponse = await GET(new Request('https://books.example.test/api/analytics/drill?party=00000000-0000-4000-8000-000000000002&from=2026-01-01&to=2026-01-31'))
   const party = await partyResponse.json() as { total: string; entries: { amount: string }[]; monthly: { amount: string }[]; breakdown: { amount: string }[] }
   assert.equal(party.total, '1.2345')
   assert.equal(party.entries[0]?.amount, '9007199254740993.1234')
@@ -110,4 +110,14 @@ test('account and party monetary projections all use decimal serialization', () 
   }
   assert.doesNotMatch(routeSource, /(?:total|amount): Number\(/)
   assert.doesNotMatch(routeSource, /Number\(r\.amount\)/)
+})
+
+test('analytics drill rejects malformed account and party selectors before querying', async () => {
+  routeState.responses = []
+
+  const accountResponse = await GET(new Request('https://books.example.test/api/analytics/drill?account=not-a-uuid&from=2026-01-01&to=2026-01-31'))
+  assert.equal(accountResponse.status, 404)
+
+  const partyResponse = await GET(new Request('https://books.example.test/api/analytics/drill?party=not-a-uuid&from=2026-01-01&to=2026-01-31'))
+  assert.equal(partyResponse.status, 404)
 })
