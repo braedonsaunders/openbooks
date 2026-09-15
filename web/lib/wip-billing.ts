@@ -299,6 +299,10 @@ async function remainingContractCapacity(
 ): Promise<string | null> {
   const profile = effectiveWipPolicy(policy.versions, policy.fallbackProfile, asOf).financialProfile
   if (profile.totalPrice.method !== 'not_to_exceed') return null
+  // A ceiling that was never entered is unknown, not zero: billing-request
+  // invoicing and Financials both read it that way (no ceiling ⇒ no cap),
+  // so prebilling must agree instead of refusing every worksheet.
+  if (cmp(policy.contractValue, '0') <= 0) return null
   const used = await projectContractCapacityUsed(executor, orgId, policy.projectId, profile.invoicedToDate, { excludePrebillId })
   const remaining = add(policy.contractValue, `-${used}`)
   return cmp(remaining, '0') > 0 ? remaining : '0.0000'
