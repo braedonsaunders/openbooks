@@ -378,6 +378,23 @@ export async function createScriptJournal(
     for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, or summary accountId "${id}"`);
   }
 
+  // Line dimensions are fail-closed like accountId: the validator proves shape
+  // only, so a well-formed id from another tenant would die at the composite
+  // FK as an unhandled storage error. Prove org ownership here instead, with
+  // a tenant-opaque refusal that reveals nothing about other tenants' charts.
+  for (const [key, label, table] of [["departmentId", "department", "departments"], ["projectId", "project", "projects"]] as const) {
+    const refIds = [...new Set(v.lines.map((l) => l[key]).filter((x): x is string => typeof x === "string" && x.length > 0))];
+    if (refIds.length === 0) continue;
+    const r = (await db.execute(sql`
+      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`));
+    const found = new Set(r.rows.map((x) => String(x.id)));
+    const foreign = refIds.find((x) => !found.has(x));
+    if (foreign !== undefined) {
+      const lineNumber = v.lines.findIndex((l) => l[key] === foreign) + 1;
+      throw new JournalWriteError(`line ${lineNumber}: ${label} not found in this organization`);
+    }
+  }
+
   const { subsidiaryId, baseCurrency } = await resolveScriptJournalSubsidiary(
     orgId,
     actorId,

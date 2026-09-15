@@ -309,3 +309,39 @@ test("a scheduled null-actor post:true that fails approval routing is rejected w
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a foreign-organization line department is refused with a domain error and writes nothing", { skip: !DB }, async () => {
+  const orgA = await createScratchOrg();
+  const orgB = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(orgA.orgId);
+    const deptB = "33333333-3333-4333-8333-333333333333";
+    await db.execute(sql`insert into departments (id, org_id, name) values (${deptB}, ${orgB.orgId}, 'Foreign department')`);
+    // The validator shape-checks the id, but only an org-ownership lookup can
+    // refuse another tenant's department: without it the composite FK dies at
+    // the re-insert as an unhandled storage error.
+    await assert.rejects(
+      createScriptJournal(
+        orgA.orgId,
+        actors.submitterId,
+        {
+          documentDate: orgA.date,
+          memo: "foreign dept probe",
+          lines: [
+            { accountId: orgA.accounts.bank, amount: 25, departmentId: deptB },
+            { accountId: orgA.accounts.adjustment, amount: -25 },
+          ],
+        },
+        {},
+      ),
+      (e: Error) => e instanceof JournalWriteError && /not found in this organization/.test(e.message),
+    );
+    const r = (await db.execute<{ docs: string; lines: string }>(sql`
+      select (select count(*) from documents where org_id = ${orgA.orgId})::text as docs,
+             (select count(*) from document_lines where org_id = ${orgA.orgId})::text as lines`));
+    assert.deepEqual(r.rows[0], { docs: "0", lines: "0" });
+  } finally {
+    await dropScratchOrg(orgA.orgId);
+    await dropScratchOrg(orgB.orgId);
+  }
+});
