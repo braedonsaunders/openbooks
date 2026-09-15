@@ -17,7 +17,7 @@ import { resolveDefaultValue, type FieldValueMap } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
 import { nextDocumentNumber } from "../bills";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { loadFieldDefs, validateCustomValues } from "../custom-fields";
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../custom-fields";
 import { allowedSubsidiaryIds as loadAllowedSubsidiaryIds } from "../subsidiaries";
 import {
   buildSearchText,
@@ -554,6 +554,16 @@ async function createEntity(
   const cv = validateCustomValues(defs, v.customValues);
   if (!cv.ok)
     return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
+  // Reference custom values are uuid-SHAPED at this point but nothing proves
+  // the referenced row belongs to the caller: refuse foreign or dangling ids
+  // with a tenant-opaque 404 instead of persisting a cross-tenant pointer.
+  const unownedCreateRefs = await findUnownedCustomReferences(user.orgId, defs, cv.cleaned);
+  if (unownedCreateRefs.length > 0) {
+    const def = unownedCreateRefs[0]!;
+    return err(404, `${def.label} not found in this organization`, {
+      fieldErrors: { [def.key]: "not found in this organization" },
+    });
+  }
   const subsidiaryGate = await guardEntitySubsidiaryMutation(
     user,
     table,
@@ -666,6 +676,20 @@ async function updateEntity(
     });
     if (!cv.ok)
       return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
+    // Ownership applies to newly supplied references only: the merged bag may
+    // carry legacy values written before this fence existed, and an unrelated
+    // edit must not lock the row on those.
+    const suppliedCleaned: Record<string, unknown> = {};
+    for (const key of Object.keys(v.customValues)) {
+      if (cv.cleaned[key] !== undefined) suppliedCleaned[key] = cv.cleaned[key];
+    }
+    const unownedUpdateRefs = await findUnownedCustomReferences(user.orgId, defs, suppliedCleaned);
+    if (unownedUpdateRefs.length > 0) {
+      const def = unownedUpdateRefs[0]!;
+      return err(404, `${def.label} not found in this organization`, {
+        fieldErrors: { [def.key]: "not found in this organization" },
+      });
+    }
     const merged = {
       ...((existing.rows[0].custom as Record<string, unknown>) ?? {}),
       ...cv.cleaned,
