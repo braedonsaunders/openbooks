@@ -210,6 +210,71 @@ test("exemptions: FIT-exempt keeps FICA; FICA-exempt keeps FIT; FUTA-exempt", ()
   assert.equal(futaExempt.suta, money("0"));
 });
 
+test("Additional Medicare when YTD wages already exceed $200,000", () => {
+  // The over-threshold slice is incremental: with $201,000 already in, only
+  // the $3,000 of this period that pushes further past the threshold is
+  // taxed — max0(204,000 − 200,000) − max0(201,000 − 200,000) = 3,000, so
+  // 3,000 × 0.9% = 27.00. Adding the already-taxed slice instead of
+  // subtracting it withholds $45.00 on this cheque, every cheque, all year.
+  const result = calculatePub15T({
+    payDate: "2026-11-15", periodsPerYear: 24, wages: "3000.00", filingStatus: "single",
+    ytd: { medicareWages: "201000.00" },
+  });
+  assert.equal(result.medicare, money("43.50")); // 3,000 × 1.45%, uncapped
+  assert.equal(result.additionalMedicare, money("27.00"));
+});
+
+test("period-frequency boundaries: annual pay and P=2000 calculate, 0 and 2001 refuse", () => {
+  // Annual payroll exercises the schedule with no annualization in the way;
+  // P = 2000 is the highest documented frequency (daily + leap adjustments).
+  const annual = calculatePub15T({
+    payDate: "2026-06-15", periodsPerYear: 1, wages: "60000.00", filingStatus: "single",
+  });
+  // 1i = 60,000 − 8,600 = 51,400; 2g = 1,240 + 12% × 31,500 = 5,020
+  assert.equal(annual.factors.AAWA, money("51400"));
+  assert.equal(annual.fit, money("5020.00"));
+
+  const frequent = calculatePub15T({
+    payDate: "2026-06-15", periodsPerYear: 2000, wages: "30.00", filingStatus: "single",
+  });
+  // Same annualized figures, de-annualized: 5,020 ÷ 2,000 = 2.51.
+  assert.equal(frequent.fit, money("2.51"));
+
+  assert.throws(() => calculatePub15T({
+    payDate: "2026-06-15", periodsPerYear: 0, wages: "30.00", filingStatus: "single",
+  }), /invalid pay periods per year/);
+  assert.throws(() => calculatePub15T({
+    payDate: "2026-06-15", periodsPerYear: 2001, wages: "30.00", filingStatus: "single",
+  }), /invalid pay periods per year/);
+});
+
+test("2019-or-earlier W-4 with zero allowances withholds from dollar one", () => {
+  // Zero allowances is valid (no $4,300 subtractions) — refusing it blocks
+  // every legacy W-4 that claims no allowances.
+  const result = calculatePub15T({
+    payDate: "2026-06-30", periodsPerYear: 12, wages: "5000.00",
+    filingStatus: "single",
+    pre2020: { allowances: 0, married: false },
+  });
+  // 1l = 60,000 − 0 = 60,000; 2g = 5,800 + 22% × 2,100 = 6,262; ÷ 12 = 521.83
+  assert.equal(result.factors.AAWA, money("60000"));
+  assert.equal(result.fit, money("521.83"));
+});
+
+test("Worksheet 1A and statutory constants are the published figures", () => {
+  // Digit-exact pins: any transcription slip in these Pub 15-T / SSA / IRC
+  // figures fails here, independently of the behavioral goldens above.
+  assert.equal(RATES_2026.wageAdjustment.marriedJoint, "12900"); // line 1g
+  assert.equal(RATES_2026.wageAdjustment.other, "8600"); // line 1g
+  assert.equal(RATES_2026.allowanceAmount, "4300"); // line 1k
+  assert.equal(RATES_2026.supplemental.flatRate, "0.22"); // Pub 15 §7
+  assert.equal(RATES_2026.supplemental.mandatoryHighRate, "0.37");
+  assert.equal(RATES_2026.supplemental.mandatoryThreshold, "1000000");
+  assert.equal(RATES_2026.fica.additionalMedicareRate, "0.009");
+  assert.equal(RATES_2026.fica.additionalMedicareThreshold, "200000");
+  assert.equal(RATES_2026.futa.grossRate, "0.06"); // IRC §3301
+});
+
 test("wave-1 state coverage list is exactly the nine no-withholding states", () => {
   assert.deepEqual(
     [...NO_WITHHOLDING_STATES].sort(),
