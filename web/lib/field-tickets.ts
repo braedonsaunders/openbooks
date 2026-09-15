@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrg } from '@openbooks/engine/src/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import {
   captureFieldTicketLaborEvidence,
@@ -15,7 +16,7 @@ import {
   runDocumentVersionedTransaction,
 } from './documents'
 import { canonicalDecimal } from './exact-decimal'
-import { isFeatureEnabled } from './features'
+import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
@@ -74,6 +75,21 @@ export class FieldTicketNotFoundError extends FieldTicketError {
   readonly status = 404
 }
 
+type TicketTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+async function assertFieldTicketsEnabled(orgId: string): Promise<void> {
+  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) {
+    throw new FieldTicketNotFoundError('Ticket not found')
+  }
+}
+
+async function assertFieldTicketsEnabledTx(tx: TicketTransaction, orgId: string): Promise<void> {
+  await acquireFeatureGateLock(orgId, tx)
+  if (!(await lockAndCheckOrgFeature(tx, orgId, 'fieldTickets'))) {
+    throw new FieldTicketNotFoundError('Ticket not found')
+  }
+}
+
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 
 /** Sunday-start week window (matches timesheets), or the single day. */
@@ -129,6 +145,7 @@ export async function createFieldTicket(
   userId: string,
   input: { projectId?: string | null; date?: string; period?: TicketPeriod; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<{ id: string; documentNumber: string }> {
+  await assertFieldTicketsEnabled(orgId)
   return withOrg(orgId, async () => {
     const proj = input.projectId
       ? (
@@ -166,8 +183,6 @@ export async function createFieldTicket(
     return { id: row.rows[0]!.id, documentNumber: row.rows[0]!.document_number }
   })
 }
-
-type TicketTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Header updates from the standard flyout form. Changing the project
@@ -210,6 +225,7 @@ export async function updateTicketHeader(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx) => {
+      await assertFieldTicketsEnabledTx(tx, orgId)
       const doc = await loadHeader(orgId, ticketId)
       if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
@@ -363,6 +379,7 @@ export async function saveCrewGrid(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx) => {
+      await assertFieldTicketsEnabledTx(tx, orgId)
       const doc = await loadHeader(orgId, ticketId)
       if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
@@ -553,6 +570,7 @@ export async function addTicketLine(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx, locked) => {
+      await assertFieldTicketsEnabledTx(tx, orgId)
       if (locked.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, locked.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
@@ -705,6 +723,7 @@ export async function removeTicketLine(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx, locked) => {
+      await assertFieldTicketsEnabledTx(tx, orgId)
       if (locked.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, locked.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
@@ -962,6 +981,7 @@ async function auditTicketLifecycle(
  * approver, hardcoded threshold, or parallel approval path.
  */
 export async function submitFieldTicket(orgId: string, userId: string, ticketId: string): Promise<void> {
+  await assertFieldTicketsEnabled(orgId)
   const outcome = await withOrg(orgId, async () => {
     const doc = await loadHeader(orgId, ticketId)
     if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be submitted')
@@ -1019,6 +1039,7 @@ export async function releaseFieldTicketApproval(
   outcome: 'approved' | 'rejected',
   comment?: string | null,
 ): Promise<void> {
+  await assertFieldTicketsEnabled(orgId)
   const doc = await loadHeader(orgId, ticketId, true)
   if (outcome === 'rejected') {
     if (doc.status !== 'pending_approval') {
@@ -1146,6 +1167,7 @@ export async function loadFieldTicket(
   ticketId: string,
   opts: { includeRelated?: boolean; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ) {
+  await assertFieldTicketsEnabled(orgId)
   const doc = await loadHeader(orgId, ticketId)
   if (opts.allowedSubsidiaryIds !== undefined
     && !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, doc.subsidiaryId)) {

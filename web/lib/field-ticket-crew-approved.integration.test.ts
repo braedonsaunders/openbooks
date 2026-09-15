@@ -23,6 +23,7 @@ test('the crew grid refuses to silently rewrite approved entries', enabled, asyn
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const actor = (await seedFlowActors(org.orgId)).adminId
       const timeTypeId = randomUUID()
       await db.execute(sql`insert into time_types
