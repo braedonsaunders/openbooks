@@ -108,3 +108,7 @@ test("formula TAX_RATE resolves each org default and fails closed", () => {
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+test("forecast buckets place a 90-day-old item in 90+", () => {
+  assert.match(coreSource, /if \(daysPastDue < 90\) return "61-90";/);
+});
