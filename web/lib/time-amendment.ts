@@ -133,6 +133,7 @@ async function insertAmendment(
   // negative of that — so a missing snapshot is carried as ZERO, never left
   // null for the approval resolver to fill with today's wage.
   const costRate = row.cost_rate ?? '0'
+  const contraHours = neg(row.hours)
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into time_entries
       (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
@@ -143,7 +144,7 @@ async function insertAmendment(
        bill_rate_currency, bill_rate_book_id, bill_rate_version_id, bill_rate_line_id,
        amends_entry_id, created_by, updated_by)
     values
-      (${orgId}, ${ownedEmployee}, ${row.worked_on}, ${neg(row.hours)},
+      (${orgId}, ${ownedEmployee}, ${row.worked_on}, ${contraHours},
        ${ownedRefs.timeTypeId}, ${ownedRefs.itemId}, ${ownedRefs.projectId},
        ${ownedRefs.projectId ? row.project_task_id : null}, ${ownedRefs.departmentId},
        ${row.memo}, ${row.memo_is_private}, ${row.is_billable}, 'draft', ${JSON.stringify(row.custom ?? {})}::jsonb,
@@ -154,7 +155,23 @@ async function insertAmendment(
        ${row.id}, ${actorId}, ${actorId})
     returning id
   `))
-  return inserted.rows[0]!.id
+  const contraId = inserted.rows[0]!.id
+  // Durable correction evidence, part of the same atomic unit: the contra
+  // rewrites the economics of consumed history, so the link back to the
+  // original plus the before/after hours must commit with it — an audit
+  // failure rolls the amendment back. Both amendment entry points ride this
+  // insert, so both are covered.
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'time_entries', ${contraId}, 'insert', ${JSON.stringify({
+      event: 'amended',
+      actor: { kind: 'user', userId: actorId },
+      amendsEntryId: row.id,
+      before: { status: row.status ?? null, hours: row.hours },
+      after: { status: 'draft', hours: contraHours },
+    })}::jsonb, ${actorId})
+  `)
+  return contraId
 }
 
 /**
