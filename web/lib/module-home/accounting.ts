@@ -3,6 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { getAuthz } from '../authz'
+import { statementBookExpr } from '../gl-summary'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 
 /**
@@ -129,6 +130,10 @@ export async function accountingHome(
     scope = authz?.user.orgId === orgId ? authz.allowedSubsidiaryIds : new Set<string>()
   }
   const ago7 = addCalendarDays(await businessToday(orgId), -7)
+  // Ledger hygiene counts read the primary posting book, like bank
+  // reconciliation and the banking cockpit — a secondary book's drafts and
+  // postings must not inflate the primary ledger's tiles.
+  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
     db.execute<any>(sql`
@@ -149,10 +154,10 @@ export async function accountingHome(
     db.execute(sql`
       select
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft'
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}) as draft_journals,
+          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
           and je.posting_date >= ${ago7}
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}) as posted_7d,
+          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as posted_7d,
         (select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active
           ${scope === null ? sql`` : [...scope].length
             ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[]))`
