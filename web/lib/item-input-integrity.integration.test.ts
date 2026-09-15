@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import type { SessionUser } from './auth';
@@ -56,3 +57,28 @@ for (const [label,body] of cases) {
     } finally {session.user=null;await dropScratchOrg(org.orgId);}
   });
 }
+
+test('item PATCH preserves omitted required custom fields on a partial edit', {skip:!process.env.OPENBOOKS_DB_URL}, async()=>{
+  const org=await createScratchOrg();
+  try {
+    const actor=await createScratchUser(org.orgId,'Item custom fields','reviewer');
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+    session.user={id:actor,orgId:org.orgId,name:'Item custom fields',email:'item-custom@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
+    const requiredId=randomUUID();
+    const optionalId=randomUUID();
+    const id=org.items.service;
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${requiredId}, ${org.orgId}, 'items', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actor}, ${actor}),
+        (${optionalId}, ${org.orgId}, 'items', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actor}, ${actor})
+    `);
+    await db.execute(sql`update items set custom='{"required_code":"R-1"}'::jsonb where id=${id} and org_id=${org.orgId}`);
+
+    const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify({custom:{optional_note:'updated'}})}),{params:Promise.resolve({id})}));
+    assert.equal(response.status,200,JSON.stringify(await response.json()));
+    const stored=(await db.execute<{custom:Record<string,unknown>}>(sql`select custom from items where id=${id} and org_id=${org.orgId}`)).rows[0]?.custom;
+    assert.deepEqual(stored,{required_code:'R-1',optional_note:'updated'});
+  } finally {session.user=null;await dropScratchOrg(org.orgId);}
+});
