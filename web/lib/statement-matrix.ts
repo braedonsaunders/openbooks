@@ -853,9 +853,14 @@ export async function statementMatrix(opts: {
       }
       return amount
     }
+    // Column sums are rounded to ledger scale (4dp) once, in SQL: the
+    // translated (rate × amount) and cash-basis (amount × settled share)
+    // products carry digits far past 4dp, which the exact-decimal tree
+    // rollup below cannot hold. Rounding the sum — never each line — keeps
+    // the rounding drift to half a unit per account-column.
     const filterCols = sql.join(
       cols.map(
-        (c, i) => sql`coalesce(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
+        (c, i) => sql`coalesce(round(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 4), 0) as ${sql.raw(`c${i}`)}`,
       ),
       sql`, `,
     )
