@@ -299,6 +299,19 @@ test("the CPA-005 credit file refuses a blank payee account number", () => {
   );
 });
 
+test("the CPA-005 credit file refuses an oversized cross-reference", () => {
+  const run = cpa005Run();
+  assert.throws(
+    () => buildCpa005File({
+      ...run,
+      payments: run.payments.map((payment, index) =>
+        index === 0 ? { ...payment, crossReference: "12345678901234567890" } : payment,
+      ),
+    }),
+    (error: Error) => error instanceof PaymentError && /cross-reference.*19 characters/.test(error.message),
+  );
+});
+
 test("a data centre that cannot form a valid trace number refuses to write a file", () => {
   for (const originatingDataCentre of ["00000", "543", "FILL-ME"]) {
     assert.throws(

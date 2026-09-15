@@ -3094,6 +3094,7 @@ export function buildCpa005File(run: Cpa005Run): string {
     if (p.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
     if (p.accountNumber.trim() === "") throw new PaymentError("payee account number must not be blank");
     if (p.accountNumber.length > 12) throw new PaymentError("payee account number must be 12 characters or fewer");
+    if (p.crossReference.length > 19) throw new PaymentError("cross-reference must be 19 characters or fewer");
     return (
       txnType + // transaction type (3)
       num(p.amountCents, 10) + // amount in cents (10)
