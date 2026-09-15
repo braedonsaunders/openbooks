@@ -137,7 +137,9 @@ export async function loadApprovals(
     KIND_KEYS.includes(kind) ? t(`kinds.${kind}`) : kind.replace(/_/g, ' ')
 
   // ---- My approvals (always loaded: the tab label carries the count) -------
-  const gates = await worklistGates(orgId, user.id)
+  // Subsidiary-scoped like the decide path: a gate assignment is not a grant
+  // to every legal entity.
+  const gates = await worklistGates(orgId, user.id, undefined, authz.allowedSubsidiaryIds)
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
   const flowIds = [...new Set(gates.map((g) => g.flowId))]

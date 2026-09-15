@@ -108,7 +108,9 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
        order by g.created_at desc
        limit 5
     `),
-    worklistGates(orgId, userId),
+    // "My approvals" only: subsidiary-scoped like the decide path, so the
+    // widget never lists financial details from other legal entities.
+    worklistGates(orgId, userId, undefined, authz.allowedSubsidiaryIds),
     db.execute(sql`
       select id, kind, document_number, document_date, total, status
         from documents

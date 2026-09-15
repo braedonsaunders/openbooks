@@ -566,6 +566,13 @@ export interface WorklistGate {
   /** Native subject label/link for non-document approvals such as close runs. */
   subjectLabel: string | null;
   href: string | null;
+  /**
+   * Legal entity owning the approval subject: the joined document's for
+   * document approvals, resolved from the employee/bank party otherwise.
+   * Null when unresolvable — restricted callers fail closed on null exactly
+   * like the decide path (gateSubsidiaryScopeAllows).
+   */
+  subsidiaryId: string | null;
   /** Joined document header (null for future non-document subjects). */
   document: {
     subsidiaryId: string | null;
@@ -602,6 +609,7 @@ function mapWorklistRow(
     escalateAt: (row.escalateAt as Date | null) ?? null,
     onBehalfOf,
     subjectLabel: (row.subjectLabel as string | null) ?? null,
+    subsidiaryId: (row.subsidiaryId as string | null) ?? null,
     href: row.closePeriodName ? `/close?run=${String(row.subjectId)}&stage=lock` : null,
     document: row.documentNumber
       ? {
@@ -643,10 +651,59 @@ const WORKLIST_SELECT = sql`
  * an ACTIVE delegation window pointing at them (out-of-office coverage).
  * `roles` defaults to the user's resolved role keys.
  */
+/**
+ * Fill in the legal entity behind worklist rows whose subject is not a
+ * document (timesheet weeks inherit it from the employee party, bank-account
+ * approvals from theirs). Batched per subject kind; subjects with no
+ * resolvable entity keep null so restricted callers fail closed on them.
+ */
+async function resolveWorklistSubsidiaries(orgId: string, gates: WorklistGate[]): Promise<void> {
+  const missing = gates.filter((g) => g.subsidiaryId == null);
+  if (missing.length === 0) return;
+  const idsFor = (kind: string): string[] => [
+    ...new Set(missing.filter((g) => g.subjectKind === kind).map((g) => g.subjectId)),
+  ];
+  const apply = (rows: Array<{ id: string; subsidiaryId: string | null }>) => {
+    const byId = new Map(rows.map((r) => [r.id, r.subsidiaryId]));
+    for (const g of missing) {
+      if (byId.has(g.subjectId)) g.subsidiaryId = byId.get(g.subjectId) ?? null;
+    }
+  };
+  const timesheets = idsFor("timesheet_week");
+  if (timesheets.length > 0) {
+    const r = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      select tw.id, p.subsidiary_id as "subsidiaryId"
+        from timesheet_weeks tw
+        join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
+       where tw.org_id = ${orgId}
+         and tw.id in (select jsonb_array_elements_text(${JSON.stringify(timesheets)}::jsonb)::uuid)
+    `);
+    apply(r.rows);
+  }
+  const bankAccounts = idsFor("party_bank_account");
+  if (bankAccounts.length > 0) {
+    const r = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      select ba.id, p.subsidiary_id as "subsidiaryId"
+        from party_bank_accounts ba
+        join parties p on p.id = ba.party_id and p.org_id = ba.org_id
+       where ba.org_id = ${orgId}
+         and ba.id in (select jsonb_array_elements_text(${JSON.stringify(bankAccounts)}::jsonb)::uuid)
+    `);
+    apply(r.rows);
+  }
+}
+
 export async function worklistGates(
   orgId: string,
   userId: string,
   roles?: Iterable<string>,
+  /**
+   * Subsidiaries visible to this caller. A gate assignment is not a grant to
+   * every legal entity: restricted sets filter the worklist with the same
+   * fail-closed rule the decide path enforces, so financial details from
+   * other entities are never listed. Null/undefined means unrestricted.
+   */
+  allowedSubsidiaryIds?: GateSubsidiaryScope,
 ): Promise<WorklistGate[]> {
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   const r = (await db.execute<Record<string, unknown>>(sql`
@@ -683,6 +740,12 @@ export async function worklistGates(
       if (!principal) continue;
       out.push(mapWorklistRow(row, { userId: principal.id, name: principal.name }));
     }
+  }
+  // Every row carries its legal entity (documents join it; other subjects
+  // resolve above) so all worklist surfaces can apply the caller's boundary.
+  await resolveWorklistSubsidiaries(orgId, out);
+  if (allowedSubsidiaryIds != null) {
+    return out.filter((g) => gateSubsidiaryScopeAllows(allowedSubsidiaryIds, g.subsidiaryId));
   }
   return out;
 }
