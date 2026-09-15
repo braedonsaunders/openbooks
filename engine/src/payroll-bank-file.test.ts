@@ -953,6 +953,36 @@ test("a run already recorded as paid is refused by name", { skip: !DB }, async (
 });
 
 test(
+  "a generated bank file cannot be released after its pay run is voided",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg();
+    const { documentId } = await mixedRun(fx);
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+    const artifact = await generatePayRunBankFile({
+      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+    });
+
+    // A generated file may sit awaiting treasury release while the run is
+    // voided. Releasing it after that reversal would instruct the bank to pay
+    // liabilities the ledger no longer carries.
+    await db.execute(sql`
+      update pay_runs set run_status = 'voided'
+       where org_id = ${fx.orgId} and document_id = ${documentId}`);
+
+    await assert.rejects(
+      releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
+      /voided|no longer committed/i,
+    );
+    const row = (await db.execute<{ status: string; releaseCount: number }>(sql`
+      select status, release_count as "releaseCount"
+        from pay_run_bank_files
+       where org_id = ${fx.orgId} and id = ${artifact.id}`)).rows[0]!;
+    assert.deepEqual(row, { status: "generated", releaseCount: 0 });
+  },
+);
+
+test(
   "bank-file generation rechecks approval after the outer entitlement read",
   { skip: !DB },
   async () => {

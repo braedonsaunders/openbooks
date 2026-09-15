@@ -817,6 +817,33 @@ export async function releasePayRunBankFile(
   }
 
   await db.transaction(async (tx) => {
+    // Re-judge the originating run while its rows are locked. A generated file
+    // may wait in treasury while the run is voided, paid by another rail, or
+    // has its approval withdrawn; handing those stale bytes to the bank would
+    // instruct money the ledger no longer owes.
+    const lifecycle = (await tx.execute<{
+      run_status: string; paid_at: string | null; doc_status: string; document_id: string;
+    }>(sql`
+      select r.run_status, r.paid_at, d.status as doc_status,
+             f.pay_run_document_id as document_id
+        from pay_run_bank_files f
+        join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where f.org_id = ${orgId} and f.id = ${artifactId}
+       for update of f, r, d
+    `)).rows[0];
+    if (!lifecycle) throw new PayrollError("payroll bank file not found");
+    if (lifecycle.run_status !== "committed") {
+      throw new PayrollError("this pay run is no longer committed — refusing to release its bank file");
+    }
+    if (lifecycle.doc_status === "voided") {
+      throw new PayrollError("this pay run is voided — refusing to release its bank file");
+    }
+    if (lifecycle.paid_at) {
+      throw new PayrollError("this pay run is already recorded as paid — refusing to release its bank file");
+    }
+    await assertPayRunApprovalReleased(orgId, lifecycle.document_id, tx);
+
     // The audit record and the release counters move together: an artifact
     // can never show a release the log does not explain, or vice versa.
     const updated = await tx.execute<{ releaseCount: number }>(sql`
