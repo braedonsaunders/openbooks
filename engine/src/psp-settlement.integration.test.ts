@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import {
   importSettlementBatch,
+  parseChargebeeSettlement,
   postSettlementBatch,
   PspSettlementError,
   reverseSettlementBatch,
@@ -562,6 +563,213 @@ test(
           return true;
         },
       );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "Chargebee settlement imports amount_paid with adjustments as their own evidence line",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      // Real-shaped provider payload: unix date, minor-unit ints, entity-typed
+      // detail. $100 billed, $80 collected, $20 adjusted off for goodwill.
+      const parsed = parseChargebeeSettlement(
+        {
+          id: `cb-settle-${org.orgId}`,
+          date: 1720000000,
+          currency_code: "CAD",
+          total: 10_000,
+          amount_paid: 8_000,
+          amount_adjusted: 2_000,
+          adjustment_reason: "goodwill",
+          line_items: [
+            { id: "li_plan", description: "Standard plan", amount: 9_000, entity_type: "plan" },
+            { id: "li_tax", description: "Sales tax", amount: 1_000, entity_type: "tax" },
+          ],
+        },
+        org.date,
+      );
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      };
+      const first = await importSettlementBatch(org.orgId, actor, parsed, accounts);
+      assert.equal(first.created, true);
+      const batch = (await db.execute<{
+          status: string;
+          gross_amount: string;
+          fee_amount: string;
+          refund_amount: string;
+          dispute_amount: string;
+          adjustment_amount: string;
+          fx_amount: string;
+          net_amount: string;
+          line_count: number;
+        }>(sql`
+        select status, gross_amount::text, fee_amount::text,
+               refund_amount::text, dispute_amount::text,
+               adjustment_amount::text, fx_amount::text, net_amount::text,
+               line_count
+          from psp_settlement_batches
+         where id = ${first.batchId} and org_id = ${org.orgId}
+      `));
+      // The receipt is what was collected: gross − adjustments == amount_paid,
+      // with adjustments tracked apart from refunds.
+      assert.deepEqual(batch.rows[0], {
+        status: "draft",
+        gross_amount: "100.0000",
+        fee_amount: "0.0000",
+        refund_amount: "0.0000",
+        dispute_amount: "0.0000",
+        adjustment_amount: "20.0000",
+        fx_amount: "0.0000",
+        net_amount: "80.0000",
+        line_count: 3,
+      });
+      const stored = (await db.execute<{
+          line_number: number;
+          kind: string;
+          external_ref: string | null;
+          description: string | null;
+          amount: string;
+          meta: Record<string, unknown>;
+        }>(sql`
+        select line_number, kind, external_ref, description, amount::text as amount, meta
+          from psp_settlement_lines
+         where batch_id = ${first.batchId} and org_id = ${org.orgId}
+         order by line_number
+      `));
+      assert.deepEqual(
+        stored.rows.map((line) => [line.kind, line.amount]),
+        [
+          ["charge", "90.0000"],
+          ["other", "10.0000"],
+          ["adjustment", "20.0000"],
+        ],
+      );
+      assert.equal(stored.rows[2]!.external_ref, `cb-settle-${org.orgId}_adjustment`);
+      assert.equal(stored.rows[2]!.description, "Chargebee adjustment (goodwill)");
+      assert.deepEqual(stored.rows[2]!.meta, { chargebeeReason: "goodwill" });
+
+      // Replay is idempotent: same batch, same evidence, no duplicate lines.
+      const replay = await importSettlementBatch(org.orgId, actor, parsed, accounts);
+      assert.deepEqual(replay, { batchId: first.batchId, created: false });
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(sql`
+            select count(*)::int as n from psp_settlement_lines
+             where batch_id = ${first.batchId} and org_id = ${org.orgId}
+          `)
+        ).rows[0]!.n,
+        3,
+      );
+
+      // An unfooted invoice never reaches storage: the parse refuses naming it.
+      const mismatchId = `cb-mismatch-${org.orgId}`;
+      assert.throws(
+        () =>
+          parseChargebeeSettlement(
+            {
+              id: mismatchId,
+              currency_code: "CAD",
+              total: 10_000,
+              amount_paid: 8_000,
+              amount_adjusted: 1_000,
+            },
+            org.date,
+          ),
+        (error: unknown) =>
+          error instanceof PspSettlementError && error.message.includes(mismatchId),
+      );
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(sql`
+            select count(*)::int as n from psp_settlement_batches
+             where org_id = ${org.orgId} and external_ref = ${mismatchId}
+          `)
+        ).rows[0]!.n,
+        0,
+        "the refused settlement stores no batch",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "Chargebee settlement posts the collected amount to bank with adjustments on their own clearing line",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const parsed = parseChargebeeSettlement(
+        {
+          id: `cb-post-${org.orgId}`,
+          // Unix provider timestamp aligned to the scratch org's open period.
+          date: Math.floor(new Date(`${org.date}T12:00:00Z`).getTime() / 1000),
+          currency_code: "CAD",
+          total: 10_000,
+          amount_paid: 8_000,
+          amount_adjusted: 2_000,
+          adjustment_reason: "goodwill",
+          line_items: [
+            { id: "li_plan", description: "Standard plan", amount: 9_000, entity_type: "plan" },
+            { id: "li_tax", description: "Sales tax", amount: 1_000, entity_type: "tax" },
+          ],
+        },
+        org.date,
+      );
+      const { batchId } = await importSettlementBatch(org.orgId, actor, parsed, {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      });
+      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor);
+      const gl = (await db.execute<{ account_id: string; memo: string; amount: string }>(sql`
+        select account_id, memo, sum(amount)::text as amount
+          from journal_lines
+         where entry_id = ${entryId} and org_id = ${org.orgId}
+         group by account_id, memo
+         order by memo
+      `));
+      const byMemo = new Map(gl.rows.map((line) => [line.memo, line]));
+      // Bank receipts exactly what was collected; the adjustment clears the
+      // customer balance on its own line, apart from any refund leg.
+      assert.equal(byMemo.get("PSP net deposit")?.amount, "80.0000");
+      assert.equal(byMemo.get("PSP net deposit")?.account_id, org.accounts.bank);
+      assert.equal(byMemo.get("PSP adjustments")?.amount, "20.0000");
+      assert.equal(byMemo.get("PSP adjustments")?.account_id, org.accounts.clearing);
+      assert.equal(byMemo.get("PSP clearing / charges")?.amount, "-100.0000");
+      assert.equal(byMemo.get("PSP clearing / charges")?.account_id, org.accounts.clearing);
+      assert.equal(gl.rows.length, 3);
+      const balance = (await db.execute<{ amount: string }>(sql`
+        select coalesce(sum(amount), 0)::text as amount
+          from journal_lines where entry_id = ${entryId}
+      `));
+      assert.equal(balance.rows[0]?.amount, "0.0000");
+      const postAudits = (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count
+          from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'psp_settlement_batches'
+           and row_id = ${batchId}
+           and action = 'post'
+      `));
+      assert.equal(postAudits.rows[0]?.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }
