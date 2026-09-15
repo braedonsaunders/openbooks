@@ -91,5 +91,13 @@ test('approving a targeted change order controls the repriced schedule line', { 
     session.user = user(approver, 'Change-order approver', 'approver@scratch.test')
     const approved = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: co, approvedOn: org.date })
     assert.equal(approved.status, 200)
+    assert.deepEqual((await db.execute<{ change_order_id: string | null; scheduled_value: string }>(sql`
+      select change_order_id, scheduled_value::text from sov_lines where org_id=${org.orgId} and id=${target}
+    `)).rows[0], { change_order_id: co, scheduled_value: '1500.0000' })
+
+    const refused = await post(construction.POST, org.orgId, { action: 'updateSov', id: target, description: 'Unauthorized reprice', scheduledValue: '1600' })
+    assert.equal(refused.status, 422)
+    assert.match((await refused.json()).error, /change order/i)
+    assert.equal((await db.execute<{ scheduled_value: string }>(sql`select scheduled_value::text from sov_lines where org_id=${org.orgId} and id=${target}`)).rows[0]!.scheduled_value, '1500.0000')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
