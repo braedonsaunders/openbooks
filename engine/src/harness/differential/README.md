@@ -7,12 +7,13 @@ payment-application engine) and independently computed by a deliberately tiny
 reference ledger. The two results are diffed penny-for-penny — no tolerance,
 one cent fails.
 
-This complements the two sibling evidence systems:
+This complements the sibling evidence system:
 
-- `engine/src/harness/ledger-parity` — the same economic events driven through
-  OpenBooks and a pinned ERPNext site, compared per lifecycle checkpoint.
 - `engine/src/conformance` — published accounting-standards requirements
   encoded as executable fixtures.
+
+(A prior ERPNext-based parity harness lived beside this one and was removed;
+per-product checkpoint comparison is not currently claimed — see TRUST.md.)
 
 The differential harness adds the third leg: an **independent oracle**. The
 reference ledger (`reference-ledger.ts`) imports NOTHING from the engine — not

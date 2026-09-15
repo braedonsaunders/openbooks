@@ -262,17 +262,26 @@ Live status per case, including the shortfall text for every gap and partial:
 
 ## Independent recomputation
 
-Checking your own arithmetic against yourself has a limit. Two harnesses go
-outside it:
+Checking your own arithmetic against yourself has a limit. One harness goes
+outside it, alongside the simulator below:
 
-**Differential ledger parity.** The same economic events are driven through the
-OpenBooks posting kernel and through a separate, independently written
-accounting system, and the resulting functional-currency general-ledger impact
-is compared at every lifecycle checkpoint — draft, post, allocate, amend,
-cancel, and period lock. There is **no rounding tolerance; a one-cent
-difference fails**. A capability that is unsupported or unclassified is a
-coverage failure, never an implicit pass. See
-[engine/src/harness/ledger-parity/README.md](engine/src/harness/ledger-parity/README.md).
+**Differential recomputation.** A published, versioned transaction corpus
+(`corpus/differential/`) is replayed through the real OpenBooks posting
+pipeline and independently recomputed by a deliberately tiny reference ledger
+that imports nothing from the engine — not even its money utilities. The
+resulting trial balance and per-party open balances are compared exactly:
+no rounding tolerance, a one-cent difference fails, and the product's own
+native integrity invariants run over the replay org as a third leg. Unknown
+corpus content fails the run rather than passing silently; capability areas
+outside the corpus's stated v1 scope (multi-currency, tax engines,
+inventory flows, and the rest) are listed as out of scope in the harness
+README, not implicitly passed. See
+[engine/src/harness/differential/README.md](engine/src/harness/differential/README.md).
+
+A prior parity harness against an external ERP
+(`engine/src/harness/ledger-parity`) was removed because it made release
+verification depend on standing up a second product. Per-checkpoint
+comparison across two products is not currently claimed.
 
 **Seeded business simulation.** A synthetic company is generated from a seed,
 advanced through simulated time, and driven through real business activity by
