@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -23,10 +24,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const { accountId } = (parsedBody.data) as { accountId?: string };
-  if (!accountId) return NextResponse.json({ error: "accountId required" }, { status: 400 });
+  if (typeof accountId !== "string" || !isUuid(accountId)) {
+    return NextResponse.json({ error: "accountId required" }, { status: 400 });
+  }
 
   const group = await loadGroup(id, gate.user.orgId);
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -66,8 +70,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const accountId = new URL(req.url).searchParams.get("accountId");
-  if (!accountId) return NextResponse.json({ error: "accountId required" }, { status: 400 });
+  if (!accountId || !isUuid(accountId)) {
+    return NextResponse.json({ error: "accountId required" }, { status: 400 });
+  }
 
   const group = await loadGroup(id, gate.user.orgId);
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
