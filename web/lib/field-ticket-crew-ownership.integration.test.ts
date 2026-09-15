@@ -23,6 +23,8 @@ test('the crew grid refuses crew members, items, and days it cannot own', {skip:
     const org = await createScratchOrg()
     const alienOrg = await createScratchOrg()
     try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${alienOrg.orgId}`)
       const actor = (await seedFlowActors(org.orgId)).adminId
       const timeTypeId = randomUUID()
       await db.execute(sql`insert into time_types
