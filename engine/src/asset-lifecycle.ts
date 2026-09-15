@@ -419,6 +419,37 @@ export async function disposeAsset(
       throw new AssetLifecycleError("configure a gain/loss on disposal account on the asset category first");
     }
 
+    // SCHEDULE TIE — once depreciation posting has begun, the schedule is the
+    // authoritative NBV trail: refuse while a planned-but-unposted line's
+    // period has already begun by the disposal date. Booking NBV off
+    // posted-to-date alone would silently skip the stub period's charge (a
+    // mid-period disposal understates accumulated depreciation and misstates
+    // the gain or loss, flipping its sign when the stub charge exceeds the
+    // margin); posting the period first keeps the disposal tied to the
+    // schedule. A disposal dated the first day of a period precedes any holding
+    // in it, so the boundary itself stays open; and before anything is posted
+    // there is no posted trail to leapfrog — NBV is cost plus explicit
+    // remeasurements.
+    const stub = (await tx.execute<{ period_name: string }>(sql`
+      select p.name as period_name
+        from depreciation_schedule_lines l
+        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+        join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+       where l.org_id = ${orgId} and s.asset_id = ${assetId} and s.book_id = ${bookId}
+         and l.posted_amount is null and p.starts_on < ${opts.date}
+         and exists (
+           select 1 from depreciation_schedule_lines posted
+            join depreciation_schedules ps on ps.id = posted.schedule_id and ps.org_id = posted.org_id
+            where posted.org_id = ${orgId} and ps.asset_id = ${assetId} and ps.book_id = ${bookId}
+              and posted.posted_amount is not null
+         )
+       order by p.starts_on limit 1`));
+    if (stub.rows[0]) {
+      throw new AssetLifecycleError(
+        `asset ${asset.asset_number} has unposted depreciation for period ${stub.rows[0].period_name} covering the disposal date — post the stub period's depreciation before disposing so the gain or loss ties to the schedule`,
+      );
+    }
+
     const resolvedAccounts = lifecycleAccounts(asset);
     const accounts: DisposalAccounts = {
       assetAccountId: resolvedAccounts.assetAccountId,
