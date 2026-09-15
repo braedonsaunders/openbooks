@@ -1,12 +1,13 @@
 import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../netsuite.ts";
-import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money.ts";
+import { fromUnits, mulDecimal, mulRate, normalizeMoney, toUnits } from "../money.ts";
 import { buildNativeFromNetSuite, type NetSuiteTaxCodeFallbacks, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
   EntityStream,
   MigrationSource,
   NativeChanges,
+  SourceApplicationLink,
   SourceAccountMonthRow,
   SourceEntity,
   SourceOpenItem,
@@ -194,23 +195,71 @@ export interface NsApplicationLink {
   nextdoc: string;
   nextline: string;
   foreignamount: string;
+  /** The PAYING transaction's exchange rate (transaction→base). */
+  payexrate?: string | null;
 }
 
 /** Enforce a stable application-link identity across governed export retries. */
 export function uniqueNetSuiteApplicationLinks(rows: NsApplicationLink[]): NsApplicationLink[] {
-  const unique = new Map<string, { amount: string; row: NsApplicationLink }>();
+  const unique = new Map<string, { amount: string; rate: string; row: NsApplicationLink }>();
   for (const row of rows) {
     const key = `${row.previousdoc}:${row.previousline}:${row.nextdoc}:${row.nextline}`;
     const prior = unique.get(key);
     if (prior) {
-      if (prior.amount !== String(row.foreignamount)) {
+      if (
+        prior.amount !== String(row.foreignamount) ||
+        prior.rate !== String(row.payexrate ?? "")
+      ) {
         throw new Error(`NetSuite returned conflicting application link ${key}`);
       }
       continue;
     }
-    unique.set(key, { amount: String(row.foreignamount), row });
+    unique.set(key, { amount: String(row.foreignamount), rate: String(row.payexrate ?? ""), row });
   }
   return [...unique.values()].map(({ row }) => row);
+}
+
+/**
+ * State a NetSuite settlement link in functional currency.
+ *
+ * `nexttransactionlinelink.foreignamount` is denominated in the transaction
+ * currency, but the application reconciler settles functional carrying
+ * amounts: its already-applied hydration sums `source_amount`, and its
+ * remaining-amount loop decrements functional values. Converting with the
+ * PAYING transaction's rate through the same `mulRate` the posting kernel
+ * uses makes a fully-paid link convert to exactly the payer's carrying value,
+ * so it settles to zero. A missing rate fails closed: passing the foreign
+ * face value through under-settles the link while reporting `unallocated`
+ * zero and `alreadySettled` on every later run.
+ */
+export function netSuiteSettlementAmount(link: NsApplicationLink): string {
+  const ref = `${link.previousdoc}:${link.previousline}→${link.nextdoc}:${link.nextline}`;
+  const rate = String(link.payexrate ?? "").trim();
+  if (!rate) {
+    throw new Error(`NetSuite settlement link ${ref} carries no payer exchange rate`);
+  }
+  try {
+    return mulRate(String(link.foreignamount ?? ""), rate);
+  } catch (error) {
+    throw new Error(
+      `NetSuite settlement link ${ref} has an unusable amount or rate: ${(error as Error).message}`,
+    );
+  }
+}
+
+/**
+ * Map NetSuite payment links to reconciler input: dedupe across governed
+ * export retries, drop non-positive links, and state every amount in
+ * functional currency.
+ */
+export function toSourceApplicationLinks(rows: NsApplicationLink[]): SourceApplicationLink[] {
+  return uniqueNetSuiteApplicationLinks(rows)
+    .filter((link) => link.foreignamount != null && toUnits(link.foreignamount) > 0n)
+    .map((link) => ({
+      paymentRef: String(link.nextdoc),
+      appliedRef: String(link.previousdoc),
+      amount: netSuiteSettlementAmount(link),
+    }));
 }
 
 function parseNetSuiteTaxCodeFallbacks(value: unknown): NetSuiteTaxCodeFallbacks {
@@ -1186,7 +1235,7 @@ export class NetSuiteSource implements MigrationSource {
         linesByTxn.set(key, [...(linesByTxn.get(key) ?? []), line]);
       }
       links.push(...await this.q<NsApplicationLink>(
-        `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND (nextdoc IN (${chunk.join(",")}) OR previousdoc IN (${chunk.join(",")})) ORDER BY previousdoc, previousline, nextdoc, nextline`,
+        `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' AND (n.nextdoc IN (${chunk.join(",")}) OR n.previousdoc IN (${chunk.join(",")})) ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline`,
       ));
     }
     for (const [transactionId, rows] of linesByTxn) {
@@ -1206,13 +1255,7 @@ export class NetSuiteSource implements MigrationSource {
         documents.push(built.doc);
       }
     }
-    const applications = uniqueNetSuiteApplicationLinks(links)
-      .filter((link) => link.foreignamount != null && toUnits(link.foreignamount) > 0n)
-      .map((link) => ({
-        paymentRef: String(link.nextdoc),
-        appliedRef: String(link.previousdoc),
-        amount: String(link.foreignamount),
-      }));
+    const applications = toSourceApplicationLinks(links);
     return { documents, applications, deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
   }
 
@@ -1346,24 +1389,18 @@ export class NetSuiteSource implements MigrationSource {
         const chunk = tids.slice(i, i + 150);
         if (chunk.length === 0) continue;
         links.push(...(await this.q<NsApplicationLink>(
-          `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND (nextdoc IN (${chunk.join(",")}) OR previousdoc IN (${chunk.join(",")})) ORDER BY previousdoc, previousline, nextdoc, nextline`,
+          `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' AND (n.nextdoc IN (${chunk.join(",")}) OR n.previousdoc IN (${chunk.join(",")})) ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline`,
         )));
       }
     } else {
       const partition = {
         id: "applications",
-        sql: "SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' ORDER BY previousdoc, previousline, nextdoc, nextline",
+        sql: "SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline",
       };
       const exported = await this.bridge.bulkQuery<NsApplicationLink>([partition]);
       links.push(...(exported.get(partition.id) ?? []));
     }
-    const applications = uniqueNetSuiteApplicationLinks(links)
-      .filter((l) => l.foreignamount != null && toUnits(l.foreignamount) > 0n)
-      .map((l) => ({
-        paymentRef: String(l.nextdoc),
-        appliedRef: String(l.previousdoc),
-        amount: String(l.foreignamount),
-      }));
+    const applications = toSourceApplicationLinks(links);
 
     // Pull deletion tombstones without attaching code to transaction saves.
     // The feed is account-wide, so retain only financially meaningful record

@@ -15,6 +15,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { postDocument } from "../posting.ts";
 import { createScratchOrg, type ScratchOrg } from "../test-fixtures.ts";
+import { reconcileApplications } from "./applications.ts";
+import { toSourceApplicationLinks } from "./netsuite-source.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -83,5 +85,94 @@ test(
       select open_balance::text as "openBalance" from documents
        where id = ${id} and org_id = ${o.orgId}`);
     assert.equal(doc.rows[0]!.openBalance, "100.0000");
+  },
+);
+
+test(
+  "a fully-paid foreign invoice settles to zero through converted link amounts",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    // A 100 EUR invoice paid in full from a 100 EUR payment at carrying rates
+    // 1.2/1.1. The source link states 100 in transaction currency; the
+    // adapter must convert it to the payer's 120.0000 functional before the
+    // reconciler sees it. Feeding the foreign face value through settles only
+    // ~83.33 and leaves a repair-proof 16.6667 open on both documents while
+    // reporting unallocated zero and alreadySettled on re-run.
+    const o = await ctx();
+    const payDoc = randomUUID();
+    const invDoc = randomUUID();
+    const payEntry = randomUUID();
+    const invEntry = randomUUID();
+    const payLine = randomUUID();
+    const payBank = randomUUID();
+    const invLine = randomUUID();
+    const invBank = randomUUID();
+    await db.execute(sql`
+      insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id,
+                             document_date, posting_date, currency, status, subtotal, tax_total,
+                             total, custom)
+      values (${payDoc}, ${o.orgId}, 'customer_payment', 'PAY-FXNS', ${o.customerId},
+              ${o.subsidiaryId}, ${o.date}, ${o.date}, 'EUR', 'approved', 100, 0, 100,
+              '{"nsId":"pay-fxns"}'::jsonb),
+             (${invDoc}, ${o.orgId}, 'customer_invoice', 'INV-FXNS', ${o.customerId},
+              ${o.subsidiaryId}, ${o.date}, ${o.date}, 'EUR', 'approved', 100, 0, 100,
+              '{"nsId":"inv-fxns"}'::jsonb)`);
+    await db.execute(sql`
+      insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+                                   period_id, memo, status, source_document_id, origin)
+      values (${payEntry}, ${o.orgId}, ${o.bookId}, ${o.subsidiaryId}, 'PAY-FXNS',
+              ${o.date}, ${o.periodId}, 'fx settlement fixture', 'draft', ${payDoc}, 'document'),
+             (${invEntry}, ${o.orgId}, ${o.bookId}, ${o.subsidiaryId}, 'INV-FXNS',
+              ${o.date}, ${o.periodId}, 'fx settlement fixture', 'draft', ${invDoc}, 'document')`);
+    await db.execute(sql`
+      insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+                                 amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+      values (${payLine}, ${o.orgId}, ${payEntry}, 1, ${o.accounts.ar}, ${o.subsidiaryId},
+              120, 'EUR', 100, 1.2, ${o.customerId}, true),
+             (${payBank}, ${o.orgId}, ${payEntry}, 2, ${o.accounts.bank}, ${o.subsidiaryId},
+              -120, 'CAD', -120, 1, null, false),
+             (${invLine}, ${o.orgId}, ${invEntry}, 1, ${o.accounts.ar}, ${o.subsidiaryId},
+              -110, 'EUR', -100, 1.1, ${o.customerId}, true),
+             (${invBank}, ${o.orgId}, ${invEntry}, 2, ${o.accounts.bank}, ${o.subsidiaryId},
+              110, 'CAD', 110, 1, null, false)`);
+    await db.execute(sql`
+      update journal_entries set status = 'posted', posted_at = now()
+       where id in (${payEntry}, ${invEntry})`);
+    await db.execute(sql`
+      update documents set posted_entry_id = ${payEntry}, posting_period_id = ${o.periodId},
+        status = 'posted' where id = ${payDoc} and org_id = ${o.orgId}`);
+    await db.execute(sql`
+      update documents set posted_entry_id = ${invEntry}, posting_period_id = ${o.periodId},
+        status = 'posted' where id = ${invDoc} and org_id = ${o.orgId}`);
+
+    const links = toSourceApplicationLinks([
+      {
+        previousdoc: "inv-fxns",
+        previousline: "0",
+        nextdoc: "pay-fxns",
+        nextline: "0",
+        foreignamount: "100",
+        payexrate: "1.2",
+      },
+    ]);
+    assert.deepEqual(links, [
+      { paymentRef: "pay-fxns", appliedRef: "inv-fxns", amount: "120.0000" },
+    ]);
+
+    const first = await reconcileApplications(o.orgId, "nsId", links);
+    assert.equal(first.unallocated, "0.0000");
+    assert.equal(first.skippedNoLine, 0);
+
+    const balances = await db.execute<{ n: string; ob: string | null }>(sql`
+      select document_number as "n", open_balance::text as "ob" from documents
+       where org_id = ${o.orgId} and id in (${payDoc}, ${invDoc}) order by 1`);
+    assert.deepEqual(balances.rows, [
+      { n: "INV-FXNS", ob: "0.0000" },
+      { n: "PAY-FXNS", ob: "0.0000" },
+    ]);
+
+    const second = await reconcileApplications(o.orgId, "nsId", links);
+    assert.equal(second.inserted, 0);
+    assert.equal(second.alreadySettled, 1);
   },
 );

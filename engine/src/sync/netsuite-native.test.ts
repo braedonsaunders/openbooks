@@ -11,8 +11,10 @@ import {
   NETSUITE_TRANSACTION_WATERMARK_QUERY,
   netSuiteCreditOpenBalance,
   netSuiteLineColumns,
+  netSuiteSettlementAmount,
   numericIdWindows,
   parseNetSuiteMappings,
+  toSourceApplicationLinks,
   uniqueNetSuiteApplicationLinks,
   uniqueNetSuiteTransactionLines,
 } from "./netsuite-source.ts";
@@ -1302,4 +1304,77 @@ test("NetSuite foreign documents without a usable rate fail closed", () => {
     );
     assert.ok("skip" in built, `rate ${hdr.exchangerate ?? "(absent)"} must not post`);
   }
+});
+
+test("NetSuite settlement links convert to the payer's functional currency", () => {
+  // The reconciler settles functional carrying amounts, so a 100 EUR link
+  // paid at 1.3687 must arrive as 136.8700 — passing the foreign face value
+  // through under-settles by the FX spread while reporting unallocated zero.
+  assert.equal(
+    netSuiteSettlementAmount({
+      previousdoc: "7",
+      previousline: "0",
+      nextdoc: "8",
+      nextline: "0",
+      foreignamount: "100",
+      payexrate: "1.3687",
+    }),
+    "136.8700",
+  );
+  assert.equal(
+    netSuiteSettlementAmount({
+      previousdoc: "7",
+      previousline: "0",
+      nextdoc: "8",
+      nextline: "0",
+      foreignamount: "250.50",
+      payexrate: "1",
+    }),
+    "250.5000",
+  );
+  assert.throws(
+    () =>
+      netSuiteSettlementAmount({
+        previousdoc: "7",
+        previousline: "0",
+        nextdoc: "8",
+        nextline: "0",
+        foreignamount: "100",
+      }),
+    /carries no payer exchange rate/,
+  );
+  assert.throws(
+    () =>
+      netSuiteSettlementAmount({
+        previousdoc: "7",
+        previousline: "0",
+        nextdoc: "8",
+        nextline: "0",
+        foreignamount: "100",
+        payexrate: "bogus",
+      }),
+    /unusable amount or rate/,
+  );
+});
+
+test("NetSuite link mapping dedupes, drops non-positive, and converts", () => {
+  const link = {
+    previousdoc: "7",
+    previousline: "0",
+    nextdoc: "8",
+    nextline: "0",
+    foreignamount: "100",
+    payexrate: "1.2",
+  };
+  assert.deepEqual(toSourceApplicationLinks([link, { ...link }]), [
+    { paymentRef: "8", appliedRef: "7", amount: "120.0000" },
+  ]);
+  assert.deepEqual(
+    toSourceApplicationLinks([{ ...link, foreignamount: "0" }]),
+    [],
+  );
+  assert.throws(
+    () => toSourceApplicationLinks([link, { ...link, payexrate: "1.3" }]),
+    /conflicting application link 7:0:8:0/,
+  );
 });
