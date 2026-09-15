@@ -393,6 +393,201 @@ test(
 );
 
 test(
+  "retro readiness ignores a later raise that still covers the settled period",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable,
+            taxPayableAccountId: craPayable,
+            vacationPayableAccountId: vacationPayable,
+            wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+
+      const jobA = randomUUID();
+      await db.execute(sql`
+        insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom)
+        values (${jobA}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-A', 'Job A', 'active', true, '{}'::jsonb)`);
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Robin Field', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2025-06-01', true,
+                ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_percent, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                '4', 'accrue', true, ${actorId}, ${actorId})`);
+
+      // One committed period: 30 h on job A at $30.00/h = $900.00.
+      for (const [day, hours] of [["2026-01-06", 20], ["2026-01-13", 10]] as const) {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id,
+                                    status, is_billable, billing_status, costing_basis,
+                                    created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${day}, ${hours}, ${jobA}, 'approved',
+                  false, 'unbilled', 'actual', ${actorId}, ${actorId})`);
+      }
+      const source = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-01-05", periodEnd: "2026-01-18", payDate: "2026-01-21",
+      });
+      const calculated = await calculatePayRun({
+        orgId: org.orgId, documentId: source.documentId, actorId,
+      });
+      assert.deepEqual(calculated.errors, []);
+      assert.equal(calculated.gross, "900.0000", "30 h x $30.00");
+      await commitPayRun({ orgId: org.orgId, documentId: source.documentId, actorId });
+
+      // The January raise that nominates the period: $33.00/h effective
+      // 1 January, entered the operator's way.
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = '2025-12-31', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2025-06-01'`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '33', 'hour', '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+      const proposal = await proposeRetroPay({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+      });
+      assert.equal(proposal.periods.length, 1);
+      assert.equal(proposal.periods[0]!.difference!.recomputedEarnings, "990.0000");
+      assert.equal(proposal.periods[0]!.difference!.delta, "90.0000");
+      const retro = await createRetroPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+      });
+      assert.equal(retro.total, "90.0000");
+      assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
+
+      // A new row effective inside the settled period blocks: the product's
+      // own overlap guard forces the old row to be capped before it (here to
+      // 9 January), so January would recalculate against the $99.00 row.
+      // Undoing both heals.
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = '2026-01-09', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '99', 'hour', '2026-01-10', true,
+                ${actorId}, ${actorId})`);
+      assert.ok(
+        (await retroRunFindings(org.orgId, retro.documentId))
+          .some((finding) => finding.code === "retro.stale"),
+        "a new row effective inside the settled period still blocks the run",
+      );
+      await db.execute(sql`
+        delete from labor_cost_rates
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-10'`);
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = null, updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
+
+      // Months later a routine October raise closes the $33.00 row at
+      // 30 September and opens $36.00 — exactly what the product's own
+      // save-rate does. The January row still covers January in full, so
+      // re-running January prices the same $990.00: the settlement is not
+      // stale and the open retro run must stay payable.
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = '2026-09-30', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '36', 'hour', '2026-10-01', true,
+                ${actorId}, ${actorId})`);
+      assert.deepEqual(
+        await retroRunFindings(org.orgId, retro.documentId),
+        [],
+        "capping the governing row after the settled period ends changes no January number",
+      );
+
+      // The arm still bites on changes that DO move January money. A
+      // backdated rate correction to the governing row blocks ...
+      await db.execute(sql`
+        update labor_cost_rates set rate = '34', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      const staleAfterRateEdit = await retroRunFindings(org.orgId, retro.documentId);
+      assert.ok(
+        staleAfterRateEdit.some((finding) => finding.code === "retro.stale"),
+        "a backdated rate change to the governing row still blocks the run",
+      );
+      // ... while restoring the exact quantified value heals it again.
+      await db.execute(sql`
+        update labor_cost_rates set rate = '33', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
+
+      // Deactivating the governing row blocks (January would recalculate
+      // against a different row), and reactivating heals.
+      await db.execute(sql`
+        update labor_cost_rates set is_active = false, updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      assert.ok(
+        (await retroRunFindings(org.orgId, retro.documentId))
+          .some((finding) => finding.code === "retro.stale"),
+        "deactivating the governing row still blocks the run",
+      );
+      await db.execute(sql`
+        update labor_cost_rates set is_active = true, updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2026-01-01'`);
+      assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
   "retro readiness ignores a time correction made before quantification",
   { skip: !DB },
   async () => {

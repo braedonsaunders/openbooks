@@ -1007,11 +1007,42 @@ export async function retroRunFindings(
            -- Has anything the detection triggers watch moved since this
            -- settlement was quantified? If so the numbers on it are stale and
            -- the run would pay a difference nobody has reviewed.
+           --
+           -- The wage arm compares against the rate the quantification priced
+           -- in (the snapshot's payRates entry for this employee), not just
+           -- the row's timestamp: closing the governing row the day before a
+           -- LATER raise takes effect leaves the settled period's numbers
+           -- untouched — the row still covers the period in full — and must
+           -- not read as stale. A touched row is provably harmless when it is
+           -- the recorded governing row, still active and still covering the
+           -- period with every money-relevant attribute unchanged, or when it
+           -- is not that row and cannot govern the period now. Anything else
+           -- — a rate/basis/currency/hours edit, a deactivation, a cap that
+           -- ends coverage early, a new row effective inside the period, a
+           -- reactivated row governing again — still blocks. Rows written
+           -- before migration 0142 carry no snapshot and keep the old
+           -- timestamp-only arm.
            exists (
              select 1 from labor_cost_rates w
               where w.org_id = st.org_id and w.employee_party_id = st.employee_party_id
                 and w.effective_from <= st.source_period_end
-                and greatest(w.created_at, w.updated_at) > st.quantified_at) as wage_moved,
+                and greatest(w.created_at, w.updated_at) > st.quantified_at
+                and (st.quantified_source_snapshot is null
+                     or not (
+                       (w.id::text = coalesce(wage_baseline.value->>'rateId', '')
+                        and w.is_active
+                        and (w.effective_to is null or w.effective_to >= st.source_period_end)
+                        and w.rate::text = (wage_baseline.value->>'rate')
+                        and w.basis = (wage_baseline.value->>'basis')
+                        and w.currency = (wage_baseline.value->>'currency')
+                        and coalesce(w.annual_hours::text, '')
+                          = coalesce(wage_baseline.value->>'annualHours', '')
+                        and w.effective_from::text = (wage_baseline.value->>'effectiveFrom'))
+                       or (w.id::text is distinct from (wage_baseline.value->>'rateId')
+                           and (w.is_active is not true
+                                or (w.effective_to is not null
+                                    and w.effective_to < st.source_period_end)))
+                     ))) as wage_moved,
            exists (
              select 1 from employee_pay_components a
               where a.org_id = st.org_id and a.employee_party_id = st.employee_party_id
@@ -1095,6 +1126,19 @@ export async function retroRunFindings(
       join pay_runs src on src.document_id = st.source_pay_run_document_id and src.org_id = st.org_id
       join documents d on d.id = st.source_pay_run_document_id and d.org_id = st.org_id
       join documents retro_doc on retro_doc.id = st.retro_pay_run_document_id and retro_doc.org_id = st.org_id
+      -- The governing pay rate the quantification priced in, for this
+      -- employee: the snapshot's payRates entry (migration 0142). Absent on
+      -- pre-0142 rows, where the wage arm above keeps its timestamp shape.
+      left join lateral (
+        select e.value
+          from jsonb_array_elements(
+            case when jsonb_typeof(coalesce(st.quantified_source_snapshot, '{}'::jsonb)->'payRates') = 'array'
+                 then coalesce(st.quantified_source_snapshot, '{}'::jsonb)->'payRates'
+                 else '[]'::jsonb end
+          ) as e(value)
+         where e.value->>'employeePartyId' = st.employee_party_id::text
+         limit 1
+      ) wage_baseline on true
      where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`retro_doc.subsidiary_id`, allowedSubsidiaryIds)}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
