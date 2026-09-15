@@ -21,6 +21,19 @@ const MAIN_ROOT_URL = "file:///Users/braedonsaunders/Documents/openbooks/";
 const WORKTREE_ROOT_URL = new URL("../../", import.meta.url).href;
 const gateMock = "data:text/javascript," + encodeURIComponent(
   "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].gate}");
+// documents/actions authenticates through lib/authz, which reads cookies —
+// unmockable headless. The mock returns the test gate, grants the document
+// permission, and enforces the same subsidiary rule as the real guard so the
+// run-subsidiary gate is genuinely exercised on the way to the evidence.
+const authzMock = "data:text/javascript," + encodeURIComponent(`
+  export async function getAuthz() { return globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].gate; }
+  export function can() { return true; }
+  export function guardSubsidiaryScope(gate, subsidiaryId) {
+    if (gate.allowedSubsidiaryIds === null || gate.allowedSubsidiaryIds === undefined) return null;
+    if (subsidiaryId && gate.allowedSubsidiaryIds.has(subsidiaryId)) return null;
+    return Response.json({ error: 'not found' }, { status: 404 });
+  }
+`);
 // resolveDefinitionToExportData requires a Next request scope (report authz
 // reads cookies), which no harness has. The translator-style stub records
 // each resolution and returns empty-but-valid report content: the defect
@@ -42,6 +55,10 @@ registerHooks({ resolve(specifier, context, next) {
   const parent = decodeURIComponent(context.parentURL ?? "");
   if (specifier === "./report-run" && parent.endsWith("/web/lib/payroll-evidence.ts")) {
     return { shortCircuit: true, url: reportRunMock };
+  }
+  if (specifier === "../../../../lib/authz"
+    && parent.endsWith("/api/documents/actions/route.ts")) {
+    return { shortCircuit: true, url: authzMock };
   }
   if (specifier === "../../../../../../lib/feature-gates"
     && parent.endsWith("/api/payroll/runs/[id]/stubs-pdf/route.ts")) {
@@ -66,6 +83,7 @@ const { commitPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { GET: stubsPdf } = await import("../app/api/payroll/runs/[id]/stubs-pdf/route");
 const { POST: runAction } = await import("../app/api/payroll/runs/[id]/route");
+const { POST: documentAction } = await import("../app/api/documents/actions/route");
 
 /**
  * Stub outputs carry every employee's wage data, so they enforce the same
@@ -170,6 +188,67 @@ test("approval submission refuses a run carrying an out-of-scope employee", { sk
         body: JSON.stringify({ action: "submit-approval" }),
       }),
       { params: Promise.resolve({ id: documentId }) },
+    );
+    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
+    assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
+  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+});
+
+/** An on_submit pay-run flow with a gate — a real approval policy, so the
+document submit path assembles evidence. */
+const GATING_GRAPH = {
+  schemaVersion: 1,
+  nodes: [
+    { id: "t", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+    {
+      id: "g", position: { x: 200, y: 0 },
+      data: {
+        kind: "gate",
+        gate: { title: "Approve pay run", assignees: [{ kind: "role", role: "admin" }], mode: "any" },
+      },
+    },
+  ],
+  edges: [{ id: "e", source: "t", target: "g" }],
+};
+
+test("document submit refuses evidence assembly for a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The generic document submit attaches the same evidence package when the
+  // org gates pay runs — through a second route that must enforce the same
+  // population opacity. A calculated (still draft-document) run assembles.
+  const fx = await seedAdoption();
+  await db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+  const { input } = await calculatedRun(fx);
+  await db.execute(sql`
+    insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
+    values (${fx.orgId}, 'Pay run approval', 'pay_run', true,
+            ${JSON.stringify(GATING_GRAPH)}::jsonb, ${fx.actorId}, ${fx.actorId})`);
+  const hidden = randomUUID();
+  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden submit employer', 'CAD', 'CA')`);
+  await db.execute(sql`update parties set subsidiary_id = ${hidden}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+  try {
+    state.gate = scopedGate(fx, "payroll.run");
+    state.reportResolutions = 0;
+    const refused = await documentAction(
+      new Request("https://openbooks.test/api/documents/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "submit", documentId: input.documentId }),
+      }),
+    );
+    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
+    assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
+    assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
+
+    state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
+    const submitted = await documentAction(
+      new Request("https://openbooks.test/api/documents/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "submit", documentId: input.documentId }),
+      }),
     );
     assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
     assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
