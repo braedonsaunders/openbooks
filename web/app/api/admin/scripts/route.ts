@@ -9,6 +9,7 @@ import {
 } from '@openbooks/engine/src/scripting.ts'
 import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/script-config.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
@@ -64,6 +65,11 @@ export async function PATCH(req: Request) {
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  // A malformed id names nothing: same answer as an unknown script, never a
+  // PostgreSQL uuid cast error escaping as a 500.
+  if (typeof body.id !== 'string' || !isUuid(body.id)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const err = validate(body)
   if (err) return validationResponse(err)
 
