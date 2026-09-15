@@ -1,5 +1,66 @@
 {
   "version": 1,
-  "comment": "Ratified killed-ratio floor per target. Set from the measured report by npm run test:mutation -- --write-checked-in; the coordinator decides when to raise. Empty until the first full measurement lands.",
-  "floors": {}
+  "comment": "Ratified killed-ratio floor per target. Raise only by re-running test:mutation with --write-checked-in, verifying the new report, and committing report + floor together.",
+  "floors": {
+    "engine/src/money.ts": {
+      "ratio": 0.391304347826087,
+      "measured": 23,
+      "mode": "unit"
+    },
+    "engine/src/posting.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit"
+    },
+    "engine/src/posting-effects.ts": {
+      "ratio": 0.2,
+      "measured": 25,
+      "mode": "unit"
+    },
+    "engine/src/sync/applications.ts": {
+      "ratio": 0,
+      "measured": 23,
+      "mode": "unit"
+    },
+    "engine/src/payments.ts": {
+      "ratio": 0.08333333333333333,
+      "measured": 24,
+      "mode": "unit"
+    },
+    "engine/src/payroll-run.ts": {
+      "ratio": 0.16,
+      "measured": 25,
+      "mode": "unit"
+    },
+    "engine/src/payroll/canada/t4127.ts": {
+      "ratio": 0.375,
+      "measured": 24,
+      "mode": "unit"
+    },
+    "engine/src/payroll/us/pub15t.ts": {
+      "ratio": 0.76,
+      "measured": 25,
+      "mode": "unit"
+    },
+    "engine/src/payroll/us/withholding.ts": {
+      "ratio": 0.08333333333333333,
+      "measured": 24,
+      "mode": "unit"
+    },
+    "engine/src/tax.ts": {
+      "ratio": 0.48,
+      "measured": 25,
+      "mode": "unit"
+    },
+    "engine/src/tax-return.ts": {
+      "ratio": 0.43478260869565216,
+      "measured": 23,
+      "mode": "unit"
+    },
+    "engine/src/depreciation.ts": {
+      "ratio": 0.17391304347826086,
+      "measured": 23,
+      "mode": "unit"
+    }
+  }
 }
