@@ -50,7 +50,7 @@ test("settlement upserts pin the known tenant on the payment_instruction_id conf
 });
 
 test(
-  "a failed bank-return settlement rolls its payment reversal back atomically",
+  "a bank return citing an unknown statement line fails closed before any reversal or settlement write",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());
@@ -152,9 +152,11 @@ test(
         };
       });
 
-      // This missing bank-statement line is first referenced by the settlement
-      // insert, after reversePaymentForReturn has voided the document and
-      // created its correcting journal entry inside the same transaction.
+      // The statement line is checked against the run's bank account before
+      // reversePaymentForReturn runs (fail-closed evidence guard); a line the
+      // tenant cannot see must leave the payment, its applications, the
+      // instruction and the run exactly as they were — the same end state the
+      // transaction wrapper guarantees for any later failure.
       await assert.rejects(
         () =>
           recordPaymentSettlement({
@@ -168,11 +170,10 @@ test(
             returnReason: "Insufficient funds",
           }),
         (error: unknown) => {
-          const failure = postgresFailure(error);
-          assert.equal(failure?.code, "23503");
+          assert.equal(postgresFailure(error), null, "refused by the domain guard, not by the database");
           assert.equal(
-            failure?.constraint,
-            "payment_settlements_bank_statement_line_id_fkey",
+            (error as Error).message,
+            "bank statement line does not belong to the payment run's bank account",
           );
           return true;
         },
