@@ -184,6 +184,22 @@ test("the SEPA credit file refuses sub-cent precision instead of rounding it", (
   );
 });
 
+test("the SEPA credit file refuses a creditor IBAN with an invalid checksum", () => {
+  assert.throws(
+    () => buildSepaFile({
+      settings: SEPA_SETTINGS,
+      messageId: "MSG-0001",
+      creationDateTime: "2026-03-03T00:00:00",
+      executionDate: "2026-03-05",
+      payments: [{
+        ...sepaPayment("125.00"),
+        creditorIban: "DE89370400440532013001",
+      }],
+    }),
+    (error: Error) => error instanceof PaymentError && /creditor IBAN/.test(error.message),
+  );
+});
+
 test("a data centre that cannot form a valid trace number refuses to write a file", () => {
   for (const originatingDataCentre of ["00000", "543", "FILL-ME"]) {
     assert.throws(
