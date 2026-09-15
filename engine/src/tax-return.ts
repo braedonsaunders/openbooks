@@ -266,6 +266,13 @@ export interface TaxReturnResult {
   to: string;
   submissionChannel: string;
   watermark: string | null;
+  /**
+   * The org's own registration number for this return's form (e.g. the CRA
+   * business number on a GST34), from the active tax_registrations row whose
+   * form and effective window cover the period — null when unregistered. The
+   * facsimile prints this identity verbatim and must never invent one.
+   */
+  registrationNumber: string | null;
   boxes: TaxReturnBox[];
 }
 
@@ -546,6 +553,20 @@ async function computeTaxReturnInSnapshot(
 
   const boxes = assembleReturn(boxDefs, glRaw, new Map(Object.entries(adjustments)));
 
+  // The filing identity travels with the computed boxes so every printed
+  // surface (notably the form-faithful facsimile) identifies the return with
+  // the org's own registration — never a placeholder. The predicate mirrors
+  // the filing-calendar match: the active registration for this form whose
+  // effective window overlaps the return period, latest-starting first so a
+  // superseding registration wins.
+  const regRes = (await runner.execute<{ registration_number: string | null }>(sql`
+    select registration_number
+      from tax_registrations
+     where org_id = ${orgId} and is_active and return_form_code = ${formCode}
+       and (effective_from is null or effective_from <= ${to})
+       and (effective_to is null or effective_to >= ${from})
+     order by effective_from desc nulls last, id limit 1`));
+
   return {
     formCode,
     formName: form.name,
@@ -553,6 +574,7 @@ async function computeTaxReturnInSnapshot(
     to,
     submissionChannel: form.submission_channel,
     watermark: form.watermark,
+    registrationNumber: regRes.rows[0]?.registration_number ?? null,
     boxes,
   };
 }

@@ -269,7 +269,10 @@ export function renderGst34Facsimile(
     `<tr><td colspan="4" style="padding:1px 6px 4px;font-size:9px;color:#333;"><strong>NOTE:</strong> ${text}</td></tr>`
 
   const period = `${result.from} &nbsp;&nbsp; ${result.to}`
-  const bn = '00000 0000 000000'
+  // The return's own filing identity from tax_registrations (threaded through
+  // TaxReturnResult by computeTaxReturn) — an unregistered org prints a blank
+  // business-number cell, never a fabricated number.
+  const bn = result.registrationNumber?.trim() ? result.registrationNumber.trim() : ''
 
   return `<div style="width:780px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#000;">
     ${

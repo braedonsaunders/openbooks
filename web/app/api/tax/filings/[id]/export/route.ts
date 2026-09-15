@@ -46,6 +46,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     to: row.period_to,
     submissionChannel: row.submission_channel,
     watermark: t('history.snapshotWatermark', { hash: row.snapshot_hash }),
+    // The snapshot stores boxes only; a historical reprint carries no live
+    // registration identity rather than a number that may have changed since.
+    registrationNumber: null,
     boxes: row.boxes.map((box) => ({ ...box, pdfField: null })),
   }
   const data = taxReturnExportData(result, t)

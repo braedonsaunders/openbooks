@@ -10,6 +10,7 @@ const RETURN_WITH_EDITABLE_BOXES: TaxReturnResult = {
   to: "2026-03-31",
   submissionChannel: "portal_manual",
   watermark: null,
+  registrationNumber: null,
   boxes: [
     { lineCode: "9", label: "Adjustment 9", value: "0.0000", computed: false, editable: true, pdfField: null },
     { lineCode: "10", label: "Adjustment 10", value: "0.0000", computed: false, editable: true, pdfField: null },
