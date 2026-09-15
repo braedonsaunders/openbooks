@@ -116,7 +116,10 @@ export function glActivityBuckets(
            l.amount, greatest(l.amount, 0), greatest(-l.amount, 0)
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
-       and e.status in ('posted', 'reversed') and (${ranges})
+       and e.status in ('posted', 'reversed')
+       and e.posting_date <= ${opts.maxDate}
+       ${opts.minDate ? sql`and e.posting_date >= ${opts.minDate}` : sql``}
+       and (${ranges})
        and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
      where l.org_id = ${orgId}
   )`
