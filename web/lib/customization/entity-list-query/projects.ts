@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Projects                                                            */
@@ -67,10 +68,13 @@ function projectFilterPredicate(clause: FilterClause): SQL | null {
       if (operator === "in" || operator === "not_in") return inList(typeExpr)
       return null
     }
-    case "customer_id":
+    case "customer_id": {
+      const refused = uuidOrFalse(single(value))
+      if (refused) return refused
       if (operator === "eq") return sql`p.customer_id = ${single(value)}`
       if (operator === "ne") return sql`p.customer_id <> ${single(value)}`
       return null
+    }
     default:
       return null
   }
