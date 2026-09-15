@@ -16,8 +16,9 @@ import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 /**
  * Merchant/PSP settlement imports (Stripe, Recurly, Chargebee). A settlement
  * batch is the payout/deposit row from the processor; lines are fees, charges,
- * refunds, disputes, and FX adjustments that post through the kernel as a
- * single balanced journal (origin payment-ops style) with immutable evidence.
+ * refunds, disputes, provider adjustments, and FX adjustments that post through
+ * the kernel as a single balanced journal (origin payment-ops style) with
+ * immutable evidence.
  */
 export const PSP_PROVIDERS = [
   "stripe",
@@ -50,6 +51,10 @@ export const pspSettlementBatches = pgTable(
     feeAmount: money("fee_amount").notNull().default("0"),
     refundAmount: money("refund_amount").notNull().default("0"),
     disputeAmount: money("dispute_amount").notNull().default("0"),
+    /** Provider adjustments (e.g. Chargebee amount_adjusted); deducted from
+     *  net like refunds but tracked apart so write-offs and credit-note
+     *  applications never pollute refund metrics. Migration 0144. */
+    adjustmentAmount: money("adjustment_amount").notNull().default("0"),
     /** Net deposit to bank (often gross − fees − refunds ± FX). */
     netAmount: money("net_amount").notNull().default("0"),
     /** FX gain/loss recognized when processor settles in a different currency. */
@@ -100,6 +105,7 @@ export const pspSettlementLines = pgTable(
         "fee",
         "dispute",
         "dispute_reversal",
+        "adjustment",
         "fx_adjustment",
         "transfer",
         "other",
