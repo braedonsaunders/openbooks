@@ -5,7 +5,8 @@ import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
-import { getAuthz, can, guardSubsidiaryScope } from '../../../../lib/authz'
+import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermission } from '../../../../lib/documents'
 
@@ -31,12 +32,13 @@ async function attachPayRunEvidence(
   documentId: string,
   orgId: string,
   userId: string,
+  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
 ): Promise<void> {
   if (kind !== 'pay_run') return
   const { payRunApprovalState } = await import('@openbooks/engine/src/payroll-approval.ts')
   if (!(await payRunApprovalState(orgId, documentId)).policyExists) return
   const { assemblePayRunEvidence } = await import('../../../../lib/payroll-evidence')
-  await assemblePayRunEvidence(orgId, userId, documentId)
+  await assemblePayRunEvidence(orgId, userId, documentId, allowedSubsidiaryIds)
 }
 export async function POST(req: Request) {
   // Auth first: existence/kind/status of documents is never disclosed to
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
       if (doc.status !== 'draft') {
         return NextResponse.json({ error: `document is ${doc.status}, not draft` }, { status: 422 })
       }
-      await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id)
+      await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id, authz.allowedSubsidiaryIds)
       const { gated, runId, flowError, autoApproved } =
         await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
       if (gated) {
@@ -101,7 +103,7 @@ export async function POST(req: Request) {
     // assembled BEFORE the transaction opens (rendering three reports inside a
     // financial transaction would hold a connection far too long).
     if (doc.status === 'draft') {
-      await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id)
+      await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id, authz.allowedSubsidiaryIds)
     }
     // Submit/release/post is one financial command. A posting rejection must
     // not strand a draft in approved status or persist partial financial work.
@@ -156,9 +158,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, entryId: outcome.entryId })
   } catch (e) {
     // Posting refusals (kernel rules or unconfigured org control accounts) are
-    // request-state failures, not server defects.
+    // request-state failures, not server defects — as is a payroll domain
+    // refusal (a run the caller may not submit evidence for).
     const status =
-      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+      e instanceof PostingError || e instanceof ControlAccountsIncompleteError || e instanceof PayrollError
         ? 422
         : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
