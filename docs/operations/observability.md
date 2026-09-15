@@ -8,6 +8,11 @@ configured. There is no vendor SDK — any OTLP/HTTP receiver (Grafana Alloy,
 Jaeger, Datadog OTel gateway, an OpenTelemetry Collector, …) receives the same
 protocol.
 
+Scheduled work runs in the worker process; the web process schedules only on
+explicit single-process opt-in (`OPENBOOKS_RUN_SCHEDULER=1`), never under
+`next dev`. Each process logs one `[scheduler]` line at boot stating which
+mode it is in.
+
 ## Enabling
 
 Set the standard OpenTelemetry variables in the deployment environment (the

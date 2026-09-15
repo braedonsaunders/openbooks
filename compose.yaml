@@ -153,6 +153,11 @@ services:
       start_period: 90s
     restart: unless-stopped
 
+  # Scheduled work runs HERE: the worker owns every scheduled tick (scripts,
+  # feeds, billing, outbox, flows, close scans), claimed once across replicas
+  # by the shared Postgres lock. The web service intentionally sets no
+  # OPENBOOKS_RUN_SCHEDULER — set it to 1 on web only for single-process
+  # installs; developer processes (`next dev`) never schedule.
   worker:
     image: ${OPENBOOKS_IMAGE:?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest}
     pull_policy: missing
