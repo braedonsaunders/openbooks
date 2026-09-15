@@ -53,6 +53,12 @@ export async function POST(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+  // isDefault is coerced with !! below, but isActive rode straight into the
+  // boolean column: a non-boolean either throws 22P02 (raw 500) or coerces
+  // silently. An explicit value outside the domain is refused instead.
+  if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+    return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+  }
   const parsed = parseFormLayout(body.layout ?? { schemaVersion: 1, recordType: body.recordType });
   if (!parsed.success)
     return NextResponse.json({ error: "invalid layout", issues: parsed.issues }, { status: 400 });

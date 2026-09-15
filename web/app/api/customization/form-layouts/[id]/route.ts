@@ -75,6 +75,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     changes.allowedRoles = body.allowedRoles;
   }
   if (body.isActive !== undefined) {
+    // Collection POST coerces isDefault with !!, but an explicit PATCH value
+    // outside the boolean domain would otherwise reach the column and either
+    // coerce silently or abort the update with an unhandled storage 500.
+    if (typeof body.isActive !== "boolean") {
+      return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+    }
     sets.push(sql`is_active = ${body.isActive}`);
     changes.isActive = body.isActive;
   }
@@ -88,6 +94,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     changes.layout = true;
   }
   if (body.isDefault !== undefined) {
+    if (typeof body.isDefault !== "boolean") {
+      return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
+    }
     sets.push(sql`is_default = ${body.isDefault}`);
     changes.isDefault = body.isDefault;
   }
