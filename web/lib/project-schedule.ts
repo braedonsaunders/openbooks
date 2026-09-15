@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import type {
   ScheduleData,
@@ -10,6 +11,7 @@ import type {
 } from '@braedonsaunders/appkit-scheduling'
 import { wouldCreateDependencyCycle } from '@braedonsaunders/appkit-scheduling'
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-decimal'
+import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 
 /**
  * Project schedule persistence.
@@ -24,6 +26,20 @@ import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-dec
  */
 
 type Row = Record<string, unknown>
+type ScheduleTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+async function assertProjectSchedulingEnabled(orgId: string): Promise<void> {
+  if (!(await isFeatureEnabled(orgId, 'projectScheduling'))) {
+    throw new ScheduleError('project scheduling feature is disabled', 404)
+  }
+}
+
+async function assertProjectSchedulingEnabledTx(tx: ScheduleTransaction, orgId: string): Promise<void> {
+  await acquireFeatureGateLock(orgId, tx)
+  if (!(await lockAndCheckOrgFeature(tx, orgId, 'projectScheduling'))) {
+    throw new ScheduleError('project scheduling feature is disabled', 404)
+  }
+}
 
 const str = (value: unknown) => (value == null ? null : String(value))
 const num = (value: unknown) => (value == null ? 0 : Number(value))
@@ -59,6 +75,7 @@ function toTask(row: Row): ScheduleTask {
 
 /** Load the whole plan for one project. */
 export async function loadProjectSchedule(orgId: string, projectId: string): Promise<ScheduleData> {
+  await assertProjectSchedulingEnabled(orgId)
   const [tasks, dependencies, calendars, resources, assignments, baselines, baselineTasks] =
     await Promise.all([
       db.execute(sql`
@@ -286,6 +303,7 @@ export async function updateScheduleTask(
   patch: ScheduleTaskPatchInput,
   userId: string | null,
 ) {
+  await assertProjectSchedulingEnabled(orgId)
   await assertTaskInProject(orgId, projectId, taskId)
   await applyTaskPatch(orgId, projectId, taskId, patch, userId)
 }
@@ -300,8 +318,10 @@ export async function batchUpdateScheduleTasks(
   updates: Array<{ id: string } & ScheduleTaskPatchInput>,
   userId: string | null,
 ) {
+  await assertProjectSchedulingEnabled(orgId)
   for (const update of updates) await assertTaskInProject(orgId, projectId, update.id)
   await db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     for (const { id, ...patch } of updates) {
       await applyTaskPatch(orgId, projectId, id, patch, userId, tx)
     }
@@ -315,6 +335,7 @@ export async function createScheduleTask(
   userId: string | null,
 ) {
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     const next = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
        where org_id = ${orgId} and project_id = ${projectId}`))
@@ -332,6 +353,7 @@ export async function createScheduleTask(
 }
 
 export async function deleteScheduleTask(orgId: string, projectId: string, taskId: string) {
+  await assertProjectSchedulingEnabled(orgId)
   await assertTaskInProject(orgId, projectId, taskId)
   // A task with posted time is job-costing history; refuse rather than orphan it.
   const timeEntries = (await db.execute<{ n: number }>(sql`
@@ -341,6 +363,7 @@ export async function deleteScheduleTask(orgId: string, projectId: string, taskI
     throw new ScheduleError('task has time entries and cannot be deleted', 409)
   }
   await db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     await tx.execute(sql`
       delete from schedule_dependencies
        where org_id = ${orgId} and (predecessor_id = ${taskId} or successor_id = ${taskId})`)
@@ -362,6 +385,7 @@ export async function createScheduleDependency(
   input: { predecessorId: string; successorId: string; type?: string; lagDays?: number },
   userId: string | null,
 ) {
+  await assertProjectSchedulingEnabled(orgId)
   await assertTaskInProject(orgId, projectId, input.predecessorId)
   await assertTaskInProject(orgId, projectId, input.successorId)
 
@@ -391,6 +415,7 @@ export async function createScheduleDependency(
 }
 
 export async function deleteScheduleDependency(orgId: string, projectId: string, id: string) {
+  await assertProjectSchedulingEnabled(orgId)
   await db.execute(sql`
     delete from schedule_dependencies
      where id = ${id} and org_id = ${orgId} and project_id = ${projectId}`)
@@ -404,6 +429,7 @@ export async function createScheduleBaseline(
   userId: string | null,
 ) {
   await db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     if (input.isPrimary) {
       await tx.execute(sql`
         update schedule_baselines set is_primary = false, updated_at = now(), updated_by = ${userId}
@@ -428,6 +454,7 @@ export async function createScheduleBaseline(
 
 export async function deleteScheduleBaseline(orgId: string, projectId: string, baselineId: string) {
   await db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     await tx.execute(sql`
       delete from schedule_baseline_tasks
        where org_id = ${orgId} and baseline_id = ${baselineId}`)
@@ -451,6 +478,7 @@ export async function upsertScheduleCalendar(
   userId: string | null,
 ) {
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     if (input.id) {
       const existing = await tx.execute(sql`
         select 1 from schedule_calendars
@@ -490,6 +518,7 @@ export async function upsertScheduleCalendar(
 
 export async function deleteScheduleCalendar(orgId: string, projectId: string, calendarId: string) {
   await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     const existing = await tx.execute(sql`
       select 1 from schedule_calendars
        where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`)
@@ -540,6 +569,7 @@ export async function upsertScheduleResource(
     throw new ScheduleError('cost rate must be a number with no more than four decimal places', 422)
   }
   return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     if (input.id) {
       const existing = await tx.execute(sql`
         select 1 from schedule_resources
@@ -576,6 +606,7 @@ export async function upsertScheduleResource(
 
 export async function deleteScheduleResource(orgId: string, projectId: string, resourceId: string) {
   await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
     const existing = await tx.execute(sql`
       select 1 from schedule_resources
        where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`)
