@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { dateOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Journal entries                                                     */
@@ -118,10 +119,16 @@ function journalEntryFilterPredicate(clause: FilterClause): SQL | null {
   if (clause.key === 'origin') return select(sql`e.origin`)
   if (clause.key === 'status') return select(sql`e.status`)
   if (clause.key === 'posting_date') {
+    const refusedDay = dateOrFalse(value)
+    if (refusedDay) return refusedDay
     if (clause.operator === 'eq') return sql`e.posting_date = ${value}`
     if (clause.operator === 'gte') return sql`e.posting_date >= ${value}`
     if (clause.operator === 'lte') return sql`e.posting_date <= ${value}`
-    if (clause.operator === 'between') return sql`e.posting_date between ${value} and ${String(clause.to ?? '')}`
+    if (clause.operator === 'between') {
+      const refusedUpper = dateOrFalse(String(clause.to ?? ''))
+      if (refusedUpper) return refusedUpper
+      return sql`e.posting_date between ${value} and ${String(clause.to ?? '')}`
+    }
   }
   return null
 }
