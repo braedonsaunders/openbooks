@@ -959,7 +959,7 @@ const projectProfitability: AssistantToolDef = {
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
       `));
       if (!exists.rows[0]) return { ok: false, error: "project_not_found" };
-      return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId)), href: `/projects?project=${a.projectId}` } };
+      return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId, authz.allowedSubsidiaryIds)), href: `/projects?project=${a.projectId}` } };
     }
     const limit = Math.min(a.limit ?? 20, 50);
     const like = a.query ? `%${a.query}%` : null;

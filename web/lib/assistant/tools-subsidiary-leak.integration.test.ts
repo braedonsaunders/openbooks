@@ -158,6 +158,35 @@ test('project_profitability scopes projects to the caller subsidiary', { skip: !
   }
 });
 
+test('project_profitability hides hidden-subsidiary source documents on a visible project', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, hidden } = await seedScopedOrg();
+  const projectId = randomUUID();
+  try {
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,name) values (${projectId},${org.orgId},${org.subsidiaryId},'Visible Detail Project')`);
+    const documentId = randomUUID();
+    await db.execute(sql`insert into documents(
+      id,org_id,kind,status,document_number,subsidiary_id,project_id,party_id,document_date,currency,subtotal,tax_total,total
+    ) values (
+      ${documentId},${org.orgId},'vendor_bill','draft','HIDDEN-PROJECT-DOC',${hidden},${projectId},${org.vendorId},'2026-07-15','CAD','900','0','900'
+    )`);
+    await db.execute(sql`insert into document_lines(
+      org_id,document_id,line_number,account_id,amount,tax_amount,project_id,subsidiary_id
+    ) values (${org.orgId},${documentId},1,${org.accounts.cogs},'900','0',${projectId},${hidden})`);
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const result = await executeAssistantTool(authz, 'project_profitability', { projectId });
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.ok(result.ok);
+      const documents = (result.data as { documents: { documentNumber: string }[] }).documents;
+      assert.deepEqual(documents, [], 'a visible project must not expose source documents from hidden subsidiaries');
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('get_document hides a hidden-subsidiary document from a restricted caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, hidden } = await seedScopedOrg();
   try {

@@ -1,9 +1,10 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { db, orgContext, pool } from '@openbooks/engine/src/db.ts'
 import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments'
+import { pgTextArrayLiteral } from './pg-array'
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.
@@ -30,6 +31,15 @@ const REVENUE_TYPES = ['income', 'income_other']
 
 const COST_SET = sql`(${sql.join(COST_TYPES.map((t) => sql`${t}`), sql`, `)})`
 const REVENUE_SET = sql`(${sql.join(REVENUE_TYPES.map((t) => sql`${t}`), sql`, `)})`
+
+function projectSubsidiaryFilter(
+  column: SQL,
+  allowed: ReadonlySet<string> | null,
+): SQL {
+  if (allowed === null) return sql``
+  if (allowed.size === 0) return sql` and false`
+  return sql` and ${column} = any(${pgTextArrayLiteral([...allowed])}::uuid[])`
+}
 
 export interface ProjectCostSummary {
   budget: { cost: string; contractValue: string }
@@ -77,6 +87,7 @@ interface ProjectTimeSqlRow {
 async function projectCostSummaryInSnapshot(
   orgId: string,
   projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ProjectCostSummary> {
   const [proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows] = await Promise.all([
     // project custom (contract value) + task cost budget
@@ -96,6 +107,7 @@ async function projectCostSummaryInSnapshot(
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
         and e.book_id = (select b.id from accounting_books b
                            where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
+        ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
     `),
     // committed: open order remainders tagged to the project. Order amounts
     // are transaction-currency facts; translate each contribution through the
@@ -116,6 +128,7 @@ async function projectCostSummaryInSnapshot(
         and coalesce(dl.project_id, d.project_id) = ${projectId}
         and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
         and dl.quantity > dl.quantity_billed
+        ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
     `),
     directSubcontractOpenCommitment(orgId, projectId),
     // actual cost broken down by account
@@ -128,6 +141,7 @@ async function projectCostSummaryInSnapshot(
         and e.book_id = (select b.id from accounting_books b
                            where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
         and a.type in ${COST_SET}
+        ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
       group by a.id, a.number, a.name, a.type
       having sum(l.amount) <> 0
       order by sum(l.amount) desc
@@ -144,6 +158,7 @@ async function projectCostSummaryInSnapshot(
        and coalesce(dl.project_id, d.project_id) = ${projectId}
       left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
       where d.org_id = ${orgId}
+        ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
       group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
       order by d.document_date desc
       limit 500
@@ -175,13 +190,17 @@ async function projectCostSummaryInSnapshot(
  * `directSubcontractOpenCommitment` (and any future helper) resolves its `db`
  * queries on this same connection and snapshot.
  */
-export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
+export async function projectCostSummary(
+  orgId: string,
+  projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<ProjectCostSummary> {
   const active = orgContext.getStore()
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
       throw new Error('cannot change organization inside an active tenant transaction')
     }
-    return projectCostSummaryInSnapshot(orgId, projectId)
+    return projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds)
   }
 
   const client = await pool.connect()
@@ -195,7 +214,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
     )
     const txDb = drizzle({ client })
     const summary = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
-      await projectCostSummaryInSnapshot(orgId, projectId),
+      await projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds),
     )
     await client.query('commit')
     return summary
