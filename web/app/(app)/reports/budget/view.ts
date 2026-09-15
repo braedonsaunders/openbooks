@@ -15,6 +15,7 @@ import {
 import { budgetScenarioOptions, budgetVsActualView } from '../../../../lib/budget-report'
 import { orgInfo } from '../../../../lib/data'
 import { parseReportQuery } from '../../../../lib/report-filters'
+import { resolvePeriod } from '../../../../lib/periods'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadBudgetDimensionOptions } from '../../../../lib/budgets'
@@ -71,6 +72,10 @@ export async function loadBudgetReport(
   const authz = await requirePermission('reports.read')
   await requireFeatureEnabled(authz.user.orgId, 'budgets')
   const q = parseReportQuery(sp)
+  // The same period machinery as every other statement: the resolved window
+  // bounds the actuals (and the budget periods), so a year-to-date view no
+  // longer leaks future-dated lines the P&L never shows.
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const [scenarios, dimensions, org] = await Promise.all([
     budgetScenarioOptions(authz.user.orgId),
     loadBudgetDimensionOptions(authz.user.orgId),
@@ -106,6 +111,7 @@ export async function loadBudgetReport(
           labels,
           q.dims,
           authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds],
+          { from: period.from, to: period.to },
         )
 
   const scenarioName = scenarios.find((scenario) => scenario.id === scenarioId)?.name
@@ -137,8 +143,12 @@ export async function loadBudgetReport(
     exportParams: { ...sp, scenario: scenarioId },
     company: org?.name ?? '',
     // With no scenarios at all the native page shows the description instead
-    // of a scenario name.
-    periodPhrase: scenarios.length === 0 ? t('budget.description') : (scenarioName ?? ''),
+    // of a scenario name; otherwise the scenario echoes the resolved window
+    // so the reader can see which actuals the variance compares.
+    periodPhrase:
+      scenarios.length === 0
+        ? t('budget.description')
+        : `${scenarioName ?? ''} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     emptyNote: t('budget.noScenarios'),
     wide: (view?.columns.length ?? 0) > 4,
     hasView: Boolean(view),
@@ -174,7 +184,7 @@ export function budgetReportSpec(data: BudgetReportData): PageSpec {
       },
       {
         ...filterBar(
-          { period: false, dimensions: true, sections: true },
+          { period: true, dimensions: true, sections: true },
           {
             primaryFilter: f('scenarioFilter'),
             dimensions: f('dimensions'),
@@ -189,7 +199,7 @@ export function budgetReportSpec(data: BudgetReportData): PageSpec {
       },
       {
         ...filterBar(
-          { period: false, dimensions: true },
+          { period: true, dimensions: true },
           {
             primaryFilter: f('scenarioFilter'),
             dimensions: f('dimensions'),

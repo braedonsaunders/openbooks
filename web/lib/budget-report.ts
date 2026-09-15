@@ -124,13 +124,25 @@ function treeify(
   })
 }
 
-/** Build a Budget vs Actual statement view for a scenario, or null if unknown. */
+/**
+ * Build a Budget vs Actual statement view for a scenario, or null if unknown.
+ *
+ * Both columns share ONE caller-resolved window, exactly like the P&L: actuals
+ * sum posted lines with `from <= posting_date <= to`, and budget sums the
+ * scenario lines whose accounting period overlaps the same window. Callers
+ * resolve the window through the shared period machinery (`resolvePeriod`),
+ * so the report filter bar's period is the single source of truth — without
+ * it the whole fiscal year leaked future-dated actuals into a "year to date"
+ * comparison the P&L never showed. Omitting `period` keeps the legacy
+ * whole-fiscal-year window.
+ */
 export async function budgetVsActualView(
   scenarioId: string,
   orgId: string,
   labels: BudgetLabels,
   dims: Partial<BudgetDimensions> = {},
   subsidiaryIds?: readonly string[],
+  period?: { from: string; to: string },
 ): Promise<StatementView | null> {
   const sc = (await db.execute<{ id: string; book_id: string; fiscal_year: number; name: string }>(sql`
     select id, book_id, fiscal_year, name from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}
@@ -145,6 +157,9 @@ export async function budgetVsActualView(
   const range = periodRange.rows[0]
   if (!range?.from || !range?.to) return null
   const fy = { from: range.from, to: range.to }
+  // The resolved window, echoed on the Actual column below: P&L parity holds
+  // if and only if both readers aggregate this same range.
+  const window = period ?? fy
 
   const subsidiaryList = subsidiaryIds?.length ? sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
   const actualRows = (await db.execute<{ account_id: string; amt: string }>(sql`
@@ -155,7 +170,7 @@ export async function budgetVsActualView(
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}
        ${subsidiaryIds ? sql`and l.subsidiary_id in (${subsidiaryList})` : sql``}
-       and e.posting_date >= ${fy.from} and e.posting_date <= ${fy.to}
+       and e.posting_date >= ${window.from} and e.posting_date <= ${window.to}
        ${dims.departmentId ? sql`and l.department_id = ${dims.departmentId}` : sql``}
        ${dims.projectId ? sql`and l.project_id = ${dims.projectId}` : sql``}
        ${dims.locationId ? sql`and l.location_id = ${dims.locationId}` : sql``}
@@ -166,7 +181,9 @@ export async function budgetVsActualView(
   const budgetRows = (await db.execute<{ account_id: string; amt: string }>(sql`
     select bl.account_id, coalesce(sum(bl.amount), 0) as amt
       from budget_lines bl
+      left join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
      where bl.org_id = ${orgId} and bl.scenario_id = ${scenarioId}
+       and (ap.id is null or (ap.starts_on <= ${window.to} and ap.ends_on >= ${window.from}))
        ${subsidiaryIds ? sql`and bl.subsidiary_id in (${subsidiaryList})` : sql``}
        ${dims.departmentId ? sql`and bl.department_id = ${dims.departmentId}` : sql``}
        ${dims.projectId ? sql`and bl.project_id = ${dims.projectId}` : sql``}
@@ -192,9 +209,10 @@ export async function budgetVsActualView(
   const treeRows = treeify(accounts.rows, leaf)
 
   const columns: StatementColumn[] = [
-    // Only the Actual column drills to ledger transactions (from/to = the FY);
-    // Budget comes from budget_lines, not the ledger, so it carries no window.
-    { key: 'actual', label: labels.actual, kind: 'amount', from: fy.from, to: fy.to },
+    // Only the Actual column drills to ledger transactions (from/to = the
+    // resolved window); Budget comes from budget_lines, not the ledger, so
+    // it carries no drill window — but it aggregates the same window.
+    { key: 'actual', label: labels.actual, kind: 'amount', from: window.from, to: window.to },
     { key: 'budget', label: labels.budget, kind: 'amount' },
     { key: 'var_abs', label: labels.variance, kind: 'variance_abs' },
     { key: 'var_pct', label: labels.variancePct, kind: 'variance_pct' },
