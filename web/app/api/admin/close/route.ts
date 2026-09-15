@@ -64,6 +64,19 @@ function bool(body: Body, key: string): boolean {
   return body[key] === true;
 }
 
+/**
+ * The active flag defaults on when omitted, but an explicitly supplied
+ * value must be a real boolean: `!== false` coercion would otherwise let
+ * isActive: "false" (or 0) silently ACTIVATE the row with a 200 — a live
+ * automation or reporting package the admin tried to switch off keeps
+ * running. Same boolean-flag contract as the admin setup PATCH routes.
+ */
+function optionalActive(body: Body): boolean {
+  if (body.isActive === undefined) return true;
+  if (typeof body.isActive !== "boolean") throw new CloseError("isActive must be a boolean");
+  return body.isActive;
+}
+
 function optionalUuid(body: Body, key: string, label: string): string | undefined {
   if (body[key] === undefined) return undefined;
   if (typeof body[key] !== "string" || !isUuid(body[key])) {
@@ -114,6 +127,7 @@ function validateDependencies(
 
 async function saveCalendar(orgId: string, actorId: string, body: Body) {
   const id = optionalUuid(body, "id", "calendar");
+  const isActive = optionalActive(body);
   const name = text(body, "name", true)!;
   const cadence = text(body, "cadence", true)!;
   if (!CADENCES.has(cadence)) throw new CloseError("invalid calendar cadence");
@@ -161,7 +175,7 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
                week_starts_on = ${weekStartsOn}, anchor_date = ${anchorDate},
                time_zone = ${text(body, "timeZone") ?? "UTC"},
                adjustment_period_enabled = ${bool(body, "adjustmentPeriodEnabled")},
-               is_default = ${isDefault}, is_active = ${body.isActive !== false},
+               is_default = ${isDefault}, is_active = ${isActive},
                config = ${JSON.stringify(object(body, "config"))}::jsonb,
                updated_at = now(), updated_by = ${actorId}
          where id = ${id} and org_id = ${orgId}
@@ -180,7 +194,7 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
          adjustment_period_enabled, is_default, is_active, config, created_by, updated_by)
       values (${orgId}, ${name}, ${cadence}, ${yearStartMonth}, ${weekStartsOn}, ${anchorDate},
               ${text(body, "timeZone") ?? "UTC"}, ${bool(body, "adjustmentPeriodEnabled")},
-              ${isDefault}, ${body.isActive !== false}, ${JSON.stringify(object(body, "config"))}::jsonb,
+              ${isDefault}, ${isActive}, ${JSON.stringify(object(body, "config"))}::jsonb,
               ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
     const after = inserted.rows[0];
     if (!after) throw new CloseError("calendar could not be created");
@@ -337,6 +351,7 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
     )
   )
     throw new CloseError("invalid policy type");
+  const isActive = optionalActive(body);
   return db.transaction(async (tx) => {
     const beforeResult = await tx.execute(sql`
       select * from close_policies
@@ -346,7 +361,7 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
     const result = (await tx.execute(sql`
       insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
       values (${orgId}, ${code}, ${text(body, "name", true)!}, ${text(body, "description")}, ${policyType},
-              ${JSON.stringify(object(body, "rules"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId})
+              ${JSON.stringify(object(body, "rules"))}::jsonb, ${isActive}, ${actorId}, ${actorId})
       on conflict (org_id, code) do update set name = excluded.name, description = excluded.description,
         policy_type = excluded.policy_type, rules = excluded.rules, is_active = excluded.is_active,
         updated_at = now(), updated_by = excluded.updated_by
@@ -362,6 +377,7 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
 
 async function saveAutomation(orgId: string, actorId: string, body: Body) {
   const id = optionalUuid(body, "id", "automation");
+  const isActive = optionalActive(body);
   const trigger = text(body, "trigger", true)!;
   const action = text(body, "automationAction", true)!;
   if (
@@ -400,14 +416,14 @@ async function saveAutomation(orgId: string, actorId: string, body: Body) {
       ? await tx.execute(sql`
           update close_automation_rules set name = ${text(body, "name", true)!}, trigger = ${trigger}, action = ${action},
             conditions = ${JSON.stringify(object(body, "conditions"))}::jsonb, config = ${JSON.stringify(object(body, "config"))}::jsonb,
-            is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${actorId}
+            is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId}
            returning *`)
       : await tx.execute(sql`
           insert into close_automation_rules
             (org_id, name, trigger, action, conditions, config, is_active, created_by, updated_by)
           values (${orgId}, ${text(body, "name", true)!}, ${trigger}, ${action}, ${JSON.stringify(object(body, "conditions"))}::jsonb,
-                  ${JSON.stringify(object(body, "config"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId})
+                  ${JSON.stringify(object(body, "config"))}::jsonb, ${isActive}, ${actorId}, ${actorId})
           returning *`)) as { rows: Array<Record<string, unknown>> };
     const after = result.rows[0];
     await tx.execute(sql`
@@ -433,6 +449,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
     return report as Record<string, unknown>;
   });
   const id = optionalUuid(body, "id", "reporting package");
+  const isActive = optionalActive(body);
   const isDefault = body.isDefault === true;
   return db.transaction(async (tx) => {
     let before: Record<string, unknown> | null = null;
@@ -453,7 +470,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
         reports = ${JSON.stringify(reports)}::jsonb,
         recipients = ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
         delivery = ${JSON.stringify(object(body, "delivery"))}::jsonb, is_default = ${isDefault},
-        is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${actorId}
+        is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
         where id = ${id} and org_id = ${orgId}
         returning *`)) as { rows: Array<Record<string, unknown>> };
       const after = updated.rows[0];
@@ -469,7 +486,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
       values (${orgId}, ${text(body, "name", true)!}, ${text(body, "description")},
               ${JSON.stringify(reports)}::jsonb,
               ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
-              ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${body.isActive !== false}, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
+              ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
     const after = result.rows[0];
     if (!after) throw new CloseError("reporting package could not be created");
     await tx.execute(sql`
