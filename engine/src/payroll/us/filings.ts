@@ -14,6 +14,18 @@ import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } fro
  * packs.ts handoff).
  */
 
+/**
+ * W-2 lines this product does NOT produce, named rather than printed as zeros
+ * an employer might file (the RLZ-1.S `RLZ1S_GAPS` pattern): state wages and
+ * state income tax withheld (boxes 15–20) for every work state. The stub
+ * subledger withholds them — `state_income_tax` lines on committed stubs —
+ * but no per-state slip line reports them back.
+ */
+export const W2_GAPS = [
+  "state wages and state income tax withheld (W-2 boxes 15-20) are not reported per state of employment — " +
+    "state tax is withheld on committed stubs but has no slip line; file state wages from payroll records",
+];
+
 async function form941Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
   const quarters = await form941Worksheet(orgId, taxYear);
   return {
@@ -130,7 +142,7 @@ async function w2Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
       { code: "6", label: "Medicare tax withheld", value: slip.box6MedicareTax },
     ],
     notes: [
-      "A W-2 carries one federal wage set; state lines are reported per state of employment.",
+      "A W-2 carries one federal wage set (boxes 1-6); state wages and state withholding are not reported per state — see the declared W-2 gaps.",
     ],
   };
 }
