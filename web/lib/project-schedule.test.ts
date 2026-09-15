@@ -61,6 +61,7 @@ const mockSources = new Map<string, string>([
         const statement = text(query)
         if (/select coalesce\\(max\\(schedule_order\\)/i.test(statement)) return { rows: [{ n: 7 }] }
         if (/insert into project_tasks/i.test(statement)) return { rows: [{ id: 'task-created' }] }
+        if (/select 1 from project_tasks/i.test(statement)) return { rows: [{ id: 'task-1' }] }
         if (/select 1 from schedule_calendars/i.test(statement)) {
           return { rows: state.calendarTargetExists ? [{ id: 'calendar-target' }] : [] }
         }
@@ -177,6 +178,30 @@ test('creating a task rolls back its insert when the patch fails', async () => {
   assert.equal(state.committedTaskInserts, 0)
   assert.equal(state.rootExecuteCalls, 0)
   assert.ok(state.txQueries.some((query) => /insert into project_tasks/i.test(query.strings.join(' '))))
+})
+
+test('single-task resource replacement is atomic when a later assignment is invalid', async () => {
+  reset()
+
+  await assert.rejects(
+    schedule.updateScheduleTask(
+      ORG_ID,
+      PROJECT_A,
+      'task-1',
+      { resourceAssignments: [
+        { resourceId: 'resource-1', units: 1 },
+        { resourceId: 'resource-2', units: 0 },
+      ] } as never,
+      'user-1',
+    ),
+    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
+  )
+
+  assert.equal(state.transactionCalls, 1, 'the replacement must run inside one transaction')
+  assert.equal(state.commits, 0)
+  assert.equal(state.rollbacks, 1)
+  assert.ok(state.txQueries.some((query) => /delete from schedule_task_assignments/i.test(query.strings.join(' '))))
+  assert.ok(!state.rootExecuteCalls || state.rootExecuteCalls === 1, 'only the authorization read may use the root executor')
 })
 
 test('calendar updates and deletes require the authorized project', async () => {
