@@ -7,7 +7,7 @@ import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
-import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
+import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, exactOrderUnitPrice, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
 import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { compareDecimal } from '../../../lib/exact-decimal'
@@ -351,7 +351,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       for (const line of body.lines) {
         if (!(line.itemId || line.accountId)) continue
         const quantity = exactOrderQuantity(line.quantity ?? '0')
-        const unitPrice = exactOrderMoney(line.unitPrice ?? '0')
+        const unitPrice = exactOrderUnitPrice(line.unitPrice ?? '0')
         if (quantity === 'invalid' || unitPrice === 'invalid') {
           return NextResponse.json({ error: 'Order lines contain an invalid quantity or amount' }, { status: 422 })
         }
