@@ -167,6 +167,32 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
 
   // One transaction, unscoped (RLS bypass) since we span production→sandbox.
   await withOrg(null, async () => {
+    // As-of trims journal entries past the cutoff but copies every document,
+    // so a post-cutoff posted entry would leave its documents pointing at an
+    // entry that was never copied — a deferred-FK failure at commit. Refuse up
+    // front with an actionable error instead. The predicate mirrors the copy
+    // filter exactly (entries whose period is not in the cutoff set, including
+    // a null period, are the ones the copy would drop).
+    if (opts.tier === "as_of" && opts.asOfPeriod) {
+      const { fiscalYear: y, periodNumber: n } = opts.asOfPeriod;
+      const beyond = (await db.execute<{ count: string }>(sql`
+        select count(*)::text as count
+          from journal_entries je
+         where je.org_id = ${opts.productionOrgId}
+           and je.status in ('posted', 'reversed')
+           and not (je.period_id in (
+             select p.id from accounting_periods p
+              where p.org_id = ${opts.productionOrgId}
+                and (p.fiscal_year < ${y} or (p.fiscal_year = ${y} and p.period_number <= ${n}))
+           ))`)).rows[0]?.count;
+      if (beyond !== "0") {
+        throw new Error(
+          `as-of sandbox to fiscal ${y} period ${n} excludes ${beyond ?? "?"} posted entries in later periods; ` +
+            `their documents would reference entries that were never copied — ` +
+            `choose a cutoff at or after the latest posted period, or use a full tier`,
+        );
+      }
+    }
     await db.execute(sql`set constraints all deferred`);
     // Trusted bulk copy: the deterministic rebase guarantees integrity, so the
     // kernel guards (account-postability via 'migration', posted-immutability
