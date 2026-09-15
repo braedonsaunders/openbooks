@@ -597,8 +597,12 @@ function treeifyMatrix(
   const byId = new Map(rows.map((r) => [r.id, r]))
   const rolled = new Map<string, ExactDecimal[]>(rows.map((r) => [r.id, [...r.vals]]))
   for (const r of rows) {
+    // A malformed imported cycle must terminate, not hang the report: each
+    // ancestor absorbs the column once (same policy as the scalar treeify).
+    const seen = new Set<string>([r.id])
     let p = r.parent_id
-    while (p) {
+    while (p && !seen.has(p)) {
+      seen.add(p)
       const acc = rolled.get(p)
       if (acc) for (let i = 0; i < colCount; i++) acc[i] = decimalAdd(acc[i] ?? '0.0000', r.vals[i] ?? '0.0000')
       p = byId.get(p)?.parent_id ?? null
