@@ -220,11 +220,11 @@ export interface AdhocFilters {
  * throw and the whole list page 500s. Fail such predicates closed to an
  * empty match instead — the same fail-closed contract the write paths use.
  */
-function uuidOrFalse(value: string): SQL | null {
+export function uuidOrFalse(value: string): SQL | null {
   return isUuid(value) ? null : sql`false`
 }
 
-function dateOrFalse(value: string): SQL | null {
+export function dateOrFalse(value: string): SQL | null {
   return isIsoCalendarDate(value) ? null : sql`false`
 }
 
