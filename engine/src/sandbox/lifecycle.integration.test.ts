@@ -119,6 +119,51 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
   }
 });
 
+test("an as-of sandbox refuses posted activity after its cutoff instead of failing on a deferred foreign key", { skip: !DB }, async () => {
+  // Trimming journal entries past the cutoff while copying every document
+  // leaves post-cutoff documents pointing at entries that were never copied,
+  // which dies at commit with a cryptic documents_posted_entry_id_fkey
+  // violation. Refuse up front with an actionable error naming the cutoff.
+  const org = await createScratchOrg();
+  const sandboxName = `As-of cutoff ${randomUUID()}`;
+  try {
+    const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!.fiscal_calendar_id;
+    const laterPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${laterPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${cal})`);
+    const docId = randomUUID();
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, status, subtotal, tax_total, total, custom)
+      values (${docId}, ${org.orgId}, 'customer_invoice', 'INV-ASOF', ${org.customerId}, ${org.subsidiaryId},
+              '2026-08-05', '2026-08-05', 'CAD', 'approved', 100, 0, 100, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, source_document_id, origin)
+      values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'INV-ASOF', '2026-08-05', ${laterPeriodId},
+              'Post-cutoff invoice', 'draft', ${docId}, 'document')`);
+    await db.execute(sql`
+      insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+      values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
+             (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false)`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId} and org_id = ${org.orgId}`);
+    await db.execute(sql`update documents set posted_entry_id = ${entryId}, posting_period_id = ${laterPeriodId}, status = 'posted' where id = ${docId} and org_id = ${org.orgId}`);
+
+    await assert.rejects(
+      createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "as_of", masked: false, asOfPeriodId: org.periodId }),
+      /later periods/,
+    );
+  } finally {
+    const failed = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
+    for (const row of failed.rows) {
+      await deleteSandbox(row.id).catch(() => undefined);
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a failed refresh rolls back the wipe instead of leaving a partial sandbox", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const sandboxName = `Refresh rollback ${randomUUID()}`;
