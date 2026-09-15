@@ -61,7 +61,10 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
   // Book scope: the cockpit reads the primary posting book, like bank
   // reconciliation itself — a secondary book's adjustments must not inflate
   // balances, flows, or the trend.
-  const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+  // An explicitly empty scope is a caller whose visibility resolved to nothing
+  // and must read no rows — never degrade to the whole organization. `[]`
+  // binds as an empty uuid array so every `= any(...)` leg matches nothing.
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
