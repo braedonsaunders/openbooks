@@ -1892,6 +1892,27 @@ export function remittanceBandForAverage(
 }
 
 /**
+ * ONE pack's destination remittance schedules (see `remittanceSchedules` on
+ * the pack). Empty when the pack declares none — the US pack's federal
+ * deposits ride EFTPS on no declared timetable.
+ */
+export function packRemittanceSchedules(country: string): readonly PayrollRemittanceSchedule[] {
+  return PAYROLL_COUNTRY_PACKS[country]?.remittanceSchedules ?? [];
+}
+
+/**
+ * The schedule owning a frequency settings key, or null when no pack
+ * declares it. The settings route validates a new schedule's frequency the
+ * moment its pack declares both halves.
+ */
+export function remittanceScheduleForFrequencyKey(
+  frequencySettingsKey: string,
+): PayrollRemittanceSchedule | null {
+  return allRemittanceSchedules()
+    .find((schedule) => schedule.frequencySettingsKey === frequencySettingsKey) ?? null;
+}
+
+/**
  * Every orgs.settings.payroll key any pack declares as a destination
  * remittance frequency — the same derivation pattern as the vendor keys, so
  * the settings route accepts a new schedule's frequency the moment its pack

@@ -24,11 +24,17 @@ import {
 import {
   jurisdictionKey,
   labourJurisdictionProblem,
+  packRemittanceSchedules,
   packRemittanceVendorSettingsKeys,
   packSlotState,
   PayrollPackError,
   payrollJurisdictionDeclared,
+  remittanceFrequencyBand,
 } from "./payroll/packs.ts";
+import {
+  scheduledFrequencyAdvisory,
+  scheduledRemittanceFrequency,
+} from "./payroll-remittance.ts";
 import { payrollBankProfiles } from "./payroll-bank-file.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./payroll-holidays.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
@@ -351,6 +357,52 @@ export async function payrollSetupState(
       detail: problem ? problem.message : `${country} · ${taxYear}`,
       href: `${setupHref}?tab=packs`,
     });
+  }
+
+  // Destination remittance schedules: the frequency each scheduled
+  // destination remits at, and whether last year's measured average sits in
+  // another band. Advisory like the vendors above: an unconfirmed frequency
+  // still dates the bill (the schedule default applies), but a large employer
+  // left on the default remits late all year, so the check names what
+  // applies and the advisory names what the history suggests.
+  for (const country of installed) {
+    for (const schedule of packRemittanceSchedules(country)) {
+      const vendor = (blob as Record<string, unknown>)[schedule.vendorSettingsKey];
+      if (typeof vendor !== "string" || !vendor) continue;
+      const stored = (blob as Record<string, unknown>)[schedule.frequencySettingsKey];
+      const declared = typeof stored === "string" && remittanceFrequencyBand(schedule, stored);
+      if (!declared) {
+        checks.push({
+          severity: "warning", code: "setup.remittanceFrequency",
+          ok: false,
+          detail: typeof stored === "string" && stored
+            ? `${schedule.authority} frequency "${stored}" is not declared — ` +
+              `the ${schedule.defaultFrequency.replaceAll("_", " ")} frequency applies until it is set in Setup → Payroll`
+            : `${schedule.authority} remittance frequency is not set — ` +
+              `the ${schedule.defaultFrequency.replaceAll("_", " ")} frequency applies; ` +
+              `confirm it against your ${schedule.authority} notice in Setup → Payroll`,
+          href: `${setupHref}?tab=accounts`,
+        });
+      } else {
+        const { frequency } = scheduledRemittanceFrequency(
+          schedule, blob as Record<string, unknown>,
+        );
+        checks.push({
+          severity: "warning", code: "setup.remittanceFrequency",
+          ok: true, detail: `${schedule.authority} · ${frequency}`,
+        });
+      }
+      const advisory = await scheduledFrequencyAdvisory(
+        orgId, schedule, vendor, blob as Record<string, unknown>,
+        Number(today.slice(0, 4)) - 1,
+      );
+      if (advisory) {
+        checks.push({
+          severity: "warning", code: "setup.remittanceFrequency",
+          ok: false, detail: advisory, href: `${setupHref}?tab=accounts`,
+        });
+      }
+    }
   }
 
   // Statutory rates the employer must supply, at the scope the pack declares
