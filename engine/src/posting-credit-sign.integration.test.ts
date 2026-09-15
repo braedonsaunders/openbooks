@@ -8,22 +8,25 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixt
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-/** Draft a one-or-more-line customer credit with exact matching totals, approved and ready to post. */
+/** Draft a one-or-more-line credit memo with exact matching totals, approved and ready to post. */
 async function draftCredit(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
   userId: string,
   documentNumber: string,
   amounts: string[],
+  kind: "customer_credit" | "vendor_credit" = "customer_credit",
 ): Promise<string> {
   const id = randomUUID();
   const subtotal = amounts.reduce((n, a) => n + Number(a), 0).toFixed(4);
+  const partyId = kind === "vendor_credit" ? org.vendorId : org.customerId;
+  const lineAccount = kind === "vendor_credit" ? org.accounts.cogs : org.accounts.revenue;
   const created = await withBypass(async () => {
     await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${id}, ${org.orgId}, 'customer_credit', 'draft', ${documentNumber},
-              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+      values (${id}, ${org.orgId}, ${kind}, 'draft', ${documentNumber},
+              ${org.subsidiaryId}, ${partyId}, ${org.date}, 'CAD', '1',
               ${subtotal}, '0', ${subtotal}, ${userId})`);
     let lineNumber = 0;
     for (const amount of amounts) {
@@ -31,7 +34,7 @@ async function draftCredit(
       await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
-        values (${org.orgId}, ${id}, ${lineNumber}, ${org.accounts.revenue},
+        values (${org.orgId}, ${id}, ${lineNumber}, ${lineAccount},
                 '1', ${amount}, ${amount}, '0')`);
     }
     await db.execute(sql`
@@ -57,6 +60,35 @@ test("a negative-total credit memo cannot post as a shadow invoice", { skip: !DB
       (error: unknown) =>
         error instanceof PostingError &&
         /a credit memo must carry a positive total; a negative balance owed by the customer is an invoice/.test(
+          error.message,
+        ),
+    );
+    const untouched = await db.execute<{ status: string; entries: number }>(sql`
+      select status,
+             (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
+        from documents where id = ${id} and org_id = ${org.orgId}
+    `);
+    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a negative-total vendor credit cannot post as a shadow bill", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit sign guard", "admin"));
+    // The AP mirror of the shadow invoice: a vendor "credit" stated against
+    // its own direction would debit expense and credit AP — a payable typed
+    // as a credit. Amounts owed to a vendor are bills, not credits.
+    const id = await draftCredit(org, userId, "VC-NEG-TOTAL", ["-50"], "vendor_credit");
+    await assert.rejects(
+      postDocument(id, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      }),
+      (error: unknown) =>
+        error instanceof PostingError &&
+        /a credit memo must carry a positive total; a negative balance owed to the vendor is a bill/.test(
           error.message,
         ),
     );
