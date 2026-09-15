@@ -50,6 +50,16 @@ export async function POST(req: Request) {
   if (before.status !== 'submitted') return bad('Only a submitted week can be rejected')
 
   await withOrgTransaction(orgId, async () => {
+    // Lock the header for its audit before-image: the pre-transaction read
+    // above confirmed a submitted week, and this row pins what the rejection
+    // transitions from under concurrency.
+    const header = ((await db.execute<{ id: string; status: string }>(sql`
+      select id, status from timesheet_weeks
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and week_start = ${week}::date
+       for update
+    `)).rows[0])
     await setTimesheetWeekStatus(
       orgId,
       ownedEmployee,
@@ -68,6 +78,22 @@ export async function POST(req: Request) {
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
          and status = 'submitted'`)
+    // Durable decision evidence, part of the same atomic unit: the documented
+    // reason is the point of a rejection, so it rides with the before/after
+    // status. An audit failure rolls the rejection back with it.
+    if (header) {
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
+          event: 'rejected',
+          actor: { kind: 'user', userId: user.id },
+          before: { status: header.status },
+          after: { status: 'rejected' },
+          reason,
+          weekStart: week,
+        })}::jsonb, ${user.id})
+      `)
+    }
   })
 
   return NextResponse.json(await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds))
