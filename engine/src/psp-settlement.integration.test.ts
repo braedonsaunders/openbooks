@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
@@ -7,6 +8,7 @@ import {
   postSettlementBatch,
   PspSettlementError,
   reverseSettlementBatch,
+  savePspProviderConfig,
   type ParsedSettlement,
 } from "./psp-settlement.ts";
 import {
@@ -416,6 +418,127 @@ test(
         journal_entries: 0,
       });
     } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "settlement import and provider config refuse accounts from another organization",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const foreign = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const foreignBank = (
+        await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${foreign.orgId} and type = 'asset_bank'
+             and is_active and not is_summary limit 1
+        `)
+      ).rows[0]!.id;
+      const parsed: ParsedSettlement = {
+        provider: "stripe",
+        externalRef: `payout-foreign-${org.orgId}`,
+        settlementDate: org.date,
+        currency: "CAD",
+        lines: [{ kind: "charge", amount: "100.0000", currency: "CAD" }],
+      };
+      const accounts = {
+        bankAccountId: foreignBank,
+        feeAccountId: org.accounts.freight,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      };
+      // A foreign bank account must fail closed at the boundary with a domain
+      // error — not persist and detonate as a raw FK 500 at posting time.
+      await assert.rejects(
+        importSettlementBatch(org.orgId, actor, parsed, accounts),
+        (error: unknown) => {
+          assert.ok(error instanceof PspSettlementError);
+          assert.match((error as Error).message, /same organization|postable/i);
+          return true;
+        },
+      );
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(sql`
+            select count(*)::int as n from psp_settlement_batches
+             where org_id = ${org.orgId} and external_ref = ${parsed.externalRef}
+          `)
+        ).rows[0]!.n,
+        0,
+        "the refused import stores no batch",
+      );
+      await assert.rejects(
+        savePspProviderConfig(
+          org.orgId,
+          { provider: "stripe", isEnabled: true, defaultBankAccountId: foreignBank },
+          actor,
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof PspSettlementError);
+          return true;
+        },
+      );
+    } finally {
+      await dropScratchOrg(foreign.orgId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "settlement posting refuses a batch whose accounts left the organization",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const foreign = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const foreignBank = (
+        await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${foreign.orgId} and type = 'asset_bank'
+             and is_active and not is_summary limit 1
+        `)
+      ).rows[0]!.id;
+      // A bank account deactivated-or-foreign after import (or written around
+      // the service) must fail closed naming the account — not escape as a
+      // raw foreign-key 500 from the journal insert.
+      const batchId = randomUUID();
+      await db.execute(sql`
+        insert into psp_settlement_batches
+          (id, org_id, provider, external_ref, status, currency,
+           gross_amount, net_amount, settlement_date,
+           bank_account_id, fee_account_id, clearing_account_id, subsidiary_id,
+           created_by, updated_by)
+        values (${batchId}, ${org.orgId}, 'stripe', ${`payout-stale-${batchId}`}, 'draft', 'CAD',
+                '100', '100', ${org.date},
+                ${foreignBank}, ${org.accounts.freight}, ${org.accounts.clearing}, ${org.subsidiaryId},
+                ${actor}, ${actor})
+      `);
+      await assert.rejects(
+        postSettlementBatch(org.orgId, batchId, actor),
+        (error: unknown) => {
+          assert.ok(error instanceof PspSettlementError);
+          assert.match((error as Error).message, /same organization|postable|not found/i);
+          return true;
+        },
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
+            select status, journal_entry_id from psp_settlement_batches
+             where id = ${batchId} and org_id = ${org.orgId}
+          `)
+        ).rows[0]!.status,
+        "draft",
+        "the refused post leaves the draft without a journal",
+      );
+    } finally {
+      await dropScratchOrg(foreign.orgId);
       await dropScratchOrg(org.orgId);
     }
   },

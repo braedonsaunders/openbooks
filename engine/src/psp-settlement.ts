@@ -28,6 +28,50 @@ export type SettlementLineKind =
 
 export class PspSettlementError extends Error {}
 
+const PSP_ACCOUNT_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Every account a settlement batch can post to must resolve as a postable
+ * account of the caller's org (active, non-summary). Tenant-coherent FKs
+ * would kill a foreign account at the journal insert as a raw 500, and a
+ * deactivated account only slightly later at the line guard — both long
+ * after import/config accepted the reference. Fail closed here instead with
+ * a domain error; a uniform refusal reveals nothing about other tenants.
+ */
+async function validateSettlementPostingAccounts(
+  orgId: string,
+  accounts: { label: string; id: string | null | undefined }[],
+): Promise<void> {
+  const ids = [
+    ...new Set(
+      accounts
+        .map((a) => a.id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  if (ids.length === 0) return;
+  const malformed = ids.find((id) => !PSP_ACCOUNT_UUID_RE.test(id));
+  if (malformed) {
+    throw new PspSettlementError(
+      `settlement account ${malformed} is not a valid account reference`,
+    );
+  }
+  const rows = (await db.execute<{ id: string }>(sql`
+    select id from accounts
+     where org_id = ${orgId} and is_active and not is_summary
+       and id = any(${`{${ids.join(",")}}`}::uuid[])
+  `));
+  const found = new Set(rows.rows.map((r) => r.id.toLowerCase()));
+  const missing = ids.find((id) => !found.has(id.toLowerCase()));
+  if (missing) {
+    const label = accounts.find((a) => a.id === missing)?.label ?? "settlement";
+    throw new PspSettlementError(
+      `settlement ${label} account is not a postable account in this organization`,
+    );
+  }
+}
+
 export interface ParsedSettlementLine {
   kind: SettlementLineKind;
   amount: string; // signed; fees/refunds usually negative of gross narrative in provider but we store natural sign by kind
@@ -487,6 +531,15 @@ export async function importSettlementBatch(
       );
     }
   }
+  // Resolve posting accounts before any write: import is the first place a
+  // foreign or unpostable account reference can enter the batch lifecycle.
+  await validateSettlementPostingAccounts(orgId, [
+    { label: "bank", id: accounts.bankAccountId },
+    { label: "fee", id: accounts.feeAccountId },
+    { label: "dispute", id: accounts.disputeAccountId },
+    { label: "fx", id: accounts.fxAccountId },
+    { label: "clearing", id: accounts.clearingAccountId },
+  ]);
   const totals = summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
@@ -751,8 +804,19 @@ export async function postSettlementBatch(
       );
 
     const accountIds = [...new Set(jlines.map((line) => line.accountId))];
-    await db.execute(sql`select id from accounts where org_id=${orgId}
-      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+    const locked = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${orgId}
+      and is_active and not is_summary
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`));
+    // Accounts can leave the org (or postability) after import: re-resolve
+    // every posting account under the batch lock so a stale reference fails
+    // closed naming the account instead of escaping as a raw FK 500.
+    const lockedIds = new Set(locked.rows.map((r) => r.id.toLowerCase()));
+    const stale = accountIds.find((id) => !lockedIds.has(id.toLowerCase()));
+    if (stale) {
+      throw new PspSettlementError(
+        `settlement posting account is not a postable account in this organization`,
+      );
+    }
     const subsidiaryId = b.subsidiary_id;
     try {
       await validateSubsidiaryRestrictions(db, {
@@ -972,6 +1036,16 @@ export async function savePspProviderConfig(
   },
   actorId: string | null,
 ): Promise<void> {
+  // Default posting accounts are validated like any other settlement
+  // reference: a foreign or unpostable id must not persist to detonate at
+  // posting time.
+  await validateSettlementPostingAccounts(orgId, [
+    { label: "bank", id: input.defaultBankAccountId },
+    { label: "fee", id: input.defaultFeeAccountId },
+    { label: "dispute", id: input.defaultDisputeAccountId },
+    { label: "fx", id: input.defaultFxAccountId },
+    { label: "clearing", id: input.defaultClearingAccountId },
+  ]);
   let secrets: string | null = null;
   if (input.apiKey) secrets = await sealJson({ apiKey: input.apiKey });
   await db.execute(sql`
