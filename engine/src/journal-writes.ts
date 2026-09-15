@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, schema, withOrgTransaction } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
-import { businessToday } from "./business-date.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { postDocument, runPostDocumentEffects } from "./posting.ts";
@@ -152,7 +152,12 @@ export function validateJournalInput(input: ScriptJournalInput): {
     );
   }
   const documentDate = input.documentDate;
-  if (!DATE_RE.test(documentDate)) throw new JournalWriteError(`invalid documentDate "${input.documentDate}" (use YYYY-MM-DD)`);
+  // DATE_RE alone admits impossible calendar dates ("2024-02-30"), which the
+  // draft insert then refused with a raw driver error. Fail closed here with
+  // the named error, on the real calendar.
+  if (!DATE_RE.test(documentDate) || !isIsoCalendarDate(documentDate)) {
+    throw new JournalWriteError(`invalid documentDate "${input.documentDate}" (use YYYY-MM-DD)`);
+  }
 
   const amounts: string[] = [];
   const debits: string[] = [];
