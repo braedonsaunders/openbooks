@@ -12,6 +12,12 @@ import { auditConfigChange } from '../../_lib'
 
 export const runtime = 'nodejs'
 
+/** POST coerces mandate status into this domain; the text column has no CHECK. */
+const MANDATE_STATUSES = new Set(['pending', 'active', 'suspended', 'revoked', 'expired'])
+
+/** POST coerces schedule action into this domain; the text column has no CHECK. */
+const SCHEDULE_ACTIONS = new Set(['create_draft', 'submit_for_approval'])
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ resource: string; id: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
@@ -22,6 +28,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data)
+  // POST constrains mandate status and schedule action to fixed value domains
+  // while the text columns carry no CHECK constraint. PATCH must refuse what
+  // POST would never store: a mistyped status never equals the 'active' the
+  // direct-debit builder requires, silently dropping the mandate reference
+  // from payment files, and an unknown action leaves the scheduler's intent
+  // ambiguous.
+  if (resource === 'mandates' && body.status !== undefined
+    && (typeof body.status !== 'string' || !MANDATE_STATUSES.has(body.status))) {
+    return NextResponse.json({ error: 'status must be pending, active, suspended, revoked, or expired' }, { status: 400 })
+  }
+  if (resource === 'schedules' && body.action !== undefined
+    && (typeof body.action !== 'string' || !SCHEDULE_ACTIONS.has(body.action))) {
+    return NextResponse.json({ error: 'action must be create_draft or submit_for_approval' }, { status: 400 })
+  }
   try {
     if (body.country !== undefined) {
       const country = optionalCountry(body.country)
