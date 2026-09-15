@@ -101,3 +101,20 @@ test('saving immediately approved hours captures rates and posts configured labo
     assert.deepEqual((await f.snapshot()).rows, before)
   } finally { await f.close() }
 })
+
+test('an hours cell wider than the ledger column fails closed without writing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // time_entries.hours is numeric(19,4): a pasted 20-digit cell cleared the
+  // exact-decimal check and died in Postgres with a storage error. Fail
+  // closed with the named 422 and write nothing.
+  const f = await fixture(true)
+  try {
+    const response = await f.save({ rows: [{ ...f.row, hours: ['99999999999999999999', '', '', '', '', '', ''] }] })
+    assert.equal(response.status, 422, await response.clone().text())
+    assert.match(((await response.json()) as { error: string }).error, /Hours/)
+    assert.equal((await f.snapshot()).rows.length, 0)
+    // The column maximum itself still saves.
+    const ok = await f.save({ rows: [{ ...f.row, hours: ['999999999999999.9999', '', '', '', '', '', ''] }] })
+    assert.equal(ok.status, 200, await ok.clone().text())
+    assert.equal((await f.snapshot()).rows.length, 1)
+  } finally { await f.close() }
+})
