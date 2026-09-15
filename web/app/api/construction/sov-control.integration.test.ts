@@ -190,3 +190,37 @@ test('addChangeOrder refuses a duplicate change-order number', { skip: !process.
     assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from change_orders where org_id=${org.orgId} and project_id=${project} and number='CO-RACE'`)).rows[0]!.n, 1)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
+
+test('SOV values and change-order amounts wider than numeric(19,4) fail closed', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // scheduled_value and change_orders.amount are numeric(19,4): pasted
+  // 20-digit figures cleared the exact-decimal check and died in storage
+  // with a driver error. Fail closed with the named refusal instead.
+  const org = await createScratchOrg()
+  try {
+    const actor = await createScratchUser(org.orgId, 'Magnitude controller', 'reviewer')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    session.user = { id: actor, orgId: org.orgId, name: 'Magnitude controller', email: 'magnitude@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+
+    const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
+    const typeId = randomUUID(), project = randomUUID()
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
+    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'magnitude fixture')`)
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
+      values (${project},${org.orgId},${org.subsidiaryId},'MAG','Magnitude job',${org.customerId},${typeId},'active',true)`)
+
+    const huge = await post(construction.POST, org.orgId, { action: 'addSov', projectId: project, description: 'Too big', scheduledValue: '99999999999999999999' })
+    assert.equal(huge.status, 422, await huge.clone().text())
+    const hugeCo = await post(construction.POST, org.orgId, { action: 'addChangeOrder', projectId: project, number: 'CO-HUGE', amount: '99999999999999999999' })
+    assert.equal(hugeCo.status, 422, await hugeCo.clone().text())
+    assert.equal((await db.execute<{ n: string }>(sql`select count(*) as n from sov_lines where org_id=${org.orgId}`)).rows[0]!.n, '0')
+    assert.equal((await db.execute<{ n: string }>(sql`select count(*) as n from change_orders where org_id=${org.orgId}`)).rows[0]!.n, '0')
+
+    // The column maximum itself still saves through both actions.
+    const ok = await post(construction.POST, org.orgId, { action: 'addSov', projectId: project, description: 'Max line', scheduledValue: '999999999999999.9999' })
+    assert.equal(ok.status, 201, await ok.clone().text())
+    const okCo = await post(construction.POST, org.orgId, { action: 'addChangeOrder', projectId: project, number: 'CO-MAX', amount: '999999999999999.9999' })
+    assert.equal(okCo.status, 201, await okCo.clone().text())
+  } finally { session.user = null; await dropScratchOrg(org.orgId) }
+})
