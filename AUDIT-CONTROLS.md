@@ -105,7 +105,7 @@ enabled on **378 tables**.
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| K1 | **A closed period rejects postings.** `period_module_blocks_write` is consulted on write; a closed module lock raises regardless of the code path. | Database | `engine/src/posting-period.integration.test.ts` |
+| K1 | **A closed period rejects postings.** `period_module_blocks_write` is consulted on write; a closed module lock raises regardless of the code path. | Database | `engine/src/close.test.ts` ("only an approved reopen restores posting beneath a scope-wide close" posts into a closed period and asserts refusal) |
 | K2 | **A document's posting period must equal its journal's period.** A posted document cannot claim one period while its entry sits in another. | Database | `engine/src/close-period-identity.integration.test.ts` |
 | K3 | **Close is sequenced per module.** AR, AP, and GL close independently, so closing receivables does not silently freeze general-ledger adjustments. | Service | `engine/src/close.ts`, `engine/src/flows/close-approval.integration.test.ts` |
 | K4 | **Reopening is controlled and audited**, with an expiry after which the lock re-asserts itself automatically. | Database + Service | `period_module_blocks_write` (`reopen_expires_at`), `close_reopen_requests` |
