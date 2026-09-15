@@ -13,6 +13,7 @@ import { nextMirrorAt } from "@openbooks/engine/src/sync/mirror-schedule.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../../lib/authz";
+import { storageIdentityError } from "../_storage-identity";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,8 @@ export async function PATCH(
       ? await businessToday(orgId)
       : undefined;
 
+  // A malformed id surfaces as a Postgres input error from the first
+  // lookup; resolve it through the not-found contract, never a raw 500.
   const result = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
@@ -180,6 +183,9 @@ export async function PATCH(
       actorId: gate.user.id,
     });
     return updated;
+  }).catch((e) => {
+    if (storageIdentityError(e)) return NextResponse.json({ error: "not found" }, { status: 404 });
+    throw e;
   });
   if (result instanceof NextResponse) return result;
   return NextResponse.json({ ok: true });
@@ -193,7 +199,10 @@ export async function DELETE(
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const { id } = await params;
-  const existing = await getConnection(orgId, id);
+  const existing = await getConnection(orgId, id).catch((e) => {
+    if (storageIdentityError(e)) return null;
+    throw e;
+  });
   if (!existing)
     return NextResponse.json({ error: "not found" }, { status: 404 });
   await db.transaction(async (tx) => {

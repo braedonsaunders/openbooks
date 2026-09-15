@@ -6,6 +6,7 @@ import {
   type SourceDeletionAction,
 } from "@openbooks/engine/src/sync/source-deletions.ts";
 import { guardPermission } from "../../../../../../../lib/authz";
+import { storageIdentityError } from "../../../_storage-identity";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,9 @@ export async function POST(
   } catch (error) {
     if (error instanceof SourceDeletionResolutionError) {
       return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    if (storageIdentityError(error)) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     throw error;
   }
