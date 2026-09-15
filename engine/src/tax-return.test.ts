@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CANADA_RETURN_PACKS } from "./country-tax-packs/ca-returns.ts";
-import { assembleReturn, evalFormula, planReturn, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow } from "./tax-return.ts";
+import { assembleReturn, evalFormula, planReturn, taxableBaseSideForCode, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow } from "./tax-return.ts";
 
 const codes = (...c: string[]) => new Set(c);
 
@@ -179,6 +179,16 @@ test("planReturn collapses multi-code boxes and collects every GL source", () =>
     ["gst", "hst-on"],
   );
   assert.equal(glSources.length, 2);
+});
+
+test("taxable-base side routing: one-sided codes decide, both-sides codes split", () => {
+  // A both-sides code (no declared side) feeds the sales AND the purchases
+  // family; routing it to one side only would halve or double its box.
+  assert.equal(taxableBaseSideForCode("sales"), "sales");
+  assert.equal(taxableBaseSideForCode("purchases"), "purchases");
+  assert.equal(taxableBaseSideForCode(undefined), null);
+  assert.equal(taxableBaseSideForCode("both"), null);
+  assert.equal(taxableBaseSideForCode(""), null);
 });
 
 test("a GL-mapped box with no ledger activity is zero, not missing", () => {
