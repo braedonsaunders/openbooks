@@ -8,6 +8,7 @@ import { guardPermission } from "../../../../lib/authz";
 import { guardProjectsFeature } from "../../../../lib/projects-gate";
 import { isUuid } from "../../../../lib/list-params";
 import {
+  findUnownedCustomReferences,
   loadFieldDefs,
   validateCustomValues,
 } from "../../../../lib/custom-fields";
@@ -323,11 +324,17 @@ export async function PUT(
     termCodes.add(code);
   }
 
+  const rateVersionDefs = await loadFieldDefs("item_rate_versions");
   const customValidation = validateCustomValues(
-    await loadFieldDefs("item_rate_versions"),
+    rateVersionDefs,
     body.custom,
   );
   if (!customValidation.ok) return error("custom");
+  // Reference custom values are uuid-SHAPED at this point but nothing proves
+  // the referenced row belongs to the caller: refuse foreign or dangling ids
+  // instead of persisting a cross-tenant pointer.
+  const unownedCustomRefs = await findUnownedCustomReferences(gate.user.orgId, rateVersionDefs, customValidation.cleaned);
+  if (unownedCustomRefs.length > 0) return error("unknownCustomReference");
 
   const orgId = gate.user.orgId;
   const storedItemTargets = (await db.execute<{
