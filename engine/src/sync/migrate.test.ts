@@ -163,3 +163,141 @@ test(
     }
   },
 );
+
+test(
+  "tax-code mirrors never rewrite closed or future rate windows",
+  { skip: !DB },
+  async () => {
+    // Rate windows are dated statutory history: the calculation engine
+    // resolves the rate for a document's own date, so rewriting every window
+    // to the source's current rate reinterprets history (and destroys a
+    // tenant-planned future window). Only the currently open window states
+    // the source's current rate.
+    const org = await createScratchOrg();
+    try {
+      const source: MigrationSource = {
+        name: "migration-test",
+        refKey: "migrationTest",
+        baseCurrency: "CAD",
+        accountingPeriods: async () => [],
+        entities: async () => [],
+        nativeChanges: async () => {
+          throw new Error("not used by this test");
+        },
+        trialBalance: async () => [],
+        monthlyActivity: async () => [],
+      };
+      const [code] = await withOrg(org.orgId, () =>
+        db.execute<{ id: string }>(sql`
+          insert into tax_codes (org_id, code, name, applies_to, custom)
+          values (${org.orgId}, 'TAX-HIST', 'History Tax', 'both',
+                  '{"migrationTest": "TAX-HIST"}'::jsonb)
+          returning id
+        `),
+      ).then((r) => r.rows);
+      await withOrg(org.orgId, () => db.execute(sql`
+        insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, effective_to)
+        values (${org.orgId}, ${code!.id}, '5.0000', '2020-01-01', '2022-12-31'),
+               (${org.orgId}, ${code!.id}, '13.0000', '2023-01-01', '2026-12-31'),
+               (${org.orgId}, ${code!.id}, '15.0000', '2027-01-01', null)
+      `));
+      const stats = await withOrg(org.orgId, () =>
+        loadEntities(source, org.orgId, null, undefined, undefined, [
+          {
+            resource: "tax_codes",
+            records: [
+              {
+                sourceRef: "TAX-HIST",
+                fields: { code: "TAX-HIST", name: "History Tax", ratePercent: "13" },
+              },
+            ],
+          },
+        ]),
+      );
+      assert.equal(stats.tax_codes?.updated, 1);
+      const windows = await withOrg(org.orgId, () =>
+        db.execute<{ rate: string; from: string; to: string | null }>(sql`
+          select rate_percent::text as rate, effective_from::text as "from",
+                 effective_to::text as "to"
+            from tax_rates
+           where org_id = ${org.orgId} and tax_code_id = ${code!.id}
+           order by effective_from
+        `),
+      );
+      assert.deepEqual(
+        windows.rows.map((row) => [row.rate, row.from, row.to]),
+        [
+          ["5.0000", "2020-01-01", "2022-12-31"],
+          ["13.0000", "2023-01-01", "2026-12-31"],
+          ["15.0000", "2027-01-01", null],
+        ],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "tax-code mirrors still land the source rate on the open current window",
+  { skip: !DB },
+  async () => {
+    // Guard against overcorrection: the loader-created single open-ended
+    // window states the source's current rate and must keep tracking it.
+    const org = await createScratchOrg();
+    try {
+      const source: MigrationSource = {
+        name: "migration-test",
+        refKey: "migrationTest",
+        baseCurrency: "CAD",
+        accountingPeriods: async () => [],
+        entities: async () => [],
+        nativeChanges: async () => {
+          throw new Error("not used by this test");
+        },
+        trialBalance: async () => [],
+        monthlyActivity: async () => [],
+      };
+      const stats = await withOrg(org.orgId, () =>
+        loadEntities(source, org.orgId, null, undefined, undefined, [
+          {
+            resource: "tax_codes",
+            records: [
+              {
+                sourceRef: "TAX-OPEN",
+                fields: { code: "TAX-OPEN", name: "Open Tax", ratePercent: "5" },
+              },
+            ],
+          },
+        ]),
+      );
+      assert.equal(stats.tax_codes?.created, 1);
+      const again = await withOrg(org.orgId, () =>
+        loadEntities(source, org.orgId, null, undefined, undefined, [
+          {
+            resource: "tax_codes",
+            records: [
+              {
+                sourceRef: "TAX-OPEN",
+                fields: { code: "TAX-OPEN", name: "Open Tax", ratePercent: "13" },
+              },
+            ],
+          },
+        ]),
+      );
+      assert.equal(again.tax_codes?.updated, 1);
+      const windows = await withOrg(org.orgId, () =>
+        db.execute<{ rate: string }>(sql`
+          select rate_percent::text as rate
+            from tax_rates tr
+            join tax_codes tc on tc.id = tr.tax_code_id and tc.org_id = tr.org_id
+           where tr.org_id = ${org.orgId} and tc.code = 'TAX-OPEN'
+        `),
+      );
+      assert.deepEqual(windows.rows, [{ rate: "13.0000" }]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
