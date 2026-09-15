@@ -3092,6 +3092,7 @@ export function buildCpa005File(run: Cpa005Run): string {
 
   const segments = run.payments.map((p, i) => {
     if (p.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
+    if (p.accountNumber.length > 12) throw new PaymentError("payee account number must be 12 characters or fewer");
     return (
       txnType + // transaction type (3)
       num(p.amountCents, 10) + // amount in cents (10)
