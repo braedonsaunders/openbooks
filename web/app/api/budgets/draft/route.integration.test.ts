@@ -146,3 +146,21 @@ test('draft creation rejects a malformed source scenario id instead of creating 
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('draft creation rejects a malformed explicit fiscal year instead of defaulting', { skip: !DB }, async () => {
+  const { org, fy } = await fixture()
+  try {
+    const before = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    const response = await post({ bookId: org.bookId, fiscalYear: 'not-a-year' })
+    assert.equal(response.status, 422)
+    assert.deepEqual(await response.json(), { error: 'invalid_fiscal_year' })
+    const after = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    assert.equal(after, before, 'malformed fiscal-year input must not create a default-year draft')
+    assert.ok(fy)
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})

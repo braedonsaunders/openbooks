@@ -22,7 +22,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid_book_id' }, { status: 422 })
   }
   const requestedBook = typeof body.bookId === 'string' ? body.bookId : null
-  const requestedYear = Number(body.fiscalYear)
+  if (
+    body.fiscalYear !== undefined
+    && (typeof body.fiscalYear !== 'number' || !Number.isInteger(body.fiscalYear) || body.fiscalYear < 1900 || body.fiscalYear > 9999)
+  ) {
+    return NextResponse.json({ error: 'invalid_fiscal_year' }, { status: 422 })
+  }
+  const requestedYear = body.fiscalYear === undefined ? null : body.fiscalYear
   const kind = BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? (body.kind as string) : 'budget'
   if (body.sourceScenarioId !== undefined && (typeof body.sourceScenarioId !== 'string' || !isUuid(body.sourceScenarioId))) {
     return NextResponse.json({ error: 'invalid_source_scenario_id' }, { status: 422 })
@@ -43,7 +49,7 @@ export async function POST(req: Request) {
       ) as fiscal_year
   `))
   const bookId = requestedBook ?? defaults.rows[0]?.book_id
-  const fiscalYear = Number.isInteger(requestedYear) && requestedYear >= 1900 && requestedYear <= 9999
+  const fiscalYear = requestedYear !== null
     ? requestedYear
     : Number(defaults.rows[0]?.fiscal_year)
   if (!bookId || !Number.isInteger(fiscalYear)) {
