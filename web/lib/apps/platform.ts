@@ -292,9 +292,10 @@ async function writeRecord(
   // rollback trigger.
   return withOrgTransaction(ctx.orgId, async () => {
     const fields = await writableFields(ctx, resolved)
-    if (operation === 'create') return unwrapWrite(await createRecord(ctx.user, resolved, fields, body))
-    if (operation === 'update') return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body))
-    return unwrapWrite(await deleteRecord(ctx.user, resolved, id!))
+    const writeOptions = { allowedSubsidiaryIds: ctx.allowedSubsidiaryIds }
+    if (operation === 'create') return unwrapWrite(await createRecord(ctx.user, resolved, fields, body, writeOptions))
+    if (operation === 'update') return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body, writeOptions))
+    return unwrapWrite(await deleteRecord(ctx.user, resolved, id!, writeOptions))
   })
 }
 
@@ -311,6 +312,9 @@ async function assertSubsidiaryWriteScope(
   if (!schema?.fields.some((field) => field.name === 'subsidiary_id')) return
 
   const requested = body.subsidiaryId ?? body.subsidiary_id
+  if (requested === null && operation !== 'create') {
+    throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
+  }
   if (requested !== undefined && requested !== null && !ctx.allowedSubsidiaryIds.has(String(requested))) {
     throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
   }
