@@ -105,27 +105,14 @@ one.
 Covered: ASC 606 / IFRS 15 revenue (including variable-consideration
 constraint, financing-component separation, and percent-complete catch-up;
 contract modifications are a published gap), ASC 842 / IFRS 16 lessee leases
-(remeasurement is a published gap), IAS 2 / ASC 330 inventories (including
+(remeasurement and early termination are published gaps), IAS 2 / ASC 330 inventories (including
 lower-of-cost-and-NRV with the framework-divergent reversal rule, and landed
 cost), IAS 21 foreign currency (including designated monetary items beyond
-trade balances), ASC 360 / IAS 16 long-lived assets, ASC 740 / IAS 12 income
+trade balances), ASC 360 / IAS 16 long-lived assets (disposals tie to the posted schedule; partial disposals, intercompany transfers, and 4-4-5-calendar scheduling are published gaps), ASC 740 / IAS 12 income
 taxes (including rate-change remeasurement of opening balances), construction
 progress billing / change orders / cost-to-cost (expected-loss provision is a
-published gap), IAS 37 / ASC 450 provisions (published gaps: no provisions
-engine yet), IAS 21 settlement (realized differences, full-residual
-consumption) and non-monetary historical cost (net-investment OCI is a
-published gap), Canadian payroll deductions and US withholding (CRA T4127
-periodic method including CPP2, EI maxima, QPIP/QPP and the Quebec abatement,
-lump-sum bonus rate; IRS Pub 15-T Worksheet 1A with FICA, supplemental and
-Additional Medicare, plus an Alabama booklet sample — cumulative averaging and
-Quebec provincial tax are published gaps), and sales/consumption tax
-(exclusive/inclusive GST, QST compounding, per-line rounding, partial input
-credits, GST34 payable/refund and VAT100 box walks, US nexus OR/AND/sales-only
-rules — native place-of-supply determination is a published gap), and
-consolidation (full method with NCI recognition and profit allocation,
-intercompany elimination, equity method, proportionate owned share, and
-foreign-subsidiary translation at average/history — loss-of-control
-accounting is a published gap).
+published gap), and IAS 37 / ASC 450 provisions (published gaps: no provisions
+engine yet).
 
 Not yet covered, and therefore **not claimed**: business combinations,
 consolidation procedure, financial instruments, employee benefits,
