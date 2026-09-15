@@ -313,3 +313,16 @@ const SOURCES: Record<string, DocListSource> = {
 export function listSource(recordType: string): DocListSource | undefined {
   return SOURCES[recordType]
 }
+
+/**
+ * Total ORDER BY for universal document lists. Sort keys (date, status,
+ * party name, totals) tie constantly; without a unique tiebreaker Postgres
+ * may return tied rows in any order, so pages reshuffle between visits and
+ * rows duplicate or drop across page boundaries. The document id is unique
+ * (and time-ordered uuid v7, matching the newest-first default), so it pins
+ * every page deterministically in both directions.
+ */
+export function listOrderClause(orderExpr: SQL, dir: 'asc' | 'desc'): SQL {
+  const direction = dir === 'asc' ? sql`asc` : sql`desc`
+  return sql`${orderExpr} ${direction} nulls last, d.id ${direction}`
+}

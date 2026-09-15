@@ -20,7 +20,7 @@ import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
 import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
-import { listSource } from '../lib/list/sources'
+import { listOrderClause, listSource } from '../lib/list/sources'
 import { RelatedPartyLink } from './related-party-link'
 
 /**
@@ -172,7 +172,7 @@ export async function RecordListView({
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         ${joins}
        where ${where}
-       order by ${orderExpr} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
+       order by ${listOrderClause(orderExpr, params.dir)}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `)),
     (db.execute(sql`

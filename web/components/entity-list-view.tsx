@@ -26,7 +26,7 @@ import {
   customerSorts,
   customerStatusExpr,
 } from '../lib/customization/entity-list-query'
-import { entityListSource } from '../lib/list/entity-sources'
+import { entityListSource, entityOrderClause } from '../lib/list/entity-sources'
 
 /**
  * The universal ENTITY list — the non-`documents` twin of RecordListView. Renders
@@ -189,7 +189,7 @@ export async function EntityListView({
         from ${tableSql}
         ${baseJoins}
        where ${where}
-       order by ${orderExpr} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
+       order by ${entityOrderClause(source, orderExpr, params.dir)}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `)),
     source.statusCounts === false
