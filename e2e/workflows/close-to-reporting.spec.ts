@@ -1,17 +1,10 @@
 import { test } from "@playwright/test";
 import { authedContext, dismissSetupWizard } from "../auth";
 import {
-  ADMIN_EMAIL,
-  ADMIN_PASSWORD,
   AMT,
-  APPROVER_EMAIL,
-  APPROVER_PASSWORD,
-  EXPECT,
   api,
-  binderHash,
   field,
   expect,
-  extractPdfText,
   ok,
   revisionToken,
   targetPeriods,
@@ -67,9 +60,6 @@ const SEED: Seed = {
   runId: "",
   accounts: {},
 };
-
-let BINDER1_HASH = "";
-let BINDER1_BODY = "";
 
 test.describe.serial("close to reporting", () => {
   // No retries: this is a stateful saga, and retrying it mid-flight would
