@@ -241,12 +241,18 @@ const SOURCES: Record<string, DocListSource> = {
       {
         paramKey: 'schedule',
         filterKey: 'pay_schedule_id',
-        loadOptions: async (orgId) => {
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
           const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
             select s.id::text as value, s.name as label, count(pr.document_id)::int as count
               from pay_schedules s
               left join pay_runs pr on pr.pay_schedule_id = s.id and pr.org_id = s.org_id
              where s.org_id = ${orgId}
+               ${allowedSubsidiaryIds == null
+                 ? sql``
+                 // A schedule with no subsidiary belongs to the root subsidiary —
+                 // the same rule payrollVisibleScheduleFilter enforces everywhere
+                 // else. Null is neither org-wide nor invisible; it coalesces.
+                 : sql`and coalesce(s.subsidiary_id, (select root.id from subsidiaries root where root.org_id = ${orgId} and root.parent_id is null and root.is_active order by root.created_at limit 1)) = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[])`}
              group by s.id, s.name
              order by s.name`)
           return result.rows
