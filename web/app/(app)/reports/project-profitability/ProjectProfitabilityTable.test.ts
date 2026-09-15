@@ -4,10 +4,18 @@ import test from 'node:test'
 
 const source = readFileSync(new URL('./ProjectProfitabilityTable.tsx', import.meta.url), 'utf8')
 
-test('project profitability converts exact percentage-point margins for Intl percent formatting', () => {
+test('project profitability passes decimalRatio margins directly to Intl percent formatting', () => {
   assert.match(
     source,
-    /format\.number\(Number\(value\)\s*\/\s*10000\s*,\s*\{\s*style:\s*'percent'/,
-    'a 25% margin is stored as 2500.0000 and must reach Intl as 0.25',
+    /format\.number\(Number\(value\)\s*,\s*\{\s*style:\s*'percent'/,
+    'decimalRatio returns 0.2500 for a 25% margin and Intl percent formatting expects 0.25',
+  )
+})
+
+test('project profitability keeps decimalRatio values in ratio units', () => {
+  assert.doesNotMatch(
+    source,
+    /Number\(value\)\s*\/\s*10000/,
+    'decimalRatio returns 0.2500 for a 25% margin; dividing it again would display 0.0%',
   )
 })
