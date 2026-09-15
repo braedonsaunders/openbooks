@@ -307,15 +307,27 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
     )
   )
     throw new CloseError("invalid policy type");
-  const result = (await db.execute(sql`
-    insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
-    values (${orgId}, ${code}, ${text(body, "name", true)!}, ${text(body, "description")}, ${policyType},
-            ${JSON.stringify(object(body, "rules"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId})
-    on conflict (org_id, code) do update set name = excluded.name, description = excluded.description,
-      policy_type = excluded.policy_type, rules = excluded.rules, is_active = excluded.is_active,
-      updated_at = now(), updated_by = excluded.updated_by
-    where close_policies.org_id = ${orgId} returning id`)) as any;
-  return result.rows[0].id as string;
+  return db.transaction(async (tx) => {
+    const beforeResult = await tx.execute(sql`
+      select * from close_policies
+       where org_id = ${orgId} and code = ${code}
+       for update`);
+    const before = beforeResult.rows[0] ?? null;
+    const result = (await tx.execute(sql`
+      insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
+      values (${orgId}, ${code}, ${text(body, "name", true)!}, ${text(body, "description")}, ${policyType},
+              ${JSON.stringify(object(body, "rules"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId})
+      on conflict (org_id, code) do update set name = excluded.name, description = excluded.description,
+        policy_type = excluded.policy_type, rules = excluded.rules, is_active = excluded.is_active,
+        updated_at = now(), updated_by = excluded.updated_by
+      where close_policies.org_id = ${orgId} returning *`)) as { rows: Array<Record<string, unknown>> };
+    const after = result.rows[0];
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'close_policies', ${after?.id}, ${before ? "update" : "insert"},
+              ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
+    return after?.id as string;
+  });
 }
 
 async function saveAutomation(orgId: string, actorId: string, body: Body) {
