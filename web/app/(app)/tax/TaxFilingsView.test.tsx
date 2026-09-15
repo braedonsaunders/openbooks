@@ -48,3 +48,9 @@ test('changing forms starts from the neutral business-month bounds', () => {
   assert.match(viewSource, /setFrom\(bounds\.from\)/)
   assert.match(viewSource, /setTo\(bounds\.to\)/)
 })
+
+test('tax filing box display preserves exact decimal values', () => {
+  assert.match(viewSource, /import \{ formatDecimal \} from ['"]\.\.\/\.\.\/\.\.\/lib\/money-format['"]/)
+  assert.match(viewSource, /formatDecimal\(locale, value,/)
+  assert.doesNotMatch(viewSource, /Number\(value\)\.toLocaleString/)
+})
