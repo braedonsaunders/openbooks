@@ -271,3 +271,47 @@ test(
     }
   },
 )
+
+test(
+  'a restricted platform update cannot clear a project subsidiary',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actorId, inOrg } = await makePlatformFixture()
+    const projectId = randomUUID()
+    const allowedScope = new Set([org.subsidiaryId])
+    const scopedPlatform = createAppPlatformAdapter({
+      orgId: org.orgId,
+      user: {
+        id: actorId,
+        email: 'platform-scope@scratch.test',
+        name: 'Platform Scope Controller',
+        roles: [{ key: 'admin', name: 'Admin' }],
+        orgId: org.orgId,
+        envKind: 'production' as const,
+        productionOrgId: org.orgId,
+        isSuperAdmin: false,
+        homeUserId: actorId,
+        homeOrgId: org.orgId,
+      },
+      grantedPermissions: ['*'],
+      userCan: () => true,
+      allowedSubsidiaryIds: allowedScope,
+    })
+    try {
+      await inOrg(() => db.execute(sql`
+        insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, created_by, updated_by)
+        values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'PLAT-SCOPE', 'Scoped project', 'active', true, ${actorId}, ${actorId})
+      `))
+      await assert.rejects(
+        inOrg(() => scopedPlatform.update('projects', projectId, { subsidiary_id: null })),
+        (error) => error instanceof AppPlatformError && error.status === 403,
+      )
+      const row = await inOrg(() => db.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from projects where org_id = ${org.orgId} and id = ${projectId}
+      `))
+      assert.equal(row.rows[0]?.subsidiary_id, org.subsidiaryId)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
