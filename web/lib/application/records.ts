@@ -151,7 +151,11 @@ function baseWhere(
 }
 
 function requestedSubsidiary(body: Record<string, unknown>): string | null | undefined {
-  const value = body.subsidiaryId ?? body.subsidiary_id;
+  const direct = body.subsidiaryId ?? body.subsidiary_id;
+  const nested = body.data && typeof body.data === "object" && !Array.isArray(body.data)
+    ? (body.data as Record<string, unknown>).subsidiary_id
+    : undefined;
+  const value = direct ?? nested;
   if (value === null || value === undefined) return value;
   if (typeof value !== "string" || !isUuid(value)) {
     throw invalidInput("subsidiaryId must be a UUID or null");
@@ -270,7 +274,10 @@ export async function createApplicationRecord(
   },
 ): Promise<{ replayed: boolean; status: number; result: unknown }> {
   const scope = await scopeFor(context, input.typeKey, "create");
-  assertSubsidiaryAccess(context, requestedSubsidiary(input.body));
+  const requested = requestedSubsidiary(input.body);
+  if (requested !== undefined || !scope.resolved.dynamic) {
+    assertSubsidiaryAccess(context, requested);
+  }
   const outcome = await executeIdempotent({
     context,
     operation: `records.${input.typeKey}.create`,
@@ -283,7 +290,7 @@ export async function createApplicationRecord(
       scope.resolved,
       scope.schema.fields,
       input.body,
-      { source: context.source },
+      { source: context.source, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
     )),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
@@ -301,7 +308,8 @@ export async function updateApplicationRecord(
   if (!isUuid(input.id)) throw invalidInput("id must be a UUID");
   const scope = await scopeFor(context, input.typeKey, "update");
   await assertExistingRecordAccess(context, scope, input.id);
-  assertSubsidiaryAccess(context, requestedSubsidiary(input.body));
+  const requested = requestedSubsidiary(input.body);
+  if (requested !== undefined) assertSubsidiaryAccess(context, requested);
   const outcome = await executeIdempotent({
     context,
     operation: `records.${input.typeKey}.update`,
@@ -314,7 +322,7 @@ export async function updateApplicationRecord(
       scope.schema.fields,
       input.id,
       input.body,
-      { source: context.source },
+      { source: context.source, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
     )),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
@@ -337,6 +345,7 @@ export async function deleteApplicationRecord(
       context.authz.user,
       scope.resolved,
       input.id,
+      { allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
     )),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };

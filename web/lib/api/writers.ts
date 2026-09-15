@@ -21,9 +21,11 @@ import { loadFieldDefs, validateCustomValues } from "../custom-fields";
 import { allowedSubsidiaryIds as loadAllowedSubsidiaryIds } from "../subsidiaries";
 import {
   buildSearchText,
+  hasSubsidiaryField,
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
+  recordSubsidiaryScopeAllows,
 } from "../records";
 import {
   lintRecordFields,
@@ -111,9 +113,12 @@ async function applyCustomRecord(
     { success: true }
   >["sections"],
   body: { data?: unknown; status?: string },
+  allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
   const record = await loadRecord(user.orgId, typeKey, id);
   if (!record) return err(404, "not found");
+  const allowed = await mutationSubsidiaryScope(user, allowedScope);
+  if (!recordSubsidiaryScopeAllows(sections, record.data, allowed)) return err(404, "not found");
 
   let nextStatus: RecordStatus | undefined;
   if (body.status !== undefined) {
@@ -153,6 +158,7 @@ async function applyCustomRecord(
 
   const effectiveData = nextData ?? stripUnknownData(sections, record.data);
   const effectiveStatus = nextStatus ?? record.status;
+  if (!recordSubsidiaryScopeAllows(sections, effectiveData, allowed)) return err(404, "not found");
   const stage = effectiveStatus === "active" ? "submit" : "draft";
   const errors = validateRecordData(sections, effectiveData, stage);
   if (errors.length > 0) {
@@ -219,6 +225,7 @@ async function createCustomRecordAttempt(
   user: SessionUser,
   typeKey: string,
   body: { data?: unknown; status?: string },
+  allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
   const scope = await loadCustomScope(user, typeKey);
   if (!scope) return err(404, "not found");
@@ -247,6 +254,17 @@ async function createCustomRecordAttempt(
       if (v !== undefined && v !== null && v !== "") values[field.id] = v;
     }
   }
+  const allowed = await mutationSubsidiaryScope(user, allowedScope);
+  if (allowed !== null && hasSubsidiaryField(sections)) {
+    const requested = values.subsidiary_id;
+    if (requested === undefined || requested === null || requested === "") {
+      const ids = [...allowed];
+      if (ids.length !== 1) return err(422, "subsidiaryId is required for this record");
+      values.subsidiary_id = ids[0];
+    } else if (!allowed.has(String(requested))) {
+      return err(403, "forbidden subsidiary");
+    }
+  }
   const data = withComputedFormulas(sections, values);
   const recordNumber = await nextDocumentNumber(
     user.orgId,
@@ -265,7 +283,7 @@ async function createCustomRecordAttempt(
 
   // If the caller sent data/status, apply it on top of the seeded draft.
   if (body.data !== undefined || body.status !== undefined) {
-    const applied = await applyCustomRecord(user, typeKey, id, sections, body);
+    const applied = await applyCustomRecord(user, typeKey, id, sections, body, allowedScope);
     if (applied.status >= 400) return applied;
     return { status: 201, body: applied.body };
   }
@@ -285,12 +303,13 @@ async function createCustomRecord(
   user: SessionUser,
   typeKey: string,
   body: { data?: unknown; status?: string },
+  allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
   const run = async (): Promise<WriteResult> => {
     const savepoint = "custom_record_create";
     await db.execute(sql.raw(`savepoint ${savepoint}`));
     try {
-      const result = await createCustomRecordAttempt(user, typeKey, body);
+      const result = await createCustomRecordAttempt(user, typeKey, body, allowedScope);
       if (result.status >= 400) {
         await db.execute(sql.raw(`rollback to savepoint ${savepoint}`));
         await db.execute(sql.raw(`release savepoint ${savepoint}`));
@@ -318,21 +337,25 @@ async function updateCustomRecord(
   typeKey: string,
   id: string,
   body: { data?: unknown; status?: string },
+  allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
   const scope = await loadCustomScope(user, typeKey);
   if (!scope) return err(404, "not found");
-  return applyCustomRecord(user, typeKey, id, scope.sections, body);
+  return applyCustomRecord(user, typeKey, id, scope.sections, body, allowedScope);
 }
 
 async function deleteCustomRecord(
   user: SessionUser,
   typeKey: string,
   id: string,
+  allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
   const scope = await loadCustomScope(user, typeKey);
   if (!scope) return err(404, "not found");
   const record = await loadRecord(user.orgId, typeKey, id);
   if (!record) return err(404, "not found");
+  const allowed = await mutationSubsidiaryScope(user, allowedScope);
+  if (!recordSubsidiaryScopeAllows(scope.sections, record.data, allowed)) return err(404, "not found");
   if (record.status !== "draft") {
     return err(422, "Only draft records can be deleted — deactivate instead");
   }
@@ -973,7 +996,7 @@ export async function createRecord(
   return withOrgTransaction(user.orgId, async () => {
     switch (resolved.writer.kind) {
       case "custom_record":
-        return createCustomRecord(user, resolved.key, body);
+        return createCustomRecord(user, resolved.key, body, options.allowedSubsidiaryIds);
       case "entity":
         return createEntity(
           user,
@@ -1010,7 +1033,7 @@ export async function updateRecord(
   return withOrgTransaction(user.orgId, async () => {
     switch (resolved.writer.kind) {
       case "custom_record":
-        return updateCustomRecord(user, resolved.key, id, body);
+        return updateCustomRecord(user, resolved.key, id, body, options.allowedSubsidiaryIds);
       case "entity":
         return updateEntity(
           user,
@@ -1047,7 +1070,7 @@ export async function deleteRecord(
   return withOrgTransaction(user.orgId, async () => {
     switch (resolved.writer.kind) {
       case "custom_record":
-        return deleteCustomRecord(user, resolved.key, id);
+        return deleteCustomRecord(user, resolved.key, id, options.allowedSubsidiaryIds);
       case "entity":
         return deleteEntity(
           user,
