@@ -31,6 +31,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
 
+  // A malformed id would surface as a Postgres uuid throw and a raw 500;
+  // resolve it through the same 404 as an unknown id.
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
   // Org-scoped existence + kind lookup BEFORE anything is disclosed.
   const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
     sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
@@ -72,6 +76,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const user = authz.user
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const owned = (await db.execute<(DocumentEditCurrent & { subsidiaryId: string | null })>(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
@@ -180,6 +185,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
     sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
   ))
