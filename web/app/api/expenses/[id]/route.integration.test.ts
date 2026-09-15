@@ -294,6 +294,37 @@ test('expense DELETE with a stale revision token is rejected as a 409 without de
   })
 })
 
+test('expense PATCH refuses malformed and foreign line references with domain errors', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    const foreign = await createScratchOrg()
+    try {
+      const foreignDept = randomUUID()
+      await db.execute(sql`insert into departments (id, org_id, name) values (${foreignDept}, ${foreign.orgId}, 'Foreign department')`)
+      const line = (extra: Record<string, unknown>) => ({ accountId: org.accounts.cogs, amount: '10', description: 'probe', ...extra })
+      // A malformed line department dies at the re-insert as 22P02 (raw 500).
+      const malformed = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ departmentId: 'not-a-uuid' })] })
+      assert.equal(malformed.status, 422, JSON.stringify(await malformed.clone().json()))
+      // A foreign-org line department dies at the tenant-coherent FK as an
+      // unhandled 23503 (raw 500) instead of a tenant-opaque 404.
+      const alien = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ departmentId: foreignDept })] })
+      assert.equal(alien.status, 404, JSON.stringify(await alien.clone().json()))
+      // An unknown tax code escapes computeBillTotals as a raw Error (500)
+      // instead of a domain 422.
+      const tax = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ taxCodeId: 'not-a-uuid' })] })
+      assert.equal(tax.status, 422, JSON.stringify(await tax.clone().json()))
+      const lines = (await db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`)).rows[0]!.n
+      assert.equal(lines, 1, 'refused line references store nothing')
+      assert.equal(
+        (await db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`)).rows[0]!.account_id,
+        org.accounts.cogs,
+        'the original line survives refused saves',
+      )
+    } finally {
+      await dropScratchOrg(foreign.orgId)
+    }
+  })
+})
+
 test('expense DELETE with the exact revision deletes the draft', { skip: !DB }, async () => {
   await fixture(async (org, id) => {
     const response = await del(id, { expectedUpdatedAt: await revision(id) })
