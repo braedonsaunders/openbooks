@@ -15,7 +15,7 @@ import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { loadRequiredControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
 import { isDocumentRevisionToken } from './api/registry-data'
 import { isUuid } from './list-params'
@@ -781,12 +781,35 @@ export async function applyDocumentEdit(
     throw new DocumentEditError(422, `a ${current.kind} requires a subsidiary; the subsidiary cannot be removed`)
   }
   if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
+    if (!isUuid(body.subsidiaryId)) throw new DocumentEditError(422, 'invalid subsidiaryId')
     const subsidiary = (await db.execute(sql`
       select 1 from subsidiaries
        where id = ${body.subsidiaryId} and org_id = ${orgId}
          and is_active and not is_elimination`))
     if (!subsidiary.rows.length) throw new DocumentEditError(422, 'invalid subsidiary')
   }
+  // Header dates and reference ids reach DATE/uuid columns uncast: a malformed
+  // value dies at the storage layer as a raw 500 instead of a domain error.
+  // Fail closed here — once, for every caller (UI routes, public API, MCP,
+  // assistant) — covering both shape-invalid strings and impossible days.
+  // Explicit nulls keep their existing clear-the-field semantics.
+  const headerDates = [body.documentDate, body.dueDate, body.postingDate, body.expectedPayDate] as const
+  const headerDateNames = ['documentDate', 'dueDate', 'postingDate', 'expectedPayDate'] as const
+  for (let i = 0; i < headerDates.length; i++) {
+    const value = headerDates[i]
+    if (value !== undefined && value !== null && !isIsoCalendarDate(value)) {
+      throw new DocumentEditError(422, `invalid ${headerDateNames[i]} — expected YYYY-MM-DD`)
+    }
+  }
+  const headerRefs = [body.partyId, body.paymentCardId, body.departmentId, body.projectId, body.locationId, body.classId] as const
+  const headerRefNames = ['partyId', 'paymentCardId', 'departmentId', 'projectId', 'locationId', 'classId'] as const
+  for (let i = 0; i < headerRefs.length; i++) {
+    const value = headerRefs[i]
+    if (value !== undefined && value !== null && !isUuid(value)) {
+      throw new DocumentEditError(422, `invalid ${headerRefNames[i]}`)
+    }
+  }
+
   if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
     throw new DocumentEditError(404, 'not found')
   }
