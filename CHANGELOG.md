@@ -30,6 +30,11 @@ changes; each release documents required operator action.
   Concurrent worker replicas still run each tick once via the existing
   Postgres claim lock. No job semantics changed.
 
+### Analytics
+
+- Analytics: True Cost dashboard restored as a hub dashboard; the report
+  remains at /reports/true-cost.
+
 ### Operator action
 
 - Scheduler topology: multi-process deployments take no action — keep the
