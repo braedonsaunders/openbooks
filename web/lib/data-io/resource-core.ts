@@ -125,7 +125,10 @@ export class RefResolver {
     // customers, entitlement scopes reference employees and trades). Without
     // these, natural keys are unresolvable and UUIDs pass through unchecked.
     if (target.resource === 'items') {
-      return { table: 'items', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'code' }
+      // Item codes are optional while names are required: code-then-name,
+      // mirroring parties/locations, so codeless items export a portable
+      // name instead of a UUID no other org can resolve.
+      return { table: 'items', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'coalesce(code, name)' }
     }
     if (target.resource === 'projects') {
       return { table: 'projects', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'code' }
@@ -141,6 +144,14 @@ export class RefResolver {
       // name is a deterministic natural key for transaction and setup
       // imports. UUID resolution is unaffected (it keys on idCol).
       return { table: 'subsidiaries', keyCol: 'name', idCol: 'id', orgScoped: true, labelExpr: 'name' }
+    }
+    if (target.resource === 'locations') {
+      // Location codes are optional while names are required, so the import
+      // vocabulary is code-then-name (mirroring parties): exports render
+      // coalesce(code, name) and resolution falls back to name below. A
+      // codeless location would otherwise export a UUID no other org can
+      // resolve, breaking fresh-org migration of every row pointing at it.
+      return { table: 'locations', keyCol: 'code', idCol: 'id', orgScoped: true, labelExpr: 'coalesce(code, name)' }
     }
     const entity = SETUP_ENTITY_BY_KEY.get(target.resource)
     if (entity) {
@@ -236,6 +247,16 @@ export class RefResolver {
     if (r.rows.length === 0 && target.resource === 'parties') {
       r = (await db.execute(sql`
         select id from parties where display_name = ${value} and org_id = ${this.orgId} limit 1`)) as {
+        rows: { id: string }[]
+      }
+    }
+    // Code-then-name, mirroring the coalesce(code, name) exports above: names
+    // are only a fallback (duplicate names resolve to one row, as with
+    // parties), never the primary identity.
+    if (r.rows.length === 0 && (target.resource === 'locations' || target.resource === 'items')) {
+      const fallbackTable = target.resource === 'locations' ? 'locations' : 'items'
+      r = (await db.execute(sql`
+        select id from ${sql.raw(fallbackTable)} where name = ${value} and org_id = ${this.orgId} limit 1`)) as {
         rows: { id: string }[]
       }
     }
