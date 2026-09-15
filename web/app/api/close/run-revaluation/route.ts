@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/fx-revaluation.ts'
+import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/fx-revaluation.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -49,6 +49,13 @@ export async function POST(req: Request) {
   } catch (e: unknown) {
     if (e instanceof RevaluationFeatureDisabledError) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    // Every RevaluationError throw site is request state, not a server
+    // defect: unconfigured book/control account, an unknown or closed
+    // period, a missing spot rate, an inactive subsidiary, an unbalanced
+    // entry. Fail those closed with 422; only systemic throws stay 500.
+    if (e instanceof RevaluationError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
     }
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 500 })
