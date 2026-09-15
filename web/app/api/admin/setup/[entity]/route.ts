@@ -870,6 +870,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   )
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   if (entity.dataSource === 'extension-settings') {
     try { return NextResponse.json(await saveExtensionSettingRow(orgId, actorId, [...gate.permissions], body)) }
@@ -1145,6 +1148,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const url = new URL(req.url)
   const id = url.searchParams.get('id') ?? ''
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  if (idColumn(entity) === 'id' && !UUID_RE.test(id)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {

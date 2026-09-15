@@ -196,6 +196,29 @@ test("the setup route states the tax-rate domain before every write and maps sto
   assert.ok((source.match(/pgErrorCode\(e\) === '23505'/g)?.length ?? 0) >= 2);
 });
 
+test("generic setup PATCH and DELETE reject malformed row ids", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Setup Id Admin", "admin");
+  try {
+    authenticate({ orgId: org.orgId, actorId });
+
+    const patched = await PATCH(
+      patchRequest("tax-codes", { id: "not-a-uuid", code: "MALFORMED", name: "Should not persist" }),
+      call("tax-codes", {}),
+    );
+    assert.equal(patched.status, 404);
+
+    const deleted = await DELETE(
+      deleteRequest("tax-codes", "not-a-uuid"),
+      call("tax-codes", {}),
+    );
+    assert.equal(deleted.status, 404);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("derived-rule edits close the old window and create a successor", { skip: !DB }, async () => {
   const f = await seedDerivedRuleFixture();
   try {
