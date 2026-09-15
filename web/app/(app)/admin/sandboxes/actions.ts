@@ -12,7 +12,12 @@ import {
 } from "@openbooks/engine/src/sandbox/promote.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { can } from "../../../../lib/authz";
+import { isUuid } from "../../../../lib/list-params";
 import type { PromotionTransition } from "../../../../lib/sandbox-promotion";
+
+function assertUuid(value: string, label: string): void {
+  if (!isUuid(value)) throw new Error(`${label} is invalid`);
+}
 
 async function requireManager() {
   const authz = await getAuthz();
@@ -52,6 +57,7 @@ async function ownedSandbox(sandboxId: string, productionOrgId: string): Promise
 
 export async function refreshSandboxAction(sandboxId: string, keepCustomizations: boolean): Promise<void> {
   const authz = await requireManager();
+  assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp({ op: "refresh", sandboxId, keepCustomizations });
   revalidatePath("/admin/sandboxes");
@@ -59,6 +65,7 @@ export async function refreshSandboxAction(sandboxId: string, keepCustomizations
 
 export async function resetSandboxAction(sandboxId: string): Promise<void> {
   const authz = await requireManager();
+  assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp({ op: "reset", sandboxId });
   revalidatePath("/admin/sandboxes");
@@ -66,6 +73,7 @@ export async function resetSandboxAction(sandboxId: string): Promise<void> {
 
 export async function deleteSandboxAction(sandboxId: string): Promise<void> {
   const authz = await requireManager();
+  assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp({ op: "delete", sandboxId });
   revalidatePath("/admin/sandboxes");
@@ -73,6 +81,7 @@ export async function deleteSandboxAction(sandboxId: string): Promise<void> {
 
 export async function setScheduleAction(sandboxId: string, cadence: string | null): Promise<void> {
   const authz = await requireManager();
+  assertUuid(sandboxId, "Sandbox");
   const value = cadence && ["hourly", "daily", "weekly"].includes(cadence) ? cadence : null;
   await db.transaction(async (tx) => {
     const existing = await tx.execute<{ orgId: string; refreshSchedule: string | null }>(sql`
@@ -104,6 +113,7 @@ export async function setScheduleAction(sandboxId: string, cadence: string | nul
 
 export async function promoteSandboxAction(sandboxId: string, name: string): Promise<{ changeSetId: string; itemCount: number }> {
   const authz = await requireManager();
+  assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   const result = await buildChangeSet(sandboxId, name.trim() || "Change set", authz.user.id);
   revalidatePath("/admin/sandboxes/change-sets");
@@ -112,6 +122,7 @@ export async function promoteSandboxAction(sandboxId: string, name: string): Pro
 
 export async function reviewChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
+  assertUuid(changeSetId, "Change set");
   const r = await db.execute(sql`
     select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`);
   if (!r.rows.length) throw new Error("change set not found");
@@ -121,6 +132,7 @@ export async function reviewChangeSetAction(changeSetId: string): Promise<void> 
 
 export async function approveChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
+  assertUuid(changeSetId, "Change set");
   const r = await db.execute(sql`
     select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`);
   if (!r.rows.length) throw new Error("change set not found");
@@ -130,6 +142,7 @@ export async function approveChangeSetAction(changeSetId: string): Promise<void>
 
 export async function applyChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
+  assertUuid(changeSetId, "Change set");
   const r = ((await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`)));
   if (!r.rows.length) throw new Error("change set not found");
   await applyChangeSet(changeSetId, authz.user.id);
