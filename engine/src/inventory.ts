@@ -2914,8 +2914,23 @@ export async function reverseInventoryMovement(
       }
     }
 
-    for (const source of sources) {
-      await lockInventoryPosition(tx, source.item_id, source.stock_location_id);
+    // Every other multi-position path (transfers, builds, document applies,
+    // landed-cost vouchers) takes these position locks in sorted key order.
+    // A transfer reversal used to lock transfer-out before transfer-in, so a
+    // reversal racing an opposite-direction transfer deadlocked (40P01).
+    for (const key of [
+      ...new Set(
+        sources.map(
+          (source) => `${source.item_id}:${source.stock_location_id}`,
+        ),
+      ),
+    ].sort()) {
+      const separator = key.indexOf(":");
+      await lockInventoryPosition(
+        tx,
+        key.slice(0, separator),
+        key.slice(separator + 1),
+      );
     }
     const serialId =
       sources.find((source) => source.serial_id)?.serial_id ?? null;
