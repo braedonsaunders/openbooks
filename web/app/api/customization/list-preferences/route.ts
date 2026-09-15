@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { RECORD_TYPE_BY_KEY } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
+import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,11 @@ export async function PUT(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   const viewId = body.viewId ?? null;
+  // A malformed id would surface as a Postgres uuid throw and a raw 500;
+  // resolve it through the same 404 as an unknown view.
+  if (viewId && !isUuid(viewId)) {
+    return NextResponse.json({ error: "list view not found" }, { status: 404 });
+  }
   if (viewId) {
     // Must be a view this user can actually use: in-org, right record type,
     // and either org-shared or their own personal view.
