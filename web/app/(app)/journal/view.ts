@@ -18,6 +18,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { createDraftJournal, loadJournalDoc } from '../../../lib/journals'
+import { JOURNAL_GL_NATIVE_ORIGINS } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import type { JournalDrawer } from './JournalDrawer'
@@ -102,8 +103,7 @@ export async function loadJournal(
     exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind = 'journal')
     or (
       not exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id)
-      and e.origin in ('manual','closing','allocation','revaluation','labor_burden',
-                       'depreciation','revenue_recognition','fx_settlement','translation')
+      and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})
     )
   )`
   // draft manual journals are documents (not entries yet) — surfaced separately
