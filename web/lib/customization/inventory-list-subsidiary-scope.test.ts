@@ -35,7 +35,7 @@ const hooks = registerHooks({
         url: 'data:text/javascript,export const db={execute:async()=>({rows:[]})}',
       }
     }
-    if (specifier === '../subsidiaries') {
+    if (specifier === '../subsidiaries' || specifier === '../../subsidiaries') {
       return {
         shortCircuit: true,
         format: 'module',
