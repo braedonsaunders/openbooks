@@ -466,3 +466,85 @@ test(
     }
   },
 );
+
+test(
+  "junk and oversized disposal/remeasurement amounts fail closed with no rows written",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const categoryId = randomUUID();
+    const assetId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into asset_categories
+          (id, org_id, name, asset_account_id,
+           accumulated_depreciation_account_id,
+           depreciation_expense_account_id, gain_loss_account_id,
+           default_method, default_life_months, default_convention,
+           tax_attributes, is_active, created_by, updated_by)
+        values
+          (${categoryId}, ${org.orgId}, 'Amount guard equipment',
+           ${org.accounts.invAsset}, ${org.accounts.clearing},
+           ${org.accounts.adjustment}, ${org.accounts.adjustment},
+           'straight_line', 10, 'full_month', '{}'::jsonb, true,
+           ${actorId}, ${actorId})
+      `);
+      await db.execute(sql`
+        insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status,
+           acquired_on, in_service_on, acquisition_cost, salvage_value,
+           depreciation_method, useful_life_months, depreciation_convention,
+           custom, created_by, updated_by)
+        values
+          (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId},
+           'ASSET-AMOUNT-GUARD', 'Amount guard asset', 'in_service',
+           ${org.date}, ${org.date}, 1000, 0, 'straight_line', 10,
+           'full_month', '{}'::jsonb, ${actorId}, ${actorId})
+      `);
+      const snapshot = async () => ({
+        status: (await db.execute<{ status: string }>(sql`
+          select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`)).rows[0]!.status,
+        events: (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}`)).rows[0]!.n,
+        entries: (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n,
+      });
+      const before = await snapshot();
+      // A pasted 20-digit amount previously passed validation and died in
+      // Postgres with a storage overflow; junk previously died in the money
+      // module with a raw Error. Both must refuse as AssetLifecycleError.
+      await assert.rejects(
+        disposeAsset(org.orgId, assetId, {
+          proceeds: "99999999999999999999999",
+          proceedsAccountId: org.accounts.bank,
+          date: "2026-07-31",
+          actorId,
+        }),
+        (e) => e instanceof AssetLifecycleError && /supported ledger magnitude/.test(e.message),
+        "oversized proceeds",
+      );
+      await assert.rejects(
+        remeasureAsset(org.orgId, assetId, {
+          newCarryingValue: "99999999999999999999999",
+          date: "2026-07-31",
+          actorId,
+        }),
+        (e) => e instanceof AssetLifecycleError && /supported ledger magnitude/.test(e.message),
+        "oversized carrying value",
+      );
+      await assert.rejects(
+        remeasureAsset(org.orgId, assetId, {
+          newCarryingValue: "$800",
+          date: "2026-07-31",
+          actorId,
+        }),
+        (e) => e instanceof AssetLifecycleError && /exact decimal/.test(e.message),
+        "junk carrying value",
+      );
+      assert.deepEqual(await snapshot(), before, "refused amounts mutate no asset, event, or journal state");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

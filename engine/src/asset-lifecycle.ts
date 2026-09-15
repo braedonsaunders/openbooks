@@ -5,6 +5,7 @@ import { isIsoCalendarDate } from "./business-date.ts";
 import { assertPeriodModulesOpen, CloseError } from "./close.ts";
 import { buildScheduleWithRunner, reconcileAssetDepreciationStatusWithRunner, resolveAssetAccounts, unimpairedAssetCarryingValue } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
@@ -70,6 +71,15 @@ async function assertAssetPeriodOpen(
  * (positive = gain). Returns the balanced GL lines (zeros dropped). Pure, so the
  * accounting is unit-tested without a database.
  */
+/** Posted money is numeric(19,4): fifteen whole digits. The format check admits
+ * any magnitude, so a pasted 20-digit amount died in Postgres with a storage
+ * error. Fail closed with the same named refusal. */
+function assertLedgerMagnitude(value: string, label: string): void {
+  if (value.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+    throw new AssetLifecycleError(`${label} exceeds the supported ledger magnitude`);
+  }
+}
+
 export function computeDisposal(args: {
   cost: string;
   accumulated: string;
@@ -374,6 +384,12 @@ export async function disposeAsset(
   // the database: a write-off takes no proceeds (the API coerces them to zero;
   // a direct caller passing both is a bug), and proceeds are never negative.
   const rawProceeds = opts.proceeds ?? "0";
+  // A direct caller bypasses the route's format gate; junk would otherwise
+  // die inside the money module with a raw Error instead of the domain
+  // refusal. The write-off and negativity checks below assume exact input.
+  if (canonicalDecimal(rawProceeds, 4) === null) {
+    throw new AssetLifecycleError("proceeds must be an exact decimal");
+  }
   if (opts.writeOff && !isZero(add(rawProceeds, "0"))) {
     throw new AssetLifecycleError("a write-off takes no proceeds — omit proceeds or record a sale disposal");
   }
@@ -381,6 +397,7 @@ export async function disposeAsset(
     throw new AssetLifecycleError("proceeds must be a non-negative amount");
   }
   const proceeds = opts.writeOff ? "0" : rawProceeds;
+  assertLedgerMagnitude(add(proceeds, "0"), "proceeds");
   return db.transaction(async (tx) => {
     // Serialize disposal against remeasurement on the authoritative asset row.
     // This must precede every carrying-value read so a contender waits for the
@@ -832,9 +849,16 @@ export async function remeasureAsset(
   assertLifecycleDate(opts.date);
   // A recoverable amount is never negative — fail closed before touching the
   // database rather than posting an impairment that drives NBV below zero.
+  // Junk would otherwise die inside the money module with a raw Error, and a
+  // pasted 20-digit value would die at the journal insert with a storage
+  // overflow; both refuse here as the domain error.
+  if (canonicalDecimal(opts.newCarryingValue, 4) === null) {
+    throw new AssetLifecycleError("new carrying value must be an exact decimal");
+  }
   if (cmp(add(opts.newCarryingValue, "0"), "0") < 0) {
     throw new AssetLifecycleError("new carrying value must be a non-negative amount");
   }
+  assertLedgerMagnitude(add(opts.newCarryingValue, "0"), "new carrying value");
   return db.transaction(async (tx) => {
     // Lock before reading any carrying-value input. A concurrent
     // remeasurement waits here, then its following SELECT sees the committed
