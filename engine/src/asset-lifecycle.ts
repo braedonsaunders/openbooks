@@ -48,15 +48,17 @@ const sub = (a: string, b: string) => add(a, neg(b));
  * Application-level companion to the je_guard Postgres gate (which refuses
  * the draft→posted flip in a GL-closed period): fail fast with a named
  * AssetLifecycleError instead of dying at the flip with a raw driver error.
- * Assets carry no close module of their own; GL is always implied — the same
- * companion posting.ts, document-void.ts, and inventory.ts provide.
+ * Unlike je_guard, this also enforces the assets workstream lock — the same
+ * lock the depreciation claim already honors — so closing the assets module
+ * actually stops disposals, remeasurements, and reversals. GL is always
+ * implied.
  */
 async function assertAssetPeriodOpen(
   tx: SqlExecutor,
   args: { orgId: string; periodId: string; bookId: string; subsidiaryIds: string[] },
 ): Promise<void> {
   try {
-    await assertPeriodModulesOpen(tx, { ...args, modules: [] });
+    await assertPeriodModulesOpen(tx, { ...args, modules: ["assets"] });
   } catch (error) {
     if (error instanceof CloseError) throw new AssetLifecycleError(error.message);
     throw error;

@@ -62,6 +62,18 @@ async function closeGl(org: ScratchOrg, actorId: string): Promise<void> {
   });
 }
 
+async function closeAssetsModule(org: ScratchOrg, actorId: string): Promise<void> {
+  await setPeriodLockState({
+    orgId: org.orgId,
+    periodId: org.periodId,
+    bookId: org.bookId,
+    module: "assets",
+    state: "closed",
+    actorId,
+    reason: "fraud probe: assets workstream closed for the period",
+  });
+}
+
 test("a GL-closed period refuses asset disposals dated inside it", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -93,6 +105,30 @@ test("a GL-closed period refuses asset remeasurements dated inside it", { skip: 
       "a remeasurement into a GL-closed period must be refused",
     );
     assert.equal(await journalCount(org.orgId), before, "refused remeasurement left GL residue");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an assets-closed period refuses asset disposals dated inside it", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const assetId = await seedAsset(org, actorId, "amod");
+    // Only the assets workstream is closed — GL stays open, so the je_guard
+    // backstop cannot help: the engine must enforce the module lock itself,
+    // exactly as the depreciation claim already does.
+    await closeAssetsModule(org, actorId);
+    const before = await journalCount(org.orgId);
+    await assert.rejects(
+      disposeAsset(org.orgId, assetId, { writeOff: true, date: org.date, actorId }),
+      /closed/i,
+      "a disposal into an assets-closed period must be refused",
+    );
+    assert.equal(await journalCount(org.orgId), before, "refused disposal left GL residue");
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`)).rows[0]!;
+    assert.equal(status.status, "in_service", "refused disposal must not derecognize the asset");
   } finally {
     await dropScratchOrg(org.orgId);
   }
