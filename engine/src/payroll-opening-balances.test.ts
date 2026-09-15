@@ -376,6 +376,9 @@ test(
       });
       assert.equal(ca.f5b, "120.5000");
       assert.equal(ca.qc_csb, "85.0000");
+      // No QPIP-employer carry-in was saved: the reader must return zero,
+      // not the contents of a neighbouring YTD column.
+      assert.equal(ca.qpip_employer, "0.0000");
 
       const us = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
@@ -455,9 +458,10 @@ test(
       `));
       const factors = stub.rows[0]!.factors;
       assert.equal(factors.QPIP_ER, "0.0000");
-      // A zero assessable base emits no WCB line at all: absence IS the
-      // capped outcome, and it must read as zero, not as missing evidence.
-      assert.equal(factors.WCB_EARN ?? "0.0000", "0.0000");
+      // A zero assessable base emits no WCB evidence at all: absence IS the
+      // capped outcome, and a zero-valued factor key would misread as room.
+      assert.ok(!("WCB_EARN" in factors), "no assessable-earnings factor at the cap");
+      assert.ok(!("WCB" in factors), "no premium factor at the cap");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
