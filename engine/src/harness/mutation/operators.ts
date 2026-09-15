@@ -202,9 +202,38 @@ function mutateComparisonFlip(masked: string, starts: number[], push: Push): voi
     } else if (two === "=>" || two === "<<" || two === ">>") {
       i += 2;
     } else if (one === "<") {
+      // Angle-bracket heuristic: an unspaced `<` after an identifier or
+      // closer is a type argument (`Map<string>`, `foo<Bar>(`) — the engine
+      // writes comparisons spaced (`a < b`; verified zero unspaced cases).
+      // The syntax gate remains the backstop for anything ambiguous.
+      const next = i + 1 < masked.length ? masked[i + 1]! : "";
+      if (/[A-Za-z0-9_$>\]\)\"'?]/.test(prev) && next !== "" && !/\s/.test(next)) {
+        i += 1;
+        continue;
+      }
       emit(i, i + 1, "comparison '<' -> '<='", "<=");
       i += 1;
     } else if (one === ">") {
+      // Mirror heuristic for the generic closer (`Promise<void> {`,
+      // `foo<Bar>(`, `Pick<A, B>)`): an identifier/closer before `>` and a
+      // type-position punctuator after it is not a comparison. A masked
+      // string literal can stand between the opener and the bracket
+      // (`Pick<typeof db, "execute">)`), so look past whitespace for an
+      // opener (`,`, `(`, `[`, `=`, `:`) in that case.
+      const nextNonSpace = masked.slice(i + 1).match(/\S/)?.[0] ?? "";
+      let prevNonSpace = prev;
+      for (let k = i - 1; k >= 0 && /\s/.test(masked[k]!); k -= 1) {
+        prevNonSpace = k > 0 ? masked[k - 1]! : "";
+      }
+      const prevIsCloser = /[A-Za-z0-9_$>\]\)\"'?]/.test(prev);
+      const prevIsOpenerGap = /\s/.test(prev) && /[,\[(=:]/.test(prevNonSpace);
+      if (
+        (prevIsCloser || prevIsOpenerGap) &&
+        ["(", ",", ";", "{", ")", "[", "|", "&", "?", "=", ":"].includes(nextNonSpace)
+      ) {
+        i += 1;
+        continue;
+      }
       // `=>` is not a comparison; the `=` half never matches above because
       // the scan consumes pairs left to right, so guard the `>` half here.
       if (prev === "=") {

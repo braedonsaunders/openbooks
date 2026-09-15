@@ -345,13 +345,18 @@ async function runTarget(
     const run = await runTestFiles(scratch, [file], options.useDb, options.timeoutSecs);
     const summary = parseTap(run.output, run.exitCode);
     if (run.timedOut || summary.fail > 0 || summary.crashed) {
-      return {
-        ...empty, status: "baseline-failed",
-        baselineFiles: [...baselineFiles, {
-          file, tests: summary.tests, pass: summary.pass, fail: summary.fail,
-          skipped: summary.skipped, executed: summary.pass + summary.fail > 0,
-        }],
+      const failed: BaselineFile = {
+        file, tests: summary.tests, pass: summary.pass, fail: summary.fail,
+        skipped: summary.skipped, executed: summary.pass + summary.fail > 0,
       };
+      // Without a database a red baseline on a needsDb target only proves
+      // the file needs the database (e.g. a test that issues a real query
+      // instead of self-skipping). Report it as skipped-with-cause; the DB
+      // run delivers the real verdict. In db mode a red baseline blocks.
+      if (!options.useDb && target.needsDb === true) {
+        return { ...empty, status: "baseline-skipped", baselineFiles: [...baselineFiles, failed] };
+      }
+      return { ...empty, status: "baseline-failed", baselineFiles: [...baselineFiles, failed] };
     }
     baselineFiles.push({
       file, tests: summary.tests, pass: summary.pass, fail: summary.fail,
