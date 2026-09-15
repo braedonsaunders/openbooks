@@ -90,6 +90,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   ) {
     return NextResponse.json({ error: 'Invalid sort order' }, { status: 422 })
   }
+  // show_in_nav rides raw into a boolean column: PostgreSQL would silently
+  // coerce spellings like 'off'/'on' or throw 22P02 on anything else.
+  if (body.showInNav !== undefined && typeof body.showInNav !== 'boolean') {
+    return NextResponse.json({ error: 'Invalid show in nav flag' }, { status: 422 })
+  }
 
   let key: string | undefined
   if (body.key !== undefined && body.key !== type.key) {
