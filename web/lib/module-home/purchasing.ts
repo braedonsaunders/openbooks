@@ -127,7 +127,10 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
   const in7 = addCalendarDays(today, 7)
   const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
   const trendFrom = weekStarts[0]!
-  const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+  // An explicitly empty scope is a caller whose visibility resolved to nothing
+  // and must read no rows — never degrade to the whole organization. `[]`
+  // binds as an empty uuid array so every `= any(...)` leg matches nothing.
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const docScope = subArr ? sql` and d.subsidiary_id = any(${subArr})` : sql``
 
