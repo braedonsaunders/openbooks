@@ -13,6 +13,14 @@ export const runtime = 'nodejs'
 export async function GET() {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
-  const gates = await worklistGates(authz.user.orgId, authz.user.id)
+  // A gate assignment is not a grant to every legal entity: the worklist
+  // carries the same subsidiary boundary the decide path enforces, so
+  // financial details from other entities are never listed.
+  const gates = await worklistGates(
+    authz.user.orgId,
+    authz.user.id,
+    undefined,
+    authz.allowedSubsidiaryIds,
+  )
   return NextResponse.json({ gates })
 }

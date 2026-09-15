@@ -14,15 +14,15 @@ import { executeIdempotent } from "./idempotency";
 export async function listApprovalWorklist(context: ApplicationContext) {
   if (!(await isFeatureEnabled(context.authz.user.orgId, "flows"))) return [];
   assertApplicationPermission(context, "flows.approve");
-  const gates = await worklistGates(
+  // The subsidiary boundary lives in the engine worklist so every subject
+  // kind is covered uniformly (the previous document-only filter could not
+  // see timesheet/bank subjects) with the decide path's fail-closed rule.
+  return worklistGates(
     context.authz.user.orgId,
     context.authz.user.id,
     context.authz.user.roles.map((role) => role.key),
+    context.authz.allowedSubsidiaryIds,
   );
-  const allowed = context.authz.allowedSubsidiaryIds;
-  return allowed === null
-    ? gates
-    : gates.filter((gate) => !gate.document || !gate.document.subsidiaryId || allowed.has(gate.document.subsidiaryId));
 }
 
 export async function decideApproval(
