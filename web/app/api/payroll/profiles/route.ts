@@ -124,6 +124,11 @@ function claimCode(value: unknown): number | null | 'invalid' {
   return n
 }
 
+/** Whole-digit width of a canonical decimal, for column-range guards. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 async function visibleFilingAccounts(gate: Parameters<typeof guardPayrollFilingAccounts>[0]) {
   const accounts = await listFilingAccounts(gate.user.orgId)
   if (gate.allowedSubsidiaryIds === null) return accounts
@@ -356,7 +361,10 @@ export async function POST(req: Request) {
     const raw = body[key]
     if (raw === null || raw === undefined || raw === '') continue
     const value = canonicalDecimal(raw, 2)
-    if (value === null || compareDecimal(value, '0') < 0) {
+    // The profile money columns are numeric(19,4): fifteen whole digits. The
+    // shape check admits any magnitude, so a pasted 20-digit figure died in
+    // the upsert with a storage error. Fail closed with the existing refusal.
+    if (value === null || compareDecimal(value, '0') < 0 || wholeDigits(value) > 15) {
       return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     }
     money[key] = normalizeMoney(value)
@@ -364,7 +372,8 @@ export async function POST(req: Request) {
   let vacationPercent: string | null = null
   if (body.vacationPercent !== null && body.vacationPercent !== undefined && body.vacationPercent !== '') {
     const vacationRaw = canonicalDecimal(body.vacationPercent, 4)
-    if (vacationRaw === null || compareDecimal(vacationRaw, '0') < 0) {
+    // vacation_percent is numeric(7,4): three whole digits for the same reason.
+    if (vacationRaw === null || compareDecimal(vacationRaw, '0') < 0 || wholeDigits(vacationRaw) > 3) {
       return NextResponse.json({ error: 'invalid vacationPercent' }, { status: 422 })
     }
     vacationPercent = normalizeMoney(vacationRaw)
