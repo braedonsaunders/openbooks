@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { assertPeriodModulesOpen, CloseError } from "./close.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
@@ -672,6 +673,30 @@ async function assertLeaseAccountsPostable(
   }
 }
 
+/**
+ * Application-level companion to the je_guard Postgres gate (which refuses
+ * the draft→posted flip in a GL-closed period): fail fast with a named
+ * LeaseError instead of dying at the flip with a raw driver error. GL is
+ * always implied; leases post on the primary book for one legal entity.
+ */
+async function assertLeasePeriodOpen(
+  tx: Pick<typeof db, "execute">,
+  args: { orgId: string; periodId: string; bookId: string; subsidiaryId: string },
+): Promise<void> {
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId: args.orgId,
+      periodId: args.periodId,
+      bookId: args.bookId,
+      subsidiaryIds: [args.subsidiaryId],
+      modules: [],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) throw new LeaseError(error.message);
+    throw error;
+  }
+}
+
 async function postLeaseEntry(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -713,6 +738,14 @@ async function postLeaseEntry(
     })),
   });
   const ctx = await postingContext(tx, args.orgId, args.lease.subsidiary_id, args.date);
+  // Refuse here with a named error: the je_guard backstop would reject the
+  // flip below with a raw driver error instead.
+  await assertLeasePeriodOpen(tx, {
+    orgId: args.orgId,
+    periodId: ctx.periodId,
+    bookId: ctx.bookId,
+    subsidiaryId: args.lease.subsidiary_id,
+  });
   const entry = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -908,11 +941,11 @@ export async function postDueLeaseSchedules(
 
   const result: PostLeaseScheduleResult = { posted: 0, skipped: 0, entries: [] };
   for (const candidate of due.rows) {
-    await db.transaction(async (tx) => {
+    const outcome = await db.transaction(async (tx) => {
       // Claim the aggregate first, then reload the due line. Discovery is not
       // a posting snapshot: another runner may have completed it while we wait.
       const theLease = await leaseRow(orgId, candidate.lease_id, tx);
-      if (theLease.status !== "active") { result.skipped++; return; }
+      if (theLease.status !== "active") return { status: "skipped" as const };
       const line = (await tx.execute<LeaseSchedulePostingRow>(sql`
         select l.id as line_id, l.lease_id, l.sequence, l.due_on::text as due_on,
                l.payment::text as payment, l.interest::text as interest, l.principal::text as principal,
@@ -921,7 +954,25 @@ export async function postDueLeaseSchedules(
           from lease_agreement_schedule_lines l
          where l.id=${candidate.line_id} and l.lease_id=${candidate.lease_id} and l.org_id=${orgId}
            and l.due_on <= ${asOfDate} and l.payment_entry_id is null for update`)).rows[0];
-      if (!line) { result.skipped++; return; }
+      if (!line) return { status: "skipped" as const };
+      // A locked period skips its lines the way the depreciation and revenue
+      // runners skip theirs: the run keeps posting open periods instead of
+      // dying on the first locked one. assertLeasePeriodOpen raises LeaseError
+      // only for the closed refusal, so catching it here is precise — any
+      // other failure still aborts the run. A missing period is not a skip:
+      // postingContext above refuses it the way it always has.
+      const postCtx = await postingContext(tx, orgId, theLease.subsidiary_id, line.due_on);
+      try {
+        await assertLeasePeriodOpen(tx, {
+          orgId,
+          periodId: postCtx.periodId,
+          bookId: postCtx.bookId,
+          subsidiaryId: theLease.subsidiary_id,
+        });
+      } catch (error) {
+        if (error instanceof LeaseError) return { status: "period_closed" as const };
+        throw error;
+      }
       const entryIds: string[] = [];
       const tag = `${theLease.lease_number}-${line.sequence}`;
 
@@ -996,9 +1047,14 @@ export async function postDueLeaseSchedules(
                posted_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${line.line_id} and org_id = ${orgId} and payment_entry_id is null`);
 
-      result.posted++;
-      result.entries.push({ leaseId: line.lease_id, sequence: line.sequence, entryIds });
+      return { status: "posted" as const, leaseId: line.lease_id, sequence: line.sequence, entryIds };
     });
+    if (outcome.status === "posted") {
+      result.posted++;
+      result.entries.push({ leaseId: outcome.leaseId, sequence: outcome.sequence, entryIds: outcome.entryIds });
+    } else {
+      result.skipped++;
+    }
   }
   return result;
 }
