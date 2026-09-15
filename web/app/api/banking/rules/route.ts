@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { isUuid } from '../../../../lib/list-params'
 import { validateCriteria, validateOutcome } from '../../../../lib/banking-rules-validate'
 
 export const runtime = 'nodejs'
@@ -56,6 +57,11 @@ export async function PATCH(req: Request) {
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  // A malformed id would surface as a Postgres uuid throw and a raw 500;
+  // resolve it through the same 404 as an unknown rule.
+  if (typeof body.id !== 'string' || !isUuid(body.id)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   if (!body.name || String(body.name).trim() === '' || String(body.name).length > 200) {
     return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })
   }
