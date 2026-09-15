@@ -206,10 +206,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     vendor_hold: boolean
     vendor_hold_reason: string | null
     subsidiaryId: string | null
+    custom: Record<string, unknown> | null
     before: Record<string, unknown>
   }>(sql`
     select p.display_name, p.is_active, ${documentRevisionSql(sql`p.updated_at`)} as updated_at,
            p.subsidiary_id as "subsidiaryId",
+           p.custom,
            coalesce(cr.is_on_hold, false) as customer_hold,
            cr.hold_reason as customer_hold_reason,
            coalesce(vr.is_on_hold, false) as vendor_hold,
@@ -301,9 +303,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let cleanedCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
     const defs = await loadFieldDefs('parties')
-    const v = validateCustomValues(defs, body.custom)
+    // PATCH custom values are partial: validate the effective bag so an
+    // omitted required field can be satisfied by its stored value. Preserve
+    // unknown/system keys while applying cleaned submitted values, matching
+    // the shared entity-writer contract.
+    const v = validateCustomValues(defs, { ...(existingParty.custom ?? {}), ...body.custom })
     if (!v.ok) return bad(Object.values(v.errors)[0]!, v.errors)
-    cleanedCustom = v.cleaned
+    cleanedCustom = { ...(existingParty.custom ?? {}), ...v.cleaned }
   }
 
   const website = body.website !== undefined ? strOrNull(body.website) : undefined
