@@ -491,10 +491,20 @@ export function JournalDrawer({
     })
     if (!reason) return
     setBusy(true)
+    // The void API fences on the exact revision like every other document
+    // write: without it every void answers 409 and the button is dead. The
+    // token is the editor's canonical revision (never the lossy RSC Date).
+    if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+    const voidRevision = documentRevisionRef.current
+    if (voidRevision == null) {
+      toast.error(t('postFailed'))
+      setBusy(false)
+      return
+    }
     const res = await fetch(`/api/documents/${doc.id}/void`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, expectedUpdatedAt: voidRevision }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) toast.error(data.error ?? t('postFailed'))
