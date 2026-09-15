@@ -208,11 +208,19 @@ async function writeSetup(
         continue
       }
 
-      // Does a row with this natural key already exist?
+      // Does a row with this natural key already exist? A row without its
+      // natural key has no identity and would duplicate on every re-import,
+      // so keyed entities refuse it outright (entities without a natural key
+      // match nothing and insert, as before).
       let existingId: string | null = null
       if (entity.naturalKey) {
         const nkVal = String(src[entity.naturalKey] ?? '').trim()
-        if (nkVal) {
+        if (!nkVal) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: `${entity.naturalKey} is required` })
+          continue
+        }
+        {
           const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
           const dup = (await db.execute(sql`
             select ${sql.raw(idColumn(entity))} as id from ${sql.raw(entity.table)}
