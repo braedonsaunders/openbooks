@@ -520,4 +520,72 @@ export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
       };
     },
   },
+
+  {
+    id: "tax-rate-change-remeasures-opening",
+    title: "An enacted rate change remeasures opening deferred balances in the period of enactment",
+    citations: [
+      {
+        standard: "ASC 740",
+        reference: "740-10-35-4",
+        kind: "requirement",
+        requirement:
+          "Deferred tax balances are adjusted for the effect of a change in enacted rates in the period the change is enacted.",
+      },
+      {
+        standard: "IAS 12",
+        reference: "IAS 12.60",
+        kind: "requirement",
+        requirement:
+          "The effect of a change in tax rates on deferred tax is recognised in profit or loss unless it relates to items recognised outside profit or loss.",
+      },
+    ],
+    support: "supported",
+    tier: "computation",
+    assertion:
+      "When the enacted rate moves, the opening deferred balance is carried to the new rate and the whole remeasurement lands in deferred tax expense of the enactment period — current tax is untouched because no new timing difference arose.",
+    facts: [
+      "A taxable temporary difference of 400,000.00 carried from last year, when the enacted rate was 25%: the opening deferred tax liability is 100,000.00.",
+      "This year the enacted rate is 21% with no new originating or reversing movement.",
+      "The liability remeasures to 84,000.00; the 16,000.00 reduction is a deferred tax benefit.",
+      "Taxable profit is nil, so current tax is nil and total tax expense is the 16,000.00 benefit.",
+    ],
+    expected: {
+      values: {
+        taxableIncome: "0.0000",
+        currentTax: "0.0000",
+        deferredExpense: "-16000.0000",
+        totalExpense: "-16000.0000",
+        deferredTaxLiability: "84000.0000",
+      },
+    },
+    run: () => {
+      const provision = buildProvision({
+        pretaxBookIncome: "0",
+        enactedRatePercent: "21",
+        permanentDifferences: [],
+        lossCarryforwardUsed: "0",
+        valuationAllowance: "0",
+        differences: [
+          {
+            category: "fixed_assets",
+            description: "Accelerated tax depreciation",
+            difference: "400000.00",
+            source: "manual",
+          },
+        ],
+        priorNetTemporaryDifference: "400000.00",
+        prior: { dtaGross: "0", dtlGross: "100000.00", valuationAllowance: "0" },
+      });
+      return {
+        values: {
+          taxableIncome: provision.taxableIncome,
+          currentTax: provision.currentTax,
+          deferredExpense: provision.deferredExpense,
+          totalExpense: provision.totalExpense,
+          deferredTaxLiability: provision.balances.dtlGross,
+        },
+      };
+    },
+  },
 ];
