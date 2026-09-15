@@ -191,7 +191,7 @@ export interface EntityQuickFilter {
   /** Default quick-filter value unless the selected saved view owns this filter. */
   defaultValue?: string
   /** Dynamic option source; static select options come from the customization registry. */
-  loadOptions?: (orgId: string) => Promise<EntityQuickFilterOption[]>
+  loadOptions?: (orgId: string, allowedSubsidiaryIds?: Set<string> | null) => Promise<EntityQuickFilterOption[]>
 }
 
 const SOURCES: Record<string, EntityListSource> = {
@@ -633,11 +633,12 @@ const SOURCES: Record<string, EntityListSource> = {
       {
         paramKey: 'account',
         filterKey: 'account_id',
-        loadOptions: async (orgId) => {
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select a.id::text as value, concat_ws(' · ', a.number, a.name) as label
               from accounts a
              where a.org_id=${orgId} and a.is_active
+               ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds ?? null)}
                and exists (select 1 from reconciliations r where r.org_id=a.org_id and r.account_id=a.id)
              order by a.number nulls last, a.name`)
           return result.rows
@@ -666,11 +667,12 @@ const SOURCES: Record<string, EntityListSource> = {
       {
         paramKey: 'account',
         filterKey: 'account_id',
-        loadOptions: async (orgId) => {
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select a.id::text as value, concat_ws(' · ', a.number, a.name) as label
               from accounts a
              where a.org_id=${orgId} and a.is_active
+               ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds ?? null)}
                and exists (select 1 from bank_statements bs where bs.org_id=a.org_id and bs.account_id=a.id)
              order by a.number nulls last, a.name`)
           return result.rows
