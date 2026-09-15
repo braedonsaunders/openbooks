@@ -26,7 +26,9 @@ export function startSandboxScheduler(): void {
   void tick();
 }
 
-export async function tick(): Promise<void> {
+export async function tick(
+  enqueue: typeof enqueueSandboxOp = enqueueSandboxOp,
+): Promise<void> {
   if (running) return;
   running = true;
   try {
@@ -50,11 +52,25 @@ export async function tick(): Promise<void> {
         update sandboxes set status = 'refreshing'
          where id = ${s.id} and org_id = ${s.orgId} and status = 'ready'`)));
       if (!claimed.rowCount) continue;
-      // Hand back to 'ready' is done by the refresh op; enqueue it.
-      await enqueueSandboxOp(
-        { op: "refresh", sandboxId: s.id, keepCustomizations: s.keep !== false },
-        { jobId: `sbxsched|${s.id}|${Math.floor(Date.now() / window)}` },
-      );
+      try {
+        // Hand back to 'ready' is done by the refresh op; enqueue it.
+        await enqueue(
+          { op: "refresh", sandboxId: s.id, keepCustomizations: s.keep !== false },
+          { jobId: `sbxsched|${s.id}|${Math.floor(Date.now() / window)}` },
+        );
+      } catch (e) {
+        // The claim above already committed: without a queued job no worker
+        // will ever run the refresh, so release the claim instead of wedging
+        // the sandbox in 'refreshing' (the backup-run route releases its
+        // in-flight guard the same way when its enqueue fails). The next tick
+        // retries with the same deterministic jobId.
+        const message = ((e as Error).message || String(e)).slice(0, 2000);
+        await withBypassContext(() =>
+          db.execute(sql`
+          update sandboxes set status = 'ready', last_error = ${message}, updated_at = now()
+           where id = ${s.id} and org_id = ${s.orgId} and status = 'refreshing'`));
+        console.error(`[sandbox-scheduler] enqueue failed for sandbox ${s.id}; claim released:`, message);
+      }
     }
   } catch (e) {
     console.error("[sandbox-scheduler] tick failed:", e);
