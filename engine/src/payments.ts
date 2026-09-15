@@ -469,6 +469,17 @@ export async function updateDraftPayment(
     // remainder; the bank line carries the full collected amount, AR settles
     // the applications plus the on-account credit, fee income clears the
     // surcharge leg (see the customer_payment posting rule).
+    //
+    // documents.total on a payment is the CASH frame by contract: the bank
+    // line (this `total`), never the AP/AR relieved. A vendor payment with
+    // an early-payment discount posts total = cash (90) while its AP leg
+    // relieves the gross applications (100) — the relieved amount lives in
+    // the journal legs and the settlement evidence (applications), not the
+    // header. Every total-reader is cash-frame (module-home collected/paid
+    // tiles, 1099 bank-side legs, remittance instruction amounts, bank
+    // matching on journal lines); every settlement reader uses open items
+    // and applications. Do not "fix" total to the gross: cash forecasting
+    // depends on it.
     const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits + onAccountUnits);
 
     await db.transaction(async (tx) => {
