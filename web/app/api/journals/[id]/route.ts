@@ -14,6 +14,7 @@ import {
   runDocumentVersionedTransaction,
 } from '../../../../lib/documents'
 import { loadJournalDoc } from '../../../../lib/journals'
+import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
@@ -45,6 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const owned = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
   ))
@@ -100,6 +102,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existing = (await db.execute<{ status: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
     sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
@@ -328,6 +331,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission('gl.post')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const owned = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
   ))
