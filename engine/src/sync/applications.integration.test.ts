@@ -421,3 +421,223 @@ test(
     }
   },
 );
+
+test(
+  "application reconciliation caps over-application as unallocated instead of forcing it",
+  { skip: !DB },
+  async () => {
+    // A source link for 100 against 50 of open capacity must settle exactly
+    // the 50 that exists and report the other 50 as unallocated. Forcing the
+    // full 100 would breach the kernel's open-item check (or worse, silently
+    // over-settle the subledger past zero).
+    const org = await createScratchOrg();
+    const paymentDocumentId = randomUUID();
+    const appliedDocumentId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const appliedEntryId = randomUUID();
+    const paymentLineId = randomUUID();
+    const appliedLineId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-OVER',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 50, 0, 50, '{"sourceId":"payment-over"}'::jsonb),
+          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-OVER',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 50, 0, 50, '{"sourceId":"invoice-over"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-OVER', ${org.date}, ${org.periodId}, 'Over-application payment',
+           'draft', ${paymentDocumentId}, 'document'),
+          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-OVER', ${org.date}, ${org.periodId}, 'Over-application invoice',
+           'draft', ${appliedDocumentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${paymentLineId}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 50, 'CAD', 50, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, -50, 'CAD', -50, 1, null, false),
+          (${appliedLineId}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -50, 'CAD', -50, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 50, 'CAD', 50, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (${paymentEntryId}, ${appliedEntryId})
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${paymentDocumentId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${appliedDocumentId}
+      `);
+
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100" },
+        { paymentRef: "payment-over", appliedRef: "ghost-9", amount: "10" },
+      ]);
+      assert.deepEqual(first, {
+        pairs: 2,
+        inserted: 1,
+        insertedAmount: "50.0000",
+        alreadySettled: 0,
+        skippedNoLine: 1,
+        unallocated: "50.0000",
+      });
+      const applied = await db.execute<{ total: string }>(sql`
+        select sum(amount)::text as total from applications where org_id = ${org.orgId}`);
+      assert.equal(applied.rows[0]!.total, "50.0000");
+
+      // A re-run settles nothing further: remaining capacity is zero, so the
+      // same over-link stays fully unallocated instead of double-settling.
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "50.0000",
+      });
+      const again = await db.execute<{ total: string; count: string }>(sql`
+        select sum(amount)::text as total, count(*)::text as count
+          from applications where org_id = ${org.orgId}`);
+      assert.deepEqual(again.rows[0], { total: "50.0000", count: "1" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation accumulates partial applications without over-settling",
+  { skip: !DB },
+  async () => {
+    // Two source reports for the same pair (30, then 50 more) settle 30 and
+    // then only the 20 still open; a third identical report settles nothing.
+    // The pair total never exceeds the 50 of open capacity.
+    const org = await createScratchOrg();
+    const paymentDocumentId = randomUUID();
+    const appliedDocumentId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const appliedEntryId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-PART',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 50, 0, 50, '{"sourceId":"payment-part"}'::jsonb),
+          (${appliedDocumentId}, ${org.orgId}, 'invoice', 'INV-PART',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 50, 0, 50, '{"sourceId":"invoice-part"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-PART', ${org.date}, ${org.periodId}, 'Partial payment',
+           'draft', ${paymentDocumentId}, 'document'),
+          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-PART', ${org.date}, ${org.periodId}, 'Partial invoice',
+           'draft', ${appliedDocumentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 50, 'CAD', 50, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, -50, 'CAD', -50, 1, null, false),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -50, 'CAD', -50, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 50, 'CAD', 50, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (${paymentEntryId}, ${appliedEntryId})
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${paymentDocumentId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${appliedDocumentId}
+      `);
+
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "30" },
+      ]);
+      assert.deepEqual(first, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "30.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "50" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "20.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const third = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "50" },
+      ]);
+      assert.deepEqual(third, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 1,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const total = await db.execute<{ total: string }>(sql`
+        select sum(amount)::text as total from applications where org_id = ${org.orgId}`);
+      assert.equal(total.rows[0]!.total, "50.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
