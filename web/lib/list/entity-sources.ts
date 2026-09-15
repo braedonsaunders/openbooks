@@ -762,3 +762,20 @@ function crmAccountSource(
 export function entityListSource(recordType: string): EntityListSource | undefined {
   return SOURCES[recordType]
 }
+
+/**
+ * Total ORDER BY for universal entity lists — the entity-registry twin of
+ * listOrderClause. Sort keys (name, status, number) tie constantly; the
+ * source row id pins every page deterministically in both directions. The
+ * id expression falls back to `<alias>.id` for sources whose selected row id
+ * is the table primary key.
+ */
+export function entityOrderClause(
+  source: Pick<EntityListSource, 'alias' | 'idExpr'>,
+  orderExpr: SQL,
+  dir: 'asc' | 'desc',
+): SQL {
+  const direction = dir === 'asc' ? sql`asc` : sql`desc`
+  const rowId = source.idExpr ?? sql`${sql.raw(`"${source.alias}"`)}.id`
+  return sql`${orderExpr} ${direction} nulls last, ${rowId} ${direction}`
+}
