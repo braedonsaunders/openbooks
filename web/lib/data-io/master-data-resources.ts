@@ -422,13 +422,6 @@ async function writeMaster(
         outcome.errors.push({ row: rowNo, message: err })
         continue
       }
-      const cv = validateCustomValues(defs, customInput)
-      if (!cv.ok) {
-        outcome.failed++
-        outcome.errors.push({ row: rowNo, message: Object.values(cv.errors).join('; ') })
-        continue
-      }
-
       const nkVal = String(src[m.naturalKey] ?? '').trim()
       let existingId: string | null = null
       let existingCustom: Record<string, unknown> = {}
@@ -442,6 +435,16 @@ async function writeMaster(
         existingId = found.rows[0]?.id ?? null
         existingCustom = found.rows[0]?.custom ?? {}
         storedKind = found.rows[0]?.kind
+      }
+
+      // Updates are partial: required custom fields omitted from the import
+      // row are satisfied by the existing stored values. Supplied fields still
+      // override them, while inserts validate against the empty stored bag.
+      const cv = validateCustomValues(defs, { ...existingCustom, ...customInput })
+      if (!cv.ok) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: Object.values(cv.errors).join('; ') })
+        continue
       }
 
       // Inventory kinds (inventory / assembly / kit) are Inventory configuration.

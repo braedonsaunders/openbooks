@@ -16,6 +16,7 @@ interface MasterImportState {
   auditInsertCalls: number
   readRows: Record<string, Record<string, unknown>[]>
   unscopedLabelLookups: number
+  customDefs: { key: string; label: string; fieldType: string; isRequired: boolean; config: Record<string, unknown> }[]
 }
 
 const stateKey = Symbol.for('openbooks.master-data-import-test')
@@ -33,6 +34,7 @@ const importState: MasterImportState = {
   auditInsertCalls: 0,
   readRows: {},
   unscopedLabelLookups: 0,
+  customDefs: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
@@ -187,12 +189,23 @@ const mockSources = new Map<string, string>([
   [
     'mock:custom-fields',
     `
+      const state = globalThis[Symbol.for('openbooks.master-data-import-test')]
       export async function loadFieldDefs() {
-        return []
+        return state.customDefs
       }
 
-      export function validateCustomValues() {
-        return { ok: true, cleaned: {} }
+      export function validateCustomValues(defs, values) {
+        const errors = {}
+        const cleaned = {}
+        for (const def of defs) {
+          const raw = values?.[def.key]
+          if (raw === undefined || raw === null || raw === '') {
+            if (def.isRequired) errors[def.key] = def.label + ' is required'
+            continue
+          }
+          cleaned[def.key] = raw
+        }
+        return { ok: Object.keys(errors).length === 0, errors, cleaned }
       }
     `,
   ],
@@ -277,6 +290,7 @@ function resetImportState(failAudit: boolean): void {
   importState.auditInsertCalls = 0
   importState.readRows = {}
   importState.unscopedLabelLookups = 0
+  importState.customDefs = []
 }
 
 const writeContext = { orgId: 'org-1', actorId: 'actor-1', dryRun: false }
@@ -388,6 +402,27 @@ test('master-data numeric import still accepts canonical decimals', async () => 
   ], 'insert', writeContext)
 
   assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+})
+
+test('master-data updates validate omitted required custom fields from the stored row', async () => {
+  resetImportState(false)
+  importState.customDefs = [
+    { key: 'requiredCode', label: 'Required code', fieldType: 'text', isRequired: true, config: {} },
+    { key: 'optionalNote', label: 'Optional note', fieldType: 'text', isRequired: false, config: {} },
+  ]
+  importState.readRows.items = [{
+    id: 'item-1',
+    code: 'SKU-PATCH',
+    name: 'Legacy item',
+    kind: 'service',
+    custom: { requiredCode: 'R-1' },
+  }]
+
+  const outcome = await resource('items').write([
+    { code: 'SKU-PATCH', name: 'Updated item', kind: 'service', optionalNote: 'updated' },
+  ], 'upsert', writeContext)
+
+  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
 })
 
 test('master-data exports do not resolve account labels through an unscoped lookup', async () => {
