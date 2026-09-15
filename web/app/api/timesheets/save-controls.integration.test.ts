@@ -118,3 +118,25 @@ test('an hours cell wider than the ledger column fails closed without writing', 
     assert.equal((await f.snapshot()).rows.length, 1)
   } finally { await f.close() }
 })
+
+test('a foreign reference custom value cannot be saved on a time row', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await fixture(false)
+  const foreign = await createScratchOrg()
+  try {
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${randomUUID()}, ${f.org.orgId}, 'time_entries', null, 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${f.actor}, ${f.actor})
+    `)
+    const refused = await f.save({ rows: [{ ...f.row, custom: { line_ref: foreign.vendorId } }] })
+    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${await refused.clone().text()}`)
+    assert.equal((await f.snapshot()).rows.length, 0, 'refused references store nothing')
+    const saved = await f.save({ rows: [{ ...f.row, custom: { line_ref: f.org.vendorId } }] })
+    assert.equal(saved.status, 200, `own-org reference must stay green: ${await saved.clone().text()}`)
+    assert.equal((await f.snapshot()).rows.length, 1)
+  } finally {
+    await dropScratchOrgReporting(foreign.orgId)
+    await f.close()
+  }
+})
