@@ -239,6 +239,30 @@ async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string):
   if (!result.rows[0]?.enabled) throw new PropertyManagementError("Property management feature is disabled");
 }
 
+async function assertPropertyPostingScope(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  subsidiaryId: string,
+  accountIds: Array<string | null | undefined>,
+): Promise<void> {
+  const lines = [...new Set(accountIds.filter((id): id is string => Boolean(id)))].map((accountId) => ({
+    accountId,
+    amount: "0",
+    subsidiaryId,
+  }));
+  try {
+    await validateSubsidiaryRestrictions(runner, {
+      orgId,
+      ctx: await loadSubsidiaryContext(runner, orgId),
+      docSubsidiaryId: subsidiaryId,
+      lines,
+    });
+  } catch (error) {
+    if (error instanceof SubsidiaryError) throw new PropertyManagementError(error.message);
+    throw error;
+  }
+}
+
 async function fixedAssetsFeatureEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<boolean> {
   const result = (await runner.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'fixedAssets')::boolean, true) as enabled from orgs where id=${orgId}
@@ -312,6 +336,12 @@ export async function createManagedProperty(input: {
     if (!row.subsidiary_active) throw new PropertyManagementError("Subsidiary is inactive");
     if (!row.location_ok || !row.asset_ok) throw new PropertyManagementError("Property dimensions do not belong to this organization");
     if (!row.rent_account_ok || !row.cam_account_ok || !row.deposit_account_ok || !row.bank_account_ok) throw new PropertyManagementError("Property control accounts have incompatible account types");
+    await assertPropertyPostingScope(tx, input.orgId, input.subsidiaryId, [
+      input.rentIncomeAccountId,
+      input.camIncomeAccountId,
+      input.depositLiabilityAccountId,
+      input.defaultBankAccountId,
+    ]);
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into managed_properties(org_id,subsidiary_id,location_id,fixed_asset_id,code,name,property_type,currency,address,
         rent_income_account_id,cam_income_account_id,deposit_liability_account_id,default_bank_account_id,created_by,updated_by)
@@ -441,6 +471,12 @@ export async function updateManagedProperty(input: {
         "Property control accounts have incompatible account types",
       );
     }
+    await assertPropertyPostingScope(tx, input.orgId, input.subsidiaryId, [
+      input.rentIncomeAccountId,
+      input.camIncomeAccountId,
+      input.depositLiabilityAccountId,
+      input.defaultBankAccountId,
+    ]);
     if (
       row.has_leases &&
       (row.currentSubsidiaryId !== input.subsidiaryId ||
