@@ -219,7 +219,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       )
     } else {
       title = t('budget.title')
-      periodPhrase = t('budget.description')
+      periodPhrase = `${t('budget.description')} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`
       const scenario = p.get('scenario')
       if (scenario) {
         view = await budgetVsActualView(scenario, orgId, {
@@ -233,7 +233,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
           expenses: t('pnl.expenses'),
           netIncome: t('pnl.netIncome'),
           totalOf: secTotal,
-        }, q.dims, dims.subsidiaryIds)
+        }, q.dims, dims.subsidiaryIds, { from: period.from, to: period.to })
       }
     }
     if (!view) throw new Error('no data')
