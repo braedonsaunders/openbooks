@@ -11,6 +11,7 @@ import type { RatePrice } from '@openbooks/engine/src/item-rate-pricing.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { isUuid } from './list-params'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
@@ -264,6 +265,16 @@ export async function createProjectCharge(
       const billRate = exactMoney(canDerive ? div(billAmount, quantity) : fallbackBillRate, 'Bill rate')
       const accountId = line.accountId ?? it.expense_account_id
       if (!accountId) throw new ChargeError(`Item "${it.name}" needs an expense/COGS account to charge to a project`)
+      if (typeof accountId !== 'string' || !isUuid(accountId)) {
+        throw new ChargeError(`Item "${it.name}" must use a valid expense/COGS account`)
+      }
+      const account = (await tx.execute(sql`
+        select 1 from accounts
+         where org_id = ${orgId} and id = ${accountId} and is_active and not is_summary
+      `))
+      if (!account.rows.length) {
+        throw new ChargeError(`Item "${it.name}" must use an active, non-summary expense/COGS account in this organization`)
+      }
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {
         throw new ChargeError(`Item "${it.name}" needs a cost recovery account for a nonzero cost charge`)
       }
