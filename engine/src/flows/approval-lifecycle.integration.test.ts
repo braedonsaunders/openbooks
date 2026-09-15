@@ -226,6 +226,29 @@ test("a non-approver is refused", { skip: !DB }, async () => {
   });
 });
 
+test("a deactivated approver cannot decide, even through a live one-click link", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitForApproval("vendor_bill", docId);
+    const [gate] = await gateRows({ subjectId: docId });
+
+    // The approver is deactivated after the gate (and its email link) went
+    // out. The decision call below is exactly what the sessionless
+    // email-action route issues: gate + decision + the bound assignee id.
+    await db.execute(sql`update users set is_active = false where id = ${actors.approver1Id} and org_id = ${org.orgId}`);
+    await assert.rejects(
+      () => decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
+      /not an approver/,
+    );
+    assert.equal(await docStatus(docId), "pending_approval", "still gated, not decided by a deactivated user");
+  });
+});
+
 test("concurrent decisions on an 'any' gate release exactly once", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     await seedApprovalFlow(org.orgId, {

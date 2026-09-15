@@ -64,6 +64,10 @@ async function loadGate(gateId: string, orgId?: string): Promise<GateRow | null>
 }
 
 async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
+  // A deactivated user decides nothing — not even through a still-valid
+  // one-click email link (the sessionless path has no other activity check).
+  // verifyUser is org-scoped, so a foreign user id fails here too.
+  if (!(await verifyUser(gate.orgId, userId))) return false;
   if (gate.assigneeUserId === userId) return true;
   const roles = await userRoleKeys(gate.orgId, userId);
   if (roles.has(GATE_ADMIN_ROLE)) return true;
