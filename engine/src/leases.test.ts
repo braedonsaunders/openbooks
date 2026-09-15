@@ -10,6 +10,7 @@ import {
   LeaseError,
   lessorStraightLineSchedule,
   measureLesseeLease,
+  postDueLeaseSchedules,
   salesTypeCommencement,
   shortTermExemptionEligible,
 } from "./leases.ts";
@@ -306,4 +307,11 @@ test("commencement dates are gated to real calendar dates (YYYY-MM-DD)", () => {
     (e) => e instanceof LeaseError && /calendar date/.test(e.message),
   );
   assert.doesNotThrow(() => assertLeaseCommencementOn("2026-07-01"));
+});
+
+test("due-lease posting rejects an invalid as-of calendar date before database access", async () => {
+  await assert.rejects(
+    postDueLeaseSchedules("00000000-0000-0000-0000-000000000000", "2026-02-30", null),
+    (error: unknown) => error instanceof LeaseError && /calendar date/.test(error.message),
+  );
 });

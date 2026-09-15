@@ -830,6 +830,9 @@ export async function postDueLeaseSchedules(
   asOfDate: string,
   actorId: string | null,
 ): Promise<PostLeaseScheduleResult> {
+  if (!isIsoCalendarDate(asOfDate)) {
+    throw new LeaseError("as-of date must be a valid calendar date (YYYY-MM-DD)");
+  }
   const due = (await db.execute<{ line_id: string; lease_id: string }>(sql`
     select l.id as line_id, l.lease_id
       from lease_agreement_schedule_lines l
