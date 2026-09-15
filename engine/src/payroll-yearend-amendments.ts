@@ -805,7 +805,7 @@ async function issueCorrection(
       label: byRow.get(rowId)?.label || previous.slip.label,
       revision,
       previously: previous.slip.reported,
-      current: current.slip ?? reportedAsSlip(filing, previous.slip),
+      current: current.slip ?? reportedAsSlip(filing, current.reported),
       changes,
     });
     slips.push({
@@ -843,15 +843,15 @@ async function issueCorrection(
  */
 function reportedAsSlip(
   filing: PayrollYearEndFiling,
-  slip: PayrollFilingIssuedSlip,
+  reported: PayrollFilingReported,
 ): PayrollFilingSlipData {
   return {
     formCode: `${filing.key.toUpperCase()}_ISSUED`,
     formName: filing.label,
-    headerFields: slip.reported.fields
+    headerFields: reported.fields
       .filter((field) => field.code == null)
       .map((field) => ({ label: field.label, value: field.value })),
-    boxes: slip.reported.fields
+    boxes: reported.fields
       .filter((field) => field.code != null)
       .map((field) => ({ code: field.code!, label: field.label, value: field.value })),
   };
@@ -950,7 +950,7 @@ export async function filingCorrectionSlip(
       label: review?.label || previous.slip.label,
       revision,
       previously: previous.slip.reported,
-      current: current.slip ?? reportedAsSlip(filing, previous.slip),
+      current: current.slip ?? reportedAsSlip(filing, current.reported),
       changes: revision === "cancelled"
         ? []
         : diffReported(previous.slip.reported, current.reported),

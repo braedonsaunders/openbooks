@@ -1034,6 +1034,89 @@ test(
 );
 
 test(
+  "a correction for a filing without a slip renders the current reported values",
+  { skip: !DB },
+  async () => {
+    const fx = await seedT4Year();
+    const country = "ZY";
+    const filingKey = `correction-snapshot-${randomUUID()}`;
+    const settingKey = `payrollCorrectionSnapshot-${randomUUID()}`;
+
+    const readMarker = async (): Promise<string> => {
+      const result = await db.execute<{ marker: string | null }>(sql`
+        select settings->>${settingKey} as marker
+          from orgs
+         where id = ${fx.orgId}
+      `);
+      return result.rows[0]?.marker ?? "";
+    };
+
+    registerPayrollFilings({
+      country,
+      programTypes: [],
+      yearEnd: [{
+        key: filingKey,
+        label: "Correction snapshot filing",
+        cadence: "annual",
+        population: async () => {
+          const marker = await readMarker();
+          return {
+            rowKey: "rowId",
+            columns: [{ key: "marker", label: "Marker" }],
+            rows: [{ rowId: "row-1", marker }],
+          };
+        },
+        amendment: {
+          supported: true,
+          revisions: ["amended"],
+          vehicle: "same_form",
+          download: {
+            label: "Download correction snapshot",
+            build: async ({ rows }) => ({
+              filename: "correction-snapshot.txt",
+              contentType: "text/plain",
+              body: rows[0]!.current.headerFields[0]!.value,
+            }),
+          },
+        },
+      }],
+    });
+
+    try {
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "A" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+      await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
+        taxYear: 2026, revision: "original",
+      });
+
+      // The amendment is computed from B. A filing without a declared slip
+      // still has current reported fields, and its correction artifact must
+      // carry those fields rather than silently reusing the original A.
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ [settingKey]: "B" })}::jsonb
+         where id = ${fx.orgId}
+      `);
+      const correcting = recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country, filingKey,
+        taxYear: 2026, revision: "amended", rowIds: ["row-1"],
+      });
+
+      const amended = await correcting;
+      assert.equal(amended.file?.body, "B");
+      assert.equal(amended.submission.slips[0]?.reported.fields[0]?.value, "B");
+    } finally {
+      unregisterPayrollFilings(country);
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
   "a wrong SIN shows as a change without the number ever being displayed",
   { skip: !DB },
   async () => {
