@@ -329,6 +329,10 @@ test("PATCH rejects an invalid financial date without publishing or auditing par
     assert.equal(response.status, 422, `expected invalid date ${JSON.stringify(invalidDate)} to fail`);
     assert.deepEqual(routeState.versions, versionsBefore);
     assert.deepEqual(routeState.audits, auditsBefore);
-    assert.equal(routeState.txCalls, 2);
+    // Rejected at the route boundary before any statement runs: the mocked
+    // engine below validates strictly, but the real engine only
+    // shape-checks (project-financial-profile-versions.ts DATE regex), so in
+    // production an impossible date used to escape to a raw Postgres throw.
+    assert.equal(routeState.txCalls, 0);
   }
 });
