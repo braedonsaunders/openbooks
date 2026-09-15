@@ -12,6 +12,89 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./tes
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+/** Lean WCB-only harness: one hourly ON employee at the given rate, three jobs. */
+async function seedWcbHarness(orgId: string, actorId: string, hourlyRate: string): Promise<{
+  scheduleId: string;
+  employeeId: string;
+  jobA: string;
+  jobB: string;
+  jobC: string;
+  postHours: (workedOn: string, hours: string, projectId: string | null) => Promise<void>;
+}> {
+  const account = async (number: string, name: string, type: string) => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                            reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+              '[]'::jsonb, '{}'::jsonb, true)`);
+    return id;
+  };
+  const wageExpense = await account("6000", "Wages expense", "expense");
+  const burdenExpense = await account("6010", "Payroll burden", "expense");
+  const netPayable = await account("2300", "Wages payable", "liability_current");
+  const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+  const wcbPayable = await account("2330", "WSIB payable", "liability_current");
+  await db.execute(sql`
+    update orgs set settings = settings || ${JSON.stringify({
+      payroll: {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        cppPayableAccountId: craPayable,
+        eiPayableAccountId: craPayable,
+        taxPayableAccountId: craPayable,
+        wagesTo: "expense",
+      },
+    })}::jsonb where id = ${orgId}`);
+
+  await seedPayrollComponents(orgId, actorId, "CA");
+  await setPackSlotAccount(orgId, actorId, "CA", "wcb", wcbPayable);
+
+  const wcbGroupId = randomUUID();
+  await db.execute(sql`
+    insert into worker_comp_groups (id, org_id, code, name, rate_percent, max_assessable, is_active)
+    values (${wcbGroupId}, ${orgId}, 'CLASS-A', 'Construction class A', '2', '2000', true)`);
+
+  const employeeId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${employeeId}, ${orgId}, 'person', 'Robin Rounding', true, '{}'::jsonb)`);
+  await db.execute(sql`
+    insert into employee_roles (id, org_id, party_id, worker_comp_group_id)
+    values (${randomUUID()}, ${orgId}, ${employeeId}, ${wcbGroupId})`);
+  await db.execute(sql`
+    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                  is_active, created_by, updated_by)
+    values (${orgId}, ${employeeId}, 'CAD', ${hourlyRate}, 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+  const scheduleId = randomUUID();
+  await db.execute(sql`
+    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                               pay_date_offset_days, is_active, created_by, updated_by)
+    values (${scheduleId}, ${orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+            ${actorId}, ${actorId})`);
+  await db.execute(sql`
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                           pay_basis, federal_claim_code, provincial_claim_code,
+                                           is_active, created_by, updated_by)
+    values (${orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+            true, ${actorId}, ${actorId})`);
+  const jobs = { jobA: randomUUID(), jobB: randomUUID(), jobC: randomUUID() };
+  for (const [id, name] of [[jobs.jobA, "Job A"], [jobs.jobB, "Job B"], [jobs.jobC, "Job C"]] as const) {
+    await db.execute(sql`
+      insert into projects (id, org_id, name, code, is_active, custom)
+      values (${id}, ${orgId}, ${name}, ${name}, true, '{}'::jsonb)`);
+  }
+  const postHours = async (workedOn: string, hours: string, projectId: string | null) => {
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,
+                                is_billable, billing_status, costing_basis, created_by, updated_by)
+      values (${orgId}, ${employeeId}, ${workedOn}, ${hours}, ${projectId}, 'approved', false,
+              'unbilled', 'actual', ${actorId}, ${actorId})`);
+  };
+  return { scheduleId, employeeId, ...jobs, postHours };
+}
+
 test(
   "employer taxes: WCB splits by project under the assessable cap, EHT past the exemption",
   { skip: !DB },
@@ -173,6 +256,91 @@ test(
       // 600 × 1.95% — exemption already used by the committed run.
       assert.equal(stub2.factors.EHT, "11.7000");
       assert.equal(stub2.factors.EHT_EARN, "600.0000");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "employer levies: a positive WCB remainder posts as its own untagged line",
+  { skip: !DB },
+  async () => {
+    // Rounding leaves remainder = premium − allocated; when untagged earnings
+    // exist (not allTagged) a positive remainder must post as its own
+    // untagged allocation — never folded into the last project split, and
+    // never thrown as a mismatch.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      // $600 on the job, $600 untagged → $1,200 gross, premium 2% = $24.00;
+      // the single tagged split takes exactly half, leaving +$12.00.
+      await harness.postHours("2026-07-06", "20", harness.jobA);
+      await harness.postHours("2026-07-08", "20", null);
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: harness.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const stub = ((await db.execute<{ id: string; factors: Record<string, string> }>(sql`
+        select id, factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+      `))).rows[0]!;
+      assert.equal(cmp(stub.factors.WCB_EARN ?? "0", "1200"), 0);
+      assert.equal(cmp(stub.factors.WCB ?? "0", "24"), 0);
+      const wcbLines = (await db.execute<{ amount: string; project_id: string | null }>(sql`
+        select amount, project_id from pay_stub_lines
+         where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'
+         order by project_id nulls last`));
+      assert.equal(wcbLines.rows.length, 2, "tagged split plus the untagged remainder");
+      assert.equal(wcbLines.rows[0]!.project_id, harness.jobA);
+      assert.equal(cmp(wcbLines.rows[0]!.amount, "12"), 0);
+      assert.equal(wcbLines.rows[1]!.project_id, null);
+      assert.equal(cmp(wcbLines.rows[1]!.amount, "12"), 0);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "employer levies: a negative WCB remainder folds into the last project split",
+  { skip: !DB },
+  async () => {
+    // Three tagged splits each round up a fraction of a cent, so the
+    // allocated total exceeds the premium by $0.01; the negative remainder
+    // must fold into the LAST split only.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const harness = await seedWcbHarness(org.orgId, actorId, "100");
+      await harness.postHours("2026-07-06", "3.3333", harness.jobA);
+      await harness.postHours("2026-07-08", "3.3333", harness.jobB);
+      await harness.postHours("2026-07-10", "3.3334", harness.jobC);
+      await harness.postHours("2026-07-14", "0.0001", null);
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: harness.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const stub = ((await db.execute<{ id: string; factors: Record<string, string> }>(sql`
+        select id, factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+      `))).rows[0]!;
+      assert.equal(cmp(stub.factors.WCB_EARN ?? "0", "1000.01"), 0);
+      assert.equal(cmp(stub.factors.WCB ?? "0", "20"), 0);
+      const wcbLines = (await db.execute<{ amount: string; project_id: string | null }>(sql`
+        select amount, project_id from pay_stub_lines
+         where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'`));
+      const byProject = new Map(wcbLines.rows.map((l) => [l.project_id, l.amount] as const));
+      assert.equal(cmp(byProject.get(harness.jobA) ?? "?", "6.67"), 0);
+      assert.equal(cmp(byProject.get(harness.jobB) ?? "?", "6.67"), 0);
+      assert.equal(cmp(byProject.get(harness.jobC) ?? "?", "6.66"), 0,
+        "the negative penny folds into the last split");
+      assert.equal(sum(wcbLines.rows.map((l) => l.amount)), "20.0000");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
