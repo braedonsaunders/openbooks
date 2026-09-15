@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
+import { uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Budgets                                                             */
@@ -57,8 +58,10 @@ function budgetFilterPredicate(clause: FilterClause): SQL | null {
   }
   if (clause.key === 'status') return select(sql`bs.status`)
   if (clause.key === 'kind') return select(sql`bs.kind`)
-  if (clause.key === 'fiscal_year') return select(sql`bs.fiscal_year`)
+  if (clause.key === 'fiscal_year') return select(sql`bs.fiscal_year::text`)
   if (clause.key === 'book_id') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`bs.book_id = ${value}`
     if (clause.operator === 'ne') return sql`bs.book_id <> ${value}`
   }
@@ -85,8 +88,11 @@ export function budgetWhere(
   }
   if (adhoc.filters?.status) parts.push(sql`and bs.status = ${adhoc.filters.status}`)
   if (adhoc.filters?.kind) parts.push(sql`and bs.kind = ${adhoc.filters.kind}`)
-  if (adhoc.filters?.fiscal_year) parts.push(sql`and bs.fiscal_year = ${adhoc.filters.fiscal_year}`)
-  if (adhoc.filters?.book_id) parts.push(sql`and bs.book_id = ${adhoc.filters.book_id}`)
+  if (adhoc.filters?.fiscal_year) parts.push(sql`and bs.fiscal_year::text = ${adhoc.filters.fiscal_year}`)
+  if (adhoc.filters?.book_id) {
+    const refused = uuidOrFalse(adhoc.filters.book_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and bs.book_id = ${adhoc.filters.book_id}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (bs.name ilike ${query} or bs.description ilike ${query})`)
