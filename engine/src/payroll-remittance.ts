@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, div, formatMoney, sum } from "./money.ts";
 import {
-  assertPayrollFilingAccountKnown,
   filingAccountRef,
   type FilingAccountRef,
   type PayrollFilingAccount,
@@ -67,6 +66,14 @@ export interface RemittanceGroup {
   partyName: string | null;
   /** The payroll program/EIN account this remittance is filed under. */
   filingAccount: FilingAccountRef;
+  /**
+   * True when any accrual in the group comes from a committed stub whose
+   * filing account was never attributed (legacy `unknown` source). The money
+   * is real and stays in the totals, but the group is unfiled: no remittance
+   * bill may be raised from it until those stubs are reconciled, and the
+   * group must render as unfiled/unknown rather than as an attributed filer.
+   */
+  hasUnknownFilingAccount: boolean;
   /**
    * The vendor settings keys that routed rows into this group (the pack or
    * regional declaration each row resolved through — never a jurisdiction).
@@ -180,7 +187,11 @@ export async function payrollRemittanceSummary(
 ): Promise<RemittanceGroup[]> {
   const declaration = statutoryRemittanceDeclaration();
   const rawSettings = await rawPayrollSettings(orgId, executor);
-  await assertPayrollFilingAccountKnown(executor, orgId, range);
+  // No org-wide unknown-filing-account refusal here: one legacy run must not
+  // poison the summary for the rest. Stubs whose filing account was never
+  // attributed carry a null account into the unassigned group and flag it
+  // (hasUnknownFilingAccount); only bill creation for a flagged group fails
+  // closed, until those stubs are reconciled.
   const filingAccount = sql`s.filing_account_id`;
   // '' can never be a declared key, so the coalesce keeps user components
   // (null system_key) in the summary whatever the exclusion list holds.
@@ -194,13 +205,15 @@ export async function payrollRemittanceSummary(
       component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
       system_key: string | null; remittance_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
-      province: string; amount: string;
+      filingUnknown: boolean; province: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
            -- Historical accrual evidence only. Current component or statutory
            -- account setup cannot establish where an older liability accrued.
            l.liability_account_id,
-           ${filingAccount} as filing_account_id, s.province,
+           ${filingAccount} as filing_account_id,
+           bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
+           s.province,
            sum(l.amount) as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -463,6 +476,8 @@ export type RemittanceRow = {
   remittance_party_id: string | null;
   liability_account_id: string | null;
   filing_account_id: string | null;
+  /** True when any stub behind the row never had its filing account attributed. */
+  filingUnknown: boolean;
   province: string;
   amount: string;
 };
@@ -512,6 +527,7 @@ export function groupRemittanceRows(input: {
     const group = groups.get(key) ?? {
       partyId, partyName: null,
       filingAccount: filingAccountRef(row.filing_account_id, input.filingAccounts),
+      hasUnknownFilingAccount: false,
       vendorKeys: [],
       schedule: null,
       provinces: [],
@@ -520,6 +536,7 @@ export function groupRemittanceRows(input: {
       employeeCount: runContext?.employees ?? 0,
       existingBills: [],
     };
+    group.hasUnknownFilingAccount = group.hasUnknownFilingAccount || row.filingUnknown;
     // Rows arrive per (component, province); provinces that resolve to the
     // SAME destination fold back into one component line, so a bill never
     // carries two lines for one component.
@@ -1081,6 +1098,14 @@ export async function createRemittanceBill(
       (g) => g.partyId === input.partyId && g.filingAccount.id === filingAccountId,
     );
     if (!group) throw new PayrollError("nothing to remit to this vendor for the period");
+    // Fail closed for this run's boxes only: a group carrying unattributed
+    // legacy accruals must not become a remittance bill under any account
+    // until those stubs are reconciled. Every other group still bills.
+    if (group.hasUnknownFilingAccount) {
+      throw new PayrollError(
+        "this remittance group includes payroll with an unknown historical filing account — reconcile its original payroll evidence before remitting",
+      );
+    }
     const missing = group.components.filter((c) => !c.liabilityAccountId);
     if (missing.length > 0) {
       throw new PayrollError(

@@ -190,7 +190,7 @@ const ACCOUNT: PayrollFilingAccount = {
 const ROW: RemittanceRow = {
   component_id: "qpip", code: "QPIP", name: "QPIP", kind: "deduction",
   system_key: "qpip", remittance_party_id: null, liability_account_id: "liab-1",
-  filing_account_id: ACCOUNT.id, province: "QC", amount: "100.00",
+  filing_account_id: ACCOUNT.id, filingUnknown: false, province: "QC", amount: "100.00",
 };
 
 test("grouping carries each group's schedule provenance", () => {
