@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**75 passing · 0 failing · 14 gaps · 0 not run**
+**75 passing · 0 failing · 15 gaps · 0 not run**
 
-2026-09-15T22:16:46.279Z
+2026-09-15T22:44:41.814Z
 
 ## AL DOR
 
@@ -174,6 +174,13 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **Inventory is written down to net realisable value when NRV falls below cost**<br><sub>When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV through the cost layers themselves — the loss is recognised immediately, the on-hand QUANTITY is unchanged, and the inventory subledger stays in agreement with the general ledger.</sub> | IAS 2.9<br>IAS 2.28<br>ASC 330 330-10-35-1C | PASS | Implemented |
 | **Reversal of a write-down is required under IFRS and prohibited under US GAAP**<br><sub>The same recovery in net realisable value reverses the write-down under IFRS — capped so cumulative reversals never exceed the cumulative write-down — and is refused outright under US GAAP, where the written-down amount is the new cost basis. The answer comes from the organisation's configured reporting framework, not from which function was called.</sub> | IAS 2.33<br>ASC 330 330-10-35-14 | PASS | Implemented |
 | **Freight and duty to bring inventory to its location join the cost of the stock**<br><sub>A freight voucher spreads exactly onto the on-hand layers, raising their carrying amount and debiting inventory against the freight account — the quantity on hand does not move and the subledger stays in agreement with the general ledger.</sub> | IAS 2.11<br>ASC 330 330-10-30-9 | PASS | Implemented |
+| **Disassembling part of a build returns the pro-rata components to stock**<br><sub>Taking apart four of ten built units returns eight components at their original five each to stock and leaves six assemblies at ten each — forty of component value comes home, sixty of assembly value remains, and nothing leaks or appears.</sub> | IAS 2.25<br>ASC 330 330-10-30-9 | GAP | Not implemented |
+
+### IAS 2 — shortfalls
+
+**inv-partial-disassembly — Disassembling part of a build returns the pro-rata components to stock**
+
+> Disassembly reverses a whole build only: reverseAssemblyBuild takes the build movement with no quantity, so part of a build can only come apart by reversing the entire build and rebuilding the remainder — there is no partial disassembly that returns the pro-rata components in one step.
 
 ## IAS 21
 
