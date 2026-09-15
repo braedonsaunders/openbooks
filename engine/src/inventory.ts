@@ -1013,6 +1013,33 @@ interface JournalLineInput {
 
 type Runner = Pick<typeof db, "execute">;
 
+async function assertInventoryAccountsPostable(
+  tx: Runner,
+  orgId: string,
+  accountIds: readonly string[],
+): Promise<void> {
+  const ids = [...new Set(accountIds)];
+  if (!ids.length) return;
+  const accounts = (await tx.execute<{
+    id: string;
+    is_active: boolean;
+    is_summary: boolean;
+  }>(sql`
+    select id, is_active, is_summary
+      from accounts
+     where org_id = ${orgId}
+       and id = any(${uuidArray(ids)}::uuid[])
+     for share
+  `)).rows;
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  for (const id of ids) {
+    const account = byId.get(id);
+    if (!account || !account.is_active || account.is_summary) {
+      throw new InventoryError("inventory journal requires active, non-summary accounts");
+    }
+  }
+}
+
 /** Registry default is on — absence must not disable inventory. */
 export async function inventoryFeatureEnabled(
   runner: Runner,
@@ -1055,6 +1082,7 @@ export async function postInventoryEntry(
   const bal = sum(p.lines.map((l) => l.amount));
   if (!isZero(bal))
     throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
+  await assertInventoryAccountsPostable(tx, p.orgId, p.lines.map((line) => line.accountId));
   const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
     where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`)).rows[0];
   if (!book) throw new InventoryError("inventory journal requires an active posting book");
@@ -2599,25 +2627,7 @@ async function reverseInventoryJournal(
     throw new InventoryError("the source inventory journal has no lines");
 
   const accountIds = [...new Set(lines.rows.map((line) => String(line.account_id)))];
-  const accounts = (await tx.execute<{
-    id: string;
-    name: string;
-    is_active: boolean;
-    is_summary: boolean;
-  }>(sql`
-    select id, name, is_active, is_summary
-      from accounts
-     where org_id = ${orgId}
-       and id = any(${uuidArray(accountIds)}::uuid[])
-     for share
-  `)).rows;
-  const accountById = new Map(accounts.map((account) => [account.id, account]));
-  for (const accountId of accountIds) {
-    const account = accountById.get(accountId);
-    if (!account || !account.is_active || account.is_summary) {
-      throw new InventoryError("the source inventory journal uses an inactive or summary account");
-    }
-  }
+  await assertInventoryAccountsPostable(tx, orgId, accountIds);
   try {
     await validateSubsidiaryRestrictions(tx, {
       orgId,
