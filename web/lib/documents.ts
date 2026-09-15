@@ -809,6 +809,22 @@ export async function applyDocumentEdit(
       throw new DocumentEditError(422, `invalid ${headerRefNames[i]}`)
     }
   }
+  // Tenant ownership of every referenced header id. The composite FKs would
+  // refuse a foreign id at the write as an unhandled storage error (raw
+  // 500); refuse it here with a tenant-opaque 404 that reveals nothing about
+  // other tenants' records — same contract as the line-account precheck
+  // below. Only ids actually present are looked up.
+  const headerOwners: { label: string; table: 'parties' | 'payment_cards' | 'departments' | 'projects' | 'locations' | 'classes'; value: string }[] = []
+  if (body.partyId !== undefined && body.partyId !== null) headerOwners.push({ label: 'party', table: 'parties', value: body.partyId })
+  if (body.paymentCardId !== undefined && body.paymentCardId !== null) headerOwners.push({ label: 'payment card', table: 'payment_cards', value: body.paymentCardId })
+  if (body.departmentId !== undefined && body.departmentId !== null) headerOwners.push({ label: 'department', table: 'departments', value: body.departmentId })
+  if (body.projectId !== undefined && body.projectId !== null) headerOwners.push({ label: 'project', table: 'projects', value: body.projectId })
+  if (body.locationId !== undefined && body.locationId !== null) headerOwners.push({ label: 'location', table: 'locations', value: body.locationId })
+  if (body.classId !== undefined && body.classId !== null) headerOwners.push({ label: 'class', table: 'classes', value: body.classId })
+  for (const ref of headerOwners) {
+    const owned = await db.execute(sql`select 1 from ${sql.raw(`"${ref.table}"`)} where id = ${ref.value} and org_id = ${orgId}`)
+    if (!owned.rows.length) throw new DocumentEditError(404, `${ref.label} not found in this organization`)
+  }
 
   if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
     throw new DocumentEditError(404, 'not found')
