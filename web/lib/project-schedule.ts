@@ -303,9 +303,11 @@ export async function updateScheduleTask(
   patch: ScheduleTaskPatchInput,
   userId: string | null,
 ) {
-  await assertProjectSchedulingEnabled(orgId)
-  await assertTaskInProject(orgId, projectId, taskId)
-  await applyTaskPatch(orgId, projectId, taskId, patch, userId)
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await assertProjectSchedulingEnabledTx(tx, orgId)
+    await assertTaskInProject(orgId, projectId, taskId)
+    await applyTaskPatch(orgId, projectId, taskId, patch, userId, tx)
+  }))
 }
 
 /**
