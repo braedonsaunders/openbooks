@@ -146,3 +146,87 @@ test(
     }
   },
 );
+
+test(
+  "settlement evidence must come from the payment run's bank account",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const foreignOrg = await withBypass(() => createScratchOrg());
+    const runId = randomUUID();
+    const instructionId = randomUUID();
+    const statementId = randomUUID();
+    const statementLineId = randomUUID();
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Settlement account operator", "admin"),
+      );
+      const foreignActorId = await withBypass(() =>
+        createScratchUser(foreignOrg.orgId, "Foreign settlement operator", "admin"),
+      );
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          insert into payment_runs
+            (id, org_id, run_number, bank_account_id, subsidiary_id, method,
+             direction, purpose, currency, status, payment_count, total_amount,
+             created_by, updated_by)
+          values (${runId}, ${org.orgId}, ${`ACCOUNT-SCOPE-${runId}`},
+                  ${org.accounts.bank}, ${org.subsidiaryId}, 'wire', 'outbound',
+                  'vendor_payments', 'CAD', 'confirmed', 1, '25', ${actorId}, ${actorId})
+        `);
+        await db.execute(sql`
+          insert into payment_instructions
+            (id, org_id, payment_run_id, payee_party_id, amount, currency, status,
+             created_by, updated_by)
+          values (${instructionId}, ${org.orgId}, ${runId}, ${org.vendorId},
+                  '25', 'CAD', 'sent', ${actorId}, ${actorId})
+        `);
+      });
+      await withOrgContext(foreignOrg.orgId, async () => {
+        await db.execute(sql`
+          insert into bank_statements
+            (id, org_id, account_id, source, statement_date, raw_file_ref, created_by, updated_by)
+          values (${statementId}, ${foreignOrg.orgId}, ${foreignOrg.accounts.bank}, 'test', ${foreignOrg.date}, 'test-source', ${foreignActorId}, ${foreignActorId})
+        `);
+        await db.execute(sql`
+          insert into bank_statement_lines
+            (id, org_id, statement_id, line_number, posted_on, amount, currency,
+             account_id, created_by, updated_by)
+          values (${statementLineId}, ${foreignOrg.orgId}, ${statementId}, 1, ${foreignOrg.date},
+                  '-25', 'CAD', ${foreignOrg.accounts.bank}, ${foreignActorId}, ${foreignActorId})
+        `);
+      });
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          recordPaymentSettlement({
+            instructionId,
+            orgId: org.orgId,
+            userId: actorId,
+            status: "settled",
+            effectiveOn: org.date,
+            bankStatementLineId: statementLineId,
+          }),
+        ),
+        (error: unknown) =>
+          error instanceof PaymentError
+          && error.message === "bank statement line does not belong to the payment run's bank account",
+      );
+
+      const state = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{ instruction_status: string; settlements: number }>(sql`
+          select
+            (select status from payment_instructions where id = ${instructionId}) as instruction_status,
+            (select count(*)::int from payment_settlements where payment_instruction_id = ${instructionId}) as settlements
+        `)).rows[0],
+      );
+      assert.deepEqual(state, { instruction_status: "sent", settlements: 0 });
+    } finally {
+      await withBypass(() => db.execute(sql`
+        delete from payment_settlements where payment_instruction_id = ${instructionId}
+      `));
+      await withBypass(() => dropScratchOrg(foreignOrg.orgId));
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

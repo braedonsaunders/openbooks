@@ -1042,8 +1042,8 @@ export async function recordPaymentSettlement(opts: {
     // instruction, then the payment document/reversal work. Opposite ordering
     // lets a return and a poster deadlock while each holds the row the other
     // needs to establish the terminal boundary.
-    const lockedRun = await db.execute<{ status: string }>(sql`
-      select status
+    const lockedRun = await db.execute<{ status: string; bank_account_id: string }>(sql`
+      select status, bank_account_id
         from payment_runs
        where id = ${paymentRunId} and org_id = ${opts.orgId}
        for update
@@ -1069,6 +1069,18 @@ export async function recordPaymentSettlement(opts: {
     }
     if (!["sent", "settled", "returned"].includes(instruction.status)) {
       throw new PaymentError("only a sent payment can be settled or returned");
+    }
+    if (opts.bankStatementLineId) {
+      const bankLine = await db.execute<{ id: string }>(sql`
+        select id
+          from bank_statement_lines
+         where id = ${opts.bankStatementLineId}
+           and org_id = ${opts.orgId}
+           and account_id = ${lockedRun.rows[0]!.bank_account_id}
+      `);
+      if (!bankLine.rows[0]) {
+        throw new PaymentError("bank statement line does not belong to the payment run's bank account");
+      }
     }
     let reversalEntryId: string | null = null;
     if ((opts.status === "returned" || opts.status === "rejected") && instruction.status !== "returned") {
