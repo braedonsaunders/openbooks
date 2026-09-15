@@ -33,6 +33,9 @@ export function payrollSlipFacsimile(
       to: `${taxYear}-12-31`,
       submissionChannel: 'none',
       watermark: 'Working copy — not for filing',
+      // Slips identify via the layout's per-slip header fields (employee,
+      // account, year) — they carry no indirect-tax registration identity.
+      registrationNumber: null,
       boxes: slip.boxes.map((box) => ({
         lineCode: box.code,
         label: box.label,

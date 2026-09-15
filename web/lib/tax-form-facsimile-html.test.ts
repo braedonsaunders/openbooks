@@ -16,6 +16,7 @@ function result(overrides: Partial<TaxReturnResult> = {}): TaxReturnResult {
     to: '2026-07-31',
     submissionChannel: 'portal_manual',
     watermark: 'Working copy — file electronically through the CRA',
+    registrationNumber: null,
     boxes: [
       { lineCode: '101', label: 'Sales and other revenue', value: '1837186.5000', computed: false, editable: false, pdfField: null },
       { lineCode: '103', label: 'GST/HST collected', value: '238834.2600', computed: false, editable: false, pdfField: null },
@@ -99,4 +100,21 @@ test('dynamic content is HTML-escaped (no injection from labels)', () => {
   const html = renderTaxFormFacsimileHtml(r, null)
   assert.doesNotMatch(html, /<script>x<\/script>/)
   assert.match(html, /&lt;script&gt;/)
+})
+
+test('GST34 prints the registered business number, never a fabricated one', () => {
+  // The facsimile must identify the return with the org's own CRA registration
+  // from tax_registrations — a made-up number on a government-form replica
+  // could be copied into a real filing.
+  const html = renderTaxFormFacsimileBody(
+    result({ registrationNumber: '123456789 RT0001' }),
+    { orgName: 'Example Organization' },
+  )
+  assert.match(html, /123456789 RT0001/)
+  assert.doesNotMatch(html, /00000 0000 000000/)
+})
+
+test('GST34 without a registration prints a blank business number, not zeros', () => {
+  const html = renderTaxFormFacsimileBody(result({ registrationNumber: null }), { orgName: 'Example Organization' })
+  assert.doesNotMatch(html, /00000 0000 000000/)
 })

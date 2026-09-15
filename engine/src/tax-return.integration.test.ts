@@ -267,3 +267,55 @@ test("an undescribed box takes its side from a one-sided code", { skip: !DB }, a
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("computeTaxReturn carries the form's registration number for the facsimile", { skip: !DB }, async () => {
+  // Live-Postgres regression: the GST34 facsimile printed a hardcoded
+  // '00000 0000 000000' business number even though the org's real CRA
+  // registration sat in tax_registrations — computeTaxReturn dropped it, so
+  // the printed government-form replica carried a fabricated identifier.
+  const org = await createScratchOrg();
+  try {
+    const formCode = "REG-BN";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'BN probe return', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Probe box', null, null, 1, 10)`);
+    const jurisdictionId = randomUUID();
+    await db.execute(sql`
+      insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
+      values (${jurisdictionId}, ${org.orgId}, 'PROBE', 'Probe jurisdiction', 'CA', 'country', 'gst')`);
+    await db.execute(sql`
+      insert into tax_registrations
+        (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, '123456789 RT0001', 'quarterly', ${formCode}, true)`);
+
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    assert.equal(result.registrationNumber, "123456789 RT0001");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("computeTaxReturn reports a null registration number when the form is unregistered", { skip: !DB }, async () => {
+  // The facsimile must print a blank identifier — never zeros — when the org
+  // holds no registration for the form.
+  const org = await createScratchOrg();
+  try {
+    const formCode = "REG-BN-ABSENT";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'Unregistered probe return', 'portal_manual', true)`);
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, '1', 'Probe box', null, null, 1, 10)`);
+
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
+    assert.equal(result.registrationNumber, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
