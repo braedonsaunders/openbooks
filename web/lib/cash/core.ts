@@ -572,7 +572,10 @@ export async function categoryWeekly(
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 12));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
     const r = (await db.execute(sql`
-      select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(abs(d.total)) as paid
+      -- documents.total is transaction-currency denominated: translate at the
+      -- document FX rate into functional currency before adding, exactly like
+      -- the purchasing paid values do.
+      select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(round(abs(d.total * d.fx_rate), 4)) as paid
       from documents d
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
@@ -818,7 +821,8 @@ export async function categoryWeekly(
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 3));
     const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
     const r = (await db.execute(sql`
-      select coalesce(d.document_date, d.posting_date)::text as day, sum(abs(d.total)) as paid
+      -- Same functional-currency translation as the payment history above.
+      select coalesce(d.document_date, d.posting_date)::text as day, sum(round(abs(d.total * d.fx_rate), 4)) as paid
       from documents d
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
