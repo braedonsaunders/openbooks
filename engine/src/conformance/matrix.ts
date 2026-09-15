@@ -47,7 +47,7 @@ export const REGISTERED_FLOORS: readonly {
   minimum: number;
 }[] = [
   { area: "revenue", source: REVENUE_CASES, minimum: 11 },
-  { area: "leases", source: LEASE_CASES, minimum: 6 },
+  { area: "leases", source: LEASE_CASES, minimum: 7 },
   { area: "foreign currency", source: FOREIGN_CURRENCY_CASES, minimum: 7 },
   { area: "inventory", source: INVENTORY_CASES, minimum: 6 },
   { area: "long-lived assets", source: LONG_LIVED_ASSET_CASES, minimum: 5 },
