@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "./db.ts";
-import { businessToday } from "./business-date.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import {
@@ -926,6 +926,12 @@ export async function createPaymentLink(
   }
   if (input.bankAccountId !== undefined && input.bankAccountId !== null) {
     assertAcceptanceUuid(input.bankAccountId, "bank account");
+  }
+  // A shape-valid non-day such as February 30 would otherwise reach the
+  // expires_on DATE column and surface as a raw storage throw (HTTP 500 at
+  // the route, which only maps PaymentAcceptanceError to 422).
+  if (input.expiresOn !== undefined && input.expiresOn !== null && !isIsoCalendarDate(input.expiresOn)) {
+    throw new PaymentAcceptanceError("expiresOn must be a real calendar date (YYYY-MM-DD)");
   }
   return await withOrg(orgId, async () => {
     const docs = (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; subsidiary_id: string; currency: string; document_number: string; open_balance: string }>(sql`
