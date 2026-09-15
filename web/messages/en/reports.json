@@ -199,6 +199,7 @@
     "openingCash": "Opening cash",
     "closingCash": "Closing cash",
     "netChange": "Net change in cash",
+    "fxEffect": "Effect of exchange rate changes on cash",
     "empty": "No cash movements in this period.",
     "sections": {
       "operating": "Operating activities",

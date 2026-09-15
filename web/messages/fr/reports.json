@@ -196,6 +196,7 @@
     "openingCash": "Trésorerie d’ouverture",
     "closingCash": "Trésorerie de clôture",
     "netChange": "Variation nette de trésorerie",
+    "fxEffect": "Effet des variations de change sur la trésorerie",
     "empty": "Aucun mouvement de trésorerie sur cette période.",
     "sections": {
       "operating": "Activités d’exploitation",

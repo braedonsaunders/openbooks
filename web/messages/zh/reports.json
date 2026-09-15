@@ -196,6 +196,7 @@
     "openingCash": "期初现金",
     "closingCash": "期末现金",
     "netChange": "现金净变动",
+    "fxEffect": "汇率变动对现金的影响",
     "empty": "本期间内无现金变动。",
     "sections": {
       "operating": "经营活动",

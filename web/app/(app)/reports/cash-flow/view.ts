@@ -160,6 +160,16 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
         },
       })
     }
+    if (decimalIsMaterial(cf.fxEffectOnCash)) {
+      rows.push({
+        key: 'fx-effect',
+        label: t('fxEffect'),
+        labelClassName: 'pl-8',
+        value: m(cf.fxEffectOnCash),
+        valueClassName: 'text-right tabular-nums',
+        tone: toneOf(cf.fxEffectOnCash),
+      })
+    }
     rows.push({
       key: 'net-change',
       label: t('netChange'),

@@ -492,6 +492,7 @@ export function agingExportData(
 export function cashFlowExportData(
   cf: {
     sections: { section: string; lines: { type: string; label: string; amount: ExactDecimal }[]; subtotal: ExactDecimal }[]
+    fxEffectOnCash: ExactDecimal
     netChange: ExactDecimal
     openingCash: ExactDecimal
     closingCash: ExactDecimal
@@ -510,6 +511,11 @@ export function cashFlowExportData(
       columns: [t('export.columns.type'), t('export.columns.amount')],
       rows: [
         ...s.lines.map((l) => [l.label, l.amount] as (string | number)[]),
+        // Same placement as the indirect export: the FX-effect line rides the
+        // financing group while financingTotal stays section-pure.
+        ...(s.section === 'financing' && decimalIsMaterial(cf.fxEffectOnCash)
+          ? [[t('cashFlow.fxEffect'), cf.fxEffectOnCash] as (string | number)[]]
+          : []),
         [t('cashFlow.subtotal', { section: label }), s.subtotal] as (string | number)[],
       ],
       align: ['left', 'right'],
