@@ -65,7 +65,10 @@ export async function accountRegister(
     : sql``;
   const subsidiaryFilter = allowedSubsidiaryIds
     ? allowedSubsidiaryIds.size > 0
-      ? sql` and e.subsidiary_id in ${[...allowedSubsidiaryIds]} and l.subsidiary_id in ${[...allowedSubsidiaryIds]}`
+      // Intercompany entries carry the origin subsidiary on the header while
+      // each legal-entity leg is stamped on its journal line. Filtering the
+      // header as well hides every child leg of an otherwise visible entry.
+      ? sql` and l.subsidiary_id in ${[...allowedSubsidiaryIds]}`
       : sql` and false`
     : sql``;
   const bookFilter = sql` and e.book_id = ${statementBookExpr(orgId, bookId)}`;
