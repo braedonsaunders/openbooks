@@ -318,12 +318,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         { status: e.status },
       )
     }
+    // Composite org-scoped storage keys make cross-tenant references
+    // unrepresentable; map their FK refusal to a domain 422 instead of a
+    // raw 500. The whole save (lines + header + totals) rolls back, so a
+    // mixed payload cannot half-save. Line accounts are prechecked above
+    // with a tenant-opaque 404; this fence covers the header party and
+    // every other line reference (party, department, project, ...).
+    if (isTenantReferenceViolation(e)) {
+      return NextResponse.json(
+        { error: 'referenced party, department, project, or dimension must belong to this organization' },
+        { status: 422 },
+      )
+    }
     throw e
   }
 
   const journal = await loadJournalDoc(id, user.orgId)
   if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(await withExactDocumentRevision(journal, id, user.orgId))
+}
+
+/** Walk the driver-error cause chain for a tenant-coherent FK refusal (23503). */
+function isTenantReferenceViolation(error: unknown): boolean {
+  let cursor: unknown = error
+  for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === 'object'; depth++) {
+    if ((cursor as { code?: unknown }).code === '23503') return true
+    cursor = (cursor as { cause?: unknown }).cause
+  }
+  return false
 }
 
 /** Delete a journal (guarded: open period, no applied payments, no downstream conversion). */
