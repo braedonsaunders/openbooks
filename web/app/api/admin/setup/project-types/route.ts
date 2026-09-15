@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   canonicalizeProjectFinancialProfile,
@@ -114,6 +114,10 @@ export async function PATCH(req: Request) {
   if (!isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
     return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })
+  const hasOwn = (key: string): boolean => Object.prototype.hasOwnProperty.call(b, key)
+  if (hasOwn('name') && !String(b.name ?? '').trim()) {
+    return NextResponse.json({ error: 'Name is required' }, { status: 422 })
+  }
   if (b.invoicingProfile) {
     const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
     if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
@@ -121,15 +125,12 @@ export async function PATCH(req: Request) {
   const fieldTicketsEnabled = b.invoicingProfile
     ? await isFeatureEnabled(orgId, 'fieldTickets')
     : false
-  const sets = [
-    sql`name = ${String(b.name ?? '').trim()}`,
-    sql`description = ${b.description ?? null}`,
-    sql`is_active = ${b.isActive !== false}`,
-    sql`sort_order = ${Number(b.sortOrder ?? 50)}`,
-    sql`billing_method = ${b.billingMethod}`,
-    sql`updated_at = now()`,
-    sql`updated_by = ${gate.user.id}`,
-  ]
+  const sets: SQL[] = []
+  if (hasOwn('name')) sets.push(sql`name = ${String(b.name).trim()}`)
+  if (hasOwn('description')) sets.push(sql`description = ${b.description ?? null}`)
+  if (hasOwn('isActive')) sets.push(sql`is_active = ${b.isActive !== false}`)
+  if (hasOwn('sortOrder')) sets.push(sql`sort_order = ${Number(b.sortOrder)}`)
+  sets.push(sql`billing_method = ${b.billingMethod}`, sql`updated_at = now()`, sql`updated_by = ${gate.user.id}`)
   if (b.invoicingProfile) sets.push(sql`invoicing_profile = ${JSON.stringify(b.invoicingProfile)}::jsonb`)
   if (b.backupProfile) sets.push(sql`backup_profile = ${JSON.stringify(b.backupProfile)}::jsonb`)
   let updated: boolean
