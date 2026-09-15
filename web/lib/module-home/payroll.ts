@@ -163,7 +163,7 @@ export async function payrollHome(
          where r.org_id = ${orgId} and r.tax_year = ${taxYear} and r.run_status = 'committed'
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as runs_this_year,
         (select count(*) from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
-          where r.org_id = ${orgId} and d.status = 'draft'
+          where r.org_id = ${orgId} and d.status in ('draft', 'approved')
             ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as in_progress,
         (select count(*) from pay_runs r
           join documents d on d.id = r.document_id and d.org_id = r.org_id
