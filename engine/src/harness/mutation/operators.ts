@@ -183,6 +183,7 @@ function mutateComparisonFlip(masked: string, starts: number[], push: Push): voi
     push({ operator: "comparison-flip", line, column, description, start: offset, end, text });
   };
   while (i < masked.length) {
+    const prev = i > 0 ? masked[i - 1]! : "";
     const three = masked.slice(i, i + 3);
     const two = masked.slice(i, i + 2);
     const one = masked[i]!;
@@ -204,6 +205,12 @@ function mutateComparisonFlip(masked: string, starts: number[], push: Push): voi
       emit(i, i + 1, "comparison '<' -> '<='", "<=");
       i += 1;
     } else if (one === ">") {
+      // `=>` is not a comparison; the `=` half never matches above because
+      // the scan consumes pairs left to right, so guard the `>` half here.
+      if (prev === "=") {
+        i += 1;
+        continue;
+      }
       emit(i, i + 1, "comparison '>' -> '>='", ">=");
       i += 1;
     } else {
@@ -387,7 +394,12 @@ function mutateDroppedAccumulator(maskedLines: string[], push: Push): void {
   }
 }
 
-function mutateGuardNegation(maskedLines: string[], lineOffsets: number[], push: Push): void {
+function mutateGuardNegation(
+  maskedLines: string[],
+  sourceLines: string[],
+  lineOffsets: number[],
+  push: Push,
+): void {
   for (let idx = 0; idx < maskedLines.length; idx += 1) {
     const line = maskedLines[idx]!;
     if (!/^\s*(?:\}\s*)?(if|else\s+if|while)\b/.test(line)) continue;
@@ -407,7 +419,10 @@ function mutateGuardNegation(maskedLines: string[], lineOffsets: number[], push:
       }
     }
     if (closeInLine < 0) continue;
-    const condition = line.slice(openInLine + 1, closeInLine);
+    // Locate on the masked line (strings/comments blanked) but splice the
+    // ORIGINAL text: a masked condition would plant spaces where a string
+    // literal stood and every such mutant would be a syntax error.
+    const condition = sourceLines[idx]!.slice(openInLine + 1, closeInLine);
     if (!condition.trim()) continue;
     push({
       operator: "guard-negation", line: idx + 1, column: openInLine + 2,
@@ -471,13 +486,14 @@ export function generateMutants(
   const push: Push = (m) => {
     pending.push(m);
   };
+  const sourceLines = source.split("\n");
 
   mutateArithSignFlip(masked, starts, push);
   mutateComparisonFlip(masked, starts, push);
   mutateBoundaryShift(maskedLines, starts, starts, push);
   mutateRoundingSwap(source, masked, starts, push);
   mutateDroppedAccumulator(maskedLines, push);
-  mutateGuardNegation(maskedLines, starts, push);
+  mutateGuardNegation(maskedLines, sourceLines, starts, push);
   mutateEarlyReturn(maskedLines, push);
 
   const maxPerOperator = options.maxPerOperator ?? DEFAULT_MAX_PER_OPERATOR;
@@ -486,7 +502,6 @@ export function generateMutants(
     return options.lineRanges.some((r) => line >= r.start && line <= r.end);
   };
 
-  const sourceLines = source.split("\n");
   const result: GeneratedMutant[] = [];
   const occurrence = new Map<string, number>();
   for (const op of MUTATION_OPERATORS) {
