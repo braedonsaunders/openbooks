@@ -11,6 +11,7 @@ import {
 } from '@openbooks/engine/src/information-returns.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadFilings } from '@/lib/compliance'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -80,6 +81,16 @@ export async function POST(req: Request) {
   const [org] = (
     (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
   ).rows
+
+  // Threshold reaches a numeric(19,4) column raw: junk text or a pasted
+  // 20-digit figure would otherwise die in Postgres as a raw storage failure
+  // (HTTP 500 — only InformationReturnError maps to 422 below).
+  if (body.threshold !== undefined) {
+    const exact = canonicalDecimal(body.threshold, 4)
+    if (exact === null || exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+      return NextResponse.json({ error: 'threshold must be an exact decimal with at most 15 whole digits' }, { status: 400 })
+    }
+  }
 
   try {
     const filing = await ensureFiling({
