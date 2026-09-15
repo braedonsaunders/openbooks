@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCpa005File,
+  buildNachaFile,
   buildSepaFile,
   carryingAmountForSettlement,
   type Cpa005Run,
   type EftSettings,
+  type NachaSettings,
   PaymentError,
   realizedFxControlAdjustment,
 } from "./payments.ts";
@@ -49,6 +51,32 @@ const EFT: EftSettings = {
   transit: "00412",
   account: "1234567",
 };
+
+const NACHA: NachaSettings = {
+  odfiRouting: "021000021",
+  immediateDestination: " 021000021",
+  immediateOrigin: " 123456789",
+  destinationName: "BANK",
+  originName: "ACME",
+  companyName: "ACME CONSTRUCTION",
+  companyId: "1123456789",
+};
+
+function nachaFile(accountNumber: string): string {
+  return buildNachaFile({
+    settings: NACHA,
+    effectiveDate: new Date(2026, 2, 5),
+    creationDate: new Date(2026, 2, 3),
+    entries: [{
+      transactionCode: "22",
+      routingNumber: "021000021",
+      accountNumber,
+      amountCents: 12500n,
+      individualId: "BILL-0001",
+      individualName: "FIRST PAYEE",
+    }],
+  });
+}
 
 function cpa005Run(overrides: Partial<Cpa005Run> = {}): Cpa005Run {
   return {
@@ -197,6 +225,13 @@ test("the SEPA credit file refuses a creditor IBAN with an invalid checksum", ()
       }],
     }),
     (error: Error) => error instanceof PaymentError && /creditor IBAN/.test(error.message),
+  );
+});
+
+test("the NACHA credit file refuses a blank receiving account number", () => {
+  assert.throws(
+    () => nachaFile("   "),
+    (error: Error) => error instanceof PaymentError && /account number/.test(error.message),
   );
 });
 
