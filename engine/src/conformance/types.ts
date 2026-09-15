@@ -29,6 +29,7 @@
  * figures the payroll and indirect-tax cases reproduce to the cent.
  */
 export type Standard =
+  | "ASC 323"
   | "ASC 330"
   | "ASC 360"
   | "ASC 450"
@@ -41,9 +42,11 @@ export type Standard =
   | "IAS 12"
   | "IAS 16"
   | "IAS 21"
+  | "IAS 28"
   | "IAS 36"
   | "IAS 37"
   | "IFRS 10"
+  | "IFRS 11"
   | "IFRS 15"
   | "IFRS 16"
   | "CRA T4127"
@@ -149,7 +152,16 @@ export type Role =
   | "leaseLiability"
   | "leaseExpense"
   | "leaseInterestExpense"
-  | "rouAmortization";
+  | "rouAmortization"
+  // Consolidation (subsidiary equity, investment, NCI, goodwill)
+  | "investmentInSub"
+  | "subsidiaryEquity"
+  | "nciEquity"
+  | "nciIncome"
+  | "equityMethodIncome"
+  | "distributionIncome"
+  | "goodwill"
+  | "fairValueAdjustment";
 
 /** A signed ledger line. Positive = debit, negative = credit. Always 4dp. */
 export interface ExpectedLine {
