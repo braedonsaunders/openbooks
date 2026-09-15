@@ -113,6 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
@@ -157,6 +158,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const rowId = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
   let notFound = false
