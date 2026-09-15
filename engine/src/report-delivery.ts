@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
-import { scheduledReportEmail } from "@openbooks/emails";
+import { isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
 import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
 import {
@@ -251,6 +251,47 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
   );
 }
 
+/**
+ * Quarantine an outbox row whose recipient can never be dispatched. Schedule
+ * writes accept a looser address shape than the provider validation the queue
+ * enforces, so such an address reaches this scan through the front door — and
+ * without this guard its enqueue throw aborts the whole scan ahead of every
+ * healthy row behind it, every tick, forever. A malformed address never heals,
+ * so the row goes straight to the delivery ceiling with the same terminal
+ * stamp + structured log a poison row earns through the attempt path, and the
+ * scan moves on. Other enqueue failures (Redis down, oversized artifact) still
+ * throw: those are transient and must retry, never quarantine.
+ */
+async function quarantineUndeliverableReportDelivery(
+  row: { id: string; org_id: string; recipient: string },
+  now: Date,
+): Promise<void> {
+  const reason = `invalid recipient email address: ${row.recipient}`.slice(0, 1000);
+  const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
+    update report_delivery_outbox set status='failed', error=${reason},
+           attempt_count=${MAX_DELIVERY_ATTEMPTS}, next_attempt_at=${now},
+           terminal_failed_at = coalesce(terminal_failed_at, ${now}),
+           terminal_failed_by = case when terminal_failed_at is null
+                                      then ${EMAIL_DELIVERY_WORKER_IDENTITY}
+                                      else terminal_failed_by end,
+           updated_at=${now}
+     where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed')
+     returning (terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
+                and terminal_failed_at = ${now}) as "becameTerminal"
+  `));
+  if (marked.rows[0]?.becameTerminal) {
+    logTerminalFailure({
+      surface: "report_delivery_outbox",
+      id: row.id,
+      orgId: row.org_id,
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      error: reason,
+      markedBy: EMAIL_DELIVERY_WORKER_IDENTITY,
+      at: now,
+    });
+  }
+}
+
 /** Dispatch per-recipient outbox rows; deterministic generation ids close the DB/Redis crash gap. */
 export async function dispatchReportDeliveries(
   enqueue: (data: EnqueueEmailData, options?: { jobId?: string }) => Promise<unknown> = enqueueEmail,
@@ -274,6 +315,10 @@ export async function dispatchReportDeliveries(
   `));
   let dispatched = 0;
   for (const row of due.rows) {
+    if (!isValidEmailAddress(row.recipient)) {
+      await quarantineUndeliverableReportDelivery(row, now);
+      continue;
+    }
     const mail = scheduledReportEmail({ orgName: row.org_name, reportName: row.report_name, attachmentName: row.filename });
     const jobId = `report-delivery|${row.id}|${row.dispatch_count}`;
     await enqueue({
