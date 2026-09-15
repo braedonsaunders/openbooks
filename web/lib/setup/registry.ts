@@ -1407,6 +1407,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     key: 'item-inventory-profiles',
     table: 'item_inventory_profiles',
     rehomed: true, // lives as a Costing section on the item record
+    // One profile per item (item_inventory_profiles_item_id_unique), so the
+    // item is the import identity: re-imports dedupe instead of stacking a
+    // second profile no UI can display.
+    naturalKey: 'itemId',
     actorCols: true,
     groupKey: 'inventory',
     featureKey: 'inventory',
