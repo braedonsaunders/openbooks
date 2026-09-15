@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "gitSha": "fb75326b3",
-  "at": "2026-09-15T15:19:19.172Z",
+  "gitSha": "875f2176f",
+  "at": "2026-09-15T15:30:40.992Z",
   "mode": "unit",
   "targets": [
     {
       "target": "engine/src/money.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 3,
-      "survived": 4,
+      "killed": 9,
+      "survived": 14,
       "timedOut": 0,
       "skipped": 0,
-      "error": 1,
-      "total": 8,
-      "measured": 7,
-      "ratio": 0.42857142857142855,
+      "error": 2,
+      "total": 25,
+      "measured": 23,
+      "ratio": 0.391304347826087,
       "topSurvivors": [
         {
           "key": "engine/src/money.ts:74:boundary-shift:58:2",
@@ -40,6 +40,12 @@
           "line": 28,
           "operator": "arith-sign-flip",
           "description": "arith '-' -> '+'"
+        },
+        {
+          "key": "engine/src/money.ts:32:boundary-shift:59:2",
+          "line": 32,
+          "operator": "boundary-shift",
+          "description": "boundary '10' -> '9'"
         }
       ]
     },
@@ -47,14 +53,14 @@
       "target": "engine/src/posting.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 4,
-      "survived": 4,
+      "killed": 8,
+      "survived": 15,
       "timedOut": 0,
       "skipped": 0,
-      "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0.5,
+      "error": 2,
+      "total": 25,
+      "measured": 23,
+      "ratio": 0.34782608695652173,
       "topSurvivors": [
         {
           "key": "engine/src/posting.ts:740:guard-negation:9:1",
@@ -79,6 +85,12 @@
           "line": 252,
           "operator": "guard-negation",
           "description": "guard negated '(row.collected_account_id)'"
+        },
+        {
+          "key": "engine/src/posting.ts:1532:boundary-shift:61:1",
+          "line": 1532,
+          "operator": "boundary-shift",
+          "description": "boundary '1' -> '0'"
         }
       ]
     },
@@ -86,14 +98,14 @@
       "target": "engine/src/posting-effects.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 3,
-      "survived": 5,
+      "killed": 5,
+      "survived": 20,
       "timedOut": 0,
       "skipped": 0,
       "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0.375,
+      "total": 25,
+      "measured": 25,
+      "ratio": 0.2,
       "topSurvivors": [
         {
           "key": "engine/src/posting-effects.ts:209:guard-negation:7:1",
@@ -132,12 +144,12 @@
       "needsDb": false,
       "status": "measured",
       "killed": 0,
-      "survived": 7,
+      "survived": 23,
       "timedOut": 0,
       "skipped": 0,
-      "error": 1,
-      "total": 8,
-      "measured": 7,
+      "error": 2,
+      "total": 25,
+      "measured": 23,
       "ratio": 0,
       "topSurvivors": [
         {
@@ -176,14 +188,14 @@
       "target": "engine/src/payments.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 1,
-      "survived": 7,
+      "killed": 2,
+      "survived": 22,
       "timedOut": 0,
       "skipped": 0,
-      "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0.125,
+      "error": 1,
+      "total": 25,
+      "measured": 24,
+      "ratio": 0.08333333333333333,
       "topSurvivors": [
         {
           "key": "engine/src/payments.ts:276:boundary-shift:24:1",
@@ -221,14 +233,14 @@
       "target": "engine/src/payroll-run.ts",
       "needsDb": true,
       "status": "measured",
-      "killed": 0,
-      "survived": 8,
+      "killed": 4,
+      "survived": 21,
       "timedOut": 0,
       "skipped": 0,
       "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0,
+      "total": 25,
+      "measured": 25,
+      "ratio": 0.16,
       "topSurvivors": [
         {
           "key": "engine/src/payroll-run.ts:3185:comparison-flip:28:1",
@@ -266,14 +278,14 @@
       "target": "engine/src/payroll/canada/t4127.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 5,
-      "survived": 3,
+      "killed": 9,
+      "survived": 15,
       "timedOut": 0,
       "skipped": 0,
-      "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0.625,
+      "error": 1,
+      "total": 25,
+      "measured": 24,
+      "ratio": 0.375,
       "topSurvivors": [
         {
           "key": "engine/src/payroll/canada/t4127.ts:319:boundary-shift:48:2",
@@ -292,6 +304,18 @@
           "line": 384,
           "operator": "comparison-flip",
           "description": "comparison '>' -> '>='"
+        },
+        {
+          "key": "engine/src/payroll/canada/t4127.ts:362:arith-sign-flip:23:1",
+          "line": 362,
+          "operator": "arith-sign-flip",
+          "description": "arith '-' -> '+'"
+        },
+        {
+          "key": "engine/src/payroll/canada/t4127.ts:225:boundary-shift:32:1",
+          "line": 225,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '-1'"
         }
       ]
     },
@@ -327,14 +351,14 @@
       "target": "engine/src/payroll/us/pub15t.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 6,
-      "survived": 2,
+      "killed": 19,
+      "survived": 6,
       "timedOut": 0,
       "skipped": 0,
       "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0.75,
+      "total": 25,
+      "measured": 25,
+      "ratio": 0.76,
       "topSurvivors": [
         {
           "key": "engine/src/payroll/us/pub15t.ts:196:arith-sign-flip:7:1",
@@ -347,6 +371,24 @@
           "line": 128,
           "operator": "boundary-shift",
           "description": "boundary '1' -> '2'"
+        },
+        {
+          "key": "engine/src/payroll/us/pub15t.ts:145:boundary-shift:55:2",
+          "line": 145,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '1'"
+        },
+        {
+          "key": "engine/src/payroll/us/pub15t.ts:128:comparison-flip:33:1",
+          "line": 128,
+          "operator": "comparison-flip",
+          "description": "comparison '<' -> '<='"
+        },
+        {
+          "key": "engine/src/payroll/us/pub15t.ts:128:boundary-shift:44:1",
+          "line": 128,
+          "operator": "boundary-shift",
+          "description": "boundary '2000' -> '1999'"
         }
       ]
     },
@@ -354,14 +396,14 @@
       "target": "engine/src/payroll/us/withholding.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 1,
-      "survived": 6,
+      "killed": 2,
+      "survived": 22,
       "timedOut": 0,
       "skipped": 0,
       "error": 1,
-      "total": 8,
-      "measured": 7,
-      "ratio": 0.14285714285714285,
+      "total": 25,
+      "measured": 24,
+      "ratio": 0.08333333333333333,
       "topSurvivors": [
         {
           "key": "engine/src/payroll/us/withholding.ts:338:guard-negation:7:1",
@@ -413,14 +455,14 @@
       "target": "engine/src/tax.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 3,
-      "survived": 5,
+      "killed": 12,
+      "survived": 13,
       "timedOut": 0,
       "skipped": 0,
       "error": 0,
-      "total": 8,
-      "measured": 8,
-      "ratio": 0.375,
+      "total": 25,
+      "measured": 25,
+      "ratio": 0.48,
       "topSurvivors": [
         {
           "key": "engine/src/tax.ts:227:comparison-flip:20:1",
@@ -458,14 +500,14 @@
       "target": "engine/src/tax-return.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 1,
-      "survived": 6,
+      "killed": 10,
+      "survived": 13,
       "timedOut": 0,
       "skipped": 0,
-      "error": 1,
-      "total": 8,
-      "measured": 7,
-      "ratio": 0.14285714285714285,
+      "error": 2,
+      "total": 25,
+      "measured": 23,
+      "ratio": 0.43478260869565216,
       "topSurvivors": [
         {
           "key": "engine/src/tax-return.ts:506:guard-negation:11:1",
@@ -517,14 +559,14 @@
       "target": "engine/src/depreciation.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 0,
-      "survived": 7,
+      "killed": 4,
+      "survived": 19,
       "timedOut": 0,
       "skipped": 0,
-      "error": 1,
-      "total": 8,
-      "measured": 7,
-      "ratio": 0,
+      "error": 2,
+      "total": 25,
+      "measured": 23,
+      "ratio": 0.17391304347826086,
       "topSurvivors": [
         {
           "key": "engine/src/depreciation.ts:365:boundary-shift:90:1",
