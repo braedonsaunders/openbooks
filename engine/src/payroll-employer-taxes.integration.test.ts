@@ -4,6 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { cmp, neg, sum } from "./money.ts";
+import { calculateT4127 } from "./payroll/canada/t4127.ts";
+import { saveOpeningBalances } from "./payroll-opening-balances.ts";
 import { setPackSlotAccount } from "./payroll/packs.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
@@ -223,6 +225,35 @@ test(
       assert.equal(ehtLines.rows.length, 1);
       assert.equal(ehtLines.rows[0]!.amount, "27.3000");
 
+      // An ON stub carries no Québec line and keeps the federal labels and
+      // canonical display order: income tax, CPP/CPP2, EI, then employer
+      // shares, WCB, and EHT.
+      const onLines = (await db.execute<{ system_key: string | null; kind: string; description: string; sequence: number }>(sql`
+        select c.system_key, l.kind, l.description, l.sequence
+          from pay_stub_lines l
+          join pay_components c on c.id = l.component_id
+         where l.org_id = ${org.orgId} and l.stub_id = ${stub.id} and l.sequence >= 100
+         order by l.sequence`));
+      assert.deepEqual(
+        onLines.rows.map((row) => [row.sequence, row.system_key, row.kind]),
+        [
+          [110, "income_tax", "deduction"],
+          [120, "cpp", "deduction"],
+          [140, "ei", "deduction"],
+          [210, "cpp", "employer_contribution"],
+          [220, "ei", "employer_contribution"],
+          [260, "wcb", "employer_contribution"],
+          [260, "wcb", "employer_contribution"],
+          [270, "eht", "employer_contribution"],
+        ],
+      );
+      const onLine = (systemKey: string, kind: string) =>
+        onLines.rows.find((row) => row.system_key === systemKey && row.kind === kind);
+      assert.equal(onLine("cpp", "deduction")!.description, "CPP");
+      assert.equal(onLine("cpp", "employer_contribution")!.description, "CPP (employer)");
+      assert.ok(!onLines.rows.some((row) => row.system_key === "qc_income_tax"),
+        "no Québec income tax outside QC");
+
       // Commit: balanced projection, WCB/EHT credit their slot accounts.
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       const lines = (await db.execute<{ account_id: string; amount: string; project_id: string | null }>(sql`
@@ -341,6 +372,108 @@ test(
       assert.equal(cmp(byProject.get(harness.jobC) ?? "?", "6.66"), 0,
         "the negative penny folds into the last split");
       assert.equal(sum(wcbLines.rows.map((l) => l.amount)), "20.0000");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "employer levies: a zero-gross stub emits no WCB or EHT evidence",
+  { skip: !DB },
+  async () => {
+    // EHT is configured, but the employee worked nothing: zero earnings must
+    // skip both levies without emitting zero-valued factor keys.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      const ehtPayable = randomUUID();
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                              reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${ehtPayable}, ${org.orgId}, '2340', 'EHT payable', 'liability_current', false, true,
+                false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(settings, '{payroll,ca}',
+                                    '{"eht": {"enabled": true, "rate": "1.95", "annualExemption": "1000"}}')
+         where id = ${org.orgId}`);
+      await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: harness.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const stubs = (await db.execute<{ factors: Record<string, string> }>(sql`
+        select factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+      `));
+      assert.equal(stubs.rows.length, 1);
+      for (const key of ["WCB", "WCB_EARN", "EHT", "EHT_EARN"]) {
+        assert.ok(!(key in stubs.rows[0]!.factors), `no ${key} factor on zero earnings`);
+      }
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "an ON stub over the first CPP ceiling keeps the CPP2 line in canonical order",
+  { skip: !DB },
+  async () => {
+    // A $74,000 pensionable carry-in puts this $1,200 period over the 2026
+    // YMPE, so a CPP2 line posts at sequence 130 between CPP and EI with the
+    // T4127 amount.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      await saveOpeningBalances({
+        orgId: org.orgId, actorId, taxYear: 2026,
+        rows: [{ employeePartyId: harness.employeeId, amounts: { pensionableYtd: "74000" } }],
+      });
+      await harness.postHours("2026-07-06", "20", harness.jobA);
+      await harness.postHours("2026-07-08", "20", harness.jobA);
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: harness.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const stub = ((await db.execute<{ id: string }>(sql`
+        select id from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+      `))).rows[0]!;
+      const lines = (await db.execute<{ system_key: string | null; kind: string; description: string; amount: string; sequence: number }>(sql`
+        select c.system_key, l.kind, l.description, l.amount, l.sequence
+          from pay_stub_lines l
+          join pay_components c on c.id = l.component_id
+         where l.org_id = ${org.orgId} and l.stub_id = ${stub.id} and l.sequence >= 100
+         order by l.sequence`));
+      assert.deepEqual(
+        lines.rows.map((row) => [row.sequence, row.system_key, row.kind]),
+        [
+          [110, "income_tax", "deduction"],
+          [120, "cpp", "deduction"],
+          [130, "cpp2", "deduction"],
+          [140, "ei", "deduction"],
+          [210, "cpp", "employer_contribution"],
+          [220, "ei", "employer_contribution"],
+          [260, "wcb", "employer_contribution"],
+        ],
+      );
+      const expected = calculateT4127({
+        payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
+        income: "1200.00", federalClaimCode: 1, ytd: { pensionable: "74000.00" },
+      });
+      const cpp2 = lines.rows.find((row) => row.system_key === "cpp2");
+      assert.ok(cpp2 && cmp(cpp2.amount, "0") > 0, "second-tier CPP posts a positive line");
+      assert.equal(cpp2!.amount, expected.cpp2);
+      assert.equal(cpp2!.description, "CPP2");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

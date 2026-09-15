@@ -178,6 +178,28 @@ test(
       assert.equal(qpip!.amount, federal.qpip);
       assert.ok(line("qpip", "employer_contribution"), "employer QPIP accrues");
 
+      // Statutory lines post in canonical display order: federal income tax,
+      // Québec income tax, QPP, EI, QPIP, then the employer shares. (This
+      // stub earns under the first CPP ceiling, so no CPP2 line posts;
+      // the 130 slot is pinned by the second-tier ON test in
+      // payroll-employer-taxes.) Any shift in a sort key reorders the stub.
+      assert.deepEqual(
+        stubLines.rows
+          .filter((row) => row.sequence >= 100)
+          .map((row) => [row.sequence, row.system_key, row.kind]),
+        [
+          [110, "income_tax", "deduction"],
+          [115, "qc_income_tax", "deduction"],
+          [120, "cpp", "deduction"],
+          [140, "ei", "deduction"],
+          [150, "qpip", "deduction"],
+          [210, "cpp", "employer_contribution"],
+          [220, "ei", "employer_contribution"],
+          [230, "qpip", "employer_contribution"],
+        ],
+      );
+      assert.equal(line("cpp", "employer_contribution")!.description, "QPP (employer)");
+
       const deductions = sum([
         federal.totalTax, quebec.totalTax, federal.cpp, federal.cpp2, federal.ei, federal.qpip,
       ]);
