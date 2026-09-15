@@ -1538,6 +1538,35 @@ export const CLAIMABLE_FROM: Record<WebhookEvent["status"], string[]> = {
   refunded: ["succeeded", "initiated"],
 };
 
+/**
+ * Consume a parked refund-first marker for a succeeded event's intent: write
+ * the controller-facing clawback note and close the marker exactly once
+ * (conditional update = the once-only lock; concurrent consumers serialize
+ * and the loser sees no row). Runs ahead of settlement so the note survives
+ * a settlement failure; a retry then settles without re-noting.
+ */
+async function consumePendingClawback(
+  orgId: string,
+  provider: AcceptanceProvider,
+  intentRef: string,
+  attemptId: string,
+): Promise<boolean> {
+  const consumed = (await db.execute<{ id: string }>(sql`
+    update payment_pending_clawbacks
+       set consumed_at = now(), consumed_attempt_id = ${attemptId}
+     where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
+       and consumed_at is null
+     returning id
+  `));
+  if (!consumed.rows[0]) return false;
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'payment_attempts', ${attemptId}, 'update',
+            ${JSON.stringify({ after: { status: "refunded", note: "refund/chargeback reported by provider before its settlement event; reverse the receipt via payments if funds were clawed back" } })}::jsonb, null)
+  `);
+  return true;
+}
+
 async function processWebhookEvent(
   orgId: string,
   provider: AcceptanceProvider,
@@ -1587,7 +1616,30 @@ async function processWebhookEvent(
     `));
   }
   const found = attempt.rows[0];
-  if (!found) return "unknown_attempt";
+  if (!found) {
+    // Refund-first: a chargeback that beat its settlement event cannot resolve
+    // — the intent id is only persisted onto the attempt from the completed
+    // session — so park it as a pending-clawback marker instead of dropping it
+    // as unknown_attempt (which 200s and loses the return forever). The later
+    // succeeded event consumes the marker, settles, and writes the clawback
+    // note. Redeliveries upsert idempotently; normal-order refunds never land
+    // here because they resolve above. Events without an intent key have
+    // nothing to park under and stay unknown.
+    if (event.status === "refunded" && intentRef) {
+      await db.execute(sql`
+        insert into payment_pending_clawbacks
+          (org_id, provider, intent_ref, event_status, event_payload, last_seen_at)
+        values (${orgId}, ${provider}, ${intentRef}, 'refunded',
+                ${JSON.stringify({ externalRef: event.externalRef, raw: event.raw ?? null })}::jsonb, now())
+        on conflict (org_id, provider, intent_ref)
+        do update set event_status = excluded.event_status,
+          event_payload = excluded.event_payload,
+          last_seen_at = now(), consumed_at = null, consumed_attempt_id = null
+      `);
+      return "pending_clawback";
+    }
+    return "unknown_attempt";
+  }
 
   if (event.status === "succeeded") {
     const hasPaidAmount = event.paidAmount != null;
@@ -1686,9 +1738,21 @@ async function processWebhookEvent(
     if ((err as { code?: string }).code === "23505") return "duplicate";
     throw err;
   }
-  if (!claim.rows[0]) return "duplicate";
+  if (!claim.rows[0]) {
+    // Crash-after-settle with a parked refund: the receipt is already booked
+    // (journal set, so this delivery correctly dedupes) but the clawback note
+    // never fired. Consume the marker now so the controller still learns of
+    // the return.
+    if (event.status === "succeeded" && intentRef) {
+      await consumePendingClawback(orgId, provider, intentRef, found.id);
+    }
+    return "duplicate";
+  }
 
   if (event.status === "succeeded") {
+    // A refund that beat this settlement parked a marker on the intent: fire
+    // its clawback note ahead of settlement (survives a settlement failure).
+    if (intentRef) await consumePendingClawback(orgId, provider, intentRef, found.id);
     try {
       const outcome = await settleAttempt(orgId, found.id);
       return outcome === "gated" ? "awaiting_approval" : "settled";
@@ -1704,6 +1768,16 @@ async function processWebhookEvent(
     }
   }
   if (event.status === "refunded") {
+    // A marker parked by an earlier out-of-order delivery is superseded: this
+    // branch writes the note itself, so just close the marker silently.
+    if (intentRef) {
+      await db.execute(sql`
+        update payment_pending_clawbacks
+           set consumed_at = now(), consumed_attempt_id = ${found.id}
+         where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
+           and consumed_at is null
+      `);
+    }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_attempts', ${found.id}, 'update',
