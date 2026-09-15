@@ -387,6 +387,8 @@ async function writeMaster(
           setCols.push({ column: c.column, value: normalized })
           continue
         }
+        // Every other present cell (text, validated selects) binds as-is.
+        setCols.push({ column: c.column, value: raw })
       }
       if (err) {
         outcome.failed++

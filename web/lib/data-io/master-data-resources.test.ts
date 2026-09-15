@@ -11,6 +11,7 @@ interface MasterImportState {
   savepointRollbacks: number
   attemptedMutations: string[]
   committedMutations: { table: string; id: string }[]
+  masterInserts: string[]
   scopedAccountOwnershipChecks: string[]
   scopedAccountLabelLookups: string[]
   auditInsertCalls: number
@@ -29,6 +30,7 @@ const importState: MasterImportState = {
   savepointRollbacks: 0,
   attemptedMutations: [],
   committedMutations: [],
+  masterInserts: [],
   scopedAccountOwnershipChecks: [],
   scopedAccountLabelLookups: [],
   auditInsertCalls: 0,
@@ -105,6 +107,7 @@ const mockSources = new Map<string, string>([
         const id = ids[table]
         const mutation = { table, id }
         state.attemptedMutations.push(table)
+        state.masterInserts.push(text)
         if (pending) pending.push(mutation)
         else state.committedMutations.push(mutation)
         return { rows: [{ id }] }
@@ -285,6 +288,7 @@ function resetImportState(failAudit: boolean): void {
   importState.savepointRollbacks = 0
   importState.attemptedMutations.length = 0
   importState.committedMutations.length = 0
+  importState.masterInserts.length = 0
   importState.scopedAccountOwnershipChecks.length = 0
   importState.scopedAccountLabelLookups.length = 0
   importState.auditInsertCalls = 0
@@ -402,6 +406,16 @@ test('master-data numeric import still accepts canonical decimals', async () => 
   ], 'insert', writeContext)
 
   assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  // Core text/select columns must reach the insert alongside the normalized
+  // rate — a coercion refactor that drops the fallthrough push silently
+  // stores rows without their natural key, name, or kind.
+  assert.equal(importState.masterInserts.length, 1)
+  const insert = importState.masterInserts[0]!
+  assert.match(insert, /\bcode\b.*\bname\b.*\bkind\b.*default_rate\b/i)
+  assert.match(insert, /SKU-OK/)
+  assert.match(insert, /Canonical probe/)
+  assert.match(insert, /service/)
+  assert.match(insert, /12\.3456/)
 })
 
 test('master-data updates validate omitted required custom fields from the stored row', async () => {
