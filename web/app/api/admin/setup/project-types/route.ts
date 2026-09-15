@@ -16,6 +16,12 @@ import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const runtime = 'nodejs'
 
+/** Sort order rides into an integer column: refuse what Number() would turn
+ * into NaN or a fractional/out-of-range value before any read or write. */
+function invalidSortOrder(value: unknown): boolean {
+  return typeof value !== 'number' || !Number.isInteger(value) || value < -2147483648 || value > 2147483647
+}
+
 function validateInvoicingProfile(profile: any, billingMethod: unknown): string | null {
   const validBases = new Set(['date_range', 'draw_amount', 'time_selection', 'milestone', 'field_ticket'])
   const procedure = profile?.billingProcedure
@@ -59,6 +65,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing profile' }, { status: 422 })
   const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
   if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
+  if (b.sortOrder !== undefined && b.sortOrder !== null && invalidSortOrder(b.sortOrder))
+    return NextResponse.json({ error: 'sortOrder must be an integer' }, { status: 400 })
   if (
     b.invoicingProfile.allowedBases.includes('field_ticket')
     && !(await isFeatureEnabled(orgId, 'fieldTickets'))
@@ -135,11 +143,15 @@ export async function PATCH(req: Request) {
   const fieldTicketsEnabled = b.invoicingProfile
     ? await isFeatureEnabled(orgId, 'fieldTickets')
     : false
+  if (hasOwn('isActive') && typeof b.isActive !== 'boolean')
+    return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 })
+  if (hasOwn('sortOrder') && invalidSortOrder(b.sortOrder))
+    return NextResponse.json({ error: 'sortOrder must be an integer' }, { status: 400 })
   const sets: SQL[] = []
   if (hasOwn('name')) sets.push(sql`name = ${String(b.name).trim()}`)
   if (hasOwn('description')) sets.push(sql`description = ${b.description ?? null}`)
-  if (hasOwn('isActive')) sets.push(sql`is_active = ${b.isActive !== false}`)
-  if (hasOwn('sortOrder')) sets.push(sql`sort_order = ${Number(b.sortOrder)}`)
+  if (hasOwn('isActive')) sets.push(sql`is_active = ${b.isActive}`)
+  if (hasOwn('sortOrder')) sets.push(sql`sort_order = ${b.sortOrder}`)
   sets.push(sql`billing_method = ${b.billingMethod}`, sql`updated_at = now()`, sql`updated_by = ${gate.user.id}`)
   if (b.invoicingProfile) sets.push(sql`invoicing_profile = ${JSON.stringify(b.invoicingProfile)}::jsonb`)
   if (b.backupProfile) sets.push(sql`backup_profile = ${JSON.stringify(b.backupProfile)}::jsonb`)
