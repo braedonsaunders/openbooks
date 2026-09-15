@@ -20,10 +20,20 @@ export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
+/** Whole-digit width of a canonical decimal. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 function moneyOrNull(v: unknown): string | null | 'invalid' {
   if (v === null || v === undefined || v === '') return null
   const exact = canonicalDecimal(v, 4)
   if (exact === null) return 'invalid'
+  // Every charge-line figure lands in a numeric(19,4) column — rates and
+  // amounts directly, and the quantity again through base_quantity, the
+  // derived amounts, and the rate components — so magnitudes wider than 15
+  // whole digits would die in Postgres as a raw overflow (HTTP 500).
+  if (wholeDigits(exact) > 15) return 'invalid'
   try {
     return normalizeMoney(exact)
   } catch {
@@ -34,6 +44,7 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
 function quantityOrInvalid(v: unknown): string | 'invalid' {
   const exact = canonicalDecimal(v, 8)
   if (exact === null || compareDecimal(exact, '0') <= 0) return 'invalid'
+  if (wholeDigits(exact) > 15) return 'invalid'
   return exact
 }
 
