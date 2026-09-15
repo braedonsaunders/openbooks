@@ -97,7 +97,7 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
         label: "Account field mappings",
         kind: "textarea",
         placeholder: "{}",
-        help: "Optional JSON mapping account-specific custom field and record IDs to OpenBooks concepts.",
+        help: "Optional JSON mapping account-specific custom field and record IDs to OpenBooks concepts (including sales/purchase tax code fallbacks). See the extraction-bridge documentation for the supported keys.",
       },
     ],
     secretFields: [
