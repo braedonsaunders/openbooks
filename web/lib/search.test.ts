@@ -182,6 +182,7 @@ const mockSources = new Map<string, string>([
       export async function withBypassContext(fn) {
         return fn()
       }
+      export function ambientTenantOrgId() { return null }
     `,
   ],
   [
@@ -235,6 +236,12 @@ const hooks = registerHooks({
       ['./documents', 'mock:documents'],
       ['./features', 'mock:features'],
     ]).get(specifier)
+    // The './documents' mock stands in for web/lib/documents.ts only: schema
+    // table modules (schema/src/*.ts) import the same literal specifier for
+    // the real documents table, and hijacking those breaks their bindings.
+    if (mockUrl === 'mock:documents' && context.parentURL.includes('/schema/src/')) {
+      return nextResolve(specifier, context)
+    }
     if (mockUrl) return { url: mockUrl, shortCircuit: true }
     return nextResolve(specifier, context)
   },
