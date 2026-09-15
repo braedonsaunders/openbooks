@@ -62,3 +62,34 @@ test('updateSov refuses a change-order-controlled schedule line', { skip: !proce
     assert.equal(allowed.status, 200)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
+
+test('approving a targeted change order controls the repriced schedule line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const preparer = await createScratchUser(org.orgId, 'Change-order preparer', 'reviewer')
+    const approver = await createScratchUser(org.orgId, 'Change-order approver', 'reviewer')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    const user = (id: string, name: string, email: string) => ({
+      id, orgId: org.orgId, name, email, roles: [], isSuperAdmin: false,
+      envKind: 'production' as const, productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: id,
+    })
+    session.user = user(preparer, 'Change-order preparer', 'preparer@scratch.test')
+
+    const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
+    const typeId = randomUUID(), project = randomUUID(), target = randomUUID(), co = randomUUID()
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values (${typeId},${org.orgId},'targeted_change_order','Targeted change order','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
+    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'targeted change order fixture')`)
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,contract_value)
+      values (${project},${org.orgId},${org.subsidiaryId},'TCO','Targeted change order job',${org.customerId},${typeId},'active',true,'1000')`)
+    await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order)
+      values (${target},${org.orgId},${project},'Base scope','1000',1)`)
+    await db.execute(sql`insert into change_orders(id,org_id,project_id,number,description,amount,target_sov_line_id,status,created_by,updated_by)
+      values (${co},${org.orgId},${project},'CO-1','Revised scope','500',${target},'draft',${preparer},${preparer})`)
+
+    session.user = user(approver, 'Change-order approver', 'approver@scratch.test')
+    const approved = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: co, approvedOn: org.date })
+    assert.equal(approved.status, 200)
+  } finally { session.user = null; await dropScratchOrg(org.orgId) }
+})

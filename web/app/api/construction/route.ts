@@ -388,14 +388,14 @@ export async function POST(req: Request) {
             sovLineId = sov.rows[0]!.id;
             await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${orgId}, 'sov_lines', ${sovLineId}, 'insert',
-                      jsonb_build_object('source', 'approved_change_order', 'changeOrderId', ${body.id},
-                        'after', jsonb_build_object('projectId', ${row.project_id}, 'scheduledValue', ${String(row.amount)})),
+                      jsonb_build_object('source', 'approved_change_order', 'changeOrderId', ${body.id}::text,
+                        'after', jsonb_build_object('projectId', ${row.project_id}::text, 'scheduledValue', ${String(row.amount)}::text)),
                       ${userId})`);
           }
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'change_orders', ${body.id}, 'approve',
                     jsonb_build_object('before', jsonb_build_object('status', 'draft'), 'after',
-                      jsonb_build_object('status', 'approved', 'approvedOn', ${approvedOn}, 'sovLineId', ${sovLineId})),
+                      jsonb_build_object('status', 'approved', 'approvedOn', ${approvedOn}::text, 'sovLineId', ${sovLineId}::text)),
                     ${userId})`);
         });
         return NextResponse.json({ ok: true });
