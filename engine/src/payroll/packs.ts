@@ -8,7 +8,7 @@ import { CA_OPENING_YTD_FIELDS } from "./canada/opening-ytd.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./canada/rates.ts";
 import { usPackFilings } from "./us/filings.ts";
 import { US_OPENING_YTD_FIELDS } from "./us/opening-ytd.ts";
-import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
+import { US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
 import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
 import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
 import { RQ_REMITTANCE_SCHEDULE } from "./canada/quebec/remittance.ts";

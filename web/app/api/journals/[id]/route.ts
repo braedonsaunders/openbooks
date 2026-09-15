@@ -7,7 +7,6 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import {
-  assertDocumentEditRevision,
   DocumentEditError,
   documentRevisionSql,
   requireDocumentEditRevision,
