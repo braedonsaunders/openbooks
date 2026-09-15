@@ -37,6 +37,7 @@ async function fixture() {
   return { ...org, actorId }
 }
 
+const { DELETE } = await import('./[id]/route')
 const post = (body: Record<string, unknown>) =>
   POST(new Request('https://openbooks.test/api/banking/bank-feeds', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -45,6 +46,10 @@ const patch = (id: string, body: Record<string, unknown>) =>
   PATCH(new Request(`https://openbooks.test/api/banking/bank-feeds/${id}`, {
     method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }), { params: Promise.resolve({ id }) })
+const remove = (id: string) =>
+  DELETE(new Request(`https://openbooks.test/api/banking/bank-feeds/${id}`, { method: 'DELETE' }), {
+    params: Promise.resolve({ id }),
+  })
 
 async function feedRow(orgId: string, id: string) {
   return (await db.execute<{ name: string; sync_cadence: string }>(sql`
@@ -84,6 +89,18 @@ test('bank-feed POST rejects a syncCadence outside the stored check constraint',
       syncCadence: 'weekly',
       credentials: { accessToken: 'test-token' },
     })
+    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
+  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
+})
+
+test('bank-feed routes reject malformed ids as client errors', { skip: !enabled }, async () => {
+  const org = await fixture()
+  try {
+    for (const id of ['not-a-uuid', 'new']) {
+      assert.equal((await patch(id, { name: 'Renamed' })).status, 404, `PATCH ${id}`);
+      assert.equal((await remove(id)).status, 404, `DELETE ${id}`);
+    }
+    const refused = await post({ name: 'Bad account feed', provider: 'manual', accountId: 'not-a-uuid' })
     assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
