@@ -924,3 +924,247 @@ test("NetSuite application links are ingested exactly once and conflicts fail cl
     /conflicting application link bill:0:payment:1/,
   );
 });
+
+test("NetSuite hand-adjusted tax without a configured fallback fails closed", () => {
+  // No line carries a tax code and NetSuite posted real tax: the builder must
+  // refuse to invent a code, naming the source transaction and line.
+  const built = buildNativeFromNetSuite(
+    context,
+    { ...header, ttype: "CustInvc", tranid: "INV-9001" },
+    [
+      {
+        transaction: "9001",
+        id: "1",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "9001",
+        id: "2",
+        mainline: "F",
+        taxline: "T",
+        account: "10",
+        netamount: "-13",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.deepEqual(built, {
+    skip: "no configured sales tax code fallback for source transaction INV-9001 line 1",
+  });
+});
+
+test("NetSuite configured sales fallback resolves by source tax-code id", () => {
+  const taxContext = {
+    ...context,
+    taxCodeByRef: new Map([["2529", "source-hst-code"]]),
+  } as unknown as NativeContext;
+  const built = buildNativeFromNetSuite(
+    taxContext,
+    { ...header, ttype: "CustInvc", tranid: "INV-9001" },
+    [
+      {
+        transaction: "9001",
+        id: "1",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "9001",
+        id: "2",
+        mainline: "F",
+        taxline: "T",
+        account: "10",
+        netamount: "-13",
+        subsidiary: "1",
+      },
+    ],
+    { taxCodeFallbacks: { sales: "2529" } },
+  );
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.lines[0]?.taxCodeId, "source-hst-code");
+  assert.equal(built.doc.lines[0]?.taxAmount, "13.0000");
+  assert.equal(built.doc.lines[0]?.taxOverridden, true);
+  assert.equal(built.taxComputedMatch, false);
+});
+
+test("NetSuite configured fallback resolves by rate when no source id matches", () => {
+  const taxContext = {
+    ...context,
+    taxByRate: new Map([["7", { id: "rate-seven-code", rate: "7" }]]),
+  } as unknown as NativeContext;
+  const built = buildNativeFromNetSuite(
+    taxContext,
+    { ...header, ttype: "CustInvc", tranid: "INV-9001" },
+    [
+      {
+        transaction: "9001",
+        id: "1",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "9001",
+        id: "2",
+        mainline: "F",
+        taxline: "T",
+        account: "10",
+        netamount: "-13",
+        subsidiary: "1",
+      },
+    ],
+    { taxCodeFallbacks: { sales: "7" } },
+  );
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.lines[0]?.taxCodeId, "rate-seven-code");
+});
+
+test("NetSuite purchase lines use the purchase fallback, not the sales one", () => {
+  const taxContext = {
+    ...context,
+    taxCodeByRef: new Map([["77", "purchase-code"]]),
+  } as unknown as NativeContext;
+  const lines: NsLine[] = [
+    {
+      transaction: "9002",
+      id: "1",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "100",
+      subsidiary: "1",
+    },
+    {
+      transaction: "9002",
+      id: "2",
+      mainline: "F",
+      taxline: "T",
+      account: "10",
+      netamount: "5",
+      subsidiary: "1",
+    },
+  ];
+  assert.deepEqual(
+    buildNativeFromNetSuite(
+      taxContext,
+      { ...header, ttype: "VendBill", tranid: "BILL-9002" },
+      lines,
+      { taxCodeFallbacks: { sales: "77" } },
+    ),
+    {
+      skip: "no configured purchase tax code fallback for source transaction BILL-9002 line 1",
+    },
+  );
+  const built = buildNativeFromNetSuite(
+    taxContext,
+    { ...header, ttype: "VendBill", tranid: "BILL-9002" },
+    lines,
+    { taxCodeFallbacks: { purchase: "77" } },
+  );
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.lines[0]?.taxCodeId, "purchase-code");
+});
+
+test("NetSuite configured fallback naming no tax code fails closed", () => {
+  const built = buildNativeFromNetSuite(
+    context,
+    { ...header, ttype: "CustInvc", tranid: "INV-9001" },
+    [
+      {
+        transaction: "9001",
+        id: "1",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "-100",
+        subsidiary: "1",
+      },
+      {
+        transaction: "9001",
+        id: "2",
+        mainline: "F",
+        taxline: "T",
+        account: "10",
+        netamount: "-13",
+        subsidiary: "1",
+      },
+    ],
+    { taxCodeFallbacks: { sales: "9999" } },
+  );
+  assert.deepEqual(built, {
+    skip: 'configured sales tax code fallback "9999" matches no tax code for source transaction INV-9001 line 1',
+  });
+});
+
+test("NetSuite penny-degenerate tax without a configured fallback fails closed", () => {
+  const built = buildNativeFromNetSuite(
+    context,
+    { ...header, ttype: "CustInvc", tranid: "INV-9003" },
+    [
+      {
+        transaction: "9003",
+        id: "1",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        netamount: "-10",
+        subsidiary: "1",
+      },
+      {
+        transaction: "9003",
+        id: "2",
+        mainline: "F",
+        taxline: "T",
+        account: "10",
+        netamount: "-0.01",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.deepEqual(built, {
+    skip: "no configured sales tax code fallback for source transaction INV-9003 line 1",
+  });
+});
+
+test("NetSuite account mappings accept sales/purchase tax code fallbacks", () => {
+  assert.deepEqual(
+    parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":"13","purchase":"5"}}')
+      .taxCodeFallbacks,
+    { sales: "13", purchase: "5" },
+  );
+  assert.deepEqual(
+    parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":" 2529 "}}')
+      .taxCodeFallbacks,
+    { sales: "2529" },
+  );
+  assert.equal(parseNetSuiteMappings("{}").taxCodeFallbacks, undefined);
+  assert.throws(
+    () => parseNetSuiteMappings('{"taxCodeFallbacks":{"emea":"13"}}'),
+    /sales and\/or purchase/,
+  );
+  assert.throws(
+    () => parseNetSuiteMappings('{"taxCodeFallbacks":{}}'),
+    /sales and\/or purchase/,
+  );
+  assert.throws(
+    () => parseNetSuiteMappings('{"taxCodeFallbacks":"13"}'),
+    /must be an object/,
+  );
+  assert.throws(
+    () => parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":""}}'),
+    /must be a source tax-code id or rate/,
+  );
+  assert.throws(
+    () => parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":13}}'),
+    /must be a source tax-code id or rate/,
+  );
+});
