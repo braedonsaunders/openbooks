@@ -42,12 +42,51 @@ function withoutPartyRoleSecrets(
   return safe
 }
 
-export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<PartyPayload | null> {
+export interface LoadPartyOptions {
+  /**
+   * CRM account drawers render party identity plus relationship facts only.
+   * The `crm` bundle drops the role rows (customer credit controls, vendor
+   * compliance/TIN evidence, employee HR facts), sealed bank details, and
+   * transaction totals — a crm.accounts.read holder has no consumer for them
+   * and they stay behind the parties/compliance/payroll-gated surfaces.
+   * Defaults to the full directory bundle.
+   */
+  bundle?: 'directory' | 'crm'
+}
+
+export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, opts?: LoadPartyOptions): Promise<PartyPayload | null> {
+  const crmOnly = opts?.bundle === 'crm'
   const party = (await db.execute<Record<string, unknown>>(sql`
     select *, ${documentRevisionSql(sql`updated_at`)} as updated_at from parties where id = ${id} and org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
   `))
   if (!party.rows[0]) return null
+  if (crmOnly) {
+    const [addresses, contacts] = await Promise.all([
+      db.execute<Record<string, unknown>>(sql`
+        select id, label, line1, line2, city, region, postal_code, country,
+               is_default_billing, is_default_shipping
+          from addresses where party_id = ${id} and org_id = ${orgId} order by created_at
+      `),
+      db.execute<Record<string, unknown>>(sql`
+        select id, first_name, last_name, name, title, role, email, phone,
+               mobile_phone, fax, is_primary, is_active
+          from contacts where party_id = ${id} and org_id = ${orgId}
+         order by is_primary desc, name
+      `),
+    ])
+    return {
+      party: withoutPartyRoleSecrets(party.rows[0], ['tax_ids']),
+      customer: null,
+      vendor: null,
+      employee: null,
+      addresses: addresses.rows,
+      contacts: contacts.rows,
+      bankAccounts: [],
+      transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
+      additionalSubsidiaryIds: [],
+    }
+  }
 
   const [customer, vendor, employee, addresses, contacts, bankAccounts, partySubs, txnSummary, currencySummary] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`

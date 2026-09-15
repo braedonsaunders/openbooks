@@ -58,7 +58,7 @@ export async function loadProspects(
   let drawer: AccountDrawerProps | null = null
   if (openId && isUuid(openId)) {
     const [party, account, statuses, owners, territories, sources] = await Promise.all([
-      loadParty(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
+      loadParty(openId, authz.user.orgId, authz.allowedSubsidiaryIds, { bundle: 'crm' }),
       loadCrmAccount(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
       db.execute(sql`select id,name,lifecycle_stage from crm_account_statuses where org_id=${authz.user.orgId} and is_active order by lifecycle_stage,sequence`) as any,
       db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`) as any,
