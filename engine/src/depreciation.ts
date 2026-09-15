@@ -583,7 +583,11 @@ export async function buildScheduleWithRunner(
 
     const skippedMonths: string[] = [];
     const future: { periodId: string | null; plan: ScheduleLinePlan }[] = [];
-    const mappedPeriods = new Set<string>();
+    // Formula storage has one line per period. Several native months can fall
+    // inside one broader fiscal period — two calendar-month starts always sit
+    // inside a retail 5-week period — and the period then bears the SUM of its
+    // months, never a last-month-wins overwrite and never a dropped month.
+    const mappedPeriods = new Map<string, number>();
     for (const p of plan) {
       const period = periods.find(period => period.starts_on <= p.periodMonth && period.ends_on >= p.periodMonth);
       if (!period) {
@@ -594,19 +598,25 @@ export async function buildScheduleWithRunner(
         }
         skippedMonths.push(p.periodMonth);
       }
-      if (period) {
-        // Formula storage has one line per period. A broader fiscal period
-        // must not turn repeated updates into a last-month-wins allocation.
-        if (mappedPeriods.has(period.id)) throw new Error("multiple native depreciation months map to one accounting period");
-        mappedPeriods.add(period.id);
-      }
       const prior = period ? byPeriod.get(period.id) : undefined;
       if (period && remeasurement.cutoff && period.ends_on < remeasurement.cutoff && !prior) {
         throw new Error(`historical depreciation projection missing (${p.periodMonth}); reconcile retained evidence before rebuilding`);
       }
       if (period && preservedPeriods.has(period.id)) continue;
       if (prior && prior.source !== "formula") throw new Error("formula rebuild cannot reinterpret depreciation input evidence");
+      if (period) {
+        // Same period, same prior row, same preserved outcome as the month
+        // already mapped here — the checks above necessarily agreed with it —
+        // so accumulate straight into that future entry.
+        const merged = mappedPeriods.get(period.id);
+        if (merged !== undefined) {
+          const target = future[merged]!;
+          target.plan = { ...target.plan, planned: add(target.plan.planned, p.planned) };
+          continue;
+        }
+      }
       future.push({ periodId: period?.id ?? null, plan: p });
+      if (period) mappedPeriods.set(period.id, future.length - 1);
     }
 
     // Allocate across the entire native remaining horizon BEFORE mapping to
