@@ -14,7 +14,9 @@ import {
   PaymentWebhookBatchError,
   publicPaymentPage,
   resolveSurcharge,
+  toMinorUnits,
 } from "./payment-acceptance.ts";
+import { add } from "./money.ts";
 import { postDocument } from "./posting.ts";
 import {
   createPaymentDocument,
@@ -1160,11 +1162,11 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     // Each rail resolves its own dimension: the card rule prices Stripe and
     // the bank-debit rule prices GoCardless.
     assert.deepEqual(
-      await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate }),
+      await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", currency: "CAD", onDate }),
       { amount: "3.0000", ruleId: cardRuleId, feeIncomeAccountId: org.accounts.revenue },
     );
     assert.deepEqual(
-      await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", onDate }),
+      await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", currency: "CAD", onDate }),
       { amount: "2.0000", ruleId: bankRuleId, feeIncomeAccountId: org.accounts.revenue },
     );
 
@@ -1183,14 +1185,14 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     // Card-only landscape: the bank debit gets no fee — never the card fee.
     await db.execute(sql`update payment_surcharge_rules set is_active = false where id = ${bankRuleId}`);
     assert.deepEqual(
-      await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", onDate }),
+      await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", currency: "CAD", onDate }),
       { amount: "0", ruleId: null, feeIncomeAccountId: null },
     );
     // And the mirror case: a bank-debit-only landscape never prices the card.
     await db.execute(sql`update payment_surcharge_rules set is_active = false where id = ${cardRuleId}`);
     await db.execute(sql`update payment_surcharge_rules set is_active = true where id = ${bankRuleId}`);
     assert.deepEqual(
-      await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate }),
+      await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", currency: "CAD", onDate }),
       { amount: "0", ruleId: null, feeIncomeAccountId: null },
     );
     await db.execute(sql`update payment_surcharge_rules set is_active = true where id = ${cardRuleId}`);
@@ -1207,11 +1209,11 @@ test("surcharge resolution honors the payment method across card and bank-debit 
         (${gcOnlyDebitRuleId}, ${org.orgId}, 'GC debit fee', 'fixed', null, '1.5000', ${org.accounts.revenue}, 'gocardless', 'bank_debit', '2020-06-01', ${userId}, ${userId})
     `);
     assert.equal(
-      (await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate })).ruleId,
+      (await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", currency: "CAD", onDate })).ruleId,
       stripeOnlyCardRuleId,
     );
     assert.equal(
-      (await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", onDate })).amount,
+      (await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", currency: "CAD", onDate })).amount,
       "1.5000",
     );
 
@@ -1222,6 +1224,7 @@ test("surcharge resolution honors the payment method across card and bank-debit 
       (await resolveSurcharge(org.orgId, {
         provider: "gocardless",
         amount: "100.0000",
+        currency: "CAD",
         onDate,
         configuredRuleId: cardRuleId,
       })).amount,
@@ -1231,6 +1234,7 @@ test("surcharge resolution honors the payment method across card and bank-debit 
       await resolveSurcharge(org.orgId, {
         provider: "stripe",
         amount: "100.0000",
+        currency: "CAD",
         onDate,
         configuredRuleId: cardRuleId,
       }),
@@ -1279,8 +1283,8 @@ test("surcharge resolution honors the payment method across card and bank-debit 
       },
       "a same-window rival is refused by the storage guard",
     );
-    const tieFirst = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate });
-    const tieSecond = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate });
+    const tieFirst = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", currency: "CAD", onDate });
+    const tieSecond = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", currency: "CAD", onDate });
     assert.equal(tieFirst.ruleId, tieA, "resolution deterministically keeps the sole surviving rule");
     assert.equal(tieSecond.ruleId, tieFirst.ruleId);
 
@@ -1296,7 +1300,7 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     `);
     await db.execute(sql`update payment_surcharge_rules set percent = '10' where org_id = ${org.orgId} and calculation = 'percent'`);
     assert.equal(
-      (await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate })).amount,
+      (await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", currency: "CAD", onDate })).amount,
       "10.0000",
       "live resolution genuinely follows the churned landscape",
     );
@@ -1375,6 +1379,40 @@ test("invalid acceptance references fail before checkout and at storage", { skip
     `);
     assert.equal(providerCalls, 0);
     assert.deepEqual(after.rows[0], before.rows[0]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("surcharge quotes are provider-collectible minor units, never sub-cent dust", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Fee Dust Tester", "admin");
+    await db.execute(sql`
+      insert into payment_surcharge_rules
+        (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+      values (${randomUUID()}, ${org.orgId}, 'Card fee', 'percent', '3', null, ${org.accounts.revenue}, null, 'card', '2020-01-01', ${userId}, ${userId})
+    `);
+    const today = new Date().toISOString().slice(0, 10);
+    // 3% of $11.11 is $0.3333 exactly — no provider can collect a third of a
+    // cent, so the quote must arrive minor-exact or every checkout for this
+    // amount fails at the adapter boundary.
+    const quote = await resolveSurcharge(org.orgId, {
+      provider: "stripe",
+      amount: "11.1100",
+      currency: "CAD",
+      onDate: today,
+    });
+    assert.equal(quote.amount, "0.3300");
+    assert.equal(toMinorUnits(add("11.1100", quote.amount), "CAD"), "1144");
+    // Zero-decimal currencies quantize to whole units: 3% of ¥1111 is ¥33.
+    const yen = await resolveSurcharge(org.orgId, {
+      provider: "stripe",
+      amount: "1111.0000",
+      currency: "JPY",
+      onDate: today,
+    });
+    assert.equal(yen.amount, "33.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
