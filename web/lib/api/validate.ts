@@ -1,6 +1,7 @@
 import "server-only";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { canonicalDecimal } from "../exact-decimal";
+import { isUuid } from "../list-params";
 import type { ApiField } from "./schema-registry";
 
 /**
@@ -28,6 +29,14 @@ export function coerceScalar(
   raw: unknown,
 ): { ok: true; value: unknown } | { ok: false; message: string } {
   if (raw === null || raw === undefined || raw === "") return { ok: true, value: null };
+  // Reference columns ride the same uncast path into storage as every other
+  // string: a malformed id dies as 22P02 inside a generic "could not ..."
+  // 422 leaking SQL text. Shape-check here so every writer fails closed with
+  // a typed field error; tenant ownership is fenced by the caller.
+  if (type === "string (uuid)") {
+    if (typeof raw !== "string" || !isUuid(raw)) return { ok: false, message: "must be a valid id" };
+    return { ok: true, value: raw };
+  }
   const base = type.split(" (")[0]; // "string (uuid)" → "string"
   switch (base) {
     case "number": {

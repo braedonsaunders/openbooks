@@ -395,6 +395,93 @@ async function refuseDisabledItemTimeTracking(
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
+/**
+ * Native reference columns per entity table → owning table. `coerceScalar`
+ * proves uuid SHAPE, but composite tenant-coherent FKs refuse a foreign id
+ * only as an unhandled storage error (generic 422 leaking SQL text), and
+ * single-column FKs (items.recognition_rule_id, projects.project_type_id)
+ * are tenant-incoherent: a foreign id passes the constraint and persists as
+ * a silent cross-tenant link. Ownership is therefore fenced here, batched
+ * per table like the document line-ref precheck. Keys mirror the live FK
+ * graph; columns absent from a table's map are not reference columns.
+ */
+const ENTITY_REFERENCE_TABLES: Record<string, Record<string, string>> = {
+  items: {
+    income_account_id: "accounts",
+    expense_account_id: "accounts",
+    deferred_account_id: "accounts",
+    cost_recovery_account_id: "accounts",
+    tax_code_id: "tax_codes",
+    recognition_rule_id: "recognition_rules",
+  },
+  projects: {
+    parent_id: "projects",
+    customer_id: "parties",
+    foreman_id: "parties",
+    manager_id: "parties",
+    project_type_id: "project_types",
+    subsidiary_id: "subsidiaries",
+  },
+  parties: {
+    subsidiary_id: "subsidiaries",
+  },
+  fixed_assets: {
+    asset_account_id: "accounts",
+    accumulated_depreciation_account_id: "accounts",
+    depreciation_expense_account_id: "accounts",
+    category_id: "asset_categories",
+    custodian_party_id: "parties",
+    department_id: "departments",
+    depreciation_method_id: "depreciation_methods",
+    location_id: "locations",
+    project_id: "projects",
+    source_document_line_id: "document_lines",
+    subsidiary_id: "subsidiaries",
+  },
+};
+
+/** Columns in `columns` whose value is not owned by `orgId` (tenant-opaque callers map to 404). */
+async function findUnownedEntityReferences(
+  orgId: string,
+  table: string,
+  columns: Record<string, unknown>,
+): Promise<string[]> {
+  const refs = ENTITY_REFERENCE_TABLES[table];
+  if (!refs) return [];
+  const wanted = new Map<string, { column: string; value: string }[]>();
+  for (const [column, refTable] of Object.entries(refs)) {
+    const raw = columns[column];
+    // Null/undefined clears the column (or was already refused as a required
+    // clear); only present values need an owner. Shape is proven upstream by
+    // coerceScalar's uuid branch.
+    if (typeof raw !== "string" || raw.length === 0) continue;
+    const list = wanted.get(refTable) ?? [];
+    list.push({ column, value: raw });
+    wanted.set(refTable, list);
+  }
+  const unowned: string[] = [];
+  for (const [refTable, entries] of wanted) {
+    const ids = [...new Set(entries.map((e) => e.value))];
+    const owned = new Set(
+      (
+        await db.execute<{ id: string }>(sql`
+          select id from ${sql.raw(`"${refTable}"`)}
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)
+      ).rows.map((r) => r.id),
+    );
+    for (const entry of entries) {
+      if (!owned.has(entry.value)) unowned.push(entry.column);
+    }
+  }
+  return unowned;
+}
+
+function unownedEntityReferenceResult(column: string): WriteResult {
+  return err(404, `${column} not found in this organization`, {
+    fieldErrors: [{ field: column, message: "not found in this organization" }],
+  });
+}
+
 const ENTITY_SUBSIDIARY_TABLES = new Set([
   "parties",
   "projects",
@@ -564,6 +651,9 @@ async function createEntity(
       fieldErrors: { [def.key]: "not found in this organization" },
     });
   }
+  // Native reference columns: shape is proven by coerceScalar, ownership here.
+  const unownedCreateColumns = await findUnownedEntityReferences(user.orgId, table, v.columns);
+  if (unownedCreateColumns.length > 0) return unownedEntityReferenceResult(unownedCreateColumns[0]!);
   const subsidiaryGate = await guardEntitySubsidiaryMutation(
     user,
     table,
@@ -657,6 +747,11 @@ async function updateEntity(
   ) {
     return err(403, "forbidden subsidiary");
   }
+  // Native reference columns on the partial patch: shape is proven by
+  // coerceScalar, ownership here. v.columns carries supplied keys only, so
+  // omitted references are never re-checked.
+  const unownedUpdateColumns = await findUnownedEntityReferences(user.orgId, table, v.columns);
+  if (unownedUpdateColumns.length > 0) return unownedEntityReferenceResult(unownedUpdateColumns[0]!);
 
   const sets: ReturnType<typeof sql>[] = [];
   for (const [col, value] of Object.entries(v.columns)) {
