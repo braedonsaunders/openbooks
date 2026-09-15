@@ -6,7 +6,7 @@ const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { page, frame, widgetBlock } = await import('@braedonsaunders/appkit-viewspec')
-const { savePageSpec, restorePageSpec } = await import('./page-specs.ts')
+const { savePageSpec, restorePageSpec, listPageSpecHistory } = await import('./page-specs.ts')
 
 /**
  * Layout-restore scope: a restore must supersede only the layer it publishes
@@ -37,6 +37,35 @@ async function activeRows(orgId: string, route: string) {
     )
   ).rows
 }
+
+test('layout history shows org versions plus the reader\'s own — never a colleague\'s', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId } = await withBypass(() => createScratchOrg())
+  const adminId = await withBypass(() => createScratchUser(orgId, 'Layout admin', 'admin'))
+  const userA = await withBypass(() => createScratchUser(orgId, 'Layout user A', 'admin'))
+  const userB = await withBypass(() => createScratchUser(orgId, 'Layout user B', 'admin'))
+  try {
+    const org = await withBypass(() =>
+      savePageSpec({ orgId, actorId: adminId, route: '/banking', spec: spec('org'), registries }),
+    )
+    assert.equal(org.ok, true, 'org layout saves')
+    const a = await withBypass(() =>
+      savePageSpec({ orgId, actorId: userA, route: '/banking', spec: spec('A personal'), registries, scope: 'user' }),
+    )
+    assert.equal(a.ok, true, 'A personal saves')
+    const b = await withBypass(() =>
+      savePageSpec({ orgId, actorId: userB, route: '/banking', spec: spec('B personal'), registries, scope: 'user' }),
+    )
+    assert.equal(b.ok, true, 'B personal saves')
+
+    const seen = await withBypass(() => listPageSpecHistory(orgId, '/banking', userB))
+    const authors = new Set(seen.map((v) => v.savedBy))
+    assert.ok(authors.has(adminId), 'org history is visible')
+    assert.ok(authors.has(userB), 'own personal history is visible')
+    assert.equal(authors.has(userA), false, 'a colleague\'s personal history must not leak')
+  } finally {
+    await withBypass(() => dropScratchOrg(orgId))
+  }
+})
 
 test('restoring an org version leaves personal layouts active', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { orgId } = await withBypass(() => createScratchOrg())

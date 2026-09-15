@@ -346,7 +346,7 @@ export async function setLayout(
  */
 export async function listLayoutHistory(context: ApplicationContext, input: { route: string }) {
   requireCustomization(context)
-  return { versions: await listPageSpecHistory(context.authz.user.orgId, input.route) }
+  return { versions: await listPageSpecHistory(context.authz.user.orgId, input.route, context.authz.user.id) }
 }
 
 /**

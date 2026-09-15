@@ -302,8 +302,12 @@ export interface PageSpecVersion {
  * deleting it, so the audit trail points at something a person can still
  * read. Nothing could read them, which made "deactivated, not deleted" a
  * promise with no way to collect on it. This is the way.
+ *
+ * Org versions plus the reader's own personal ones — never a colleague's,
+ * like the layout list itself. A personal layout is nobody else's business,
+ * and its history (notes, authors, timing) is nobody else's either.
  */
-export async function listPageSpecHistory(orgId: string, route: string): Promise<PageSpecVersion[]> {
+export async function listPageSpecHistory(orgId: string, route: string, userId?: string): Promise<PageSpecVersion[]> {
   const rows = await db.execute<{
     id: string
     is_active: boolean
@@ -316,6 +320,7 @@ export async function listPageSpecHistory(orgId: string, route: string): Promise
       from page_specs s
       left join users u on u.id = s.created_by and u.org_id = s.org_id
      where s.org_id = ${orgId} and s.route = ${route}
+       and (s.user_id is null ${userId ? sql`or s.user_id = ${userId}` : sql``})
      order by s.created_at desc`)
   return rows.rows.map((row) => ({
     id: row.id,
