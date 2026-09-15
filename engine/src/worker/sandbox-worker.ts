@@ -38,6 +38,15 @@ export async function processSandboxJobData(d: SandboxJobData): Promise<unknown>
         return await resetSandbox(d.sandboxId);
       case "delete":
         return await deleteSandbox(d.sandboxId);
+      default: {
+        // Unknown kinds (a poisoned payload, or an op from a release this
+        // worker no longer knows) must fail LOUD: falling through would
+        // resolve the promise and BullMQ would mark the job complete,
+        // silently dropping the work with no dead-letter trace. attempts: 1
+        // sends it straight to the failed set, retained and operator-visible.
+        const op = (d as { op?: unknown }).op;
+        throw new Error(`unknown sandbox job op: ${typeof op === "string" && op ? op : "(missing)"}`);
+      }
     }
   });
 }
