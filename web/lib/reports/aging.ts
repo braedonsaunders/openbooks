@@ -86,8 +86,8 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
            coalesce(sum(oi.open) filter (where oi.age_days <= 0), 0) as current,
            coalesce(sum(oi.open) filter (where oi.age_days between 1 and 30), 0) as b1,
            coalesce(sum(oi.open) filter (where oi.age_days between 31 and 60), 0) as b2,
-           coalesce(sum(oi.open) filter (where oi.age_days between 61 and 90), 0) as b3,
-           coalesce(sum(oi.open) filter (where oi.age_days > 90), 0) as b4,
+           coalesce(sum(oi.open) filter (where oi.age_days between 61 and 89), 0) as b3,
+           coalesce(sum(oi.open) filter (where oi.age_days >= 90), 0) as b4,
            coalesce(sum(oi.open), 0) as total
       from open_items oi
       left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
@@ -142,11 +142,11 @@ export interface AgingDetailResult {
   asOf: string
 }
 
-function bucketOf(age: number): AgingBucket {
+export function bucketOf(age: number): AgingBucket {
   if (age <= 0) return "current"
   if (age <= 30) return "b1"
   if (age <= 60) return "b2"
-  if (age <= 90) return "b3"
+  if (age < 90) return "b3"
   return "b4"
 }
 
