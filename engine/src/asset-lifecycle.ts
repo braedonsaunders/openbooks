@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
+import { assertPeriodModulesOpen, CloseError } from "./close.ts";
 import { buildScheduleWithRunner, reconcileAssetDepreciationStatusWithRunner, resolveAssetAccounts, unimpairedAssetCarryingValue } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 import { orgReportingFramework } from "./reporting-framework.ts";
@@ -42,6 +43,25 @@ export interface DisposalLine {
 }
 
 const sub = (a: string, b: string) => add(a, neg(b));
+
+/**
+ * Application-level companion to the je_guard Postgres gate (which refuses
+ * the draft→posted flip in a GL-closed period): fail fast with a named
+ * AssetLifecycleError instead of dying at the flip with a raw driver error.
+ * Assets carry no close module of their own; GL is always implied — the same
+ * companion posting.ts, document-void.ts, and inventory.ts provide.
+ */
+async function assertAssetPeriodOpen(
+  tx: SqlExecutor,
+  args: { orgId: string; periodId: string; bookId: string; subsidiaryIds: string[] },
+): Promise<void> {
+  try {
+    await assertPeriodModulesOpen(tx, { ...args, modules: [] });
+  } catch (error) {
+    if (error instanceof CloseError) throw new AssetLifecycleError(error.message);
+    throw error;
+  }
+}
 
 /**
  * Pure disposal arithmetic. NBV = cost − accumulated; gain/loss = proceeds − NBV
@@ -416,6 +436,20 @@ export async function disposeAsset(
     await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
     const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
 
+    // A disposal dated into a GL-closed period must refuse here — resolving
+    // the period once also turns a dateless insert (null period_id) into a
+    // named error instead of a raw constraint failure.
+    const period = (await tx.execute<{ id: string }>(sql`
+      select id from accounting_periods where org_id = ${orgId} and not is_adjustment
+       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`));
+    if (!period.rows[0]) throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
+    await assertAssetPeriodOpen(tx, {
+      orgId,
+      periodId: period.rows[0].id,
+      bookId,
+      subsidiaryIds: [asset.subsidiary_id],
+    });
+
     const entryRes = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -623,8 +657,8 @@ export async function reverseAssetLifecycleEvent(
     // lines. Recheck the current legal-entity/account/dimension policy before
     // creating the compensating entry; setup may have been restricted since
     // the source event was posted.
-    const sourceLines = (await tx.execute<{ account_id: string; amount: string }>(sql`
-      select account_id, amount::text as amount
+    const sourceLines = (await tx.execute<{ account_id: string; amount: string; subsidiary_id: string }>(sql`
+      select account_id, amount::text as amount, subsidiary_id
         from journal_lines
        where org_id = ${orgId} and entry_id = ${source.journal_entry_id}
        order by line_number
@@ -635,6 +669,15 @@ export async function reverseAssetLifecycleEvent(
       source,
       sourceLines.map((line) => ({ accountId: line.account_id, amount: line.amount })),
     );
+
+    // The reversal posts into the reversal date's period: judge every leg the
+    // je_guard trigger would judge (header plus mirrored line subsidiaries).
+    await assertAssetPeriodOpen(tx, {
+      orgId,
+      periodId: period.rows[0].id,
+      bookId: source.book_id,
+      subsidiaryIds: [...new Set([source.subsidiary_id, ...sourceLines.map((line) => line.subsidiary_id)])],
+    });
 
     const reversalEntry = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
@@ -827,6 +870,18 @@ export async function remeasureAsset(
     }
 
     await assertLifecyclePostingPolicy(tx, orgId, asset, lines);
+    // Same companion as disposals: a remeasurement dated into a GL-closed
+    // period refuses here, and a dateless insert becomes a named error.
+    const remeasurePeriod = (await tx.execute<{ id: string }>(sql`
+      select id from accounting_periods where org_id = ${orgId} and not is_adjustment
+       and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1`));
+    if (!remeasurePeriod.rows[0]) throw new AssetLifecycleError(`no accounting period covers ${opts.date}`);
+    await assertAssetPeriodOpen(tx, {
+      orgId,
+      periodId: remeasurePeriod.rows[0].id,
+      bookId,
+      subsidiaryIds: [asset.subsidiary_id],
+    });
     const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
     // An asset can be remeasured repeatedly; the entry number must be unique
