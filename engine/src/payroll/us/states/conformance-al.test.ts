@@ -62,9 +62,9 @@ test("AL official example — M-2, $850 weekly, FIT $35.19: $29.59", () => {
   // Period tax is $29.59 either way. The engine annualizes FIT exactly.
   const result = AL_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00",
-    basis: "resident",
+    basis: "resident", federalIncomeTax: "35.19",
     certificate: cert({
-      exemption: "M", dependents: "2", federal_income_tax_withheld: "35.19",
+      exemption: "M", dependents: "2",
     }),
   });
   assert.equal(result.factors.AL_GI, money("44200"));
@@ -79,20 +79,20 @@ test("AL official example — M-2, $850 weekly, FIT $35.19: $29.59", () => {
 test("AL no A-4 withholds as zero exemptions", () => {
   const empty = AL_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00",
-    basis: "resident",
+    basis: "resident", federalIncomeTax: "35.19",
     certificate: resolveCertificate({
       certificate: AL_CERTIFICATE,
       stored: [{
         certificateKey: AL_CERTIFICATE.key,
-        answers: { federal_income_tax_withheld: "35.19" },
+        answers: {},
         effectiveFrom: null,
       }],
     }),
   });
   const zero = AL_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00",
-    basis: "resident",
-    certificate: cert({ exemption: "0", dependents: "0", federal_income_tax_withheld: "35.19" }),
+    basis: "resident", federalIncomeTax: "35.19",
+    certificate: cert({ exemption: "0", dependents: "0" }),
   });
   assert.equal(empty.tax, zero.tax);
   assert.equal(empty.factors.AL_PERSONAL_EXEMPTION, money("0"));
@@ -111,13 +111,13 @@ test("AL refuses without this period's federal income tax withheld", () => {
 test("AL supplemental paid with regular wages is aggregated, not a silent 5%", () => {
   const aggregated = AL_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "850.00", supplemental: "200.00",
-    basis: "resident",
-    certificate: cert({ exemption: "M", dependents: "2", federal_income_tax_withheld: "35.19" }),
+    basis: "resident", federalIncomeTax: "35.19",
+    certificate: cert({ exemption: "M", dependents: "2" }),
   });
   const together = AL_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "1050.00",
-    basis: "resident",
-    certificate: cert({ exemption: "M", dependents: "2", federal_income_tax_withheld: "35.19" }),
+    basis: "resident", federalIncomeTax: "35.19",
+    certificate: cert({ exemption: "M", dependents: "2" }),
   });
   assert.equal(aggregated.tax, together.tax);
   assert.equal(aggregated.taxSupplemental, money("0"));
@@ -129,7 +129,7 @@ test("AL refuses a year it has not transcribed", () => {
     () => AL_WITHHOLDING.compute({
       payDate: "2027-01-15", periodsPerYear: 52, wages: "850",
       basis: "resident",
-      certificate: cert({ exemption: "M", federal_income_tax_withheld: "0" }),
+      certificate: cert({ exemption: "M" }),
     }),
     /2027 Alabama income tax withholding tables are not loaded.*Never extrapolate the prior year/s,
   );

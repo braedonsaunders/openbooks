@@ -429,17 +429,16 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     ?? "single") as OrMaritalStatus;
   const claimed = certificateCount(input.certificate, "allowances") ?? 0;
 
-  // Publication 150-206-436: BASE subtracts federal income tax withheld.
-  // That figure is this period's FIT, supplied on the certificate because
-  // UsStateWithholdingInput has no federal-tax field. Missing is a refusal
-  // — substituting $0 would over-withhold every Oregon employee who had
-  // federal tax taken out.
-  const periodFederal = certificateAmount(input.certificate, "federal_income_tax_withheld");
-  if (periodFederal == null) {
+  // Publication 150-206-436: BASE subtracts federal income tax withheld. The
+  // shared Pub 15-T pass supplies the current paycheck's result; it is not a
+  // stale answer on OR-W-4 (which has no federal-tax question).
+  const periodFederal = input.federalIncomeTax;
+  if (periodFederal == null || periodFederal.trim() === "") {
     throw new Error(
       "Oregon withholding (150-206-436) requires this period's federal income tax "
-      + "withheld as an input to BASE (FAQ 1: not FICA; FAQ 11: yes, the program "
-      + "must subtract it, up to the printed cap). The engine will not assume $0.",
+      + "from the current Pub 15-T calculation as an input to BASE (FAQ 1: not "
+      + "FICA; FAQ 11: yes, the program must subtract it, up to the printed cap). "
+      + "The engine will not assume $0.",
     );
   }
 
@@ -577,20 +576,6 @@ export const OR_CERTIFICATE: PayrollCertificate = {
         + "each year. Without a current exemption the employer withholds. This engine "
         + "honors the flag on file — dating the February 15 cutoff is certificate "
         + "administration, not a silent fallback.",
-    },
-    {
-      key: "federal_income_tax_withheld",
-      label: "Federal income tax withheld this period (formula input)",
-      kind: "amount",
-      decimals: 4,
-      min: "0",
-      help:
-        "Not an OR-W-4 line. Publication 150-206-436 builds BASE from wages minus "
-        + "federal income tax withheld minus the standard deduction (FAQ 1: do not "
-        + "include FICA; FAQ 11: the program must subtract it, up to the printed "
-        + "annual cap). The payroll run supplies THIS PERIOD's federal income tax; "
-        + "the engine annualizes it. A missing amount is refused — assuming zero "
-        + "would over-withhold.",
     },
   ],
 };

@@ -106,6 +106,12 @@ export interface UsStateWithholdingInput {
   /** Supplemental wages this period (bonus, commission, severance). */
   supplemental?: string;
   /**
+   * Federal income tax withheld by the CURRENT paycheck's Pub 15-T pass.
+   * Alabama and Oregon subtract this amount in their state formulas; it is a
+   * computed statutory result, never an employee certificate answer.
+   */
+  federalIncomeTax?: string;
+  /**
    * Tax-qualified deductions from this period's wages. Nebraska's special
    * 1.5% floor is assessed on gross wages after these deductions, rather than
    * on the ordinary allowance-reduced percentage-method base.
