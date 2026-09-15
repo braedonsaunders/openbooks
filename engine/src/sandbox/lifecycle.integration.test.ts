@@ -493,3 +493,31 @@ test("a masked sandbox carries no bank routing, taxpayer ids or org tax ids", { 
     assert.deepEqual(await masked(), expected, "refresh keeps the masked sandbox identifier-free");
   });
 });
+
+test("a masked sandbox scrubs custom JSON and copied user credentials", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `Mask custom data ${randomUUID()}`;
+  await withSandboxCleanup(org, sandboxName, async (handle) => {
+    const userId = await createScratchUser(org.orgId, "Production Operator", "mask_operator");
+    await db.execute(sql`
+      update parties
+         set custom = '{"government_id":"123-45-6789","source_email":"person@example.com"}'::jsonb
+       where id = ${org.customerId} and org_id = ${org.orgId}`);
+    await db.execute(sql`
+      update users
+         set email = 'person@example.com', name = 'Production Operator', password_hash = 'production-password-hash'
+       where id = ${userId} and org_id = ${org.orgId}`);
+
+    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "masked", masked: true });
+    handle.sandboxId = created.sandboxId;
+    const leaked = (await db.execute<{ custom_leaks: number; user_leaks: number }>(sql`
+      select
+        (select count(*)::int from parties
+          where org_id = ${created.sandboxOrgId}
+            and custom::text like any (array['%123-45-6789%', '%person@example.com%'])) as custom_leaks,
+        (select count(*)::int from users
+          where org_id = ${created.sandboxOrgId}
+            and (email = 'person@example.com' or name = 'Production Operator' or password_hash = 'production-password-hash')) as user_leaks`)).rows[0]!;
+    assert.deepEqual(leaked, { custom_leaks: 0, user_leaks: 0 });
+  });
+});

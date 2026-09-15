@@ -99,6 +99,12 @@ function generateCopySql(
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!, "id", c)} `);
+    } else if (opts.masked && (c.udtName === "jsonb" || c.udtName === "json") && c.name === "custom") {
+      // Custom fields are arbitrary tenant-authored JSON and may contain PII
+      // without a schema-level column for a masking policy to name. A masked
+      // environment must not carry that payload by default; an explicit
+      // table/column policy can opt into a narrower transform when safe.
+      exprs.push(`${maskExpr(c.name, "null_out", "id", c)} `);
     } else {
       exprs.push(`"${c.name}"`);
     }
