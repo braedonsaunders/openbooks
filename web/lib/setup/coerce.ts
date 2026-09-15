@@ -43,7 +43,7 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
  * custom-field date validator (isIsoCalendarDate) and the forms-core response
  * validator. Pure — this module must stay free of db imports.
  */
-function isCalendarDate(value: string): boolean {
+export function isCalendarDate(value: string): boolean {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!match) return false
   const year = Number(match[1])

@@ -20,6 +20,7 @@ import {
 } from '@openbooks/engine/src/labor-costing.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { isCalendarDate } from '../../../../../lib/setup/coerce'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
@@ -425,7 +426,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
     }
     const effectiveFrom = body.effectiveFrom
-    if (typeof effectiveFrom !== 'string' || !DATE_RE.test(effectiveFrom)) {
+    // Shape alone admits impossible dates ('2026-02-30') that PostgreSQL
+    // then refuses with a driver error instead of this field error.
+    if (typeof effectiveFrom !== 'string' || !DATE_RE.test(effectiveFrom) || !isCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
     }
     const reason = bodyReason(body.reason, 'wage rate saved')
@@ -514,7 +517,7 @@ export async function POST(req: Request) {
   if (body.action === 'end-rate') {
     if (!isUuid(body.id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const to = body.effectiveTo
-    if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to))) {
+    if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to) || !isCalendarDate(to))) {
       return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
     }
     const reason = bodyReason(body.reason, to ? 'wage rate ended' : 'wage rate end date cleared')
@@ -619,7 +622,9 @@ export async function POST(req: Request) {
   }
 
   // Payroll true-up: read the clearing wash for a period / post its residue.
-  const DATE_OK = (v: unknown) => DATE_RE.test(String(v ?? ''))
+  // An impossible date that passes the shape check reaches the engine, whose
+  // SQL date comparisons throw past the route's 422 mapping as a 500.
+  const DATE_OK = (v: unknown) => typeof v === 'string' && DATE_RE.test(v) && isCalendarDate(v)
   if (body.action === 'reconcile') {
     if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
       return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
