@@ -794,31 +794,51 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
   }
   const to = await verifyUser(gate.orgId, toUserId);
   if (!to) throw new GateError("delegate target is not an active user in this org");
+  // Preserve the ORIGINAL assignee (the first hand-off wins — a chain of
+  // delegations still points back to who the gate was authored to).
+  const delegatedFrom = gate.delegatedFromUserId ?? gate.assigneeUserId ?? fromUserId;
 
-  try {
-    await db
-      .update(schema.flowGates)
-      .set({
-        assigneeUserId: toUserId,
-        // Preserve the ORIGINAL assignee (the first hand-off wins — a chain of
-        // delegations still points back to who the gate was authored to).
-        delegatedFromUserId: gate.delegatedFromUserId ?? gate.assigneeUserId ?? fromUserId,
-        updatedBy: fromUserId,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.status, "pending")));
-  } catch (e) {
-    // unique (run_id, node_id, assignee_user_id): the target already holds a
-    // sibling row of this gate.
-    throw new GateError(`could not delegate: ${(e as Error).message}`);
-  }
+  // One atomic unit: the reassignment, the delegate's notice, and the audit
+  // evidence commit together, so a hand-off that changes who may release the
+  // document can never persist without its actor-attributed trail.
+  await withOrg(gate.orgId, async () => {
+    try {
+      await db
+        .update(schema.flowGates)
+        .set({
+          assigneeUserId: toUserId,
+          delegatedFromUserId: delegatedFrom,
+          updatedBy: fromUserId,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.status, "pending")));
+    } catch (e) {
+      // unique (run_id, node_id, assignee_user_id): the target already holds a
+      // sibling row of this gate.
+      throw new GateError(`could not delegate: ${(e as Error).message}`);
+    }
 
-  await db.insert(schema.notifications).values({
-    orgId: gate.orgId,
-    userId: toUserId,
-    kind: "approval",
-    title: `Approval delegated to you: ${gate.title}`,
-    href: "/approvals",
+    await db.insert(schema.notifications).values({
+      orgId: gate.orgId,
+      userId: toUserId,
+      kind: "approval",
+      title: `Approval delegated to you: ${gate.title}`,
+      href: "/approvals",
+    });
+
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${gate.orgId}, 'flow_gates', ${gateId}, 'update', ${JSON.stringify({
+        event: "delegated",
+        actor: { kind: "user", userId: fromUserId },
+        before: { assigneeUserId: gate.assigneeUserId },
+        after: { assigneeUserId: toUserId, delegatedFromUserId: delegatedFrom },
+        runId: gate.runId,
+        flowId: gate.flowId,
+        subjectKind: gate.subjectKind,
+        subjectId: gate.subjectId,
+      })}::jsonb, ${fromUserId})
+    `);
   });
 }
 
