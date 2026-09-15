@@ -262,7 +262,12 @@ export async function loadClose(
   const onRun = wizard !== null
   const onList = !onRun
   const currentFy = await currentFiscalYear()
-  const fy = Number(pickString(sp.fy) ?? currentFy)
+  // A hand-edited or stale fy must fall back like an absent one: NaN (and
+  // fractional or out-of-range years) would otherwise ride straight into the
+  // fiscal_year predicate and 500 on a database cast error.
+  const fyRaw = pickString(sp.fy)
+  const fyParsed = fyRaw === undefined ? currentFy : Number(fyRaw)
+  const fy = Number.isInteger(fyParsed) && fyParsed >= 1900 && fyParsed <= 9999 ? fyParsed : currentFy
   const status = pickString(sp.status)
   const q = pickString(sp.q)?.trim()
   const pageNum = clamp(Number(pickString(sp.page) ?? 1), 1, 10_000)
