@@ -120,8 +120,18 @@ function reset(): void {
 }
 
 function request(): Request {
-  return new Request("http://openbooks.test/api/analytics/cashflow/entity?party=party-1&side=ar");
+  return new Request("http://openbooks.test/api/analytics/cashflow/entity?party=00000000-0000-4000-8000-000000000001&side=ar");
 }
+
+test("entity drills reject a malformed party selector before querying", async () => {
+  reset();
+
+  const response = await GET(new Request("http://openbooks.test/api/analytics/cashflow/entity?party=not-a-uuid&side=ar"));
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.equal(routeState.calls.length, 0, "malformed party must stop before the party lookup");
+});
 
 test("restricted entity drills gate the party before disclosure", async () => {
   reset();

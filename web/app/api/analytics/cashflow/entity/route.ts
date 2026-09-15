@@ -4,6 +4,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
   const party = url.searchParams.get("party");
   const side = url.searchParams.get("side") === "ap" ? "ap" : "ar";
   if (!party) return NextResponse.json({ error: "party required" }, { status: 400 });
+  if (!isUuid(party)) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   // The party is the record boundary.  A null-subsidiary party is an
   // org-wide identity, but every transaction leg below still has to be
