@@ -1569,3 +1569,51 @@ test("a SEPA debit profile refuses a malformed originator BIC", () => {
     (error: Error) => error instanceof PaymentError && error.message.includes("originatorBic"),
   );
 });
+
+test(
+  "junk or oversized draft adjustment amounts fail closed as PaymentError",
+  { skip: !DB },
+  async () => {
+    // A sloppy drawer save used to hand fee/discount/on-account text straight
+    // to toUnits (a bare Error — a 500 at the payments API) and any magnitude
+    // straight into the numeric(19,4) header/total (a storage failure). Both
+    // must fail closed as PaymentError (a 422) before any write.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Sloppy operator", "admin"),
+      );
+      const cases: Array<{ label: string; kind: "customer_payment" | "vendor_payment"; patch: Record<string, unknown> }> = [
+        { label: "fee junk", kind: "customer_payment", patch: { feeAmount: "abc", feeIncomeAccountId: org.accounts.revenue } },
+        { label: "fee huge", kind: "customer_payment", patch: { feeAmount: "99999999999999999999", feeIncomeAccountId: org.accounts.revenue } },
+        { label: "on-account junk", kind: "customer_payment", patch: { onAccountAmount: "12ab" } },
+        { label: "on-account huge", kind: "customer_payment", patch: { onAccountAmount: "99999999999999999999" } },
+        { label: "discount junk", kind: "vendor_payment", patch: { discountAmount: "abc", discountAccountId: org.accounts.revenue } },
+        { label: "discount huge", kind: "vendor_payment", patch: { discountAmount: "99999999999999999999", discountAccountId: org.accounts.revenue } },
+      ];
+      for (const c of cases) {
+        const payment = await withOrgContext(org.orgId, () =>
+          createPaymentDocument({
+            orgId: org.orgId,
+            kind: c.kind,
+            createdBy: actorId,
+            partyId: c.kind === "customer_payment" ? org.customerId : org.vendorId,
+            bankAccountId: org.accounts.bank,
+            subsidiaryId: org.subsidiaryId,
+            documentDate: org.date,
+            currency: "CAD",
+          }),
+        );
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            updateDraftPayment(payment.id, c.patch as never, actorId, org.orgId),
+          ),
+          (e: Error) => e instanceof PaymentError,
+          c.label,
+        );
+      }
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

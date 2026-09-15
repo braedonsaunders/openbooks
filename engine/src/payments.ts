@@ -148,6 +148,31 @@ function persistPaymentFxRate(value: unknown): string {
   }
 }
 
+/**
+ * Draft discount/fee/on-account inputs must be exact 4dp amounts the
+ * numeric(19,4) header/total columns can hold. Reading them with toUnits
+ * directly threw a bare Error on junk text (a 500 at the payments API, which
+ * maps only PaymentError to 422) and admitted any magnitude (a storage
+ * failure on save), so both fail closed here as PaymentError.
+ */
+function persistPaymentMoney(value: unknown, label: string): bigint {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new PaymentError(`${label} must be an exact decimal amount of at most 4 decimal places`);
+  }
+  let units: bigint;
+  try {
+    units = toUnits(exact);
+  } catch {
+    throw new PaymentError(`${label} must be an exact decimal amount of at most 4 decimal places`);
+  }
+  const whole = (units < 0n ? -units : units) / 10_000n;
+  if (whole >= 10n ** 15n) {
+    throw new PaymentError(`${label} is out of range — at most 15 whole digits fit the ledger`);
+  }
+  return units;
+}
+
 export async function createPaymentDocument(opts: {
   orgId: string;
   kind: PaymentKind;
@@ -392,7 +417,7 @@ export async function updateDraftPayment(
 
     validateAllocationInputs(allocations);
     validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
-    const discountUnits = toUnits(discountAmount);
+    const discountUnits = persistPaymentMoney(discountAmount, "discount amount");
     if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
     // Early-payment discounts settle against the payable: the vendor_payment
     // kernel rule carries the discount leg, while customer_payment has none —
@@ -400,7 +425,7 @@ export async function updateDraftPayment(
     // applications (caught only later at the posting cross-foot).
     if (discountUnits > 0n && doc.kind !== "vendor_payment") throw new PaymentError("discounts only apply to vendor payments");
     if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
-    const feeUnits = toUnits(feeAmount);
+    const feeUnits = persistPaymentMoney(feeAmount, "fee amount");
     if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
     if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
     if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
@@ -409,7 +434,7 @@ export async function updateDraftPayment(
     // the full collected amount while the applications settle only what is
     // still open. Vendor overpayments have no such representation and are
     // refused here, like surcharges on the vendor side.
-    const onAccountUnits = toUnits(onAccountAmount);
+    const onAccountUnits = persistPaymentMoney(onAccountAmount, "on-account amount");
     if (onAccountUnits < 0n) throw new PaymentError("on-account amount cannot be negative");
     if (onAccountUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("on-account residuals only apply to customer receipts");
 
