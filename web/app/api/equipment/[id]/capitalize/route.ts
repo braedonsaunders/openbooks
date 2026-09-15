@@ -5,6 +5,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
+import { isUuid } from '../../../../../lib/list-params'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'
 
 export const runtime = 'nodejs'
@@ -64,6 +65,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const { id } = await params
+  // A malformed id names no unit: same answer as an unknown one, never a
+  // PostgreSQL uuid cast error escaping as a 500.
+  if (!isUuid(id)) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
   const { orgId, id: userId } = gate.user
 
   const unitRes = (await db.execute<{
