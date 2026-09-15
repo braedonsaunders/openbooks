@@ -188,9 +188,9 @@ test("purchase tax projection separates recoverable, nonrecoverable, withholding
   const projected = RULES.vendor_bill!(doc, [line], {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [
-      { taxCodeId: "standard", sequence: 1, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard", collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
-      { taxCodeId: "withholding", sequence: 2, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding", collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
-      { taxCodeId: "reverse", sequence: 3, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge", collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "standard", sequence: 1, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "withholding", sequence: 2, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding" as const, collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
+      { taxCodeId: "reverse", sequence: 3, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
     ]]]),
   });
   assert.deepEqual(projected.map((row) => [row.accountId, row.amount]), [
@@ -241,7 +241,7 @@ test("sales tax control lines never become project revenue or cost", () => {
       taxAmount: "13.0000",
       recoverableAmount: "0",
       nonrecoverableAmount: "0",
-      calculationType: "standard",
+      calculationType: "standard" as const,
       collectedAccountId: "output",
       paidAccountId: "input",
       withholdingAccountId: null,
@@ -274,12 +274,88 @@ test("tax profiles cannot post without cross-footing component evidence", () => 
       control: { ap: "ap", ar: "ar", bank: "bank" },
       taxComponentsByLine: new Map([["line", [{
         taxCodeId: "tax", sequence: 1, taxAmount: "12.9999", recoverableAmount: "12.9999",
-        nonrecoverableAmount: "0", calculationType: "standard", collectedAccountId: "output",
+        nonrecoverableAmount: "0", calculationType: "standard" as const, collectedAccountId: "output",
         paidAccountId: "input", withholdingAccountId: null,
       }]]]),
     }),
     /do not match stored tax total/,
   );
+});
+
+test("tax amounts without calculation evidence fail closed instead of posting short", () => {
+  // A line carrying tax but no profile and no components posted its net
+  // amount only: $13 of tax vanished from the projection while the document
+  // still claimed it. Like a profile without evidence, tax without evidence
+  // must fail closed before any journal is written.
+  const doc = { id: "doc", kind: "customer_invoice", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
+  const control = { control: { ap: "ap", ar: "ar", bank: "bank" } };
+  const taxedLine = { id: "line", lineNumber: 1, accountId: "income", amount: "100.0000", taxAmount: "13.0000" } as unknown as PostingDocumentLine;
+  assert.throws(
+    () => RULES.customer_invoice!(doc, [taxedLine], control),
+    (error: Error) => error instanceof PostingError && /line 1 has a tax amount but no calculation evidence/.test(error.message),
+  );
+  const bill = { id: "doc", kind: "vendor_bill", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
+  const billLine = { id: "line", lineNumber: 1, accountId: "expense", amount: "100.0000", taxAmount: "7.0000" } as unknown as PostingDocumentLine;
+  assert.throws(
+    () => RULES.vendor_bill!(bill, [billLine], control),
+    (error: Error) => error instanceof PostingError && /line 1 has a tax amount but no calculation evidence/.test(error.message),
+  );
+  // Zero-tax lines without a profile still post untouched.
+  const untaxed = { id: "line", lineNumber: 1, accountId: "income", amount: "100.0000", taxAmount: "0" } as unknown as PostingDocumentLine;
+  const projected = RULES.customer_invoice!(doc, [untaxed], control);
+  assert.deepEqual(projected.map((row) => [row.accountId, row.amount]), [
+    ["ar", "100.0000"],
+    ["income", "-100.0000"],
+  ]);
+});
+
+test("credit memos mirror their invoice and bill projections with reversed direction", () => {
+  // The -1 direction is a mutation target: flipped to +1, a credit memo
+  // posts its tax legs with invoice/bill signs while still balancing, so
+  // only exact mirrored amounts catch it.
+  const deps = {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    taxComponentsByLine: new Map([["line", [
+      { taxCodeId: "standard", sequence: 1, taxAmount: "10.0000", recoverableAmount: "5.0000", nonrecoverableAmount: "5.0000", calculationType: "standard" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+      { taxCodeId: "withholding", sequence: 2, taxAmount: "3.0000", recoverableAmount: "3.0000", nonrecoverableAmount: "0.0000", calculationType: "withholding" as const, collectedAccountId: null, paidAccountId: null, withholdingAccountId: "withholding" },
+      { taxCodeId: "reverse", sequence: 3, taxAmount: "5.0000", recoverableAmount: "4.0000", nonrecoverableAmount: "1.0000", calculationType: "reverse_charge" as const, collectedAccountId: "output", paidAccountId: "input", withholdingAccountId: null },
+    ]]]),
+  };
+  const bill = { id: "doc", kind: "vendor_credit", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
+  const billLine = { id: "line", lineNumber: 1, accountId: "expense", amount: "100.0000", taxAmount: "7.0000", taxGroupId: "group" } as unknown as PostingDocumentLine;
+  const creditProjected = RULES.vendor_credit!(bill, [billLine], deps);
+  assert.deepEqual(creditProjected.map((row) => [row.accountId, row.amount]), [
+    ["ap", "107.0000"],
+    ["expense", "-106.0000"],
+    ["input", "-5.0000"],
+    ["withholding", "3.0000"],
+    ["input", "-4.0000"],
+    ["output", "5.0000"],
+  ]);
+  assert.doesNotThrow(() => assertFinalKernelBalance(creditProjected.map((row) => ({ ...row, subsidiaryId: "sub" }))));
+
+  const invoice = { id: "invoice", kind: "customer_credit", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
+  const invoiceLine = { id: "line", lineNumber: 1, accountId: "income", amount: "100.0000", taxAmount: "13.0000", taxCodeId: "tax" } as unknown as PostingDocumentLine;
+  const invoiceProjected = RULES.customer_credit!(invoice, [invoiceLine], {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    taxComponentsByLine: new Map([["line", [{
+      taxCodeId: "tax",
+      sequence: 1,
+      taxAmount: "13.0000",
+      recoverableAmount: "0",
+      nonrecoverableAmount: "0",
+      calculationType: "standard" as const,
+      collectedAccountId: "output",
+      paidAccountId: "input",
+      withholdingAccountId: null,
+    }]]]),
+  });
+  assert.deepEqual(invoiceProjected.map((row) => [row.accountId, row.amount]), [
+    ["ar", "-113.0000"],
+    ["income", "100.0000"],
+    ["output", "13.0000"],
+  ]);
+  assert.doesNotThrow(() => assertFinalKernelBalance(invoiceProjected.map((row) => ({ ...row, subsidiaryId: "sub" }))));
 });
 
 test("taxable sales and purchases fail closed when no tax control account exists", () => {
@@ -402,10 +478,72 @@ test("payment discount/fee validation is PostingError, not a raw 500-class error
     ["negative fee", () => RULES.customer_payment!(customerReceipt({ feeAmount: "-5.0000", feeIncomeAccountId: "fee" }), [paymentLine(1)], paymentDeps), /fee cannot be negative/],
     ["fee exceeding receipt", () => RULES.customer_payment!(customerReceipt({ feeAmount: "500.0000", feeIncomeAccountId: "fee" }), [paymentLine(1)], paymentDeps), /fee exceeds the receipt/],
     ["missing fee account", () => RULES.customer_payment!(customerReceipt({ feeAmount: "5.0000" }), [paymentLine(1)], paymentDeps), /fee income account is required/],
+    ["dust-negative discount", () => RULES.vendor_payment!(vendorBill({ discountAmount: "-0.0001", discountAccountId: "disc" }), [paymentLine(1)], paymentDeps), /discount cannot be negative/],
+    ["dust-negative fee", () => RULES.customer_payment!(customerReceipt({ feeAmount: "-0.0001", feeIncomeAccountId: "fee" }), [paymentLine(1)], paymentDeps), /fee cannot be negative/],
   ];
   for (const [name, run, message] of cases) {
     assert.throws(run, (error: Error) => error instanceof PostingError && message.test(error.message), name);
   }
+});
+
+test("zero discount, zero fee, and a fee equal to the receipt post without extra legs", () => {
+  // The zero boundaries are mutation targets: a shifted bound rejects the
+  // legal zero (or accepts dust-negative amounts), and a widened fee cap
+  // refuses a receipt consumed entirely by its surcharge.
+  const paymentLine = (lineNumber: number) =>
+    ({ id: `p${lineNumber}`, lineNumber, accountId: "bank", amount: "100.0000" }) as unknown as PostingDocumentLine;
+  const paymentDeps = { control: { ap: "ap", ar: "ar", bank: "bank" } };
+  const vendorBill = (custom: Record<string, unknown>) =>
+    ({ id: "vp", kind: "vendor_payment", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom }) as unknown as PostingDocument;
+  const customerReceipt = (custom: Record<string, unknown>) =>
+    ({ id: "cp", kind: "customer_payment", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom }) as unknown as PostingDocument;
+  assert.deepEqual(
+    RULES.vendor_payment!(vendorBill({ discountAmount: "0" }), [paymentLine(1)], paymentDeps).map((row) => [row.accountId, row.amount]),
+    [["ap", "100.0000"], ["bank", "-100.0000"]],
+  );
+  assert.deepEqual(
+    RULES.customer_payment!(customerReceipt({ feeAmount: "0" }), [paymentLine(1)], paymentDeps).map((row) => [row.accountId, row.amount]),
+    [["bank", "100.0000"], ["ar", "-100.0000"]],
+  );
+  assert.deepEqual(
+    RULES.customer_payment!(
+      customerReceipt({ feeAmount: "100.0000", feeIncomeAccountId: "fee" }), [paymentLine(1)], paymentDeps,
+    ).map((row) => [row.accountId, row.amount]),
+    [["bank", "100.0000"], ["ar", "0.0000"], ["fee", "-100.0000"]],
+  );
+});
+
+test("transfer posts dust amounts but refuses unresolvable line accounts", () => {
+  // A shifted positivity bound rejects the smallest legal transfer; an
+  // inverted account check lets an empty account reach the ledger.
+  const control = { control: { ap: "ap", ar: "ar", bank: "bank" } };
+  assert.deepEqual(
+    RULES.transfer!(
+      transferDoc,
+      [transferLine(1, "bank-b", "0.0001"), transferLine(2, "bank-a", "0")],
+      control,
+    ).map((row) => [row.accountId, row.amount]),
+    [["bank-b", "0.0001"], ["bank-a", "-0.0001"]],
+  );
+  assert.throws(
+    () => RULES.vendor_bill!(
+      { id: "doc", kind: "vendor_bill", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument,
+      [{ id: "l1", lineNumber: 1, accountId: "", amount: "100.0000" } as unknown as PostingDocumentLine],
+      control,
+    ),
+    (error: Error) => error instanceof PostingError && /no resolvable account/.test(error.message),
+  );
+});
+
+test("card charges fail closed without a payment card", () => {
+  // A negated card guard posts the liability leg against an undefined
+  // account instead of refusing the document.
+  const doc = { id: "doc", kind: "card_charge", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
+  const line = { id: "line", lineNumber: 1, accountId: "expense", amount: "100.0000" } as unknown as PostingDocumentLine;
+  assert.throws(
+    () => RULES.card_charge!(doc, [line], { control: { ap: "ap", ar: "ar", bank: "bank" } }),
+    (error: Error) => error instanceof PostingError && /requires a payment card/.test(error.message),
+  );
 });
 
 test("transfer rejects a full-amount source leg instead of summing both legs", () => {

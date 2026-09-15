@@ -527,6 +527,11 @@ function componentsForLine(
       `line ${line.lineNumber} has a tax profile but no calculation evidence`,
     );
   }
+  if (!hasTaxProfile && components.length === 0 && !isZero(line.taxAmount ?? "0")) {
+    throw new PostingError(
+      `line ${line.lineNumber} has a tax amount but no calculation evidence`,
+    );
+  }
   if (components.length > 0) {
     const settlement = componentSettlementTotal(components);
     if (cmp(settlement, line.taxAmount ?? "0") !== 0) {
