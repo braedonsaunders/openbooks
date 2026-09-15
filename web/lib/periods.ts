@@ -8,7 +8,7 @@ import {
   type DateRange,
 } from '@openbooks/reports'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { fiscalStartMonth } from './fiscal'
+import { defaultFiscalCalendarPeriods, fiscalStartMonth } from './fiscal'
 import { resolveOrgId } from './org-scope'
 
 /**
@@ -78,6 +78,27 @@ export async function resolvePeriod(
   const today = opts.today ?? await businessToday(orgId)
   const id = isPeriodPreset(presetId) ? presetId! : DEFAULT_PERIOD_PRESET
   const startMonth = await fiscalStartMonth(orgId)
+
+  // Retail/custom calendars: resolve the period/month, quarter, half and
+  // fiscal-year preset families against the default calendar's declared
+  // periods so the filter-bar window agrees with fiscal-period statement
+  // columns (a 5-week period is one window, labelled with its fiscal name).
+  // A miss falls through to the legacy paths below. Monthly-cadence orgs —
+  // or calendars without generated periods — skip this entirely and keep
+  // the existing behavior byte-identical.
+  const fiscal = await defaultFiscalCalendarPeriods(orgId)
+  const declared =
+    fiscal && fiscal.cadence !== 'monthly' && fiscal.periods.length > 0 ? fiscal.periods : undefined
+  if (declared) {
+    const range = resolvePreset(id, {
+      startMonth,
+      today,
+      customFrom: opts.customFrom,
+      customTo: opts.customTo,
+      periods: declared,
+    })
+    if (range) return { presetId: id, ...range }
+  }
 
   // Accounting-period-aware presets: prefer real period rows.
   if (id in PERIOD_FAMILY) {
