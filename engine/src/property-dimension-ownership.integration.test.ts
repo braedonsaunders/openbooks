@@ -24,6 +24,15 @@ async function seedBranchLocation(orgId: string, parentId: string): Promise<stri
   return locationId;
 }
 
+async function seedInactiveSubsidiary(orgId: string, parentId: string): Promise<string> {
+  const subsidiaryId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries(id, org_id, parent_id, name, base_currency, country, is_active)
+    values (${subsidiaryId}, ${orgId}, ${parentId}, 'Inactive property subsidiary', 'CAD', 'CA', false)
+  `);
+  return subsidiaryId;
+}
+
 async function enablePropertyManagement(orgId: string): Promise<void> {
   await db.execute(sql`
     update orgs
@@ -83,6 +92,60 @@ test("property updates reject moving a location across subsidiaries", { skip: !p
         status: "active",
       }),
       (error: unknown) => error instanceof PropertyManagementError && /dimensions do not belong/.test(error.message),
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("property creation rejects an inactive subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enablePropertyManagement(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
+    await assert.rejects(
+      createManagedProperty({
+        orgId: org.orgId,
+        actorId,
+        subsidiaryId,
+        code: "PROP-INACTIVE-SUB",
+        name: "Inactive subsidiary property",
+        propertyType: "commercial",
+      }),
+      (error: unknown) => error instanceof PropertyManagementError && /inactive/.test(error.message),
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("property updates reject assigning an inactive subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enablePropertyManagement(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
+    const property = await createManagedProperty({
+      orgId: org.orgId,
+      actorId,
+      subsidiaryId: org.subsidiaryId,
+      code: "PROP-INACTIVE-UPDATE",
+      name: "Inactive update property",
+      propertyType: "commercial",
+    });
+    await assert.rejects(
+      updateManagedProperty({
+        orgId: org.orgId,
+        actorId,
+        propertyId: property.id,
+        subsidiaryId,
+        code: "PROP-INACTIVE-UPDATE",
+        name: "Inactive update property",
+        propertyType: "commercial",
+        status: "active",
+      }),
+      (error: unknown) => error instanceof PropertyManagementError && /inactive/.test(error.message),
     );
   } finally {
     await dropScratchOrg(org.orgId);

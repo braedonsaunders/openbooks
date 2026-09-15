@@ -278,8 +278,9 @@ export async function createManagedProperty(input: {
     if (requestedCurrency && !(await multiCurrencyFeatureEnabled(tx, input.orgId))) {
       throw new PropertyManagementError("Multi-currency is disabled", 404);
     }
-    const scope = (await tx.execute<{ currency: string; location_ok: boolean; asset_ok: boolean; rent_account_ok: boolean; cam_account_ok: boolean; deposit_account_ok: boolean; bank_account_ok: boolean }>(sql`
+    const scope = (await tx.execute<{ currency: string; subsidiary_active: boolean; location_ok: boolean; asset_ok: boolean; rent_account_ok: boolean; cam_account_ok: boolean; deposit_account_ok: boolean; bank_account_ok: boolean }>(sql`
       select s.base_currency as currency,
+        s.is_active as subsidiary_active,
         (${input.locationId ?? null}::uuid is null or exists(
           select 1 from locations l
            where l.org_id=${input.orgId} and l.id=${input.locationId ?? null}
@@ -308,6 +309,7 @@ export async function createManagedProperty(input: {
     `));
     const row = scope.rows[0];
     if (!row) throw new PropertyManagementError("Subsidiary not found");
+    if (!row.subsidiary_active) throw new PropertyManagementError("Subsidiary is inactive");
     if (!row.location_ok || !row.asset_ok) throw new PropertyManagementError("Property dimensions do not belong to this organization");
     if (!row.rent_account_ok || !row.cam_account_ok || !row.deposit_account_ok || !row.bank_account_ok) throw new PropertyManagementError("Property control accounts have incompatible account types");
     const inserted = (await tx.execute<{ id: string }>(sql`
@@ -373,6 +375,7 @@ export async function updateManagedProperty(input: {
         has_leases: boolean;
         has_active_leases: boolean;
         subsidiary_ok: boolean;
+        subsidiary_active: boolean;
         location_ok: boolean;
         asset_ok: boolean;
         rent_account_ok: boolean;
@@ -384,6 +387,7 @@ export async function updateManagedProperty(input: {
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id and status in ('active','notice')) as has_active_leases,
         exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId}) as subsidiary_ok,
+        exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId} and is_active) as subsidiary_active,
         (${input.locationId ?? null}::uuid is null or exists(
           select 1 from locations l
            where l.org_id=${input.orgId} and l.id=${input.locationId ?? null}
@@ -412,6 +416,8 @@ export async function updateManagedProperty(input: {
     `));
     const row = scope.rows[0];
     if (!row) throw new PropertyManagementError("Property not found");
+    if (!row.subsidiary_ok) throw new PropertyManagementError("Subsidiary not found");
+    if (!row.subsidiary_active) throw new PropertyManagementError("Subsidiary is inactive");
     const currentAssetId = row.currentFixedAssetId ? String(row.currentFixedAssetId) : null;
     const nextAssetId = input.fixedAssetId !== undefined ? (input.fixedAssetId || null) : currentAssetId;
     if (nextAssetId !== currentAssetId && !(await fixedAssetsFeatureEnabled(tx, input.orgId))) {
