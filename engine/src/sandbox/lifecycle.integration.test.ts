@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
+import { postDocument } from "../posting.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -520,4 +521,55 @@ test("a masked sandbox scrubs custom JSON and copied user credentials", { skip: 
             and (email = 'person@example.com' or name = 'Production Operator' or password_hash = 'production-password-hash')) as user_leaks`)).rows[0]!;
     assert.deepEqual(leaked, { custom_leaks: 0, user_leaks: 0 });
   });
+});
+
+
+test("a sandbox holding posted documents can be deleted without stranding its org", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `DeletePosted ${randomUUID()}`;
+  let sandboxId: string | null = null;
+  try {
+    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
+    sandboxId = created.sandboxId;
+    const accountByNumber = async (number: string): Promise<string> =>
+      (await db.execute<{ id: string }>(sql`select id::text as id from accounts where org_id = ${created.sandboxOrgId} and number = ${number}`)).rows[0]!.id;
+    const customer = (await db.execute<{ id: string }>(sql`select id::text as id from parties where org_id = ${created.sandboxOrgId} and display_name = 'Acme Customer'`)).rows[0]!.id;
+    const subsidiary = (await db.execute<{ id: string }>(sql`select id::text as id from subsidiaries where org_id = ${created.sandboxOrgId}`)).rows[0]!.id;
+    const userId = await createScratchUser(created.sandboxOrgId, `SbxPost ${randomUUID()}`, "accountant");
+    const invoiceId = randomUUID();
+    await db.execute(sql`insert into documents
+      (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+       document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${invoiceId}, ${created.sandboxOrgId}, 'customer_invoice', 'draft', ${`SBX-${randomUUID()}`},
+              ${subsidiary}, ${customer}, ${org.date}, ${org.date},
+              'CAD', '1', '100', '0', '100', ${userId})`);
+    await db.execute(sql`insert into document_lines
+      (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+      values (${created.sandboxOrgId}, ${invoiceId}, 1, ${await accountByNumber("4000")}, '1', '100', '100', '0', '0')`);
+    await db.execute(sql`update documents set status='approved' where id=${invoiceId} and org_id=${created.sandboxOrgId}`);
+    await postDocument(invoiceId, {
+      control: { ar: await accountByNumber("1100"), ap: await accountByNumber("2000"), bank: await accountByNumber("1000") },
+    });
+    await deleteSandbox(sandboxId);
+    sandboxId = null;
+    const residue = (await db.execute<{ orgs: number; documents: number; entries: number }>(sql`
+      select (select count(*)::int from orgs where id = ${created.sandboxOrgId}) as orgs,
+             (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
+             (select count(*)::int from journal_entries where org_id = ${created.sandboxOrgId}) as entries
+    `)).rows[0]!;
+    assert.deepEqual(residue, { orgs: 0, documents: 0, entries: 0 });
+    const prod = (await db.execute<{ orgs: number; documents: number }>(sql`
+      select (select count(*)::int from orgs where id = ${org.orgId}) as orgs,
+             (select count(*)::int from documents where org_id = ${org.orgId}) as documents
+    `)).rows[0]!;
+    assert.deepEqual(prod, { orgs: 1, documents: 0 });
+  } finally {
+    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
+    else {
+      const failed = (await db.execute<{ id: string }>(sql`
+        select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
+      for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
+    }
+    await dropScratchOrg(org.orgId);
+  }
 });
