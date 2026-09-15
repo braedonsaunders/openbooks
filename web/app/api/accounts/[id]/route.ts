@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
-import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { assetBankHygieneWarning } from '../../../../lib/accounts-hygiene'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAccount } from '../_lib'
@@ -165,8 +165,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       existing.custom && typeof existing.custom === 'object'
         ? (existing.custom as Record<string, unknown>)
         : {}
-    const validated = validateCustomValues(await loadFieldDefs('accounts'), { ...existingCustom, ...body.custom })
+    const patchDefs = await loadFieldDefs('accounts')
+    const validated = validateCustomValues(patchDefs, { ...existingCustom, ...body.custom })
     if (!validated.ok) return bad('invalid_custom_fields', 'custom')
+    // Supplied values only, so legacy bags written before this fence cannot
+    // lock unrelated edits.
+    const suppliedCustom: Record<string, unknown> = {}
+    for (const key of Object.keys(body.custom)) {
+      if (validated.cleaned[key] !== undefined) suppliedCustom[key] = validated.cleaned[key]
+    }
+    const unownedPatchRefs = await findUnownedCustomReferences(gate.user.orgId, patchDefs, suppliedCustom)
+    if (unownedPatchRefs.length > 0) return bad('unknown_custom_reference', 'custom')
     custom = { ...existingCustom, ...validated.cleaned }
   }
 

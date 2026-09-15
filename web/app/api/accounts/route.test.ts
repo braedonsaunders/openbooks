@@ -133,7 +133,8 @@ const mockSources = new Map<string, string>([
   [
     "mock:custom-fields",
     `export async function loadFieldDefs() { return [] }
-     export function validateCustomValues(_defs, values) { return { ok: true, cleaned: values } }`,
+     export function validateCustomValues(_defs, values) { return { ok: true, cleaned: values } }
+     export async function findUnownedCustomReferences() { return [] }`,
   ],
   [
     "mock:list-params",

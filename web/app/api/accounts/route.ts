@@ -7,7 +7,7 @@ import { canonicalJson } from '@openbooks/engine/src/canonical-json.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
-import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { assetBankHygieneWarning } from '../../../lib/accounts-hygiene'
 import { isUuid } from '../../../lib/list-params'
 import { loadAccount } from './_lib'
@@ -120,8 +120,14 @@ export async function POST(request: Request) {
   }
   const requiredDimensions = [...new Set(requestedDimensions)]
 
-  const validatedCustom = validateCustomValues(await loadFieldDefs('accounts'), body.custom ?? {})
+  const customDefs = await loadFieldDefs('accounts')
+  const validatedCustom = validateCustomValues(customDefs, body.custom ?? {})
   if (!validatedCustom.ok) return bad('invalid_custom_fields', 'custom')
+  // Reference custom values are uuid-SHAPED at this point but nothing proves
+  // the referenced row belongs to the caller: refuse foreign or dangling ids
+  // instead of persisting a cross-tenant pointer.
+  const unownedCreateRefs = await findUnownedCustomReferences(gate.user.orgId, customDefs, validatedCustom.cleaned)
+  if (unownedCreateRefs.length > 0) return bad('unknown_custom_reference', 'custom')
   const custom = validatedCustom.cleaned
 
   const snapshot = {
