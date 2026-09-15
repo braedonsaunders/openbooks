@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
+import { sum } from '@openbooks/engine/src/money.ts'
 /**
  * Payment-run flyout: instructions, EFT readiness, and the two explicit
  * actions — CPA-005 file download (draft → exported) and posting the run's
@@ -157,7 +158,7 @@ export function RunDrawer({
   const filteredInstructions = instructions.filter((i) => !instructionQ || String(i.payee).toLowerCase().includes(instructionQ.toLowerCase()) || String(i.document_number ?? '').toLowerCase().includes(instructionQ.toLowerCase()))
   const instructionPages = Math.max(1, Math.ceil(filteredInstructions.length / 10))
   const shownInstructions = filteredInstructions.slice((instructionPage - 1) * 10, instructionPage * 10)
-  const total = live.reduce((acc, i) => acc + Number(i.amount), 0)
+  const total = sum(live.map((i) => String(i.amount)))
   const latestFile = files[0]
   const hasApprovedFile = latestFile && (latestFile.status === 'approved' || latestFile.status === 'delivered')
   const canGenerate = eftConfigured && blockers.length === 0 && run.status === 'approved'
