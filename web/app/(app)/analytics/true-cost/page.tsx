@@ -1,14 +1,20 @@
-import { redirect } from 'next/navigation'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { ModuleView } from '../../../../components/viewspec/module-view'
+import { loadTrueCost, trueCostSpec } from './view'
+import { getTranslations } from 'next-intl/server'
 
-export default async function TrueCostPage({ searchParams }: {
+export const dynamic = 'force-dynamic'
+
+export async function generateMetadata() {
+  const t = await getTranslations('analytics.trueCost')
+  return { title: t('title') }
+}
+
+export default async function TrueCostPage({
+  searchParams,
+}: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const authz = await requirePermission('reports.read')
-  await requireFeatureEnabled(authz.user.orgId, 'projects')
-  const params = await searchParams
-  const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) if (value) query.set(key, value)
-  redirect(`/reports/true-cost?${query}`)
+  const sp = await searchParams
+  const data = await loadTrueCost(sp)
+  return <ModuleView spec={trueCostSpec(data)} data={data} searchParams={sp} trusted />
 }

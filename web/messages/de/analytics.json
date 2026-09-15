@@ -138,6 +138,7 @@
     "title": "Echte Kosten",
     "backToHub": "Analytik",
     "configureInSetup": "In den Einstellungen konfigurieren →",
+    "openReport": "Bericht öffnen",
     "formats": {
       "perHour": "{amount}/Std."
     },

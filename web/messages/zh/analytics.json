@@ -138,6 +138,7 @@
     "title": "真实成本",
     "backToHub": "分析",
     "configureInSetup": "在设置中配置 →",
+    "openReport": "打开报告",
     "formats": {
       "perHour": "{amount}/小时"
     },
