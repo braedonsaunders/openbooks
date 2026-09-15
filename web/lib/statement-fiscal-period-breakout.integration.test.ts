@@ -158,6 +158,34 @@ test('quarter breakout groups the 4-4-5 calendar declared periods', { skip: !pro
   }
 })
 
+test('month breakout falls back to calendar math past generated periods', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // Fail-safe gate: FY2027 was never generated for this calendar, so a
+  // window reaching past FY2026 must keep the old calendar columns rather
+  // than silently dropping activity outside declared periods.
+  const { org, calendarId } = await make445Org()
+  try {
+    await withBypassContext(async () => {
+      await postRevenue(org, calendarId, '2026-04-15', '200.0000')
+    })
+    await withOrgContext(org.orgId, async () => {
+      const matrix = await statementMatrix({
+        orgId: org.orgId,
+        types: [...PNL_TYPES],
+        mode: 'flow',
+        period: { from: '2026-02-02', to: '2027-06-30' },
+        periodLabel: 'spillover',
+        breakout: 'month',
+      })
+      assert.equal(matrix.columns.length, 17)
+      assert.equal(matrix.columns[0]!.label, '2026-02')
+      assert.equal(matrix.columns[2]!.label, '2026-04')
+      assert.deepEqual(await revenueValues(matrix, 17).then((v) => [v[0], v[2]]), ['0.0000', '200.0000'])
+    })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId)).catch(() => {})
+  }
+})
+
 test('monthly January-start orgs keep calendar-month breakouts byte-identical', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
