@@ -325,6 +325,36 @@ test('expense PATCH refuses malformed and foreign line references with domain er
   })
 })
 
+test('expense PATCH refuses foreign reference custom values on header and lines', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    const foreign = await createScratchOrg()
+    try {
+      await db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${randomUUID()}, ${org.orgId}, 'documents', 'expense_report', 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId}),
+          (${randomUUID()}, ${org.orgId}, 'document_lines', 'expense_report', 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
+      `)
+      const refusedHeader = await patch(id, { expectedUpdatedAt: await revision(id), custom: { ref_party: foreign.vendorId } })
+      assert.equal(refusedHeader.status, 404, JSON.stringify(await refusedHeader.clone().json()))
+      const storedCustom = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`)).rows[0]?.custom
+      assert.equal((storedCustom as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused header references store nothing')
+      const savedHeader = await patch(id, { expectedUpdatedAt: await revision(id), custom: { ref_party: org.vendorId } })
+      assert.equal(savedHeader.status, 200, JSON.stringify(await savedHeader.clone().json()))
+      const line = (custom: Record<string, unknown>) => ({ accountId: org.accounts.cogs, amount: '10', description: 'probe', custom })
+      const refusedLine = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ line_ref: foreign.vendorId })] })
+      assert.equal(refusedLine.status, 404, JSON.stringify(await refusedLine.clone().json()))
+      const lines = (await db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`)).rows[0]!.n
+      assert.equal(lines, 1, 'refused line references store nothing')
+      const savedLine = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ line_ref: org.vendorId })] })
+      assert.equal(savedLine.status, 200, JSON.stringify(await savedLine.clone().json()))
+    } finally {
+      await dropScratchOrg(foreign.orgId)
+    }
+  })
+})
+
 test('expense DELETE with the exact revision deletes the draft', { skip: !DB }, async () => {
   await fixture(async (org, id) => {
     const response = await del(id, { expectedUpdatedAt: await revision(id) })
