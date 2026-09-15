@@ -154,7 +154,11 @@ export function transactionResource(
       const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds
       const docs = (await db.execute(sql`
         select d.id, d.document_number, d.document_date, d.due_date, d.currency, d.memo,
-               d.reference_number, d.status, p.short_code as party
+               d.reference_number, d.status,
+               -- The importer resolves parties by short code with a display-name
+               -- fallback (see PARTY_ID_LOOKUP); export that same key or rows
+               -- for parties without a short code come back unresolvable.
+               coalesce(nullif(p.short_code, ''), p.display_name) as party
           from documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = ${cfg.kind}
            ${transactionSubsidiaryFilter(subsidiaryScope)}
