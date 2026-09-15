@@ -44,6 +44,11 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return isUuid(s) ? s : 'invalid'
 }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 const nullableText = z.string().nullable().optional()
 const nullableMoney = z.preprocess(
   value => typeof value === 'string' && value.trim() === '' ? null : value,
@@ -179,6 +184,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     else {
       const exact = canonicalDecimal(raw, 4)
       if (exact === null) return bad('Default rate must be a number with no more than four decimal places')
+      if (wholeDigits(exact) > 15) return bad('Default rate is out of range — at most 15 whole digits fit the ledger')
       defaultRate = fixedDecimal(exact, 4)
     }
   }
@@ -190,6 +196,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     else {
       const exact = canonicalDecimal(raw, 4)
       if (exact === null || compareDecimal(exact, '0') < 0) return bad('Default cost must be a non-negative number')
+      if (wholeDigits(exact) > 15) return bad('Default cost is out of range — at most 15 whole digits fit the ledger')
       defaultCost = fixedDecimal(exact, 4)
     }
   }
@@ -258,6 +265,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     else {
       const exact = canonicalDecimal(raw, 4)
       if (exact === null) return bad('Standalone selling price must be a number with no more than four decimal places')
+      if (wholeDigits(exact) > 15) return bad('Standalone selling price is out of range — at most 15 whole digits fit the ledger')
       standaloneSellingPrice = fixedDecimal(exact, 4)
     }
   }
