@@ -154,3 +154,95 @@ test("div then mul returns the original within one rounding step", () => {
     );
   }
 });
+
+test("roundDiv rounds halves away from zero on both sides of zero", () => {
+  // A truncating-division swap returns 0 for every |n| < d row here; a
+  // half-even swap flips the exact-half rows (1/2, 5/2, 6/4, -5/2).
+  const cases: Array<[bigint, bigint, bigint]> = [
+    [1n, 2n, 1n],
+    [3n, 2n, 2n],
+    [5n, 2n, 3n],
+    [7n, 4n, 2n],
+    [6n, 4n, 2n],
+    [10n, 4n, 3n],
+    [4n, 2n, 2n],
+    [0n, 7n, 0n],
+    [-1n, 2n, -1n],
+    [-3n, 2n, -2n],
+    [-5n, 2n, -3n],
+    [-6n, 4n, -2n],
+    [-10n, 4n, -3n],
+  ];
+  for (const [numerator, denominator, expected] of cases) {
+    assert.equal(roundDiv(numerator, denominator), expected, `${numerator}/${denominator}`);
+  }
+  assert.throws(() => roundDiv(1n, 0n), /denominator must be greater than zero/);
+  assert.throws(() => roundDiv(1n, -2n), /denominator must be greater than zero/);
+});
+
+test("mul rounds a half-unit product away from zero instead of truncating it", () => {
+  // 0.0001 × 0.5 is exactly half a ledger unit: truncation posts 0.0000 and
+  // silently destroys the half cent; a sign flip posts the wrong side.
+  assert.equal(mul("0.0001", "0.5000"), "0.0001");
+  assert.equal(mul("-0.0001", "0.5000"), "-0.0001");
+  assert.equal(mul("0.0001", "-0.5000"), "-0.0001");
+  assert.equal(mul("-0.0001", "-0.5000"), "0.0001");
+  assert.equal(mul("0.0002", "0.2500"), "0.0001");
+  assert.equal(mul("2.6750", "1.0000"), "2.6750");
+});
+
+test("mulRate rounds a half-unit translation away from zero on both signs", () => {
+  // 0.0001 at a 0.5 rate is exactly half a functional unit — the same
+  // boundary the FX residual absorber assumes each line can carry.
+  assert.equal(mulRate("0.0001", "0.5000000000"), "0.0001");
+  assert.equal(mulRate("-0.0001", "0.5000000000"), "-0.0001");
+  assert.equal(mulRate("0.0001", "1.0000000000"), "0.0001");
+  assert.equal(mulRate("0.0003", "0.5000000000"), "0.0002");
+  assert.equal(mulRate("-0.0003", "0.5000000000"), "-0.0002");
+});
+
+test("mulRatio keeps dust shares visible and signs them with the amount", () => {
+  // A truncating swap zeroes every dust row; a sign flip credits the residue.
+  const cases: Array<[string, bigint, bigint, string]> = [
+    ["0.0001", 1n, 2n, "0.0001"],
+    ["0.0002", 1n, 4n, "0.0001"],
+    ["-0.0001", 1n, 2n, "-0.0001"],
+    ["-0.0002", 1n, 4n, "-0.0001"],
+    ["100.0000", 1n, 3n, "33.3333"],
+    ["100.0000", 2n, 3n, "66.6667"],
+    ["0.0001", 1n, 1n, "0.0001"],
+  ];
+  for (const [amount, numerator, denominator, expected] of cases) {
+    assert.equal(mulRatio(amount, numerator, denominator), expected, `${amount} × ${numerator}/${denominator}`);
+  }
+  // Complementary shares bracket the whole: floor + ceiling, never two floors.
+  assert.equal(
+    toUnits(mulRatio("100.0000", 1n, 3n)) + toUnits(mulRatio("100.0000", 2n, 3n)),
+    toUnits("100.0000"),
+  );
+  assert.throws(() => mulRatio("100.0000", -1n, 3n), /numerator cannot be negative/);
+  assert.throws(() => mulRatio("100.0000", 1n, 0n), /denominator must be greater than zero/);
+});
+
+test("mulPercent rounds a half-quantum levy away from zero on both signs", () => {
+  // 0.0001 at 50% is exactly half a unit; 100 at 0.0001% is one dust unit.
+  assert.equal(mulPercent("0.0001", "50"), "0.0001");
+  assert.equal(mulPercent("-0.0001", "50"), "-0.0001");
+  assert.equal(mulPercent("100.0000", "0.0001"), "0.0001");
+  assert.equal(mulPercent("-100.0000", "0.0001"), "-0.0001");
+  assert.equal(mulPercent("0.0003", "50"), "0.0002");
+  assert.equal(mulPercent("200.0000", "7.25"), "14.5000");
+  assert.equal(mulPercent("-200.0000", "7.25"), "-14.5000");
+  assert.throws(() => mulPercent("100", "5", 5), /decimalPlaces/);
+  assert.throws(() => mulPercent("100", "5", -1), /decimalPlaces/);
+});
+
+test("div rounds a half-quantum quotient away from zero on both signs", () => {
+  // 1 ÷ 20000 is exactly half a unit: truncation posts 0.0000 and the
+  // divisor's value vanishes from the ledger.
+  assert.equal(div("1", "20000"), "0.0001");
+  assert.equal(div("-1", "20000"), "-0.0001");
+  assert.equal(div("1", "-20000"), "-0.0001");
+  assert.equal(div("-1", "-20000"), "0.0001");
+  assert.equal(div("3", "20000"), "0.0002");
+});
