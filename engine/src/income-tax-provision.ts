@@ -10,6 +10,7 @@ import {
   mulPercent,
   mulRate,
   neg,
+  roundDiv,
   sum,
   toUnits,
 } from "./money.ts";
@@ -159,12 +160,21 @@ function maxZero(v: string): string {
 
 function percentOf(amount: string, base: string): string | null {
   if (isZero(base)) return null;
-  const pct = (toUnits(amount) * 1_000_000n) / toUnits(base); // 4dp of percent
-  const sign = pct < 0n ? "-" : "";
-  const abs = pct < 0n ? -pct : pct;
-  const whole = abs / 10_000n;
-  const frac = String(abs % 10_000n).padStart(4, "0");
-  return `${sign}${whole}.${frac.slice(0, 2)}`;
+  // Percent in 4dp units, then ONE half-away-from-zero rounding to the two
+  // decimals the provision UI prints (12.345% -> "12.35"). Truncating here
+  // would print "12.34%" for a true 12.345% reconciliation step.
+  const baseUnits = toUnits(base);
+  // roundDiv needs a positive denominator: carry a negative base (loss-year
+  // pretax over a negative base) into the numerator so the sign survives.
+  const denominator = baseUnits < 0n ? -baseUnits : baseUnits;
+  const scaled = toUnits(amount) * 1_000_000n;
+  const pct = roundDiv(baseUnits < 0n ? -scaled : scaled, denominator);
+  const display = roundDiv(pct, 100n);
+  const sign = display < 0n ? "-" : "";
+  const abs = display < 0n ? -display : display;
+  const whole = abs / 100n;
+  const frac = String(abs % 100n).padStart(2, "0");
+  return `${sign}${whole}.${frac}`;
 }
 
 /** Pure: the entire provision computation for ONE legal entity, side-effect free. */
