@@ -22,13 +22,20 @@
  * paragraph in an authoritative copy.
  */
 
-/** Standards bodies' documents this corpus draws requirements from. */
+/**
+ * Standards bodies' and tax authorities' documents this corpus draws
+ * requirements from: accounting standards plus the payroll-deduction guides,
+ * withholding publications, tax statutes, and return guides whose worked
+ * figures the payroll and indirect-tax cases reproduce to the cent.
+ */
 export type Standard =
   | "ASC 330"
   | "ASC 360"
   | "ASC 450"
   | "ASC 606"
   | "ASC 740"
+  | "ASC 810"
+  | "ASC 830"
   | "ASC 842"
   | "IAS 2"
   | "IAS 12"
@@ -36,8 +43,21 @@ export type Standard =
   | "IAS 21"
   | "IAS 36"
   | "IAS 37"
+  | "IFRS 10"
   | "IFRS 15"
-  | "IFRS 16";
+  | "IFRS 16"
+  | "CRA T4127"
+  | "IRS Pub 15"
+  | "IRS Pub 15-T"
+  | "IRC 3101/3111"
+  | "AL DOR"
+  | "ETA"
+  | "RQ QST"
+  | "CRA GST34"
+  | "HMRC VAT700/12"
+  | "SD v. Wayfair"
+  | "CDTFA Reg 1684"
+  | "NY Tax Law 1101";
 
 /**
  * How the case relates to its source.

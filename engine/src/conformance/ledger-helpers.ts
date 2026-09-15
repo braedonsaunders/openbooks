@@ -104,9 +104,12 @@ export interface DraftDocumentInput {
 }
 
 /**
- * Insert an APPROVED source document with its lines. Approved, not draft:
- * `postDocument` refuses anything that has not completed the approval
- * lifecycle, and the approval workflow is not what these cases are testing.
+ * Insert a DRAFT source document with its lines, following the real document
+ * lifecycle. Lines are staged while the document is still draft because the
+ * document-line immutability guard permits line writes only in draft;
+ * `postNewDocument` approves before posting. `postDocument` refuses anything
+ * that has not completed the approval lifecycle, and the approval workflow
+ * itself is not what these cases are testing.
  */
 export async function draftDocument(
   ledger: LedgerContext,
@@ -122,7 +125,7 @@ export async function draftDocument(
     insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
                            currency, fx_rate, status, subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
     values (${documentId}, ${ledger.orgId}, ${input.kind}, ${input.number}, ${input.partyId ?? null},
-            ${ledger.subsidiaryId}, ${date}, ${date}, ${currency}, ${fxRate}, 'approved',
+            ${ledger.subsidiaryId}, ${date}, ${date}, ${currency}, ${fxRate}, 'draft',
             ${subtotal}, '0', ${subtotal}, false, '{}'::jsonb, '{}'::jsonb)`);
 
   let lineNumber = 1;
@@ -139,12 +142,16 @@ export async function draftDocument(
   return documentId;
 }
 
-/** Draft + post in one step; returns the posted journal entry id. */
+/** Draft + approve + post in one step; returns the posted journal entry id. */
 export async function postNewDocument(
   ctx: CaseContext,
   input: DraftDocumentInput,
 ): Promise<string> {
-  const documentId = await draftDocument(ctx.ledger!, input);
+  const ledger = ctx.ledger!;
+  const documentId = await draftDocument(ledger, input);
+  await db.execute(sql`
+    update documents set status = 'approved'
+     where id = ${documentId} and org_id = ${ledger.orgId} and status = 'draft'`);
   return await postDocument(documentId, deps(ctx));
 }
 
