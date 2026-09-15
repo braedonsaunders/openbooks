@@ -159,15 +159,30 @@ test('later impairment refuses a basis below retained unposted reservations atom
 });
 
 for(const existing of [false,true]) {
-  test(`multiple native months in one accounting period refuse atomically, existing=${existing}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+  // Contract change (retail calendars): when several native months fall inside
+  // one broader fiscal period — a hand-stretched month here, every 5-week
+  // period on a 4-4-5 calendar — the builder allocates the SUM of those
+  // months into that period (one line per period, horizon total intact)
+  // instead of refusing. Refusal made depreciation, and therefore the close,
+  // impossible on retail calendars.
+  test(`multiple native months in one accounting period allocate atomically, existing=${existing}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
     const org=await createScratchOrg();
     try {
       const {actorId,assetId}=await seed(org,2);
       if(!existing) await db.execute(sql`delete from depreciation_schedule_lines where org_id=${org.orgId}`);
       await db.execute(sql`update accounting_periods set ends_on='2026-09-30' where org_id=${org.orgId} and starts_on='2026-08-01'`);
-      const before=await snapshot(org);
-      await assert.rejects(buildSchedule(assetId,org.orgId,actorId,org.bookId),/multiple native depreciation months/i);
-      assert.deepEqual(await snapshot(org),before);
+      await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+      const planned=(await rows(org,assetId)).map(r=>r.planned);
+      assert.deepEqual(planned,['100.0000','200.0000'],'July bears one month; the stretched period bears August+September');
+      const dup=(await db.execute<{extra:string}>(sql`
+        select count(*)::text as extra from depreciation_schedule_lines l
+        join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
+        where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${org.bookId}
+        group by l.period_id having count(*) > 1`)).rows;
+      assert.equal(dup.length,0,'one line per period');
+      // Rebuilding is idempotent: no drift, no duplicate rows.
+      await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+      assert.deepEqual((await rows(org,assetId)).map(r=>r.planned),['100.0000','200.0000']);
     } finally {await dropScratchOrg(org.orgId);}
   });
 }
