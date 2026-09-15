@@ -1036,6 +1036,11 @@ export async function savePspProviderConfig(
   },
   actorId: string | null,
 ): Promise<void> {
+  // Fail closed before any write: without this the storage CHECK surfaces
+  // an unknown provider as a raw 500.
+  if (input.provider !== "stripe" && input.provider !== "recurly" && input.provider !== "chargebee") {
+    throw new PspSettlementError(`unknown provider ${String(input.provider)}`);
+  }
   // Default posting accounts are validated like any other settlement
   // reference: a foreign or unpostable id must not persist to detonate at
   // posting time.
