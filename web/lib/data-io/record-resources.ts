@@ -13,8 +13,10 @@ import {
   MAX_EXPORT_ROWS,
   RefResolver,
   type DataResource,
+  type ReadCtx,
   type WriteCtx,
 } from './resource-core'
+import { pgTextArrayLiteral } from '../pg-array'
 import {
   type CellValue,
   type ImportMode,
@@ -132,12 +134,22 @@ export function recordResource(orgId: string, typeKey: string, sections: FormSec
     async columns() {
       return recordColumns(sections)
     },
-    async read() {
+    async read(readCtx?: ReadCtx) {
       const fields = recordResourceFields(sections)
       const resolver = new RefResolver(orgId)
+      const subsidiaryField = sections.some((section) =>
+        section.fields.some((field) => field.id === 'subsidiary_id'),
+      )
+      const subsidiaryScope =
+        !subsidiaryField || readCtx?.allowedSubsidiaryIds === null || readCtx?.allowedSubsidiaryIds === undefined
+          ? sql``
+          : readCtx.allowedSubsidiaryIds.size > 0
+            ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...readCtx.allowedSubsidiaryIds])}::text[])`
+            : sql`and false`
       const result = (await db.execute(sql`
         select record_number, status, data from custom_records
          where org_id = ${orgId} and type_key = ${typeKey}
+           ${subsidiaryScope}
          order by record_number limit ${MAX_EXPORT_ROWS}`)) as {
         rows: { record_number: string; status: string; data: FieldValueMap }[]
       }
