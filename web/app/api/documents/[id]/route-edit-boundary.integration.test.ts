@@ -38,7 +38,7 @@ const { documentRevisionSql } = await import('../../../../lib/documents.ts')
 const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
-async function makeDraftBill(org: { orgId: string; subsidiaryId: string; date: string }): Promise<string> {
+async function makeDraftBill(org: { orgId: string; subsidiaryId: string; date: string; accounts: { cogs: string } }): Promise<string> {
   const id = randomUUID()
   await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
     values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${'BILL-' + id.slice(0, 8)}, ${org.date}, ${org.subsidiaryId}, 'CAD', '0', '0', '0', '{}'::jsonb)`)
@@ -106,6 +106,28 @@ test('documents PATCH refuses a malformed reference id with a domain error', { s
     assert.equal(stored, null, 'refused references write nothing')
   } finally {
     await dropScratchOrg(org.orgId)
+  }
+})
+
+test('documents PATCH refuses malformed and foreign line dimension references', { skip: !DB }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    state.orgId = orgA.orgId
+    state.actorId = randomUUID()
+    const id = await makeDraftBill(orgA)
+    const deptB = randomUUID()
+    await db.execute(sql`insert into departments (id, org_id, name) values (${deptB}, ${orgB.orgId}, 'Foreign department')`)
+    const line = (departmentId: string) => ({ accountId: orgA.accounts.cogs, amount: '10', description: 'probe', departmentId })
+    const malformed = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line('not-a-uuid')] })
+    assert.equal(malformed.status, 422, `expected 422, got ${malformed.status}: ${JSON.stringify(malformed.json)}`)
+    const foreign = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line(deptB)] })
+    assert.equal(foreign.status, 404, `expected 404, got ${foreign.status}: ${JSON.stringify(foreign.json)}`)
+    const lines = (await db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${orgA.orgId}`)).rows[0]!.n
+    assert.equal(lines, 0, 'refused line references store nothing')
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
   }
 })
 

@@ -906,6 +906,40 @@ export async function applyDocumentEdit(
     if (malformedLineAccounts.length > 0 || usableLineAccounts.length !== lineAccountIds.length) {
       throw new DocumentEditError(404, 'account not found in this organization')
     }
+    // Line dimension references ride the same uncast path into the re-insert:
+    // a malformed id dies as 22P02 and a foreign id as 23503, both unhandled
+    // storage errors. Shape-check every submitted reference first, then prove
+    // tenant ownership batched per table (same contract as line accounts).
+    const lineRefDefs = [
+      { key: 'partyId', label: 'party', table: 'parties' },
+      { key: 'departmentId', label: 'department', table: 'departments' },
+      { key: 'projectId', label: 'project', table: 'projects' },
+      { key: 'locationId', label: 'location', table: 'locations' },
+      { key: 'classId', label: 'class', table: 'classes' },
+      { key: 'itemId', label: 'item', table: 'items' },
+      { key: 'stockLocationId', label: 'stock location', table: 'stock_locations' },
+    ] as const
+    for (let i = 0; i < body.lines.length; i++) {
+      const line = body.lines[i]!
+      for (const def of lineRefDefs) {
+        const value = line[def.key]
+        if (value !== undefined && value !== null && !isUuid(value)) {
+          throw new DocumentEditError(422, `Line ${i + 1}: invalid ${def.key}`)
+        }
+      }
+    }
+    for (const def of lineRefDefs) {
+      const ids = [...new Set(body.lines.map((l) => l[def.key]).filter((v): v is string => typeof v === 'string' && v.length > 0))]
+      if (ids.length === 0) continue
+      const owned = new Set((await db.execute<{ id: string }>(sql`
+        select id from ${sql.raw(`"${def.table}"`)}
+         where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)).rows.map((r) => r.id))
+      const foreign = ids.find((v) => !owned.has(v))
+      if (foreign !== undefined) {
+        const lineNumber = body.lines.findIndex((l) => l[def.key] === foreign) + 1
+        throw new DocumentEditError(404, `Line ${lineNumber}: ${def.label} not found in this organization`)
+      }
+    }
     // Validate, don't filter. The old `filter((l) => l.accountId && cmp(l.amount, '0') > 0)`
     // dropped negative and zero lines before the totals were computed, so any
     // edit of a document carrying one rewrote it without that line — the
