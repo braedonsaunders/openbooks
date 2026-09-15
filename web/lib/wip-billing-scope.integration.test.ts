@@ -22,6 +22,7 @@ test('WIP prebilling honours the caller subsidiary scope end to end', {skip:!pro
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const actors = await seedFlowActors(org.orgId)
       const preparer = actors.adminId, approver = actors.approver1Id
       const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!

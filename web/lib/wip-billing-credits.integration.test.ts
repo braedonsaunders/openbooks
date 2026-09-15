@@ -24,6 +24,7 @@ test('a credit-only project fails prebill creation with a domain error', enabled
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const preparer = (await seedFlowActors(org.orgId)).adminId
       const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
       const financialProfile = {
