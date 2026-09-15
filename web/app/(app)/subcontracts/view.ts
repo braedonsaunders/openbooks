@@ -6,6 +6,7 @@ import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaund
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { requireSubcontractsFeature } from '../../../lib/subcontracts-gate'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
  * Subcontracts, split into a loader and a spec.
@@ -60,12 +61,22 @@ export async function loadSubcontracts(
   const orgId = authz.user.orgId
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const [projects, vendors, accounts, parties] = await Promise.all([
-    db.execute<SubcontractOption>(sql`select id, name from projects where org_id = ${orgId} and is_active and status not in ('closed','cancelled') order by name`),
+    db.execute<SubcontractOption>(sql`select id, name from projects
+      where org_id = ${orgId} and is_active and status not in ('closed','cancelled')
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
+      order by name`),
     multiCurrency
-      ? db.execute<SubcontractOption>(sql`select p.id, p.display_name as name, vr.currency from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active order by p.display_name`)
-      : db.execute<SubcontractOption>(sql`select p.id, p.display_name as name from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active order by p.display_name`),
+      ? db.execute<SubcontractOption>(sql`select p.id, p.display_name as name, vr.currency from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active
+          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+        order by p.display_name`)
+      : db.execute<SubcontractOption>(sql`select p.id, p.display_name as name from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active
+          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+        order by p.display_name`),
     db.execute<SubcontractOption>(sql`select id, concat_ws(' · ', number, name) as name from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense','cogs') order by number nulls last`),
-    db.execute<SubcontractOption>(sql`select id, display_name as name from parties where org_id = ${orgId} and is_active order by display_name limit 2000`),
+    db.execute<SubcontractOption>(sql`select id, display_name as name from parties
+      where org_id = ${orgId} and is_active
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+      order by display_name limit 2000`),
   ])
   return {
     // Hard-coded in the native PageHeader, not a message key.
