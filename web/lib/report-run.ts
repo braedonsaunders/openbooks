@@ -168,6 +168,9 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     classId: q.dims.classId,
     segments: q.dims.segments,
     subsidiaryIds: subView.subsidiary?.ids,
+    // Unrestricted root-covering views read root-owned (null subsidiary)
+    // documents alongside attributed ones; restricted views stay fail-closed.
+    includeNullSubsidiary: subView.subsidiary?.includeNullSubsidiary === true,
   }
   const secTotal = (section: string) => t('statement.sectionTotal', { section })
 

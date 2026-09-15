@@ -116,7 +116,16 @@ async function openPoValueInOrgCurrency(
   return { byParty, total }
 }
 
-export async function purchasingHome(orgId: string, subIds?: string[]): Promise<PurchasingHome> {
+export async function purchasingHome(
+  orgId: string,
+  subIds?: string[],
+  /**
+   * Server-set: the caller is unrestricted AND the viewed set contains the
+   * org root, so document-side reads also match root-owned (null
+   * subsidiary) rows. Restricted callers never receive it.
+   */
+  includeNullSubsidiary?: boolean,
+): Promise<PurchasingHome> {
   const [ordersOn, expensesOn] = await Promise.all([
     isFeatureEnabled(orgId, 'orders'),
     isFeatureEnabled(orgId, 'expenses'),
@@ -132,7 +141,14 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
   // binds as an empty uuid array so every `= any(...)` leg matches nothing.
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
-  const docScope = subArr ? sql` and d.subsidiary_id = any(${subArr})` : sql``
+  // Document-side reads match root-owned rows only for unrestricted
+  // root-covering views; the limb never widens an empty scope (see filters).
+  const docScope =
+    subArr && includeNullSubsidiary === true && (subIds?.length ?? 0) > 0
+      ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))`
+      : subArr
+        ? sql` and d.subsidiary_id = any(${subArr})`
+        : sql``
 
   const [apRes, topRes, trendRes, badgeRes, poRowsRes, orgRes] = (await Promise.all([
     // Open payables aggregate — open bill/expense items with remaining balance.

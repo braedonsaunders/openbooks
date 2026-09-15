@@ -15,6 +15,13 @@ export interface DimFilter {
    * filter without FX translation — amounts stay in functional currency.
    */
   subsidiaryIds?: string[];
+  /**
+   * Server-set only (never parsed from URL input): the caller is
+   * unrestricted AND the viewed entity set contains the org root, so
+   * root-owned rows (null subsidiary) must read alongside attributed rows.
+   * Restricted callers never receive it — their nulls fail closed.
+   */
+  includeNullSubsidiary?: boolean;
   segments?: Record<string, string>;
 }
 
@@ -27,8 +34,15 @@ export function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
   for (const [key, value] of Object.entries(dims?.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
     w = sql`${w} and ${alias}.extra_dims ->> ${key} = ${value}`;
   }
-  if (dims?.subsidiaryIds)
-    w = sql`${w} and ${alias}.subsidiary_id = any(${`{${dims.subsidiaryIds.join(",")}}`}::uuid[])`;
+  if (dims?.subsidiaryIds) {
+    // The null limb is unrestricted-only (see includeNullSubsidiary) and
+    // never widens an empty scope: `= any('{}')` already matches nothing,
+    // and an empty caller must read no rows — never the root-owned ones.
+    if (dims.subsidiaryIds.length > 0 && dims.includeNullSubsidiary === true)
+      w = sql`${w} and (${alias}.subsidiary_id is null or ${alias}.subsidiary_id = any(${`{${dims.subsidiaryIds.join(",")}}`}::uuid[]))`;
+    else
+      w = sql`${w} and ${alias}.subsidiary_id = any(${`{${dims.subsidiaryIds.join(",")}}`}::uuid[])`;
+  }
   return w;
 }
 

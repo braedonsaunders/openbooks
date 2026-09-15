@@ -20,6 +20,27 @@ import { subsidiaryFeatureEnabled } from "./features";
 
 export class MissingRatesError extends Error {}
 
+/**
+ * Pure root-owned rule shared by every subsidiary-context consumer: the
+ * viewed set reads null-subsidiary (root-owned) rows alongside attributed
+ * rows exactly when the caller is unrestricted AND the viewed set contains
+ * the org root — the same population the line-side readers see (posting
+ * stamps every leg with the root id, so the matrix never drops them).
+ * Restricted callers stay fail-closed (even with full-entity visibility),
+ * and an explicitly branch-scoped view hides root-owned rows exactly like
+ * its statement cell does. A missing root is degenerate; unrestricted
+ * callers keep the established unaffected behavior.
+ */
+export function resolveNullSubsidiaryInclusion(
+  allowed: Set<string> | null,
+  rootId: string | undefined,
+  inViewIds: readonly string[],
+): boolean {
+  if (allowed !== null) return false;
+  if (rootId === undefined) return true;
+  return inViewIds.includes(rootId);
+}
+
 export interface ResolvedSubsidiaryView {
   /** Undefined = single-subsidiary org; statements run untouched. */
   subsidiary?: StatementSubsidiaryContext;
@@ -47,7 +68,7 @@ export async function resolveSubsidiaryView(
     (subsidiaryId && pickerOptions.find((s) => s.id === subsidiaryId)) ||
     (allowed ? pickerOptions[0] : root && pickerOptions.find((s) => s.id === root.id)) ||
     pickerOptions[0];
-  if (!node) return { consolidated: false, options: pickerOptions, subsidiary: { ids: [] } };
+  if (!node) return { consolidated: false, options: pickerOptions, subsidiary: { ids: [], includeNullSubsidiary: false } };
 
   const subtree = subtreeIds(all, node.id);
   const members = all.filter(
@@ -148,8 +169,13 @@ export async function resolveSubsidiaryView(
       );
   }
 
+  const includeNullSubsidiary = resolveNullSubsidiaryInclusion(
+    allowed,
+    root?.id,
+    inView.map((s) => s.id),
+  );
   return {
-    subsidiary: { ids: inView.map((s) => s.id), rates, weights },
+    subsidiary: { ids: inView.map((s) => s.id), rates, weights, includeNullSubsidiary },
     currency: node.baseCurrency,
     label: consolidated ? `${node.name} (consolidated)` : node.name,
     consolidated,
