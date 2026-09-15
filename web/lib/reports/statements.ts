@@ -67,8 +67,14 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
   const byId = new Map(rows.map((r) => [r.id, r]));
   const rolled = new Map<string, ExactDecimal>(rows.map((r) => [r.id, r.raw]));
   for (const r of rows) {
+    // A malformed imported cycle (the PATCH route refuses these, but imports
+    // land parent_id without validation) must terminate, not hang the report:
+    // each ancestor absorbs the balance once, matching the display layer's
+    // tolerate-and-show policy.
+    const seen = new Set<string>([r.id]);
     let p = r.parent_id;
-    while (p) {
+    while (p && !seen.has(p)) {
+      seen.add(p);
       rolled.set(p, decimalAdd(rolled.get(p) ?? ZERO, r.raw));
       p = byId.get(p)?.parent_id ?? null;
     }

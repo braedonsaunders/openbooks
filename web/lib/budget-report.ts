@@ -85,8 +85,12 @@ function treeify(
   for (const a of accounts) {
     const own = leaf.get(a.id)
     if (!own) continue
+    // A malformed imported cycle must terminate, not hang the report (same
+    // policy as the statement treeify rollups).
+    const seen = new Set<string>([a.id])
     let p = a.parent_id
-    while (p) {
+    while (p && !seen.has(p)) {
+      seen.add(p)
       const acc = rolled.get(p)
       if (acc) {
         acc[0] = decimalAdd(acc[0], own[0])
