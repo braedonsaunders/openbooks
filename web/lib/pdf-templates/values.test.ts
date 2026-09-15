@@ -88,6 +88,7 @@ const mockSources = new Map<string, string>([
       // lib/subsidiaries (the shared scope predicate values.ts reuses) imports
       // this seam; the pay-stub path under test never reaches it.
       export async function withBypassContext(_opts, work) { return work() }
+      export function ambientTenantOrgId() { return null }
     `,
   ],
   [
