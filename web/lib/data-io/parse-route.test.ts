@@ -73,6 +73,14 @@ function parseRequest(text: string) {
   })
 }
 
+function commitRequest(rows: Record<string, unknown>[]) {
+  return new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mode: 'commit', resource: 'probe', mapping: {}, rows }),
+  })
+}
+
 test('parse mode reports duplicate columns as a 400, not a 500', async () => {
   const response = await POST(parseRequest('documentDate,amount,amount\n2026-01-01,100,200\n'))
   assert.equal(response.status, 400)
@@ -104,4 +112,15 @@ test('parse mode marks a small file complete', async () => {
   const payload = await response.json()
   assert.equal(payload.total, 1)
   assert.equal(payload.truncated, false)
+})
+
+test('commit mode refuses more rows than the parser cap instead of running them', async () => {
+  // The wizard can only ever send what the parser kept (<= the cap); a direct
+  // API caller sending 100k rows would otherwise run a 100k-savepoint write
+  // transaction to its timeout. Fail fast with the same bound.
+  const rows = Array.from({ length: 20_001 }, (_, i) => ({ documentDate: '2026-01-01', amount: `${i}` }))
+  const response = await POST(commitRequest(rows))
+  assert.equal(response.status, 400)
+  const payload = await response.json()
+  assert.match(payload.error, /too many rows/i)
 })
