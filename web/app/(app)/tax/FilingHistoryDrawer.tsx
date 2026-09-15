@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Download } from 'lucide-react'
 import { Badge, Button, Input, Label, UrlDrawer } from '@openbooks/ui'
+import { formatDecimal } from '../../../lib/money-format'
 
 export type FilingHistoryRecord = {
   id: string
@@ -82,7 +83,7 @@ export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: Fi
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
           <table className="w-full text-sm">
             <thead><tr className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400"><th className="px-3 py-2">{t('line')}</th><th className="px-3 py-2">{t('lineDescription')}</th><th className="px-3 py-2 text-right">{t('amount')}</th></tr></thead>
-            <tbody>{filing.boxes.map((box) => <tr key={box.lineCode} className="border-t border-slate-100 dark:border-slate-800"><td className="px-3 py-2 font-mono text-xs">{box.lineCode}</td><td className="px-3 py-2">{box.label}</td><td className="px-3 py-2 text-right tabular-nums">{Number(box.value).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>)}</tbody>
+            <tbody>{filing.boxes.map((box) => <tr key={box.lineCode} className="border-t border-slate-100 dark:border-slate-800"><td className="px-3 py-2 font-mono text-xs">{box.lineCode}</td><td className="px-3 py-2">{box.label}</td><td className="px-3 py-2 text-right tabular-nums">{formatDecimal(locale, box.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>)}</tbody>
           </table>
         </div>
         <p className="break-all text-xs text-slate-400 dark:text-slate-500">{t('hash', { hash: filing.snapshot_hash })}</p>
