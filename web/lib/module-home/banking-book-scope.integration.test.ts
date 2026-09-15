@@ -14,6 +14,7 @@ registerHooks({
 })
 
 const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { businessToday } = await import('@openbooks/engine/src/business-date.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { bankingHome } = await import('./banking.ts')
 
@@ -80,6 +81,35 @@ test('banking cockpit reads the primary book only', { skip: !env.OPENBOOKS_DB_UR
       100,
       'trend excludes the secondary-book posting',
     )
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
+
+test('restricted transaction badge excludes subsidiary-less documents', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const today = await withBypass(() => businessToday(scratch.orgId))
+    const branchId = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Txn branch', 'CAD', 'CA')
+      `)
+      for (const [subsidiary, number] of [[branchId, 'TXN-BRANCH'], [null, 'TXN-NOSUB']] as const) {
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, document_number, subsidiary_id, document_date, currency, status)
+          values
+            (${randomUUID()}, ${scratch.orgId}, 'deposit', ${number}, ${subsidiary}, ${today}, 'CAD', 'draft')
+        `)
+      }
+    })
+
+    const restricted = await withBypass(() => bankingHome(scratch.orgId, [branchId]))
+    assert.equal(restricted.badges.txns7d, 1, 'branch scope sees only the branch document')
+    const all = await withBypass(() => bankingHome(scratch.orgId))
+    assert.equal(all.badges.txns7d, 2, 'unrestricted callers still see everything')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
