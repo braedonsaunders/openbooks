@@ -3,6 +3,9 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
 
+// Route now fails closed (404) on a non-uuid subsidiary id, so scope fixtures use a real uuid.
+const SUB_VISIBLE = '00000000-0000-4000-8000-0000000000e1'
+
 interface TaxPoolRouteState {
   allowedSubsidiaryIds: Set<string> | null;
   explicitSubsidiaryExists: boolean;
@@ -135,7 +138,7 @@ const mockSources = new Map<string, string>([
           if (text.includes('from subsidiaries')) {
             if (text.includes('parent_id is null')) return { rows: [{ id: 'sub-root' }] }
             if (!state.explicitSubsidiaryExists) return { rows: [] }
-            return { rows: [{ id: state.requestedSubsidiaryId ?? 'sub-visible' }] }
+            return { rows: [{ id: state.requestedSubsidiaryId ?? SUB_VISIBLE }] }
           }
           throw new Error('unexpected database query: ' + text)
         },
@@ -215,14 +218,14 @@ function post(body: Record<string, unknown>): Promise<Response> {
 }
 
 test("GET applies the caller subsidiary scope to tax pool periods", async () => {
-  reset(new Set(["sub-visible"]));
+  reset(new Set([SUB_VISIBLE]));
 
   const response = await GET(
     new Request("http://openbooks.test/api/assets/tax-pools?taxYear=2026"),
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.filterCalls, [["sub-visible"]]);
+  assert.deepEqual(routeState.filterCalls, [[SUB_VISIBLE]]);
   assert.ok(
     routeState.queries.some(
       (query) => query.includes("tp.subsidiary_id") && query.includes("any"),
@@ -232,7 +235,7 @@ test("GET applies the caller subsidiary scope to tax pool periods", async () => 
 });
 
 test("POST refuses an explicit subsidiary outside the caller scope before running the pool", async () => {
-  reset(new Set(["sub-visible"]));
+  reset(new Set([SUB_VISIBLE]));
 
   const response = await post({ taxYear: 2026, subsidiaryId: "sub-other" });
 
@@ -255,16 +258,16 @@ test("POST refuses the implicit root when the caller cannot access that subsidia
 });
 
 test("POST runs an in-scope explicit subsidiary", async () => {
-  reset(new Set(["sub-visible"]));
+  reset(new Set([SUB_VISIBLE]));
 
-  const response = await post({ taxYear: 2026, subsidiaryId: "sub-visible" });
+  const response = await post({ taxYear: 2026, subsidiaryId: SUB_VISIBLE });
 
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.runCalls, [
     {
       orgId: "org-1",
       bookId: "book-1",
-      subsidiaryId: "sub-visible",
+      subsidiaryId: SUB_VISIBLE,
       regime: "ca_cca",
       taxYear: 2026,
     },
@@ -278,7 +281,7 @@ test("POST refuses an explicit book outside the caller org before running the po
   const response = await post({
     taxYear: 2026,
     bookId: "11111111-1111-4111-8111-111111111111",
-    subsidiaryId: "sub-visible",
+    subsidiaryId: SUB_VISIBLE,
   });
 
   assert.equal(response.status, 404);
