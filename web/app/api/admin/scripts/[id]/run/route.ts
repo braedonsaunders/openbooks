@@ -9,6 +9,7 @@ import {
   runScheduledScript,
 } from '@openbooks/engine/src/scripting.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { isUuid } from '../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
+  // A malformed id names no script: same answer as an unknown one, never a
+  // PostgreSQL uuid cast error escaping as a 500.
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
     select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
