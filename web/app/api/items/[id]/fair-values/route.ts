@@ -6,6 +6,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 
 export const runtime = 'nodejs'
@@ -41,9 +42,14 @@ function money(value: unknown): string | null | 'range' {
   return normalizeMoney(exact)
 }
 
-function dateOrNull(value: unknown): string | null {
+function dateOrNull(value: unknown): string | null | 'invalid' {
   const s = String(value ?? '').trim()
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+  if (!s) return null
+  // A shape-valid non-day such as February 30 would otherwise reach the DATE
+  // columns and surface as a 500 from PostgreSQL instead of failing closed
+  // here. Non-date text keeps its existing lenient-null behavior.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  return isIsoCalendarDate(s) ? s : 'invalid'
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -77,6 +83,9 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
   if (highValue === 'range') return { error: 'High value is out of range — at most 15 whole digits fit the ledger' }
   const effectiveFrom = dateOrNull(body.effectiveFrom)
   const effectiveTo = dateOrNull(body.effectiveTo)
+  if (effectiveFrom === 'invalid' || effectiveTo === 'invalid') {
+    return { error: 'Enter a real calendar date (YYYY-MM-DD)' }
+  }
   if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) {
     return { error: 'The end date cannot precede the start date' }
   }
