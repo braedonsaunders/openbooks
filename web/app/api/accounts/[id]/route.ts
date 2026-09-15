@@ -120,6 +120,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!currency.rows[0]) return bad('invalid_currency', 'currencyRestriction')
     }
   }
+  // Storage requires reconcilable accounts to carry a settlement currency
+  // (accounts_reconcilable_currency_required). Judge the effective pair —
+  // the request's currency over the stored one — so neither enabling the flag
+  // nor clearing the currency can reach the database as a raw error.
+  const effectiveCurrency = currencyRestriction !== undefined
+    ? currencyRestriction
+    : (existing.currency_restriction as string | null)
+  if (nextReconcilable && !effectiveCurrency) {
+    return bad('reconcilable_currency_required', 'currencyRestriction')
+  }
 
   let subsidiaryId: string | null | undefined
   if (body.subsidiaryId !== undefined) {
