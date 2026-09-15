@@ -120,7 +120,7 @@ export async function loadDocuments(
   // Access control: '*' admins get Manager everywhere; otherwise the org-role
   // baseline (Manager for documents.manage, else Viewer) plus resource_grants.
   const baseline: AccessLevel = canManage ? 'manager' : 'viewer'
-  const viewer = { userId: authz.user.id, isAdmin: can(authz, '*'), baseline }
+  const viewer = { userId: authz.user.id, isAdmin: can(authz, '*'), baseline, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
   const t = await getTranslations('documents')
 
   const fileId = typeof sp.file === 'string' ? sp.file : undefined

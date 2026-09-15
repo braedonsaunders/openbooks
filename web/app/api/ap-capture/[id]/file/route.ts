@@ -21,6 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const blob = await getFileBlob(gate.user.orgId, fileId, {
     userId: gate.user.id,
     isAdmin: can(gate, '*'),
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
   })
   if (!blob) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return blobResponse(request, blob, { fallbackName: 'document' })

@@ -44,6 +44,7 @@ export async function loadTrash(): Promise<TrashData> {
     userId: authz.user.id,
     isAdmin: can(authz, '*'),
     baseline: 'manager' as const,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
   }
   const t = await getTranslations('documents')
   const tt = await getTranslations('documents.trash')
