@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "./db.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
 import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
-import { getOnHandForEntity, inventoryOffsetAccountProblem, lockInventoryPosition, postInventoryEntry } from "./inventory.ts";
+import { getOnHandForEntity, inventoryOffsetAccountProblem, lockInventoryPosition, postInventoryEntry, stockLocationDim } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
@@ -343,6 +343,9 @@ export async function writeDownInventoryToNrv(
 
       const amount = fromUnits(-plan.deltaUnits);
       const memo = input.memo ?? `NRV write-down — carrying value to ${fromUnits(plan.targetUnits)}`;
+      // The written-down layers sit at this stock location; stamp it so the
+      // location's inventory GL keeps tying to its layers.
+      const locationId = await stockLocationDim(tx, orgId, input.stockLocationId, null);
       const entryId = await postInventoryEntry(tx, {
         orgId,
         actorId,
@@ -354,8 +357,8 @@ export async function writeDownInventoryToNrv(
         entryNumber: `NRV-${randomUUID().slice(0, 8)}`,
         memo,
         lines: [
-          { accountId: accounts.adjustment, amount, memo },
-          { accountId: accounts.asset, amount: fromUnits(plan.deltaUnits), memo },
+          { accountId: accounts.adjustment, amount, locationId, memo },
+          { accountId: accounts.asset, amount: fromUnits(plan.deltaUnits), locationId, memo },
         ],
       });
 
@@ -554,6 +557,8 @@ export async function reverseInventoryWritedown(
 
     const amount = fromUnits(increase);
     const memo = input.memo ?? `NRV write-down reversal — carrying value to ${fromUnits(targetUnits)}`;
+    // Mirror the write-down's attribution at the same stock location.
+    const locationId = await stockLocationDim(tx, orgId, input.stockLocationId, null);
     const entryId = await postInventoryEntry(tx, {
       orgId,
       actorId,
@@ -565,8 +570,8 @@ export async function reverseInventoryWritedown(
       entryNumber: `NRVR-${randomUUID().slice(0, 8)}`,
       memo,
       lines: [
-        { accountId: accounts.asset, amount, memo },
-        { accountId: accounts.adjustment, amount: fromUnits(-increase), memo },
+        { accountId: accounts.asset, amount, locationId, memo },
+        { accountId: accounts.adjustment, amount: fromUnits(-increase), locationId, memo },
       ],
     });
 
