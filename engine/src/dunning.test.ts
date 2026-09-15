@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
-import { isDunnableDocumentKind, renderTemplate, runDunning, selectDueStage, type DunningStage } from "./dunning.ts";
+import { isDunnableDocumentKind, renderTemplate, runDunning, runDunningForOrg, selectDueStage, type DunningStage } from "./dunning.ts";
 import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
@@ -568,6 +568,36 @@ test("a policy pointed at a payable kind never duns the vendor", { skip: !DB }, 
     const notice = await stagedNotice(billId);
     assert.equal(notice.logRows.length, 0);
     assert.equal(notice.outboxRows.length, 0);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a dunning reminder escapes party-controlled values in its HTML part", { skip: !DB }, async () => {
+  // Template vars (party name, document number) are free-text rows an
+  // insider — or a tainted import — controls. The text part carries them
+  // raw, but the HTML part must escape them: otherwise a customer name like
+  // the one below ships arbitrary markup to the customer's inbox from the
+  // org's own authenticated mail domain.
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update parties set display_name = '<img src=x onerror=alert(1)>'
+       where id = ${org.customerId} and org_id = ${org.orgId}
+    `);
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    const run = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(run.sent, 1);
+    const { outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(outboxRows.length, 1);
+    const payload = outboxRows[0]!.payload as { html: string; text: string };
+    assert.doesNotMatch(payload.html, /<img src=x onerror/);
+    assert.match(payload.html, /&lt;img/);
+    assert.match(payload.text, /<img src=x onerror/);
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
