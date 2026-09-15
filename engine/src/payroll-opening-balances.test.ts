@@ -388,6 +388,82 @@ test(
   },
 );
 
+test(
+  "employer-side capped levies consume pre-adoption history on the first stub",
+  { skip: !DB },
+  async () => {
+    // A mid-year adopter's prior provider reports what the EMPLOYER has paid
+    // toward annual-maximum levies too: QPIP employer premiums (max $620.06
+    // for 2026) and WCB assessable earnings (this group's max $1,000). Both
+    // caps consume committed stubs only, so a carry-in the engine cannot
+    // store re-opens the full annual room: the first stub over-accrues
+    // employer burden and liability that were already paid. Terry maxed both
+    // caps at the prior provider, so the first stub here must accrue nothing
+    // for either levy.
+    const fx = await seedAdoption();
+    try {
+      await db.execute(sql`
+        update employee_payroll_profiles set province = 'QC'
+         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`);
+      const groupId = randomUUID();
+      await db.execute(sql`
+        insert into worker_comp_groups (id, org_id, code, name, rate_percent, max_assessable,
+                                        is_active, created_by, updated_by)
+        values (${groupId}, ${fx.orgId}, 'WCB TEST', 'Test class', '3.5000', '1000', true,
+                ${fx.actorId}, ${fx.actorId})`);
+      await db.execute(sql`
+        update employee_roles set worker_comp_group_id = ${groupId}
+         where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: {
+            pensionableYtd: "60000", insurableYtd: "60000",
+            cppYtd: "2800", cpp2Ytd: "200", eiYtd: "900", qpipYtd: "442.90",
+            taxableYtd: "60000", taxYtd: "8000",
+            qpipEmployerYtd: "620.06", wcbAssessableYtd: "1000",
+          },
+        }],
+      });
+
+      const ytd = await employeeYtd({
+        tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
+        taxYear: 2026, documentId: randomUUID(),
+      });
+      assert.equal(ytd.qpip_employer, "620.0600");
+
+      for (const day of ["2026-07-06", "2026-07-13"]) {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours,
+                                    status, is_billable, billing_status, costing_basis,
+                                    created_by, updated_by)
+          values (${fx.orgId}, ${fx.employeeId}, ${day}, '40', 'approved',
+                  false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+      }
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
+      });
+      const calculated = await calculatePayRun({
+        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+      });
+      assert.deepEqual(calculated.errors, []);
+      const stub = (await db.execute<{ factors: Record<string, string> }>(sql`
+        select factors from pay_stubs
+         where org_id = ${fx.orgId} and pay_run_document_id = ${run.documentId}
+      `));
+      const factors = stub.rows[0]!.factors;
+      assert.equal(factors.QPIP_ER, "0.0000");
+      // A zero assessable base emits no WCB line at all: absence IS the
+      // capped outcome, and it must read as zero, not as missing evidence.
+      assert.equal(factors.WCB_EARN ?? "0.0000", "0.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* The component dimension: an annual cap that does not restart        */
 /* ------------------------------------------------------------------ */
@@ -1149,6 +1225,19 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
   assert.equal(clean.qcCsbYtd, "85.0000");
   assert.equal(clean.ficaWithheldYtd, "4000.0000");
 
+  // Employer-side capped levies normalize the same way, with no static
+  // ceiling: both maximums (QPIP maxEmployer, the group's max_assessable)
+  // move, so only exact money and never-negative apply.
+  const employer = normalizeOpeningBalance({
+    pensionableYtd: "60000", insurableYtd: "60000",
+    qpipEmployerYtd: "620.06", wcbAssessableYtd: "1000",
+  });
+  assert.equal(employer.qpipEmployerYtd, "620.0600");
+  assert.equal(employer.wcbAssessableYtd, "1000.0000");
+  assert.throws(() => normalizeOpeningBalance({ qpipEmployerYtd: "-1" }), /cannot be negative/);
+  assert.throws(() => normalizeOpeningBalance({ wcbAssessableYtd: "lots" }), /is not an amount/);
+  assert.equal(isEmptyOpeningBalance({ wcbAssessableYtd: "1000.0000" }, {}), false);
+
   // Part-to-whole, like every other cross-field check: bonus-attributed
   // history cannot exceed the bonuses, FICA dollars cannot exceed the wages.
   assert.throws(
@@ -1184,4 +1273,8 @@ test("the pack-declared second-order fields are wired to every consumer", () => 
   assert.deepEqual(byKey.get("qcCsbYtd")?.packs, ["CA"]);
   assert.equal(byKey.get("ficaWithheldYtd")?.column, "fica_withheld_ytd");
   assert.deepEqual(byKey.get("ficaWithheldYtd")?.packs, ["US"]);
+  assert.equal(byKey.get("qpipEmployerYtd")?.column, "qpip_employer_ytd");
+  assert.deepEqual(byKey.get("qpipEmployerYtd")?.packs, ["CA"]);
+  assert.equal(byKey.get("wcbAssessableYtd")?.column, "wcb_assessable_ytd");
+  assert.deepEqual(byKey.get("wcbAssessableYtd")?.packs, ["CA"]);
 });

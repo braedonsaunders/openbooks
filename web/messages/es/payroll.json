@@ -3,7 +3,9 @@
     "fields": {
       "cpp2BonusYtd": "Aportaciones CPP2 sobre bonificaciones",
       "qcCsbYtd": "Aportaciones QPP adicionales sobre bonificaciones",
-      "ficaWithheldYtd": "Impuesto FICA retenido"
+      "ficaWithheldYtd": "Impuesto FICA retenido",
+      "qpipEmployerYtd": "Primas QPIP del empleador",
+      "wcbAssessableYtd": "Ingresos evaluables WCB"
     }
   }
 }

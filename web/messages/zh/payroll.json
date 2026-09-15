@@ -3,7 +3,9 @@
     "fields": {
       "cpp2BonusYtd": "奖金 CPP2 缴款",
       "qcCsbYtd": "奖金额外 QPP 缴款",
-      "ficaWithheldYtd": "已代扣 FICA 税"
+      "ficaWithheldYtd": "已代扣 FICA 税",
+      "qpipEmployerYtd": "雇主 QPIP 缴款",
+      "wcbAssessableYtd": "WCB 应评税工资"
     }
   }
 }

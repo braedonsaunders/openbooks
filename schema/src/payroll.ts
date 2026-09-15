@@ -586,6 +586,15 @@ export const payrollOpeningBalances = pgTable(
     qcCsbYtd: money("qc_csb_ytd").notNull().default("0"),
     ficaWithheldYtd: money("fica_withheld_ytd").notNull().default("0"),
     /**
+     * Employer-side capped-levy history (migration 0143). Same declaration
+     * pattern as the bonus history above: the CA pack declares each one and
+     * this model only stores what the declarations name. Employer QPIP
+     * premiums and WCB assessable earnings both run against annual maximums
+     * that committed stubs alone cannot reconstruct for a mid-year adopter.
+     */
+    qpipEmployerYtd: money("qpip_employer_ytd").notNull().default("0"),
+    wcbAssessableYtd: money("wcb_assessable_ytd").notNull().default("0"),
+    /**
      * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
      * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
      * against the org's vacation plan, loaded through

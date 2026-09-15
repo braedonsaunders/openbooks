@@ -3,7 +3,9 @@
     "fields": {
       "cpp2BonusYtd": "CPP2-Beiträge auf Boni",
       "qcCsbYtd": "Zusätzliche QPP-Beiträge auf Boni",
-      "ficaWithheldYtd": "Einbehaltene FICA-Steuer"
+      "ficaWithheldYtd": "Einbehaltene FICA-Steuer",
+      "qpipEmployerYtd": "Arbeitgeber-QPIP-Beiträge",
+      "wcbAssessableYtd": "WCB-pflichtiges Entgelt"
     }
   }
 }

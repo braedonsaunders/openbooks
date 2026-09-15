@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../../payroll-error.ts";
+import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import {
   add, cmp, mulPercent, mulRatio, neg, roundMoney, sum, toUnits,
 } from "../../money.ts";
@@ -43,8 +44,17 @@ export async function applyCaEmployerLevies(
     // figures consume the annual cap — the same doctrine `employeeYtd` states
     // for CPP/EI. (The run being calculated keeps its own-document arm below
     // so the exemption still sequences across its own employees.)
+    // Pre-adoption assessable earnings ride the opening carry-in, like every
+    // other annual ceiling: without it a mid-year adopter re-opens the full
+    // group maximum on the first stub.
+    const wcbAssessableColumn = CA_OPENING_YTD_FIELDS.find(
+      (field) => field.key === "wcbAssessableYtd",
+    )!.column;
     const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
-      select coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
+      select coalesce((select ${sql.raw(wcbAssessableColumn)} from payroll_opening_balances
+                         where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+                           and tax_year = ${taxYear}), 0)
+             + coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
        where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}

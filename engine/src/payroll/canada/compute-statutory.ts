@@ -31,6 +31,7 @@ export async function employeeYtd(
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
   const cpp2BonusColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "cpp2BonusYtd")!.column;
   const qcCsbColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qcCsbYtd")!.column;
+  const qpipEmployerColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qpipEmployerYtd")!.column;
   const r = (await tx.execute<CanadaYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
@@ -51,7 +52,9 @@ export async function employeeYtd(
       coalesce((select qpip_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'QPIP')::numeric), 0) as qpip,
-      coalesce(sum((s.factors->>'QPIP_ER')::numeric), 0) as qpip_employer,
+      coalesce((select ${sql.raw(qpipEmployerColumn)} from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum((s.factors->>'QPIP_ER')::numeric), 0) as qpip_employer,
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,

@@ -7,6 +7,15 @@ import type { PayrollOpeningYtdField } from "../packs.ts";
  * (CPP2 attributed to bonuses); Québec TP-1015 consumes CSB1 (additional QPP
  * attributed to bonuses).
  *
+ * Employer-side capped levies ride the same mechanism for a different
+ * reason: they run against annual maximums — QPIP employer premiums
+ * (T4127 caps them at the year's maxEmployer) and WCB assessable earnings
+ * (the worker-comp group's max_assessable) — that committed stubs alone
+ * cannot reconstruct for a mid-year adopter. Without a carry-in the first
+ * stub re-opens the full annual room and over-accrues burden and liability
+ * already paid. Neither has a static ceiling to validate against (both
+ * maximums move), so both are ceiling-less: exact money, never negative.
+ *
  * These declarations live with the CA pack, not in the generic opening
  * balance layer. The generic layer iterates pack declarations so another
  * country can add its own carry-in facts without country branching here.
@@ -25,5 +34,17 @@ export const CA_OPENING_YTD_FIELDS: readonly PayrollOpeningYtdField[] = [
     label: "Québec additional-QPP bonus contributions",
     help: "Additional QPP (CSB) amounts attributed to lump-sum payments before adoption (TP-1015 factor CSB1 year-to-date, Québec).",
     ceilingKey: "nonPeriodicYtd",
+  },
+  {
+    key: "qpipEmployerYtd",
+    column: "qpip_employer_ytd",
+    label: "QPIP employer premiums",
+    help: "Employer QPIP premiums already paid this year before adoption (Québec). Counts toward the annual employer maximum.",
+  },
+  {
+    key: "wcbAssessableYtd",
+    column: "wcb_assessable_ytd",
+    label: "WCB assessable earnings",
+    help: "Workers' compensation assessable earnings already paid this year before adoption. Counts toward the worker-comp group's annual maximum per employee.",
   },
 ];
