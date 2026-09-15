@@ -1,6 +1,8 @@
 import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
+import { flowRates } from "../fx-presentation";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -85,14 +87,18 @@ export interface VendorData {
 
 interface VendorSpendRow extends Record<string, unknown> {
   id: string; name: string; spend: string | number; prior_spend: string | number;
+  func: string | null; late: string | null; late_prior: string | null;
 }
 interface VendorBillRow extends Record<string, unknown> {
   id: string; bills: string | number; last_bill: string | null;
 }
-interface MonthSpendRow extends Record<string, unknown> { month: string; spend: string | number }
+interface MonthSpendRow extends Record<string, unknown> {
+  month: string; spend: string | number; func: string | null; late: string | null;
+}
 interface VendorPaymentRow extends Record<string, unknown> {
-  id: string; paid_lines: string | number; avg_days: string | number | null;
-  on_time: string | number; late_amount: string | number;
+  id: string; func: string | null; paid_lines: string | number;
+  on_time: string | number; days_sum: string | number | null;
+  late_amount: string | number; late_dt: string | null;
 }
 
 function priorYear(iso: string): string {
@@ -141,16 +147,20 @@ export async function vendorData(
            and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
       )
       select p.id, coalesce(p.display_name, 'Unknown') as name,
+        sub.base_currency as func,
         sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
-        sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_spend
+        sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_spend,
+        max(e.posting_date) filter (where e.posting_date >= ${from} and e.posting_date <= ${to})::text as late,
+        max(e.posting_date) filter (where e.posting_date >= ${pFrom} and e.posting_date <= ${pTo})::text as late_prior
       from ew e
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join parties p on p.id = l.party_id and p.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
-      group by p.id, p.display_name
+      group by p.id, p.display_name, sub.base_currency
     `),
     db.execute<VendorBillRow>(sql`
       select party_id as id, count(*)::int as bills, max(posting_date) as last_bill
@@ -166,14 +176,16 @@ export async function vendorData(
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
            and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
       )
-      select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as spend
+      select to_char(e.posting_date, 'YYYY-MM') as month, sub.base_currency as func,
+        sum(l.amount) as spend, max(e.posting_date)::text as late
       from ew e
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and a.type in ('cogs','expense','expense_deferred')
-      group by 1
+      group by 1, 2
     `),
     // Payment behaviour: collapse applications to one row per AP open-item
     // line before rolling up by vendor. A bill paid in installments must still
@@ -187,6 +199,7 @@ export async function vendorData(
           abs(bl.txn_amount) as bill_total, a.target_transaction_amount as applied_amount,
           coalesce(bl.due_date, be.posting_date) as due_date,
           pe.posting_date as payment_date,
+          sub.base_currency as func,
           a.amount
         from applications a
         join journal_lines bl on bl.id = a.to_line_id and bl.org_id = a.org_id
@@ -194,6 +207,7 @@ export async function vendorData(
         join journal_lines pl on pl.id = a.from_line_id and pl.org_id = a.org_id
         join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
         join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
+        left join subsidiaries sub on sub.id = bl.subsidiary_id and sub.org_id = bl.org_id
         where a.org_id = ${orgId} and bl.org_id = ${orgId} and be.org_id = ${orgId}
           and pl.org_id = ${orgId} and pe.org_id = ${orgId} and ba.org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowed)}
@@ -204,39 +218,80 @@ export async function vendorData(
           and a.applied_on <= ${ref} and pe.posting_date <= ${ref}
           and be.posting_date >= ${from} and be.posting_date <= ${to}
       ), bill_payments as (
-        select bill_line_id, party_id, bill_date, due_date, bill_total,
+        select bill_line_id, party_id, bill_date, due_date, bill_total, func,
           sum(applied_amount) as applied,
           max(payment_date) as last_payment,
           coalesce(sum(amount) filter (where payment_date > due_date), 0) as late_amount
         from bill_applications
-        group by bill_line_id, party_id, bill_date, due_date, bill_total
+        group by bill_line_id, party_id, bill_date, due_date, bill_total, func
       )
-      select party_id as id,
+      select party_id as id, func,
         count(*) filter (where applied >= bill_total)::int as paid_lines,
-        round((avg(last_payment - bill_date) filter (where applied >= bill_total))::numeric, 1) as avg_days,
         count(*) filter (where applied >= bill_total and last_payment <= due_date)::int as on_time,
-        coalesce(sum(late_amount), 0) as late_amount
+        coalesce(sum(last_payment - bill_date) filter (where applied >= bill_total), 0) as days_sum,
+        coalesce(sum(late_amount), 0) as late_amount,
+        max(last_payment)::text as late_dt
       from bill_payments
-      group by party_id
+      group by party_id, func
     `),
   ]);
 
-  const billMap = new Map(billRows.rows.map((r) => [r.id, r]));
-  const payMap = new Map(payRows.rows.map((r) => [r.id, r]));
+  // Spend, late, and payment legs arrive per (party, functional) in
+  // line-entity functionals: translate each at its latest posting date,
+  // then merge per party in presentation. Day counts stay exact — days
+  // re-average from summed day-diffs, weighted by paid bills below.
+  const spendRowsTyped = spendRows.rows;
+  const spendCtx = await flowRates(orgId, [
+    ...spendRowsTyped.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...spendRowsTyped.filter((r) => r.prior_spend != null).map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
+  ]);
+  const spendByParty = new Map<string, { name: string; spend: string; priorSpend: string }>();
+  for (const r of spendRowsTyped) {
+    const cur = spendByParty.get(String(r.id)) ?? { name: String(r.name), spend: "0", priorSpend: "0" };
+    cur.spend = add(cur.spend, mulDecimal(String(r.spend ?? 0), spendCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    if (r.prior_spend != null) {
+      cur.priorSpend = add(cur.priorSpend, mulDecimal(String(r.prior_spend), spendCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
+    }
+    spendByParty.set(String(r.id), cur);
+  }
+  const payCtx = await flowRates(orgId, payRows.rows.map((r) => ({
+    func: r.func ?? null, date: String(r.late_dt ?? to).slice(0, 10),
+  })));
+  const paidByParty = new Map<string, { paidBills: number; onTime: number; daysSum: number; lateSpend: string }>();
+  for (const r of payRows.rows) {
+    const cur = paidByParty.get(String(r.id)) ?? { paidBills: 0, onTime: 0, daysSum: 0, lateSpend: "0" };
+    cur.paidBills += Number(r.paid_lines ?? 0);
+    cur.onTime += Number(r.on_time ?? 0);
+    cur.daysSum += Number(r.days_sum ?? 0);
+    cur.lateSpend = add(cur.lateSpend, mulDecimal(String(r.late_amount ?? 0),
+      payCtx.rateAt(r.func ?? null, String(r.late_dt ?? to).slice(0, 10))));
+    paidByParty.set(String(r.id), cur);
+  }
+  const monthCtx = await flowRates(orgId, monthRows.rows.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? `${r.month}-01`).slice(0, 10),
+  })));
+  const spendByMonth = new Map<string, string>();
+  for (const r of monthRows.rows) {
+    const key = String(r.month);
+    spendByMonth.set(key, add(spendByMonth.get(key) ?? "0",
+      mulDecimal(String(r.spend ?? 0), monthCtx.rateAt(r.func ?? null, String(r.late ?? `${r.month}-01`).slice(0, 10)))));
+  }
 
-  const base = spendRows.rows
-    .map((r) => {
-      const spend = Number(r.spend);
-      const priorSpend = Number(r.prior_spend);
-      const bm = billMap.get(r.id);
-      const pm = payMap.get(r.id);
+  const billMap = new Map(billRows.rows.map((r) => [r.id, r]));
+
+  const base = [...spendByParty.entries()]
+    .map(([id, s]) => {
+      const spend = Number(s.spend);
+      const priorSpend = Number(s.priorSpend);
+      const bm = billMap.get(id);
+      const pm = paidByParty.get(id);
       const bills = bm ? Number(bm.bills) : 0;
       const lastBill = bm?.last_bill ?? null;
-      const paidBills = pm ? Number(pm.paid_lines) : 0;
-      const onTime = pm ? Number(pm.on_time) : 0;
+      const paidBills = pm ? pm.paidBills : 0;
+      const onTime = pm ? pm.onTime : 0;
       return {
-        id: r.id as string,
-        name: r.name as string,
+        id,
+        name: s.name,
         spend,
         priorSpend,
         yoyPct: priorSpend > 0 ? (spend - priorSpend) / priorSpend : null,
@@ -245,10 +300,10 @@ export async function vendorData(
         lastBill,
         recencyDays: lastBill ? daysBetween(lastBill, ref) : null,
         paidBills,
-        avgDaysToPay: pm && pm.avg_days !== null ? Number(pm.avg_days) : null,
+        avgDaysToPay: paidBills > 0 && pm ? Math.round((pm.daysSum / paidBills) * 10) / 10 : null,
         onTimePct: paidBills > 0 ? onTime / paidBills : null,
         latePct: paidBills > 0 ? 1 - onTime / paidBills : null,
-        lateSpend: pm ? Number(pm.late_amount) : 0,
+        lateSpend: pm ? Number(pm.lateSpend) : 0,
       };
     })
     .filter((r) => r.spend > 0 || r.priorSpend > 0)
@@ -288,12 +343,11 @@ export async function vendorData(
     return { ...r, sharePct, tier, score, grade: gradeOf(score), performance, quadrant };
   });
 
-  const byMonth = new Map<string, number>(monthRows.rows.map((r) => [r.month, Number(r.spend)]));
   const monthly: MonthSpend[] = [];
   for (let i = 0; i < 12; i++) {
     const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
     const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
-    monthly.push({ month: ym, label: monthLabel(ym), spend: byMonth.get(ym) ?? 0 });
+    monthly.push({ month: ym, label: monthLabel(ym), spend: Number(spendByMonth.get(ym) ?? 0) });
   }
 
   const spend = rows.reduce((a, r) => a + r.spend, 0);
