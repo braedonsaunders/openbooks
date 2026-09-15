@@ -117,6 +117,10 @@ async function runOwnershipConsolidationIn(
   tx: Runner,
 ): Promise<{ runId: string; entryIds: string[] }> {
   if (!userId) throw new ConsolidationError("an attributable actor is required");
+  // Journal phases honor the same close fence as rate derivation: a closed GL
+  // must refuse with a ConsolidationError here, not with the kernel guard's
+  // raw Postgres failure at the first draft→posted flip.
+  await assertConsolidatedRatesOpen(orgId, periodId, tx);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
   const context = await loadSubsidiaryContext(tx, orgId);
   const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
@@ -660,6 +664,10 @@ async function runAutoEliminationIn(
       "no active elimination subsidiary — create one under Setup → Subsidiaries",
     );
   }
+
+  // Same close fence as rate derivation and the ownership phase: a closed GL
+  // refuses with a ConsolidationError, never a raw kernel-guard failure.
+  await assertConsolidatedRatesOpen(orgId, periodId, tx);
 
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`);
 
