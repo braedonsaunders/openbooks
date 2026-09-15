@@ -18,6 +18,7 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -145,6 +146,12 @@ export async function POST(req: Request) {
             { error: "batchId required" },
             { status: 422 },
           );
+        // A malformed id fails closed exactly like an unresolvable one: the
+        // subsidiary lookup below would otherwise surface a Postgres uuid
+        // cast error as a 500.
+        if (typeof body.batchId !== "string" || !isUuid(body.batchId)) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
         if (authz.allowedSubsidiaryIds) {
           const batch = (await db.execute<{ subsidiaryId: string | null }>(sql`
             select subsidiary_id as "subsidiaryId"
@@ -173,6 +180,9 @@ export async function POST(req: Request) {
             { error: "reason required" },
             { status: 422 },
           );
+        if (typeof body.batchId !== "string" || !isUuid(body.batchId)) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
         if (authz.allowedSubsidiaryIds) {
           const batch = (await db.execute<{ subsidiaryId: string | null }>(sql`
             select subsidiary_id as "subsidiaryId"
