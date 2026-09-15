@@ -12,6 +12,7 @@ import {
   type BuildScheduleResult,
 } from "./depreciation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixtures.ts";
+import { remeasureAsset } from "./asset-lifecycle.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -223,6 +224,42 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
          select schedule_id from depreciation_schedule_lines where id = ${second.scheduleLineId})
     `));
     assert.deepEqual(corrected.rows[0], { accumulated: "100.0000", postings: 2, journals: 2, entry_numbers: 2 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an IFRS reversal on manual evidence replays the manual ceiling, not production", { skip: !DB }, async () => {
+  // Restoration-ceiling pin: input-driven methods replay retained evidence —
+  // manual evidence sums manual_amount. Reading production_units for a manual
+  // asset (or vice versa) throws the wrong-evidence error and blocks every
+  // impairment reversal on input-driven schedules.
+  const { org, assetId, actorId, evidenceFileId } = await seedAsset("manual");
+  try {
+    await db.execute(sql`
+      update orgs set settings = settings || '{"reportingFramework": "ifrs"}'::jsonb
+       where id = ${org.orgId}`);
+    // Remeasurement posts gains/losses: configure the account before anything
+    // posts (posted policy is immutable).
+    await db.execute(sql`
+      update asset_categories set gain_loss_account_id = ${org.accounts.adjustment}
+       where org_id = ${org.orgId}`);
+    await recordDepreciationInput({
+      orgId: org.orgId, assetId, effectiveDate: org.date, kind: "manual", value: "100.0000",
+      memo: "Manual charge before impairment", evidenceFileId, actorId,
+    });
+    // Post the planned input so the carrying value reflects it.
+    await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
+    // NBV 12,000 − 100 = 11,900; impair to 11,000 (loss 900).
+    const impairment = await remeasureAsset(org.orgId, assetId, {
+      newCarryingValue: "11000", date: "2026-07-31", actorId,
+    });
+    assert.equal(impairment.delta, "-900.0000");
+    // Fair value recovers to 11,500: reversal 500, inside the 900 cap.
+    const reversal = await remeasureAsset(org.orgId, assetId, {
+      newCarryingValue: "11500", date: "2026-07-31", actorId,
+    });
+    assert.equal(reversal.delta, "500.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
