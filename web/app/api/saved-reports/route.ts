@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../lib/authz";
+import { isUuid } from "../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const { name, path, params } = (parsedBody.data) as { name?: string; path?: string; params?: Record<string, string> };
-  if (!name || !path || !path.startsWith("/reports")) {
+  if (!name || typeof path !== "string" || !path.startsWith("/reports")) {
     return NextResponse.json({ error: "name and a /reports path required" }, { status: 400 });
   }
   await db.execute(sql`
@@ -29,7 +30,7 @@ export async function DELETE(req: Request) {
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const { id } = (parsedBody2.data) as { id?: string };
-  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
   const deleted = await db.execute<{ id: string }>(sql`
     delete from saved_reports
      where id = ${id}
