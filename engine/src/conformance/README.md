@@ -103,14 +103,19 @@ one.
 ## Scope today
 
 Covered: ASC 606 / IFRS 15 revenue (including variable-consideration
-constraint and financing-component separation), ASC 842 / IFRS 16 lessee
-leases, IAS 2 / ASC 330 inventories (including lower-of-cost-and-NRV with the
-framework-divergent reversal rule), IAS 21 foreign currency (including
-designated monetary items beyond trade balances), ASC 360 / IAS 16 long-lived
-assets, and ASC 740 / IAS 12 income taxes.
+constraint, financing-component separation, and percent-complete catch-up;
+contract modifications are a published gap), ASC 842 / IFRS 16 lessee leases
+(remeasurement is a published gap), IAS 2 / ASC 330 inventories (including
+lower-of-cost-and-NRV with the framework-divergent reversal rule, and landed
+cost), IAS 21 foreign currency (including designated monetary items beyond
+trade balances), ASC 360 / IAS 16 long-lived assets, ASC 740 / IAS 12 income
+taxes (including rate-change remeasurement of opening balances), construction
+progress billing / change orders / cost-to-cost (expected-loss provision is a
+published gap), and IAS 37 / ASC 450 provisions (published gaps: no provisions
+engine yet).
 
 Not yet covered, and therefore **not claimed**: business combinations,
-consolidation procedure, financial instruments, employee benefits, provisions
-and contingencies, share-based payment, government grants, hyperinflation,
-segment reporting, and interim reporting. Absence from this corpus is not
-evidence of conformance in either direction.
+consolidation procedure, financial instruments, employee benefits,
+share-based payment, government grants, hyperinflation, segment reporting,
+and interim reporting. Absence from this corpus is not evidence of
+conformance in either direction.

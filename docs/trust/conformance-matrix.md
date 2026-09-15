@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**42 passing · 0 failing · 0 gaps · 0 not run**
+**48 passing · 0 failing · 5 gaps · 0 not run**
 
-Commit `43d710e73cea26fdd84b20091472b6e3d205d10d` · 2026-09-01T21:16:26.618Z
+Commit `421c40b0806e08dc6087ed8880245646df44566c` · 2026-09-15T21:08:55.971Z
 
 ## ASC 360
 
@@ -30,6 +30,17 @@ Commit `43d710e73cea26fdd84b20091472b6e3d205d10d` · 2026-09-01T21:16:26.618Z
 | **Each revenue line becomes a tracked performance obligation**<br><sub>The system creates and retains an identified performance obligation for each distinct promise, which is the record an auditor inspects when testing the completeness of the revenue schedule.</sub> | ASC 606 606-10-25-14<br>IFRS 15.22 | PASS | Implemented |
 | **Variable consideration is constrained to the amount not subject to significant reversal**<br><sub>A contingent bonus is estimated by the stated method, the constraint caps what enters the transaction price, and the held-back amount is carried explicitly — so revenue can never include consideration management has judged subject to significant reversal.</sub> | ASC 606 606-10-32-11<br>ASC 606 606-10-32-8<br>IFRS 15.56 | PASS | Implemented |
 | **A significant financing component is separated from revenue**<br><sub>Revenue on a contract paid materially in arrears is measured at the cash selling price — the promised amount discounted at the rate a separate financing would carry — and the difference accretes as interest, year by year, landing exactly on the billed amount.</sub> | ASC 606 606-10-32-15<br>IFRS 15.60 | PASS | Implemented |
+| **A change in the progress estimate is caught up in the current period**<br><sub>Revising the estimated progress restates the cumulative target and books only the delta in the current period — an upward revision recognises more, a downward revision reverses what was already recognised, and prior periods are never restated.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
+| **A contract modification is assessed as a separate contract or as part of the existing one**<br><sub>Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | GAP | Not implemented |
+| **A progress application measures work done, withholds retainage, and states the amount due**<br><sub>Each schedule line reports what was completed this period, the retainage held back on it, and the net now due — and the application's totals are exactly the sum of its lines, so nothing is lost between the detail and the invoice.</sub> | ASC 606 606-10-25-27<br>IFRS 15.35 | PASS | Implemented |
+| **An approved change order revises the contract value but never below work already billed**<br><sub>Additions and deductions move the schedule line's capacity by exactly the change amount — but a deduction that would erase already-billed work is refused, so billed revenue can never be stranded without a contract value behind it.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
+| **Cost-to-cost measures progress by the share of budget consumed**<br><sub>Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when there is no budget or no cost yet, so an unbudgeted project can never report phantom progress.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
+
+### ASC 606 — shortfalls
+
+**rev-contract-modification — A contract modification is assessed as a separate contract or as part of the existing one**
+
+> The revenue engine has no contract-modification assessment: setContractPricing can overwrite a contract's total price but nothing classifies a scope-or-price change as a separate contract, a prospective remeasurement, or a cumulative catch-up, and obligations and schedules are never remapped for it.
 
 ## ASC 740
 
@@ -44,6 +55,7 @@ Commit `43d710e73cea26fdd84b20091472b6e3d205d10d` · 2026-09-01T21:16:26.618Z
 | **The reduction in a deferred tax asset is labelled per the reporting framework**<br><sub>The same arithmetic is presented in the vocabulary of whichever framework the entity reports under, so an IFRS filer never sees a US GAAP-only term in its tax note.</sub> | ASC 740 740-10-30-5(e)<br>IAS 12.24 | PASS | Implemented |
 | **Current tax is measured on taxable profit for the period**<br><sub>Taxable profit reflects permanent differences, utilised loss carryforwards, AND the year's originating movement in temporary differences — so income tax payable is the amount actually owed on the return, and the current/deferred split is right whenever timing differences exist.</sub> | ASC 740 740-10-30-2<br>IAS 12.12 | PASS | Implemented |
 | **A taxable loss does not produce a negative current tax charge**<br><sub>A loss-making year reports no current tax rather than a negative payable, and the reconciliation discloses the unrecognised current benefit explicitly instead of burying it.</sub> | ASC 740 740-10-25-2 | PASS | Implemented |
+| **An enacted rate change remeasures opening deferred balances in the period of enactment**<br><sub>When the enacted rate moves, the opening deferred balance is carried to the new rate and the whole remeasurement lands in deferred tax expense of the enactment period — current tax is untouched because no new timing difference arose.</sub> | ASC 740 740-10-35-4<br>IAS 12.60 | PASS | Implemented |
 
 ## ASC 842
 
@@ -52,6 +64,13 @@ Commit `43d710e73cea26fdd84b20091472b6e3d205d10d` · 2026-09-01T21:16:26.618Z
 | **A lessee recognises a right-of-use asset and a lease liability at commencement**<br><sub>Commencing a lease puts both an asset and a liability on the balance sheet at the exact present value of the payments — leased capacity and the obligation to pay for it are visible, not off balance sheet, and the discounting is exact to the hundredth of a cent.</sub> | ASC 842 842-20-30-1<br>IFRS 16.26<br>IFRS 16.23 | PASS | Implemented |
 | **A finance lease reports interest and amortisation separately**<br><sub>A finance lease produces a front-loaded total charge with the interest element presented in finance costs rather than operating expenses — the split that changes reported operating profit and every coverage ratio computed from it.</sub> | ASC 842 842-20-25-5<br>IFRS 16.49 | PASS | Implemented |
 | **A US GAAP operating lease reports a single straight-line lease cost**<br><sub>A lease meeting no finance criterion classifies as operating under US GAAP and charges one flat amount to operating expense each year — while still carrying the asset and liability on the balance sheet, the liability unwinding on the interest method and the right-of-use asset absorbing the difference.</sub> | ASC 842 842-20-25-6<br>ASC 842 842-10-25-2 | PASS | Implemented |
+| **A change in the lease payments or term remeasures the liability and the right-of-use asset**<br><sub>Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.</sub> | ASC 842 842-10-35-4<br>IFRS 16.39 | GAP | Not implemented |
+
+### ASC 842 — shortfalls
+
+**lease-remeasurement — A change in the lease payments or term remeasures the liability and the right-of-use asset**
+
+> The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.
 
 ## IAS 16
 
@@ -69,6 +88,7 @@ Commit `43d710e73cea26fdd84b20091472b6e3d205d10d` · 2026-09-01T21:16:26.618Z
 | **Buying inventory is not an expense**<br><sub>A purchase of stock capitalises into inventory and never touches profit or loss, so gross margin cannot be distorted by purchasing activity in the period.</sub> | IAS 2.9 | PASS | Implemented |
 | **Inventory is written down to net realisable value when NRV falls below cost**<br><sub>When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV through the cost layers themselves — the loss is recognised immediately, the on-hand QUANTITY is unchanged, and the inventory subledger stays in agreement with the general ledger.</sub> | IAS 2.9<br>IAS 2.28<br>ASC 330 330-10-35-1C | PASS | Implemented |
 | **Reversal of a write-down is required under IFRS and prohibited under US GAAP**<br><sub>The same recovery in net realisable value reverses the write-down under IFRS — capped so cumulative reversals never exceed the cumulative write-down — and is refused outright under US GAAP, where the written-down amount is the new cost basis. The answer comes from the organisation's configured reporting framework, not from which function was called.</sub> | IAS 2.33<br>ASC 330 330-10-35-14 | PASS | Implemented |
+| **Freight and duty to bring inventory to its location join the cost of the stock**<br><sub>A freight voucher spreads exactly onto the on-hand layers, raising their carrying amount and debiting inventory against the freight account — the quantity on hand does not move and the subledger stays in agreement with the general ledger.</sub> | IAS 2.11<br>ASC 330 330-10-30-9 | PASS | Implemented |
 
 ## IAS 21
 
@@ -81,6 +101,28 @@ Commit `43d710e73cea26fdd84b20091472b6e3d205d10d` · 2026-09-01T21:16:26.618Z
 | **An unchanged closing rate produces no entry**<br><sub>A period in which rates did not move generates no journal entry at all, so period-end processing cannot manufacture immaterial noise in the ledger or in the exchange gain and loss account.</sub> | IAS 21.28 | PASS | Implemented |
 | **A multi-line invoice translates balanced through a ten-decimal inverse rate**<br><sub>A multi-line sale invoiced in USD at the ten-decimal inverse of a stored CAD→USD pair — 1.4285714286, exactly the figure posting derives itself as (1 / 0.7)::numeric(19,10) when the exchange table holds only one direction — lands in CAD with every line translated independently and the entry balancing to exactly zero; per-line rounding never leaks a residual into any account, least of all a control account.</sub> | IAS 21.21 | PASS | Implemented |
 | **Output tax on a foreign-currency invoice equals the translated statutory amount exactly, and the translation residual lands on a trading line**<br><sub>On a taxed, multi-line USD invoice translated through a ten-decimal rate whose per-line roundings do NOT reconcile, the tax control lines carry exactly tax-total × spot rate and the one-unit translation residual is absorbed by a revenue line — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.</sub> | IAS 21.21 | PASS | Implemented |
+
+## IAS 37
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **A contract expected to lose money provides for the full loss immediately**<br><sub>The moment a contract is forecast to lose money, the entire expected loss is charged to profit or loss at once — it is never spread over the remaining term to flatter early periods.</sub> | IAS 37.66<br>ASC 450 450-20-25-2 | GAP | Not implemented |
+| **A probable, estimable obligation is recognised as a provision**<br><sub>A lawsuit that will probably cost 50,000.00 appears on the balance sheet now — a probable obligation is never left off the books until the cash leaves.</sub> | IAS 37.14<br>ASC 450 450-20-25-2 | GAP | Not implemented |
+| **A provision is measured at the best estimate and reviewed every period**<br><sub>The provision tracks the current best estimate — when new information moves the estimate from 50,000.00 to 65,000.00, a further 15,000.00 is charged in the period the estimate changes.</sub> | IAS 37.36<br>IAS 37.59 | GAP | Not implemented |
+
+### IAS 37 — shortfalls
+
+**con-expected-loss-provided — A contract expected to lose money provides for the full loss immediately**
+
+> No engine assesses construction contracts for expected losses: progress billing tracks completed value and billings, but nothing forecasts cost to complete, tests the contract for a loss, or posts a provision for it.
+
+**prov-recognition-threshold — A probable, estimable obligation is recognised as a provision**
+
+> No provisions engine exists: nothing records a present obligation, tests it against the probable-and-estimable threshold, or posts the resulting liability — such obligations can only be entered as manual journals with no recognition discipline behind them.
+
+**prov-best-estimate-measurement — A provision is measured at the best estimate and reviewed every period**
+
+> With no provisions ledger there is nothing to remeasure: no periodic review of open provisions, no adjustment path for a changed estimate, and no utilisation tracking when the obligation settles.
 
 ## IFRS 16
 
