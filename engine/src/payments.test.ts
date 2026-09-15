@@ -10,6 +10,7 @@ import {
   type NachaSettings,
   PaymentError,
   realizedFxControlAdjustment,
+  sameCurrencyAllocation,
 } from "./payments.ts";
 
 test("partial settlement allocates carrying value exactly beyond Number's safe range", () => {
@@ -325,4 +326,88 @@ test("a data centre that cannot form a valid trace number refuses to write a fil
     () => buildCpa005File(cpa005Run({ settings: { ...EFT, dataCentre: "1234" } })),
     (error: Error) => error instanceof PaymentError && /destination data centre/.test(error.message),
   );
+});
+
+test("partial settlement keeps dust visible and splits sum back to the whole", () => {
+  // A truncating-division swap zeroes the dust row; an argument swap posts
+  // multiples of the open balance instead of fractions of it.
+  const cases: Array<[string, string, string, string]> = [
+    ["100.0000", "100.0000", "30.0000", "30.0000"],
+    ["100.0000", "3.0000", "1.0000", "33.3333"],
+    ["0.0003", "0.0003", "0.0001", "0.0001"],
+    ["-100.0000", "100.0000", "30.0000", "-30.0000"],
+    ["0.0001", "0.0001", "0.0001", "0.0001"],
+  ];
+  for (const [openBase, openTxn, settledTxn, expected] of cases) {
+    assert.equal(
+      carryingAmountForSettlement(openBase, openTxn, settledTxn),
+      expected,
+      `settle ${settledTxn} of ${openTxn} (base ${openBase})`,
+    );
+  }
+  // Settling in two steps accounts for the whole carrying value exactly:
+  // first 30 of 100, then the remaining 70 closes at its full value.
+  const first = carryingAmountForSettlement("100.0000", "100.0000", "30.0000");
+  const second = carryingAmountForSettlement("70.0000", "70.0000", "70.0000");
+  assert.equal(first, "30.0000");
+  assert.equal(second, "70.0000");
+});
+
+test("settlement refuses zero, negative and over-application", () => {
+  // Zero or negative settlement amounts would record applications that move
+  // no money; over-application would settle more than the item holds. All
+  // three must be PaymentError, never a silent clamp.
+  for (const settled of ["0.0000", "-0.0001", "-5.0000"]) {
+    assert.throws(
+      () => carryingAmountForSettlement("10.0000", "10.0000", settled),
+      (error: Error) => error instanceof PaymentError,
+      `settled=${settled}`,
+    );
+  }
+  assert.throws(
+    () => carryingAmountForSettlement("10.0000", "10.0000", "10.0001"),
+    (error: Error) => error instanceof PaymentError,
+    "settled above open",
+  );
+  assert.throws(
+    () => carryingAmountForSettlement("10.0000", "5.0000", "5.0001"),
+    (error: Error) => error instanceof PaymentError,
+    "settled above open transaction",
+  );
+});
+
+test("realized FX adjustment signs gain and loss, including dust", () => {
+  // The adjustment is the exact opposite of the carrying pair: a dropped
+  // negation books gains as losses. Dust rows pin the sign at one unit.
+  const cases: Array<[string, string, string]> = [
+    ["-130.0000", "120.0000", "10.0000"],
+    ["130.0000", "-120.0000", "-10.0000"],
+    ["120.0000", "-120.0000", "0.0000"],
+    ["-0.0001", "0.0000", "0.0001"],
+    ["0.0001", "0.0000", "-0.0001"],
+    ["100.0000", "-99.9999", "-0.0001"],
+    ["-100.0000", "99.9999", "0.0001"],
+    ["0.0000", "0.0000", "0.0000"],
+  ];
+  for (const [source, target, expected] of cases) {
+    assert.equal(realizedFxControlAdjustment(source, target), expected, `${source} vs ${target}`);
+  }
+});
+
+test("same-currency allocation carries equal amounts and a rate of one", () => {
+  // This shape is what the settlement-evidence validator requires for
+  // same-currency applications: equal amounts, unit rate, same_currency
+  // source, a human reference, and no provider observation.
+  const allocation = sameCurrencyAllocation("line-1", "125.5000");
+  assert.equal(allocation.openLineId, "line-1");
+  assert.equal(allocation.sourceTransactionAmount, "125.5000");
+  assert.equal(allocation.targetTransactionAmount, "125.5000");
+  assert.equal(allocation.targetBaseAmount, undefined);
+  assert.equal(allocation.settlementRate, "1");
+  assert.equal(allocation.settlementRateSource, "same_currency");
+  assert.ok(allocation.settlementRateReference.trim().length > 0);
+  assert.equal(allocation.settlementFxRateId ?? null, null);
+  const withBase = sameCurrencyAllocation("line-2", "10.0000", "10.0000");
+  assert.equal(withBase.targetBaseAmount, "10.0000");
+  assert.equal(withBase.sourceTransactionAmount, withBase.targetTransactionAmount);
 });
