@@ -12,6 +12,7 @@ import {
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
+  recordSubsidiaryScopeAllows,
 } from '../../../../../lib/records'
 import {
   lintRecordFields,
@@ -23,7 +24,13 @@ import {
 
 export const runtime = 'nodejs'
 
-async function loadScope(orgId: string, roleKeys: readonly string[], typeKey: string, id: string) {
+async function loadScope(
+  orgId: string,
+  roleKeys: readonly string[],
+  typeKey: string,
+  id: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
   if (!isUuid(id)) return null
   const type = await loadRecordTypeByKey(orgId, typeKey)
   if (!type || type.status !== 'published' || !inTypeAudience(roleKeys, type.allowed_roles)) return null
@@ -31,6 +38,7 @@ async function loadScope(orgId: string, roleKeys: readonly string[], typeKey: st
   if (!record) return null
   const lint = lintRecordFields(type.fields, type.name)
   if (!lint.success) return null
+  if (!recordSubsidiaryScopeAllows(lint.sections, record.data, allowedSubsidiaryIds)) return null
   return { type, record, sections: lint.sections }
 }
 
@@ -49,7 +57,13 @@ export async function GET(
   const gate = await guardPermission('records.read')
   if (gate instanceof NextResponse) return gate
   const { typeKey, id } = await params
-  const scope = await loadScope(gate.user.orgId, gate.user.roles.map(({ key }) => key), typeKey, id)
+  const scope = await loadScope(
+    gate.user.orgId,
+    gate.user.roles.map(({ key }) => key),
+    typeKey,
+    id,
+    gate.allowedSubsidiaryIds,
+  )
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ record: scope.record })
 }
@@ -77,7 +91,13 @@ export async function PATCH(
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { typeKey, id } = await params
-  const scope = await loadScope(user.orgId, user.roles.map(({ key }) => key), typeKey, id)
+  const scope = await loadScope(
+    user.orgId,
+    user.roles.map(({ key }) => key),
+    typeKey,
+    id,
+    gate.allowedSubsidiaryIds,
+  )
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const { sections } = scope
 
@@ -99,6 +119,9 @@ export async function PATCH(
     `)).rows[0]
     if (!locked) return { kind: 'not_found' as const }
     const record = locked as typeof scope.record
+    if (!recordSubsidiaryScopeAllows(sections, record.data, gate.allowedSubsidiaryIds)) {
+      return { kind: 'not_found' as const }
+    }
 
     let nextStatus: RecordStatus | undefined
     if (body.status !== undefined) {
@@ -143,6 +166,9 @@ export async function PATCH(
     // are enforced whenever the record is (or is becoming) active.
     const effectiveData = nextData ?? stripUnknownData(sections, record.data)
     const effectiveStatus = nextStatus ?? record.status
+    if (!recordSubsidiaryScopeAllows(sections, effectiveData, gate.allowedSubsidiaryIds)) {
+      return { kind: 'not_found' as const }
+    }
     const stage = effectiveStatus === 'active' ? 'submit' : 'draft'
     const errors = validateRecordData(sections, effectiveData, stage)
     if (errors.length > 0) {
@@ -238,7 +264,13 @@ export async function DELETE(
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { typeKey, id } = await params
-  const scope = await loadScope(user.orgId, user.roles.map(({ key }) => key), typeKey, id)
+  const scope = await loadScope(
+    user.orgId,
+    user.roles.map(({ key }) => key),
+    typeKey,
+    id,
+    gate.allowedSubsidiaryIds,
+  )
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
   let reason: string | null = null
   if ((req.headers.get('content-type') ?? '').includes('application/json')) {
@@ -256,6 +288,9 @@ export async function DELETE(
        for update
     `)).rows[0]
     if (!before) return { kind: 'not_found' as const }
+    if (!recordSubsidiaryScopeAllows(scope.sections, before.data as FieldValueMap, gate.allowedSubsidiaryIds)) {
+      return { kind: 'not_found' as const }
+    }
     if (before.status !== 'draft') {
       return { kind: 'protected' as const }
     }

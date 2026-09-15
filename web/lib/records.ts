@@ -79,6 +79,22 @@ export async function loadRecord(
   return r.rows[0]
 }
 
+/** Whether a custom-record definition carries the conventional subsidiary field. */
+export function hasSubsidiaryField(sections: FormSection[]): boolean {
+  return sections.some((section) => section.fields.some((field) => field.id === 'subsidiary_id'))
+}
+
+/** Fail-closed visibility check for JSON-backed subsidiary values on custom records. */
+export function recordSubsidiaryScopeAllows(
+  sections: FormSection[],
+  data: FieldValueMap,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): boolean {
+  if (!hasSubsidiaryField(sections) || allowedSubsidiaryIds === null) return true
+  const subsidiaryId = data.subsidiary_id
+  return typeof subsidiaryId === 'string' && allowedSubsidiaryIds.has(subsidiaryId)
+}
+
 /**
  * A type's allowed_roles audience: empty/null ⇒ every records.* holder;
  * non-empty ⇒ listed role keys plus admins (same contract as form
