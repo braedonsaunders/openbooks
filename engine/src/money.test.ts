@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, div, divRate, formatMoney, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, roundDiv, roundMoney, toUnits } from "./money.ts";
+import { abs, cmp, div, divRate, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -283,6 +283,80 @@ test("normalizeDecimal pins quantity scale without touching money precision", ()
   assert.throws(() => normalizeDecimal("1.5", 11), /decimalPlaces/);
   assert.throws(() => normalizeDecimal("1.5", -1), /decimalPlaces/);
   assert.throws(() => normalizeDecimal("1.5", 1.5), /decimalPlaces/);
+});
+
+test("decimal factors accept signed, whole and leading-dot spellings exactly", () => {
+  // A sign-class mutant ([++] strips nothing, [--] keeps the plus, +units on
+  // the negate path) flips or rejects every negative factor; a whole-part
+  // mutant (whole * RATE_SCALE swapped to /) zeroes every factor at or above
+  // one; a spelling mutant (\\d+ mangled to \\d-) rejects leading-dot input.
+  assert.equal(mulDecimal("100", "-0.5"), "-50.0000");
+  assert.equal(mulDecimal("100", "-12.5"), "-1250.0000");
+  assert.equal(mulDecimal("100", "+0.5"), "50.0000");
+  assert.equal(mulDecimalFactors("100", [".5"]), "50.0000");
+  assert.equal(mulDecimalFactors("100", ["-2", "0.5"]), "-100.0000");
+  assert.equal(mulDecimal("100", "2"), "200.0000");
+  assert.equal(mulDecimalFactors("100", ["1.5"]), "150.0000");
+});
+
+test("decimal factors refuse precision beyond ten places but keep exact tails", () => {
+  // Every guard mutant here silently truncates or wrongly rejects: a
+  // widened length bound (> 11), a shifted slice (11), a widened digit
+  // class ([2-9], [1-8], [1-10]) or a narrowed one ([0-9]).
+  for (const bad of ["0.00000000005", "0.00000000001", "0.00000000009", "1.00000000001"]) {
+    assert.throws(() => mulDecimal("1", bad), /precision/, `factor ${bad}`);
+  }
+  assert.equal(mulDecimal("1", "0.1234567891"), "0.1235");
+  assert.equal(mulDecimal("1", "0.12345678900"), "0.1235");
+  // Eleven digits with a nonzero tenth place and a zero tail is still exact:
+  // a slice shifted to 9 reads the 9 and wrongly refuses it.
+  assert.equal(mulDecimal("1", "0.12345678910"), "0.1235");
+});
+
+test("scientific notation edges expand exactly", () => {
+  // An explicit plus exponent, a unit exponent, a negative exponent, and a
+  // negative exponent on a multi-digit whole part each pin one mutation of
+  // the sign strip, the exponent match, or the exp > 0 / exp < 0 branches.
+  assert.equal(toUnits("1e+5"), 1000000000n);
+  assert.equal(toUnits("1.5e1"), 150000n);
+  assert.equal(toUnits("1.5e-1"), 1500n);
+  assert.equal(toUnits("12.34e-1"), 12340n);
+});
+
+test("money inputs tolerate trailing zeros but refuse hidden precision", () => {
+  // A narrowed digit class ([0-9]) rejects the exact zero tail; a shifted
+  // slice (3) throws on it instead; a widened class ([1-8]) silently drops
+  // a real ninth-decimal digit.
+  assert.equal(normalizeMoney("1.23450"), "1.2345");
+  assert.equal(normalizeMoney("1.20000"), "1.2000");
+  assert.throws(() => normalizeMoney("1.00009"), /precision/);
+});
+
+test("sum, isZero and cmp cover the empty, signed and equal rows", () => {
+  // The sum seed, the isZero comparison, and both cmp branches have no
+  // coverage: a shifted seed posts dust on every empty sum, a flipped
+  // isZero treats dust as zero (or zero as dust), and a widened cmp
+  // reports equality as over- or under-payment.
+  assert.equal(sum([]), "0.0000");
+  assert.equal(sum(["1.5000", "2.2500", "-0.2500"]), "3.5000");
+  assert.equal(isZero("0"), true);
+  assert.equal(isZero("-0.0000"), true);
+  assert.equal(isZero("0.0001"), false);
+  assert.equal(isZero("-0.0001"), false);
+  assert.equal(cmp("1.5000", "1.5000"), 0);
+  assert.equal(cmp("1.4000", "1.5000"), -1);
+  assert.equal(cmp("1.6000", "1.5000"), 1);
+});
+
+test("boundary precisions stay legal at zero and full scale", () => {
+  // A narrowed guard (<= 0, <= 0n, >= 4) rejects the legal zero/full-scale
+  // row; a widened one (< 0n) lets the zero denominator fall through to the
+  // wrong error, which the message match pins to the right guard.
+  assert.equal(mulPercent("200.0000", "7.25", 0), "15.0000");
+  assert.equal(mulRatio("100.0000", 0n, 3n), "0.0000");
+  assert.equal(roundMoney("1.2345", 4), "1.2345");
+  assert.throws(() => mulRatio("100.0000", 1n, 0n), /ratio denominator must be greater than zero/);
+  assert.throws(() => divRate("1", "0"), /FX rate must be greater than zero/);
 });
 
 test("roundMoney and formatMoney keep the sign honest at every scale", () => {
