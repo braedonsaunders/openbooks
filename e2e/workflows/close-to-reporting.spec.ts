@@ -1,11 +1,16 @@
 import { test } from "@playwright/test";
-import { authedContext } from "../auth";
+import { authedContext, dismissSetupWizard } from "../auth";
 import {
   AMT,
+  APPROVER_EMAIL,
+  APPROVER_PASSWORD,
   api,
   field,
   expect,
+  draftSeedDocument,
   ok,
+  postSeedDocument,
+  postSeedJournal,
   revisionToken,
   targetPeriods,
   type Seed,
@@ -110,6 +115,9 @@ test.describe.serial("close to reporting", () => {
       const rootDraft = ok(await api(req, origin, "POST", "/api/journals/draft", {}), "root draft");
       const rootFetched = ok(await api(req, origin, "GET", `/api/journals/${rootDraft.id}`), "root draft fetch");
       SEED.rootSubId = field(rootFetched.doc as Record<string, unknown>, "subsidiary_id", "root draft");
+      // The probe draft must not survive: an unposted draft with no period is
+      // a critical readiness exception, and this suite asserts a clean gate.
+      ok(await api(req, origin, "DELETE", `/api/journals/${rootDraft.id}`), "drop probe draft");
       const subB = ok(
         await api(req, origin, "POST", "/api/admin/setup/subsidiaries", {
           name: "Harbour Subsidiary",
@@ -178,21 +186,8 @@ test.describe.serial("close to reporting", () => {
 
       // 7. Posting documents across both subsidiaries (all stay open: the
       //    AR/AP aging assertions need unpaid balances at report time).
-      async function postDocument(kind: string, patch: Record<string, unknown>) {
-        const draft = ok(await api(req, origin, "POST", "/api/documents/draft", { kind }), `${kind} draft`);
-        const id = draft.id as string;
-        const token = await revisionToken(req, origin, `/api/documents/${id}`, (d) => (d.doc ? field(d.doc as Record<string, unknown>, "updated_at", "document") : field(d, "updated_at", "document")));
-        ok(
-          await api(req, origin, "PATCH", `/api/documents/${id}`, { expectedUpdatedAt: token, ...patch }),
-          `${kind} fill`,
-        );
-        const posted = ok(
-          await api(req, origin, "POST", "/api/documents/actions", { action: "post", documentId: id }),
-          `${kind} post`,
-        );
-        expect(posted.ok).toBe(true);
-        return id;
-      }
+      const postDocument = (kind: string, patch: Record<string, unknown>) =>
+        postSeedDocument(req, origin, kind, patch);
       const revA = SEED.accounts["4100"]!;
       const revB = SEED.accounts["4000"]!;
       const expA = SEED.accounts["6100"]!;
@@ -221,31 +216,13 @@ test.describe.serial("close to reporting", () => {
       const bill = ok(await api(req, origin, "GET", `/api/documents/${invB}`), "period resolve");
       SEED.periodId = field(bill.doc as Record<string, unknown>, "posting_period_id", "invoice");
 
-      async function postJournal(subsidiaryId: string, documentDate: string, memo: string, lines: { account: string; amount: string; description: string; project?: boolean }[]) {
-        const draft = ok(await api(req, origin, "POST", "/api/journals/draft", { subsidiaryId }), "journal draft");
-        const id = draft.id as string;
-        const token = await revisionToken(req, origin, `/api/journals/${id}`, (d) => field(d.doc as Record<string, unknown>, "updated_at", "journal"));
-        ok(
-          await api(req, origin, "PATCH", `/api/journals/${id}`, {
-            expectedUpdatedAt: token,
-            documentDate,
-            memo,
-            lines: lines.map((l) => ({
-              accountId: SEED.accounts[l.account]!,
-              description: l.description,
-              amount: l.amount,
-              ...(l.project ? { projectId: SEED.projectId } : {}),
-            })),
-          }),
-          `journal ${memo}`,
-        );
-        const posted = ok(
-          await api(req, origin, "POST", "/api/journals/actions", { action: "post", documentId: id }),
-          `journal post ${memo}`,
-        );
-        expect(posted.ok).toBe(true);
-        return id;
-      }
+      const postJournal = (subsidiaryId: string, documentDate: string, memo: string, lines: { account: string; amount: string; description: string; project?: boolean }[]) =>
+        postSeedJournal(req, origin, SEED.accounts, {
+          subsidiaryId,
+          documentDate,
+          memo,
+          lines: lines.map((l) => ({ ...l, ...(l.project ? { projectId: SEED.projectId } : {}) })),
+        });
       const C = (n: string) => n;
       await postJournal(SEED.rootSubId, `${P.from.slice(0, 8)}05`, "Owner funding", [
         { account: C("1000"), amount: AMT.funding, description: "Cash in" },
@@ -338,6 +315,251 @@ test.describe.serial("close to reporting", () => {
       );
       expect(field(matched.totals as Record<string, unknown>, "difference", "reconciliation")).toBe("0.0000");
       ok(await api(req, origin, "POST", `/api/banking/reconciliations/${recon.id}/sign-off`, {}), "sign-off");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("starts the close run from the period list and shows a clear readiness", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      // The fiscal-year filter defaults to the current year; a January run
+      // would target December of the prior year, so pin it explicitly.
+      await page.goto(`/close?fy=${P.name.slice(0, 4)}`);
+      await dismissSetupWizard(page);
+      const row = page.locator("tr", { hasText: P.name }).first();
+      await expect(row).toBeVisible();
+      // The book picker is a custom listbox over a native select: read the
+      // options (values are book ids) from any unstarted row, untouched —
+      // Primary is the default selection, the book under test.
+      const bookOptions = await page.locator("tr select option").evaluateAll((els) =>
+        els.map((e) => ({ value: (e as HTMLOptionElement).value, label: (e.textContent ?? "").trim() })),
+      );
+      SEED.primaryBookId = bookOptions.find((o) => o.label.includes("Primary"))?.value ?? "";
+      expect(SEED.primaryBookId, "primary book resolved").toBeTruthy();
+      const resume = row.getByRole("link", { name: "Resume" });
+      if (await resume.isVisible()) {
+        // Dirty tenant (local re-run): follow the existing run instead of
+        // starting a second one. CI tenants are pristine, so CI always
+        // exercises the Start path below.
+        SEED.runId = new URL((await resume.getAttribute("href")) ?? "", baseURL).searchParams.get("run") ?? "";
+      } else {
+        const started = page.waitForURL(/\/close\?run=[0-9a-f-]+/);
+        await row.getByRole("button", { name: "Start close" }).click();
+        await started;
+        SEED.runId = new URL(page.url()).searchParams.get("run") ?? "";
+      }
+      expect(SEED.runId, "run started").toBeTruthy();
+
+      // Readiness data: zero blocking exceptions. The score sits below 100
+      // while the manual cutoff tasks are open (83 on this seed) — that gap
+      // is the next test's business, not an exception. The wizard renders
+      // the same refresh payload the approval gate enforces.
+      const refreshed = ok(
+        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, { action: "refresh" }),
+        "refresh",
+      );
+      // Exactly one open exception: the material-variance WARNING the seed
+      // is designed to produce (six accounts jump from zero to five figures
+      // against an empty prior month). It proves readiness is evaluating,
+      // not vacant — while no error/critical blocks the gate.
+      expect(refreshed.openExceptions).toBe(1);
+      await page.goto(`/close?run=${SEED.runId}&stage=readiness`);
+      await expect(page.getByText(new RegExp(`${refreshed.readinessScore}\\s*%`)).first()).toBeVisible();
+      await expect(page.getByText("In progress").first()).toBeVisible();
+      await expect(page.getByText("Warning", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText("Critical", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Error", { exact: true })).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("hard gates refuse approval before cutoffs are done, then release", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      // Negative proof first: the gate must bite while manual cutoffs are open.
+      const refused = await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, {
+        action: "request_approval",
+      });
+      expect(refused.status).toBe(422);
+      expect(String((refused.json as Record<string, unknown>).error)).toContain("hard-gated tasks");
+
+      // Complete both cutoff tasks through the wizard UI: evidence, start, complete.
+      // Cards are scoped as the deepest block holding both the task title
+      // and its action buttons (titles are unique per run).
+      await page.goto(`/close?run=${SEED.runId}&stage=execute`);
+      for (const title of ["Complete receivables cutoff", "Complete payables cutoff"]) {
+        const card = page
+          .locator("div")
+          .filter({ hasText: title })
+          .filter({ has: page.getByRole("button", { name: "Add evidence" }) })
+          .last();
+        await card.getByPlaceholder("Add a note or evidence summary\u2026").fill(`Cutoff verified for ${P.name}`);
+        const evidenced = page.waitForResponse(
+          (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}/evidence`) && r.request().method() === "POST",
+        );
+        await card.getByRole("button", { name: "Add evidence" }).click();
+        expect((await evidenced).status()).toBe(200);
+        const started = page.waitForResponse(
+          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+        );
+        await card.getByRole("button", { name: "Start" }).click();
+        expect((await started).status()).toBe(200);
+        const completed = page.waitForResponse(
+          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+        );
+        await card.getByRole("button", { name: "Complete" }).click();
+        expect((await completed).status()).toBe(200);
+      }
+
+      // With the cutoffs complete the readiness gate is fully green.
+      const cleared = ok(
+        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, { action: "refresh" }),
+        "refresh after cutoffs",
+      );
+      expect(cleared.openExceptions).toBe(1);
+      expect(cleared.readinessScore).toBe(100);
+      await page.goto(`/close?run=${SEED.runId}&stage=readiness`);
+      await expect(page.getByText(/100\s*%/).first()).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("requests approval in the wizard, approves independently, and locks the period", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    const actx = await browser.newContext({ baseURL });
+    const apage = await actx.newPage();
+    try {
+      await page.goto(`/close?run=${SEED.runId}&stage=lock`);
+      const requested = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Request approval" }).click();
+      expect((await requested).status()).toBe(200);
+      await expect(page.getByText("In review").first()).toBeVisible();
+
+      // Second actor through the real login — no bypass, no shared session.
+      const loginRes = await apage.request.post(`${baseURL}/api/login`, {
+        data: { email: APPROVER_EMAIL, password: APPROVER_PASSWORD },
+        headers: { Origin: new URL(baseURL!).origin },
+      });
+      expect(loginRes.ok(), await loginRes.text()).toBe(true);
+      const gates = ok(await api(apage.request, baseURL!, "GET", "/api/flows/gates"), "gates");
+      const gate = ((gates.gates ?? []) as { id: string; subjectId: string }[]).find(
+        (g) => g.subjectId === SEED.runId,
+      );
+      expect(gate, "approval gate exists").toBeTruthy();
+
+      // Segregation negative: the requester cannot approve their own close.
+      const selfApprove = await api(page.request, baseURL!, "POST", "/api/flows/gates/decide", {
+        gateId: gate!.id,
+        decision: "approved",
+        comment: "self-approval attempt",
+      });
+      expect(selfApprove.status, "self-approval refused").not.toBe(200);
+
+      const decided = ok(
+        await api(apage.request, baseURL!, "POST", "/api/flows/gates/decide", {
+          gateId: gate!.id,
+          decision: "approved",
+          comment: `Close ${P.name} approved for lock`,
+        }),
+        "gate decide",
+      );
+      expect(decided.ok).toBe(true);
+
+      await page.goto(`/close?run=${SEED.runId}&stage=lock`);
+      await expect(page.getByText("Approved").first()).toBeVisible();
+      page.on("dialog", (d) => void d.accept());
+      const locked = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
+      );
+      await page.getByRole("button", { name: "Lock period" }).click();
+      expect((await locked).status()).toBe(200);
+      await expect(page.getByText("Closed").first()).toBeVisible();
+      await expect(page.getByText(/Period locked by/).first()).toBeVisible();
+    } finally {
+      await apage.close();
+      await actx.close();
+      await context.close();
+    }
+  });
+
+  test("refuses postings into the closed period across modules", async ({ browser, baseURL }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    try {
+      // GL: a manual journal dated inside the closed period.
+      const draft = ok(
+        await api(page.request, baseURL!, "POST", "/api/journals/draft", { subsidiaryId: SEED.rootSubId }),
+        "refusal draft",
+      );
+      const id = field(draft, "id", "refusal draft");
+      const token = await revisionToken(page.request, baseURL!, `/api/journals/${id}`, (d) =>
+        field(d.doc as Record<string, unknown>, "updated_at", "journal"));
+      ok(
+        await api(page.request, baseURL!, "PATCH", `/api/journals/${id}`, {
+          expectedUpdatedAt: token,
+          documentDate: `${P.from.slice(0, 8)}25`,
+          memo: "Attempt into closed period",
+          lines: [
+            { accountId: SEED.accounts["6300"], description: "Supplies", amount: "100.00" },
+            { accountId: SEED.accounts["1000"], description: "Cash", amount: "-100.00" },
+          ],
+        }),
+        "refusal fill",
+      );
+      const glRefused = await api(page.request, baseURL!, "POST", "/api/journals/actions", {
+        action: "post",
+        documentId: id,
+      });
+      expect(glRefused.status).toBe(422);
+      expect(JSON.stringify(glRefused.json)).toMatch(/closed/i);
+
+      // AR and AP: invoice and bill posts into the same closed scope refuse.
+      const arId = await draftSeedDocument(page.request, baseURL!, "customer_invoice", {
+        partyId: SEED.customerAId,
+        subsidiaryId: SEED.rootSubId,
+        documentDate: `${P.from.slice(0, 8)}26`,
+        dueDate: `${P.from.slice(0, 8)}28`,
+        lines: [
+          {
+            accountId: SEED.accounts["4100"],
+            description: "Late billing",
+            quantity: "1",
+            unitPrice: "500.00",
+            amount: "500.00",
+          },
+        ],
+      });
+      const arRefused = await api(page.request, baseURL!, "POST", "/api/documents/actions", {
+        action: "post",
+        documentId: arId,
+      });
+      expect(arRefused.status).toBe(422);
+      expect(JSON.stringify(arRefused.json)).toMatch(/closed/i);
+      const apId = await draftSeedDocument(page.request, baseURL!, "vendor_bill", {
+        partyId: SEED.vendorAId,
+        subsidiaryId: SEED.rootSubId,
+        documentDate: `${P.from.slice(0, 8)}26`,
+        dueDate: `${P.from.slice(0, 8)}28`,
+        lines: [
+          {
+            accountId: SEED.accounts["6100"],
+            description: "Late expense",
+            quantity: "1",
+            unitPrice: "400.00",
+            amount: "400.00",
+          },
+        ],
+      });
+      const apRefused = await api(page.request, baseURL!, "POST", "/api/documents/actions", {
+        action: "post",
+        documentId: apId,
+      });
+      expect(apRefused.status).toBe(422);
+      expect(JSON.stringify(apRefused.json)).toMatch(/closed/i);
     } finally {
       await context.close();
     }

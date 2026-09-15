@@ -113,7 +113,7 @@ export interface Seed {
 export async function api(
   request: APIRequestContext,
   baseURL: string,
-  method: "GET" | "POST" | "PUT" | "PATCH",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ) {
@@ -192,3 +192,77 @@ export function binderHash(binder: unknown): string {
 }
 
 export { expect };
+
+export interface SeedJournalLine {
+  account: string;
+  amount: string;
+  description: string;
+  projectId?: string;
+}
+
+/** Post one manual journal through draft -> PATCH -> post. Returns the document id. */
+export async function postSeedJournal(
+  request: APIRequestContext,
+  baseURL: string,
+  accounts: Record<string, string>,
+  args: { subsidiaryId: string; documentDate: string; memo: string; lines: SeedJournalLine[] },
+) {
+  const draft = ok(await api(request, baseURL, "POST", "/api/journals/draft", { subsidiaryId: args.subsidiaryId }), "journal draft");
+  const id = field(draft, "id", "journal draft");
+  const token = await revisionToken(request, baseURL, `/api/journals/${id}`, (d) =>
+    field(d.doc as Record<string, unknown>, "updated_at", "journal"));
+  ok(
+    await api(request, baseURL, "PATCH", `/api/journals/${id}`, {
+      expectedUpdatedAt: token,
+      documentDate: args.documentDate,
+      memo: args.memo,
+      lines: args.lines.map((l) => ({
+        accountId: field(accounts, l.account, "journal line"),
+        description: l.description,
+        amount: l.amount,
+        ...(l.projectId ? { projectId: l.projectId } : {}),
+      })),
+    }),
+    `journal ${args.memo}`,
+  );
+  const posted = ok(
+    await api(request, baseURL, "POST", "/api/journals/actions", { action: "post", documentId: id }),
+    `journal post ${args.memo}`,
+  );
+  expect(posted.ok).toBe(true);
+  return id;
+}
+
+/** Fill one drawer document (invoice/bill) through draft -> PATCH, without posting. */
+export async function draftSeedDocument(
+  request: APIRequestContext,
+  baseURL: string,
+  kind: string,
+  patch: Record<string, unknown>,
+) {
+  const draft = ok(await api(request, baseURL, "POST", "/api/documents/draft", { kind }), `${kind} draft`);
+  const id = field(draft, "id", `${kind} draft`);
+  const token = await revisionToken(request, baseURL, `/api/documents/${id}`, (d) =>
+    d.doc ? field(d.doc as Record<string, unknown>, "updated_at", kind) : field(d, "updated_at", kind));
+  ok(
+    await api(request, baseURL, "PATCH", `/api/documents/${id}`, { expectedUpdatedAt: token, ...patch }),
+    `${kind} fill`,
+  );
+  return id;
+}
+
+/** Post one drawer document (invoice/bill) through draft -> PATCH -> post. */
+export async function postSeedDocument(
+  request: APIRequestContext,
+  baseURL: string,
+  kind: string,
+  patch: Record<string, unknown>,
+) {
+  const id = await draftSeedDocument(request, baseURL, kind, patch);
+  const posted = ok(
+    await api(request, baseURL, "POST", "/api/documents/actions", { action: "post", documentId: id }),
+    `${kind} post`,
+  );
+  expect(posted.ok).toBe(true);
+  return id;
+}
