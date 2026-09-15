@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { BANK_KINDS } from '../documents'
+import { statementBookExpr } from '../gl-summary'
 
 /**
  * Banking module home — one light round trip for the workspace landing
@@ -57,9 +58,13 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
   const txList = sql`(${sql.join(BANK_KINDS.map((kind) => sql`${kind}`), sql`, `)})`
   // Active subsidiary view: journal sums scope to the subtree's lines, and the
   // roster keeps only accounts whose restriction intersects it (null = shared).
+  // Book scope: the cockpit reads the primary posting book, like bank
+  // reconciliation itself — a secondary book's adjustments must not inflate
+  // balances, flows, or the trend.
   const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
+  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
 
   const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
     // Roster — one row per reconcilable account with balance + workflow state.
@@ -75,7 +80,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
         left join lateral (
           select sum(jl.amount) as balance
             from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
            where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}) bal on true
         left join lateral (
           select count(*) as n
@@ -107,7 +112,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
              sum(jl.amount) as flow,
              sum(jl.amount) filter (where je.posting_date >= ${ago7}) as flow_7d
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
