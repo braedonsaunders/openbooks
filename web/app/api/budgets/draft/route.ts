@@ -18,7 +18,10 @@ export async function POST(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
 
-  const requestedBook = typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
+  if (body.bookId !== undefined && (typeof body.bookId !== 'string' || !isUuid(body.bookId))) {
+    return NextResponse.json({ error: 'invalid_book_id' }, { status: 422 })
+  }
+  const requestedBook = typeof body.bookId === 'string' ? body.bookId : null
   const requestedYear = Number(body.fiscalYear)
   const kind = BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? (body.kind as string) : 'budget'
   const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId) ? body.sourceScenarioId : null

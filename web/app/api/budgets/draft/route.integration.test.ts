@@ -112,3 +112,20 @@ test('draft from source copies only caller-visible entities', { skip: !DB }, asy
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('draft creation rejects a malformed explicit book id instead of defaulting', { skip: !DB }, async () => {
+  const { org, fy } = await fixture()
+  try {
+    const before = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    const response = await post({ bookId: 'not-a-uuid', fiscalYear: fy })
+    assert.equal(response.status, 422)
+    assert.deepEqual(await response.json(), { error: 'invalid_book_id' })
+    const after = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    assert.equal(after, before, 'malformed book input must not create a default-book draft')
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})
