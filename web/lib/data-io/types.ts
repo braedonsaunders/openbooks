@@ -109,6 +109,13 @@ export interface WriteOutcome {
   updated: number
   failed: number
   errors: RowError[]
+  /**
+   * Non-blocking row advisories (a warning never fails its row). Optional so
+   * resources without advisories keep their existing outcome shape; the
+   * import route passes the outcome through untouched, so anything set here
+   * reaches the preview and the commit result alike.
+   */
+  warnings?: RowError[]
 }
 
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'json'] as const

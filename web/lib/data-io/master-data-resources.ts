@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '../exact-decimal'
+import { assetBankHygieneWarning } from '../accounts-hygiene'
 import { toSnake } from '../setup/registry'
 import { coerceBoolean, UUID_RE } from '../setup/coerce'
 import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
@@ -318,6 +319,16 @@ async function writeMaster(
   const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'inventory'))
   const equipmentOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'equipment'))
   const multiCurrencyOn = m.key !== 'accounts' || (await orgFeatureEnabled(ctx.orgId, 'multiCurrency'))
+  // Bank-typed hygiene needs to know which accounts already back real bank
+  // activity. One set per import — never a query per row.
+  const statementAccountIds = m.key === 'accounts'
+    ? new Set(
+      ((await db.execute(sql`
+        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}`)) as {
+        rows: { id: string }[]
+      }).rows.map((r) => r.id),
+    )
+    : new Set<string>()
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
@@ -428,15 +439,28 @@ async function writeMaster(
       let existingId: string | null = null
       let existingCustom: Record<string, unknown> = {}
       let storedKind: string | undefined
+      let storedAccount: { type?: string; name?: string; reconcilable?: boolean; is_summary?: boolean } | undefined
       if (nkVal) {
         const found = (await db.execute(sql`
-          select id, custom${m.key === 'items' ? sql`, kind` : sql``} from ${sql.raw(m.table)}
+          select id, custom${m.key === 'items' ? sql`, kind` : sql``}${m.key === 'accounts' ? sql`, type, name, reconcilable, is_summary` : sql``} from ${sql.raw(m.table)}
            where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`)) as {
-          rows: { id: string; custom: Record<string, unknown>; kind?: string }[]
+          rows: {
+            id: string
+            custom: Record<string, unknown>
+            kind?: string
+            type?: string
+            name?: string
+            reconcilable?: boolean
+            is_summary?: boolean
+          }[]
         }
         existingId = found.rows[0]?.id ?? null
         existingCustom = found.rows[0]?.custom ?? {}
         storedKind = found.rows[0]?.kind
+        if (m.key === 'accounts' && found.rows[0]) {
+          const row = found.rows[0]
+          storedAccount = { type: row.type, name: row.name, reconcilable: row.reconcilable, is_summary: row.is_summary }
+        }
       }
 
       // Updates are partial: required custom fields omitted from the import
@@ -534,6 +558,24 @@ async function writeMaster(
           })
         }
         outcome.created++
+      }
+
+      // Bank-typed hygiene: warn on uncorroborated asset_bank in preview and
+      // commit alike. Effective values — the row's cells over the stored row —
+      // so a partial update re-checks the account as it will stand.
+      if (m.key === 'accounts') {
+        const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
+        const warning = assetBankHygieneWarning({
+          type: String(cell('type') ?? storedAccount?.type ?? ''),
+          name: String(cell('name') ?? storedAccount?.name ?? ''),
+          reconcilable: Boolean(cell('reconcilable') ?? storedAccount?.reconcilable ?? false),
+          isSummary: Boolean(cell('is_summary') ?? storedAccount?.is_summary ?? false),
+          hasStatements: existingId ? statementAccountIds.has(existingId) : false,
+        })
+        if (warning) {
+          if (!outcome.warnings) outcome.warnings = []
+          outcome.warnings.push({ row: rowNo, message: warning, field: 'type' })
+        }
       }
     } catch (e) {
       outcome.failed++

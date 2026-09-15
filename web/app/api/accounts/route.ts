@@ -8,6 +8,7 @@ import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
+import { assetBankHygieneWarning } from '../../../lib/accounts-hygiene'
 import { isUuid } from '../../../lib/list-params'
 import { loadAccount } from './_lib'
 import { accountInputFields } from './_input'
@@ -208,5 +209,14 @@ export async function POST(request: Request) {
 
   const payload = await loadAccount(requestId, gate.user.orgId)
   if (!payload) return bad('save_failed', undefined, 500)
-  return NextResponse.json(payload, { status: created ? 201 : 200 })
+  // A fresh account backs no statements yet: corroboration is the request's
+  // own name and reconcilable flag. The warning rides alongside success —
+  // the account is always created.
+  const hygiene = assetBankHygieneWarning({
+    type: String(body.type),
+    name,
+    reconcilable,
+    isSummary,
+  })
+  return NextResponse.json({ ...payload, warnings: hygiene ? [hygiene] : [] }, { status: created ? 201 : 200 })
 }

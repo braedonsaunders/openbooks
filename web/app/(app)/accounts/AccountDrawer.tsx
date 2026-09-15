@@ -141,6 +141,13 @@ export function AccountDrawer({
       return
     }
     toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
+    // Typing hygiene is advisory: the save stands, and the server's warning
+    // (e.g. a bank-typed account with no bank corroboration) surfaces as its
+    // own toast so it cannot be mistaken for a failure.
+    const warnings = Array.isArray((data as { warnings?: unknown }).warnings)
+      ? (data as { warnings: unknown[] }).warnings.filter((w): w is string => typeof w === 'string')
+      : []
+    if (warnings.length > 0) toast.warning(warnings[0])
     if (createMode) {
       const createdId = data?.account?.id
       const separator = closeHref.includes('?') ? '&' : '?'
