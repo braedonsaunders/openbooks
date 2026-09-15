@@ -29,6 +29,15 @@ export type MoneyFormatter = {
   locale: string
 }
 
+export type DecimalFormatOptions = {
+  minimumFractionDigits?: number
+  maximumFractionDigits?: number
+  notation?: 'standard' | 'compact'
+  compactDisplay?: 'short' | 'long'
+  signDisplay?: Intl.NumberFormatOptions['signDisplay']
+  useGrouping?: Intl.NumberFormatOptions['useGrouping']
+}
+
 function normalizedCurrency(value: string): string {
   return value.trim().toUpperCase()
 }
@@ -61,6 +70,23 @@ function decimalFallback(
     signDisplay: options.signDisplay,
     useGrouping: options.useGrouping,
   }).format(value as never)
+}
+
+/** Locale-aware decimal presentation that preserves exact numeric strings. */
+export function formatDecimal(locale: string, value: MoneyValue, options: DecimalFormatOptions = {}): string {
+  if (value === null || value === undefined || value === '') return ''
+  const number = numericValue(value)
+  if (number === null) return String(value)
+  const resolvedLocale = Intl.getCanonicalLocales(locale)[0] ?? 'en'
+  return new Intl.NumberFormat(resolvedLocale, {
+    style: 'decimal',
+    notation: options.notation,
+    compactDisplay: options.compactDisplay,
+    minimumFractionDigits: options.minimumFractionDigits,
+    maximumFractionDigits: options.maximumFractionDigits,
+    signDisplay: options.signDisplay,
+    useGrouping: options.useGrouping,
+  }).format(number as never)
 }
 
 export function createMoneyFormatter(locale: string, defaultCurrency: string): MoneyFormatter {

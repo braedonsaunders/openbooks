@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { formatDecimal } from '../../../lib/money-format'
 import { toast } from 'sonner'
 import { ChevronDown, Download, ExternalLink, FileCheck2, Play } from 'lucide-react'
 import {
@@ -114,7 +115,7 @@ export function TaxFilingsView({
   }, [code, bounds.from, bounds.to])
 
   const fmt = (value: string) =>
-    Number(value).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    formatDecimal(locale, value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const adjustmentQuery = (values: Record<string, string>) =>
     Object.entries(values)

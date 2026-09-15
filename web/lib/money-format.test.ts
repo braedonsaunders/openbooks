@@ -3,7 +3,7 @@ import { globSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createMoneyFormatter } from './money-format.ts'
+import { createMoneyFormatter, formatDecimal } from './money-format.ts'
 import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -60,6 +60,13 @@ test('decimal strings never cross the binary floating-point boundary', () => {
     '$9,007,199,254,740,993.1234',
   )
   assert.equal(format.money('-0.0000'), '$0.00')
+})
+
+test('decimal formatting preserves exact values without a currency symbol', () => {
+  assert.equal(
+    formatDecimal('en-US', '9007199254740993.1234', { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
+    '9,007,199,254,740,993.1234',
+  )
 })
 
 test('repository money formatters never receive Number-coerced exact decimals', () => {
