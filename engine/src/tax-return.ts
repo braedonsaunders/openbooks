@@ -304,7 +304,10 @@ export interface TaxReturnResult {
  * functional currency — never an org-wide blend of per-subsidiary functionals.
  */
 export interface TaxReturnFilingEntity {
-  /** Subsidiaries forming the filing entity. Omit for the whole org. */
+  /**
+   * Subsidiaries forming the filing entity. Omit (or pass an empty set with
+   * a `registrationId`) for the whole org.
+   */
   subsidiaryIds: string[];
   /**
    * Pin the registration whose number travels on the return. It must belong
@@ -423,7 +426,7 @@ async function resolveReturnScope(
     return { ids: [], currencyById, nameById, rootId, legacy: true, explicit: false };
   }
   const requested = filingEntity?.subsidiaryIds;
-  if (!requested) {
+  if (!requested || (requested.length === 0 && filingEntity?.registrationId)) {
     return {
       ids: subRes.rows.map((r) => r.id),
       currencyById,

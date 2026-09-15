@@ -300,3 +300,39 @@ test("an unknown or elimination subsidiary fails closed", { skip: !DB }, async (
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a registration-only pin keeps the org-wide return with the pinned number", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const code = await makeTaxCode(org.orgId, "CAD-PIN", org.accounts);
+    await seedEntityDocument(org, {
+      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-PIN",
+      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+    });
+    const formCode = "REG-ONLY";
+    await makeEntityForm(org.orgId, formCode, [
+      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+      { lineCode: "TAX", taxCodeId: code, basis: "tax_collected", sign: -1, sequence: 20 },
+    ]);
+    const jurisdictionId = randomUUID();
+    await db.execute(sql`
+      insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
+      values (${jurisdictionId}, ${org.orgId}, 'PINONLY', 'Pin-only jurisdiction', 'CA', 'country', 'gst')`);
+    const registrationId = randomUUID();
+    await db.execute(sql`
+      insert into tax_registrations
+        (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
+      values (${registrationId}, ${org.orgId}, ${jurisdictionId}, '999888777 RT0001', 'quarterly', ${formCode}, true)`);
+    const result = await computeTaxReturn(org.orgId, formCode, org.date, org.date, {}, {
+      filingEntity: { subsidiaryIds: [], registrationId },
+    });
+    const values = boxesOf(result);
+    assert.equal(values.get("BASE"), "200.0000");
+    assert.equal(values.get("TAX"), "20.0000");
+    assert.equal(result.registrationNumber, "999888777 RT0001");
+    assert.equal(result.registrationId, registrationId);
+    assert.equal(result.functionalCurrency, "CAD");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

@@ -149,3 +149,96 @@ test("POST keeps a valid categorized difference and skips empty grid rows", asyn
     ],
   );
 });
+
+test("POST passes per-entity inputs and presentation currency to the run", async () => {
+  routeState.calls.length = 0;
+
+  const response = await post({
+    fiscalYear: 2026,
+    permanentDifferences: [{ description: "Root meals", amount: "10.00" }],
+    entities: {
+      "sub-1": {
+        permanentDifferences: [{ description: "Meals", amount: "50.00" }],
+        additionalDifferences: [
+          { description: "Lease", category: "provisions", difference: "10.00" },
+        ],
+        lossCarryforwardUsed: "5.00",
+        valuationAllowance: "1.00",
+      },
+    },
+    presentationCurrency: "USD",
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls.length, 1);
+  const input = routeState.calls[0]!.input as Record<string, unknown>;
+  assert.deepEqual(input.entities, {
+    "sub-1": {
+      permanentDifferences: [{ description: "Meals", amount: "50.0000" }],
+      additionalDifferences: [
+        {
+          category: "provisions",
+          description: "Lease",
+          difference: "10.0000",
+          source: "manual",
+        },
+      ],
+      lossCarryforwardUsed: "5.0000",
+      valuationAllowance: "1.0000",
+    },
+  });
+  assert.equal(input.presentationCurrency, "USD");
+});
+
+test("POST omits entity keys when no per-entity inputs are given", async () => {
+  routeState.calls.length = 0;
+
+  const response = await post({ fiscalYear: 2026 });
+
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls.length, 1);
+  const input = routeState.calls[0]!.input as Record<string, unknown>;
+  assert.equal("entities" in input, false);
+  assert.equal("presentationCurrency" in input, false);
+});
+
+test("POST refuses malformed per-entity inputs without reaching the run", async () => {
+  for (const entities of [
+    [],
+    { "sub-1": null },
+    {
+      "sub-1": {
+        permanentDifferences: [{ description: "Meals", amount: "bogus" }],
+      },
+    },
+    {
+      "sub-1": {
+        additionalDifferences: [
+          { description: "Lease", category: "typo", difference: "10.00" },
+        ],
+      },
+    },
+    { "sub-1": { lossCarryforwardUsed: "bogus" } },
+    { "sub-1": { permanentDifferences: "bogus" } },
+  ]) {
+    routeState.calls.length = 0;
+    const response = await post({ fiscalYear: 2026, entities });
+    assert.equal(response.status, 400, JSON.stringify(entities));
+    assert.deepEqual(await response.json(), {
+      error: "invalid provision entities",
+    });
+    assert.equal(routeState.calls.length, 0);
+  }
+});
+
+test("POST refuses a malformed presentation currency without reaching the run", async () => {
+  for (const presentationCurrency of ["US", "usd", "USDD", 123, ""]) {
+    routeState.calls.length = 0;
+    const response = await post({ fiscalYear: 2026, presentationCurrency });
+    assert.equal(response.status, 400, JSON.stringify(presentationCurrency));
+    assert.deepEqual(await response.json(), {
+      error: "invalid presentation currency",
+    });
+    assert.equal(routeState.calls.length, 0);
+  }
+});
