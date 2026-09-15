@@ -180,6 +180,23 @@ test("guard-negation wraps single-line if and while conditions", () => {
   assert.ok(mutants[2]!.mutatedSource.includes("while (!(a !== b)) {"));
 });
 
+test("guard-negation preserves string literals from the original source", () => {
+  const source = [
+    "export function route(mode: string): string {",
+    "  if (mode !== \"reverse_charge\") {",
+    "    return \"standard\";",
+    "  }",
+    "  return mode;",
+    "}",
+    "",
+  ].join("\n");
+  const mutants = byOperator(generateMutants("engine/src/probe.ts", source), "guard-negation");
+  assert.equal(mutants.length, 1);
+  // The spliced condition must be the original text, not the masked copy:
+  // a masked splice plants spaces where the literal stood and never parses.
+  assert.ok(mutants[0]!.mutatedSource.includes('if (!(mode !== "reverse_charge")) {'));
+});
+
 test("early-return-before-write fires only under a provable void return type", () => {
   const source = [
     "export async function persist(db: { insert(x: number): void }): Promise<void> {",
