@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { sealSecret } from '@openbooks/engine/src/secrets.ts'
 import { FORM_TYPES, type FormType } from '@openbooks/engine/src/information-returns.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 
@@ -65,6 +65,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
   const { orgId, id: actorId } = gate.user
   const { partyId } = await params
   if (!isUuid(partyId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // The vendor is the record boundary: a restricted caller may only touch
+  // compliance identity for parties inside their fence (null-subsidiary
+  // parties are org-wide, mirroring the party lists and the bank-detail
+  // route). Without this, a hidden-entity TIN could be overwritten blind.
+  const partyScope = await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from parties
+     where id = ${partyId} and org_id = ${orgId}`)
+  if (!partyScope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, partyScope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
