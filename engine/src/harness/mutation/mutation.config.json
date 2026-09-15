@@ -101,7 +101,8 @@
       "tests": [
         "engine/src/tax-return.test.ts",
         "engine/src/tax-filing.test.ts",
-        "engine/src/tax-return.integration.test.ts"
+        "engine/src/tax-return.integration.test.ts",
+        "engine/src/tax-return-filing-entity.integration.test.ts"
       ]
     },
     {
