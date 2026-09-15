@@ -267,6 +267,9 @@ export async function POST(req: Request) {
         if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         const amount = normalizeMoney(amountRaw);
         const targetSovLineId = typeof body.targetSovLineId === "string" && body.targetSovLineId ? body.targetSovLineId : null;
+        if (targetSovLineId && !isUuid(targetSovLineId)) {
+          throw new ConstructionBillingError("The target schedule line id must be a valid UUID");
+        }
         if (!number || cmp(amount, "0") === 0) throw new ConstructionBillingError("Change-order number and a non-zero amount are required");
         if (cmp(amount, "0") < 0 && !targetSovLineId) throw new ConstructionBillingError("A deductive change order must identify the schedule line it reduces");
         const id = await db.transaction(async (tx) => {

@@ -60,6 +60,12 @@ test('updateSov refuses a change-order-controlled schedule line', { skip: !proce
     // Ordinary lines stay editable before billing begins.
     const allowed = await post(construction.POST, org.orgId, { action: 'updateSov', id: plain, description: 'Renamed', scheduledValue: '1200' })
     assert.equal(allowed.status, 200)
+
+    const malformed = await post(construction.POST, org.orgId, {
+      action: 'addChangeOrder', projectId: project, number: 'CO-BAD', amount: '100', targetSovLineId: 'not-a-uuid',
+    })
+    assert.equal(malformed.status, 422)
+    assert.match((await malformed.json()).error, /target schedule line/i)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
