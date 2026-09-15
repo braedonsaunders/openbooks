@@ -129,6 +129,16 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
+  // The parser caps files at MAX_IMPORT_ROWS, so the wizard can never send
+  // more — but a direct API caller can, in either mode. Running an unbounded
+  // row set (a 100k-savepoint write transaction, or a 100k-row dry run) to
+  // its timeout helps nobody; refuse with the same bound instead.
+  if (rawRows.length > MAX_IMPORT_ROWS) {
+    return NextResponse.json(
+      { error: `too many rows (maximum ${MAX_IMPORT_ROWS} per import)` },
+      { status: 400 },
+    )
+  }
   const importMode: ImportMode = body.importMode ?? 'upsert'
   const mappedRows = rawRows.map((raw) => applyMapping(raw, mapping))
 
