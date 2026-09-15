@@ -725,3 +725,31 @@ test("open-item gating is a pure function of party presence and control designat
     );
   }
 });
+
+test("replaying a posted document refuses without duplicating entries or lines", { skip: !DB }, async () => {
+  // Postings must be idempotent at the boundary: a retried or double-fired
+  // postDocument for the same document throws instead of inserting a second
+  // entry, so the ledger can never hold two entries (or two line sets) for
+  // one document.
+  const org = await createScratchOrg();
+  const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+  try {
+    const documentId = await seedApprovedDocument(org, "customer_invoice", "REPLAY-IDEMPOTENT-1");
+    await postDocument(documentId, deps, { deferEffects: true, suppressAutomation: true });
+    const counts = async () => (await db.execute<{ entries: string; lines: string }>(sql`
+      select (select count(*)::text from journal_entries
+               where org_id = ${org.orgId} and source_document_id = ${documentId}) as entries,
+             (select count(*)::text from journal_lines jl
+                join journal_entries je on je.id = jl.entry_id
+               where je.org_id = ${org.orgId} and je.source_document_id = ${documentId}) as lines`)).rows[0]!;
+    const before = await counts();
+    assert.equal(before.entries, "1");
+    await assert.rejects(
+      postDocument(documentId, deps, { deferEffects: true, suppressAutomation: true }),
+      (error: Error) => error instanceof PostingError && /already posted/.test(error.message),
+    );
+    assert.deepEqual(await counts(), before);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
