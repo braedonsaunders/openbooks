@@ -106,9 +106,10 @@ export async function loadMaskingPolicies(
  * party / legal-entity tax registrations. The org row's own tax ids are not
  * cloned at all; createSandbox/refreshSandbox blank them for masked sandboxes.
  *
- * `users` rows are deliberately NOT masked: they are the sandbox's login
- * identities (the customization layer), not business PII payload, and a
- * sandbox that cannot be signed into is useless. */
+ * User rows remain present so the production login can act as its deterministic
+ * sandbox counterpart, but their contact identity and password credential are
+ * masked just like business PII. Sandbox access is established by the home
+ * session, so an empty password hash does not make the environment unusable. */
 const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "party_bank_accounts", columnName: "account_number_encrypted", transform: "reseal_secret" },
   { tableName: "party_bank_accounts", columnName: "account_last_four", transform: "null_out" },
@@ -126,6 +127,9 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "subsidiaries", columnName: "tax_ids", transform: "null_out" },
   { tableName: "addresses", columnName: "line1", transform: "redact" },
   { tableName: "addresses", columnName: "line2", transform: "redact" },
+  { tableName: "users", columnName: "email", transform: "faker_email" },
+  { tableName: "users", columnName: "name", transform: "faker_name" },
+  { tableName: "users", columnName: "password_hash", transform: "reseal_secret" },
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the
