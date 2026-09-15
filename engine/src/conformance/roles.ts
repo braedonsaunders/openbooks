@@ -50,6 +50,14 @@ export const ROLES: readonly Role[] = [
   "leaseExpense",
   "leaseInterestExpense",
   "rouAmortization",
+  "investmentInSub",
+  "subsidiaryEquity",
+  "nciEquity",
+  "nciIncome",
+  "equityMethodIncome",
+  "distributionIncome",
+  "goodwill",
+  "fairValueAdjustment",
 ] as const;
 
 /**
@@ -80,6 +88,14 @@ const EXTRA_ACCOUNTS: readonly [Role, string, string, string][] = [
   ["leaseExpense", "6900", "Operating Lease Cost", "expense"],
   ["leaseInterestExpense", "6910", "Lease Interest Expense", "expense_other"],
   ["rouAmortization", "6920", "Right-of-Use Amortization", "expense"],
+  ["investmentInSub", "1410", "Investment in Subsidiary", "asset_current_other"],
+  ["subsidiaryEquity", "3000", "Subsidiary Share Capital", "equity"],
+  ["nciEquity", "3100", "Non-Controlling Interest", "equity"],
+  ["nciIncome", "6100", "Profit Attributable to NCI", "expense_other"],
+  ["equityMethodIncome", "4020", "Equity-Method Investment Income", "income_other"],
+  ["distributionIncome", "4030", "Dividend Income", "income_other"],
+  ["goodwill", "1510", "Goodwill", "asset_fixed"],
+  ["fairValueAdjustment", "1520", "Fair Value Adjustment", "asset_fixed"],
 ];
 
 export interface ConformanceOrg {

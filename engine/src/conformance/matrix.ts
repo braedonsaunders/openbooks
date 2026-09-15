@@ -17,6 +17,7 @@ import { FOREIGN_CURRENCY_CASES } from "./cases/foreign-currency.ts";
 import { FX_SETTLEMENT_CASES } from "./cases/fx-settlement.ts";
 import { SALES_TAX_CASES } from "./cases/sales-tax.ts";
 import { PAYROLL_STATUTORY_CASES } from "./cases/payroll-statutory.ts";
+import { CONSOLIDATION_CASES } from "./cases/consolidation.ts";
 import { INCOME_TAX_CASES } from "./cases/income-tax.ts";
 import { INVENTORY_CASES } from "./cases/inventory.ts";
 import { LEASE_CASES } from "./cases/leases.ts";
@@ -37,6 +38,7 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...INCOME_TAX_CASES,
   ...CONSTRUCTION_CASES,
   ...PROVISION_CASES,
+  ...CONSOLIDATION_CASES,
 ];
 
 /**
@@ -67,6 +69,7 @@ export const REGISTERED_FLOORS: readonly {
   { area: "income tax", source: INCOME_TAX_CASES, minimum: 10 },
   { area: "construction", source: CONSTRUCTION_CASES, minimum: 4 },
   { area: "provisions", source: PROVISION_CASES, minimum: 2 },
+  { area: "consolidation", source: CONSOLIDATION_CASES, minimum: 6 },
 ];
 
 /** Every standard the corpus makes a claim about, in citation order. */
