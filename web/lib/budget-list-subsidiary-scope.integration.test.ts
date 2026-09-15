@@ -25,6 +25,7 @@ test('budget scenario rows and totals honor the caller subsidiary scope', { skip
     const visibleScenario = randomUUID()
     const mixedScenario = randomUUID()
     const hiddenScenario = randomUUID()
+    const emptyScenario = randomUUID()
     await withBypass(async () => {
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -34,6 +35,7 @@ test('budget scenario rows and totals honor the caller subsidiary scope', { skip
         [visibleScenario, 'Visible budget'],
         [mixedScenario, 'Mixed budget'],
         [hiddenScenario, 'Hidden budget'],
+        [emptyScenario, 'Empty budget'],
       ] as const) {
         await db.execute(sql`
           insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -72,6 +74,16 @@ test('budget scenario rows and totals honor the caller subsidiary scope', { skip
       { id: mixedScenario, amount: '100.0000' },
       { id: visibleScenario, amount: '100.0000' },
     ])
+
+    const unrestrictedWhere = source.where(view, { filters: {}, showInactive: false }, scratch.orgId, null)
+    const unrestrictedJoins = typeof source.baseJoins === 'function' ? source.baseJoins(null) : source.baseJoins
+    const unrestrictedRows = await db.execute<{ id: string }>(sql`
+      select bs.id
+        from budget_scenarios bs
+        ${unrestrictedJoins}
+       where ${unrestrictedWhere}
+    `)
+    assert.ok(unrestrictedRows.rows.some((row) => row.id === emptyScenario))
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
