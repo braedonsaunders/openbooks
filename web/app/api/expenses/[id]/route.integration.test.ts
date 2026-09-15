@@ -248,4 +248,27 @@ test('expense PATCH preserves omitted required header custom fields on a partial
   })
 })
 
+test('expense PATCH refuses a line account from another organization but saves an own-org account', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    const foreign = await createScratchOrg()
+    try {
+      const foreignAccount = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${foreign.orgId} and is_active and not is_summary limit 1`)).rows[0]!.id
+      // The tenant-coherent lines FK would kill a foreign account at the
+      // insert as a 500, so the route itself refuses it with a domain 404.
+      const denied = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: foreignAccount, amount: '10', description: 'foreign account' }] })
+      assert.equal(denied.status, 404)
+      assert.equal(
+        (await db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`)).rows[0]!.account_id,
+        org.accounts.cogs,
+        'the refused save stores no foreign account',
+      )
+      // An own-org postable account still saves.
+      const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: org.accounts.cogs, amount: '10', description: 'home account' }] })
+      assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
+    } finally {
+      await dropScratchOrg(foreign.orgId)
+    }
+  })
+})
+
 test.after(async () => { await pool.end() })

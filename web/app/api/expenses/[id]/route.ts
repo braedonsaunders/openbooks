@@ -103,6 +103,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ))
     if (!owner.rows[0]) return NextResponse.json({ error: 'party not found in this organization' }, { status: 404 })
   }
+  // Line accounts are the tenant's chart of accounts. The lines FK is
+  // tenant-coherent, so a foreign account dies at the insert as a 500;
+  // refuse it here with the same domain 404 as a foreign party, and refuse
+  // inactive/summary accounts the posting kernel could never book. A uniform
+  // 404 reveals nothing about another tenant's chart.
+  if (body.lines !== undefined) {
+    const accountIds = [...new Set(body.lines.map((l) => l.accountId).filter((v): v is string => typeof v === 'string' && v.length > 0))]
+    const malformed = accountIds.filter((v) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))
+    const usable = malformed.length === 0 && accountIds.length > 0
+      ? (await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${user.orgId} and is_active and not is_summary
+             and id = any(${`{${accountIds.join(',')}}`}::uuid[])
+        `)).rows
+      : []
+    if (malformed.length > 0 || usable.length !== accountIds.length) {
+      return NextResponse.json({ error: 'account not found in this organization' }, { status: 404 })
+    }
+  }
   // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
   let expectedRevision: string
   try {
