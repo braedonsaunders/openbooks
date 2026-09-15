@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**70 passing · 0 failing · 9 gaps · 0 not run**
+**75 passing · 0 failing · 10 gaps · 0 not run**
 
-Commit `0ba5757983e76269e7e09d82721bbb53d4f3c164` · 2026-09-15T21:16:30.118Z
+Commit `27b75e9d0d1c7cb3266c37e56e8f95b3bc981c1d` · 2026-09-15T21:22:06.529Z
 
 ## AL DOR
 
@@ -168,12 +168,19 @@ Commit `0ba5757983e76269e7e09d82721bbb53d4f3c164` · 2026-09-15T21:16:30.118Z
 | **Settling the complete foreign balance consumes the complete carrying value**<br><sub>Taking the complete residual consumes the complete carrying value — including a sub-cent rounding tail — so proportional rounding can never strand an uncloseable one-unit balance on a fully settled item.</sub> | IAS 21.28 | PASS | Implemented |
 | **A non-monetary asset measured at historical cost is not retranslated**<br><sub>Equipment bought in a foreign currency keeps its transaction-date translated cost through a period-end close that moves the rate: the revaluation run finds no monetary exposure in the asset or its matching foreign-currency liability and posts nothing — neither a gain nor a loss, and no restatement of cost.</sub> | IAS 21.23(b)<br>ASC 830-10-45-17 | PASS | Implemented |
 | **Exchange differences on a net investment in a foreign operation**<br><sub>A long-term intercompany balance that is in substance part of a net investment in a foreign operation has its exchange differences recognised in other comprehensive income until the investment is disposed of.</sub> | IAS 21.32 | GAP | Not implemented |
+| **A foreign subsidiary translates profit at the average rate and equity at history**<br><sub>An 80%-owned USD subsidiary with USD 1,000.00 of equity acquired when the policy rate was 1.30 eliminates at CAD 1,300.00, while its USD 100.00 profit translates at the period average of 1.3750 to CAD 137.50 — and the 20% NCI income of CAD 27.50 proves the average, not the spot, was applied.</sub> | IAS 21.39<br>ASC 830-30-45-3 | PASS | Implemented |
 
 ### IAS 21 — shortfalls
 
 **fx-net-investment-oci — Exchange differences on a net investment in a foreign operation**
 
 > The product has no net-investment designation for intercompany monetary items: every monetary exchange difference the revaluation engine computes is offset to the profit-or-loss unrealized gain/loss account, and there is no other-comprehensive-income reserve for foreign-operation differences in the ledger.
+
+## IAS 28
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **An associate's profit increases the investment and its dividend reduces it**<br><sub>A 30% associate earning CAD 200.00 and declaring CAD 50.00 of dividends lifts the investment by CAD 45.00 in one entry — CAD 60.00 of equity income less the CAD 15.00 dividend share — with no NCI and no acquisition elimination, because an associate is never combined line by line.</sub> | IAS 28.16<br>ASC 323-10-35-4 | PASS | Implemented |
 
 ## IAS 37
 
@@ -196,6 +203,26 @@ Commit `0ba5757983e76269e7e09d82721bbb53d4f3c164` · 2026-09-15T21:16:30.118Z
 **prov-best-estimate-measurement — A provision is measured at the best estimate and reviewed every period**
 
 > With no provisions ledger there is nothing to remeasure: no periodic review of open provisions, no adjustment path for a changed estimate, and no utilisation tracking when the obligation settles.
+
+## IFRS 10
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Full consolidation eliminates the subsidiary and recognises NCI**<br><sub>Acquiring 80% of a subsidiary eliminates its acquisition-date equity against the parent's investment, recognises the 20% non-controlling interest at its proportionate share of fair value with goodwill for the remainder, and allocates 20% of the period's profit to NCI — every leg exact to the cent.</sub> | IFRS 10.22<br>IFRS 10.B94<br>ASC 810-10-45-16 | PASS | Implemented |
+| **Intercompany balances eliminate to zero while standalone views stay untouched**<br><sub>A CAD 1,000.00 intercompany receivable on the parent exactly offsets the subsidiary's CAD 1,000.00 payable, and the elimination entry reverses both — the consolidated view nets to zero while the source postings on each entity stand unchanged.</sub> | IFRS 10.B86<br>ASC 810-10-45-1 | PASS | Implemented |
+| **Loss of control derecognises the subsidiary and remeasures any retained interest**<br><sub>Selling down from 80% to 20% removes the subsidiary's net assets and NCI from the consolidated balance sheet, books the retained 20% at its fair value, and recognises the resulting gain or loss with the accumulated translation difference reclassified out of equity.</sub> | IFRS 10.25 | GAP | Not implemented |
+
+### IFRS 10 — shortfalls
+
+**consol-loss-of-control — Loss of control derecognises the subsidiary and remeasures any retained interest**
+
+> The engine has no loss-of-control accounting: closing or narrowing an ownership policy simply stops future consolidation generations, leaving the parent's investment at cost with no derecognition of the subsidiary's net assets, no release of NCI, no fair-value remeasurement of any retained interest, and no reclassification of translation differences.
+
+## IFRS 11
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Proportionate consolidation combines only the owned share, with no NCI**<br><sub>A 50%-owned joint operation eliminates the owned half of its acquisition-date equity against the parent's investment with no NCI entry at all — the reporting layer weights the subsidiary's lines, so the run posts the owned-share elimination and stops.</sub> | IFRS 11.20 | PASS | Implemented |
 
 ## IFRS 16
 

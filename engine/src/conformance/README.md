@@ -121,7 +121,11 @@ Additional Medicare, plus an Alabama booklet sample — cumulative averaging and
 Quebec provincial tax are published gaps), and sales/consumption tax
 (exclusive/inclusive GST, QST compounding, per-line rounding, partial input
 credits, GST34 payable/refund and VAT100 box walks, US nexus OR/AND/sales-only
-rules — native place-of-supply determination is a published gap).
+rules — native place-of-supply determination is a published gap), and
+consolidation (full method with NCI recognition and profit allocation,
+intercompany elimination, equity method, proportionate owned share, and
+foreign-subsidiary translation at average/history — loss-of-control
+accounting is a published gap).
 
 Not yet covered, and therefore **not claimed**: business combinations,
 consolidation procedure, financial instruments, employee benefits,
