@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { subsidiaryVisibleFilter } from "../../subsidiaries";
 
 /* ------------------------------------------------------------------ */
 /* Timesheet weeks                                                     */
@@ -33,8 +34,14 @@ function timesheetWeekFilterPredicate(clause: FilterClause): SQL | null {
   return null
 }
 
-export function timesheetWeekWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
+export function timesheetWeekWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): SQL {
   const parts: SQL[] = [sql`tw.org_id = ${orgId}`]
+  parts.push(subsidiaryVisibleFilter(sql`employee.subsidiary_id`, allowedSubsidiaryIds ?? null))
   for (const filter of view.filters) {
     const predicate = timesheetWeekFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)

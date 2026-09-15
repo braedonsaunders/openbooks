@@ -600,11 +600,12 @@ const SOURCES: Record<string, EntityListSource> = {
       {
         paramKey: 'employee',
         filterKey: 'employee_party_id',
-        loadOptions: async (orgId) => {
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select p.id::text as value, p.display_name as label
               from parties p
              where p.org_id=${orgId} and p.is_active
+               ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
                and exists (select 1 from employee_roles r where r.party_id=p.id and r.org_id=p.org_id and r.is_active)
              order by p.display_name`)
           return result.rows
