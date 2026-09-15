@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, pool } from "../db.ts";
 import { divRate, fromUnits, mulRate, toUnits } from "../money.ts";
+import type { SourceApplicationLink } from "./source.ts";
 
 /**
  * Payment-application reconciler — the platform's settlement sync.
@@ -24,10 +25,59 @@ import { divRate, fromUnits, mulRate, toUnits } from "../money.ts";
  * before writing (a void reverses entries without taking line locks).
  */
 
-export interface SourceLink {
-  paymentRef: string; // source id of the paying/crediting transaction
-  appliedRef: string; // source id of the settled open item (invoice/bill)
-  amount: string; // positive decimal
+/**
+ * Resolve one stated settlement link to functional carrying value, through
+ * the kernel's own `mulRate`. Resolution order is load-bearing:
+ *
+ * 1. Base amounts pass through untouched.
+ * 2. Amounts in the payment line's own currency convert at the line's BOOKED
+ *    rate. `have` accumulates carrying values at booked rates, so only the
+ *    booked rate keeps the pair loop convergent; a producer rate for the
+ *    same currency is informational, never an override.
+ * 3. Anything else converts at the producer-stated rate (cross-currency
+ *    links the books cannot price themselves).
+ *
+ * Anything unresolvable throws a named error: the batch rolls back and the
+ * run fails honestly. A refused link is never silently under-applied, and a
+ * settled pair never reaches resolution (its links are informational once
+ * `have` covers them — links are deterministic per source state, so a pair
+ * is either always resolvable or never settles).
+ */
+export function resolveLinkFunctional(
+  link: SourceApplicationLink,
+  payLine: Pick<OpenLine, "currency" | "fxRate" | "functionalCurrency">,
+): bigint {
+  const label = `${link.paymentRef}→${link.appliedRef}`;
+  const amount = toUnits(link.amount);
+  const ccy = (link.currency ?? "").trim().toUpperCase();
+  if (!ccy) {
+    throw new Error(
+      `application link ${label} states no currency — refusing to settle an undenominated amount`,
+    );
+  }
+  if (ccy === payLine.functionalCurrency.trim().toUpperCase()) return amount;
+  if (ccy === payLine.currency.trim().toUpperCase()) {
+    try {
+      return toUnits(mulRate(fromUnits(amount), payLine.fxRate));
+    } catch (error) {
+      throw new Error(
+        `application link ${label} states ${ccy} but the payment line carries no usable rate: ${(error as Error).message}`,
+      );
+    }
+  }
+  const rate = (link.rate ?? "").toString().trim();
+  if (!rate) {
+    throw new Error(
+      `application link ${label} states currency ${ccy}, which is neither the functional ${payLine.functionalCurrency} nor the payment line currency ${payLine.currency}, and states no conversion rate`,
+    );
+  }
+  try {
+    return toUnits(mulRate(fromUnits(amount), rate));
+  } catch (error) {
+    throw new Error(
+      `application link ${label} states an unusable conversion rate: ${(error as Error).message}`,
+    );
+  }
 }
 
 export interface ApplyStats {
@@ -113,9 +163,9 @@ async function allocateFxEntryNumber(
 }
 
 /** Largest transaction-currency amount whose rounded carrying value fits a
- * functional-currency capacity. Both the source link and open-item caps are
- * functional amounts, while the application trigger independently caps each
- * side's transaction amount. */
+ * functional-currency capacity. Every cap here is functional (pair wants are
+ * resolved from their stated currency first), while the application trigger
+ * independently caps each side's transaction amount. */
 function transactionCapacity(base: bigint, transaction: bigint, fxRate: string): bigint {
   let capacity = transaction;
   const byBase = toUnits(divRate(fromUnits(base), fxRate));
@@ -127,15 +177,19 @@ function transactionCapacity(base: bigint, transaction: bigint, fxRate: string):
 export async function reconcileApplications(
   orgId: string,
   refKey: string,
-  links: SourceLink[],
+  links: SourceApplicationLink[],
 ): Promise<ApplyStats> {
-  // -- target: applied amount per (payment, applied) pair ---------------------
-  const target = new Map<string, bigint>();
+  // -- target: stated links per (payment, applied) pair -----------------------
+  // Amounts stay STATED here: each pair resolves to functional at allocation
+  // time, once its payment lines (currency, booked rate, functional) are
+  // hydrated. Non-positive stated amounts are still skipped silently.
+  const target = new Map<string, SourceApplicationLink[]>();
   for (const l of links) {
-    const u = toUnits(l.amount);
-    if (u <= 0n) continue;
+    if (toUnits(l.amount) <= 0n) continue;
     const key = `${l.paymentRef}|${l.appliedRef}`;
-    target.set(key, (target.get(key) ?? 0n) + u);
+    const arr = target.get(key) ?? [];
+    arr.push(l);
+    target.set(key, arr);
   }
 
   // -- read-decide-write under one org-pinned transaction ----------------------
@@ -301,10 +355,7 @@ export async function reconcileApplications(
     // -- allocate the missing deltas ---------------------------------------------
     const toInsert: PendingApplication[] = [];
 
-    for (const [key, want] of target) {
-      const have = existingPair.get(key) ?? 0n;
-      let remaining = want - have;
-      if (remaining <= 0n) { alreadySettled++; continue; }
+    for (const [key, pairLinks] of target) {
       const [paymentRef, appliedRef] = key.split("|");
       // `key` is assembled from both source references above, but keep the
       // parser total under `noUncheckedIndexedAccess` before using the refs as
@@ -315,7 +366,16 @@ export async function reconcileApplications(
       }
       const payLines = linesByRef.get(paymentRef);
       const appLines = linesByRef.get(appliedRef);
-      if (!payLines || !appLines) { skippedNoLine++; continue; }
+      const firstPay = payLines?.[0];
+      if (!payLines || !appLines || !firstPay) { skippedNoLine++; continue; }
+      // Resolve the pair's stated links against the hydrated payment lines.
+      // A refused link throws: the batch rolls back and the run fails
+      // honestly instead of settling a guess.
+      let want = 0n;
+      for (const link of pairLinks) want += resolveLinkFunctional(link, firstPay);
+      const have = existingPair.get(key) ?? 0n;
+      let remaining = want - have;
+      if (remaining <= 0n) { alreadySettled++; continue; }
       // Journal line numbers are only meaningful inside their own entry. They
       // do not provide an ordering relation between the payment and applied
       // documents, so a two-pointer merge can discard a valid match when the

@@ -45,6 +45,7 @@ export interface XeroDoc {
   LineItems?: XeroLineItem[];
   JournalLines?: { LineAmount?: number; AccountCode?: string; Description?: string }[];
   CurrencyRate?: number;
+  CurrencyCode?: string;
   Total?: number;
   TotalTax?: number;
   Amount?: number;

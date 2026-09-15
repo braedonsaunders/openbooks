@@ -244,15 +244,40 @@ export class ErpNextSource implements MigrationSource {
 
     // Applications: every submitted Payment Entry's references (full graph —
     // the reconciler is delta-safe), plus journal-row allocations.
+    // `allocated_amount` is denominated in the reference's account currency
+    // (ERPNext docs: "Allocate the invoice in its account currency"), so map
+    // every invoice/order to that currency with un-windowed pulls — payment
+    // references reach back past the document window. The per-reference
+    // `exchange_rate` direction is unproven against a live tenant, so no
+    // producer rate is stated: foreign links resolve through the books' own
+    // line rates and refuse loudly on any mismatch. References the map cannot
+    // price (Journal Entry advances and the like — no single currency) stay
+    // unstated for the same reason.
+    const refCurrency = new Map<string, string>();
+    for (const doctype of ["Sales Invoice", "Purchase Invoice", "Sales Order", "Purchase Order"]) {
+      const rows = await this.client.listAll<{
+        name: string; currency?: string | null; party_account_currency?: string | null;
+      }>(doctype, ["name", "currency", "party_account_currency"], []);
+      for (const row of rows) {
+        const code = row.party_account_currency ?? row.currency;
+        if (row.name && code) refCurrency.set(`${doctype}:${row.name}`, code);
+      }
+    }
     const applications: NativeChanges["applications"] = [];
     const allPays = await this.client.listAll<{ name: string }>("Payment Entry", ["name"], [["docstatus", "=", 1]]);
     for (const p of allPays) {
-      const doc = await this.client.getDoc<ErpPayment & { references?: { reference_name: string; allocated_amount: number }[] }>(
+      const doc = await this.client.getDoc<ErpPayment & { references?: { reference_doctype?: string | null; reference_name: string; allocated_amount: number }[] }>(
         "Payment Entry", p.name,
       );
       for (const r of doc.references ?? []) {
         if (!(r.allocated_amount > 0)) continue;
-        applications.push({ paymentRef: p.name, appliedRef: r.reference_name, amount: formatMoney(String(r.allocated_amount), 2) });
+        applications.push({
+          paymentRef: p.name,
+          appliedRef: r.reference_name,
+          amount: formatMoney(String(r.allocated_amount), 2),
+          currency: (r.reference_doctype && refCurrency.get(`${r.reference_doctype}:${r.reference_name}`)) ?? "",
+          rate: null,
+        });
       }
     }
 

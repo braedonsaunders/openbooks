@@ -98,7 +98,7 @@ test(
       `);
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-1", appliedRef: "invoice-1", amount: "50" },
+        { paymentRef: "payment-1", appliedRef: "invoice-1", amount: "50", currency: "CAD" },
       ]);
       assert.deepEqual(first, {
         pairs: 1,
@@ -124,7 +124,7 @@ test(
       );
 
       const second = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-1", appliedRef: "invoice-1", amount: "50" },
+        { paymentRef: "payment-1", appliedRef: "invoice-1", amount: "50", currency: "CAD" },
       ]);
       assert.deepEqual(second, {
         pairs: 1,
@@ -210,7 +210,7 @@ test(
       `);
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-fx", appliedRef: "invoice-fx", amount: "120" },
+        { paymentRef: "payment-fx", appliedRef: "invoice-fx", amount: "100", currency: "EUR" },
       ]);
       assert.deepEqual(first, {
         pairs: 1,
@@ -272,7 +272,7 @@ test(
       ]);
 
       const second = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-fx", appliedRef: "invoice-fx", amount: "120" },
+        { paymentRef: "payment-fx", appliedRef: "invoice-fx", amount: "100", currency: "EUR" },
       ]);
       assert.deepEqual(second, {
         pairs: 1,
@@ -383,8 +383,8 @@ test(
       `);
 
       const result = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120" },
-        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2b", amount: "125" },
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120", currency: "CAD" },
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2b", amount: "125", currency: "CAD" },
       ]);
       assert.deepEqual(result, {
         pairs: 2,
@@ -407,8 +407,8 @@ test(
       // A re-run settles nothing new and mints no further FX entries, so the
       // stepped numbering cannot drift across runs.
       const rerun = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120" },
-        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2b", amount: "125" },
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2a", amount: "120", currency: "CAD" },
+        { paymentRef: "payment-fx2", appliedRef: "invoice-fx2b", amount: "125", currency: "CAD" },
       ]);
       assert.deepEqual(rerun, {
         pairs: 2,
@@ -496,8 +496,8 @@ test(
       `);
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100" },
-        { paymentRef: "payment-over", appliedRef: "ghost-9", amount: "10" },
+        { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100", currency: "CAD" },
+        { paymentRef: "payment-over", appliedRef: "ghost-9", amount: "10", currency: "CAD" },
       ]);
       assert.deepEqual(first, {
         pairs: 2,
@@ -514,7 +514,7 @@ test(
       // A re-run settles nothing further: remaining capacity is zero, so the
       // same over-link stays fully unallocated instead of double-settling.
       const second = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100" },
+        { paymentRef: "payment-over", appliedRef: "invoice-over", amount: "100", currency: "CAD" },
       ]);
       assert.deepEqual(second, {
         pairs: 1,
@@ -603,7 +603,7 @@ test(
       `);
 
       const first = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "30" },
+        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "30", currency: "CAD" },
       ]);
       assert.deepEqual(first, {
         pairs: 1,
@@ -614,7 +614,7 @@ test(
         unallocated: "0.0000",
       });
       const second = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "50" },
+        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "50", currency: "CAD" },
       ]);
       assert.deepEqual(second, {
         pairs: 1,
@@ -625,7 +625,7 @@ test(
         unallocated: "0.0000",
       });
       const third = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "50" },
+        { paymentRef: "payment-part", appliedRef: "invoice-part", amount: "50", currency: "CAD" },
       ]);
       assert.deepEqual(third, {
         pairs: 1,
@@ -755,7 +755,7 @@ test(
       );
 
       const mirror = reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-race", appliedRef: "invoice-race", amount: "100" },
+        { paymentRef: "payment-race", appliedRef: "invoice-race", amount: "100", currency: "CAD" },
       ]).then(
         (stats) => ({ ok: true as const, stats }),
         (error: unknown) => ({ ok: false as const, error }),
@@ -888,7 +888,7 @@ test(
       assert.equal(voided.status, "voided");
 
       const stats = await reconcileApplications(org.orgId, "sourceId", [
-        { paymentRef: "payment-void", appliedRef: "invoice-void", amount: "100" },
+        { paymentRef: "payment-void", appliedRef: "invoice-void", amount: "100", currency: "CAD" },
       ]);
       assert.deepEqual(stats, {
         pairs: 1,
@@ -981,7 +981,7 @@ test(
 
       const [mirrorOutcome, voidOutcome] = await Promise.all([
         reconcileApplications(org.orgId, "sourceId", [
-          { paymentRef: "payment-converge", appliedRef: "invoice-converge", amount: "100" },
+          { paymentRef: "payment-converge", appliedRef: "invoice-converge", amount: "100", currency: "CAD" },
         ]).then(
           (stats) => ({ ok: true as const, stats }),
           (error: unknown) => ({ ok: false as const, error }),
