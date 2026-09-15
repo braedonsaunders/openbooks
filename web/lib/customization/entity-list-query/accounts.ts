@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { statementBookExpr } from "../../gl-summary";
+import { uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Accounts                                                            */
@@ -126,6 +127,8 @@ function accountFilterPredicate(clause: FilterClause): SQL | null {
   if (clause.key === 'type') return select(sql`a.type`)
   if (clause.key === 'status') return select(ACCOUNT_STATUS_EXPR)
   if (clause.key === 'parent_id') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`a.parent_id = ${value}`
     if (clause.operator === 'ne') return sql`a.parent_id <> ${value}`
   }
