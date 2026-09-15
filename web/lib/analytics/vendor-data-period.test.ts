@@ -67,6 +67,9 @@ const mockSources = new Map<string, string>([
       export const db = {
         async execute(query) {
           state.queries.push(query)
+          // Consolidated presentation reads the org base first; the mock
+          // world is single-currency, so every leg translates 1:1.
+          if (query.text.includes('from orgs')) return { rows: [{ baseCurrency: 'CAD' }] }
           if (query.text.includes('from documents')) return { rows: billRows(query) }
           if (query.text.includes('from ew e')) {
             if (query.text.includes('to_char(e.posting_date')) return { rows: [] }
