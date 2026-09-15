@@ -6,6 +6,7 @@ import {
   decimalNeg,
   decimalPercentChange,
   decimalScale,
+  decimalScaleWhole,
   decimalSum,
   fromDecimalUnits,
   toDecimalUnits,
@@ -31,4 +32,16 @@ test('exact scaling and variance calculations round deterministically', () => {
   assert.equal(decimalPercentChange('110.0000', '100.0000'), '10.0000')
   assert.equal(decimalPercentChange('90.0000', '100.0000'), '-10.0000')
   assert.equal(decimalPercentChange('1.0000', '0.0000'), null)
+})
+
+test('scaled whole-unit display rounds once from the ledger value', () => {
+  // 1499.9999 is 1.49999999 thousand: printing it in thousands must read 1,
+  // not 2. A two-step scale-then-format rounds 1.49999999 up to 1.5000 first
+  // and the display rounding then carries it to 2.
+  assert.equal(decimalScaleWhole('1499.9999', 1000), '1.0000')
+  assert.equal(decimalScaleWhole('-1499.9999', 1000), '-1.0000')
+  assert.equal(decimalScaleWhole('1500.0000', 1000), '2.0000')
+  assert.equal(decimalScaleWhole('1499999.9999', 1000000), '1.0000')
+  assert.equal(decimalScaleWhole('2500000.0000', 1000000), '3.0000')
+  assert.equal(decimalScaleWhole('0.0000', 1000), '0.0000')
 })
