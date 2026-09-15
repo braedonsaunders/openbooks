@@ -119,6 +119,16 @@ test("units-of-production corrections are exact and cannot make lifetime usage n
   }), /between zero and expected lifetime units/);
 });
 
+test("units-of-production may reverse recorded usage exactly to zero", () => {
+  // Boundary pin: priorUnits + period == 0 is inside [0, lifetime] — only
+  // strictly negative usage is refused. A <= comparison strands the final
+  // reversal and leaves phantom depreciation on the books.
+  assert.equal(computeUnitsOfProductionCharge({
+    cost: "1000.0000", salvage: "100.0000", lifetimeUnits: "300.0000",
+    periodUnits: "-100.0000", unitsAlreadyRecorded: "100.0000", depreciationAlreadyPlanned: "300.0000",
+  }), "-300.0000");
+});
+
 test("final production units absorb exact rounding remainder", () => {
   const first = computeUnitsOfProductionCharge({
     cost: "1.0000", salvage: "0.0000", lifetimeUnits: "3.0000", periodUnits: "1.0000",
