@@ -25,10 +25,10 @@ test('version scopes gate rate resolution, not just surcharges', enabled, async 
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
-      const deptA = randomUUID(), deptB = randomUUID()
-      for (const [id, name] of [[deptA, 'Scoped'], [deptB, 'Other']] as const) {
-        await db.execute(sql`insert into departments (id, org_id, name, is_active) values (${id}, ${org.orgId}, ${name}, true)`)
-      }
+      const deptParent = randomUUID(), deptA = randomUUID(), deptB = randomUUID()
+      await db.execute(sql`insert into departments (id, org_id, name, is_active) values (${deptParent}, ${org.orgId}, 'Scoped parent', true)`)
+      await db.execute(sql`insert into departments (id, org_id, parent_id, name, is_active) values (${deptA}, ${org.orgId}, ${deptParent}, 'Scoped child', true)`)
+      await db.execute(sql`insert into departments (id, org_id, name, is_active) values (${deptB}, ${org.orgId}, 'Other', true)`)
       const employee = randomUUID(), project = randomUUID(), book = randomUUID(), version = randomUUID(), entry = randomUUID()
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${employee}, ${org.orgId}, 'employee', 'Scoped worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
@@ -44,7 +44,7 @@ test('version scopes gate rate resolution, not just surcharges', enabled, async 
       await db.execute(sql`insert into item_rate_lines (org_id, version_id, item_id, unit_code, unit_name, base_quantity, cost_rate, bill_rate)
         values (${org.orgId}, ${version}, ${org.items.service}, 'hour', 'Hour', 1, 100, 200)`)
       await db.execute(sql`insert into labor_rate_version_scopes (org_id, version_id, scope_type, scope_value_id, include_children)
-        values (${org.orgId}, ${version}, 'department', ${deptA}, true)`)
+        values (${org.orgId}, ${version}, 'department', ${deptParent}, true)`)
       await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
       await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, date_basis, is_active)
         values (${org.orgId}, ${book}, 'usage_date', true)`)
