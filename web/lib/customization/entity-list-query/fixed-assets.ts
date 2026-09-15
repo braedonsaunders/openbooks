@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { statementBookExpr } from "../../gl-summary";
+import { dateOrFalse, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Fixed assets                                                        */
@@ -57,16 +58,26 @@ function fixedAssetFilterPredicate(clause: FilterClause): SQL | null {
   }
   switch (clause.key) {
     case 'status': return select(sql`a.status`)
-    case 'category_id':
+    case 'category_id': {
+      const refused = uuidOrFalse(value)
+      if (refused) return refused
       if (clause.operator === 'eq') return sql`a.category_id = ${value}`
       if (clause.operator === 'ne') return sql`a.category_id <> ${value}`
       return null
-    case 'acquired_on':
+    }
+    case 'acquired_on': {
+      const refused = dateOrFalse(value)
+      if (refused) return refused
       if (clause.operator === 'eq') return sql`a.acquired_on = ${value}`
       if (clause.operator === 'gte') return sql`a.acquired_on >= ${value}`
       if (clause.operator === 'lte') return sql`a.acquired_on <= ${value}`
-      if (clause.operator === 'between') return sql`a.acquired_on between ${value} and ${String(clause.to ?? '')}`
+      if (clause.operator === 'between') {
+        const refusedTo = dateOrFalse(String(clause.to ?? ''))
+        if (refusedTo) return refusedTo
+        return sql`a.acquired_on between ${value} and ${String(clause.to ?? '')}`
+      }
       return null
+    }
     case 'serial_number':
       if (clause.operator === 'eq') return sql`a.serial_number = ${value}`
       if (clause.operator === 'contains') return sql`a.serial_number ilike ${`%${value}%`}`
