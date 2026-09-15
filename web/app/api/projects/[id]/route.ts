@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
@@ -236,6 +236,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // omitted required field can be satisfied by its stored value.
     const result = validateCustomValues(defs, { ...base, ...body.custom })
     if (!result.ok) return bad(Object.values(result.errors)[0]!, result.errors)
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids instead of persisting a cross-tenant pointer.
+    // Supplied values only, so legacy bags cannot lock unrelated edits.
+    const suppliedCustom: Record<string, unknown> = {}
+    for (const key of Object.keys(body.custom)) {
+      if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
+    }
+    const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+    if (unowned.length > 0) return bad(`${unowned[0]!.label} not found in this organization`)
     for (const d of defs) delete base[d.key]
     Object.assign(base, result.cleaned)
     mergedCustom = base
