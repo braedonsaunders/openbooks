@@ -12,6 +12,7 @@ import {
   loadComplianceMatrix,
   loadVendorCertificates,
   loadVendorWaivers,
+  complianceSubsidiaryFilter,
   requireComplianceFeature,
   type ComplianceMatrix,
 } from '../../../../lib/compliance'
@@ -76,6 +77,7 @@ export async function loadComplianceVendors(
           : stateFilter === 'expiring'
             ? ['expiring']
             : undefined,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }),
     isFeatureEnabled(orgId, 'projects'),
   ])
@@ -96,14 +98,17 @@ export async function loadComplianceVendors(
                    coalesce(vr.is_t4a, false) as reportable
               from parties p
               join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
-             where p.org_id = ${orgId} and p.id = ${openVendor}`),
-          loadVendorCertificates(orgId, openVendor),
-          loadVendorWaivers(orgId, openVendor),
+             where p.org_id = ${orgId} and p.id = ${openVendor}
+               ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}`),
+          loadVendorCertificates(orgId, openVendor, authz.allowedSubsidiaryIds),
+          loadVendorWaivers(orgId, openVendor, authz.allowedSubsidiaryIds),
           loadRequirementPolicies(orgId),
           loadComplianceClasses(orgId),
           db.execute<{ id: string; label: string }>(sql`
             select id, coalesce(code || ' · ' || name, name) as label from projects
-             where org_id = ${orgId} and is_active order by code nulls last, name limit 500`),
+             where org_id = ${orgId} and is_active
+               ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+             order by code nulls last, name limit 500`),
         ])
         const row = vendor.rows[0]
         if (!row) return null
