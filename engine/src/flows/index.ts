@@ -13,6 +13,7 @@ export { executeFlowPlan, type ExecuteFlowPlanResult } from "./execute.ts";
 export {
   submitForApproval,
   submitAndReleaseIfUngated,
+  SubmitError,
   type SubmitResult,
   type SubmissionReleaseResult,
 } from "./submit.ts";

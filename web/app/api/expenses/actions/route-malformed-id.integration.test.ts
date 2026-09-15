@@ -26,6 +26,10 @@ registerHooks({
       export async function isFeatureEnabled() { return true }
     `)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
+    // Pin the engine to THIS checkout: the environment shares node_modules
+    // with the main checkout, so an unmapped @openbooks/engine import would
+    // silently exercise main's engine instead of the branch under test.
+    if (specifier.startsWith('@openbooks/engine/')) return next(root + specifier.slice('@openbooks/'.length), context)
     return next(specifier, context)
   },
 })

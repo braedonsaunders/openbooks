@@ -18,6 +18,16 @@ import { runRecordFlows } from "./run.ts";
  * policy applies" and releases the record to approved. There is no fallback
  * approval engine or per-transaction approval policy — Flows is the only path.
  */
+/**
+ * A submission lifecycle refusal: the target is not in a submittable state
+ * (already submitted, approved, or otherwise transitioned). Callers map this
+ * to a 4xx — a double-clicked or replayed submit is request state, not a
+ * server defect, and must never surface as a 500.
+ */
+export class SubmitError extends Error {
+  readonly name = "SubmitError";
+}
+
 export interface SubmitResult {
   /** A flow produced approval gates; the document is now `pending_approval`. */
   gated: boolean;
@@ -62,7 +72,7 @@ async function submitForApprovalLocked(
     .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)))
     .for("update");
   if (!doc) throw new Error("target document not found");
-  if (doc.status !== "draft") throw new Error(`document is ${doc.status}, not draft`);
+  if (doc.status !== "draft") throw new SubmitError(`document is ${doc.status}, not draft`);
   const blockedCorrection = (await db.execute<{ document_number: string }>(sql`
     select source.document_number
       from document_links link

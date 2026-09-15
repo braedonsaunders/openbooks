@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
@@ -100,10 +100,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
   } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts) are
-    // request-state failures, not server defects.
+    // Posting refusals (kernel rules or unconfigured org control accounts)
+    // and submission lifecycle refusals (a double-clicked or replayed submit
+    // on a report that already left draft) are request-state failures, not
+    // server defects.
     const status =
-      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+      e instanceof PostingError || e instanceof ControlAccountsIncompleteError || e instanceof SubmitError
         ? 422
         : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
