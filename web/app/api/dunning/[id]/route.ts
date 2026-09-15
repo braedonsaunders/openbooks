@@ -88,10 +88,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     minBalance = normalizeMoney(minBalanceRaw);
   }
-  // PATCH enforces the same field contracts as POST: the non-empty name and
-  // a storable grace period.
+  // PATCH enforces the same field contracts as POST: the non-empty name,
+  // a storable grace period, and a real boolean active flag.
   if ("name" in body && (typeof body.name !== "string" || !body.name.trim())) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
+  if ("isActive" in body && typeof body.isActive !== "boolean") {
+    return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
   }
   let gracePeriodDays: number | undefined;
   if ("gracePeriodDays" in body) {
@@ -116,7 +119,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (gracePeriodDays !== undefined) sets.push(sql`grace_period_days = ${gracePeriodDays}`);
     if (minBalance !== undefined) sets.push(sql`min_balance = ${minBalance}`);
     if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
-    if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
+    if ("isActive" in body) sets.push(sql`is_active = ${body.isActive as boolean}`);
     let afterPolicy: Record<string, unknown> | undefined;
     if (sets.length) {
       const updated = (await tx.execute<Record<string, unknown>>(sql`
