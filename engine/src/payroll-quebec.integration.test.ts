@@ -9,9 +9,11 @@ import { calculateTp1015 } from "./payroll/canada/quebec/tp1015.ts";
 import { setPackSlotAccount } from "./payroll/packs.ts";
 import { yearEndFiling } from "./payroll-filing-registry.ts";
 import { rl1Population } from "./payroll-rl1.ts";
-import { payrollRemittanceSummary } from "./payroll-remittance.ts";
+import { createRemittanceBill, payrollRemittanceSummary } from "./payroll-remittance.ts";
 import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
-import { t4Slips } from "./payroll-yearend.ts";
+import { t4Slips, t4Summary } from "./payroll-yearend.ts";
+import { postDocument } from "./posting.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -211,6 +213,25 @@ test(
       assert.equal(rqGroup!.total, sum([
         federal.cpp, federal.cppEmployer, federal.qpip, federal.qpipEmployer, quebec.totalTax,
       ]));
+
+      // T4's on-screen reconciliation amount is the CRA remittance only. A
+      // Québec source-deduction bill is a different authority's filing and
+      // must not inflate the federal T4 summary after both bills are posted.
+      for (const group of [craGroup, rqGroup]) {
+        const bill = await createRemittanceBill(org.orgId, actorId, {
+          partyId: group!.partyId!,
+          from: "2026-07-01",
+          to: "2026-07-31",
+          filingAccountId: group!.filingAccount.id,
+        });
+        await submitAndReleaseIfUngated("vendor_bill", bill.documentId, actorId);
+        await postDocument(bill.documentId, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        });
+      }
+      const t4 = await t4Summary(org.orgId, 2026);
+      assert.equal(cmp(t4.remitted, craGroup!.total), 0,
+        "T4 remitted total includes only posted CRA bills, not Revenu Québec bills");
 
       // Year-end: the RL-1 is a declared CA filing and its population carries
       // the committed QC stub; T4 box 22 stays FEDERAL-only by construction.
