@@ -5,7 +5,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../db.ts";
 import { reconcileApplications } from "./applications.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { requestDocumentVoid } from "../document-void.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -800,6 +801,106 @@ test(
           from applications
          where org_id = ${org.orgId} and unapplied_at is null`);
       assert.deepEqual(settled.rows[0], { total: "100.0000", count: "1" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "the mirror skips a pair whose invoice was voided before it runs",
+  { skip: !DB },
+  async () => {
+    // The other concurrent office: a controlled void lands first, then the
+    // mirror runs. Reversed entries are not settlement endpoints, so the
+    // pair must resolve as a skipped line with nothing written — never an
+    // application onto the voided invoice's dead lines.
+    const org = await createScratchOrg();
+    const paymentDocumentId = randomUUID();
+    const appliedDocumentId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const appliedEntryId = randomUUID();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Void Auditor", "admin");
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-VOID',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 100, 0, 100, '{"sourceId":"payment-void"}'::jsonb),
+          (${appliedDocumentId}, ${org.orgId}, 'customer_invoice', 'INV-VOID',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 100, 0, 100, '{"sourceId":"invoice-void"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-VOID', ${org.date}, ${org.periodId}, 'Void-race payment',
+           'draft', ${paymentDocumentId}, 'document'),
+          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-VOID', ${org.date}, ${org.periodId}, 'Void-race invoice',
+           'draft', ${appliedDocumentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (${paymentEntryId}, ${appliedEntryId})
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${paymentDocumentId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${appliedDocumentId}
+      `);
+
+      const voided = await requestDocumentVoid({
+        documentId: appliedDocumentId,
+        orgId: org.orgId,
+        actorId,
+        reason: "voided before the mirror runs",
+        reversalDate: org.date,
+        source: "api",
+      });
+      assert.equal(voided.status, "voided");
+
+      const stats = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "payment-void", appliedRef: "invoice-void", amount: "100" },
+      ]);
+      assert.deepEqual(stats, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 0,
+        skippedNoLine: 1,
+        unallocated: "0.0000",
+      });
+      const written = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from applications where org_id = ${org.orgId}`);
+      assert.equal(written.rows[0]!.count, "0");
     } finally {
       await dropScratchOrg(org.orgId);
     }
