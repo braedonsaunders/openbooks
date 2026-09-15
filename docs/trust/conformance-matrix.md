@@ -4,9 +4,15 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**48 passing · 0 failing · 5 gaps · 0 not run**
+**70 passing · 0 failing · 9 gaps · 0 not run**
 
-Commit `421c40b0806e08dc6087ed8880245646df44566c` · 2026-09-15T21:08:55.971Z
+Commit `0ba5757983e76269e7e09d82721bbb53d4f3c164` · 2026-09-15T21:16:30.118Z
+
+## AL DOR
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Alabama withholding reproduces the booklet's official worked example**<br><sub>Annualized income of $44,200.00 less the $5,000.00 standard deduction, $3,000.00 personal exemption, $2,000.00 of dependent allowances and $1,829.88 of annualized federal tax leaves the booklet's taxable figure, and the engine's $29.59 matches the printed answer to the cent.</sub> | AL DOR Withholding Tax Tables and Instructions, rev. Aug 2024 — official M-2 / $850 example | PASS | Implemented |
 
 ## ASC 360
 
@@ -72,6 +78,63 @@ Commit `421c40b0806e08dc6087ed8880245646df44566c` · 2026-09-15T21:08:55.971Z
 
 > The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.
 
+## CDTFA Reg 1684
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **California ignores transaction count: only the $500,000 sales threshold binds**<br><sub>$200,000 of sales with one hundred thousand transactions is not nexus in California, while $600,000 with no transactions at all is — the transaction count is genuinely ignored, not merely outweighed.</sub> | CDTFA Reg 1684 Cal. RTC 6203 — $500,000 sales threshold | PASS | Implemented |
+
+## CRA GST34
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **A GST34 return with tax owing computes every box from the ledger**<br><sub>With $1,000.00 of sales, $50.00 of tax collected and $20.00 of input credits, the return computes net tax of $30.00 owing — line 109 flows through 113A and 113C into a $30.00 payment on line 115 with no refund on line 114.</sub> | CRA GST34 GST34 lines 101/103/105/106/108/109/113C/114/115 | PASS | Implemented |
+| **A GST34 return with excess credits claims a refund, not a negative payment**<br><sub>With $10.00 collected and $25.00 of credits, the $15.00 negative balance becomes a $15.00 refund on line 114 with $0.00 on the payment line — the return never presents a negative payment.</sub> | CRA GST34 GST34 lines 109/113C/114/115 | PASS | Implemented |
+
+## CRA T4127
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Weekly CPP and EI apply at statutory rates within their maxima**<br><sub>A $1,500.00 weekly Saskatchewan pay deducts $85.25 of CPP and $24.45 of EI, and the employer accrues $85.25 and $34.23 — every figure the guide's per-period formulas produce, with neither maximum yet in reach.</sub> | CRA T4127 T4127 122nd edition — CPP/QPP and EI factors (C, EI) | PASS | Implemented |
+| **Earnings above the YMPE attract the second-tier CPP2 contribution**<br><sub>An employee whose year-to-date pensionable earnings reach $74,000.00 pays $56.00 of CPP2 on a $2,000.00 biweekly pay — 4% on exactly the $1,400.00 of the band this period enters — while base CPP continues against its own remaining room.</sub> | CRA T4127 T4127 122nd edition — second-additional factor (C2, W) | PASS | Implemented |
+| **EI premiums stop once the annual maximum is reached**<br><sub>An employee who has already paid the full $1,123.07 of EI pays $0.00 on a further $2,000.00 of insurable earnings — while CPP, which has its own maximum still unreached, continues at $110.99.</sub> | CRA T4127 T4127 122nd edition — EI maximum (D1) | PASS | Implemented |
+| **Québec pay carries QPP, QPIP and reduced EI with the federal abatement**<br><sub>A $1,500.00 weekly Québec pay deducts $90.26 of QPP, $19.50 of EI at the Québec rate, and $6.45 of QPIP, while federal tax is reduced by the 16.5% abatement to a $141.63 period withholding — with no provincial T4127 tax, which Revenu Québec administers separately.</sub> | CRA T4127 T4127 122nd edition — Quebec factors (QPP, QPIP, abatement) | PASS | Implemented |
+| **A small bonus is taxed at the lump-sum rate, not the marginal rate**<br><sub>A $2,000.00 bonus paid with no other income in the year attracts exactly $300.00 of tax at the 15% lump-sum rate — while CPP and EI still apply to the bonus as pensionable and insurable earnings.</sub> | CRA T4127 T4127 122nd edition — tax on non-periodic payments (TB) | PASS | Implemented |
+| **Cumulative averaging (Option 2) for uneven pay**<br><sub>An employee paid unevenly through the year has income tax averaged cumulatively across elapsed periods, so a large early payment does not over-withhold against the annual liability.</sub> | CRA T4127 T4127 — Option 2 cumulative averaging | GAP | Not implemented |
+| **Québec provincial income tax (TP-1015)**<br><sub>A Québec pay deducts provincial income tax per the TP-1015 tables alongside federal tax, QPP, QPIP and EI — the stub's total withholding is complete for a Québec employee.</sub> | CRA T4127 T4127 — Quebec provincial tax administered via TP-1015 | GAP | Not implemented |
+
+### CRA T4127 — shortfalls
+
+**payroll-cumulative-averaging — Cumulative averaging (Option 2) for uneven pay**
+
+> The engine implements only the Option-1 periodic method (plus the YTD variant of the K2 credit basis, which is not Option 2). There is no cumulative-averaging computation: uneven pay is annualized period by period, which over-withholds early lump sums relative to the guide's Option 2.
+
+**payroll-quebec-provincial-tax — Québec provincial income tax (TP-1015)**
+
+> Québec provincial income tax is not implemented: the engine computes the federal side for Québec employment (abatement, K2Q, QPP/QPIP) and provincials for every other jurisdiction, but TP-1015 tables are absent, so a Québec stub understates total withholding by the provincial share.
+
+## ETA
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Tax-exclusive consideration bears GST at the statutory rate**<br><sub>A tax-exclusive line of $100.00 carries exactly $5.00 of GST and settles at $105.00 — the net amount posted to revenue is untouched by the tax.</sub> | ETA 165(1) | PASS | Implemented |
+| **A tax-included price yields the exact statutory tax with no residue**<br><sub>A $105.00 tax-included price extracts to exactly $100.00 of revenue and $5.00 of GST — the line cross-foots to the penny with no rounding residue parked anywhere.</sub> | ETA 165(1) | PASS | Implemented |
+| **Each line's tax rounds independently before the document total is summed**<br><sub>Three lines of $33.33, $33.33 and $33.34 each carry $1.67 of GST for a $5.01 document tax — one cent above the $5.00 a single $100.00 line would carry. The penny is the deterministic consequence of per-line rounding, stated openly rather than forced to agree.</sub> | ETA 165(1) | PASS | Implemented |
+| **A partially recoverable tax splits into credit and cost exactly**<br><sub>A $10.00 tax that is 50% recoverable produces a $5.00 input credit and a $5.00 non-recoverable cost — the split sums to the tax with neither side rounded away.</sub> | ETA 169(1) | PASS | Implemented |
+| **Native place-of-supply determination from the delivery address**<br><sub>Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.</sub> | ETA 144.1 (place of supply) | GAP | Not implemented |
+
+### ETA — shortfalls
+
+**sales-tax-place-of-supply — Native place-of-supply determination from the delivery address**
+
+> The country packs carry sourced jurisdictional rates (Ontario HST 13%, GST 5%) but the kernel never selects among them: the merchant configures which tax code a document line uses, or an external rate provider quotes it. There is no native place-of-supply function mapping a delivery province or address to the applicable pack rate, and the packs self-report sourcingRules as partial.
+
+## HMRC VAT700/12
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **A VAT100 return nets output tax against reclaimed input tax**<br><sub>With £200.00 of output VAT and £50.00 of input VAT, box 3 is £200.00 and box 5 is £150.00 to pay — while boxes 6 and 7 carry the £1,000.00 of net sales and £250.00 of net purchases the tax was computed from.</sub> | HMRC VAT700/12 VAT100 boxes 1/3/4/5/6/7 | PASS | Implemented |
+
 ## IAS 16
 
 | Requirement | Citation | Status | Conformance |
@@ -101,6 +164,16 @@ Commit `421c40b0806e08dc6087ed8880245646df44566c` · 2026-09-15T21:08:55.971Z
 | **An unchanged closing rate produces no entry**<br><sub>A period in which rates did not move generates no journal entry at all, so period-end processing cannot manufacture immaterial noise in the ledger or in the exchange gain and loss account.</sub> | IAS 21.28 | PASS | Implemented |
 | **A multi-line invoice translates balanced through a ten-decimal inverse rate**<br><sub>A multi-line sale invoiced in USD at the ten-decimal inverse of a stored CAD→USD pair — 1.4285714286, exactly the figure posting derives itself as (1 / 0.7)::numeric(19,10) when the exchange table holds only one direction — lands in CAD with every line translated independently and the entry balancing to exactly zero; per-line rounding never leaks a residual into any account, least of all a control account.</sub> | IAS 21.21 | PASS | Implemented |
 | **Output tax on a foreign-currency invoice equals the translated statutory amount exactly, and the translation residual lands on a trading line**<br><sub>On a taxed, multi-line USD invoice translated through a ten-decimal rate whose per-line roundings do NOT reconcile, the tax control lines carry exactly tax-total × spot rate and the one-unit translation residual is absorbed by a revenue line — no translation residual is parked on a statutory return line where it would flow straight into a filed figure.</sub> | IAS 21.21 | PASS | Implemented |
+| **Settling a monetary item recognises the realized difference in profit or loss**<br><sub>Collecting part of a foreign-currency receivable clears exactly the proportional share of its carrying value, values the cash at the settlement-date rate, and books the difference as a realized gain or loss — the settled slice never leaves a tail behind and the unsettled slice keeps its historical carrying value.</sub> | IAS 21.28<br>ASC 830-20-35-1 | PASS | Implemented |
+| **Settling the complete foreign balance consumes the complete carrying value**<br><sub>Taking the complete residual consumes the complete carrying value — including a sub-cent rounding tail — so proportional rounding can never strand an uncloseable one-unit balance on a fully settled item.</sub> | IAS 21.28 | PASS | Implemented |
+| **A non-monetary asset measured at historical cost is not retranslated**<br><sub>Equipment bought in a foreign currency keeps its transaction-date translated cost through a period-end close that moves the rate: the revaluation run finds no monetary exposure in the asset or its matching foreign-currency liability and posts nothing — neither a gain nor a loss, and no restatement of cost.</sub> | IAS 21.23(b)<br>ASC 830-10-45-17 | PASS | Implemented |
+| **Exchange differences on a net investment in a foreign operation**<br><sub>A long-term intercompany balance that is in substance part of a net investment in a foreign operation has its exchange differences recognised in other comprehensive income until the investment is disposed of.</sub> | IAS 21.32 | GAP | Not implemented |
+
+### IAS 21 — shortfalls
+
+**fx-net-investment-oci — Exchange differences on a net investment in a foreign operation**
+
+> The product has no net-investment designation for intercompany monetary items: every monetary exchange difference the revaluation engine computes is offset to the profit-or-loss unrealized gain/loss account, and there is no other-comprehensive-income reserve for foreign-operation differences in the ledger.
 
 ## IAS 37
 
@@ -131,6 +204,36 @@ Commit `421c40b0806e08dc6087ed8880245646df44566c` · 2026-09-15T21:08:55.971Z
 | **IFRS applies one lessee model to every lease**<br><sub>The identical lease produces a front-loaded charge under IFRS and a flat charge under US GAAP — the classification step is skipped entirely under IFRS, and a dual-reporting entity gets each framework's answer from the same source data by switching the configured framework.</sub> | IFRS 16.22<br>IFRS 16.31 | PASS | Implemented |
 | **Short-term and low-value leases may be kept off balance sheet**<br><sub>An elected short-term lease recognises no asset or liability at commencement and charges rent straight to expense as paid — and the election is validated against eligibility, so a thirteen-month lease cannot quietly take it.</sub> | IFRS 16.5<br>ASC 842 842-20-25-2 | PASS | Implemented |
 | **A lessor classifies each lease and accounts for it accordingly**<br><sub>A lessor tests each lease against the classification criteria — sales-type, direct financing (selling profit deferred into the net investment), or operating; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term, and the levelling accrual is posted against the property billing pipeline by the levelling service, not left as a manual adjustment.</sub> | IFRS 16.61<br>IFRS 16.81<br>ASC 842 842-30-25-1 | PASS | Implemented |
+
+## IRS Pub 15
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Supplemental wages past $1M and wages past the Social Security base are handled exactly**<br><sub>A $200,000.00 bonus on top of $900,000.00 of prior supplemental pay withholds $59,000.00 — $100,000.00 at 22% and $100,000.00 at the mandatory 37% — while Social Security caps at $11,439.00, Medicare runs uncapped at $2,943.50, and Additional Medicare takes $27.00 on the slice above $200,000.00.</sub> | IRS Pub 15 Pub 15 section 7 — supplemental wage withholding<br>IRC 3101/3111 IRC 3101(b)(2) — Additional Hospital Insurance Tax | PASS | Implemented |
+
+## IRS Pub 15-T
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **US federal withholding follows Worksheet 1A with FICA alongside**<br><sub>A single filer earning $3,000.00 biweekly withholds $320.38 of federal income tax — $8,330.00 of tentative annual tax de-annualized over 26 periods — plus $186.00 of Social Security and $43.50 of Medicare, each matched by the employer.</sub> | IRS Pub 15-T Pub 15-T Worksheet 1A (percentage method)<br>IRC 3101/3111 IRC 3101(a)-(b) / 3111(a)-(b) — OASDI and Hospital Insurance rates | PASS | Implemented |
+
+## NY Tax Law 1101
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **New York requires both $500,000 of sales and 100 transactions**<br><sub>$600,000 with 50 transactions is not nexus in New York, while the same sales with 150 transactions is — the conjunction is enforced, not treated as a disjunction.</sub> | NY Tax Law 1101 Tax Law 1101(b)(8)(iv) — $500,000 and 100 transactions | PASS | Implemented |
+
+## RQ QST
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **QST compounds on the GST-included price**<br><sub>On a $100.00 Québec sale the engine charges $5.00 of GST and then 9.975% on the GST-included $105.00 — $10.47 of QST — for a $115.47 total. The compounding order is the return-affecting figure, and it is exact.</sub> | RQ QST RQ calculating GST and QST | PASS | Implemented |
+
+## SD v. Wayfair
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **A default state is met through either the sales or the transaction trigger**<br><sub>Either trigger alone creates the obligation: $120,000 with 5 transactions is met, 250 transactions at $40,000 is met, and $40,000 with 5 transactions is not.</sub> | SD v. Wayfair 585 U.S. 342 (2018) | PASS | Implemented |
 
 ## Reproducing this
 

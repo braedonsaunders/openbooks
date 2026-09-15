@@ -1,10 +1,10 @@
 {
-  "at": "2026-09-15T21:08:55.971Z",
-  "gitSha": "421c40b0806e08dc6087ed8880245646df44566c",
+  "at": "2026-09-15T21:16:30.118Z",
+  "gitSha": "0ba5757983e76269e7e09d82721bbb53d4f3c164",
   "totals": {
-    "pass": 48,
+    "pass": 70,
     "fail": 0,
-    "gap": 5,
+    "gap": 9,
     "skipped": 0
   },
   "pass": true,
@@ -40,7 +40,7 @@
         "Standalone selling prices 50.00, 25.00 and 75.00 (total 150.00).",
         "Proportions are 1/3, 1/6 and 1/2 of the transaction price."
       ],
-      "ms": 2
+      "ms": 0
     },
     {
       "id": "rev-allocate-no-lost-cent",
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 190
+      "ms": 1097
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 64
+      "ms": 360
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 186
+      "ms": 212
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -403,7 +403,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 8
+      "ms": 20
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -437,7 +437,7 @@
         "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
         "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "lease-operating-single-cost",
@@ -534,7 +534,7 @@
         "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
         "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "ms": 10
+      "ms": 34
     },
     {
       "id": "lease-lessor-classification",
@@ -574,7 +574,7 @@
         "A sales-type lease with a net investment of 90,000.00 over a carrying amount of 75,000.00 takes 15,000.00 of selling profit at commencement.",
         "The identical economics with the PV test met only through a third-party residual guarantee classify as direct financing, and the 15,000.00 is deferred into the net investment instead."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "lease-remeasurement",
@@ -634,7 +634,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 25
+      "ms": 181
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -673,7 +673,7 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "ms": 59
+      "ms": 159
     },
     {
       "id": "fx-long-term-debt-retranslated",
@@ -706,7 +706,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 42
+      "ms": 118
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -788,7 +788,7 @@
         "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
         "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
       ],
-      "ms": 27
+      "ms": 80
     },
     {
       "id": "fx-inverse-rate-statutory-tax-exact",
@@ -814,7 +814,714 @@
         "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
         "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728."
       ],
-      "ms": 46
+      "ms": 98
+    },
+    {
+      "id": "fx-settlement-realized-gain",
+      "title": "Settling a monetary item recognises the realized difference in profit or loss",
+      "standards": [
+        "IAS 21",
+        "ASC 830"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.28",
+          "kind": "requirement",
+          "requirement": "Exchange differences arising on settling monetary items are recognised in profit or loss in the period in which they arise."
+        },
+        {
+          "standard": "ASC 830",
+          "reference": "ASC 830-20-35-1",
+          "kind": "requirement",
+          "requirement": "A change in exchange rates between the transaction date and the settlement date increases or decreases the functional-currency cash flow, and that increase or decrease is a transaction gain or loss recognised in income."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Collecting part of a foreign-currency receivable clears exactly the proportional share of its carrying value, values the cash at the settlement-date rate, and books the difference as a realized gain or loss — the settled slice never leaves a tail behind and the unsettled slice keeps its historical carrying value.",
+      "facts": [
+        "A USD receivable of 1,000.00 carried at CAD 1,350.00 (booked at 1.3500).",
+        "USD 600.00 is collected when the spot rate is 1.4000: cash of CAD 840.00.",
+        "The consumed carrying value is 1,350.00 × 600/1,000 = CAD 810.00, leaving CAD 540.00 on the receivable for the remaining USD 400.00.",
+        "Cash exceeds consumed carrying value by CAD 30.00 — a realized gain, credited to the realized exchange gain/loss account."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "fx-settlement-full-consumes-residual",
+      "title": "Settling the complete foreign balance consumes the complete carrying value",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.28",
+          "kind": "requirement",
+          "requirement": "Exchange differences arising on settling monetary items are recognised in profit or loss in the period in which they arise."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Taking the complete residual consumes the complete carrying value — including a sub-cent rounding tail — so proportional rounding can never strand an uncloseable one-unit balance on a fully settled item.",
+      "facts": [
+        "A USD balance fully settled: open foreign 1,000.00, settled foreign 1,000.00.",
+        "The carrying value is CAD 1,350.0001, with a 0.0001 rounding tail from earlier proportional settlements.",
+        "The consumed carrying value is exactly CAD 1,350.0001 — not the proportionally rounded 1,350.0000."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "fx-nonmonetary-asset-at-historical-cost",
+      "title": "A non-monetary asset measured at historical cost is not retranslated",
+      "standards": [
+        "IAS 21",
+        "ASC 830"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.23(b)",
+          "kind": "requirement",
+          "requirement": "Non-monetary items measured at historical cost are translated using the exchange rate at the date of the transaction and are not retranslated."
+        },
+        {
+          "standard": "ASC 830",
+          "reference": "ASC 830-10-45-17",
+          "kind": "requirement",
+          "requirement": "Non-monetary balances are remeasured using the historical exchange rate in effect when the transaction occurred, not the current rate."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Equipment bought in a foreign currency keeps its transaction-date translated cost through a period-end close that moves the rate: the revaluation run finds no monetary exposure in the asset or its matching foreign-currency liability and posts nothing — neither a gain nor a loss, and no restatement of cost.",
+      "facts": [
+        "The reporting currency is CAD.",
+        "Equipment bought for USD 5,000.00 on 2026-07-15 at 1.3500 is carried at CAD 6,750.00 against a matching USD loan carried at CAD 6,750.00.",
+        "Neither account is designated a monetary item: fixed assets are carried at historical cost and this loan account carries no monetary flag.",
+        "The closing rate on 2026-07-31 is 1.4000.",
+        "The period-end revaluation posts nothing — the equipment stays at CAD 6,750.00."
+      ],
+      "ms": 177
+    },
+    {
+      "id": "fx-net-investment-oci",
+      "title": "Exchange differences on a net investment in a foreign operation",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.32",
+          "kind": "requirement",
+          "requirement": "Exchange differences on a monetary item that forms part of the reporting entity's net investment in a foreign operation are recognised in other comprehensive income, not in profit or loss."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "A long-term intercompany balance that is in substance part of a net investment in a foreign operation has its exchange differences recognised in other comprehensive income until the investment is disposed of.",
+      "facts": [
+        "A CAD parent holds a USD subsidiary financed by a long-term intercompany loan with no planned settlement.",
+        "The loan is designated part of the net investment in the foreign operation.",
+        "At the closing rate the loan carries an exchange difference of CAD 500.00.",
+        "The required outcome is a CAD 500.00 movement in other comprehensive income, with nothing in profit or loss."
+      ],
+      "gap": "The product has no net-investment designation for intercompany monetary items: every monetary exchange difference the revaluation engine computes is offset to the profit-or-loss unrealized gain/loss account, and there is no other-comprehensive-income reserve for foreign-operation differences in the ledger.",
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-exclusive-standard",
+      "title": "Tax-exclusive consideration bears GST at the statutory rate",
+      "standards": [
+        "ETA"
+      ],
+      "citations": [
+        {
+          "standard": "ETA",
+          "reference": "ETA 165(1)",
+          "kind": "requirement",
+          "requirement": "GST is charged at 5% on the value of the consideration for a taxable supply made in Canada."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A tax-exclusive line of $100.00 carries exactly $5.00 of GST and settles at $105.00 — the net amount posted to revenue is untouched by the tax.",
+      "facts": [
+        "Taxable consideration of $100.00, GST at 5%, tax-exclusive pricing.",
+        "Tax is 100.00 × 5% = $5.00; the settlement total is $105.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-inclusive-extraction",
+      "title": "A tax-included price yields the exact statutory tax with no residue",
+      "standards": [
+        "ETA"
+      ],
+      "citations": [
+        {
+          "standard": "ETA",
+          "reference": "ETA 165(1)",
+          "kind": "requirement",
+          "requirement": "GST is charged at 5% on the value of the consideration for a taxable supply made in Canada, including when the advertised price already includes the tax."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A $105.00 tax-included price extracts to exactly $100.00 of revenue and $5.00 of GST — the line cross-foots to the penny with no rounding residue parked anywhere.",
+      "facts": [
+        "Advertised tax-included price of $105.00, GST at 5% included.",
+        "Net is $100.00 and tax is $5.00; net plus tax equals the entered $105.00 exactly."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-compound-qst-on-gst",
+      "title": "QST compounds on the GST-included price",
+      "standards": [
+        "RQ QST"
+      ],
+      "citations": [
+        {
+          "standard": "RQ QST",
+          "reference": "RQ calculating GST and QST",
+          "kind": "requirement",
+          "requirement": "QST at 9.975% is calculated on the selling price including GST, not on the pre-tax price."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "On a $100.00 Québec sale the engine charges $5.00 of GST and then 9.975% on the GST-included $105.00 — $10.47 of QST — for a $115.47 total. The compounding order is the return-affecting figure, and it is exact.",
+      "facts": [
+        "Pre-tax price of $100.00; GST at 5% is $5.00.",
+        "The QST base is 100.00 + 5.00 = $105.00; QST is 105.00 × 9.975% = 10.47375, rounded half-up to $10.47.",
+        "Settlement total is 100.00 + 5.00 + 10.47 = $115.47."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-per-line-rounding",
+      "title": "Each line's tax rounds independently before the document total is summed",
+      "standards": [
+        "ETA"
+      ],
+      "citations": [
+        {
+          "standard": "ETA",
+          "reference": "ETA 165(1)",
+          "kind": "requirement",
+          "requirement": "GST at 5% applies to each taxable supply, and each line's tax is rounded half-up to the cent before the document total is summed."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Three lines of $33.33, $33.33 and $33.34 each carry $1.67 of GST for a $5.01 document tax — one cent above the $5.00 a single $100.00 line would carry. The penny is the deterministic consequence of per-line rounding, stated openly rather than forced to agree.",
+      "facts": [
+        "Lines of $33.33, $33.33 and $33.34 at 5%: 33.33 × 5% = 1.6665 → $1.67 each; 33.34 × 5% = 1.667 → $1.67.",
+        "Document tax is 1.67 + 1.67 + 1.67 = $5.01.",
+        "A single $100.00 line at 5% would carry $5.00 — the case pins the one-cent difference as policy, not error."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-partial-itc",
+      "title": "A partially recoverable tax splits into credit and cost exactly",
+      "standards": [
+        "ETA"
+      ],
+      "citations": [
+        {
+          "standard": "ETA",
+          "reference": "ETA 169(1)",
+          "kind": "requirement",
+          "requirement": "An input tax credit is claimable only to the extent the purchase is for consumption or use in commercial activity; the non-creditable share stays in cost."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A $10.00 tax that is 50% recoverable produces a $5.00 input credit and a $5.00 non-recoverable cost — the split sums to the tax with neither side rounded away.",
+      "facts": [
+        "Purchase of $200.00 at 5% carries $10.00 of tax, 50% recoverable.",
+        "Recoverable is $5.00; non-recoverable is 10.00 − 5.00 = $5.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-gst34-payable",
+      "title": "A GST34 return with tax owing computes every box from the ledger",
+      "standards": [
+        "CRA GST34"
+      ],
+      "citations": [
+        {
+          "standard": "CRA GST34",
+          "reference": "GST34 lines 101/103/105/106/108/109/113C/114/115",
+          "kind": "requirement",
+          "requirement": "Net tax is total GST/HST collected (line 105) less total input credits (line 108); a positive balance is an amount owing (line 115)."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "With $1,000.00 of sales, $50.00 of tax collected and $20.00 of input credits, the return computes net tax of $30.00 owing — line 109 flows through 113A and 113C into a $30.00 payment on line 115 with no refund on line 114.",
+      "facts": [
+        "Line 101 sales: $1,000.00. Line 103 collected: $50.00; line 104 adjustments: $0.00.",
+        "Line 105 is 103 + 104 = $50.00. Line 106 credits: $20.00; line 107 adjustments: $0.00.",
+        "Line 108 is 106 + 107 = $20.00. Line 109 is 105 − 108 = $30.00.",
+        "Lines 110–112, 205 and 405 are $0.00, so 113A, 113B and 113C are $30.00, $0.00 and $30.00.",
+        "Line 114 (refund) is max(−30.00, 0) = $0.00; line 115 (payment) is max(30.00, 0) = $30.00."
+      ],
+      "ms": 1
+    },
+    {
+      "id": "sales-tax-gst34-refund",
+      "title": "A GST34 return with excess credits claims a refund, not a negative payment",
+      "standards": [
+        "CRA GST34"
+      ],
+      "citations": [
+        {
+          "standard": "CRA GST34",
+          "reference": "GST34 lines 109/113C/114/115",
+          "kind": "requirement",
+          "requirement": "A negative balance is a refund claimed (line 114); only a positive balance is an amount enclosed (line 115)."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "With $10.00 collected and $25.00 of credits, the $15.00 negative balance becomes a $15.00 refund on line 114 with $0.00 on the payment line — the return never presents a negative payment.",
+      "facts": [
+        "Line 105 is $10.00; line 108 is $25.00; line 109 is 10.00 − 25.00 = −$15.00.",
+        "Lines 110–112, 205 and 405 are $0.00, so 113C is −$15.00.",
+        "Line 114 is max(15.00, 0) = $15.00; line 115 is max(−15.00, 0) = $0.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-vat100-net",
+      "title": "A VAT100 return nets output tax against reclaimed input tax",
+      "standards": [
+        "HMRC VAT700/12"
+      ],
+      "citations": [
+        {
+          "standard": "HMRC VAT700/12",
+          "reference": "VAT100 boxes 1/3/4/5/6/7",
+          "kind": "requirement",
+          "requirement": "Box 5 is the difference between total output tax (box 3) and total input tax (box 4), with boxes 6 and 7 carrying the net sales and purchases excluding VAT."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "With £200.00 of output VAT and £50.00 of input VAT, box 3 is £200.00 and box 5 is £150.00 to pay — while boxes 6 and 7 carry the £1,000.00 of net sales and £250.00 of net purchases the tax was computed from.",
+      "facts": [
+        "Box 1 output VAT: £200.00; box 2 Northern Ireland acquisitions: £0.00.",
+        "Box 3 is 1 + 2 = £200.00. Box 4 reclaimed input VAT: £50.00.",
+        "Box 5 is |200.00 − 50.00| = £150.00.",
+        "Box 6 net sales excluding VAT: £1,000.00; box 7 net purchases excluding VAT: £250.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-nexus-default-or",
+      "title": "A default state is met through either the sales or the transaction trigger",
+      "standards": [
+        "SD v. Wayfair"
+      ],
+      "citations": [
+        {
+          "standard": "SD v. Wayfair",
+          "reference": "585 U.S. 342 (2018)",
+          "kind": "requirement",
+          "requirement": "A state may require a remote seller to collect sales tax once the seller exceeds $100,000 in sales or 200 transactions in the state."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Either trigger alone creates the obligation: $120,000 with 5 transactions is met, 250 transactions at $40,000 is met, and $40,000 with 5 transactions is not.",
+      "facts": [
+        "Florida follows the prevailing $100,000-or-200-transaction pattern.",
+        "$120,000 with 5 transactions meets the sales trigger.",
+        "$40,000 with 250 transactions meets the transaction trigger.",
+        "$40,000 with 5 transactions meets neither."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-nexus-ca-sales-only",
+      "title": "California ignores transaction count: only the $500,000 sales threshold binds",
+      "standards": [
+        "CDTFA Reg 1684"
+      ],
+      "citations": [
+        {
+          "standard": "CDTFA Reg 1684",
+          "reference": "Cal. RTC 6203 — $500,000 sales threshold",
+          "kind": "requirement",
+          "requirement": "A retailer without physical presence in California is engaged in business there once combined California sales exceed $500,000; there is no transaction-count trigger."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "$200,000 of sales with one hundred thousand transactions is not nexus in California, while $600,000 with no transactions at all is — the transaction count is genuinely ignored, not merely outweighed.",
+      "facts": [
+        "California applies a $500,000 sales-only threshold.",
+        "$200,000 with 100,000 transactions: sales below threshold, transactions irrelevant — no nexus.",
+        "$600,000 with 0 transactions: sales above threshold — nexus met."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-nexus-ny-and",
+      "title": "New York requires both $500,000 of sales and 100 transactions",
+      "standards": [
+        "NY Tax Law 1101"
+      ],
+      "citations": [
+        {
+          "standard": "NY Tax Law 1101",
+          "reference": "Tax Law 1101(b)(8)(iv) — $500,000 and 100 transactions",
+          "kind": "requirement",
+          "requirement": "A remote seller has nexus in New York only when it exceeds both $500,000 in sales and 100 transactions; meeting one trigger alone is not enough."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "$600,000 with 50 transactions is not nexus in New York, while the same sales with 150 transactions is — the conjunction is enforced, not treated as a disjunction.",
+      "facts": [
+        "New York applies a $500,000-and-100-transaction threshold.",
+        "$600,000 with 50 transactions: sales met, transactions not — no nexus.",
+        "$600,000 with 150 transactions: both met — nexus met."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "sales-tax-place-of-supply",
+      "title": "Native place-of-supply determination from the delivery address",
+      "standards": [
+        "ETA"
+      ],
+      "citations": [
+        {
+          "standard": "ETA",
+          "reference": "ETA 144.1 (place of supply)",
+          "kind": "requirement",
+          "requirement": "Whether GST or a participating province's HST applies — and at which of the differing HST rates — follows where the supply is made, so the same $100 supply bears $5.00 for an Alberta delivery and $13.00 for an Ontario one."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Given a supply and its delivery province, the kernel selects the applicable sourced rate (GST 5% for Alberta, HST 13% for Ontario) on its own, without the merchant pre-selecting the tax code or calling an external rate service.",
+      "facts": [
+        "A $100.00 taxable supply delivered in Alberta must bear $5.00 (GST 5%).",
+        "The identical supply delivered in Ontario must bear $13.00 (HST 13%).",
+        "The required outcome is the rate selected from the delivery province alone."
+      ],
+      "gap": "The country packs carry sourced jurisdictional rates (Ontario HST 13%, GST 5%) but the kernel never selects among them: the merchant configures which tax code a document line uses, or an external rate provider quotes it. There is no native place-of-supply function mapping a delivery province or address to the applicable pack rate, and the packs self-report sourcingRules as partial.",
+      "ms": 0
+    },
+    {
+      "id": "payroll-cpp-ei-basic",
+      "title": "Weekly CPP and EI apply at statutory rates within their maxima",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 122nd edition — CPP/QPP and EI factors (C, EI)",
+          "kind": "requirement",
+          "requirement": "Each pay period deducts CPP on pensionable earnings above the per-period exemption up to the annual maximum, and EI on insurable earnings up to its annual maximum, with the employer paying the matching and 1.4x shares."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A $1,500.00 weekly Saskatchewan pay deducts $85.25 of CPP and $24.45 of EI, and the employer accrues $85.25 and $34.23 — every figure the guide's per-period formulas produce, with neither maximum yet in reach.",
+      "facts": [
+        "Pay date 2026-01-15 (122nd edition), Saskatchewan, 52 pay periods, pensionable and insurable earnings of $1,500.00, no year-to-date balances.",
+        "CPP exemption for weekly pay is $67.30; contributory earnings are 1,500.00 − 67.30 = $1,432.70.",
+        "CPP is 1,432.70 × 5.95% = 85.24565, rounded half-up to $85.25 — within the $4,230.45 maximum, and below the YMPE so no second-tier contribution.",
+        "EI is 1,500.00 × 1.63% = $24.45 — within the $1,123.07 maximum.",
+        "Employer CPP matches at $85.25; employer EI is 24.45 × 1.4 = $34.23.",
+        "The enhanced-CPP income deduction (F5) is 85.25 × 1.00/5.95 = $14.33, carried wholly against periodic pay.",
+        "Annual taxable income is (1,500.00 − 14.33) × 52 = $77,254.84; federal tax on it is $8,869.87 and Saskatchewan tax is $5,938.39, so the period withholding is (8,869.87 + 5,938.39) / 52 = $284.77."
+      ],
+      "ms": 1
+    },
+    {
+      "id": "payroll-cpp2-second-tier",
+      "title": "Earnings above the YMPE attract the second-tier CPP2 contribution",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 122nd edition — second-additional factor (C2, W)",
+          "kind": "requirement",
+          "requirement": "Pensionable earnings in the band between the YMPE and the YAMPE attract the second-additional contribution at 4%, bounded by its own annual maximum and year-to-date room."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "An employee whose year-to-date pensionable earnings reach $74,000.00 pays $56.00 of CPP2 on a $2,000.00 biweekly pay — 4% on exactly the $1,400.00 of the band this period enters — while base CPP continues against its own remaining room.",
+      "facts": [
+        "Pay date 2026-01-15, Saskatchewan, 26 pay periods, pensionable earnings of $2,000.00.",
+        "Year-to-date with this employer: pensionable $74,000.00, CPP $4,000.00, CPP2 $0.00.",
+        "2026 YMPE is $74,600.00 and YAMPE is $85,000.00, so W is max(74,000.00, 74,600.00) = $74,600.00.",
+        "This period enters the band by 74,000.00 + 2,000.00 − 74,600.00 = $1,400.00; CPP2 is 1,400.00 × 4% = $56.00, within the $416.00 maximum.",
+        "Base CPP is min(4,230.45 − 4,000.00, (2,000.00 − 134.61) × 5.95%) = min(230.45, 110.99) = $110.99."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-ei-max-stops-premium",
+      "title": "EI premiums stop once the annual maximum is reached",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 122nd edition — EI maximum (D1)",
+          "kind": "requirement",
+          "requirement": "EI premiums for the year cannot exceed the annual maximum; once year-to-date premiums reach it, further insurable earnings in the year attract no premium."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "An employee who has already paid the full $1,123.07 of EI pays $0.00 on a further $2,000.00 of insurable earnings — while CPP, which has its own maximum still unreached, continues at $110.99.",
+      "facts": [
+        "Pay date 2026-01-15, Saskatchewan, 26 pay periods, insurable and pensionable earnings of $2,000.00.",
+        "Year-to-date EI premiums of $1,123.07 — the 2026 maximum exactly.",
+        "EI room is 1,123.07 − 1,123.07 = $0.00, so this period's premium is $0.00 and the employer share is $0.00.",
+        "CPP is unaffected by the EI maximum: (2,000.00 − 134.61) × 5.95% = $110.99."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-quebec-qpip-abatement",
+      "title": "Québec pay carries QPP, QPIP and reduced EI with the federal abatement",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 122nd edition — Quebec factors (QPP, QPIP, abatement)",
+          "kind": "requirement",
+          "requirement": "Québec employment uses QPP rates for pensions, QPIP premiums for parental insurance, the reduced Québec EI rate, and the 16.5% federal abatement in place of provincial income tax under T4127."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A $1,500.00 weekly Québec pay deducts $90.26 of QPP, $19.50 of EI at the Québec rate, and $6.45 of QPIP, while federal tax is reduced by the 16.5% abatement to a $141.63 period withholding — with no provincial T4127 tax, which Revenu Québec administers separately.",
+      "facts": [
+        "Pay date 2026-01-15, Québec, 52 pay periods, earnings of $1,500.00, no year-to-date balances.",
+        "QPP is (1,500.00 − 67.30) × 6.30% = 90.2601, rounded to $90.26 — within the $4,479.30 maximum.",
+        "EI at the Québec rate is 1,500.00 × 1.30% = $19.50; employer EI is 19.50 × 1.4 = $27.30.",
+        "QPIP is 1,500.00 × 0.43% = $6.45; employer QPIP is 1,500.00 × 0.602% = $9.03.",
+        "The F5 deduction is 90.26 × 1.00/6.30 = $14.33, giving the same $77,254.84 annual income as the matching non-Québec pay.",
+        "The K2 credit basis annualizes the base share of QPP (90.26 × 52 = 4,693.52, base share $3,948.52) capped at the QPP base maximum of $3,768.30 — not the CPP cap — plus EI capped at the Québec maximum of $895.70 and QPIP of $335.40, for K2 of (3,768.30 + 895.70 + 335.40) × 14% = $699.92.",
+        "Federal gross tax is $8,819.90; less the 16.5% abatement of $1,455.28, federal tax is $7,364.62.",
+        "The period withholding is 7,364.62 / 52 = $141.63."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-bonus-lump-sum-rate",
+      "title": "A small bonus is taxed at the lump-sum rate, not the marginal rate",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 122nd edition — tax on non-periodic payments (TB)",
+          "kind": "requirement",
+          "requirement": "When annualized income including the bonus does not exceed $5,000, tax on the bonus is a flat 10% in Québec and 15% elsewhere; larger bonuses are taxed at the marginal difference."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A $2,000.00 bonus paid with no other income in the year attracts exactly $300.00 of tax at the 15% lump-sum rate — while CPP and EI still apply to the bonus as pensionable and insurable earnings.",
+      "facts": [
+        "Pay date 2026-01-15, Ontario, 52 pay periods, periodic income of $0.00 with a $2,000.00 bonus.",
+        "Annualized income with the bonus is $1,980.67 after the $19.33 F5 bonus split — at or below $5,000, so the flat rate applies.",
+        "Bonus tax is 2,000.00 × 15% = $300.00; periodic tax is $0.00.",
+        "CPP on the bonus is (2,000.00 − 67.30) × 5.95% = 114.99565, rounded to $115.00.",
+        "EI on the bonus is 2,000.00 × 1.63% = $32.60."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-us-fit-fica-basic",
+      "title": "US federal withholding follows Worksheet 1A with FICA alongside",
+      "standards": [
+        "IRS Pub 15-T",
+        "IRC 3101/3111"
+      ],
+      "citations": [
+        {
+          "standard": "IRS Pub 15-T",
+          "reference": "Pub 15-T Worksheet 1A (percentage method)",
+          "kind": "requirement",
+          "requirement": "Withholding annualizes periodic wages, adjusts per the W-4, looks the result up in the annual percentage-method schedule, and de-annualizes — rounding half-up at each worksheet line."
+        },
+        {
+          "standard": "IRC 3101/3111",
+          "reference": "IRC 3101(a)-(b) / 3111(a)-(b) — OASDI and Hospital Insurance rates",
+          "kind": "requirement",
+          "requirement": "Social Security tax is 6.2% of wages to the annual wage base and Medicare tax is 1.45% of all wages, each matched equally by the employer."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A single filer earning $3,000.00 biweekly withholds $320.38 of federal income tax — $8,330.00 of tentative annual tax de-annualized over 26 periods — plus $186.00 of Social Security and $43.50 of Medicare, each matched by the employer.",
+      "facts": [
+        "Pay date 2026-03-15 (2026 edition), single filing status, 26 pay periods, wages of $3,000.00, no W-4 adjustments beyond the standard.",
+        "Annualized wages are 3,000.00 × 26 = $78,000.00; less the $8,600.00 W-4 wage adjustment, the adjusted annual wage amount is $69,400.00.",
+        "The single STANDARD schedule row is $57,900.00 plus 22% of the excess: 5,800.00 + (69,400.00 − 57,900.00) × 22% = 5,800.00 + 2,530.00 = $8,330.00.",
+        "De-annualized withholding is 8,330.00 / 26 = $320.38.",
+        "Social Security is 3,000.00 × 6.2% = $186.00, within the $184,500.00 wage base; Medicare is 3,000.00 × 1.45% = $43.50."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-us-supplemental-medicare-cap",
+      "title": "Supplemental wages past $1M and wages past the Social Security base are handled exactly",
+      "standards": [
+        "IRS Pub 15",
+        "IRC 3101/3111"
+      ],
+      "citations": [
+        {
+          "standard": "IRS Pub 15",
+          "reference": "Pub 15 section 7 — supplemental wage withholding",
+          "kind": "requirement",
+          "requirement": "Supplemental wages are withheld at the 22% flat rate, except that wages past $1,000,000 of year-to-date supplemental pay are withheld at the mandatory 37%."
+        },
+        {
+          "standard": "IRC 3101/3111",
+          "reference": "IRC 3101(b)(2) — Additional Hospital Insurance Tax",
+          "kind": "requirement",
+          "requirement": "Additional Medicare tax of 0.9% applies to wages above $200,000 (employee only, no employer match), while Social Security stops at the wage base."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A $200,000.00 bonus on top of $900,000.00 of prior supplemental pay withholds $59,000.00 — $100,000.00 at 22% and $100,000.00 at the mandatory 37% — while Social Security caps at $11,439.00, Medicare runs uncapped at $2,943.50, and Additional Medicare takes $27.00 on the slice above $200,000.00.",
+      "facts": [
+        "Pay date 2026-03-15, single, 26 pay periods, periodic wages of $3,000.00 plus a $200,000.00 bonus; $900,000.00 of prior supplemental pay.",
+        "The first $100,000.00 of the bonus (up to the $1,000,000.00 threshold) is withheld at 22% = $22,000.00; the remaining $100,000.00 at 37% = $37,000.00; supplemental withholding is $59,000.00.",
+        "FICA wages are 203,000.00: Social Security taxes min(203,000.00, 184,500.00) = 184,500.00 × 6.2% = $11,439.00.",
+        "Medicare is 203,000.00 × 1.45% = $2,943.50.",
+        "Additional Medicare is (203,000.00 − 200,000.00) × 0.9% = $27.00, employee only.",
+        "FUTA is min(203,000.00, 7,000.00) × 0.6% = $42.00, employer only."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-us-al-booklet-sample",
+      "title": "Alabama withholding reproduces the booklet's official worked example",
+      "standards": [
+        "AL DOR"
+      ],
+      "citations": [
+        {
+          "standard": "AL DOR",
+          "reference": "Withholding Tax Tables and Instructions, rev. Aug 2024 — official M-2 / $850 example",
+          "kind": "illustrative-example",
+          "requirement": "The booklet's formula on a married employee with 2 dependents earning $850.00 weekly and $35.19 of federal withholding produces $29.59 of Alabama withholding."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Annualized income of $44,200.00 less the $5,000.00 standard deduction, $3,000.00 personal exemption, $2,000.00 of dependent allowances and $1,829.88 of annualized federal tax leaves the booklet's taxable figure, and the engine's $29.59 matches the printed answer to the cent.",
+      "facts": [
+        "Married employee, exemption M with 2 dependents, $850.00 weekly, federal withholding of $35.19 for the period.",
+        "Annualized gross is 850.00 × 52 = $44,200.00; standard deduction $5,000.00; personal exemption $3,000.00; dependents 2 × $1,000.00 = $2,000.00.",
+        "Annualized federal tax is 35.19 × 52 = $1,829.88.",
+        "Withholding for the period is $29.59 — the booklet's printed figure."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "payroll-cumulative-averaging",
+      "title": "Cumulative averaging (Option 2) for uneven pay",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 — Option 2 cumulative averaging",
+          "kind": "requirement",
+          "requirement": "An employer paying uneven amounts through the year may average income tax deductions cumulatively so employees with lumpy pay are not over-withheld early in the year."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "An employee paid unevenly through the year has income tax averaged cumulatively across elapsed periods, so a large early payment does not over-withhold against the annual liability.",
+      "facts": [
+        "An employee earns $60,000.00 in the first quarter and $10,000.00 per quarter after.",
+        "Under Option 1 each period annualizes its own pay; under Option 2 the deduction averages cumulative income over elapsed periods.",
+        "The required outcome is the cumulative-average deduction for the current period."
+      ],
+      "gap": "The engine implements only the Option-1 periodic method (plus the YTD variant of the K2 credit basis, which is not Option 2). There is no cumulative-averaging computation: uneven pay is annualized period by period, which over-withholds early lump sums relative to the guide's Option 2.",
+      "ms": 0
+    },
+    {
+      "id": "payroll-quebec-provincial-tax",
+      "title": "Québec provincial income tax (TP-1015)",
+      "standards": [
+        "CRA T4127"
+      ],
+      "citations": [
+        {
+          "standard": "CRA T4127",
+          "reference": "T4127 — Quebec provincial tax administered via TP-1015",
+          "kind": "requirement",
+          "requirement": "Québec employees have provincial income tax withheld under Revenu Québec's TP-1015 source-deduction tables in addition to the federal tax T4127 computes."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "A Québec pay deducts provincial income tax per the TP-1015 tables alongside federal tax, QPP, QPIP and EI — the stub's total withholding is complete for a Québec employee.",
+      "facts": [
+        "Québec employment: T4127 covers the federal side (including the abatement) plus QPP, QPIP and EI.",
+        "Provincial income tax under TP-1015 is a further required deduction on the same pay.",
+        "The required outcome is the TP-1015 provincial withholding for the period."
+      ],
+      "gap": "Québec provincial income tax is not implemented: the engine computes the federal side for Québec employment (abatement, K2Q, QPP/QPIP) and provincials for every other jurisdiction, but TP-1015 tables are absent, so a Québec stub understates total withholding by the provincial share.",
+      "ms": 0
     },
     {
       "id": "inv-fifo-cost-formula",
@@ -854,7 +1561,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 146
+      "ms": 452
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -887,7 +1594,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 263
+      "ms": 206
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -918,7 +1625,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 56
+      "ms": 158
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -941,7 +1648,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 283
+      "ms": 76
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -979,7 +1686,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 97
+      "ms": 163
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -1012,7 +1719,7 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 62
+      "ms": 115
     },
     {
       "id": "inv-landed-cost-capitalized",
@@ -1044,7 +1751,7 @@
         "A freight voucher of 100.00 is allocated on a carrying-value basis.",
         "The whole 100.00 capitalizes: inventory rises to 400.00 (4.00 a unit) and 100 units remain on hand."
       ],
-      "ms": 64
+      "ms": 120
     },
     {
       "id": "ppe-impairment-to-fair-value",
