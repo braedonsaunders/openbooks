@@ -55,6 +55,10 @@ function hoursOrNull(v: unknown): string | null | 'invalid' {
   }
   if (compareDecimal(hours, '0') < 0) return 'invalid'
   if (compareDecimal(hours, '0') === 0) return null
+  // time_entries.hours is numeric(19,4): fifteen whole digits. The format
+  // check admits any magnitude, so a pasted 20-digit cell died in Postgres
+  // with a storage error. Fail closed with the same named refusal.
+  if (hours.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return 'invalid'
   return hours
 }
 
