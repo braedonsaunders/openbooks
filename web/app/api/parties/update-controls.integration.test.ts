@@ -72,6 +72,39 @@ test('routine party saves preserve the reserved source sync-identity bridge', { 
   }
 })
 
+test('party PATCH preserves omitted required custom fields on a partial edit', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, actor } = await fixture()
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const requiredId = randomUUID()
+      const optionalId = randomUUID()
+      await db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${requiredId}, ${org.orgId}, 'parties', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actor}, ${actor}),
+          (${optionalId}, ${org.orgId}, 'parties', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actor}, ${actor})
+      `)
+      await db.execute(sql`update parties set custom='{"required_code":"R-1"}'::jsonb where id=${org.customerId} and org_id=${org.orgId}`)
+
+      const response = await PATCH(
+        patchRequest({
+          custom: { optional_note: 'updated' },
+          expectedUpdatedAt: await revision(org.orgId, org.customerId),
+        }),
+        params(org.customerId),
+      )
+      assert.equal(response.status, 200, await response.clone().text())
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`
+        select custom from parties where id=${org.customerId} and org_id=${org.orgId}`)).rows[0]!.custom
+      assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
+    })
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
 test('transaction filter enums stay inside the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, actor } = await fixture()
   try {
