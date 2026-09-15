@@ -3,7 +3,7 @@ import { db, withOrgTransaction } from "./db.ts";
 import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
-import { businessToday } from "./business-date.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 
 /**
@@ -16,6 +16,11 @@ import { canonicalDecimal } from "./exact-decimal.ts";
 export type TaxRateProviderKey = "avalara" | "taxjar" | "custom_http" | "manual";
 
 export class TaxRateProviderError extends Error {}
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
+}
 
 function persistRatePercent(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -731,6 +736,20 @@ export async function persistTaxQuote(
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<string> {
   const quotedOn = req.quotedOn ?? await businessToday(orgId);
+  // A shape-valid non-day such as February 30, or an amount wider than the
+  // evidence columns, would otherwise die in Postgres as a raw storage throw
+  // (HTTP 500 at the quote route, which only maps TaxRateProviderError).
+  if (!isIsoCalendarDate(quotedOn)) {
+    throw new TaxRateProviderError("quotedOn must be a real calendar date (YYYY-MM-DD)");
+  }
+  const taxableExact = canonicalDecimal(req.taxableAmount, 4);
+  const taxExact = canonicalDecimal(result.taxAmount, 4);
+  if (taxableExact === null || taxExact === null) {
+    throw new TaxRateProviderError("quote amounts must be exact decimals");
+  }
+  if (wholeDigits(taxableExact) > 15 || wholeDigits(taxExact) > 15) {
+    throw new TaxRateProviderError("quote amounts must fit the ledger (at most 15 whole digits)");
+  }
   const inserted = await runner.execute<{ id: string }>(sql`
     insert into tax_rate_quotes
       (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
