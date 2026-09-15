@@ -55,15 +55,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
 
-  const entitlement = await payRunBankFileEntitlement(orgId, id)
+  const entitlement = await payRunBankFileEntitlement(orgId, id, gate.allowedSubsidiaryIds)
   if (entitlement.refusal?.code === 'notFound') {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
   const [profiles, artifacts, audit] = await Promise.all([
     payrollBankProfiles(orgId),
-    listPayRunBankFiles(orgId, id),
-    payRunBankFileAudit(orgId, id),
+    listPayRunBankFiles(orgId, id, gate.allowedSubsidiaryIds),
+    payRunBankFileAudit(orgId, id, undefined, gate.allowedSubsidiaryIds),
   ])
   // The population is only meaningful once the run's figures are final.
   const population =
@@ -127,6 +127,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       actorId: gate.user.id,
       paymentBankProfileId: body.paymentBankProfileId,
       supersedeReason: typeof body.supersedeReason === 'string' ? body.supersedeReason : null,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json({ artifact }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {

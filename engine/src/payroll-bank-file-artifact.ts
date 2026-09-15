@@ -15,6 +15,10 @@ import {
 } from "./payroll-bank-file.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
+  lockAndCheckPayrollRunPopulation,
+  payrollRunPopulationScopeFilter,
+} from "./payroll-scope.ts";
+import {
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
 } from "./payroll-run.ts";
@@ -169,6 +173,10 @@ async function loadRun(
      join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       -- Whole-run figures are visible only when every stub and adjustment
+       -- is: a scoped caller must own the complete population, exactly as
+       -- the run detail and every other run action require.
+       ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
   `));
   return rows.rows[0] ?? null;
 }
@@ -594,6 +602,11 @@ export async function generatePayRunBankFile(
     // or expire while the file is being prepared, so resolve it again through
     // this transaction's executor while the run/document locks are held.
     await assertPayRunApprovalReleased(orgId, documentId, tx);
+    // The same staleness applies to WHO the run pays: an employee transfer
+    // that lands after the outer read must not slip hidden pay into the
+    // file. Fail closed while the locks are held, before any number is
+    // allocated or any byte is stored.
+    await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds);
     const live = (await tx.execute<{ id: string; file_number: string }>(sql`
       select id, file_number, coalesce(max(sequence_number) over (), 0) as _ignored
         from pay_run_bank_files
@@ -843,6 +856,10 @@ export async function releasePayRunBankFile(
       throw new PayrollError("this pay run is already recorded as paid — refusing to release its bank file");
     }
     await assertPayRunApprovalReleased(orgId, lifecycle.document_id, tx);
+    // A transfer since generation may have moved part of the population out
+    // of the caller's scope. The bytes were rendered for the complete run,
+    // so a caller who no longer owns every stub must not take them.
+    await lockAndCheckPayrollRunPopulation(tx, orgId, lifecycle.document_id, allowedSubsidiaryIds);
 
     // The audit record and the release counters move together: an artifact
     // can never show a release the log does not explain, or vice versa.

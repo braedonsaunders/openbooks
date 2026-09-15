@@ -54,7 +54,7 @@ export async function POST(
   if (denied) return denied
 
   try {
-    const released = await releasePayRunBankFile(gate.user.orgId, fileId, gate.user.id)
+    const released = await releasePayRunBankFile(gate.user.orgId, fileId, gate.user.id, gate.allowedSubsidiaryIds)
     return new NextResponse(new Uint8Array(released.bytes), {
       headers: {
         'Content-Type': released.contentType,

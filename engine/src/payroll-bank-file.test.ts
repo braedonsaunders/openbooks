@@ -1049,6 +1049,68 @@ test("a voided run is refused by name", { skip: !DB }, async () => {
   assert.match(entitlement.refusal!.reason, /voided/);
 });
 
+test("a bank file refuses a run carrying employees outside the caller's subsidiary scope", { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  const { documentId, wired } = await mixedRun(fx);
+  // Fixture hires carry no subsidiary; pin every stub employee to the run's
+  // legal entity so the scoped caller owns the complete run first.
+  await db.execute(sql`
+    update parties set subsidiary_id = ${fx.subsidiaryId}
+     where org_id = ${fx.orgId} and kind = 'person'`);
+  await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+  const scoped = new Set([fx.subsidiaryId]);
+  assert.equal(
+    (await payRunBankFileEntitlement(fx.orgId, documentId, scoped)).entitled,
+    true,
+    "the scoped owner is entitled to its complete run",
+  );
+
+  // Transfer the EFT employee out of scope. The run's legal entity is
+  // unchanged, so the run-subsidiary gate still passes — but the population
+  // now carries pay the caller must neither see nor instruct.
+  const hidden = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden employer', 'USD', 'US')`);
+  await db.execute(sql`
+    update parties set subsidiary_id = ${hidden}
+     where org_id = ${fx.orgId} and id = ${wired}`);
+
+  const entitlement = await payRunBankFileEntitlement(fx.orgId, documentId, scoped);
+  assert.equal(entitlement.entitled, false);
+  assert.equal(entitlement.refusal?.code, "notFound");
+  await assert.rejects(
+    generatePayRunBankFile({
+      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      allowedSubsidiaryIds: scoped,
+    }),
+    /pay run not found/,
+  );
+  assert.equal(
+    (await listPayRunBankFiles(fx.orgId, documentId)).length,
+    0,
+    "a refused generate must not leave a bank-file artifact behind",
+  );
+  // Unrestricted payroll still sees and may file the complete run.
+  assert.equal((await payRunBankFileEntitlement(fx.orgId, documentId)).entitled, true);
+  const artifact = await generatePayRunBankFile({
+    orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+  });
+  // The bytes were rendered for the complete run, so a caller who no longer
+  // owns every stub must not take them — while the unrestricted owner still
+  // releases the same artifact.
+  await assert.rejects(
+    releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId, scoped),
+    /pay run not found/,
+  );
+  assert.equal(
+    (await listPayRunBankFiles(fx.orgId, documentId))[0]!.releaseCount,
+    0,
+    "a refused release must not advance the release counters",
+  );
+  assert.equal((await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId)).artifact.id, artifact.id);
+});
+
 test("unconfigured originator values are named, never defaulted", { skip: !DB }, async () => {
   const fx = await payrollOrg({ odfiRouting: "", companyId: "" });
   const { documentId } = await mixedRun(fx);
