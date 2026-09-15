@@ -49,8 +49,11 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
     }>(sql`
     with open_items as (
       select d.party_id,
-             (case when d.kind = ${creditKind} then -1 else 1 end)
-               * d.open_balance * d.fx_rate as open,
+             -- Ledger scale is 4dp but the translation carries up to 14; round
+             -- once here so bucket sums and the JS exact-decimal rollup below
+             -- agree (unrounded values throw past 4dp) and always tie.
+             round((case when d.kind = ${creditKind} then -1 else 1 end)
+               * d.open_balance * d.fx_rate, 4) as open,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days
         from documents d
        where d.org_id = ${resolvedOrgId}
@@ -144,8 +147,10 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
     with open_items as (
       select d.id, d.kind, d.party_id, d.document_number,
              coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
-             (case when d.kind = ${creditKind} then -1 else 1 end)
-               * d.open_balance * d.fx_rate as open,
+             -- Same 4dp ledger-scale rounding as the summary so detail rows
+             -- never carry precision the exact-decimal rollup cannot hold.
+             round((case when d.kind = ${creditKind} then -1 else 1 end)
+               * d.open_balance * d.fx_rate, 4) as open,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days
         from documents d
        where d.org_id = ${resolvedOrgId}
