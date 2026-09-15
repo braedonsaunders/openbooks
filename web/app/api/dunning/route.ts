@@ -43,20 +43,30 @@ function validStages(raw: unknown): StageInput[] | null {
   // Enforce unique, ascending sequences (the DB has a unique index too).
   const seqs = new Set(stages.map((s) => s.sequence));
   if (seqs.size !== stages.length) return null;
-  if (stages.some((s) => !Number.isInteger(s.sequence) || !Number.isInteger(s.offsetDays))) return null;
+  // sequence/offset_days are int4: integers beyond ±2^31 fail the insert as
+  // an unhandled storage error (500). Negative offsets are legitimate
+  // (pre-due courtesy rungs), so the bound is the column range, not >= 0.
+  if (stages.some((s) => !isInt32(s.sequence) || !isInt32(s.offsetDays))) return null;
   return stages;
+}
+
+/** int4 range guard shared by the day-count fields. */
+function isInt32(n: number): boolean {
+  return Number.isInteger(n) && n >= -2147483648 && n <= 2147483647;
 }
 
 /**
  * Grace days are stored into an integer column. Anything that is not a
  * non-negative integer — non-numeric strings, booleans, fractions,
  * negatives — is a client error, never a storage error surfacing as a 500.
+ * The int4 range is enforced too: a pasted 10-digit count is an integer but
+ * still not storable.
  */
 function parseGracePeriodDays(raw: unknown): number | null {
   if (raw === undefined || raw === null || raw === '') return 0;
   if (typeof raw === 'boolean') return null;
   const days = Number(raw);
-  if (!Number.isInteger(days) || days < 0) return null;
+  if (!Number.isInteger(days) || days < 0 || days > 2147483647) return null;
   return days;
 }
 
@@ -102,6 +112,12 @@ export async function POST(req: Request) {
   }
   const minBalanceRaw = canonicalDecimal(body.minBalance ?? "0", 4);
   if (minBalanceRaw === null || compareDecimal(minBalanceRaw, "0") < 0) {
+    return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
+  }
+  // min_balance is numeric(19,4): fifteen whole digits. The format check
+  // admits any magnitude, so a pasted 20-digit balance died in Postgres with
+  // a storage error.
+  if (minBalanceRaw.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
     return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
   }
   const minBalance = normalizeMoney(minBalanceRaw);

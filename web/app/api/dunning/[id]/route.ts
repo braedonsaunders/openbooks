@@ -19,6 +19,12 @@ interface StageInput {
   escalate?: boolean;
 }
 
+/** int4 range guard: sequence/offset_days beyond ±2^31 fail the write as an
+ * unhandled storage error. Negative offsets stay legal (pre-due rungs). */
+function isInt32(n: number): boolean {
+  return Number.isInteger(n) && n >= -2147483648 && n <= 2147483647;
+}
+
 function validStages(raw: unknown): StageInput[] | null {
   if (!Array.isArray(raw)) return null;
   const stages: StageInput[] = [];
@@ -27,7 +33,7 @@ function validStages(raw: unknown): StageInput[] | null {
     const o = s as Record<string, unknown>;
     if (typeof o.name !== "string" || !o.name.trim()) return null;
     if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return null;
-    if (!Number.isInteger(Number(o.sequence)) || !Number.isInteger(Number(o.offsetDays))) return null;
+    if (!isInt32(Number(o.sequence)) || !isInt32(Number(o.offsetDays))) return null;
     stages.push({
       sequence: Number(o.sequence),
       name: o.name,
@@ -44,13 +50,14 @@ function validStages(raw: unknown): StageInput[] | null {
 /**
  * Grace days are stored into an integer column. Anything that is not a
  * non-negative integer is a client error, never a storage error surfacing
- * as a 500. Same contract as the collection POST.
+ * as a 500. Same contract as the collection POST — including the int4 range:
+ * a pasted 10-digit count is an integer but still not storable.
  */
 function parseGracePeriodDays(raw: unknown): number | null {
   if (raw === undefined || raw === null || raw === '') return 0;
   if (typeof raw === 'boolean') return null;
   const days = Number(raw);
-  if (!Number.isInteger(days) || days < 0) return null;
+  if (!Number.isInteger(days) || days < 0 || days > 2147483647) return null;
   return days;
 }
 
@@ -84,6 +91,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("minBalance" in body) {
     const minBalanceRaw = canonicalDecimal(body.minBalance, 4);
     if (minBalanceRaw === null || compareDecimal(minBalanceRaw, "0") < 0) {
+      return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
+    }
+    // min_balance is numeric(19,4): fifteen whole digits.
+    if (minBalanceRaw.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
       return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
     }
     minBalance = normalizeMoney(minBalanceRaw);
