@@ -9,6 +9,7 @@ import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fiel
 import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 
@@ -19,7 +20,6 @@ const nameBodySchema = z.looseObject({
 })
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
   return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })
@@ -191,16 +191,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // -- dates ---------------------------------------------------------------
+  // Strict calendar boundary: a shape-valid non-day such as February 30
+  // would otherwise reach the DATE columns and surface as a 500 from
+  // PostgreSQL instead of failing closed here.
   let startsOn: string | null | undefined
   if (body.startsOn !== undefined) {
     const s = strOrNull(body.startsOn)
-    if (s !== null && !DATE_RE.test(s)) return bad('Invalid start date')
+    if (s !== null && !isIsoCalendarDate(s)) return bad('Invalid start date')
     startsOn = s
   }
   let endsOn: string | null | undefined
   if (body.endsOn !== undefined) {
     const s = strOrNull(body.endsOn)
-    if (s !== null && !DATE_RE.test(s)) return bad('Invalid end date')
+    if (s !== null && !isIsoCalendarDate(s)) return bad('Invalid end date')
     endsOn = s
   }
 
