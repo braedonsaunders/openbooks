@@ -605,6 +605,32 @@ async function postingContext(runner: SqlExecutor, orgId: string, subsidiaryId: 
   return { bookId: row.book_id, periodId: row.period_id, currency: row.currency };
 }
 
+async function assertLeaseAccountsPostable(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  accountIds: readonly string[],
+): Promise<void> {
+  const ids = [...new Set(accountIds)];
+  if (!ids.length) return;
+  const accounts = (await tx.execute<{
+    id: string;
+    is_active: boolean;
+    is_summary: boolean;
+  }>(sql`
+    select id, is_active, is_summary
+      from accounts
+     where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])
+     for share
+  `)).rows;
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  if (ids.some((id) => {
+    const account = byId.get(id);
+    return !account || !account.is_active || account.is_summary;
+  })) {
+    throw new LeaseError("lease posting requires active, non-summary accounts");
+  }
+}
+
 async function postLeaseEntry(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -622,9 +648,7 @@ async function postLeaseEntry(
   // Apply the same native legal-entity policy as other posting workflows. Hold
   // the hierarchy and referenced configuration throughout validation and writes.
   await tx.execute(sql`select id from subsidiaries where org_id=${args.orgId} order by id for share`);
-  const accountIds = [...new Set(args.lines.map((line) => line.accountId))];
-  await tx.execute(sql`select id from accounts where org_id=${args.orgId}
-    and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+  await assertLeaseAccountsPostable(tx, args.orgId, args.lines.map((line) => line.accountId));
   const dimensions = [
     { table: "departments", id: args.lease.department_id },
     { table: "projects", id: args.lease.project_id },
