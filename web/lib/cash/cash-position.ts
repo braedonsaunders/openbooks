@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import {
@@ -184,6 +184,18 @@ export interface CashPosition {
  * Shares every primitive with the analytics forecast; this view is the
  * operational read (act on cash), analytics is the analytical read (explain it).
  */
+/**
+ * Document-side subsidiary predicate for the vendor picker: the canonical
+ * fail-closed membership test, plus root-owned (null subsidiary) rows for
+ * unrestricted root-covering views only. An empty visible set still denies
+ * everything — the limb never widens it.
+ */
+function vendorDocScope(visible: ReadonlySet<string> | null, includeNullSubsidiary: boolean): SQL {
+  if (visible === null || visible.size === 0) return subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible);
+  if (!includeNullSubsidiary) return subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible);
+  return sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${`{${[...visible].join(",")}}`}::uuid[]))`;
+}
+
 export async function cashPosition(
   orgId: string,
   horizonWeeks: number,
@@ -193,6 +205,13 @@ export async function cashPosition(
    * SQL-backed categories. Omission inherits the caller's full allowed set. */
   requestedSubIds: string[] | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  /**
+   * Server-set: the caller is unrestricted AND the viewed set contains the
+   * org root, so document-side reads (vendor picker, category histories)
+   * also match root-owned (null subsidiary) rows. Restricted callers never
+   * receive it.
+   */
+  includeNullSubsidiary?: boolean,
 ): Promise<CashPosition> {
   const subIds = allowedSubsidiaryIds === null ? requestedSubIds
     : requestedSubIds === undefined ? [...allowedSubsidiaryIds]
@@ -226,7 +245,7 @@ export async function cashPosition(
            select 1 from documents d
            where d.org_id = ${orgId} and d.party_id = p.id and d.voided_at is null
              and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
-             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible)}
+             ${vendorDocScope(visible, includeNullSubsidiary === true)}
         )
       order by 2
     `),
@@ -239,7 +258,13 @@ export async function cashPosition(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, subIds };
+  const catContext = {
+    arWeekly: weekTotals(ar.byWeek),
+    apWeekly: weekTotals(ap.byWeek),
+    cashStart: startingCash,
+    subIds,
+    includeNullSubsidiary: includeNullSubsidiary === true,
+  };
   const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
