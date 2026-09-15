@@ -485,6 +485,9 @@ export async function reverseAssetLifecycleEvent(
         asset_number: string;
         status: string;
         subsidiary_id: string;
+        department_id: string | null;
+        project_id: string | null;
+        location_id: string | null;
         acquisition_cost: string;
         salvage_value: string;
         book_id: string;
@@ -497,6 +500,7 @@ export async function reverseAssetLifecycleEvent(
       select event.id, event.asset_id, event.kind, event.journal_entry_id,
              event.created_at::text as created_at, asset.asset_number, asset.status,
              asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
+             asset.department_id, asset.project_id, asset.location_id,
              entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status,
              event.occurred_on::text as occurred_on, entry.posting_date::text as posting_date
         from asset_events event
@@ -590,6 +594,34 @@ export async function reverseAssetLifecycleEvent(
         `no accounting period covers ${opts.date}`,
       );
     }
+
+    const book = (await tx.execute<{ id: string }>(sql`
+      select id
+        from accounting_books
+       where org_id = ${orgId} and id = ${source.book_id}
+         and is_active and posts_gl
+       for share
+    `)).rows[0];
+    if (!book) {
+      throw new AssetLifecycleError("the source journal book is not active for posting");
+    }
+
+    // A reversal is a new posting, not a privileged copy of historical
+    // lines. Recheck the current legal-entity/account/dimension policy before
+    // creating the compensating entry; setup may have been restricted since
+    // the source event was posted.
+    const sourceLines = (await tx.execute<{ account_id: string; amount: string }>(sql`
+      select account_id, amount::text as amount
+        from journal_lines
+       where org_id = ${orgId} and entry_id = ${source.journal_entry_id}
+       order by line_number
+    `)).rows;
+    await assertLifecyclePostingPolicy(
+      tx,
+      orgId,
+      source,
+      sourceLines.map((line) => ({ accountId: line.account_id, amount: line.amount })),
+    );
 
     const reversalEntry = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
