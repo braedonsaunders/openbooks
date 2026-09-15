@@ -231,4 +231,21 @@ test('expense employee identity rejects vendor-only parties but preserves former
   })
 })
 
+test('expense PATCH preserves omitted required header custom fields on a partial edit', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${randomUUID()}, ${org.orgId}, 'documents', 'expense_report', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${state.actorId}, ${state.actorId}),
+        (${randomUUID()}, ${org.orgId}, 'documents', 'expense_report', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
+    `)
+    await db.execute(sql`update documents set custom = '{"required_code":"R-1"}'::jsonb where id=${id} and org_id=${org.orgId}`)
+    const saved = await patch(id, { expectedUpdatedAt: await revision(id), custom: { optional_note: 'updated' } })
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
+    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`)).rows[0]?.custom
+    assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
+  })
+})
+
 test.after(async () => { await pool.end() })
