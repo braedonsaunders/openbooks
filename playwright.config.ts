@@ -15,6 +15,14 @@ const baseURL = process.env.E2E_BASE_URL ?? (production ? "https://localhost:478
  */
 export default defineConfig({
   testDir: "./e2e",
+  // Two projects share one server: `app` is the shell/smoke suite that gates
+  // merges; `workflows` holds the end-to-end business workflow suites
+  // (quote-to-cash, procure-to-pay, payroll, close-to-reporting), which CI
+  // runs as their own step so their runtime and results stay visible.
+  projects: [
+    { name: "app", testIgnore: /e2e\/workflows\// },
+    { name: "workflows", testMatch: /e2e\/workflows\/.*\.spec\.ts$/ },
+  ],
   timeout: 90_000,
   expect: { timeout: 20_000 },
   retries: process.env.CI ? 1 : 0,
