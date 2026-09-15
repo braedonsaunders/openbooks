@@ -1,0 +1,562 @@
+{
+  "version": 1,
+  "gitSha": "fb75326b3",
+  "at": "2026-09-15T15:19:19.172Z",
+  "mode": "unit",
+  "targets": [
+    {
+      "target": "engine/src/money.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 3,
+      "survived": 4,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 1,
+      "total": 8,
+      "measured": 7,
+      "ratio": 0.42857142857142855,
+      "topSurvivors": [
+        {
+          "key": "engine/src/money.ts:74:boundary-shift:58:2",
+          "line": 74,
+          "operator": "boundary-shift",
+          "description": "boundary '4' -> '5'"
+        },
+        {
+          "key": "engine/src/money.ts:30:arith-sign-flip:35:1",
+          "line": 30,
+          "operator": "arith-sign-flip",
+          "description": "arith '-' -> '+'"
+        },
+        {
+          "key": "engine/src/money.ts:108:rounding-swap:20:1",
+          "line": 108,
+          "operator": "rounding-swap",
+          "description": "rounding 'roundDiv(a, b)' -> truncating '((a) / (b))'"
+        },
+        {
+          "key": "engine/src/money.ts:28:arith-sign-flip:11:1",
+          "line": 28,
+          "operator": "arith-sign-flip",
+          "description": "arith '-' -> '+'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/posting.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 4,
+      "survived": 4,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0.5,
+      "topSurvivors": [
+        {
+          "key": "engine/src/posting.ts:740:guard-negation:9:1",
+          "line": 740,
+          "operator": "guard-negation",
+          "description": "guard negated '(existingComponents.length === 0)'"
+        },
+        {
+          "key": "engine/src/posting.ts:610:comparison-flip:39:1",
+          "line": 610,
+          "operator": "comparison-flip",
+          "description": "comparison '!==' -> '==='"
+        },
+        {
+          "key": "engine/src/posting.ts:738:guard-negation:9:1",
+          "line": 738,
+          "operator": "guard-negation",
+          "description": "guard negated '(!line.taxCodeId && !line.taxGroupId)'"
+        },
+        {
+          "key": "engine/src/posting.ts:252:guard-negation:9:1",
+          "line": 252,
+          "operator": "guard-negation",
+          "description": "guard negated '(row.collected_account_id)'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/posting-effects.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 3,
+      "survived": 5,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0.375,
+      "topSurvivors": [
+        {
+          "key": "engine/src/posting-effects.ts:209:guard-negation:7:1",
+          "line": 209,
+          "operator": "guard-negation",
+          "description": "guard negated '(claimed.rows[0])'"
+        },
+        {
+          "key": "engine/src/posting-effects.ts:387:boundary-shift:11:1",
+          "line": 387,
+          "operator": "boundary-shift",
+          "description": "boundary '100' -> '101'"
+        },
+        {
+          "key": "engine/src/posting-effects.ts:209:boundary-shift:20:1",
+          "line": 209,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '-1'"
+        },
+        {
+          "key": "engine/src/posting-effects.ts:297:guard-negation:7:1",
+          "line": 297,
+          "operator": "guard-negation",
+          "description": "guard negated '(marked?.becameTerminal)'"
+        },
+        {
+          "key": "engine/src/posting-effects.ts:177:guard-negation:11:1",
+          "line": 177,
+          "operator": "guard-negation",
+          "description": "guard negated '(row.becameTerminal)'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/sync/applications.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 0,
+      "survived": 7,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 1,
+      "total": 8,
+      "measured": 7,
+      "ratio": 0,
+      "topSurvivors": [
+        {
+          "key": "engine/src/sync/applications.ts:230:arith-sign-flip:59:1",
+          "line": 230,
+          "operator": "arith-sign-flip",
+          "description": "arith '-' -> '+'"
+        },
+        {
+          "key": "engine/src/sync/applications.ts:265:comparison-flip:50:1",
+          "line": 265,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        },
+        {
+          "key": "engine/src/sync/applications.ts:297:guard-negation:15:1",
+          "line": 297,
+          "operator": "guard-negation",
+          "description": "guard negated '(!appLine)'"
+        },
+        {
+          "key": "engine/src/sync/applications.ts:347:boundary-shift:26:1",
+          "line": 347,
+          "operator": "boundary-shift",
+          "description": "boundary '0n' -> '-1n'"
+        },
+        {
+          "key": "engine/src/sync/applications.ts:376:comparison-flip:22:1",
+          "line": 376,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/payments.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 1,
+      "survived": 7,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0.125,
+      "topSurvivors": [
+        {
+          "key": "engine/src/payments.ts:276:boundary-shift:24:1",
+          "line": 276,
+          "operator": "boundary-shift",
+          "description": "boundary '2' -> '1'"
+        },
+        {
+          "key": "engine/src/payments.ts:281:boundary-shift:25:2",
+          "line": 281,
+          "operator": "boundary-shift",
+          "description": "boundary '0n' -> '1n'"
+        },
+        {
+          "key": "engine/src/payments.ts:276:guard-negation:7:1",
+          "line": 276,
+          "operator": "guard-negation",
+          "description": "guard negated '(!match || (match[2]?.length ?? 0) > 10)'"
+        },
+        {
+          "key": "engine/src/payments.ts:614:boundary-shift:22:2",
+          "line": 614,
+          "operator": "boundary-shift",
+          "description": "boundary '0n' -> '1n'"
+        },
+        {
+          "key": "engine/src/payments.ts:276:boundary-shift:43:2",
+          "line": 276,
+          "operator": "boundary-shift",
+          "description": "boundary '10' -> '9'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/payroll-run.ts",
+      "needsDb": true,
+      "status": "measured",
+      "killed": 0,
+      "survived": 8,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0,
+      "topSurvivors": [
+        {
+          "key": "engine/src/payroll-run.ts:3185:comparison-flip:28:1",
+          "line": 3185,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        },
+        {
+          "key": "engine/src/payroll-run.ts:3434:boundary-shift:23:1",
+          "line": 3434,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '-1'"
+        },
+        {
+          "key": "engine/src/payroll-run.ts:2081:guard-negation:9:1",
+          "line": 2081,
+          "operator": "guard-negation",
+          "description": "guard negated '(!employee || !payrollSubsidiaryInScope(allowedSubsidiaryIds, emp)'"
+        },
+        {
+          "key": "engine/src/payroll-run.ts:3193:guard-negation:7:1",
+          "line": 3193,
+          "operator": "guard-negation",
+          "description": "guard negated '(!oneOffRun && !payRateIsUsable(emp.pay_basis!, payRate))'"
+        },
+        {
+          "key": "engine/src/payroll-run.ts:1558:guard-negation:9:1",
+          "line": 1558,
+          "operator": "guard-negation",
+          "description": "guard negated '(!stub)'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/payroll/canada/t4127.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 5,
+      "survived": 3,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0.625,
+      "topSurvivors": [
+        {
+          "key": "engine/src/payroll/canada/t4127.ts:319:boundary-shift:48:2",
+          "line": 319,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '1'"
+        },
+        {
+          "key": "engine/src/payroll/canada/t4127.ts:219:boundary-shift:32:2",
+          "line": 219,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '1'"
+        },
+        {
+          "key": "engine/src/payroll/canada/t4127.ts:384:comparison-flip:16:1",
+          "line": 384,
+          "operator": "comparison-flip",
+          "description": "comparison '>' -> '>='"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/payroll/canada/compute-statutory.ts",
+      "needsDb": true,
+      "status": "baseline-skipped",
+      "killed": 0,
+      "survived": 0,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 0,
+      "measured": 0,
+      "ratio": null,
+      "topSurvivors": []
+    },
+    {
+      "target": "engine/src/payroll/canada/employer-levies.ts",
+      "needsDb": true,
+      "status": "baseline-skipped",
+      "killed": 0,
+      "survived": 0,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 0,
+      "measured": 0,
+      "ratio": null,
+      "topSurvivors": []
+    },
+    {
+      "target": "engine/src/payroll/us/pub15t.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 6,
+      "survived": 2,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0.75,
+      "topSurvivors": [
+        {
+          "key": "engine/src/payroll/us/pub15t.ts:196:arith-sign-flip:7:1",
+          "line": 196,
+          "operator": "arith-sign-flip",
+          "description": "arith '-' -> '+'"
+        },
+        {
+          "key": "engine/src/payroll/us/pub15t.ts:128:boundary-shift:35:2",
+          "line": 128,
+          "operator": "boundary-shift",
+          "description": "boundary '1' -> '2'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/payroll/us/withholding.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 1,
+      "survived": 6,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 1,
+      "total": 8,
+      "measured": 7,
+      "ratio": 0.14285714285714285,
+      "topSurvivors": [
+        {
+          "key": "engine/src/payroll/us/withholding.ts:338:guard-negation:7:1",
+          "line": 338,
+          "operator": "guard-negation",
+          "description": "guard negated '(!certificate.certificate.fields.some((field) => field.key === ke)'"
+        },
+        {
+          "key": "engine/src/payroll/us/withholding.ts:270:arith-sign-flip:11:1",
+          "line": 270,
+          "operator": "arith-sign-flip",
+          "description": "arith '+' -> '-'"
+        },
+        {
+          "key": "engine/src/payroll/us/withholding.ts:265:comparison-flip:31:1",
+          "line": 265,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        },
+        {
+          "key": "engine/src/payroll/us/withholding.ts:266:guard-negation:11:1",
+          "line": 266,
+          "operator": "guard-negation",
+          "description": "guard negated '(rate == null || rate === \"\")'"
+        },
+        {
+          "key": "engine/src/payroll/us/withholding.ts:203:guard-negation:13:1",
+          "line": 203,
+          "operator": "guard-negation",
+          "description": "guard negated '(!district)'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/payroll/us/compute-statutory.ts",
+      "needsDb": true,
+      "status": "baseline-skipped",
+      "killed": 0,
+      "survived": 0,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 0,
+      "measured": 0,
+      "ratio": null,
+      "topSurvivors": []
+    },
+    {
+      "target": "engine/src/tax.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 3,
+      "survived": 5,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 8,
+      "measured": 8,
+      "ratio": 0.375,
+      "topSurvivors": [
+        {
+          "key": "engine/src/tax.ts:227:comparison-flip:20:1",
+          "line": 227,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        },
+        {
+          "key": "engine/src/tax.ts:432:boundary-shift:60:2",
+          "line": 432,
+          "operator": "boundary-shift",
+          "description": "boundary '50n' -> '51n'"
+        },
+        {
+          "key": "engine/src/tax.ts:219:comparison-flip:61:1",
+          "line": 219,
+          "operator": "comparison-flip",
+          "description": "comparison '<=' -> '<'"
+        },
+        {
+          "key": "engine/src/tax.ts:267:comparison-flip:36:1",
+          "line": 267,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        },
+        {
+          "key": "engine/src/tax.ts:303:boundary-shift:51:2",
+          "line": 303,
+          "operator": "boundary-shift",
+          "description": "boundary '0n' -> '1n'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/tax-return.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 1,
+      "survived": 6,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 1,
+      "total": 8,
+      "measured": 7,
+      "ratio": 0.14285714285714285,
+      "topSurvivors": [
+        {
+          "key": "engine/src/tax-return.ts:506:guard-negation:11:1",
+          "line": 506,
+          "operator": "guard-negation",
+          "description": "guard negated '(side === \"purchases\" || side === null)'"
+        },
+        {
+          "key": "engine/src/tax-return.ts:383:comparison-flip:26:1",
+          "line": 383,
+          "operator": "comparison-flip",
+          "description": "comparison '===' -> '!=='"
+        },
+        {
+          "key": "engine/src/tax-return.ts:411:comparison-flip:19:1",
+          "line": 411,
+          "operator": "comparison-flip",
+          "description": "comparison '!==' -> '==='"
+        },
+        {
+          "key": "engine/src/tax-return.ts:493:boundary-shift:29:1",
+          "line": 493,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '-1'"
+        },
+        {
+          "key": "engine/src/tax-return.ts:143:comparison-flip:31:1",
+          "line": 143,
+          "operator": "comparison-flip",
+          "description": "comparison '>=' -> '>'"
+        }
+      ]
+    },
+    {
+      "target": "engine/src/consolidation.ts",
+      "needsDb": true,
+      "status": "baseline-skipped",
+      "killed": 0,
+      "survived": 0,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 0,
+      "total": 0,
+      "measured": 0,
+      "ratio": null,
+      "topSurvivors": []
+    },
+    {
+      "target": "engine/src/depreciation.ts",
+      "needsDb": false,
+      "status": "measured",
+      "killed": 0,
+      "survived": 7,
+      "timedOut": 0,
+      "skipped": 0,
+      "error": 1,
+      "total": 8,
+      "measured": 7,
+      "ratio": 0,
+      "topSurvivors": [
+        {
+          "key": "engine/src/depreciation.ts:365:boundary-shift:90:1",
+          "line": 365,
+          "operator": "boundary-shift",
+          "description": "boundary '0' -> '-1'"
+        },
+        {
+          "key": "engine/src/depreciation.ts:134:comparison-flip:71:1",
+          "line": 134,
+          "operator": "comparison-flip",
+          "description": "comparison '<' -> '<='"
+        },
+        {
+          "key": "engine/src/depreciation.ts:724:arith-sign-flip:71:1",
+          "line": 724,
+          "operator": "arith-sign-flip",
+          "description": "arith '-' -> '+'"
+        },
+        {
+          "key": "engine/src/depreciation.ts:450:guard-negation:11:1",
+          "line": 450,
+          "operator": "guard-negation",
+          "description": "guard negated '(method === \"manual\")'"
+        },
+        {
+          "key": "engine/src/depreciation.ts:271:boundary-shift:25:2",
+          "line": 271,
+          "operator": "boundary-shift",
+          "description": "boundary '1' -> '2'"
+        }
+      ]
+    }
+  ]
+}

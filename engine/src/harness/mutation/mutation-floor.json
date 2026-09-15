@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "comment": "Ratified killed-ratio floor per target. Set from the measured report by npm run test:mutation -- --write-checked-in; the coordinator decides when to raise. Empty until the first full measurement lands.",
+  "floors": {}
+}
