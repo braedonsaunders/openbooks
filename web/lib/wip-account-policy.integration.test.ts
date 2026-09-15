@@ -20,6 +20,7 @@ async function fixture(account: 'missing' | 'revenue' | 'invAsset', run: (f: Fix
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
       const actors = await seedFlowActors(org.orgId)
       const profile = BUILTIN_PROJECT_TYPES.find((type) => type.key === 'time_and_materials')!
       const typeId = randomUUID(), project = randomUUID(), employee = randomUUID(), entry = randomUUID()

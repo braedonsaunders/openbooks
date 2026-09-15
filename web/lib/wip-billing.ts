@@ -11,7 +11,8 @@ import {
   persistLineTaxComponents,
 } from '@openbooks/engine/src/tax-persist.ts'
 import { nextDocumentNumber } from './bills'
-import { isFeatureEnabled } from './features'
+import { acquireFeatureGateLock, isFeatureEnabled } from './features'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import {
@@ -30,6 +31,21 @@ export class WipBillingError extends Error {
     super(message)
     this.name = 'WipBillingError'
   }
+}
+
+async function assertWipBillingEnabled(orgId: string): Promise<void> {
+  const [projects, wipBilling] = await Promise.all([
+    isFeatureEnabled(orgId, 'projects'),
+    isFeatureEnabled(orgId, 'wipBilling'),
+  ])
+  if (!projects || !wipBilling) throw new WipBillingError('WIP Billing feature is disabled', 404)
+}
+
+async function assertWipBillingEnabledTx(tx: Executor, orgId: string): Promise<void> {
+  await acquireFeatureGateLock(orgId, tx)
+  const projects = await lockAndCheckOrgFeature(tx, orgId, 'projects')
+  const wipBilling = await lockAndCheckOrgFeature(tx, orgId, 'wipBilling')
+  if (!projects || !wipBilling) throw new WipBillingError('WIP Billing feature is disabled', 404)
 }
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -389,6 +405,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
   if (periodStart && periodStart > periodEnd) throw new WipBillingError('Period start must be on or before period end')
 
   return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`wip-prebill:${orgId}:${input.projectId}`}, 0))`)
     const policy = await loadProjectPolicy(tx, orgId, input.projectId, true, scope)
     const procedureReason = sourceLinePrebillingReason(policy.invoicingProfile)
@@ -590,6 +607,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
 }
 
 export async function listPrebills(orgId: string, projectId?: string, scope: SubsidiaryScope = null): Promise<PrebillListRow[]> {
+  await assertWipBillingEnabled(orgId)
   const result = (await db.execute<PrebillListRow>(sql`
     select worksheet.id,
            worksheet.worksheet_number as "worksheetNumber",
@@ -620,6 +638,7 @@ export async function listPrebills(orgId: string, projectId?: string, scope: Sub
 }
 
 export async function loadPrebill(orgId: string, id: string, scope: SubsidiaryScope = null): Promise<PrebillDetail | null> {
+  await assertWipBillingEnabled(orgId)
   const headers = await listPrebills(orgId, undefined, scope)
   const header = headers.find((row) => row.id === id)
   if (!header) return null
@@ -675,6 +694,7 @@ export async function updatePrebillLine(
   const proposed = persistMoney(input.proposedBillAmount, 'Proposed bill amount')
   const evidence = evidenceList(input.adjustmentEvidence)
   return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
     const current = (await tx.execute<{ proposed: string; original: string; status: PrebillStatus; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } }; other_proposed: string }>(sql`
       select line.proposed_bill_amount::text as proposed, line.original_bill_amount::text as original,
              worksheet.status, worksheet.project_id, worksheet.period_end::text as period_end,
@@ -741,6 +761,7 @@ export async function holdPrebillLine(
   if (!cleanReason) throw new WipBillingError('A hold reason is required')
   const cleanEvidence = evidenceList(evidence)
   return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
     const row = (await tx.execute<{ source_type: WipSourceType; source_id: string; project_id: string; status: PrebillStatus }>(sql`
       select line.source_type, coalesce(line.time_entry_id, line.document_line_id) as source_id,
              line.project_id, worksheet.status
@@ -787,6 +808,7 @@ export async function releaseWipHold(orgId: string, actorId: string, holdId: str
   const releaseReason = reason.trim()
   if (!releaseReason) throw new WipBillingError('A release reason is required')
   return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
     const released = (await tx.execute<{ source_type: WipSourceType; source_id: string }>(sql`
       update wip_holds
          set released_at = now(), released_by = ${actorId}, release_reason = ${releaseReason},
@@ -840,6 +862,7 @@ export async function transitionPrebill(
     throw new WipBillingError('A reason is required')
   }
   return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
     const locked = (await tx.execute<{ status: PrebillStatus; submitted_by: string | null; created_by: string | null; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } } }>(sql`
       select worksheet.status, worksheet.submitted_by, worksheet.created_by, worksheet.project_id,
              worksheet.period_end::text as period_end, worksheet.custom
@@ -904,6 +927,7 @@ export async function transitionPrebill(
  * conversion requests race.
  */
 export async function convertPrebill(orgId: string, actorId: string, id: string, scope: SubsidiaryScope = null) {
+  await assertWipBillingEnabled(orgId)
   const existing = (await db.execute<{ status: PrebillStatus; invoice_id: string | null; invoice_number: string | null; subsidiary_id: string | null }>(sql`
     select worksheet.status, worksheet.invoice_document_id as invoice_id, project.subsidiary_id,
            invoice.document_number as invoice_number
@@ -920,6 +944,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
   }
   if (observed.status !== 'approved') throw new WipBillingError('Only an approved prebill can be converted')
   return db.transaction(async (tx) => {
+    await assertWipBillingEnabledTx(tx, orgId)
     const header = (await tx.execute<Record<string, any>>(sql`
       select worksheet.*, project.customer_id, project.customer_po_number, project.subsidiary_id,
              project.name as project_name, type.billing_method,
@@ -1262,6 +1287,7 @@ function eligibleWipSources(orgId: string, asOf: string, scope: SubsidiaryScope)
 }
 
 export async function wipAnalytics(orgId: string, asOf?: string, scope: SubsidiaryScope = null): Promise<WipAnalytics> {
+  await assertWipBillingEnabled(orgId)
   const asOfDate = asOf ?? (await businessToday(orgId))
   requireDate(asOfDate, 'As-of date')
   const [agingResult, realizationResult, leakageResult] = await Promise.all([
@@ -1312,6 +1338,7 @@ export async function wipAnalytics(orgId: string, asOf?: string, scope: Subsidia
 }
 
 export async function listWipProjects(orgId: string, scope: SubsidiaryScope = null): Promise<WipProjectOption[]> {
+  await assertWipBillingEnabled(orgId)
   const result = (await db.execute<{ id: string; name: string; customerName: string | null; projectTypeName: string; invoicingProfile: InvoicingProfile }>(sql`
     select project.id, project.name, customer.display_name as "customerName",
            type.name as "projectTypeName", type.invoicing_profile as "invoicingProfile"
