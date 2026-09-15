@@ -10,6 +10,7 @@ import {
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
@@ -26,6 +27,9 @@ export const runtime = 'nodejs'
  * restricted caller can never route an out-of-scope report to the GL.
  */
 async function expenseReport(id: string, authz: Authz) {
+  // A malformed id would surface as a Postgres uuid throw and a raw 500;
+  // resolve it through the same not-found contract as an unknown id.
+  if (!isUuid(id)) return null
   const r = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(
     sql`select id, status, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${authz.user.orgId}`,
   ))
