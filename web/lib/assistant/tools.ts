@@ -240,9 +240,16 @@ const findJournalEntries: AssistantToolDef = {
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
     `));
-    const c = (await db.execute<{ n: string }>(
-      sql`select count(*) as n from journal_entries e where ${where}`,
-    ));
+    // The count must agree with the listing above it (and the UI journal
+    // list): an entry with no visible line is listed nowhere, so it is
+    // counted nowhere. Counting entry-scoped would inflate the total with
+    // entries these very rows can never return.
+    const c = (await db.execute<{ n: string }>(sql`
+      select count(distinct e.id) as n
+        from journal_entries e
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id${lineSubsidiaryFilter}
+       where ${where}
+    `));
     const total = Number(c.rows[0]?.n ?? 0);
     return {
       ok: true,

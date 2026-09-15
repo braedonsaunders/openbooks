@@ -27,7 +27,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
@@ -205,3 +205,69 @@ test('get_document hides a hidden-subsidiary document from a restricted caller',
     await dropScratchOrg(org.orgId);
   }
 });
+
+for (const mode of ['restricted', 'all'] as const) {
+  test(`find_journal_entries total agrees with its listing: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    // The listing joins journal_lines under the caller scope (an entry with
+    // no visible line never appears, like the UI journal list), but the
+    // match count was entry-scoped only — so a restricted caller saw a total
+    // for entries the listing itself could never return.
+    const { org, hidden } = await seedScopedOrg();
+    try {
+      await db.execute(sql`update app_roles set permissions=${JSON.stringify([...PROBE_PERMS, 'gl.read'])}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
+      if (mode === 'all') {
+        await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'all' })}::jsonb where org_id=${org.orgId} and key='scope_prober'`);
+      }
+      // Fully visible entry: header and line in the visible subsidiary.
+      const fullyVisible = randomUUID();
+      const headerOnly = randomUUID();
+      await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values
+          (${fullyVisible}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'JE-VISIBLE', '2026-07-15', ${org.periodId}, 'visible', 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values
+          (${org.orgId}, ${fullyVisible}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '50.00', 'CAD', '50.00', '1'),
+          (${org.orgId}, ${fullyVisible}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-50.00', 'CAD', '-50.00', '1')`);
+      // Header-only entry: header in the visible subsidiary, its only line
+      // parked in the hidden one — the listing can never return it.
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values
+          (${headerOnly}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'JE-HEADER-ONLY', '2026-07-15', ${org.periodId}, 'header only', 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values
+          (${org.orgId}, ${headerOnly}, 1, ${org.accounts.bank}, ${hidden}, '75.00', 'CAD', '75.00', '1'),
+          (${org.orgId}, ${headerOnly}, 2, ${org.accounts.revenue}, ${hidden}, '-75.00', 'CAD', '-75.00', '1')`);
+      });
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const result = await executeAssistantTool(authz, 'find_journal_entries', {});
+        assert.equal(result.ok, true, JSON.stringify(result));
+        assert.ok(result.ok);
+        const data = result.data as { total: number; items: { entryNumber: string }[] };
+        const numbers = data.items.map((item) => item.entryNumber).sort();
+        assert.deepEqual(
+          [data.total, numbers],
+          mode === 'all'
+            ? [2, ['JE-HEADER-ONLY', 'JE-VISIBLE']]
+            : [1, ['JE-VISIBLE']],
+          `${mode}: total must count exactly the entries the listing returns`,
+        );
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  });
+}
