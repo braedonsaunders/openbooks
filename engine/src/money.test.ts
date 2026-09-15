@@ -246,3 +246,59 @@ test("div rounds a half-quantum quotient away from zero on both signs", () => {
   assert.equal(div("-1", "-20000"), "0.0001");
   assert.equal(div("3", "20000"), "0.0002");
 });
+
+test("decimal spellings canonicalize without binary floats", () => {
+  // A spelling-sensitive mutant (string compare, or kept raw text) fails the
+  // zero and padding rows; a float-based rewrite fails the long rows.
+  const spellings: Array<[string, string]> = [
+    ["+1.5", "1.5000"],
+    [".5", "0.5000"],
+    ["5.", "5.0000"],
+    ["00012.30", "12.3000"],
+    ["-0.0000", "0.0000"],
+    ["-0", "0.0000"],
+    ["900719925474099.9999", "900719925474099.9999"],
+    ["-900719925474099.9999", "-900719925474099.9999"],
+  ];
+  for (const [input, expected] of spellings) {
+    assert.equal(normalizeMoney(input), expected, `normalizeMoney(${input})`);
+  }
+  for (const bad of ["1.00005", "-0.00001", "abc", "", "1.2.3", "--1"]) {
+    assert.throws(() => normalizeMoney(bad), Error, `normalizeMoney(${bad})`);
+  }
+});
+
+test("normalizeDecimal pins quantity scale without touching money precision", () => {
+  assert.equal(normalizeDecimal("1.5", 4), "1.5000");
+  assert.equal(normalizeDecimal("1.2300", 2), "1.23");
+  assert.equal(normalizeDecimal("-0", 2), "0.00");
+  assert.equal(normalizeDecimal("-0.0000", 4), "0.0000");
+  assert.equal(normalizeDecimal("1.23456789", 8), "1.23456789");
+  assert.equal(normalizeDecimal("1e4", 4), "10000.0000");
+  assert.equal(normalizeDecimal("5", 0), "5");
+  assert.equal(normalizeDecimal("5.0", 0), "5");
+  assert.throws(() => normalizeDecimal("0.5", 0), /precision/);
+  assert.throws(() => normalizeDecimal("1.234567891", 8), /precision/);
+  assert.throws(() => normalizeDecimal("abc", 4), /not a decimal/);
+  assert.throws(() => normalizeDecimal("1.5", 11), /decimalPlaces/);
+  assert.throws(() => normalizeDecimal("1.5", -1), /decimalPlaces/);
+  assert.throws(() => normalizeDecimal("1.5", 1.5), /decimalPlaces/);
+});
+
+test("roundMoney and formatMoney keep the sign honest at every scale", () => {
+  // Away-from-zero must keep a negative sign when the rounded value is
+  // nonzero, and must not invent one when dust rounds to zero.
+  assert.equal(roundMoney("-1.0050", 2), "-1.0100");
+  assert.equal(roundMoney("1.0049", 2), "1.0000");
+  assert.equal(roundMoney("2.6750", 2), "2.6800");
+  assert.equal(roundMoney("1.2345", 3), "1.2350");
+  assert.equal(roundMoney("-1.2345", 3), "-1.2350");
+  assert.equal(roundMoney("-0.0049", 2), "0.0000");
+  assert.equal(formatMoney("2.6750", 2), "2.68");
+  assert.equal(formatMoney("-0.0050", 2), "-0.01");
+  assert.equal(formatMoney("-0.0049", 2), "0.00");
+  assert.equal(formatMoney("100", 0), "100");
+  assert.equal(formatMoney("-100.5", 0), "-101");
+  assert.equal(formatMoney("0.0049", 2), "0.00");
+  assert.throws(() => roundMoney("1.5", 5), /decimalPlaces/);
+});
