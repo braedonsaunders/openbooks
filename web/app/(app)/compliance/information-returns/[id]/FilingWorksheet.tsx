@@ -21,7 +21,7 @@ import {
   TableRow,
   Textarea,
 } from '@openbooks/ui'
-import { filedBoxAmounts } from '@openbooks/engine/src/information-returns.ts'
+import { filedBoxAmounts } from '@openbooks/engine/src/information-returns-boxes.ts'
 import type { FormBox } from '@openbooks/engine/src/information-returns.ts'
 import { promptDialog } from '../../../../../lib/prompt'
 import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'

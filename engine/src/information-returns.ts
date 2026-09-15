@@ -954,16 +954,8 @@ function recipientSourceSnapshot(
 }
 
 /** The figure that gets filed: computed plus any deliberate adjustment. */
-export function filedBoxAmounts(
-  computed: Record<string, string>,
-  adjustments: Record<string, string>,
-): Record<string, string> {
-  const out: Record<string, string> = { ...computed };
-  for (const [box, delta] of Object.entries(adjustments)) {
-    out[box] = add(out[box] ?? "0", delta);
-  }
-  return out;
-}
+export { filedBoxAmounts } from "./information-returns-boxes.ts";
+import { filedBoxAmounts } from "./information-returns-boxes.ts";
 
 /** Sum of the non-withholding boxes actually being filed. */
 export function filedTotal(form: FormDefinition, boxAmounts: Record<string, string>): string {
