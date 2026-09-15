@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { receiveInventory } from "./inventory.ts";
+import { InventoryError, receiveInventory } from "./inventory.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -71,6 +71,41 @@ test("posted inventory movements cannot be deleted or rewritten", { skip: !DB },
     const demoted = await db.execute<{ status: string }>(sql`
       select status from inventory_movements where id = ${movementId} and org_id = ${org.orgId}`);
     assert.equal(demoted.rows[0]!.status, "pending", "posted must demote to pending");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("inventory quantities wider than numeric(19,4) fail closed before any write", { skip: !DB }, async () => {
+  // Every movement quantity funnels through one persistor into numeric(19,4)
+  // columns: a pasted 20-digit figure normalized fine and died only at the
+  // insert with a storage error. Fail closed with a named error instead —
+  // one guard covering receipts, issues, transfers, builds, and landed costs.
+  const org = await createScratchOrg();
+  const input = {
+    itemId: org.items.fifo,
+    stockLocationId: org.stockLocationId,
+    subsidiaryId: org.subsidiaryId,
+    offsetAccountId: org.accounts.clearing,
+    date: org.date,
+  } as const;
+  try {
+    await assert.rejects(
+      receiveInventory(org.orgId, null, { ...input, quantity: "99999999999999999999", unitCost: "2.00" }),
+      (error: unknown) =>
+        error instanceof InventoryError && /out of range/.test(error.message),
+      "an oversized receipt quantity should fail closed with a named error",
+    );
+    const rows = await db.execute<{ movements: number; lines: number }>(sql`
+      select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
+             (select count(*)::int from journal_lines where org_id = ${org.orgId}) as lines`);
+    assert.deepEqual(rows.rows[0], { movements: 0, lines: 0 });
+    // The column maximum itself still receives (unit cost 1 keeps the extended
+    // journal math exactly at the maximum too).
+    await receiveInventory(org.orgId, null, { ...input, quantity: "999999999999999.9999", unitCost: "1.00" });
+    const saved = await db.execute<{ quantity: string }>(sql`
+      select quantity::text as quantity from inventory_movements where org_id = ${org.orgId}`);
+    assert.equal(saved.rows[0]!.quantity, "999999999999999.9999");
   } finally {
     await dropScratchOrg(org.orgId);
   }

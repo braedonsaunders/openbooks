@@ -202,11 +202,20 @@ async function assertNoForeignOnHand(
 function persistReceiptMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) throw new InventoryError(`${label} must be an exact decimal`);
+  let amount: string;
   try {
-    return normalizeMoney(exact);
+    amount = normalizeMoney(exact);
   } catch {
     throw new InventoryError(`${label} must be an exact decimal`);
   }
+  // Every caller lands in numeric(19,4) columns (movements, order lines,
+  // landed costs): fifteen whole digits. A pasted wider figure normalized
+  // fine and died only at the insert with a storage error — fail closed
+  // here, once, for receipts, issues, transfers, builds, and landed costs.
+  if (amount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+    throw new InventoryError(`${label} is out of range — at most 15 whole digits fit the ledger`);
+  }
+  return amount;
 }
 
 function normalizeMovementIdempotencyKey(value: string | null | undefined): string | null {
@@ -1179,8 +1188,15 @@ export async function receiveInventory(
   input: ReceiveInput,
 ): Promise<MovementResult> {
   const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
-  if (cmp(input.quantity, "0") <= 0)
+  // Fail closed on shape AND range before any journal math or layer write:
+  // every downstream consumer lands in numeric(19,4) columns, so junk used
+  // to escape as a bare Error and oversized figures as a storage failure.
+  const quantity = persistReceiptMoney(input.quantity, "receipt quantity");
+  if (cmp(quantity, "0") <= 0)
     throw new InventoryError("receipt quantity must be positive");
+  // unitCost may be omitted (average fallback); when supplied it prices the
+  // same journal math, so it takes the same early gate.
+  if (input.unitCost !== undefined) persistReceiptMoney(input.unitCost, "receipt unit cost");
   const period = await periodForDate(orgId, input.date);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -1498,7 +1514,10 @@ export async function issueInventory(
 ): Promise<MovementResult> {
   const runner = input.tx ?? db;
   const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
-  if (cmp(input.quantity, "0") <= 0)
+  // Same early gate as receipts: junk must name InventoryError (not a bare
+  // Error) and oversized figures must refuse before any journal math.
+  const quantity = persistReceiptMoney(input.quantity, "issue quantity");
+  if (cmp(quantity, "0") <= 0)
     throw new InventoryError("issue quantity must be positive");
   const period = await periodForDate(orgId, input.date, runner);
   if (!period)
@@ -1952,7 +1971,11 @@ export async function adjustInventory(
   actorId: string | null,
   input: AdjustInput,
 ): Promise<MovementResult> {
-  const sign = cmp(input.quantityDelta, "0");
+  // Deltas are signed, so the range gate runs before the sign is read: junk
+  // must name InventoryError (not the bare Error cmp throws) and oversized
+  // figures must refuse before delegation or any journal math.
+  const quantityDelta = persistReceiptMoney(input.quantityDelta, "adjustment quantity");
+  const sign = cmp(quantityDelta, "0");
   if (sign === 0)
     throw new InventoryError("adjustment quantity cannot be zero");
   // Keep the adjustment-account lookup in the same lock boundary as the
@@ -2190,7 +2213,10 @@ async function transferInventoryTx(
   entryId: string | null;
   value: string;
 }> {
-  if (cmp(input.quantity, "0") <= 0)
+  // Same early gate as receipts: junk must name InventoryError (not a bare
+  // Error) and oversized figures must refuse before any journal math.
+  const quantity = persistReceiptMoney(input.quantity, "transfer quantity");
+  if (cmp(quantity, "0") <= 0)
     throw new InventoryError("transfer quantity must be positive");
   if (input.fromStockLocationId === input.toStockLocationId)
     throw new InventoryError("transfer needs two different locations");
@@ -3054,7 +3080,10 @@ export async function buildAssembly(
   actorId: string | null,
   input: BuildInput,
 ): Promise<AssemblyBuildResult> {
-  if (cmp(input.quantity, "0") <= 0)
+  // Same early gate as receipts: junk must name InventoryError (not a bare
+  // Error) and oversized figures must refuse before any journal math.
+  const quantity = persistReceiptMoney(input.quantity, "assembly build quantity");
+  if (cmp(quantity, "0") <= 0)
     throw new InventoryError("build quantity must be positive");
   const period = await periodForDate(orgId, input.date);
   if (!period)
