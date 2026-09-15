@@ -163,3 +163,85 @@ test(
     }
   },
 );
+
+async function seedDraftQuoteWithLine(tag: string) {
+  const fixture = await seedDraftQuote(tag);
+  const account = (await db.execute<{ id: string }>(sql`
+    select id from accounts where org_id = ${fixture.orgId} order by number limit 1`)).rows[0]!.id;
+  await db.execute(sql`
+    insert into document_lines(org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
+    values (${fixture.orgId}, ${fixture.orderId}, 1, ${account}, 'Seeded line', 1, 100, 100)
+  `);
+  await db.execute(sql`
+    update documents set subtotal = 100, tax_total = 0, total = 100
+     where id = ${fixture.orderId} and org_id = ${fixture.orgId}`);
+  return fixture;
+}
+
+async function orderState(fixture: Fixture) {
+  return (await db.execute<{ lines: number; total: string; party: string | null }>(sql`
+    select (select count(*)::int from document_lines
+             where org_id = ${fixture.orgId} and document_id = ${fixture.orderId}) as lines,
+           (select total::text from documents
+             where org_id = ${fixture.orgId} and id = ${fixture.orderId}) as total,
+           (select party_id::text from documents
+             where org_id = ${fixture.orgId} and id = ${fixture.orderId}) as party`)).rows[0]!;
+}
+
+test(
+  "order PATCH refuses a non-array lines payload without touching the order",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDraftQuoteWithLine("Q-SHAPE-1");
+    const before = await orderState(fixture);
+    assert.equal(before.lines, 1);
+    try {
+      const response = await PATCH(await patchRequest(fixture, { lines: "corrupt" }), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      });
+      assert.equal(response.status, 422, `non-array lines must be a 422: ${response.status}`);
+      assert.deepEqual(await orderState(fixture), before, "the refused save must leave lines and totals intact");
+    } finally {
+      gateState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "order PATCH refuses a null line entry without touching the order",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDraftQuoteWithLine("Q-SHAPE-2");
+    const before = await orderState(fixture);
+    try {
+      const response = await PATCH(await patchRequest(fixture, { lines: [null] }), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      });
+      assert.equal(response.status, 422, `null line entry must be a 422: ${response.status}`);
+      assert.deepEqual(await orderState(fixture), before, "the refused save must leave lines and totals intact");
+    } finally {
+      gateState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "order PATCH refuses a malformed party reference without touching the order",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedDraftQuoteWithLine("Q-SHAPE-3");
+    const before = await orderState(fixture);
+    try {
+      const response = await PATCH(await patchRequest(fixture, { partyId: "not-a-uuid" }), {
+        params: Promise.resolve({ id: fixture.orderId }),
+      });
+      assert.equal(response.status, 422, `malformed partyId must be a 422: ${response.status}`);
+      assert.deepEqual(await orderState(fixture), before, "the refused save must leave the order intact");
+    } finally {
+      gateState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);

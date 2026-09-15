@@ -135,6 +135,58 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       )
     }
 
+    // --- body shapes ------------------------------------------------------
+    // OrderPatchBody is cast, never schema-parsed: reject malformed shapes
+    // before they reach the totals math or storage as raw 500s — or worse, a
+    // truthy non-array `lines` that iterates characters, drops every line,
+    // and zeroes the order totals with a 200.
+    if (body.status !== undefined && body.status !== 'approved' && body.status !== 'voided') {
+      return NextResponse.json({ error: 'Invalid order status' }, { status: 422 })
+    }
+    for (const [label, value] of [
+      ['party', body.partyId],
+      ['department', body.departmentId],
+      ['project', body.projectId],
+    ] as const) {
+      if (value !== undefined && value !== null && (typeof value !== 'string' || !isUuid(value))) {
+        return NextResponse.json({ error: `Invalid order ${label}` }, { status: 422 })
+      }
+    }
+    if (body.subsidiaryId !== undefined && body.subsidiaryId !== null && typeof body.subsidiaryId !== 'string') {
+      return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+    }
+    if (body.memo !== undefined && body.memo !== null && typeof body.memo !== 'string') {
+      return NextResponse.json({ error: 'Invalid order memo' }, { status: 422 })
+    }
+    if (body.lines !== undefined) {
+      if (!Array.isArray(body.lines)) {
+        return NextResponse.json({ error: 'Order lines must be an array' }, { status: 422 })
+      }
+      for (let index = 0; index < body.lines.length; index++) {
+        const line = body.lines[index]! as Record<string, unknown>
+        if (typeof line !== 'object' || line === null || Array.isArray(line)) {
+          return NextResponse.json({ error: `Order line ${index + 1} is invalid` }, { status: 422 })
+        }
+        for (const [label, value] of [
+          ['item', line.itemId],
+          ['account', line.accountId],
+          ['tax code', line.taxCodeId],
+          ['tax group', line.taxGroupId],
+          ['department', line.departmentId],
+          ['project', line.projectId],
+        ] as const) {
+          if (value !== undefined && value !== null && (typeof value !== 'string' || !isUuid(value as string))) {
+            return NextResponse.json({ error: `Order line ${index + 1} has an invalid ${label}` }, { status: 422 })
+          }
+        }
+        for (const [label, value] of [['description', line.description], ['unit', line.unit]] as const) {
+          if (value !== undefined && value !== null && typeof value !== 'string') {
+            return NextResponse.json({ error: `Order line ${index + 1} has an invalid ${label}` }, { status: 422 })
+          }
+        }
+      }
+    }
+
     // A restricted caller may re-home a draft only within their visible
     // subsidiaries; clearing the header subsidiary entirely is also denied
     // (the resolved root would sit outside their scope just as often).
