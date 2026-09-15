@@ -2101,7 +2101,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/data-io/transaction-resources.ts'),
-    /src\.currency !== undefined/,
+    /incomingCurrency && !multiCurrencyOn && incomingCurrency\.toUpperCase\(\) !== baseCurrency\.toUpperCase\(\)/,
     'transaction import must refuse currency when Multi-currency is off — existing values stay',
   )
   assert.match(
