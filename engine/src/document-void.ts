@@ -17,7 +17,7 @@ import {
   recordTransactionAudit,
   type TransactionAuditSnapshot,
 } from "./transaction-audit.ts";
-import { releaseCamBillingProvenance, releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
 import { InventoryError, reverseInventoryMovement } from "./inventory.ts";
 
 export class DocumentVoidError extends Error {
@@ -695,6 +695,15 @@ export async function completeRequestedDocumentVoid(
       if (String(doc.kind) === "pay_run") {
         await releaseVoidedPayRun(tx, orgId, documentId);
       }
+      // A voided child returns its conversion/capture cover to the source
+      // order lines, so the remainder is convertible and billable again. A
+      // no-op for documents without that provenance (fulfillments, payments,
+      // standalone bills) and for legacy children converted before it existed.
+      await releaseConvertedOrderQuantities(tx, orgId, documentId, {
+        actorId: String(doc.void_requested_by),
+        reason: String(doc.void_reason),
+        source: "controlled_void",
+      });
       await tx.execute(sql`
         update documents
            set status = 'voided',
