@@ -86,6 +86,10 @@ export async function POST(req: Request) {
     : undefined
   let subsidiaryId: string | null
   if (requestedSubsidiaryId) {
+    // A malformed id names nothing: same answer as a subsidiary in another
+    // org, and answered before the id reaches SQL (a raw uuid comparison
+    // throws 22P02 out of the handler as a 500).
+    if (!isUuid(requestedSubsidiaryId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const requestedDenied = guardSubsidiaryScope(gate, requestedSubsidiaryId)
     if (requestedDenied) return requestedDenied
     const subsidiary = await db.execute<{ id: string }>(sql`
