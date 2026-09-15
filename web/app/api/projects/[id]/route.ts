@@ -134,6 +134,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.tasks !== undefined) {
     return bad('Work breakdown tasks must be changed through the project task endpoint')
   }
+  // Flags ride raw into boolean columns: PostgreSQL would silently coerce
+  // spellings like 'off'/'on' (deactivating a project with a 200) or throw
+  // 22P02 on anything else. Refuse non-booleans like every other flag write.
+  if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
+    return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 })
+  }
+  if (body.subsidiaryIncludeChildren !== undefined && typeof body.subsidiaryIncludeChildren !== 'boolean') {
+    return NextResponse.json({ error: 'subsidiaryIncludeChildren must be a boolean' }, { status: 400 })
+  }
 
   // -- enums ---------------------------------------------------------------
   if (body.status !== undefined && !STATUSES.includes(body.status as (typeof STATUSES)[number])) {
