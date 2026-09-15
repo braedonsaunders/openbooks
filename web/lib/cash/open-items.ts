@@ -25,10 +25,12 @@ export async function openItems(
   const kindFilter = side === 'ap'
     ? sql`d.kind in ('vendor_bill', 'expense_report')`
     : sql`d.kind = 'customer_invoice'`
-  // Candidate documents come from the denormalized open_balance (maintained by
-  // the application/posting triggers) — that prunes fully-settled documents
-  // BEFORE the per-line applications aggregate runs. The per-line `remaining`
-  // stays exact: open_balance only gates which documents are worth computing.
+  // `remaining` reconstructs what was still collectible AS OF the forecast
+  // date — gross line minus applications dated on/before it (an application
+  // unapplied only after the date still counted then). Netting live
+  // applications instead would let a later settlement rewrite a past forecast,
+  // and gating on the live cached open_balance would hide documents settled
+  // after the date that were open on it.
   const result = (await db.execute(sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
@@ -37,7 +39,8 @@ export async function openItems(
                select sum(x.amount) from applications x
                 where x.org_id = ${orgId}
                   and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                  and x.unapplied_at is null
+                  and x.applied_on <= ${asOf}
+                  and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
              ), 0) as remaining
         from documents d
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
@@ -45,7 +48,7 @@ export async function openItems(
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${signFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
-         and d.open_balance > 0${subScope(sql`jl.subsidiary_id`, subIds)}
+         ${subScope(sql`jl.subsidiary_id`, subIds)}
     )
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
