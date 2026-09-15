@@ -84,6 +84,15 @@ export async function PATCH(req: Request, { params }: Params) {
     : existing.marginMm;
   const isDefault = body.isDefault ?? existing.isDefault;
   const isActive = body.isActive ?? existing.isActive;
+  // Collection POST coerces isDefault with !!; an explicit PATCH value
+  // outside the boolean domain would otherwise reach the column and either
+  // coerce silently or abort the update with an unhandled storage 500.
+  if (typeof isDefault !== 'boolean') {
+    return NextResponse.json({ error: 'isDefault must be a boolean' }, { status: 400 });
+  }
+  if (typeof isActive !== 'boolean') {
+    return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 });
+  }
 
   try {
     await db.transaction(async (tx) => {
