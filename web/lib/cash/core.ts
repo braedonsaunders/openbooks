@@ -173,6 +173,12 @@ export interface CategoryContext {
   /** Active subsidiary view — SQL-backed strategies scope their history to it
    * (manual/formula strategies are org-level models and ignore it). */
   subIds?: string[];
+  /**
+   * Server-set: the caller is unrestricted AND the viewed set contains the
+   * org root, so document-side histories also match root-owned (null
+   * subsidiary) rows. Restricted callers never receive it.
+   */
+  includeNullSubsidiary?: boolean;
 }
 
 /** A source item behind a category estimate (the breakdown rows). */
@@ -264,8 +270,13 @@ export async function resolveAsOf(orgId: string, asOfDate?: string): Promise<str
  * is active (the statement-matrix filter pattern). An omitted selection is
  * unrestricted; an explicit empty selection matches no subsidiary.
  */
-function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
-  return subIds !== undefined ? sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])` : sql``;
+function subScope(col: ReturnType<typeof sql>, subIds?: string[], includeNull = false) {
+  if (subIds === undefined) return sql``;
+  // The null limb is unrestricted-only and never widens an empty scope:
+  // `= any('{}')` already matches nothing.
+  if (includeNull && subIds.length > 0)
+    return sql` and (${col} is null or ${col} = any(${`{${subIds.join(",")}}`}::uuid[]))`;
+  return sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])`;
 }
 
 /**
@@ -580,7 +591,7 @@ export async function categoryWeekly(
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - (${historyMonths} || ' months')::interval
-        and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds)}
+        and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
       group by 1
     `));
     const months = (r.rows).map((x) => normalizeMoneyValue(String(x.paid))).filter((v) => compareMoney(v, ZERO_MONEY) > 0).sort(compareMoney);
@@ -826,7 +837,7 @@ export async function categoryWeekly(
       from documents d
       where d.org_id = ${orgId} and d.party_id in (${idList}) and d.voided_at is null
         and d.kind in ('vendor_payment', 'check')
-        and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds)}
+        and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
       group by 1
     `));
     const events = (r.rows as any[])

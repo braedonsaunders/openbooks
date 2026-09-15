@@ -64,7 +64,15 @@ export async function loadBankingCash(
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
   const [position, layoutPrefs] = await Promise.all([
-    cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids, authz.allowedSubsidiaryIds),
+    cashPosition(
+      authz.user.orgId,
+      horizon,
+      apSettings,
+      undefined,
+      subView.subsidiary?.ids,
+      authz.allowedSubsidiaryIds,
+      subView.subsidiary?.includeNullSubsidiary,
+    ),
     userPageLayout(authz.user.id, 'banking-cash'),
   ])
   // Every week's totals and counts travel with the page; the transactions
