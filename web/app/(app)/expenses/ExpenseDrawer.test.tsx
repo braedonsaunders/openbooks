@@ -11,3 +11,11 @@ test('expense voids carry the exact document revision token required by the void
     'the void action must echo the loaded revision: /api/documents/[id]/void answers 409 without it, so a token-less void can never succeed',
   )
 })
+
+test('expense deletes carry the exact document revision token fenced by the delete API', () => {
+  assert.match(
+    source,
+    /fetch\(`\/api\/expenses\/\$\{doc\.id\}`,[\s\S]*?JSON\.stringify\(\{\s*expectedUpdatedAt/,
+    'the delete action must echo the loaded revision like the documents delete contract requires',
+  )
+})

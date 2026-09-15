@@ -451,7 +451,14 @@ export function ExpenseDrawer({
     )
       return
     setBusy(true)
-    const res = await fetch(`/api/expenses/${doc.id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/expenses/${doc.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      // The delete API fences on the exact revision like the documents
+      // delete contract: without it a stale drawer silently discards a
+      // newer draft.
+      body: JSON.stringify({ expectedUpdatedAt: documentRevisionRef.current }),
+    })
     if (res.ok) {
       toast.success(t('toasts.deleted'))
       router.push('/expenses/reports')
