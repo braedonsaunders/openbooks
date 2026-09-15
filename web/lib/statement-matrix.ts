@@ -1,11 +1,11 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
+import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
-import { fiscalStartMonth } from './fiscal'
+import { fiscalStartMonth, defaultFiscalCalendarPeriods } from './fiscal'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -363,13 +363,29 @@ async function buildAmountColumns(opts: {
   const bookProbe = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
 
   if (breakout === 'month' || breakout === 'quarter') {
+    // Retail/custom calendars declare week-based periods whose boundaries
+    // never align to month ends: columns come from the default calendar's
+    // declared periods (a 5-week period is one column labelled with its
+    // fiscal name; quarters group the declared periods). Monthly-cadence
+    // orgs — and any window the declared periods do not fully cover, so no
+    // activity outside generated periods can silently drop out of the
+    // matrix — keep the calendar math below byte-identical.
+    const fiscal = await defaultFiscalCalendarPeriods(orgId)
+    const declared =
+      fiscal && fiscal.cadence !== 'monthly' && declaredPeriodsCover(fiscal.periods, period.from, period.to)
+        ? breakout === 'month'
+          ? declaredPeriodColumns(fiscal.periods, period.from, period.to)
+          : declaredQuarterColumns(fiscal.periods, period.from, period.to)
+        : null
     // Quarter columns follow the org's fiscal calendar (orgs.settings.
     // fiscalYearStartMonth) like every other fiscal-aware surface — never a
-    // hardcoded January start. Month columns are calendar months either way.
+    // hardcoded January start. Month columns are calendar months either way
+    // (for monthly-cadence orgs; retail calendars take the declared path).
     const ranges =
-      breakout === 'month'
+      declared ??
+      (breakout === 'month'
         ? fiscalMonthsBetween(period.from, period.to)
-        : fiscalQuartersBetween(period.from, period.to, await fiscalStartMonth(orgId))
+        : fiscalQuartersBetween(period.from, period.to, await fiscalStartMonth(orgId)))
     const capped = ranges.slice(0, MAX_MATRIX_COLUMNS)
     return {
       cols: capped.map((r) => ({ key: r.label, label: r.label, from: r.from, to: r.to })),
