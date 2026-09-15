@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { cn, Drawer, Input } from '@openbooks/ui'
+import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money.ts'
 import { TxnLink } from '../../reports/TxnLink'
 import { GroupedBar } from './charts'
-import { useAnalyticsMoney } from './format'
+import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
 
 /**
  * Shared analytics drill-down drawer — the openbooks implementation of'
@@ -30,16 +31,16 @@ interface DrillEntry {
   docNumber: string
   label: string
   memo: string
-  amount: number
+  amount: string
 }
 
 interface DrillData {
   mode: 'account' | 'party'
-  total: number
+  total: string
   count: number
   entries: DrillEntry[]
-  monthly: { month: string; amount: number }[]
-  breakdown: { name: string; amount: number; count: number }[]
+  monthly: { month: string; amount: string }[]
+  breakdown: { name: string; amount: string; count: number }[]
 }
 
 const PAGE = 50
@@ -64,7 +65,7 @@ const kindLabel = (k: string | null) => (k ? (KIND_LABEL[k] ?? k.replace(/_/g, '
 
 export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget | null; from: string; to: string; onClose: () => void }) {
   const fmtMoney = useAnalyticsMoney()
-  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<DrillData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<'txns' | 'breakdown' | 'trend'>('txns')
@@ -111,7 +112,7 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
         {[
           { label: 'Total', value: data ? money(data.total) : '…' },
           { label: 'Transactions', value: data ? String(data.count) : '…' },
-          { label: 'Avg', value: data && data.count > 0 ? money(data.total / data.count) : '…' },
+          { label: 'Avg', value: data && data.count > 0 ? money(divideMoney(data.total, String(data.count))) : '…' },
         ].map((s) => (
           <div key={s.label} className="px-5 py-3 text-center">
             <p className="text-lg font-semibold text-slate-800 tabular-nums dark:text-slate-100">{s.value}</p>
@@ -156,7 +157,7 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
           <p className="px-6 py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : view === 'trend' ? (
           <div className="p-4">
-            <GroupedBar labels={data.monthly.map((m) => monthLabel(m.month))} height={260} series={[{ name: 'Amount', data: data.monthly.map((m) => m.amount), color: '#0d9488' }]} />
+            <GroupedBar labels={data.monthly.map((m) => monthLabel(m.month))} height={260} series={[{ name: 'Amount', data: data.monthly.map((m) => toChartNumber(m.amount)), color: '#0d9488' }]} />
           </div>
         ) : view === 'breakdown' ? (
           <table className="w-full text-sm">
@@ -174,7 +175,7 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
                   <td className="px-6 py-2.5 text-slate-700 dark:text-slate-300">{data.mode === 'party' ? kindLabel(b.name) : b.name}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{b.count}</td>
                   <td className="px-3 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(b.amount)}</td>
-                  <td className="px-6 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{data.total > 0 ? `${((Math.abs(b.amount) / Math.abs(data.total)) * 100).toFixed(1)}%` : '—'}</td>
+                  <td className="px-6 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(absoluteMoney(data.total), '0.0000') > 0 ? formatExactPercent(divideMoney(absoluteMoney(b.amount), absoluteMoney(data.total)), 1) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -207,7 +208,7 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{data.mode === 'account' ? e.label : kindLabel(e.docKind)}</td>
                   <td className="max-w-48 truncate px-3 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.memo}>{e.memo || '—'}</td>
-                  <td className={cn('px-6 py-2 text-right font-medium tabular-nums', e.amount < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200')}>{money(e.amount)}</td>
+                  <td className={cn('px-6 py-2 text-right font-medium tabular-nums', compareMoney(e.amount, '0.0000') < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200')}>{money(e.amount)}</td>
                 </tr>
               ))}
             </tbody>
