@@ -2407,6 +2407,62 @@ test("an in-flight automatic remittance decision holds the run against a concurr
   }
 });
 
+test("posting completion reconciles a worker-confirmed remittance onto its instruction", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Remittance reconciler", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }));
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`
+        update payment_instructions
+           set status = 'sent', updated_at = now(), updated_by = ${actorId}
+         where id = ${seeded.instructionId} and org_id = ${org.orgId}
+      `);
+      await db.execute(sql`
+        insert into payment_remittances
+          (org_id, payment_instruction_id, recipients, status, attempt_count, sent_at, created_by, updated_by)
+        values
+          (${org.orgId}, ${seeded.instructionId}, '["ap@example.test"]'::jsonb,
+           'sent', 1, now(), ${actorId}, ${actorId})
+      `);
+    });
+
+    const before = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ stamp_missing: boolean }>(sql`
+        select remittance_email_sent_at is null as stamp_missing
+          from payment_instructions
+         where id = ${seeded.instructionId} and org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(before, { stamp_missing: true });
+
+    await postPaymentRun(seeded.runId, org.orgId, actorId);
+
+    const after = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        remittance_status: string;
+        stamp_missing: boolean;
+      }>(sql`
+        select run.status as run_status,
+               remittance.status as remittance_status,
+               instruction.remittance_email_sent_at is null as stamp_missing
+          from payment_runs run
+          join payment_instructions instruction
+            on instruction.payment_run_id = run.id and instruction.org_id = run.org_id
+          join payment_remittances remittance
+            on remittance.payment_instruction_id = instruction.id and remittance.org_id = instruction.org_id
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(after, {
+      run_status: "confirmed",
+      remittance_status: "sent",
+      stamp_missing: false,
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 for (const boundary of ['another run', 'missing parent', 'concurrent retry', 'stale parent', 'voided parent'] as const) {
   test(`payment-file reprocessing enforces ${boundary}`, { skip: !DB }, async () => {
     const org = await withBypass(() => createScratchOrg());

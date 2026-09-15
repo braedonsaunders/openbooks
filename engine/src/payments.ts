@@ -2614,6 +2614,23 @@ async function finishPaymentRunPosting(
   claim: PostingClaim,
 ): Promise<void> {
   await withOrgTransaction(orgId, async () => {
+    await assertPostingClaimLive(runId, orgId, claim);
+    // Email delivery is confirmed by the worker after provider acceptance, so
+    // reconcile any remittance rows that became sent while this run was
+    // posting before the instruction/run terminal transition commits.
+    await db.execute(sql`
+      update payment_instructions instruction
+         set remittance_email_sent_at = coalesce(instruction.remittance_email_sent_at, remittance.sent_at),
+             updated_at = now(),
+             updated_by = ${userId}
+        from payment_remittances remittance
+       where remittance.payment_instruction_id = instruction.id
+         and remittance.org_id = instruction.org_id
+         and remittance.status = 'sent'
+         and instruction.payment_run_id = ${runId}
+         and instruction.org_id = ${orgId}
+         and instruction.remittance_email_sent_at is null
+    `);
     const tally = (await db.execute<{ pending: number; returned: number }>(sql`
       select count(*) filter (where status = 'pending')::int as pending,
              count(*) filter (where status in ('returned', 'rejected'))::int as returned
@@ -2831,16 +2848,17 @@ export async function postPaymentRun(
 
 /**
  * Queue the payee's automatic remittance advice for one instruction the
- * worker just sent under its posting claim.
+ * worker just posted under its posting claim.
  *
  * Authority is re-proven at every step that writes: staging (the durable
  * remittance row) happens in one fenced transaction whose insert is
- * conditioned on the claim still being live, and the instruction stamp plus
- * sent-marking commit in a second fenced transaction with the write predicated
- * on that same live claim. A worker superseded between steps therefore stages
- * nothing, stamps nothing, and fails loudly instead of mutating instructions
- * on a run it no longer owns. Only the Redis enqueue itself runs outside a
- * transaction — network I/O must not hold row locks.
+ * conditioned on the claim still being live. Enqueueing is outside that
+ * transaction, and the email worker later records provider acceptance on the
+ * remittance row; payment-run completion reconciles the resulting instruction
+ * stamp under its own live claim. A worker superseded during staging therefore
+ * leaves no evidence row behind, while a crash between staging and enqueue can
+ * safely retry the same pending row and deterministic queue job. Network I/O
+ * never holds payment row locks.
  */
 async function queueAutomaticRemittance(
   runId: string,
@@ -2866,14 +2884,32 @@ async function queueAutomaticRemittance(
        where i.id = ${instructionId} and i.org_id = ${orgId}
     `)).rows[0];
     if (!row?.auto_remittance || row.direction !== "outbound") return null;
-    const already = (await db.execute(sql`
-      select 1 from payment_remittances where payment_instruction_id = ${instructionId} and org_id = ${orgId} and status = 'sent' limit 1
-    `));
-    if (already.rows[0]) return null;
-    const recipients = row.email ? [row.email] : [];
+    const already = (await db.execute<{
+      id: string;
+      status: "pending" | "sent";
+      recipients: string[] | null;
+    }>(sql`
+      select id, status, recipients
+        from payment_remittances
+       where payment_instruction_id = ${instructionId}
+         and org_id = ${orgId}
+         and status in ('pending', 'sent')
+       order by created_at desc, id desc
+       limit 1
+    `)).rows[0];
+    if (already?.status === "sent") return null;
+    // A pending row is the durable outbox identity. Reuse its original
+    // recipients on recovery rather than creating a second advice for the
+    // same instruction after a crash between staging and Redis enqueue.
+    const recipients = already?.status === "pending"
+      ? (Array.isArray(already.recipients) ? already.recipients : [])
+      : row.email ? [row.email] : [];
     // The durable remittance row is staged only while this worker still owns
     // the run: the conditional insert proves the claim at write time, so a
     // superseded worker leaves no evidence rows behind either.
+    if (already?.status === "pending") {
+      return { remittanceId: already.id, recipients, instruction: row };
+    }
     const remittance = (await db.execute<{ id: string }>(sql`
       insert into payment_remittances
         (org_id, payment_instruction_id, recipients, status, attempt_count, error, created_by, updated_by)
@@ -2918,7 +2954,17 @@ async function queueAutomaticRemittance(
       currency: instruction.currency,
       documents: documents.rows,
     });
-    await enqueueEmail({ orgId, to: staged.recipients, subject: message.subject, html: message.html, text: message.text, meta: { category: "payment_remittance" } });
+    await enqueueEmail({
+      orgId,
+      to: staged.recipients,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      meta: {
+        category: "payment_remittance",
+        paymentRemittanceId: staged.remittanceId,
+      },
+    }, { jobId: `payment-remittance|${staged.remittanceId}` });
   } catch (error) {
     enqueueError = error;
   }
@@ -2930,27 +2976,8 @@ async function queueAutomaticRemittance(
     return;
   }
 
-  // Sent-marking is fenced twice over: the heartbeat re-proves ownership, and
-  // the instruction stamp itself is predicated on the live claim, closing the
-  // window between proof and write. Losing the run here aborts loudly — the
-  // worker that recovered the claim owns completion from that moment.
-  await withOrgTransaction(orgId, async () => {
-    await assertPostingClaimLive(runId, orgId, claim);
-    const stamped = await db.execute<{ id: string }>(sql`
-      update payment_instructions
-         set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${userId}
-       where id = ${instructionId} and org_id = ${orgId}
-         and exists (
-           select 1 from payment_runs r
-            where r.id = ${runId} and r.org_id = ${orgId}
-              and r.status = 'processing'
-              and r.posting_claim_token = ${claim.token}
-         )
-      returning id
-    `);
-    if (!stamped.rows[0]) throw new PaymentRunPostingClaimFencedError(runId);
-    await db.execute(sql`update payment_remittances set status = 'sent', attempt_count = 1, last_attempt_at = now(), sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${staged.remittanceId} and org_id = ${orgId}`);
-  });
+  // Enqueueing is not delivery confirmation. Leave the remittance pending;
+  // the email worker owns the sent/failed transition after provider outcome.
 }
 
 // ---------------------------------------------------------------------------

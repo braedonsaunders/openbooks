@@ -16,7 +16,14 @@ export type EmailJobData = {
   html: string
   text: string
   attachments?: EmailAttachment[]
-  meta?: { userId?: string; category?: string; reportRunId?: string; reportDeliveryId?: string }
+  meta?: {
+    userId?: string
+    category?: string
+    reportRunId?: string
+    reportDeliveryId?: string
+    /** Payment remittance row completed by the email worker after provider acceptance. */
+    paymentRemittanceId?: string
+  }
 }
 
 export type EnqueueEmailData = Omit<EmailJobData, 'to'> & { to: string | string[] }
