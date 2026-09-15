@@ -28,10 +28,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { percentComplete?: number | null }
+  const body = (parsedBody.data) as { percentComplete?: number | null; expectedPercentComplete?: number | null }
   const pct = body.percentComplete
   if (pct !== null && pct !== undefined && (typeof pct !== 'number' || !Number.isFinite(pct) || pct < 0 || pct > 100)) {
     return NextResponse.json({ error: 'percentComplete must be 0–100 or null' }, { status: 422 })
+  }
+  // Mandatory compare-and-swap evidence on the single scalar being set: two
+  // tabs saving absolute overrides must 409 instead of silently re-basing
+  // revenue recognition on a stale number. The client sends the override
+  // value it rendered (single-scalar variant of the revision-token contract —
+  // no token plumbing, no false conflicts, exact intent preservation).
+  // Checked after the gates so a missing value never leaks project existence.
+  const expected = body.expectedPercentComplete
+  if (expected !== null && expected !== undefined && (typeof expected !== 'number' || !Number.isFinite(expected) || expected < 0 || expected > 100)) {
+    return NextResponse.json({ error: 'expectedPercentComplete must be 0–100 or null' }, { status: 409 })
+  }
+  if (expected === undefined) {
+    return NextResponse.json({ error: 'A current override value is required; reload the project and try again' }, { status: 409 })
   }
 
   const orgId = gate.user.orgId
@@ -44,6 +57,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const sync = await db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
       return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+    }
+    // The row lock serializes concurrent saves; the value decides the winner.
+    // A tab that rendered before a sibling's save committed refuses loudly
+    // instead of re-basing recognition on its stale number.
+    const live = (await tx.execute<{ override: string | null }>(sql`
+      select nullif(custom->>'percentCompleteOverride', '') as override
+        from projects
+       where id = ${id} and org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+       for update
+    `)).rows[0]
+    if (!live) return null
+    const liveValue = live.override === null ? null : Number(live.override)
+    const matches = (liveValue === null && expected === null)
+      || (liveValue !== null && expected !== null && Number.isFinite(liveValue) && liveValue === expected)
+    if (!matches) {
+      return NextResponse.json({ error: 'This override changed after you opened it; reload the project and reapply your value' }, { status: 409 })
     }
     const updated = (await tx.execute<{ id: string }>(sql`
       update projects

@@ -43,7 +43,7 @@ export function RecognitionCard({ projectId, status, canManage }: {
     const res = await fetch(`/api/projects/${projectId}/percent-complete`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ percentComplete: value }),
+      body: JSON.stringify({ percentComplete: value, expectedPercentComplete: status.overrideValue ?? null }),
     })
     const data = await res.json().catch(() => ({}))
     setBusy(false)

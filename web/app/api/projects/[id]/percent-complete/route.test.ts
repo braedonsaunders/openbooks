@@ -3,9 +3,9 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // Route-boundary regression for the project subsidiary write fence. The fake
-// database returns a row for the pre-fix query (which had no subsidiary
-// predicate), but treats a scoped query as the database would for an
-// out-of-scope project: UPDATE ... RETURNING yields no rows.
+// database treats a scoped query as the database would for an out-of-scope
+// project: the locked compare-and-swap read yields no rows, so no override
+// write or schedule sync runs.
 const stateKey = Symbol.for('openbooks.percent-complete-route-test')
 interface DbCall { kind: 'tx-execute'; text: string }
 interface SyncCall { orgId: string; actorId: string; asOfDate: string; projectId: string }
@@ -203,28 +203,36 @@ function put(body: Record<string, unknown>): Promise<Response> {
 test('PUT refuses an out-of-scope project before changing its override or schedule', async () => {
   reset()
   routeState.allowedSubsidiaryIds = new Set([VISIBLE_SUBSIDIARY_ID])
-  routeState.respondTxExecute = (text) =>
-    // Simulate the real UPDATE ... RETURNING behavior: without the scope
-    // predicate the old route would receive the project row and sync it.
-    text.includes('subsidiary_id') ? { rows: [] } : { rows: [{ id: PROJECT_ID }] }
+  // Out of scope: every scoped read and write yields no rows, so the locked
+  // compare-and-swap read refuses before any write or sync runs.
+  routeState.respondTxExecute = () => ({ rows: [] })
 
-  const response = await put({ percentComplete: 55 })
+  const response = await put({ percentComplete: 55, expectedPercentComplete: null })
 
   assert.equal(response.status, 404)
   assert.deepEqual(await response.json(), { error: 'not found' })
   assert.equal(routeState.syncCalls.length, 0, 'revenue schedule sync never ran for a hidden project')
-  const update = routeState.calls.find((call) => call.text.includes('update projects'))
-  assert.ok(update, 'the guarded UPDATE ran')
-  assert.match(update.text, /subsidiary_id\s*=\s*any/, 'the UPDATE carries the caller subsidiary scope')
+  const guard = routeState.calls.find((call) => call.text.includes('for update'))
+  assert.ok(guard, 'the guarded locked read ran')
+  assert.match(guard.text, /subsidiary_id\s*=\s*any/, 'the locked read carries the caller subsidiary scope')
+  assert.equal(
+    routeState.calls.some((call) => call.text.includes('update projects')),
+    false,
+    'no override write ran for a hidden project',
+  )
 })
 
 test('PUT updates an in-scope project and rebuilds its schedule', async () => {
   reset()
   routeState.allowedSubsidiaryIds = new Set([VISIBLE_SUBSIDIARY_ID])
   routeState.respondTxExecute = (text) =>
-    text.includes('update projects') ? { rows: [{ id: PROJECT_ID }] } : { rows: [] }
+    text.includes('update projects')
+      ? { rows: [{ id: PROJECT_ID }] }
+      : text.includes('percentCompleteOverride')
+        ? { rows: [{ override: null }] }
+        : { rows: [] }
 
-  const response = await put({ percentComplete: 37.5 })
+  const response = await put({ percentComplete: 37.5, expectedPercentComplete: null })
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), {
