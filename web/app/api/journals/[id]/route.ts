@@ -101,8 +101,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute<{ status: string; subsidiaryId: string | null }>(
-    sql`select status, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
+  const existing = (await db.execute<{ status: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
+    sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
   ))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
@@ -165,9 +165,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (headerDims && !headerDims.ok) return NextResponse.json({ error: headerDims.error }, { status: 422 })
   let headerCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
-    const v = validateCustomValues(headerDefs, body.custom)
+    // PATCH custom values are partial: validate the effective bag so an
+    // omitted required field can be satisfied by its stored value, then
+    // merge the cleaned submitted values over the stored bag so omitted
+    // keys survive. The exact-revision guard below rejects the write if a
+    // concurrent edit moved the stored bag after this read.
+    const existingCustom =
+      existing.rows[0].custom && typeof existing.rows[0].custom === 'object'
+        ? (existing.rows[0].custom as Record<string, unknown>)
+        : {}
+    const v = validateCustomValues(headerDefs, { ...existingCustom, ...body.custom })
     if (!v.ok) return NextResponse.json({ error: Object.values(v.errors)[0], fieldErrors: v.errors }, { status: 422 })
-    headerCustom = v.cleaned
+    headerCustom = { ...existingCustom, ...v.cleaned }
   }
 
   // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
