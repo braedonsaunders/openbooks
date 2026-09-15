@@ -435,17 +435,33 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
   const id = optionalUuid(body, "id", "reporting package");
   const isDefault = body.isDefault === true;
   return db.transaction(async (tx) => {
+    let before: Record<string, unknown> | null = null;
+    if (id) {
+      const existing = await tx.execute(sql`
+        select * from close_reporting_packages
+         where id = ${id} and org_id = ${orgId}
+         for update`);
+      if (!existing.rows[0]) throw new CloseError("reporting package not found");
+      before = existing.rows[0] as Record<string, unknown>;
+    }
     if (isDefault)
       await tx.execute(
         sql`update close_reporting_packages set is_default = false, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId}`,
       );
     if (id) {
-      await tx.execute(sql`update close_reporting_packages set name = ${text(body, "name", true)!}, description = ${text(body, "description")},
+      const updated = (await tx.execute(sql`update close_reporting_packages set name = ${text(body, "name", true)!}, description = ${text(body, "description")},
         reports = ${JSON.stringify(reports)}::jsonb,
         recipients = ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
         delivery = ${JSON.stringify(object(body, "delivery"))}::jsonb, is_default = ${isDefault},
         is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${actorId}
-        where id = ${id} and org_id = ${orgId}`);
+        where id = ${id} and org_id = ${orgId}
+        returning *`)) as { rows: Array<Record<string, unknown>> };
+      const after = updated.rows[0];
+      if (!after) throw new CloseError("reporting package not found");
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'close_reporting_packages', ${id}, 'update',
+                ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
       return id;
     }
     const result = (await tx.execute(sql`insert into close_reporting_packages
@@ -453,8 +469,14 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
       values (${orgId}, ${text(body, "name", true)!}, ${text(body, "description")},
               ${JSON.stringify(reports)}::jsonb,
               ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
-              ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${body.isActive !== false}, ${actorId}, ${actorId}) returning id`)) as any;
-    return result.rows[0].id as string;
+              ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${body.isActive !== false}, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
+    const after = result.rows[0];
+    if (!after) throw new CloseError("reporting package could not be created");
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'close_reporting_packages', ${after.id}, 'insert',
+              ${JSON.stringify({ before: null, after })}::jsonb, ${actorId})`);
+    return after.id as string;
   });
 }
 

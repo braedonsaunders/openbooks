@@ -259,3 +259,52 @@ test("close blueprint saves emit audit evidence for versioned mutations", { skip
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("close reporting-package saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Close Package Admin", "close-package-admin");
+    state.user = { orgId: org.orgId, id: actorId };
+    await withBypassContext(() =>
+      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
+    );
+
+    const create = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-package",
+      name: "Audit package",
+      description: "Initial package",
+      reports: [{ slug: "trial-balance" }],
+      recipients: ["close@example.test"],
+      delivery: { format: "pdf" },
+      isDefault: false,
+      isActive: true,
+    })));
+    if (create.status !== 200) throw new Error(`create package failed: ${await create.text()}`);
+    const packageId = (await create.json()).id as string;
+
+    const update = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-package",
+      id: packageId,
+      name: "Updated audit package",
+      description: "Updated package",
+      reports: [{ slug: "trial-balance" }, { slug: "income-statement" }],
+      recipients: ["controller@example.test"],
+      delivery: { format: "xlsx" },
+      isDefault: false,
+      isActive: true,
+    })));
+    if (update.status !== 200) throw new Error(`update package failed: ${await update.text()}`);
+
+    const audit = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from audit_log
+       where org_id = ${org.orgId}
+         and table_name = 'close_reporting_packages'
+         and row_id = ${packageId}
+         and action in ('insert', 'update')`));
+    assert.equal(audit.rows[0]?.count, 2);
+  } finally {
+    state.user = { orgId: "", id: "" };
+    await dropScratchOrg(org.orgId);
+  }
+});
