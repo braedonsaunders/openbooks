@@ -231,6 +231,17 @@ const mockSources = new Map<string, string>([
       export function guessMapping() {
         return {}
       }
+
+      // Mirrors web/lib/data-io/parse.ts for the route's import surface.
+      // (Mock sources load as plain JavaScript: no TypeScript modifiers.)
+      export class ImportParseError extends Error {
+        constructor(message) {
+          super(message)
+          this.name = 'ImportParseError'
+        }
+      }
+
+      export const MAX_IMPORT_ROWS = 20_000
     `,
   ],
   [

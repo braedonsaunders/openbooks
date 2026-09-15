@@ -12,9 +12,38 @@ export interface ParsedFile {
    * formula's cached string cannot masquerade as literal input.
    */
   rows: Record<string, unknown>[]
+  /**
+   * True when the file held more rows than the import cap: only the first
+   * MAX_IMPORT_ROWS were kept. Callers must surface this — silently importing
+   * a prefix of a file drops money without a trace.
+   */
+  truncated: boolean
 }
 
-const MAX_IMPORT_ROWS = 20_000
+export const MAX_IMPORT_ROWS = 20_000
+
+/** A file that cannot be imported as-is (duplicate headers, ...). */
+export class ImportParseError extends Error {
+  readonly name = 'ImportParseError'
+}
+
+/**
+ * Repeated columns collapse to one key downstream, so the losing column's
+ * data would vanish silently. Fail closed naming the header; blank headers
+ * are dropped later and never collide.
+ */
+function assertUniqueHeaders(headers: string[]): void {
+  const seen = new Set<string>()
+  for (const header of headers) {
+    if (!header) continue
+    if (seen.has(header)) {
+      throw new ImportParseError(
+        `duplicate column "${header}" — rename one of the columns before importing`,
+      )
+    }
+    seen.add(header)
+  }
+}
 
 /**
  * Normalize an uploaded file (CSV text, XLSX base64, or JSON text) into a
@@ -27,20 +56,31 @@ export async function parseImportFile(
 ): Promise<ParsedFile> {
   if (format === 'json') return parseJson(payload.text ?? '')
   if (format === 'xlsx') {
-    if (!payload.base64) return { headers: [], rows: [] }
+    if (!payload.base64) return { headers: [], rows: [], truncated: false }
     const buf = Buffer.from(payload.base64, 'base64')
     const { headers, rows } = await readSheet(buf)
-    return matrixToObjects(headers, rows)
+    assertUniqueHeaders(headers)
+    return {
+      ...matrixToObjects(headers, rows.slice(0, MAX_IMPORT_ROWS)),
+      truncated: rows.length > MAX_IMPORT_ROWS,
+    }
   }
   // csv
   const matrix = parseCsvRows(payload.text ?? '')
   const headers = (matrix.shift() ?? []).map((h) => String(h).trim())
-  return matrixToObjects(headers, matrix)
+  assertUniqueHeaders(headers)
+  return {
+    ...matrixToObjects(headers, matrix.slice(0, MAX_IMPORT_ROWS)),
+    truncated: matrix.length > MAX_IMPORT_ROWS,
+  }
 }
 
-function matrixToObjects(headers: string[], rows: (SheetCellValue | null)[][]): ParsedFile {
+function matrixToObjects(
+  headers: string[],
+  rows: (SheetCellValue | null)[][],
+): Pick<ParsedFile, 'headers' | 'rows'> {
   const out: Record<string, unknown>[] = []
-  for (const row of rows.slice(0, MAX_IMPORT_ROWS)) {
+  for (const row of rows) {
     if (
       row.every((c) => {
         const value = c !== null && c !== undefined && isSheetFormulaCellValue(c) ? c.value : c
@@ -72,7 +112,7 @@ function parseJson(text: string): ParsedFile {
   try {
     parsed = JSON.parse(text)
   } catch {
-    return { headers: [], rows: [] }
+    return { headers: [], rows: [], truncated: false }
   }
   const arr = Array.isArray(parsed) ? parsed : [parsed]
   const rows = arr.filter((r) => r && typeof r === 'object' && !Array.isArray(r)) as Record<string, unknown>[]
@@ -86,7 +126,7 @@ function parseJson(text: string): ParsedFile {
       }
     }
   }
-  return { headers, rows: rows.slice(0, MAX_IMPORT_ROWS) }
+  return { headers, rows: rows.slice(0, MAX_IMPORT_ROWS), truncated: rows.length > MAX_IMPORT_ROWS }
 }
 
 /** Auto-guess a target field for a source header (exact, case-insensitive, fuzzy). */
