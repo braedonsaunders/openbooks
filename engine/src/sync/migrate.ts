@@ -707,7 +707,14 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         custom=(${taxCustom}::jsonb || tax_codes.custom)
           || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
         where id=${id} and org_id=${orgId}`);
-      await db.execute(sql`update tax_rates set rate_percent=${rate} where tax_code_id=${id} and org_id=${orgId}`);
+      // The loader owns the source's CURRENT rate, and only the currently
+      // open window states it. Closed historical windows and tenant-planned
+      // future windows are dated statutory facts: rewriting them to today's
+      // rate reinterprets history for every date-scoped calculation (the
+      // engine resolves the rate for a document's own date).
+      await db.execute(sql`update tax_rates set rate_percent=${rate}
+        where tax_code_id=${id} and org_id=${orgId}
+          and effective_to is null and effective_from <= current_date`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
