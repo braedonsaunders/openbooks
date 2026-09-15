@@ -29,13 +29,13 @@ async function invoke(result: Result | Error) {
   };
   const run = new Function("call", "props", "setBusy", "toast", "t", "router",
     `${executable}\nreturn runRevaluation;`)(
-    async (url: string, body: { periodId: string }) => {
+    async (url: string, body: { periodId: string; bookId?: string }) => {
       assert.equal(url, "/api/close/run-revaluation");
-      assert.deepEqual(body, { periodId: "test-period" });
+      assert.deepEqual(body, { periodId: "test-period", bookId: "test-book" });
       if (result instanceof Error) throw result;
       return result;
     },
-    { run: { period_id: "test-period" } },
+    { run: { period_id: "test-period", book_id: "test-book" } },
     (value: boolean) => busy.push(value),
     { success: notification("success"), error: notification("error"), info: notification("info") },
     (key: string) => key,
