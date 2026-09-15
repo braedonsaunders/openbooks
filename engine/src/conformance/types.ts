@@ -26,6 +26,7 @@
 export type Standard =
   | "ASC 330"
   | "ASC 360"
+  | "ASC 450"
   | "ASC 606"
   | "ASC 740"
   | "ASC 842"
@@ -34,6 +35,7 @@ export type Standard =
   | "IAS 16"
   | "IAS 21"
   | "IAS 36"
+  | "IAS 37"
   | "IFRS 15"
   | "IFRS 16";
 
