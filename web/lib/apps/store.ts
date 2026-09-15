@@ -1,6 +1,6 @@
 import { extensionContributionTargetErrors } from './contribution-targets'
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import {
   runAppEndpoint,
@@ -36,7 +36,9 @@ import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
 import { featureGateLockKey, isFeatureEnabled } from '../features'
 import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
-import { inTypeAudience, loadRecordTypeByKey } from '@/lib/records'
+import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, type RecordTypeRow } from '@/lib/records'
+import { lintRecordFields } from '../record-schema'
+import { pgTextArrayLiteral } from '@/lib/pg-array'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -654,7 +656,26 @@ function storageAdapter(orgId: string, appId: string): AppStorageAdapter {
   }
 }
 
-function recordsAdapter(orgId: string, user: SessionUser): AppRecordsAdapter {
+function recordsAdapter(
+  orgId: string,
+  user: SessionUser,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): AppRecordsAdapter {
+  /**
+   * The bridge caller's subsidiary fence for one custom-record type. Types
+   * declaring the conventional subsidiary_id field are filtered to the
+   * caller's visible entities (fail-closed on an empty fence); types without
+   * the field stay org-visible — the same predicate platform.ts enforces.
+   */
+  function scopeFor(type: RecordTypeRow): SQL {
+    if (allowedSubsidiaryIds === null) return sql``
+    const lint = lintRecordFields(type.fields, type.name)
+    if (!lint.success || !hasSubsidiaryField(lint.sections)) return sql``
+    const ids = [...allowedSubsidiaryIds]
+    return ids.length > 0
+      ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(ids)}::text[])`
+      : sql`and false`
+  }
   return {
     async list(typeKey, filters) {
       const type = await loadRecordTypeByKey(orgId, typeKey)
@@ -664,11 +685,13 @@ function recordsAdapter(orgId: string, user: SessionUser): AppRecordsAdapter {
         !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)
       ) return []
       const status = typeof filters?.status === 'string' ? (filters.status as string) : null
+      const scope = scopeFor(type)
       return rows(sql`
         select id, record_number as "recordNumber", status, data
           from custom_records
          where org_id = ${orgId} and type_key = ${typeKey}
            ${status ? sql`and status = ${status}` : sql``}
+           ${scope}
          order by created_at desc limit 200`)
     },
     async get(typeKey, id) {
@@ -678,10 +701,13 @@ function recordsAdapter(orgId: string, user: SessionUser): AppRecordsAdapter {
         type.status !== 'published' ||
         !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)
       ) return null
+      const scope = scopeFor(type)
       const r = await rows(sql`
         select id, record_number as "recordNumber", status, data
           from custom_records
-         where org_id = ${orgId} and type_key = ${typeKey} and id = ${id} limit 1`)
+         where org_id = ${orgId} and type_key = ${typeKey} and id = ${id}
+           ${scope}
+         limit 1`)
       return r[0] ?? null
     },
   }
@@ -805,7 +831,7 @@ export async function runBridgeMethod(opts: {
 
   if (opts.method === 'records.list' || opts.method === 'records.get') {
     if (!recordsGranted) return { ok: false, error: 'records.read not granted', status: 403 }
-    const rec = recordsAdapter(opts.orgId, opts.user)
+    const rec = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
     const result =
       opts.method === 'records.list'
         ? await rec.list(String(opts.payload?.typeKey ?? ''), opts.payload?.filters ?? {})
@@ -825,7 +851,7 @@ export async function runBridgeMethod(opts: {
     const handlerSource = src[0].content
 
     const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
-    if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user)
+    if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
     if (glGranted) {
       // The bridge caller's subsidiary scope travels with the write, so an App
       // backend cannot journal into an entity the signed-in user may not see.
