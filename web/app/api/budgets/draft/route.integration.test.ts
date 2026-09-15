@@ -164,3 +164,20 @@ test('draft creation rejects a malformed explicit fiscal year instead of default
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('draft creation rejects an unknown explicit kind instead of defaulting to budget', { skip: !DB }, async () => {
+  const { org, fy } = await fixture()
+  try {
+    const before = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    const response = await post({ bookId: org.bookId, fiscalYear: fy, kind: 'not-a-kind' })
+    assert.equal(response.status, 422)
+    assert.deepEqual(await response.json(), { error: 'invalid_kind' })
+    const after = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    assert.equal(after, before, 'unknown kind input must not create a budget draft')
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})
