@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from './db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from './test-fixtures.ts';
-import { CloseError, decidePeriodReopen, requestPeriodReopen, setPeriodLockState } from './close.ts';
+import { assertPeriodModulesOpen, CloseError, decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen, setPeriodLockState } from './close.ts';
 
 for (const order of ['global first','entity first','race','separate entities'] as const) {
   test(`reopen approvals refuse intersecting global/entity scopes: ${order}`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
@@ -64,6 +64,35 @@ test('reopen approval refuses a scope with no closed locks', {skip:!process.env.
     const narrowId=await requestPeriodReopen({...target,modules:['ap'],actorId:actors.adminId,reason:'AP correction only'});
     await decidePeriodReopen({orgId:org.orgId,requestId:narrowId,actorId:actors.approver1Id,approve:true,hours:2});
     assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${narrowId}`)).rows[0]!.status,'approved');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('an org-wide reopen window covers subsidiary-scoped locks and re-closes them', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  const org=await createScratchOrg();
+  try {
+    const actors=await seedFlowActors(org.orgId);
+    const target={orgId:org.orgId,periodId:org.periodId,bookId:org.bookId};
+    // Post-tightening state: the subsidiary row and the org-wide row are
+    // both closed. Storage prefers the exact row, so a window written only
+    // to the org-wide row would silently leave this entity closed.
+    await setPeriodLockState({...target,subsidiaryId:org.subsidiaryId,module:'gl',state:'closed',actorId:actors.adminId,reason:'Entity close'});
+    await setPeriodLockState({...target,module:'gl',state:'closed',actorId:actors.adminId,reason:'Global close'});
+    const requestId=await requestPeriodReopen({...target,modules:['gl'],actorId:actors.adminId,reason:'Global correction window'});
+    await decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2});
+    await assertPeriodModulesOpen(db, {
+      orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,
+      subsidiaryIds:[org.subsidiaryId],modules:['gl'],
+    });
+    // Ending the window must re-close the subsidiary row it relaxed: an
+    // open child shadows the re-closed scope and keeps posting.
+    await recloseApprovedReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,reason:'Correction work completed'});
+    await assert.rejects(
+      assertPeriodModulesOpen(db, {
+        orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,
+        subsidiaryIds:[org.subsidiaryId],modules:['gl'],
+      }),
+      /GL is closed/,
+    );
   } finally { await dropScratchOrg(org.orgId); }
 });
 
