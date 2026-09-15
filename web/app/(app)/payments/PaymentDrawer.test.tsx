@@ -19,3 +19,11 @@ test('final payment posting carries the revision token fenced by post-with-appli
     'the Pay & post action must send the loaded revision so a stale drawer 409s instead of overwriting the allocation set',
   )
 })
+
+test('payment voids carry the revision token required by the void API', () => {
+  assert.match(
+    source,
+    /\/void`,\s*\{[\s\S]*?JSON\.stringify\(\{\s*reason,\s*expectedUpdatedAt/,
+    'the void action must echo the loaded revision: /api/documents/[id]/void answers 409 without it, so a token-less void can never succeed',
+  )
+})
