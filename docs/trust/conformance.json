@@ -1,10 +1,10 @@
 {
-  "at": "2026-09-15T21:16:30.118Z",
-  "gitSha": "0ba5757983e76269e7e09d82721bbb53d4f3c164",
+  "at": "2026-09-15T21:22:06.529Z",
+  "gitSha": "27b75e9d0d1c7cb3266c37e56e8f95b3bc981c1d",
   "totals": {
-    "pass": 70,
+    "pass": 75,
     "fail": 0,
-    "gap": 9,
+    "gap": 10,
     "skipped": 0
   },
   "pass": true,
@@ -104,7 +104,7 @@
         "Service term of twelve months beginning 2026-01-01.",
         "Benefits are consumed evenly, so progress is measured by elapsed time."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "rev-uneven-term-sums-exactly",
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 1097
+      "ms": 113
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 360
+      "ms": 63
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 212
+      "ms": 46
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -403,7 +403,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 20
+      "ms": 9
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -437,7 +437,7 @@
         "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
         "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "lease-operating-single-cost",
@@ -534,7 +534,7 @@
         "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
         "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "ms": 34
+      "ms": 13
     },
     {
       "id": "lease-lessor-classification",
@@ -634,7 +634,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 181
+      "ms": 28
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -673,7 +673,7 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "ms": 159
+      "ms": 54
     },
     {
       "id": "fx-long-term-debt-retranslated",
@@ -706,7 +706,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 118
+      "ms": 38
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -788,7 +788,7 @@
         "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
         "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
       ],
-      "ms": 80
+      "ms": 40
     },
     {
       "id": "fx-inverse-rate-statutory-tax-exact",
@@ -814,7 +814,7 @@
         "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
         "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728."
       ],
-      "ms": 98
+      "ms": 29
     },
     {
       "id": "fx-settlement-realized-gain",
@@ -906,7 +906,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "The period-end revaluation posts nothing — the equipment stays at CAD 6,750.00."
       ],
-      "ms": 177
+      "ms": 34
     },
     {
       "id": "fx-net-investment-oci",
@@ -1469,7 +1469,7 @@
         "Annualized federal tax is 35.19 × 52 = $1,829.88.",
         "Withholding for the period is $29.59 — the booklet's printed figure."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "payroll-cumulative-averaging",
@@ -1561,7 +1561,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 452
+      "ms": 146
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -1594,7 +1594,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 206
+      "ms": 108
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -1625,7 +1625,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 158
+      "ms": 86
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -1648,7 +1648,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 76
+      "ms": 40
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -1686,7 +1686,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 163
+      "ms": 48
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -1719,7 +1719,7 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 115
+      "ms": 54
     },
     {
       "id": "inv-landed-cost-capitalized",
@@ -1751,7 +1751,7 @@
         "A freight voucher of 100.00 is allocated on a carrying-value basis.",
         "The whole 100.00 capitalizes: inventory rises to 400.00 (4.00 a unit) and 100 units remain on hand."
       ],
-      "ms": 120
+      "ms": 35
     },
     {
       "id": "ppe-impairment-to-fair-value",
@@ -1785,7 +1785,7 @@
         "The impairment loss is 15,000.00.",
         "The product records the reduction against accumulated depreciation, leaving gross cost intact. This is a presentation choice: carrying amount, the loss, and subsequent depreciation are all identical to reducing the asset account directly."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "ppe-impairment-establishes-new-basis",
@@ -2437,6 +2437,197 @@
         "The provision is adjusted to 65,000.00 with a 15,000.00 charge in the current period."
       ],
       "gap": "With no provisions ledger there is nothing to remeasure: no periodic review of open provisions, no adjustment path for a changed estimate, and no utilisation tracking when the obligation settles.",
+      "ms": 0
+    },
+    {
+      "id": "consol-full-nci-acquisition",
+      "title": "Full consolidation eliminates the subsidiary and recognises NCI",
+      "standards": [
+        "IFRS 10",
+        "ASC 810"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 10",
+          "reference": "IFRS 10.22",
+          "kind": "requirement",
+          "requirement": "A parent presents non-controlling interests in the consolidated statement of financial position within equity, separately from the equity of the owners of the parent."
+        },
+        {
+          "standard": "IFRS 10",
+          "reference": "IFRS 10.B94",
+          "kind": "requirement",
+          "requirement": "A parent attributes the profit or loss of a subsidiary between the owners of the parent and the non-controlling interests, even when the attribution leaves the non-controlling interests with a deficit."
+        },
+        {
+          "standard": "ASC 810",
+          "reference": "ASC 810-10-45-16",
+          "kind": "requirement",
+          "requirement": "Non-controlling interests are reported in consolidated equity separately from the parent's equity, and consolidated net income is allocated between the parent and the non-controlling interests."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Acquiring 80% of a subsidiary eliminates its acquisition-date equity against the parent's investment, recognises the 20% non-controlling interest at its proportionate share of fair value with goodwill for the remainder, and allocates 20% of the period's profit to NCI — every leg exact to the cent.",
+      "facts": [
+        "A parent pays CAD 900.00 for 80% of a subsidiary whose book equity is CAD 800.00 and whose fair value of net assets is CAD 1,000.00.",
+        "The non-controlling interest is 20% of 1,000.00 = CAD 200.00; goodwill is 900.00 + 200.00 − 1,000.00 = CAD 100.00.",
+        "The subsidiary earns CAD 100.00 after acquisition; the NCI share of profit is 100.00 × 20% = CAD 20.00.",
+        "The elimination debits subsidiary equity 800.00, fair-value adjustment 200.00 and goodwill 100.00, credits the investment 900.00 and NCI equity 200.00; the income allocation debits NCI income 20.00 and credits NCI equity 20.00, leaving NCI equity at a 220.00 credit."
+      ],
+      "ms": 22
+    },
+    {
+      "id": "consol-intercompany-elimination",
+      "title": "Intercompany balances eliminate to zero while standalone views stay untouched",
+      "standards": [
+        "IFRS 10",
+        "ASC 810"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 10",
+          "reference": "IFRS 10.B86",
+          "kind": "requirement",
+          "requirement": "A parent eliminates in full intragroup assets and liabilities, equity, income, expenses and cash flows relating to transactions between entities of the group."
+        },
+        {
+          "standard": "ASC 810",
+          "reference": "ASC 810-10-45-1",
+          "kind": "requirement",
+          "requirement": "Intra-entity balances and transactions are eliminated in preparing consolidated statements."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A CAD 1,000.00 intercompany receivable on the parent exactly offsets the subsidiary's CAD 1,000.00 payable, and the elimination entry reverses both — the consolidated view nets to zero while the source postings on each entity stand unchanged.",
+      "facts": [
+        "The parent sells CAD 1,000.00 to the subsidiary: parent receivable debit 1,000.00 against revenue; subsidiary cost debit 1,000.00 against payable credit 1,000.00.",
+        "Receivable and payable carry the elimination flag; revenue and cost do not.",
+        "The elimination entry credits the receivable 1,000.00 and debits the payable 1,000.00 — balanced, with no residual.",
+        "Every source line stays posted on its own entity; only the elimination subsidiary carries the reversal."
+      ],
+      "ms": 15
+    },
+    {
+      "id": "consol-equity-method",
+      "title": "An associate's profit increases the investment and its dividend reduces it",
+      "standards": [
+        "IAS 28",
+        "ASC 323"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 28",
+          "reference": "IAS 28.16",
+          "kind": "requirement",
+          "requirement": "Under the equity method the investment is adjusted for the investor's share of the associate's post-acquisition profit or loss, and distributions received reduce the carrying amount of the investment."
+        },
+        {
+          "standard": "ASC 323",
+          "reference": "ASC 323-10-35-4",
+          "kind": "requirement",
+          "requirement": "An investor recognises its share of the earnings of an investee in the periods they are reported, and dividends received are applied against the carrying amount of the investment."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A 30% associate earning CAD 200.00 and declaring CAD 50.00 of dividends lifts the investment by CAD 45.00 in one entry — CAD 60.00 of equity income less the CAD 15.00 dividend share — with no NCI and no acquisition elimination, because an associate is never combined line by line.",
+      "facts": [
+        "The investor holds 30% of an associate accounted for by the equity method.",
+        "The associate earns CAD 200.00 after acquisition; the investor's share is 200.00 × 30% = CAD 60.00 of equity income, debiting the investment.",
+        "The associate declares CAD 50.00 of dividends; the investor's 15.00 share credits the investment and eliminates the matching dividend income.",
+        "The investment moves by 60.00 − 15.00 = CAD 45.00 debit; equity income shows a 60.00 credit and dividend income a 15.00 debit."
+      ],
+      "ms": 35
+    },
+    {
+      "id": "consol-proportionate-owned-share",
+      "title": "Proportionate consolidation combines only the owned share, with no NCI",
+      "standards": [
+        "IFRS 11"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 11",
+          "reference": "IFRS 11.20",
+          "kind": "requirement",
+          "requirement": "A joint operator recognises its share of the jointly held assets, liabilities, revenues and expenses — only the owned share is ever combined, so there is no non-controlling interest to present."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A 50%-owned joint operation eliminates the owned half of its acquisition-date equity against the parent's investment with no NCI entry at all — the reporting layer weights the subsidiary's lines, so the run posts the owned-share elimination and stops.",
+      "facts": [
+        "The parent pays CAD 550.00 for 50% of a joint operation with book equity of CAD 1,000.00 and fair value of net assets of CAD 1,000.00.",
+        "The owned share of equity is 1,000.00 × 50% = CAD 500.00; the fair-value adjustment is 500.00 − 500.00 = CAD 0.00 and posts no line.",
+        "Goodwill is 550.00 − 500.00 = CAD 50.00; the investment eliminates at CAD 550.00.",
+        "No NCI is recognised and no income is allocated: only the owned share is combined."
+      ],
+      "ms": 19
+    },
+    {
+      "id": "consol-foreign-sub-translation",
+      "title": "A foreign subsidiary translates profit at the average rate and equity at history",
+      "standards": [
+        "IAS 21",
+        "ASC 830"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.39",
+          "kind": "requirement",
+          "requirement": "A foreign operation's income and expenses are translated at the exchange rates at the dates of the transactions while its equity history stays at historical rates, so each element moves at the rate proper to it."
+        },
+        {
+          "standard": "ASC 830",
+          "reference": "ASC 830-30-45-3",
+          "kind": "requirement",
+          "requirement": "A foreign entity's income-statement elements are translated at a weighted-average rate for the period while balance-sheet translation uses the current rate, with equity carried at historical rates."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "An 80%-owned USD subsidiary with USD 1,000.00 of equity acquired when the policy rate was 1.30 eliminates at CAD 1,300.00, while its USD 100.00 profit translates at the period average of 1.3750 to CAD 137.50 — and the 20% NCI income of CAD 27.50 proves the average, not the spot, was applied.",
+      "facts": [
+        "The reporting currency is CAD; the subsidiary keeps its books in USD.",
+        "July spot rates are 1.3500 (5 July) and 1.4000 (25 July): the derived average is 1.3750 and the current rate is 1.4000.",
+        "Acquisition-date equity of USD 1,000.00 at the policy acquisition rate of 1.30 eliminates at CAD 1,300.00 against a CAD 1,200.00 investment, with fair value of 1,400.00 giving a 100.00 adjustment, NCI of 280.00 and goodwill of 80.00.",
+        "Period profit of USD 100.00 at the 1.3750 average is CAD 137.50; NCI income is 137.50 × 20% = CAD 27.50, leaving NCI equity at a 307.50 credit."
+      ],
+      "ms": 22
+    },
+    {
+      "id": "consol-loss-of-control",
+      "title": "Loss of control derecognises the subsidiary and remeasures any retained interest",
+      "standards": [
+        "IFRS 10"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 10",
+          "reference": "IFRS 10.25",
+          "kind": "requirement",
+          "requirement": "When control is lost, the former parent derecognises the subsidiary's assets, liabilities and non-controlling interests, recognises any retained investment at fair value, and reclassifies related translation differences to profit or loss."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Selling down from 80% to 20% removes the subsidiary's net assets and NCI from the consolidated balance sheet, books the retained 20% at its fair value, and recognises the resulting gain or loss with the accumulated translation difference reclassified out of equity.",
+      "facts": [
+        "A parent sells 60% of an 80%-owned subsidiary, retaining 20% with significant influence.",
+        "The subsidiary's consolidated net assets including goodwill are CAD 1,180.00 with NCI of CAD 280.00.",
+        "The retained 20% has a fair value of CAD 400.00; proceeds for the 60% sold are CAD 1,200.00.",
+        "The disposal gain is 1,200.00 + 400.00 − (1,180.00 − 280.00) = CAD 700.00."
+      ],
+      "gap": "The engine has no loss-of-control accounting: closing or narrowing an ownership policy simply stops future consolidation generations, leaving the parent's investment at cost with no derecognition of the subsidiary's net assets, no release of NCI, no fair-value remeasurement of any retained interest, and no reclassification of translation differences.",
       "ms": 0
     }
   ]
