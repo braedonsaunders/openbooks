@@ -121,6 +121,19 @@ export function decimalPercentChange(current: string, prior: string): ExactDecim
   return fromDecimalUnits(roundDiv(diff * 100n * SCALE, denominator))
 }
 
+/** Margin ratio → exact percent units for presentation.
+ *
+ *  `decimalRatio` (web/lib/reports/decimals.ts) returns a canonical ratio: a
+ *  25% project margin is '0.2500', NOT '2500.0000'. Both the profitability
+ *  table (Intl percent style divides by 100 itself) and its CSV/XLSX/PDF
+ *  export (toFixed over percent units) must scale that ratio exactly once
+ *  through this helper — never with inline math at the call site — so
+ *  display and export cannot diverge again. Scaling by 100 is exact in 4dp
+ *  units; no rounding occurs. */
+export function marginRatioToPercent(margin: ExactDecimal): ExactDecimal {
+  return fromDecimalUnits(toDecimalUnits(margin) * 100n)
+}
+
 /** Convert an exact decimal to a Number strictly for Intl formatting of a
  *  single already-rounded display cell (never for aggregation). */
 export function decimalToNumber(value: StatementValue): number {

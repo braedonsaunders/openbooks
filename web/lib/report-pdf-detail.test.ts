@@ -17,20 +17,26 @@ registerHooks({
 })
 
 const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData } = await import('./report-pdf.ts')
+const { decimalRatio } = await import('./reports/decimals.ts')
 
 const t = (key: string) => key
 
-test('project profitability export renders ratio margins at the correct percent scale', () => {
+test('project profitability export agrees with the table on decimalRatio margins', () => {
+  // The producer stores margin = decimalRatio(net, revenue): a canonical
+  // ratio, so net 25 / revenue 100 is '0.2500' — not '2500.0000'. The export
+  // must print the same 25.0% the table displays.
+  const margin = decimalRatio('25.0000', '100.0000')
+  assert.equal(margin, '0.2500')
   const data = projectProfitabilityExportData({
     from: '2026-01-01',
     to: '2026-01-31',
     rows: [],
     customers: [{
       customerName: 'Exact Customer',
-      rows: [{ projectName: 'Exact Job', revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin: '2500.0000', hours: 1 }],
-      totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin: '2500.0000', hours: 1 },
+      rows: [{ projectName: 'Exact Job', revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 }],
+      totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 },
     }],
-    totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin: '2500.0000', hours: 1 },
+    totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 },
   }, t)
 
   assert.equal(data.groups[0]?.rows[0]?.[6], '25.0%')
