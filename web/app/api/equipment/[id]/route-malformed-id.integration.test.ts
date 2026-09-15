@@ -29,6 +29,7 @@ registerHooks({
   },
 });
 const { POST } = await import("./capitalize/route");
+const { DELETE } = await import("./route");
 
 test("equipment capitalization returns 404 for a malformed unit id", { skip: !enabled }, async () => {
   const org = await createScratchOrg();
@@ -45,6 +46,11 @@ test("equipment capitalization returns 404 for a malformed unit id", { skip: !en
         params: Promise.resolve({ id }),
       });
       assert.equal(response.status, 404, `POST capitalize ${id}`);
+
+      const deleted = await DELETE(new Request(`https://openbooks.test/api/equipment/${id}`, { method: "DELETE" }), {
+        params: Promise.resolve({ id }),
+      });
+      assert.equal(deleted.status, 404, `DELETE equipment ${id}`);
     }
   } finally {
     identity.gate = null;
