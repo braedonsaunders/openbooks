@@ -1,0 +1,108 @@
+name: mutation
+
+# Nightly, non-blocking mutation measurement for the financial engine.
+# Report first, gate later: this job never fails the build (continue-on-error)
+# — it uploads the JSON + Markdown report as an artifact. The ratchet lives
+# in-repo: engine/src/harness/mutation/mutation-floor.test.ts fails `npm run
+# test:unit` when a ratified score drops below its floor. Floors move only by
+# an explicit commit of mutation-report.json + mutation-floor.json together.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SESSION_SECRET: openbooks-ci-test-secret-not-production
+  OPENBOOKS_DATA_KEY: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+  ORG_COUNTRY: US
+  ORG_CURRENCY: USD
+
+jobs:
+  measure:
+    name: measure mutation score
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_mutation
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_mutation"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_mutation
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_mutation
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
+      OPENBOOKS_TEST_DB_ISOLATED: "1"
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install qpdf
+        run: sudo apt-get update && sudo apt-get install -y qpdf
+
+      - name: Load schema
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Mark database as the owned ephemeral fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER="openbooks-ci-ephemeral-$(uuidgen)"
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
+            -c "comment on database openbooks_mutation is '$MARKER'"
+          echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
+
+      - name: Run the mutation harness
+        # Non-blocking by job-level continue-on-error: a red baseline or a
+        # crashed mutant run uploads its partial report instead of failing.
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:mutation -- --sample 10 --timeout-secs 300 2>&1 | tee mutation.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "# Mutation score"
+            echo ""
+            echo "Sampled run (10 mutants/target, DB-backed). Full detail in the **mutation-report** artifact."
+            echo ""
+            grep -E "^\| " .local/mutation/mutation-report.md 2>/dev/null || tail -30 mutation.log
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: mutation-report
+          path: |
+            mutation.log
+            .local/mutation/mutation-report.json
+            .local/mutation/mutation-report.md
+          if-no-files-found: warn
