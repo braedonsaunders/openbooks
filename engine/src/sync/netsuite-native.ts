@@ -30,6 +30,10 @@ export interface NsHeader {
   duedate?: string | null;
   entity?: string | null;
   currency?: string | null;
+  /** Display value of the transaction currency (BUILTIN.DF(t.currency)). */
+  currencylabel?: string | null;
+  /** Transaction→base rate for a foreign-currency transaction. */
+  exchangerate?: string | null;
   memo?: string | null;
   status?: string | null;
   /** NetSuite approval status: 1 pending, 2 approved, 3 rejected. */
@@ -182,6 +186,77 @@ const glUnits = (l: NsLine): bigint =>
       ? l.foreignamount
       : l.netamount) ?? "0",
   );
+
+/**
+ * NetSuite display names for transaction currencies. Mirrors the subsidiary
+ * loader's resolution in netsuite-source.ts so a document and its legal
+ * entity never disagree on what "USA" means.
+ */
+const NETSUITE_CURRENCY_ALIASES: Record<string, string> = {
+  CAN: "CAD",
+  CDN: "CAD",
+  "CANADIAN DOLLAR": "CAD",
+  USA: "USD",
+  "US DOLLAR": "USD",
+  "U.S. DOLLAR": "USD",
+};
+
+/**
+ * Resolve a NetSuite currency display value (`BUILTIN.DF(t.currency)`, or a
+ * raw ISO symbol when the account returns one) to ISO. Returns null when the
+ * value names no currency — callers fail closed.
+ */
+export function netSuiteCurrencyIso(label: unknown): string | null {
+  const text = String(label ?? "").trim().toUpperCase();
+  if (!text) return null;
+  return (
+    NETSUITE_CURRENCY_ALIASES[text] ?? (/^[A-Z]{3}$/.test(text) ? text : null)
+  );
+}
+
+/**
+ * Transaction currency and rate for the native document. Base-currency
+ * documents omit both (the kernel defaults to the source base at par), while
+ * a foreign document without a resolvable currency or a positive rate fails
+ * closed: posting it at face value as base currency would silently misstate
+ * every account it touches.
+ */
+function netSuiteDocumentFx(
+  baseCurrency: string,
+  h: NsHeader,
+): { currency?: string; fxRate?: string } | { skip: string } {
+  const stated = String(h.currencylabel ?? h.currency ?? "").trim() !== "";
+  const iso = netSuiteCurrencyIso(h.currencylabel ?? h.currency);
+  const ref = h.tranid ?? h.id;
+  if (!iso) {
+    // No currency stated: the source base default stands. A stated value that
+    // resolves to nothing is not the base — it is an unknown foreign
+    // currency that must never post at face value.
+    if (stated) {
+      return {
+        skip: `source transaction ${ref} names an unresolvable currency`,
+      };
+    }
+    return {};
+  }
+  if (iso === String(baseCurrency ?? "").trim().toUpperCase()) {
+    return {};
+  }
+  let fxRate: string;
+  try {
+    fxRate = normalizeDecimal(String(h.exchangerate ?? ""), 10);
+  } catch {
+    return {
+      skip: `source transaction ${ref} is in ${iso} but carries no usable exchange rate`,
+    };
+  }
+  if (fxRate.startsWith("-") || /^0(\.0+)?$/.test(fxRate)) {
+    return {
+      skip: `source transaction ${ref} is in ${iso} but carries no usable exchange rate`,
+    };
+  }
+  return { currency: iso, fxRate };
+}
 
 function taxOnBase(baseUnits: bigint, rateUnits: bigint): bigint {
   return round2((baseUnits * rateUnits) / (100n * 10000n));
@@ -340,12 +415,15 @@ export function buildNativeFromNetSuite(
   )?.taxcode;
   if (unmappedTaxCode) return { skip: `unmapped tax code ${unmappedTaxCode}` };
   const documentDate = parseNsDate(h.trandate);
+  const fx = netSuiteDocumentFx(ctx.baseCurrency, h);
+  if ("skip" in fx) return fx;
   const base: Omit<NativeDocument, "kind" | "lines"> = {
     sourceRef: h.id,
     documentNumber: h.tranid ?? h.id,
     posting: true,
     partyId,
     subsidiaryId,
+    ...(fx.currency ? { currency: fx.currency, fxRate: fx.fxRate } : {}),
     documentDate,
     // NetSuite exposes transaction date and posting period as independent
     // accounting facts. Do not invent a period-end date for late or

@@ -333,7 +333,8 @@ export function normalizeNetSuiteTimeEntry(
   };
 }
 const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate,
-  TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
+  TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, BUILTIN.DF(t.currency) AS currencylabel,
+  t.exchangerate, t.memo, t.status,
   t.approvalstatus, t.otherrefnum, t.posting, t.postingperiod`;
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
   tl.expenseaccount, tl.netamount, tl.foreignamount, tl.quantity, tl.rate,
