@@ -4,6 +4,8 @@ import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/e
 import { db } from '@openbooks/engine/src/db.ts'
 import { BANK_KINDS } from '../documents'
 import { statementBookExpr } from '../gl-summary'
+import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
+import { mulDecimal } from '@openbooks/engine/src/money.ts'
 
 /**
  * Banking module home — one light round trip for the workspace landing
@@ -90,6 +92,7 @@ export async function bankingHome(
     // Roster — one row per reconcilable account with balance + workflow state.
     db.execute(sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
+             bal.func as func,
              coalesce(bal.balance, 0) as balance,
              coalesce(unm.n, 0) as unmatched,
              openrec.id as open_reconciliation_id,
@@ -98,10 +101,12 @@ export async function bankingHome(
              st.imported_at as last_imported_at
         from accounts a
         left join lateral (
-          select sum(jl.amount) as balance
+          select sub.base_currency as func, sum(jl.amount) as balance
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
-           where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}) bal on true
+            left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
+           where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}
+           group by sub.base_currency) bal on true
         left join lateral (
           select count(*) as n
             from bank_statement_lines l
@@ -129,15 +134,17 @@ export async function bankingHome(
     db.execute<any>(sql`
       select jl.account_id,
              (date_trunc('week', je.posting_date))::date as wk,
+             sub.base_currency as func,
              sum(jl.amount) as flow,
              sum(jl.amount) filter (where je.posting_date >= ${ago7}) as flow_7d
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+        left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
        where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
          and je.posting_date >= ${trendFrom}
-       group by 1, 2
+       group by 1, 2, 3
     `),
     // Directory badges — org-wide counts for the workspace's other pages.
     db.execute(sql`
@@ -159,18 +166,38 @@ export async function bankingHome(
 
   // Per-account weekly flows → end-of-week balances walked BACKWARD from the
   // current balance (avoids a 13× running-sum query).
+  // Presentation: legs arrive per (account, functional). Translate every leg
+  // at the tile-date (closing) spot and re-sum in one basis, so balances,
+  // sparklines, and the trend never mix subsidiary currencies and the
+  // backward walk stays consistent. Missing coverage fails closed.
+  const base = await presentationCurrency(orgId)
+  const rates = await presentationRates(
+    orgId,
+    base,
+    [...rosterRes.rows.map((r) => r.func ?? null), ...flowsRes.rows.map((r) => r.func ?? null)],
+    today,
+  )
+  const tr = (amount: unknown, func: unknown): number =>
+    Number(mulDecimal(String(amount ?? 0), rates.get(lineFunctional(typeof func === "string" ? func : null, base))!))
+
   const flows = new Map<string, Map<string, number>>()
-  let netFlow7d = 0
   for (const r of flowsRes.rows) {
     const wk = String(r.wk).slice(0, 10)
     let m = flows.get(r.account_id)
     if (!m) flows.set(r.account_id, (m = new Map()))
-    m.set(wk, Number(r.flow))
+    m.set(wk, (m.get(wk) ?? 0) + tr(r.flow, r.func))
   }
 
-  const accounts: BankingAccountRow[] = rosterRes.rows.map((a: any) => {
-    const balance = Number(a.balance)
-    const weekly = flows.get(a.id)
+  const byAccount = new Map<string, { row: Record<string, unknown>; balance: number }>()
+  for (const a of rosterRes.rows) {
+    const cur = byAccount.get(String(a.id)) ?? { row: a, balance: 0 }
+    cur.balance += tr(a.balance, a.func)
+    byAccount.set(String(a.id), cur)
+  }
+
+  const accounts: BankingAccountRow[] = [...byAccount.values()]
+    .map(({ row: a, balance }) => {
+    const weekly = flows.get(String(a.id))
     const spark: number[] = new Array(weekStarts.length)
     let running = balance
     for (let i = weekStarts.length - 1; i >= 0; i--) {
@@ -178,24 +205,28 @@ export async function bankingHome(
       running -= weekly?.get(weekStarts[i]!) ?? 0
     }
     return {
-      id: a.id,
-      number: a.number,
-      name: a.name,
-      type: a.type,
-      currency: a.currency_restriction,
+      id: String(a.id),
+      number: a.number == null ? null : String(a.number),
+      name: String(a.name),
+      type: String(a.type),
+      currency: a.currency_restriction == null ? null : String(a.currency_restriction),
       balance,
       unmatched: Number(a.unmatched),
-      openReconciliationId: a.open_reconciliation_id,
-      reconciledThrough: a.reconciled_through,
-      lastStatementDate: a.last_statement_date,
+      openReconciliationId: a.open_reconciliation_id == null ? null : String(a.open_reconciliation_id),
+      reconciledThrough: a.reconciled_through == null ? null : String(a.reconciled_through),
+      lastStatementDate: a.last_statement_date == null ? null : String(a.last_statement_date),
       lastImportedAt: a.last_imported_at ? String(a.last_imported_at) : null,
       spark,
     }
-  })
+    })
+    // The roster query orders by type then raw leg balance; re-apply on the
+    // translated per-account balances (identical for single-currency views).
+    .sort((x, y) => (x.type < y.type ? -1 : x.type > y.type ? 1 : y.balance - x.balance))
 
   const bankIds = new Set(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.id))
+  let netFlow7d = 0
   for (const r of flowsRes.rows) {
-    if (r.flow_7d != null && bankIds.has(r.account_id)) netFlow7d += Number(r.flow_7d)
+    if (r.flow_7d != null && bankIds.has(r.account_id)) netFlow7d += tr(r.flow_7d, r.func)
   }
 
   const trend = weekStarts.map((weekStart, i) => ({
