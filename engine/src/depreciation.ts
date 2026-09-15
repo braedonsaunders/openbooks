@@ -280,7 +280,7 @@ async function assetDepreciationCalendar(runner: SqlExecutor, orgId: string, ass
 export interface BuildScheduleResult {
   scheduleId: string;
   lineCount: number;
-  /** months that had no accounting period and were skipped */
+  /** future months beyond the calendared horizon, still unmapped */
   skippedMonths: string[];
 }
 
@@ -588,6 +588,16 @@ export async function buildScheduleWithRunner(
     // inside a retail 5-week period — and the period then bears the SUM of its
     // months, never a last-month-wins overwrite and never a dropped month.
     const mappedPeriods = new Map<string, number>();
+    // The calendared horizon: months starting after every known period ends
+    // are future gaps (mapped when their periods are created). A month at or
+    // below the horizon with no period is history — a backdated in-service
+    // month or a skipped period — and its depreciation must catch up into the
+    // next mapped period, never vanish: dropped months would leave lifetime
+    // depreciation below cost minus salvage with no error and no signal.
+    const horizonEnd = periods.reduce<string | undefined>((max, period) =>
+      max === undefined || period.ends_on > max ? period.ends_on : max, undefined);
+    let pendingCatchUp = "0";
+    let firstUnplacedMonth: string | null = null;
     for (const p of plan) {
       const period = periods.find(period => period.starts_on <= p.periodMonth && period.ends_on >= p.periodMonth);
       if (!period) {
@@ -595,6 +605,11 @@ export async function buildScheduleWithRunner(
         // Future calendar gaps are harmless: they still consume native life.
         if (remeasurement.cutoff && p.periodMonth < monthStart(remeasurement.cutoff)) {
           throw new Error(`historical accounting period missing for depreciation projection (${p.periodMonth})`);
+        }
+        if (!remeasurement.cutoff && horizonEnd !== undefined && p.periodMonth <= horizonEnd) {
+          pendingCatchUp = add(pendingCatchUp, p.planned);
+          firstUnplacedMonth ??= p.periodMonth;
+          continue;
         }
         skippedMonths.push(p.periodMonth);
       }
@@ -604,6 +619,9 @@ export async function buildScheduleWithRunner(
       }
       if (period && preservedPeriods.has(period.id)) continue;
       if (prior && prior.source !== "formula") throw new Error("formula rebuild cannot reinterpret depreciation input evidence");
+      // Caught-up history lands in the next mapped, unposted period — the
+      // same SUM semantics as retail months sharing one period.
+      const carried = period && pendingCatchUp !== "0" ? add(p.planned, pendingCatchUp) : p.planned;
       if (period) {
         // Same period, same prior row, same preserved outcome as the month
         // already mapped here — the checks above necessarily agreed with it —
@@ -611,12 +629,19 @@ export async function buildScheduleWithRunner(
         const merged = mappedPeriods.get(period.id);
         if (merged !== undefined) {
           const target = future[merged]!;
-          target.plan = { ...target.plan, planned: add(target.plan.planned, p.planned) };
+          target.plan = { ...target.plan, planned: add(target.plan.planned, carried) };
+          pendingCatchUp = "0";
           continue;
         }
       }
-      future.push({ periodId: period?.id ?? null, plan: p });
-      if (period) mappedPeriods.set(period.id, future.length - 1);
+      future.push({ periodId: period?.id ?? null, plan: period ? { ...p, planned: carried } : p });
+      if (period) {
+        pendingCatchUp = "0";
+        mappedPeriods.set(period.id, future.length - 1);
+      }
+    }
+    if (pendingCatchUp !== "0") {
+      throw new Error(`historical accounting period missing for depreciation projection (${firstUnplacedMonth}); provision the period or shorten the depreciable life before rebuilding`);
     }
 
     // Allocate across the entire native remaining horizon BEFORE mapping to
