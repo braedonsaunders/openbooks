@@ -43,7 +43,7 @@ const { documentRevisionSql } = await import('@openbooks/engine/src/document-rev
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { assertExpenseEmployee } = await import('@openbooks/engine/src/expense-validation.ts')
-const { GET, PATCH } = await import('./route')
+const { GET, PATCH, DELETE } = await import('./route')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>, id: string) => Promise<void>) {
@@ -65,6 +65,10 @@ async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>,
   }
 }
 const get = (id: string) => withOrgContext(state.orgId, () => GET(new Request('http://expense.test'), { params: Promise.resolve({ id }) }))
+const del = (id: string, body: unknown) => withOrgContext(state.orgId, () => DELETE(new Request('http://expense.test', { method: 'DELETE', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
+async function exists(id: string) {
+  return (await db.execute<{ id: string }>(sql`select id from documents where id=${id} and org_id=${state.orgId}`)).rows.length > 0
+}
 const patch = (id: string, body: unknown) => withOrgContext(state.orgId, () => PATCH(new Request('http://expense.test', { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
 async function revision(id: string) {
   return (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from documents where id=${id} and org_id=${state.orgId}`)).rows[0]!.revision
@@ -270,5 +274,33 @@ test('expense PATCH refuses a line account from another organization but saves a
     }
   })
 })
+
+
+test('expense DELETE without a revision token is rejected as a 409 without deleting', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    const response = await del(id, {})
+    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()))
+    assert.equal(await exists(id), true, 'the draft must survive a token-less delete')
+  })
+})
+
+test('expense DELETE with a stale revision token is rejected as a 409 without deleting', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    const stale = await revision(id)
+    await db.execute(sql`update documents set memo='concurrent writer', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`)
+    const response = await del(id, { expectedUpdatedAt: stale })
+    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()))
+    assert.equal(await exists(id), true, 'the draft must survive a stale delete')
+  })
+})
+
+test('expense DELETE with the exact revision deletes the draft', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    const response = await del(id, { expectedUpdatedAt: await revision(id) })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    assert.equal(await exists(id), false, 'the exact-revision delete removes the draft')
+  })
+})
+
 
 test.after(async () => { await pool.end() })

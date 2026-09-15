@@ -366,7 +366,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** Delete an expense report (guarded: open period, no applied payments, no downstream conversion). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('expenses.create', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -376,11 +376,27 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
   if (denied) return denied
+  // Mandatory optimistic-concurrency evidence — same contract as the PATCH
+  // verb in this file and DELETE /api/documents/[id]: a delete that lands
+  // on a stale read must 409 instead of discarding another writer's draft.
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { expectedUpdatedAt?: string }
+  let expectedRevision: string
   try {
-    await deleteDocument(id, gate.user.id, gate.user.orgId)
+    expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
+  } catch (e) {
+    if (e instanceof DocumentEditError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
+    throw e
+  }
+  try {
+    await deleteDocument(id, gate.user.id, gate.user.orgId, { source: 'ui', expectedUpdatedAt: expectedRevision })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
+    // The engine fence carries its own 409; every other refusal stays 422.
+    if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e
   }
 }
