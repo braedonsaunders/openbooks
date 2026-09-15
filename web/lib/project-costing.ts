@@ -403,8 +403,8 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
   )
   const [timeRow, lineRow] = await Promise.all([
     db.execute(sql`
-      select coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as revenue,
-             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
+      select coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as revenue,
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
              coalesce(sum(te.hours), 0) as hours,
              count(*) as cnt
         from time_entries te
