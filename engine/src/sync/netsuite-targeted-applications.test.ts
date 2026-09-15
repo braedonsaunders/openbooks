@@ -29,6 +29,7 @@ test("targeted NetSuite pulls include payment links touching either document sid
             nextdoc: "20",
             nextline: "2",
             foreignamount: "25.0000",
+            payexrate: "1",
           },
         ];
       }
@@ -46,6 +47,6 @@ test("targeted NetSuite pulls include payment links touching either document sid
   ]);
   assert.match(
     queries.find((query) => /nexttransactionlinelink/i.test(query))!,
-    /nextdoc IN \(10\) OR previousdoc IN \(10\)/,
+    /n\.nextdoc IN \(10\) OR n\.previousdoc IN \(10\)/,
   );
 });
