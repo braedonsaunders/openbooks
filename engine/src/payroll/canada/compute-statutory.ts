@@ -13,6 +13,8 @@ export type CanadaYtdRow = {
   cpp2: string;
   ei: string;
   qpip: string;
+  /** Employer QPIP has its own annual maximum, so it needs its own YTD. */
+  qpip_employer: string;
   non_periodic: string;
   f5b: string;
   qc_csb: string;
@@ -49,6 +51,7 @@ export async function employeeYtd(
       coalesce((select qpip_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'QPIP')::numeric), 0) as qpip,
+      coalesce(sum((s.factors->>'QPIP_ER')::numeric), 0) as qpip_employer,
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,
@@ -105,7 +108,7 @@ export async function computeCaStatutory(
     cppExempt: bool(emp.cpp_exempt),
     eiExempt: bool(emp.ei_exempt),
     ytd: {
-      cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip,
+      cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip, qpipEmployer: ytd.qpip_employer,
       pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
       nonPeriodicCppEnhancedDeductions: ytd.f5b,
     },
