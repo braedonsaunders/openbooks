@@ -239,7 +239,7 @@ const hooks = registerHooks({
     // The './documents' mock stands in for web/lib/documents.ts only: schema
     // table modules (schema/src/*.ts) import the same literal specifier for
     // the real documents table, and hijacking those breaks their bindings.
-    if (mockUrl === 'mock:documents' && context.parentURL.includes('/schema/src/')) {
+    if (mockUrl === 'mock:documents' && (context.parentURL ?? '').includes('/schema/src/')) {
       return nextResolve(specifier, context)
     }
     if (mockUrl) return { url: mockUrl, shortCircuit: true }
