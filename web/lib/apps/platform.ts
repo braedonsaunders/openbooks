@@ -146,6 +146,28 @@ function allowedField(schema: ApiRecordTypeSchema, name: string): ApiField | nul
   return undefined
 }
 
+function hasSubsidiaryField(schema: ApiRecordTypeSchema): boolean {
+  return schema.fields.some((field) => field.name === 'subsidiary_id')
+}
+
+/** Custom records store declared fields inside jsonb rather than columns. */
+function subsidiaryScopeCondition(
+  ctx: AppPlatformContext,
+  resolved: ResolvedApiType,
+  schema: ApiRecordTypeSchema,
+): SQL | null {
+  if (ctx.allowedSubsidiaryIds === null || !hasSubsidiaryField(schema)) return null
+  const ids = [...ctx.allowedSubsidiaryIds]
+  if (resolved.dynamic) {
+    return ids.length > 0
+      ? sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(ids)}::text[])`
+      : sql`false`
+  }
+  return ids.length > 0
+    ? sql`subsidiary_id = any(${pgTextArrayLiteral(ids)}::uuid[])`
+    : sql`false`
+}
+
 function filterCondition(expression: SQL, filter: ListFilter, textBacked: boolean): SQL {
   const op = filter.operator ?? 'eq'
   if (op === 'isNull') return filter.value === false ? sql`${expression} is not null` : sql`${expression} is null`
@@ -187,10 +209,8 @@ async function listRecords(
     conditions.push(sql`kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])`)
   }
   if (resolved.dynamic) conditions.push(sql`type_key = ${resolved.key}`)
-  if (ctx.allowedSubsidiaryIds && typeSchema.fields.some((field) => field.name === 'subsidiary_id')) {
-    const ids = [...ctx.allowedSubsidiaryIds]
-    conditions.push(ids.length > 0 ? sql`subsidiary_id in ${ids}` : sql`false`)
-  }
+  const subsidiaryCondition = subsidiaryScopeCondition(ctx, resolved, typeSchema)
+  if (subsidiaryCondition) conditions.push(subsidiaryCondition)
 
   const q = typeof options.q === 'string' ? options.q.trim().slice(0, 500) : ''
   if (q) {
@@ -235,17 +255,16 @@ async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): 
   if (!isUuid(id)) throw new AppPlatformError('invalid record id', 400)
   const resolved = await requireOperation(ctx, typeKey, 'get')
   const typeSchema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
-  const subsidiaryScope =
-    ctx.allowedSubsidiaryIds && typeSchema?.fields.some((field) => field.name === 'subsidiary_id')
-      ? [...ctx.allowedSubsidiaryIds]
-      : null
+  const subsidiaryCondition = typeSchema
+    ? subsidiaryScopeCondition(ctx, resolved, typeSchema)
+    : null
   const table = quoteIdentifier(resolved.table)
   const result = (await db.execute<Record<string, unknown>>(sql`
     select *${documentRevisionProjection(resolved.table)} from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
        ${resolved.documentKinds ? sql`and kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])` : sql``}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
-       ${subsidiaryScope ? (subsidiaryScope.length > 0 ? sql`and subsidiary_id in ${subsidiaryScope}` : sql`and false`) : sql``}
+       ${subsidiaryCondition ? sql`and ${subsidiaryCondition}` : sql``}
      limit 1`))
   return normalizeDocumentRecordRevisions(resolved.table, result.rows)[0] ?? null
 }
@@ -311,7 +330,13 @@ async function assertSubsidiaryWriteScope(
   const schema = (await loadApiSchema(ctx.orgId)).find((type) => type.key === typeKey)
   if (!schema?.fields.some((field) => field.name === 'subsidiary_id')) return
 
-  const requested = body.subsidiaryId ?? body.subsidiary_id
+  const customData =
+    resolved.dynamic && body.data && typeof body.data === 'object' && !Array.isArray(body.data)
+      ? body.data as Record<string, unknown>
+      : null
+  const requested = resolved.dynamic
+    ? customData?.subsidiary_id
+    : body.subsidiaryId ?? body.subsidiary_id
   if (requested === null && operation !== 'create') {
     throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
   }
@@ -324,8 +349,13 @@ async function assertSubsidiaryWriteScope(
       if (allowed.length !== 1) {
         throw new AppPlatformError('subsidiaryId is required for this record', 422)
       }
-      if (resolved.writer.kind === 'document') body.subsidiaryId = allowed[0]
-      else body.subsidiary_id = allowed[0]
+      if (resolved.dynamic) {
+        body.data = { ...(customData ?? {}), subsidiary_id: allowed[0] }
+      } else if (resolved.writer.kind === 'document') {
+        body.subsidiaryId = allowed[0]
+      } else {
+        body.subsidiary_id = allowed[0]
+      }
     }
     return
   }
@@ -336,7 +366,14 @@ async function assertSubsidiaryWriteScope(
   const found = (await db.execute(sql`
     select 1 from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
-       ${allowed.length > 0 ? sql`and subsidiary_id in ${allowed}` : sql`and false`}
+       ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
+       ${resolved.dynamic
+         ? (allowed.length > 0
+           ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(allowed)}::text[])`
+           : sql`and false`)
+         : (allowed.length > 0
+           ? sql`and subsidiary_id = any(${pgTextArrayLiteral(allowed)}::uuid[])`
+           : sql`and false`)}
      limit 1`))
   if (!found.rows[0]) throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
 }
