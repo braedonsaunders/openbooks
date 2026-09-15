@@ -356,17 +356,36 @@ async function saveAutomation(orgId: string, actorId: string, body: Body) {
     ].includes(action)
   )
     throw new CloseError("invalid automation action");
-  if (id) {
-    await db.execute(sql`update close_automation_rules set name = ${text(body, "name", true)!}, trigger = ${trigger}, action = ${action},
-      conditions = ${JSON.stringify(object(body, "conditions"))}::jsonb, config = ${JSON.stringify(object(body, "config"))}::jsonb,
-      is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${actorId} where id = ${id} and org_id = ${orgId}`);
-    return id;
-  }
-  const result = (await db.execute(sql`insert into close_automation_rules
-    (org_id, name, trigger, action, conditions, config, is_active, created_by, updated_by)
-    values (${orgId}, ${text(body, "name", true)!}, ${trigger}, ${action}, ${JSON.stringify(object(body, "conditions"))}::jsonb,
-            ${JSON.stringify(object(body, "config"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId}) returning id`)) as any;
-  return result.rows[0].id as string;
+  return db.transaction(async (tx) => {
+    const beforeResult = id
+      ? await tx.execute(sql`
+          select * from close_automation_rules
+           where id = ${id} and org_id = ${orgId}
+           for update`)
+      : { rows: [] as Record<string, unknown>[] };
+    const before = beforeResult.rows[0] ?? null;
+    if (id && !before) throw new CloseError("automation not found");
+
+    const result = (id
+      ? await tx.execute(sql`
+          update close_automation_rules set name = ${text(body, "name", true)!}, trigger = ${trigger}, action = ${action},
+            conditions = ${JSON.stringify(object(body, "conditions"))}::jsonb, config = ${JSON.stringify(object(body, "config"))}::jsonb,
+            is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${actorId}
+           where id = ${id} and org_id = ${orgId}
+           returning *`)
+      : await tx.execute(sql`
+          insert into close_automation_rules
+            (org_id, name, trigger, action, conditions, config, is_active, created_by, updated_by)
+          values (${orgId}, ${text(body, "name", true)!}, ${trigger}, ${action}, ${JSON.stringify(object(body, "conditions"))}::jsonb,
+                  ${JSON.stringify(object(body, "config"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId})
+          returning *`)) as { rows: Array<Record<string, unknown>> };
+    const after = result.rows[0];
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'close_automation_rules', ${after?.id}, ${before ? "update" : "insert"},
+              ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
+    return after?.id as string;
+  });
 }
 
 async function savePackage(orgId: string, actorId: string, body: Body) {

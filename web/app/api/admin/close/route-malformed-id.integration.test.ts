@@ -102,7 +102,7 @@ test("close policy saves emit one audit event for each mutation", { skip: !proce
       rules: { threshold: "1000.0000" },
       isActive: true,
     })));
-    assert.equal(create.status, 200, await create.text());
+    if (create.status !== 200) throw new Error(`create policy failed: ${await create.text()}`);
 
     const update = await withOrgContext(org.orgId, () => POST(request({
       action: "save-policy",
@@ -113,13 +113,60 @@ test("close policy saves emit one audit event for each mutation", { skip: !proce
       rules: { threshold: "2000.0000" },
       isActive: true,
     })));
-    assert.equal(update.status, 200, await update.text());
+    if (update.status !== 200) throw new Error(`update policy failed: ${await update.text()}`);
 
     const audit = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
       select count(*)::int as count
         from audit_log
        where org_id = ${org.orgId}
          and table_name = 'close_policies'
+         and action in ('insert', 'update')`));
+    assert.equal(audit.rows[0]?.count, 2);
+  } finally {
+    state.user = { orgId: "", id: "" };
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("close automation saves emit one audit event for each mutation", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Close Automation Admin", "close-automation-admin");
+    state.user = { orgId: org.orgId, id: actorId };
+    await withBypassContext(() =>
+      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
+    );
+
+    const create = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-automation",
+      name: "Notify on close run",
+      trigger: "run_started",
+      automationAction: "notify",
+      conditions: { severity: "high" },
+      config: { channel: "email" },
+      isActive: true,
+    })));
+    if (create.status !== 200) throw new Error(`create automation failed: ${await create.text()}`);
+    const automationId = (await create.json()).id as string;
+
+    const update = await withOrgContext(org.orgId, () => POST(request({
+      action: "save-automation",
+      id: automationId,
+      name: "Notify on completed close run",
+      trigger: "run_closed",
+      automationAction: "notify",
+      conditions: { severity: "critical" },
+      config: { channel: "email" },
+      isActive: true,
+    })));
+    if (update.status !== 200) throw new Error(`update automation failed: ${await update.text()}`);
+
+    const audit = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
+      select count(*)::int as count
+        from audit_log
+       where org_id = ${org.orgId}
+         and table_name = 'close_automation_rules'
+         and row_id = ${automationId}
          and action in ('insert', 'update')`));
     assert.equal(audit.rows[0]?.count, 2);
   } finally {
