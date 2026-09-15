@@ -1,6 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { mulDecimal } from '@openbooks/engine/src/money.ts'
+import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
 
 function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
@@ -35,6 +37,7 @@ export async function openItems(
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
+             sub.base_currency as func,
              abs(jl.amount) - coalesce((
                select sum(x.amount) from applications x
                 where x.org_id = ${orgId}
@@ -47,17 +50,27 @@ export async function openItems(
          and je.posting_date <= ${asOf}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${signFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
+        left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
          ${subScope(sql`jl.subsidiary_id`, subIds)}
     )
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
-           oi.tran_date, oi.due_date, oi.remaining
+           oi.tran_date, oi.due_date, oi.remaining, oi.func
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
      where oi.remaining > 0
   `))
-  return (result.rows as any[]).map((row) => ({
+  // `remaining` nets in the line entity's functional currency (legs are
+  // stamped functional; applications.amount is target-functional and the sign
+  // filter keeps only target-side control lines). A consolidated view spans
+  // functionals, so each item translates to the presentation currency at the
+  // closing spot — raw functionals would mix subsidiary currencies. One rate
+  // lookup per functional in view; missing coverage fails closed.
+  const rows = result.rows as any[]
+  const base = await presentationCurrency(orgId)
+  const rates = await presentationRates(orgId, base, rows.map((row) => row.func ?? null), asOf)
+  return rows.map((row) => ({
     id: row.id,
     entryId: row.entry_id,
     docKind: row.doc_kind ?? null,
@@ -71,6 +84,6 @@ export async function openItems(
     // exact at the boundary; converting to Number would round valid
     // numeric(19,4) balances before the forecast has a chance to aggregate
     // them.
-    remaining: normalizeMoneyValue(String(row.remaining)),
+    remaining: normalizeMoneyValue(mulDecimal(String(row.remaining), rates.get(lineFunctional(row.func ?? null, base))!)),
   }))
 }

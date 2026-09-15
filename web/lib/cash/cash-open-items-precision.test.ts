@@ -9,7 +9,11 @@ const source = (name: string) => readFileSync(join(cashRoot, name), 'utf8')
 
 test('cash open-item boundary keeps exact numeric(19,4) text', () => {
   const openItems = source('open-items.ts')
-  assert.match(openItems, /remaining: normalizeMoneyValue\(String\(row\.remaining\)\)/)
+  // Presentation translation wraps the exact-text boundary (mulDecimal on the
+  // decimal string, never Number) — consolidated views translate each
+  // functional line at the closing spot instead of mixing subsidiary
+  // currencies.
+  assert.match(openItems, /remaining: normalizeMoneyValue\(mulDecimal\(String\(row\.remaining\)/)
   assert.doesNotMatch(openItems, /remaining:\s*Number\(row\.remaining\)/)
 
   const large = '9007199254740993.0000'
