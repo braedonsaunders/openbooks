@@ -2559,10 +2559,14 @@ export async function publishCloseRun(
   if (packageId) {
     try {
       const { enqueueCloseDelivery } = await import("@openbooks/jobs");
-      await enqueueCloseDelivery(
-        { orgId, runId, packageId },
-        { jobId: `close-package|${runId}` },
-      );
+      // No fixed jobId: every publication is its own delivery obligation. A
+      // run-scoped id would collide with the first publication's (possibly
+      // completed) job, and BullMQ answers a repeated id with the ORIGINAL
+      // job instead of queueing — so a corrected re-publication after a
+      // controlled reopen would silently never deliver. Double publication
+      // needs no idempotence key: the status guard above admits exactly one
+      // publish per close, and concurrent publishers serialize on the run row.
+      await enqueueCloseDelivery({ orgId, runId, packageId });
     } catch (error) {
       console.error("[close] failed to enqueue package delivery:", error);
     }
