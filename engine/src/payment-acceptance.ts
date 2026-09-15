@@ -1177,6 +1177,19 @@ export async function createCheckoutSession(
     throw new PaymentAcceptanceError("Online Payments is disabled");
   }
   if (link.status !== "active") throw new PaymentAcceptanceError(`payment link is ${link.status}`);
+  // Expiry is enforced here, not just on the pay page: the page flips an
+  // expired link on view, but a direct session POST would otherwise mint
+  // provider checkouts against a dead quote indefinitely. The flip commits
+  // in its own transaction because the refusal below must not roll it back.
+  if (link.expiresOn && link.expiresOn < (await businessToday(link.orgId))) {
+    await withOrg(link.orgId, async () => {
+      await db.execute(sql`
+        update payment_links set status = 'expired', updated_at = now()
+         where id = ${link.id} and org_id = ${link.orgId} and status = 'active'
+      `);
+    });
+    throw new PaymentAcceptanceError("payment link is expired");
+  }
   return await withOrg(link.orgId, async () => {
     // Serialize creators for this link BEFORE any read or write below.
     await db.execute(sql`

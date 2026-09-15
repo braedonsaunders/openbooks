@@ -1417,3 +1417,37 @@ test("surcharge quotes are provider-collectible minor units, never sub-cent dust
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("hosted checkout refuses an expired payment link without calling the provider", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-LINK-EXPIRED");
+    // The pay page flips an expired link on view, but a direct session POST
+    // must enforce expiry itself: backdate past the link's expiry unseen.
+    await db.execute(sql`
+      update payment_links set expires_on = '2020-01-01'
+       where id = ${fx.link.id} and org_id = ${org.orgId}
+    `);
+    let providerCalls = 0;
+    const fetchFn = async () => {
+      providerCalls++;
+      return {
+        status: 200,
+        json: async () => ({ id: "cs_test_expired", url: "https://checkout.stripe.test/cs_test_expired" }),
+      };
+    };
+    await assert.rejects(
+      createCheckoutSession(fx.link.token, "https://app.test/pay/" + fx.link.token, fetchFn),
+      (error: unknown) =>
+        error instanceof PaymentAcceptanceError && /expired/i.test(error.message),
+    );
+    assert.equal(providerCalls, 0, "no provider session for an expired link");
+    const state = (await db.execute<{ status: string; attempts: number }>(sql`
+      select (select status from payment_links where id = ${fx.link.id} and org_id = ${org.orgId}) as status,
+             (select count(*)::int from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}) as attempts
+    `)).rows[0]!;
+    assert.deepEqual(state, { status: "expired", attempts: 0 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
