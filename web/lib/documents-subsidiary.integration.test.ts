@@ -53,3 +53,41 @@ test("applyDocumentEdit refuses to clear a document's subsidiary", { skip: !DB }
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("applyDocumentEdit validates partial header custom fields against the stored bag", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Document custom keeper", "document_custom_keeper");
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${randomUUID()}, ${org.orgId}, 'documents', 'vendor_bill', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actor}, ${actor}),
+        (${randomUUID()}, ${org.orgId}, 'documents', 'vendor_bill', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actor}, ${actor})
+    `);
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
+         currency, subtotal, tax_total, total, custom, created_by)
+      values
+        (${id}, ${org.orgId}, 'vendor_bill', 'draft', 'CUSTOM-PATCH-1', ${org.subsidiaryId},
+         ${org.vendorId}, ${org.date}, 'CAD', '0', '0', '0',
+         '{"required_code":"R-1"}'::jsonb, ${actor})
+    `);
+    const current = await loadDocumentEditCurrent(id, org.orgId);
+    assert.ok(current);
+    await applyDocumentEdit(
+      id,
+      current,
+      { custom: { optional_note: "updated" }, expectedUpdatedAt: current.updatedAt },
+      { orgId: org.orgId, userId: actor, source: "api" },
+    );
+    const after = await db.execute<{ custom: Record<string, unknown> }>(sql`
+      select custom from documents where id = ${id} and org_id = ${org.orgId}
+    `);
+    assert.deepEqual(after.rows[0]?.custom, { required_code: "R-1", optional_note: "updated" });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

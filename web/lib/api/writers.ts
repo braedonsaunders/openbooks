@@ -871,6 +871,7 @@ async function updateDocument(
   const owned = await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
+           custom,
            subsidiary_id as "subsidiaryId",
            ${documentRevisionSql(sql.raw("updated_at"))} as "updatedAt"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}

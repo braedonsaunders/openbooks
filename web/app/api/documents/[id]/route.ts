@@ -76,6 +76,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const owned = (await db.execute<(DocumentEditCurrent & { subsidiaryId: string | null })>(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
                document_date as "documentDate",
+               custom,
                ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt",
                subsidiary_id as "subsidiaryId"
           from documents where id = ${id} and org_id = ${user.orgId}`,

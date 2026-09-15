@@ -470,6 +470,7 @@ export type DocumentEditCurrent = {
   partyId: string | null
   documentDate: string
   updatedAt: string
+  custom?: Record<string, unknown>
 };
 
 /** Exact edit snapshot used by every internal and external document writer. */
@@ -480,6 +481,7 @@ export async function loadDocumentEditCurrent(
   const result = await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
+           custom,
            ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
       from documents
      where id = ${id} and org_id = ${orgId}
@@ -754,9 +756,16 @@ export async function applyDocumentEdit(
   if (headerDims && !headerDims.ok) throw new DocumentEditError(422, headerDims.error!)
   let headerCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
-    const v = validateCustomValues(headerDefs, body.custom)
+    const supplied = body.custom
+    const existingCustom = current.custom ?? {}
+    const v = validateCustomValues(headerDefs, { ...existingCustom, ...supplied })
     if (!v.ok) throw new DocumentEditError(422, Object.values(v.errors)[0]!, v.errors)
-    headerCustom = v.cleaned
+    headerCustom = { ...existingCustom, ...v.cleaned }
+    for (const def of headerDefs) {
+      if (Object.prototype.hasOwnProperty.call(supplied, def.key) && supplied[def.key] == null) {
+        delete headerCustom[def.key]
+      }
+    }
   }
 
   // Pre-validate + prepare lines before touching the DB, so a bad line fails
