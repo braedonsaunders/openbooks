@@ -4,7 +4,7 @@ import { db, inDbTransaction, schema } from "./db.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "./subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
-import { businessToday } from "./business-date.ts";
+import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { add, mul, neg, sum, isZero } from "./money.ts";
 
 /**
@@ -98,6 +98,10 @@ export async function postProjectGlEntryWithinTransaction(
 ): Promise<string | null> {
   const { orgId, actorId, origin, entryNumber, postingDate, memo, subsidiaryId, lines } = opts;
   if (!actorId) throw new Error("an attributable actor is required");
+  // Strict calendar boundary: a non-day such as February 30 passes a naive
+  // Date.parse guard (V8 rolls it into March) and would otherwise surface as
+  // a 22008 from PostgreSQL instead of failing closed here.
+  if (!isIsoCalendarDate(postingDate)) throw new Error("postingDate must be a valid YYYY-MM-DD date");
   if (lines.length === 0) return null;
   const bal = sum(lines.map((l) => l.amount));
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
@@ -224,10 +228,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   // lands in the simulated period.
   const reversalDate =
     reversalDateInput ?? await businessToday(orgId);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(reversalDate) ||
-    Number.isNaN(Date.parse(`${reversalDate}T00:00:00Z`))
-  ) {
+  if (!isIsoCalendarDate(reversalDate)) {
     throw new Error("reversalDate must be a valid YYYY-MM-DD date");
   }
   const head = (await tx.execute(sql`

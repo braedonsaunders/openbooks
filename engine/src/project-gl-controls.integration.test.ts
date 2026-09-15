@@ -239,3 +239,40 @@ for (const policy of ["account", "project"] as const) {
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
+
+test(
+  "project GL refuses impossible calendar dates at the domain boundary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const entry = (postingDate: string) => postProjectGlEntry({
+        orgId: org.orgId, actorId, origin: "manual", entryNumber: "PROJECT-DATE-CONTROL",
+        postingDate, memo: "Project date control", subsidiaryId: org.subsidiaryId,
+        currency: "CAD", lines: [
+          { accountId: org.accounts.adjustment, amount: "10" },
+          { accountId: org.accounts.clearing, amount: "-10" },
+        ],
+      });
+      // February 30 passes a naive Date.parse guard (V8 rolls it into
+      // March) but is not a calendar day: it must fail closed here, before
+      // any journal row exists, not as a 22008 from PostgreSQL.
+      await assert.rejects(entry("2026-02-30"), /postingDate must be a valid YYYY-MM-DD date/);
+      const posted = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n;
+      assert.equal(posted, 0);
+      const sourceId = await entry(org.date);
+      assert.ok(sourceId);
+      await assert.rejects(
+        reverseProjectGlEntry(org.orgId, actorId, sourceId, "Controller approved project correction", "2026-02-30"),
+        /reversalDate must be a valid YYYY-MM-DD date/,
+      );
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from journal_entries where org_id=${org.orgId} and id=${sourceId}`)).rows[0]!.status;
+      assert.equal(status, "posted");
+      const reversalId = await reverseProjectGlEntry(org.orgId, actorId, sourceId, "Controller approved project correction", org.date);
+      assert.ok(reversalId, "a real calendar date still reverses");
+    } finally { await dropScratchOrg(org.orgId); }
+  },
+);
