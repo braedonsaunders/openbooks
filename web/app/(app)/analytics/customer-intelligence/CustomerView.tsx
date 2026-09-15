@@ -408,7 +408,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
             </Select>
             <button
               type="button"
-              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, Math.round(r.revenue), Math.round(r.clv), t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), r.paymentRating, t(`rec.${r.recommendation}`)]), today)}
+              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, r.revenue, r.clv, t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), r.paymentRating, t(`rec.${r.recommendation}`)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
