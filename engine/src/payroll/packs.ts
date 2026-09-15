@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { cmp } from "../money.ts";
 import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
 import { CA_JURISDICTIONS } from "./canada/employment-standards.ts";
 import { caPackFilings } from "./canada/filings.ts";
@@ -10,6 +11,7 @@ import { US_OPENING_YTD_FIELDS } from "./us/opening-ytd.ts";
 import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
 import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
 import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
+import { RQ_REMITTANCE_SCHEDULE } from "./canada/quebec/remittance.ts";
 import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./us/jurisdictions.ts";
 import {
   type PayrollPackCertificates,
@@ -245,6 +247,16 @@ export interface PayrollCountryPack {
    * question instead of inheriting another authority's vendor.
    */
   remittanceVendorSettingsKey: string | null;
+  /**
+   * Destination remittance schedules: per-vendor frequencies, selection
+   * bands and due-date rules as DATA (see `PayrollRemittanceSchedule`). The
+   * generic remittance layer dates a bill from the schedule governing its
+   * destination vendor and never from a jurisdiction branch — a destination
+   * with no declared schedule keeps the legacy CRA-function behaviour.
+   * OPTIONAL: a pack with no agency of its own to remit to on its own
+   * timetable declares none (the US pack's federal deposits ride EFTPS).
+   */
+   remittanceSchedules?: readonly PayrollRemittanceSchedule[];
   /**
    * How a RETROACTIVE payment is taxed here (see the type). REQUIRED: retro
    * pay is a generic concept with a jurisdictional answer, and a pack that
@@ -886,6 +898,10 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     // Source deductions are remitted to the Receiver General through the
     // org-configured CRA remittance vendor.
     remittanceVendorSettingsKey: "craRemittancePartyId",
+    // Québec-source amounts remit to Revenu Québec on TPZ-1015.R, on Revenu
+    // Québec's own frequencies — never on the CRA schedule above. See
+    // engine/src/payroll/canada/quebec/remittance.ts for the transcribed rules.
+    remittanceSchedules: [RQ_REMITTANCE_SCHEDULE],
     // T4127 Method 2 ("retroactive pay increase") taxes a retro amount as a
     // BONUS, not as period income — the CRA's own instruction — and Revenu
     // Québec's TP-1015 Appendix 2 says the same for the provincial side. Both
@@ -1571,6 +1587,101 @@ export function employmentJurisdictionsOf(country: string): readonly PayrollJuri
 }
 
 // ---------------------------------------------------------------------------
+// Destination remittance schedules — the pack declarations due dates compute from
+// ---------------------------------------------------------------------------
+
+/**
+ * One frequency's due-date rule, as DATA the generic remittance layer
+ * interprets — never a jurisdiction branch in engine code. Three shapes cover
+ * every fixed-date schedule either current pack needs:
+ *
+ * - `month_day` — day N of the month M months after the period's month
+ *   (Revenu Québec monthly: the 15th of the following month).
+ * - `quarter_day` — day N of the month M months after the quarter's end month
+ *   (Revenu Québec quarterly: the 15th of the month following the quarter).
+ * - `split_month` — the month is cut at `cutoffDay`: the first half is due
+ *   `firstDueDay` of the same-or-offset month, the second half `secondDueDay`
+ *   (Revenu Québec twice-monthly: 1st–15th due the 25th, 16th–end due the
+ *   10th of next month).
+ *
+ * A deadline landing on a Saturday, Sunday or a holiday of the schedule's
+ * declared calendar moves to the next business day — the one shift sentence
+ * every fixed-date schedule shares, so it lives on the schedule, not on each
+ * rule. A schedule that counts WORKING days (the CRA's accelerated threshold
+ * 2) is not expressible here and keeps its bespoke function; extending the
+ * union is data work for the pack that needs it, not a branch.
+ */
+export type RemittanceDueRule =
+  | { kind: "month_day"; day: number; monthsAfterPeriodMonth: number }
+  | { kind: "quarter_day"; day: number; monthsAfterQuarterEnd: number }
+  | {
+      kind: "split_month";
+      cutoffDay: number;
+      firstDueDay: number;
+      firstDueMonthOffset: number;
+      secondDueDay: number;
+      secondDueMonthOffset: number;
+    };
+
+/**
+ * One remittance frequency of a destination's schedule: the band of average
+ * monthly remittance that selects it, and the due-date rule inside the band.
+ * Amounts are decimal strings compared with the money helpers, never floats.
+ */
+export interface PayrollRemittanceFrequencyBand {
+  /** Stable key, stored in org configuration (`frequencySettingsKey`). */
+  frequency: string;
+  /** Operator-facing label for setup and readiness surfaces. */
+  label: string;
+  /** Inclusive floor of the average-monthly-remittance band; absent = none. */
+  averageMonthlyMin?: string;
+  /** Exclusive ceiling of the band; absent = none. */
+  averageMonthlyMaxExclusive?: string;
+  due: RemittanceDueRule;
+  /**
+   * The statutory sentence carried onto the bill, so an operator sees WHY
+   * the date is what it is. A `split_month` band names the first half here
+   * and the second half in `ruleSecondHalf`.
+   */
+  rule: string;
+  ruleSecondHalf?: string;
+}
+
+/**
+ * A destination's remittance schedule, declared by the pack that remits to
+ * it. The generic layer resolves it by the destination's vendor settings key
+ * and dates the bill from it — the CRA schedule must never apply to a
+ * destination with its own declaration.
+ *
+ * Effective-dated: `effectiveFrom` (inclusive) to `effectiveTo` (exclusive,
+ * absent = in force) select the version governing a period-end date, so a
+ * future agency change ships as a second version with a contiguous range and
+ * never reinterprets history. Bills stamp the applied rule text at creation.
+ */
+export interface PayrollRemittanceSchedule {
+  /** The vendor settings key whose configured party this schedule governs. */
+  vendorSettingsKey: string;
+  /** The receiving authority, shown on bills and readiness surfaces. */
+  authority: string;
+  /** Published sources for every rule — a reviewer verifies, never guesses. */
+  sources: readonly string[];
+  /** First period-end date (YYYY-MM-DD, inclusive) this version governs. */
+  effectiveFrom: string;
+  /** Last version boundary (YYYY-MM-DD, exclusive); absent = in force. */
+  effectiveTo?: string;
+  /**
+   * The tax-administration jurisdiction key whose holidays move deadlines
+   * (a `scope: 'tax_administration'` calendar — never an employment one).
+   */
+  calendar: string;
+  /** orgs.settings.payroll key holding the org's frequency for this destination. */
+  frequencySettingsKey: string;
+  /** Frequency when the org configured none (the agency's new-employer rule). */
+  defaultFrequency: string;
+  frequencies: readonly PayrollRemittanceFrequencyBand[];
+}
+
+// ---------------------------------------------------------------------------
 // Statutory remittance and posting — the pack declarations, resolved once
 // ---------------------------------------------------------------------------
 
@@ -1657,6 +1768,137 @@ export function statutoryRemittanceDeclaration(): StatutoryRemittanceDeclaration
     regionalVendorSettingsKeyBySystemKey: regionalVendorKey,
     legacyLiabilitySettingsKeyBySystemKey: legacyKey,
   };
+}
+
+/**
+ * Every pack's destination remittance schedules, validated at collection so
+ * a bad declaration stops the process that reads it rather than dating a
+ * bill from it. A schedule whose `defaultFrequency` names no band, whose
+ * band has its floor at or above its ceiling, or whose calendar no pack
+ * declares is refused by name — the same fail-fast posture as the component
+ * declarations above.
+ */
+export function allRemittanceSchedules(
+  packs: Record<string, PayrollCountryPack> = PAYROLL_COUNTRY_PACKS,
+): PayrollRemittanceSchedule[] {
+  const schedules = Object.entries(packs).flatMap(([country, pack]) =>
+    (pack.remittanceSchedules ?? []).map((schedule) => ({ country, schedule })),
+  );
+  for (const { country, schedule } of schedules) {
+    const where = `the ${country} payroll pack's remittance schedule for ${schedule.vendorSettingsKey || "(no vendor key)"}`;
+    if (!schedule.vendorSettingsKey) throw new PayrollPackError(`${where} names no vendor settings key`);
+    if (!schedule.authority?.trim()) throw new PayrollPackError(`${where} names no receiving authority`);
+    if (schedule.sources.length === 0) throw new PayrollPackError(`${where} cites no published source`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(schedule.effectiveFrom)) {
+      throw new PayrollPackError(`${where} has no effective-from date`);
+    }
+    if (schedule.effectiveTo !== undefined
+      && (!/^\d{4}-\d{2}-\d{2}$/.test(schedule.effectiveTo) || schedule.effectiveTo <= schedule.effectiveFrom)) {
+      throw new PayrollPackError(`${where} has an effective range that ends before it opens`);
+    }
+    if (!schedule.calendar) throw new PayrollPackError(`${where} names no due-date calendar`);
+    if (!payrollJurisdictionDeclared(schedule.calendar)) {
+      throw new PayrollPackError(
+        `${where} moves deadlines against "${schedule.calendar}", which no payroll pack declares — ` +
+        `declare it in engine/src/payroll/packs.ts (declared: ${
+          declaredJurisdictions().map((j) => j.key).join(", ")})`,
+      );
+    }
+    if (!schedule.frequencySettingsKey) throw new PayrollPackError(`${where} names no frequency settings key`);
+    if (schedule.frequencies.length === 0) throw new PayrollPackError(`${where} declares no frequencies`);
+    const names = new Set(schedule.frequencies.map((band) => band.frequency));
+    if (names.size !== schedule.frequencies.length) {
+      throw new PayrollPackError(`${where} declares a frequency twice`);
+    }
+    if (!names.has(schedule.defaultFrequency)) {
+      throw new PayrollPackError(
+        `${where} defaults to "${schedule.defaultFrequency}", which is not one of its declared frequencies`,
+      );
+    }
+    for (const band of schedule.frequencies) {
+      if (!band.rule?.trim()) {
+        throw new PayrollPackError(`${where} states no due-date rule for its ${band.frequency} frequency`);
+      }
+      if (band.due.kind === "split_month" && !band.ruleSecondHalf?.trim()) {
+        throw new PayrollPackError(
+          `${where} states no second-half due-date rule for its ${band.frequency} frequency`,
+        );
+      }
+      if (band.averageMonthlyMin !== undefined && band.averageMonthlyMaxExclusive !== undefined
+        && cmp(band.averageMonthlyMin, band.averageMonthlyMaxExclusive) >= 0) {
+        throw new PayrollPackError(`${where} has an empty average-monthly band for its ${band.frequency} frequency`);
+      }
+    }
+  }
+  for (let i = 0; i < schedules.length; i += 1) {
+    for (let j = i + 1; j < schedules.length; j += 1) {
+      const a = schedules[i]!;
+      const b = schedules[j]!;
+      if (a.schedule.vendorSettingsKey !== b.schedule.vendorSettingsKey) continue;
+      const aTo = a.schedule.effectiveTo ?? "9999-12-31";
+      const bTo = b.schedule.effectiveTo ?? "9999-12-31";
+      if (a.schedule.effectiveFrom < bTo && b.schedule.effectiveFrom < aTo) {
+        throw new PayrollPackError(
+          `two payroll packs declare overlapping remittance schedules for ${a.schedule.vendorSettingsKey}`,
+        );
+      }
+    }
+  }
+  return schedules.map(({ schedule }) => schedule);
+}
+
+/**
+ * The schedule version governing one destination on one period-end date, or
+ * null when no pack declares the destination — which keeps the legacy
+ * CRA-function behaviour for undeclared destinations. Pure over an explicit
+ * list, so the effective-dating is verifiable without a database.
+ */
+export function remittanceScheduleInForce(
+  vendorSettingsKey: string,
+  date: string,
+  schedules: readonly PayrollRemittanceSchedule[] = allRemittanceSchedules(),
+): PayrollRemittanceSchedule | null {
+  const covering = schedules
+    .filter((schedule) => schedule.vendorSettingsKey === vendorSettingsKey
+      && schedule.effectiveFrom <= date
+      && (schedule.effectiveTo === undefined || date < schedule.effectiveTo));
+  covering.sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1));
+  return covering[0] ?? null;
+}
+
+/** The declared frequency band, or null when the frequency names nothing. */
+export function remittanceFrequencyBand(
+  schedule: PayrollRemittanceSchedule,
+  frequency: string,
+): PayrollRemittanceFrequencyBand | null {
+  return schedule.frequencies.find((band) => band.frequency === frequency) ?? null;
+}
+
+/**
+ * The frequency band an average monthly remittance falls in, or null when no
+ * band covers it — which is a declaration gap, never a default. The bands'
+ * bounds are decimal strings compared exactly; a value on a shared boundary
+ * belongs to the higher band (each ceiling is exclusive, each floor inclusive).
+ */
+export function remittanceBandForAverage(
+  schedule: PayrollRemittanceSchedule,
+  averageMonthly: string,
+): PayrollRemittanceFrequencyBand | null {
+  return schedule.frequencies.find((band) =>
+    (band.averageMonthlyMin === undefined || cmp(averageMonthly, band.averageMonthlyMin) >= 0)
+    && (band.averageMonthlyMaxExclusive === undefined
+      || cmp(averageMonthly, band.averageMonthlyMaxExclusive) < 0),
+  ) ?? null;
+}
+
+/**
+ * Every orgs.settings.payroll key any pack declares as a destination
+ * remittance frequency — the same derivation pattern as the vendor keys, so
+ * the settings route accepts a new schedule's frequency the moment its pack
+ * declares it.
+ */
+export function declaredRemittanceFrequencySettingsKeys(): string[] {
+  return allRemittanceSchedules().map((schedule) => schedule.frequencySettingsKey);
 }
 
 /**
