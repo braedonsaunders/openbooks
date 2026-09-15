@@ -11,6 +11,9 @@
 import {
   addDays,
   addMonthsIso,
+  declaredPeriodContaining,
+  declaredPeriodQuarter,
+  declaredQuarterContaining,
   fiscalHalfRange,
   fiscalMonthOffset,
   fiscalPeriodRange,
@@ -18,6 +21,7 @@ import {
   fiscalYearOf,
   fiscalYearRangeFor,
   type DateRange,
+  type FiscalPeriod,
 } from './fiscal-calendar'
 
 /**
@@ -159,6 +163,15 @@ export type ResolvePresetInput = {
   /** Only used by the `custom` preset. */
   customFrom?: string | null
   customTo?: string | null
+  /**
+   * Declared fiscal periods (default active calendar, non-adjustment) for
+   * orgs on a retail/custom calendar. When present, the period/month,
+   * quarter, half and fiscal-year families resolve against these instead of
+   * calendar math — a 5-week period is one window, labelled with its fiscal
+   * name. Any miss falls back to calendar math, and omitting `periods`
+   * keeps every preset byte-identical (monthly-cadence orgs take this path).
+   */
+  periods?: FiscalPeriod[]
 }
 
 /** Convert a current (fiscalYear, quarter 1-4) into another by shifting `n`
@@ -178,12 +191,193 @@ function trailingMonths(today: string, n: number, label: string): DateRange {
 }
 
 /**
+ * Resolve a preset id against declared fiscal periods. Returns null for
+ * ids outside the period/month, quarter, half and fiscal-year families, and
+ * for any miss (date outside generated periods, ungenerated prior year) —
+ * callers fall back to calendar math so a preset never newly resolves null.
+ */
+function resolveDeclaredPreset(id: string, input: ResolvePresetInput): DateRange | null {
+  const periods = [...(input.periods ?? [])].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to))
+  if (!periods.length) return null
+  const { today } = input
+  const toDate = (r: DateRange): DateRange => ({ from: r.from, to: today, label: `${r.label} to date` })
+  const holding = declaredPeriodContaining(periods, today)
+
+  const shiftPeriod = (n: number): DateRange | null => {
+    if (!holding) return null
+    const idx = periods.findIndex((p) => p === holding)
+    const target = periods[idx + n]
+    return target ? { from: target.from, to: target.to, label: target.name } : null
+  }
+  const samePeriodLastYear = (): DateRange | null => {
+    if (!holding) return null
+    const target = periods.find((p) => p.fiscalYear === holding.fiscalYear - 1 && p.periodNumber === holding.periodNumber)
+    return target ? { from: target.from, to: target.to, label: target.name } : null
+  }
+
+  // (fiscalYear, quarter) groups ordered by start, with the index holding today.
+  const quarterGroups = (): { key: string; from: string; to: string; label: string }[] => {
+    const groups = new Map<string, { from: string; to: string }>()
+    for (const p of periods) {
+      const q = declaredPeriodQuarter(p.periodNumber)
+      const g = groups.get(`${p.fiscalYear}:${q}`)
+      if (!g) groups.set(`${p.fiscalYear}:${q}`, { from: p.from, to: p.to })
+      else {
+        if (p.from < g.from) g.from = p.from
+        if (p.to > g.to) g.to = p.to
+      }
+    }
+    return [...groups.entries()]
+      .map(([key, g]) => {
+        const [fy, q] = key.split(':').map(Number)
+        return { key, from: g.from, to: g.to, label: `Q${q} FY ${fy}` }
+      })
+      .sort((a, b) => a.from.localeCompare(b.from))
+  }
+  const shiftQuarter = (n: number): DateRange | null => {
+    const groups = quarterGroups()
+    const idx = groups.findIndex((g) => g.from <= today && today <= g.to)
+    const target = idx >= 0 ? groups[idx + n] : undefined
+    return target ? { from: target.from, to: target.to, label: target.label } : null
+  }
+
+  // Halves split each fiscal year's declared periods in two (first half =
+  // period numbers up to half the year's count, mirroring the 6/6 calendar
+  // split for a 12-period year).
+  const halfGroups = (): { key: string; from: string; to: string; label: string }[] => {
+    const byYear = new Map<number, FiscalPeriod[]>()
+    for (const p of periods) {
+      const list = byYear.get(p.fiscalYear) ?? []
+      list.push(p)
+      byYear.set(p.fiscalYear, list)
+    }
+    const out: { key: string; from: string; to: string; label: string }[] = []
+    for (const [fy, list] of [...byYear.entries()].sort(([a], [b]) => a - b)) {
+      const cut = Math.floor(list.length / 2)
+      for (const h of [1, 2] as const) {
+        const members = h === 1 ? list.filter((p) => p.periodNumber <= cut) : list.filter((p) => p.periodNumber > cut)
+        if (!members.length) continue
+        const from = members.reduce((a, b) => (a < b.from ? a : b.from), members[0]!.from)
+        const to = members.reduce((a, b) => (a > b.to ? a : b.to), members[0]!.to)
+        out.push({ key: `${fy}:${h}`, from, to, label: `H${h} FY ${fy}` })
+      }
+    }
+    return out.sort((a, b) => a.from.localeCompare(b.from))
+  }
+  const shiftHalf = (n: number): DateRange | null => {
+    const groups = halfGroups()
+    const idx = groups.findIndex((g) => g.from <= today && today <= g.to)
+    const target = idx >= 0 ? groups[idx + n] : undefined
+    return target ? { from: target.from, to: target.to, label: target.label } : null
+  }
+
+  const yearRanges = (): { fy: number; from: string; to: string; label: string }[] => {
+    const byYear = new Map<number, { from: string; to: string }>()
+    for (const p of periods) {
+      const g = byYear.get(p.fiscalYear)
+      if (!g) byYear.set(p.fiscalYear, { from: p.from, to: p.to })
+      else {
+        if (p.from < g.from) g.from = p.from
+        if (p.to > g.to) g.to = p.to
+      }
+    }
+    return [...byYear.entries()]
+      .map(([fy, g]) => ({ fy, from: g.from, to: g.to, label: `FY ${fy}` }))
+      .sort((a, b) => a.from.localeCompare(b.from))
+  }
+  const shiftYear = (n: number): DateRange | null => {
+    const years = yearRanges()
+    const current = holding?.fiscalYear ?? fiscalYearOf(today, input.startMonth)
+    const idx = years.findIndex((y) => y.fy === current)
+    const target = idx >= 0 ? years[idx + n] : undefined
+    return target ? { from: target.from, to: target.to, label: target.label } : null
+  }
+
+  switch (id) {
+    // Fiscal Year
+    case 'this_fiscal_year':
+      return shiftYear(0)
+    case 'this_fiscal_year_to_date': {
+      const y = shiftYear(0)
+      return y ? toDate(y) : null
+    }
+    case 'last_fiscal_year':
+      return shiftYear(-1)
+    case 'fiscal_year_before_last':
+      return shiftYear(-2)
+    case 'next_fiscal_year':
+      return shiftYear(1)
+    case 'three_fiscal_years_ago':
+      return shiftYear(-3)
+
+    // Fiscal Quarter
+    case 'this_fiscal_quarter':
+      return declaredQuarterContaining(periods, today)
+    case 'this_fiscal_quarter_to_date': {
+      const q = declaredQuarterContaining(periods, today)
+      return q ? toDate(q) : null
+    }
+    case 'last_fiscal_quarter':
+      return shiftQuarter(-1)
+    case 'fiscal_quarter_before_last':
+      return shiftQuarter(-2)
+    case 'next_fiscal_quarter':
+      return shiftQuarter(1)
+    case 'three_fiscal_quarters_ago':
+      return shiftQuarter(-3)
+    case 'same_fiscal_quarter_last_year': {
+      const q = declaredQuarterContaining(periods, today)
+      if (!q) return null
+      const groups = quarterGroups()
+      const current = groups.find((g) => g.from <= today && today <= g.to)
+      if (!current) return null
+      const [fy, n] = current.key.split(':').map(Number)
+      const target = groups.find((g) => g.key === `${fy! - 1}:${n}`)
+      return target ? { from: target.from, to: target.to, label: target.label } : null
+    }
+
+    // Fiscal Half
+    case 'this_fiscal_half':
+      return shiftHalf(0)
+    case 'last_fiscal_half':
+      return shiftHalf(-1)
+    case 'next_fiscal_half':
+      return shiftHalf(1)
+
+    // Period / Month (a fiscal period IS the month for a retail calendar)
+    case 'this_period':
+    case 'this_month':
+      return holding ? { from: holding.from, to: holding.to, label: holding.name } : null
+    case 'this_period_to_date':
+    case 'this_month_to_date':
+      return holding ? toDate({ from: holding.from, to: holding.to, label: holding.name }) : null
+    case 'last_period':
+    case 'last_month':
+      return shiftPeriod(-1)
+    case 'period_before_last':
+    case 'month_before_last':
+      return shiftPeriod(-2)
+    case 'next_month':
+      return shiftPeriod(1)
+    case 'same_month_last_fiscal_year':
+      return samePeriodLastYear()
+
+    default:
+      return null
+  }
+}
+
+/**
  * Resolve a preset id into a concrete inclusive `{ from, to }` window plus a
  * descriptive label (e.g. "FY 2026", "Q2 FY 2026", "2026-07"). Returns `null`
  * for an unknown id or a `custom` preset missing its bounds — callers fall back
  * to a default. `to` doubles as the as-of instant for point-in-time reports.
  */
 export function resolvePreset(id: string, input: ResolvePresetInput): DateRange | null {
+  if (input.periods?.length) {
+    const declared = resolveDeclaredPreset(id, input)
+    if (declared) return declared
+  }
   const { startMonth, today } = input
   const fy = fiscalYearOf(today, startMonth)
   const curQ = Math.floor(fiscalMonthOffset(today, startMonth) / 3) + 1
