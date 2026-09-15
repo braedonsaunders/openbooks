@@ -554,15 +554,18 @@ export async function loadFilings(
                count(*) filter (where r.status = 'excluded')::int as excluded,
                count(*) filter (where r.status = 'included' and r.tin_last4 is null)::int as missing_tin,
                -- The filed figure is computed + adjustment across every box, less
-               -- the withholding boxes, which are tax remitted rather than paid.
+               -- the withholding boxes, which are tax remitted rather than paid,
+               -- and less indicator boxes (e.g. NEC box 2 direct sales), which
+               -- are checkboxes rather than money being filed — the same
+               -- boundary the engine's filedTotal draws.
                sum((
                  select coalesce(sum((value)::numeric), 0)
                    from jsonb_each_text(r.computed_amounts)
-                  where key not in ('nec4', 'misc4', 't4a022')
+                  where key not in ('nec4', 'misc4', 't4a022', 'nec2')
                ) + (
                  select coalesce(sum((value)::numeric), 0)
                    from jsonb_each_text(r.adjustments)
-                  where key not in ('nec4', 'misc4', 't4a022')
+                  where key not in ('nec4', 'misc4', 't4a022', 'nec2')
                )) filter (where r.status = 'included') as total
           from information_return_recipients r
          where r.filing_id = f.id

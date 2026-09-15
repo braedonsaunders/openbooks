@@ -30,7 +30,8 @@ const hooks = registerHooks({
 // sibling suites (same seam as the information-returns scope suite: a const
 // URL is opaque to tsc, which would otherwise try to resolve the query).
 const libUrl = './compliance.ts?readiness'
-const { loadInformationReturnReadiness } = (await import(libUrl)) as typeof import('./compliance.ts')
+const { loadFilings, loadInformationReturnReadiness } =
+  (await import(libUrl)) as typeof import('./compliance.ts')
 hooks.deregister()
 
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
@@ -270,6 +271,48 @@ test(
         queue.find((r) => r.vendorName.includes(over.slice(0, 8)))?.paidThisYear,
         '2010.0000',
         'paid means cash that left the bank',
+      )
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
+  'filings list totals exclude indicator boxes like the filed figure does',
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg())
+    try {
+      const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'IR filer', 'admin'))
+      // $600 of NEC-1 compensation plus $5,000 of direct-sales dollars riding
+      // in the nec2 indicator box: the filed figure is $600 — the checkbox is
+      // not money being filed. The engine's filedTotal pins exactly this.
+      const partyId = randomUUID()
+      const filingId = randomUUID()
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+          values (${partyId}, ${org.orgId}, 'vendor', 'Indicator vendor', null, true, '{}'::jsonb)`)
+        await db.execute(sql`
+          insert into information_return_filings
+            (id, org_id, tax_year, form_type, status, threshold, currency, created_by, updated_by)
+          values (${filingId}, ${org.orgId}, 2026, '1099-NEC', 'computed', '2000', 'CAD',
+                  ${actorId}, ${actorId})`)
+        await db.execute(sql`
+          insert into information_return_recipients
+            (org_id, filing_id, party_id, status, computed_amounts, adjustments,
+             created_by, updated_by)
+          values (${org.orgId}, ${filingId}, ${partyId}, 'included',
+                  '{"nec1": "600", "nec2": "5000"}'::jsonb, '{}'::jsonb,
+                  ${actorId}, ${actorId})`)
+      })
+      const filings = await withOrgContext(org.orgId, () => loadFilings(org.orgId))
+      assert.equal(filings.length, 1)
+      assert.equal(
+        Number(filings[0]!.filedTotal),
+        600,
+        `filed total excludes the nec2 indicator box (got ${filings[0]!.filedTotal})`,
       )
     } finally {
       await dropScratchOrg(org.orgId)
