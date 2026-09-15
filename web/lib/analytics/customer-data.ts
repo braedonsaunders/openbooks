@@ -462,9 +462,11 @@ export async function customerData(period: { from: string; to: string; label: st
     (db.execute(sql`
       select d.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         count(*) filter (where d.posting_date >= ${from}) as txn_count,
-        sum(abs(d.total)) filter (where d.posting_date >= ${from}) as revenue,
-        avg(abs(d.total)) filter (where d.posting_date >= ${from}) as avg_value,
-        sum(abs(d.total)) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo}) as prior_revenue,
+        -- documents.total is transaction currency: translate at the posted
+        -- document rate so multi-currency revenue adds in functional terms.
+        sum(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${from}) as revenue,
+        avg(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${from}) as avg_value,
+        sum(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo}) as prior_revenue,
         min(d.posting_date) filter (where d.posting_date >= ${from}) as first_txn,
         max(d.posting_date) filter (where d.posting_date >= ${from}) as last_txn
       from documents d
@@ -481,7 +483,7 @@ export async function customerData(period: { from: string; to: string; label: st
     (db.execute(sql`
       select d.party_id as id,
         count(*) filter (where d.kind = 'customer_credit') as credit_count,
-        coalesce(sum(abs(d.total)) filter (where d.kind = 'customer_credit'), 0) as credit_value,
+        coalesce(sum(abs(d.total) * d.fx_rate) filter (where d.kind = 'customer_credit'), 0) as credit_value,
         count(*) filter (where d.kind = 'customer_invoice') as order_count
       from documents d
       where d.org_id = ${orgId} and d.kind in ('customer_credit', 'customer_invoice')
@@ -553,7 +555,7 @@ export async function customerData(period: { from: string; to: string; label: st
       select to_char(d.posting_date, 'YYYY-MM') as month,
         count(distinct d.party_id) as unique_customers,
         count(*) as txn_count,
-        sum(abs(d.total)) as revenue,
+        sum(abs(d.total) * d.fx_rate) as revenue,
         count(distinct d.party_id) filter (
           where f.first_month = date_trunc('month', d.posting_date)) as new_customers
       from documents d
@@ -568,7 +570,7 @@ export async function customerData(period: { from: string; to: string; label: st
     // grouped into join-year cohorts below (active = ordered in last 6 months).
     (db.execute(sql`
       select party_id as id, max(posting_date) as last_order, min(posting_date) as first_order,
-        sum(abs(total)) as lifetime_revenue
+        sum(abs(total) * fx_rate) as lifetime_revenue
       from documents
       where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
         and voided_at is null and party_id is not null
