@@ -50,6 +50,13 @@ export type StatementDimFilter = {
   locationId?: string
   classId?: string
   segments?: Record<string, string>
+  /**
+   * The view's resolved entity set (a leaf, or a consolidated subtree plus
+   * its elimination subsidiaries). Drill targets carry it so the supporting
+   * detail reads the cell's exact population; the drill route re-validates
+   * every id against the caller's allowlist before use.
+   */
+  subsidiaryIds?: string[]
 }
 
 /**

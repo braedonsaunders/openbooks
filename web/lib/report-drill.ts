@@ -123,12 +123,19 @@ function dimsValue(value: unknown): StatementDimFilter | undefined {
       if (SEGMENT_KEY.test(key) && typeof entry === 'string' && UUID.test(entry)) segments[key] = entry
     }
   }
+  // The view's entity set survives the URL round-trip under the same uuid
+  // discipline as every other id in the target; the drill route intersects
+  // it with the caller's allowlist, so a forged set cannot widen a reader.
+  // Malformed ids degrade to the picker-node fallback (or the allowlist),
+  // never to an unfiltered read.
+  const subsidiaryIds = uuidList(raw.subsidiaryIds)
   return {
     departmentId: uuidValue(raw.departmentId),
     projectId: uuidValue(raw.projectId),
     locationId: uuidValue(raw.locationId),
     classId: uuidValue(raw.classId),
     ...(segments && Object.keys(segments).length ? { segments } : {}),
+    ...(subsidiaryIds ? { subsidiaryIds } : {}),
   }
 }
 
