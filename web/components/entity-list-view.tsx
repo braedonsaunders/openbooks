@@ -204,7 +204,7 @@ export async function EntityListView({
         ${countJoins}
        where ${where}`) as any,
     Promise.all(source.quickFilters.map(async (quick) => {
-      if (quick.loadOptions) return quick.loadOptions(orgId)
+      if (quick.loadOptions) return quick.loadOptions(orgId, allowedSubs)
       const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
       return (filterMeta?.options ?? []).map((option) => ({
         value: option.value,
