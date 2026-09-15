@@ -116,6 +116,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsed = await parseJsonBody(req, journalPatchBody, { status: 422 })
   if (!parsed.ok) return parsed.response
   const body = parsed.data
+  // Every journal carries its legal entity. Posting falls back to the root
+  // when the header is null, but subsidiary-scoped readers exclude null rows,
+  // so an explicit clear would hide the live journal while leaving its ledger
+  // impact intact. Line-level nulls remain valid and fall back to the header.
+  if (body.subsidiaryId === null) {
+    return NextResponse.json(
+      { error: 'a journal requires a subsidiary; the subsidiary cannot be removed' },
+      { status: 422 },
+    )
+  }
   // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
   let expectedRevision: string
   try {
