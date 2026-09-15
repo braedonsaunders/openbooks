@@ -474,7 +474,9 @@ export function ExpenseDrawer({
     const res = await fetch(`/api/documents/${doc.id}/void`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
+      // The void API fences on the exact revision like every other document
+      // write: without it every void answers 409 and the button is dead.
+      body: JSON.stringify({ reason, expectedUpdatedAt: documentRevisionRef.current }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
