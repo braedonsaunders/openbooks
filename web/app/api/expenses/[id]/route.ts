@@ -90,6 +90,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       custom?: Record<string, unknown>
     })[]
   }
+  // The party is the employee being reimbursed. The documents FK is global,
+  // so without an org-scoped check this save would persist another tenant's
+  // party on the draft (submit and post refuse it later, but the reference
+  // itself must never be stored). A null body value keeps the current party.
+  if (body.partyId !== undefined && body.partyId !== null) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.partyId)) {
+      return NextResponse.json({ error: 'party not found in this organization' }, { status: 404 })
+    }
+    const owner = (await db.execute<{ id: string }>(
+      sql`select id from parties where id = ${body.partyId} and org_id = ${user.orgId}`,
+    ))
+    if (!owner.rows[0]) return NextResponse.json({ error: 'party not found in this organization' }, { status: 404 })
+  }
   // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
   let expectedRevision: string
   try {

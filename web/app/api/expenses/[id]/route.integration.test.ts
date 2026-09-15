@@ -190,6 +190,27 @@ test('expense PATCH response cannot bless stale content with a later writer revi
   })
 })
 
+test('expense PATCH refuses a party from another organization but saves an own-org party', { skip: !DB }, async () => {
+  await fixture(async (org, id) => {
+    // A foreign UUID passes the global documents FK, so the route itself must
+    // refuse it: the draft must never store another tenant's party.
+    const denied = await patch(id, { expectedUpdatedAt: await revision(id), partyId: randomUUID() })
+    assert.equal(denied.status, 404)
+    assert.equal(
+      (await db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`)).rows[0]!.party_id,
+      null,
+    )
+    // An own-org party saves even without an employee role: the employee-role
+    // gate stays at submit/post so a draft can precede the HR record.
+    const saved = await patch(id, { expectedUpdatedAt: await revision(id), partyId: org.vendorId })
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
+    assert.equal(
+      (await db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`)).rows[0]!.party_id,
+      org.vendorId,
+    )
+  })
+})
+
 test('expense employee identity rejects vendor-only parties but preserves former dual-role employee reimbursements', { skip: !DB }, async () => {
   await fixture(async (org, id) => {
     await db.execute(sql`update documents set party_id=${org.vendorId} where id=${id}`)
