@@ -17,6 +17,7 @@ import {
   validateEditableDocumentLines,
 } from '../../../../lib/documents'
 import { loadExpenseReport } from '../../../../lib/expenses'
+import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
@@ -130,6 +131,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'account not found in this organization' }, { status: 404 })
     }
   }
+  // Line departments/projects ride the same uncast path into the re-insert:
+  // a malformed id dies as 22P02 and a foreign id as 23503, both unhandled
+  // storage errors. Shape-check every submitted reference, then prove tenant
+  // ownership batched per table (same contract as the account precheck above
+  // and the shared document editor).
+  if (body.lines !== undefined) {
+    for (let i = 0; i < body.lines.length; i++) {
+      const line = body.lines[i]!
+      for (const key of ['departmentId', 'projectId'] as const) {
+        const value = line[key]
+        if (value !== undefined && value !== null && !isUuid(value)) {
+          return NextResponse.json({ error: `Line ${i + 1}: invalid ${key}` }, { status: 422 })
+        }
+      }
+    }
+    for (const [key, label, table] of [['departmentId', 'department', 'departments'], ['projectId', 'project', 'projects']] as const) {
+      const ids = [...new Set(body.lines.map((l) => l[key]).filter((v): v is string => typeof v === 'string' && v.length > 0))]
+      if (ids.length === 0) continue
+      const owned = new Set((await db.execute<{ id: string }>(sql`
+        select id from ${sql.raw(`"${table}"`)} where org_id = ${user.orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)).rows.map((r) => r.id))
+      const foreign = ids.find((v) => !owned.has(v))
+      if (foreign !== undefined) {
+        const lineNumber = body.lines.findIndex((l) => l[key] === foreign) + 1
+        return NextResponse.json({ error: `Line ${lineNumber}: ${label} not found in this organization` }, { status: 404 })
+      }
+    }
+  }
   // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
   let expectedRevision: string
   try {
@@ -199,10 +227,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       exactLines.push({ ...line, amount, taxAmount })
     }
-    const computed = computeBillTotals(
-      exactLines,
-      await taxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
-    )
+    // An unknown/inactive tax code throws out of the totals engine as a raw
+    // Error; translate it into the domain 422 the shared document editor
+    // returns for the same failure instead of letting it escape as a 500.
+    let computed: ReturnType<typeof computeBillTotals>
+    try {
+      computed = computeBillTotals(
+        exactLines,
+        await taxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
+      )
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 422 })
+    }
     const subtotal = exactMoney(computed.subtotal)
     if (subtotal === 'invalid') {
       return NextResponse.json({ error: 'Expense subtotal is not a valid amount' }, { status: 422 })
