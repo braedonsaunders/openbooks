@@ -123,11 +123,15 @@ const hooks = registerHooks({
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/money.ts') return { url: 'mock:money', shortCircuit: true }
+    if (specifier === './features') return { url: 'mock:features', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/org-feature-lock.ts') return { url: 'mock:org-feature-lock', shortCircuit: true }
     if (specifier === '@braedonsaunders/appkit-scheduling') return { url: 'mock:scheduling', shortCircuit: true }
     return nextResolve(specifier, _context)
   },
   load(url, _context, nextLoad) {
     if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
+    if (url === 'mock:features') return { format: 'module', source: 'export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}', shortCircuit: true }
+    if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
     const source = mockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
     return nextLoad(url, _context)
