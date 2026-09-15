@@ -64,7 +64,7 @@ export const REGISTERED_FLOORS: readonly {
   { area: "fx settlement", source: FX_SETTLEMENT_CASES, minimum: 4 },
   { area: "sales tax", source: SALES_TAX_CASES, minimum: 12 },
   { area: "payroll statutory", source: PAYROLL_STATUTORY_CASES, minimum: 10 },
-  { area: "inventory", source: INVENTORY_CASES, minimum: 7 },
+  { area: "inventory", source: INVENTORY_CASES, minimum: 8 },
   { area: "long-lived assets", source: LONG_LIVED_ASSET_CASES, minimum: 8 },
   { area: "income tax", source: INCOME_TAX_CASES, minimum: 10 },
   { area: "construction", source: CONSTRUCTION_CASES, minimum: 4 },

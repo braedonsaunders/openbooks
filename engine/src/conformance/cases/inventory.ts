@@ -663,4 +663,43 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
       };
     },
   },
+
+  {
+    id: "inv-partial-disassembly",
+    title: "Disassembling part of a build returns the pro-rata components to stock",
+    citations: [
+      {
+        standard: "IAS 2",
+        reference: "IAS 2.25",
+        kind: "requirement",
+        requirement:
+          "The cost of inventories is assigned by the cost formula in use — a partial reversal of an assembly returns the formula share of the components consumed.",
+      },
+      {
+        standard: "ASC 330",
+        reference: "330-10-30-9",
+        kind: "requirement",
+        requirement:
+          "The cost of goods manufactured that is taken back apart returns its component costs to materials; the carrying amount is conserved, not remeasured.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "Taking apart four of ten built units returns eight components at their original five each to stock and leaves six assemblies at ten each — forty of component value comes home, sixty of assembly value remains, and nothing leaks or appears.",
+    facts: [
+      "One hundred components received at 5.00 each; ten assemblies built, each consuming two components at a unit cost of 10.00.",
+      "Four assemblies are disassembled for spares: eight components return at 5.00 each (40.00) and assembly stock falls by four units (40.00).",
+      "Six assemblies remain at 60.00 and component stock stands at its unbuilt balance plus the forty returned.",
+    ],
+    gap: "Disassembly reverses a whole build only: reverseAssemblyBuild takes the build movement with no quantity, so part of a build can only come apart by reversing the entire build and rebuilding the remainder — there is no partial disassembly that returns the pro-rata components in one step.",
+    expected: {
+      values: {
+        componentsReturned: "8.0000",
+        componentsValueReturned: "40.0000",
+        assembliesRemaining: "6.0000",
+        assembliesValueRemaining: "60.0000",
+      },
+    },
+  },
 ];
