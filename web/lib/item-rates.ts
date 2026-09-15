@@ -125,7 +125,9 @@ export async function resolveItemRate(input: {
            or exists (select 1 from labor_rate_version_scopes s
              where s.org_id = v.org_id and s.version_id = v.id and (
                (s.scope_type = 'department' and s.scope_value_id = ${input.departmentId ?? null}) or
-               (s.scope_type = 'subsidiary' and s.scope_value_id = ${ctx.subsidiary_id})
+               (s.scope_type = 'subsidiary' and s.scope_value_id = ${ctx.subsidiary_id}) or
+               (s.scope_type = 'location' and s.scope_value_id = ${input.locationId ?? null}) or
+               (s.scope_type = 'class' and s.scope_value_id = ${input.classId ?? null})
              )))
        order by v.effective_from desc limit 1
     `))
