@@ -745,6 +745,14 @@ async function issueCorrection(
     );
   }
   if (revision === "amended") {
+    const resurrected = requested.filter((rowId) => byRow.get(rowId)?.status === "resurrected");
+    if (resurrected.length > 0) {
+      throw new PayrollError(
+        "these slips were cancelled but the payroll ledger produces them again, so they must be "
+        + "filed as additional originals rather than amended: "
+        + resurrected.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
+      );
+    }
     const unmoved = requested.filter((rowId) => {
       const review = byRow.get(rowId);
       return review == null || review.status === "unchanged";
