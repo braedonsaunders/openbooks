@@ -12,12 +12,81 @@ import {
   prorateFirstInvoice,
   type Interval,
 } from "@openbooks/engine/src/subscription-billing.ts";
-import { add } from "@openbooks/engine/src/money.ts";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 import { guardPermission, guardSubsidiaryScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
 export const runtime = "nodejs";
+
+type SubscriptionMrrRow = {
+  status: string;
+  priceOverride: unknown;
+  planAmount: unknown;
+  interval: Interval;
+  intervalCount: unknown;
+  quantity: unknown;
+  planCurrency: unknown;
+};
+
+/**
+ * Translate the subscription MRR card into the organization's functional
+ * currency. Plan prices remain in their contract currency, but the card is a
+ * single organization-currency scalar; unlike currencies must therefore use
+ * the same dated spot-rate policy as AR's other foreign-currency readers.
+ */
+async function subscriptionMrrInOrgCurrency(
+  orgId: string,
+  orgCurrency: string,
+  rows: readonly SubscriptionMrrRow[],
+): Promise<string> {
+  const asOf = await businessToday(orgId);
+  const rates = new Map<string, string>();
+  let total = "0.0000";
+  for (const row of rows) {
+    if (row.status !== "active") continue;
+    const amount = monthlyRecurringRevenue(
+      String(row.priceOverride ?? row.planAmount ?? "0"),
+      row.interval,
+      Number(row.intervalCount ?? 1),
+      String(row.quantity ?? "1"),
+    );
+    const sourceCurrency = String(row.planCurrency ?? orgCurrency).trim().toUpperCase();
+    if (sourceCurrency === orgCurrency) {
+      total = add(total, amount);
+      continue;
+    }
+    let rate = rates.get(sourceCurrency);
+    if (!rate) {
+      const candidates = await db.execute<{ rate: string }>(sql`
+        select rate::text from (
+          select rate, as_of, 0 as priority
+            from fx_rates
+           where org_id = ${orgId} and from_currency = ${sourceCurrency}
+             and to_currency = ${orgCurrency} and rate_type = 'spot'
+             and as_of <= ${asOf}
+          union all
+          select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority
+            from fx_rates
+           where org_id = ${orgId} and from_currency = ${orgCurrency}
+             and to_currency = ${sourceCurrency} and rate_type = 'spot'
+             and as_of <= ${asOf}
+        ) candidates
+        order by as_of desc, priority asc
+        limit 1
+      `);
+      rate = candidates.rows[0]?.rate;
+      if (!rate) {
+        throw new SubscriptionError(
+          `no spot rate for subscription MRR ${sourceCurrency}→${orgCurrency} on or before ${asOf}`,
+        );
+      }
+      rates.set(sourceCurrency, rate);
+    }
+    total = add(total, mulDecimal(amount, rate));
+  }
+  return total;
+}
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
@@ -124,7 +193,7 @@ export async function GET() {
     return NextResponse.json({ error: "feature disabled" }, { status: 404 });
   }
   const orgId = authz.user.orgId;
-  const [plans, subs] = await Promise.all([
+  const [plans, subs, org] = await Promise.all([
     db.execute(sql`
       select id, name, description, amount, currency_code as "currency", interval,
              interval_count as "intervalCount", income_account_id as "incomeAccountId",
@@ -146,17 +215,27 @@ export async function GET() {
          ${customerSubsidiaryFilter(authz.allowedSubsidiaryIds)}
        order by s.created_at desc
     `),
+    db.execute<{ baseCurrency: string }>(sql`
+      select base_currency as "baseCurrency" from orgs where id = ${orgId}
+    `),
   ]);
 
-  let mrr = "0.0000";
-  const subscriptions = subs.rows.map((s) => {
-    const m =
+  const orgCurrency = String(org.rows[0]?.baseCurrency ?? "").trim().toUpperCase();
+  if (!orgCurrency) throw new SubscriptionError("organization currency is not configured");
+  const subscriptions = subs.rows.map((s) => ({
+    ...s,
+    mrr:
       s.status === "active"
         ? monthlyRecurringRevenue(String(s.priceOverride ?? s.planAmount ?? "0"), s.interval as Interval, Number(s.intervalCount ?? 1), String(s.quantity ?? "1"))
-        : "0.0000";
-    if (s.status === "active") mrr = add(mrr, m);
-    return { ...s, mrr: m };
-  });
+        : "0.0000",
+  }));
+  let mrr: string;
+  try {
+    mrr = await subscriptionMrrInOrgCurrency(orgId, orgCurrency, subs.rows as SubscriptionMrrRow[]);
+  } catch (e) {
+    if (e instanceof SubscriptionError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
   return NextResponse.json({ plans: plans.rows, subscriptions, mrr });
 }
 
