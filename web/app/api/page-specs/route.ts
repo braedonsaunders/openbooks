@@ -92,7 +92,7 @@ export async function GET(req: Request) {
   }
 
   if (url.searchParams.get('history') === '1') {
-    return NextResponse.json({ versions: await listPageSpecHistory(gate.user.orgId, route) })
+    return NextResponse.json({ versions: await listPageSpecHistory(gate.user.orgId, route, gate.user.id) })
   }
 
   const context = applicationContextFromSession(gate, 'assistant', randomUUID())
