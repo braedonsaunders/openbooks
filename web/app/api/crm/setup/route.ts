@@ -70,6 +70,15 @@ export async function GET() {
   });
 }
 
+/** CRM ordering integer: junk and out-of-int32 figures fail closed with 422
+ * instead of reaching the sequence column as NaN/overflow (HTTP 500). */
+function sequenceInt(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return 0;
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isInteger(n) || n < -2147483648 || n > 2147483647) return null;
+  return n;
+}
+
 export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission("crm.setup.manage", "crm");
   if (gate instanceof NextResponse) return gate;
@@ -97,12 +106,18 @@ export async function POST(req: NextRequest) {
           { error: "name and lifecycle stage are required" },
           { status: 422 },
         );
+      const sequence = sequenceInt(body.sequence);
+      if (sequence === null)
+        return NextResponse.json(
+          { error: "sequence must be a whole number" },
+          { status: 422 },
+        );
       row = recordId
         ? await db.execute(
-            sql`update crm_account_statuses set name=${name},description=${body.description ?? null},lifecycle_stage=${body.lifecycleStage},sequence=${Number(body.sequence) || 0},is_qualified=${body.isQualified === true},is_closed=${body.isClosed === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
+            sql`update crm_account_statuses set name=${name},description=${body.description ?? null},lifecycle_stage=${body.lifecycleStage},sequence=${sequence},is_qualified=${body.isQualified === true},is_closed=${body.isClosed === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_account_statuses (org_id,key,name,description,lifecycle_stage,sequence,is_qualified,is_closed,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${body.lifecycleStage},${Number(body.sequence) || 0},${body.isQualified === true},${body.isClosed === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
+            sql`insert into crm_account_statuses (org_id,key,name,description,lifecycle_stage,sequence,is_qualified,is_closed,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${body.lifecycleStage},${sequence},${body.isQualified === true},${body.isClosed === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
           );
     } else if (action === "save-opportunity-status") {
       const name = String(body.name ?? "").trim();
@@ -115,6 +130,12 @@ export async function POST(req: NextRequest) {
       )
         return NextResponse.json(
           { error: "name and probability from 0 to 100 are required" },
+          { status: 422 },
+        );
+      const sequence = sequenceInt(body.sequence);
+      if (sequence === null)
+        return NextResponse.json(
+          { error: "sequence must be a whole number" },
           { status: 422 },
         );
       if (
@@ -133,10 +154,10 @@ export async function POST(req: NextRequest) {
         );
       row = recordId
         ? await db.execute(
-            sql`update crm_opportunity_statuses set name=${name},description=${body.description ?? null},sequence=${Number(body.sequence) || 0},probability=${probability},default_forecast_category=${body.defaultForecastCategory},is_closed=${body.isClosed === true},is_won=${body.isWon === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
+            sql`update crm_opportunity_statuses set name=${name},description=${body.description ?? null},sequence=${sequence},probability=${probability},default_forecast_category=${body.defaultForecastCategory},is_closed=${body.isClosed === true},is_won=${body.isWon === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
           )
         : await db.execute(
-            sql`insert into crm_opportunity_statuses (org_id,key,name,description,sequence,probability,default_forecast_category,is_closed,is_won,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${Number(body.sequence) || 0},${probability},${body.defaultForecastCategory},${body.isClosed === true},${body.isWon === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
+            sql`insert into crm_opportunity_statuses (org_id,key,name,description,sequence,probability,default_forecast_category,is_closed,is_won,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.description ?? null},${sequence},${probability},${body.defaultForecastCategory},${body.isClosed === true},${body.isWon === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
           );
     } else if (action === "save-lead-source") {
       const name = String(body.name ?? "").trim();
