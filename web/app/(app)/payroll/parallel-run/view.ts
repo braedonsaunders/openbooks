@@ -70,9 +70,9 @@ export async function loadParallelRun(
     t.has(key as never) ? t(key as never) : fallback
 
   const [registers, runs, comparisons, tolerances, slots] = await Promise.all([
-    priorRegisters(orgId),
-    comparablePayRuns(orgId),
-    parallelComparisons(orgId, {}),
+    priorRegisters(orgId, authz.allowedSubsidiaryIds),
+    comparablePayRuns(orgId, authz.allowedSubsidiaryIds),
+    parallelComparisons(orgId, { allowedSubsidiaryIds: authz.allowedSubsidiaryIds }),
     parallelTolerances(orgId),
     comparableSlots(orgId),
   ])
