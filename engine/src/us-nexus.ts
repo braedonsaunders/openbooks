@@ -76,7 +76,12 @@ export function thresholdForState(state: string): StateNexusThreshold {
 
 export interface StateSales {
   state: string
-  /** Posted sales converted to USD, numeric(19,4) string. */
+  /**
+   * Posted sales in the ledger's working currency: USD for the org-wide
+   * ledger, or the filing entity's working currency for an entity ledger
+   * (see computeUsNexusStatus `currency`). The name stays `salesUsd` so the
+   * org-wide shape is byte-identical; read it as "sales in working currency".
+   */
   salesUsd: string
   txnCount: number
 }
@@ -118,11 +123,18 @@ function progressOf(t: StateNexusThreshold, salesUsd: string, txnCount: number):
  * Evaluate nexus for each state in `sales`. A state is `met` when its trigger is
  * satisfied, `approaching` when progress ≥ `approachingAt` (default 0.8) but not
  * yet met, else `none`. Sorted most-urgent first (met, then closest approaching).
+ * `thresholds` optionally overrides the reference threshold per state (an entity
+ * ledger injects its policy-converted thresholds so the decision is exact in
+ * the working currency).
  */
-export function evaluateUsNexus(sales: StateSales[], opts?: { approachingAt?: number }): NexusEvaluation[] {
+export function evaluateUsNexus(sales: StateSales[], opts?: { approachingAt?: number; thresholds?: ReadonlyMap<string, StateNexusThreshold> }): NexusEvaluation[] {
   const approachingAt = opts?.approachingAt ?? 0.8
   const out = sales.map((s): NexusEvaluation => {
-    const threshold = thresholdForState(s.state)
+    // An entity ledger evaluates in a functional currency: it converts the
+    // USD reference thresholds at its declared policy rate and injects them
+    // here, so the comparison stays exact in the working currency while every
+    // ledger figure remains a single conversion from posted evidence.
+    const threshold = opts?.thresholds?.get(s.state) ?? thresholdForState(s.state)
     const met = isMet(threshold, s.salesUsd, s.txnCount)
     const progress = progressOf(threshold, s.salesUsd, s.txnCount)
     const status: NexusStatus = threshold.measure === 'none'
