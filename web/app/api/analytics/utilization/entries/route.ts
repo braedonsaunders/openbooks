@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { mul } from "@openbooks/engine/src/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
     date: r.date,
     hours: Number(r.hours ?? 0),
     billable: Boolean(r.is_billable),
-    cost: Number(r.cost_rate ?? 0) * Number(r.hours ?? 0),
+    cost: mul(String(r.cost_rate ?? "0"), String(r.hours ?? "0")),
     itemName: r.item_name ?? "—",
     employeeName: r.employee_name ?? "—",
     customerName: r.customer_name ?? r.project_name ?? "",

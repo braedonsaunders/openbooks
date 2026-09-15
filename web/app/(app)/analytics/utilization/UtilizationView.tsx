@@ -9,6 +9,8 @@ import {
   UserPlus, UserRound, Users, LayoutGrid, Grid3X3,
 } from 'lucide-react'
 import { cn, Select, Drawer, Badge } from '@openbooks/ui'
+import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
+import type { MoneyValue } from '../../../../lib/money-format'
 import type { UtilizationData, UGroupRow, UStat } from '../../../../lib/analytics/utilization-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
@@ -116,7 +118,7 @@ function escapeTooltipHtml(value: unknown): string {
 /* ---------------------------------------------------------- entries drawer */
 
 interface Entry {
-  id: string; date: string; hours: number; billable: boolean; cost: number
+  id: string; date: string; hours: number; billable: boolean; cost: string
   itemName: string; employeeName: string; customerName: string; memo: string
 }
 
@@ -125,7 +127,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number }; from: string; to: string; onClose: () => void
 }) {
   const fmtMoney = useAnalyticsMoney()
-  const money0 = (n: number) => fmtMoney(n)
+  const money0 = (n: MoneyValue) => fmtMoney(n)
   const t = useTranslations('analytics.utilization')
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [error, setError] = useState(false)
@@ -232,7 +234,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
                   <td className="px-4 py-1.5 text-center">
                     {e.billable
                       ? <Badge variant="success">{t('yes')}</Badge>
-                      : <span className="text-xs text-rose-500 tabular-nums">{e.cost > 0 ? money0(e.cost) : t('no')}</span>}
+                      : <span className="text-xs text-rose-500 tabular-nums">{compareMoney(e.cost, '0') > 0 ? money0(e.cost) : t('no')}</span>}
                   </td>
                 </tr>
               ))}
