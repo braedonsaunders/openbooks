@@ -400,3 +400,63 @@ test(
     }
   },
 );
+
+test(
+  "destination remittance frequencies validate against their own schedule",
+  { skip: !DB },
+  async () => {
+    const fixture = await withBypass(async () => {
+      const org = await createScratchOrg();
+      return {
+        ...org,
+        actorId: await createScratchUser(
+          org.orgId,
+          "Payroll Admin",
+          "payroll_admin",
+        ),
+      };
+    });
+    try {
+      authorize(fixture.orgId, fixture.actorId);
+
+      const accepted = await PUT(
+        request("PUT", { rqRemittanceFrequency: "twice_monthly" }),
+      );
+      assert.equal(accepted.status, 200);
+      assert.equal(
+        (await payrollState(fixture.orgId)).settings?.rqRemittanceFrequency,
+        "twice_monthly",
+      );
+
+      const before = await payrollState(fixture.orgId);
+      // Not an RQ frequency at all.
+      const unknown = await PUT(
+        request("PUT", { rqRemittanceFrequency: "weekly" }),
+      );
+      assert.equal(unknown.status, 422);
+      // A CRA remitter type is never a valid RQ frequency and vice versa.
+      const crossAgency = await PUT(
+        request("PUT", { rqRemittanceFrequency: "accelerated_2" }),
+      );
+      assert.equal(crossAgency.status, 422);
+      const mistyped = await PUT(
+        request("PUT", { rqRemittanceFrequency: 3 }),
+      );
+      assert.equal(mistyped.status, 422);
+      assert.deepEqual(await payrollState(fixture.orgId), before);
+
+      // Null clears back to the schedule default.
+      const cleared = await PUT(
+        request("PUT", { rqRemittanceFrequency: null }),
+      );
+      assert.equal(cleared.status, 200);
+      assert.equal(
+        (await payrollState(fixture.orgId)).settings?.rqRemittanceFrequency,
+        null,
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);

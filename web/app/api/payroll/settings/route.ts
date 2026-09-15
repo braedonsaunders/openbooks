@@ -9,8 +9,11 @@ import {
   type PayrollSubsidiaryScope,
 } from '@openbooks/engine/src/payroll-run.ts'
 import {
+  declaredRemittanceFrequencySettingsKeys,
   declaredRemittanceVendorSettingsKeys,
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
+  remittanceFrequencyBand,
+  remittanceScheduleForFrequencyKey,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
@@ -286,6 +289,23 @@ export async function PUT(req: Request) {
   if (vendorError) return vendorError
   for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
     if (vendorKey in body) settings[vendorKey] = body[vendorKey] ?? null
+  }
+  // Destination remittance frequencies — exactly the settings keys the pack
+  // schedules declare, each validated against its own schedule's bands (a
+  // CRA remitter type is never a valid RQ frequency and vice versa). Null
+  // clears back to the schedule default; anything else is refused at save
+  // time rather than silently dating bills from the default.
+  for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
+    if (!(frequencyKey in body)) continue
+    const value = body[frequencyKey] ?? null
+    const schedule = remittanceScheduleForFrequencyKey(frequencyKey)
+    if (value !== null
+      && (typeof value !== 'string' || !schedule || !remittanceFrequencyBand(schedule, value))) {
+      return NextResponse.json({ error: `invalid ${frequencyKey}` }, { status: 422 })
+    }
+  }
+  for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
+    if (frequencyKey in body) settings[frequencyKey] = body[frequencyKey] ?? null
   }
   // The cheque safety net. On by default: a payroll that refuses to run
   // because one employee's void cheque has not been keyed yet fails everybody

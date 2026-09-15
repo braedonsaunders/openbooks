@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, sum } from "./money.ts";
+import { add, cmp, div, formatMoney, sum } from "./money.ts";
 import {
   assertPayrollFilingAccountKnown,
   filingAccountRef,
@@ -16,6 +16,7 @@ import {
 import { PayrollError } from "./payroll-error.ts";
 import {
   allRemittanceSchedules,
+  remittanceBandForAverage,
   remittanceFrequencyBand,
   remittanceScheduleInForce,
   statutoryRemittanceDeclaration,
@@ -849,6 +850,53 @@ export function scheduleForRemittanceGroup(input: {
     dueDate: due.dueDate,
     rule: due.rule,
   };
+}
+
+/**
+ * Advisory: does last year's measured monthly average for a scheduled
+ * destination sit in a different band than the frequency the bills date at?
+ *
+ * The pack's average-monthly bands are what the agency assigns frequencies
+ * from, so a configured frequency two bands away from the measured average
+ * is worth an operator's look — a large employer left on the monthly default
+ * remits late all year. Advisory ONLY: it never throws (an org mid-setup can
+ * hold committed payroll the summary refuses to read), and it never changes a
+ * bill — the configured-or-default frequency dates, full stop.
+ *
+ * The average is the destination's committed prior-year total over 12
+ * calendar months, stated in the message so the operator can judge it (a
+ * mid-year adopter's partial year reads low by construction). Returns the
+ * warning sentence, or null when there is no prior-year history for the
+ * destination or the bands agree.
+ */
+export async function scheduledFrequencyAdvisory(
+  orgId: string,
+  schedule: PayrollRemittanceSchedule,
+  vendorPartyId: string,
+  payrollSettings: Record<string, unknown>,
+  year: number,
+  executor: RemittanceExecutor = db,
+): Promise<string | null> {
+  let groups: RemittanceGroup[];
+  try {
+    groups = await payrollRemittanceSummary(
+      orgId,
+      { from: `${year}-01-01`, to: `${year}-12-31` },
+      undefined,
+      executor,
+    );
+  } catch {
+    return null;
+  }
+  const group = groups.find((candidate) => candidate.partyId === vendorPartyId);
+  if (!group || cmp(group.total, "0") === 0) return null;
+  const average = div(group.total, "12");
+  const { frequency } = scheduledRemittanceFrequency(schedule, payrollSettings);
+  const measured = remittanceBandForAverage(schedule, average);
+  if (!measured || measured.frequency === frequency) return null;
+  return `${schedule.authority} remittances averaged $${formatMoney(average, 2)}/month across ${year} — ` +
+    `the ${measured.label.toLowerCase()} band — but bills date at the ${frequency.replaceAll("_", " ")} ` +
+    `frequency; confirm it against your ${schedule.authority} notice in Setup → Payroll`;
 }
 
 /**
