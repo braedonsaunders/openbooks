@@ -393,3 +393,36 @@ test(
     }
   },
 );
+
+test(
+  "asset PATCH refuses a foreign reference custom value instead of storing it",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedAsset();
+    const foreign = await createScratchOrg();
+    try {
+      await db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${fixture.actorId}, ${fixture.actorId})
+      `);
+      const foreignParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${foreign.orgId} limit 1`)).rows[0]!.id;
+      const ownParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${fixture.orgId} limit 1`)).rows[0]!.id;
+      const refused = await PATCH(await patchRequest(fixture, { custom: { ref_party: foreignParty } }), {
+        params: Promise.resolve({ id: fixture.assetId }),
+      });
+      assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(await refused.clone().json().catch(() => null))}`);
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId}`)).rows[0]?.custom;
+      assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, "refused references store nothing");
+      const saved = await PATCH(await patchRequest(fixture, { custom: { ref_party: ownParty } }), {
+        params: Promise.resolve({ id: fixture.assetId }),
+      });
+      assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(await saved.clone().json().catch(() => null))}`);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(fixture.orgId);
+      await dropScratchOrgReporting(foreign.orgId);
+    }
+  },
+);
