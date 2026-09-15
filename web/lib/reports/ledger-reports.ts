@@ -95,6 +95,20 @@ export async function generalLedger(
   const opening = (await reportDb.execute<{ account_id: string; bal: string }>(openingSql))
   const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]))
 
+  // Keep the detail cap presentation-only. Closing balances must include all
+  // posted activity in the report window, including lines omitted by `limit`.
+  const periodActivity = (await reportDb.execute<{ account_id: string; activity: string }>(sql`
+    select ${reportDb.censusColumn}, l.account_id, coalesce(sum(l.amount), 0) as activity
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+       and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to}
+       and ${dimWhere(opts.dims)}${acctFilter}
+     group by l.account_id
+  `))
+  const activityByAcct = new Map(periodActivity.rows.map((r) => [r.account_id, r.activity]))
+
   const lines = (await reportDb.execute<{
       account_id: string; number: string | null; name: string; type: string
       entry_id: string; entry_number: string | null; date: string
@@ -140,6 +154,10 @@ export async function generalLedger(
       docKind: r.doc_kind,
       docId: r.doc_id,
     })
+  }
+  for (const account of accounts) {
+    const activity = activityByAcct.get(account.id)
+    if (activity !== undefined) account.closing = decimalAdd(account.opening, activity)
   }
   return { accounts, from, to, truncated }
 }

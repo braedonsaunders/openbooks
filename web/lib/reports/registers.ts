@@ -181,6 +181,19 @@ export async function partyRegister(
   `))
   const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
 
+  // Keep the detail cap presentation-only. Closing balances must include all
+  // posted activity in the report window, including lines omitted by `limit`.
+  const periodActivity = (await reportDb.execute<{ party_id: string | null; activity: string }>(sql`
+    select ${reportDb.censusColumn}, l.party_id, coalesce(sum(l.amount), 0) as activity
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
+       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
+     group by l.party_id
+  `))
+  const activityByParty = new Map(periodActivity.rows.map((r) => [r.party_id, r.activity]))
+
   const lines = (await reportDb.execute<{
       party_id: string | null; party_name: string | null
       entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
@@ -223,6 +236,10 @@ export async function partyRegister(
       docKind: x.doc_kind,
       docId: x.doc_id,
     })
+  }
+  for (const party of parties) {
+    const activity = activityByParty.get(party.partyId)
+    if (activity !== undefined) party.closing = decimalAdd(party.opening, activity)
   }
   return { parties, from: opts.from, to: opts.to, side, truncated }
 }
