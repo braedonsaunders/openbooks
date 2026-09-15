@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { allocateDocumentNumber } from "@openbooks/engine/src/document-numbering.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { normalizeMoney, sum, toUnits } from "@openbooks/engine/src/money.ts";
 import { can, guardPermission } from "../../../../lib/authz";
 import { applicationContextFromSession } from "../../../../lib/application/context";
@@ -77,6 +78,12 @@ export async function POST(req: Request) {
   const balance = lines.reduce((acc, line) => acc + toUnits(line.amount), 0n);
   if (balance !== 0n || lines.length < 2) {
     return NextResponse.json({ error: "draft lines do not balance" }, { status: 422 });
+  }
+  // The HMAC covers preview integrity, not calendar semantics: the draft tool
+  // only shape-checks the date, so a model-emitted impossible day would reach
+  // the DATE column and surface as a 500. Fail closed at the write boundary.
+  if (!isIsoCalendarDate(p.documentDate)) {
+    return NextResponse.json({ error: "invalid documentDate — expected YYYY-MM-DD" }, { status: 422 });
   }
 
   const user = authz.user;

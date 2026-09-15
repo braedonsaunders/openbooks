@@ -198,6 +198,39 @@ test(
 )
 
 test(
+  'a signed preview with an impossible document date fails closed instead of a storage 500',
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture()
+    try {
+      commitState.authz = authzFor(fx, null)
+      // Proposal verification is stubbed to accept: the HMAC covers preview
+      // integrity, not calendar semantics, so a model-emitted impossible day
+      // reaches the write boundary and must fail closed there.
+      const body = commitBody(fx)
+      body.preview.documentDate = '2026-02-30'
+      let status: number
+      let payload: unknown = null
+      try {
+        const response = await post(body)
+        status = response.status
+        payload = await response.json().catch(() => null)
+      } catch {
+        status = 500
+      }
+      assert.ok(
+        status === 400 || status === 422,
+        `expected a domain 4xx, got ${status}: ${JSON.stringify(payload)}`,
+      )
+      assert.deepEqual(await journalDrafts(fx.org.orgId), [], 'refused dates write nothing')
+    } finally {
+      commitState.authz = null
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
+
+test(
   'an empty or ambiguous restricted scope is refused before anything is written',
   { skip: !DB },
   async () => {
