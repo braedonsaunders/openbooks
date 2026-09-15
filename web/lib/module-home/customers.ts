@@ -4,7 +4,8 @@ import {
   addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
 } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
-import { calculateForecast } from '../crm'
+import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
+import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'
 import { isFeatureEnabled } from '../features'
 
@@ -55,6 +56,59 @@ export interface CustomersHome {
 
 const TREND_WEEKS = 13
 
+/**
+ * Forecast rollups retain each opportunity's transaction currency. The
+ * customer home has one organization-currency scalar, so translate every
+ * currency at the latest dated spot rate before adding the rows.
+ */
+async function pipelineInOrgCurrency(
+  orgId: string,
+  orgCurrency: string,
+  asOf: string,
+  rows: readonly ForecastRow[],
+): Promise<{ total: number; weighted: number; closed: number }> {
+  const rates = new Map<string, string>()
+  let total = '0.0000'
+  let weighted = '0.0000'
+  let closed = '0.0000'
+  for (const row of rows) {
+    const sourceCurrency = String(row.currency).trim().toUpperCase()
+    if (!sourceCurrency || sourceCurrency === orgCurrency) {
+      total = add(total, row.pipeline_amount ?? '0')
+      weighted = add(weighted, row.weighted_amount ?? '0')
+      closed = add(closed, row.closed_amount ?? '0')
+      continue
+    }
+    let rate = rates.get(sourceCurrency)
+    if (!rate) {
+      const candidates = await db.execute<{ rate: string }>(sql`
+        select rate::text from (
+          select rate, as_of, 0 as priority
+            from fx_rates
+           where org_id = ${orgId} and from_currency = ${sourceCurrency}
+             and to_currency = ${orgCurrency} and rate_type = 'spot'
+             and as_of <= ${asOf}
+          union all
+          select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority
+            from fx_rates
+           where org_id = ${orgId} and from_currency = ${orgCurrency}
+             and to_currency = ${sourceCurrency} and rate_type = 'spot'
+             and as_of <= ${asOf}
+        ) candidates
+        order by as_of desc, priority asc
+        limit 1
+      `)
+      rate = candidates.rows[0]?.rate
+      if (!rate) throw new Error(`no spot rate for customer pipeline ${sourceCurrency}→${orgCurrency} on or before ${asOf}`)
+      rates.set(sourceCurrency, rate)
+    }
+    total = add(total, mulDecimal(row.pipeline_amount ?? '0', rate))
+    weighted = add(weighted, mulDecimal(row.weighted_amount ?? '0', rate))
+    closed = add(closed, mulDecimal(row.closed_amount ?? '0', rate))
+  }
+  return { total: Number(total), weighted: Number(weighted), closed: Number(closed) }
+}
+
 export async function customersHome(orgId: string, subIds?: string[]): Promise<CustomersHome> {
   const [ordersOn, crmOn] = await Promise.all([
     isFeatureEnabled(orgId, 'orders'),
@@ -70,7 +124,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const docScope = subArr ? sql` and d.subsidiary_id = any(${subArr})` : sql``
   const q = calendarQuarterBounds(today)
 
-  const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast] = (await Promise.all([
+  const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast, orgRes] = (await Promise.all([
     // Open receivables aggregate — open customer-invoice items with remaining
     // balance (the same open-item shape the cash engine reads, aggregated).
     db.execute(sql`
@@ -181,6 +235,9 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
     `),
     crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
+    db.execute<{ baseCurrency: string }>(sql`
+      select base_currency as "baseCurrency" from orgs where id = ${orgId}
+    `),
   ]))
 
   const byWeek = new Map(trendRes.rows.map((r) => [String(r.wk).slice(0, 10), Number(r.collected)]))
@@ -188,18 +245,9 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const ar = arRes.rows[0] ?? {}
   const dso = dsoRes.rows[0] ?? {}
   const badge = badgeRes.rows[0] ?? {}
-  // Forecast amounts are already expressed in the functional currency by the
-  // CRM rollup. Receipt trend/badge totals above likewise convert each
-  // transaction-currency document before summing, so every money value here
-  // is safe to format with the organization's base currency.
-  const pipeline = forecast.reduce(
-    (acc, r) => ({
-      total: acc.total + Number(r.pipeline_amount ?? 0),
-      weighted: acc.weighted + Number(r.weighted_amount ?? 0),
-      closed: acc.closed + Number(r.closed_amount ?? 0),
-    }),
-    { total: 0, weighted: 0, closed: 0 },
-  )
+  const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
+  if (!orgCurrency) throw new Error('organization currency is not configured')
+  const pipeline = await pipelineInOrgCurrency(orgId, orgCurrency, today, forecast)
 
   return {
     arOutstanding: Number(ar.outstanding ?? 0),
