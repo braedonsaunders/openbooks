@@ -203,12 +203,24 @@ export type TaxFormRenderer = (
   branding?: { orgName?: string; primaryColor?: string | null } | null,
 ) => string
 
-/** Amount as the CRA/source platform worksheet prints it: thousands + forced 2 decimals,
- *  absolute value (the sign shows in a separate box on signed lines). */
+/** Amount as the CRA/source platform worksheet prints it: thousands + forced 2 decimals.
+ * Unsigned lines have no minus box, so a negative there (net refunds, a
+ * negative adjustment) parenthesizes like the generic renderer — it must
+ * stay visible, never collapse to its absolute value. */
 function fmtGrid(value: string): string {
   const normalized = value.trim()
+  const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
   const formatted = formatExactFacsimileValue(normalized.replace(/^[+-]/, ''))
-  return formatted ?? escFacsimile(value)
+  if (formatted === null) return escFacsimile(value)
+  return negative ? `(${formatted})` : formatted
+}
+
+/** Absolute magnitude for the NET TAX / BALANCE lines, whose sign lives in
+ *  the CRA minus box beside the chip (see signCell). */
+function absGrid(value: string): string {
+  const normalized = value.trim()
+  const negative = normalized.startsWith('-') && !NEGATIVE_ZERO_TEXT.test(normalized)
+  return negative ? normalized.slice(1) : normalized.replace(/^\+/, '')
 }
 
 /**
@@ -261,7 +273,7 @@ export function renderGst34Facsimile(
       <td style="border:1px solid #000;padding:3px 6px;font-size:10px;"><span style="font-weight:700;font-size:11px;">${title}</span> <span style="font-size:9px;">${caption}</span></td>
       ${signCell(v(code))}
       ${chip(code, true)}
-      ${box(v(code))}
+      ${box(absGrid(v(code)))}
     </tr>`
   const sectionHead = (title: string) =>
     `<tr><td colspan="4" style="padding:8px 4px 3px;font-size:12px;font-weight:700;">&nbsp;&nbsp;${title}</td></tr>`
