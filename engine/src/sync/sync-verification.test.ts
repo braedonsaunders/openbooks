@@ -378,3 +378,35 @@ test("open-item verification compares every kind the NetSuite truth query lists"
     assert.ok(compared.has(kind), `${type} → ${kind} is not compared against open-item truth`);
   }
 });
+
+test("open-item verification sums duplicate target refs instead of hiding a double import", () => {
+  // Two local documents carrying the same source ref (a double import nothing
+  // forbids) must read as a divergence: collapsing to the last row reports a
+  // clean match on a doubled ledger. Summing is also order-independent where
+  // last-wins is not — a voided duplicate at zero plus the live document
+  // still ties exactly.
+  assert.deepEqual(
+    verifyOpenItems(
+      [{ ref: "inv", unpaid: "100.0000" }],
+      [
+        { ref: "inv", unpaid: "100.0000" },
+        { ref: "inv", unpaid: "100.0000" },
+      ],
+    ),
+    {
+      checked: 1,
+      matches: 0,
+      mismatches: [{ ref: "inv", ours: "200.0000", theirs: "100.0000" }],
+    },
+  );
+  assert.deepEqual(
+    verifyOpenItems(
+      [{ ref: "inv", unpaid: "100.0000" }],
+      [
+        { ref: "inv", unpaid: "0.0000" },
+        { ref: "inv", unpaid: "100.0000" },
+      ],
+    ),
+    { checked: 1, matches: 1, mismatches: [] },
+  );
+});
