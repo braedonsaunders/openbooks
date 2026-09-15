@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   computeLineTax,
   computeLineTaxes,
+  resolveLineTax,
   TaxCalculationError,
+  taxVaries,
 } from "./tax.ts";
 import { requireEffectiveRateRow } from "./tax-persist.ts";
 
@@ -215,6 +217,44 @@ test("negative and non-exact tax rates are refused at the calculation boundary",
   assert.throws(
     () => computeLineTaxes("100", [code({ recoverablePercent: "a few" })]),
     (e: unknown) => e instanceof TaxCalculationError && /recoverable percentage/.test(e.message),
+  );
+});
+
+test("override variance trips just past a half cent", () => {
+  // taxVaries is the half-cent ($0.0050) tolerance on manual overrides: a
+  // 51-unit variance varies, a 50-unit variance does not. The boundary is
+  // exact — shifting it by one unit hides real variances from reviewers.
+  assert.equal(resolveLineTax("100", "5").computed, "5.0000");
+  assert.equal(
+    taxVaries(resolveLineTax("100", "5", { overridden: true, taxAmount: "5.0050" })),
+    false,
+  );
+  assert.equal(
+    taxVaries(resolveLineTax("100", "5", { overridden: true, taxAmount: "5.0051" })),
+    true,
+  );
+  assert.equal(
+    taxVaries(resolveLineTax("100", "5", { overridden: true, taxAmount: "4.9950" })),
+    false,
+  );
+  assert.equal(
+    taxVaries(resolveLineTax("100", "5", { overridden: true, taxAmount: "4.9949" })),
+    true,
+  );
+  assert.equal(taxVaries(resolveLineTax("100", "5")), false);
+});
+
+test("a dust-positive override on a negative line is still a sign mismatch", () => {
+  // The sign guard refuses ANY positive override on a negative amount — even
+  // one unit ($0.0001). Relaxing the comparison lets a positive override slip
+  // into the magnitude path and post with the wrong sign.
+  assert.throws(
+    () =>
+      computeLineTaxes("-100", [code()], {
+        overridden: true,
+        taxAmount: "0.0001",
+      }),
+    /same sign/,
   );
 });
 
