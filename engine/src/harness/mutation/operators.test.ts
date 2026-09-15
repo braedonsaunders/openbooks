@@ -197,6 +197,21 @@ test("guard-negation preserves string literals from the original source", () => 
   assert.ok(mutants[0]!.mutatedSource.includes('if (!(mode !== "reverse_charge")) {'));
 });
 
+test("comparison-flip spares generic angle brackets but keeps spaced comparisons", () => {
+  const source = [
+    "import { db } from \"./db.ts\";",
+    "export async function load(tx: Pick<typeof db, \"execute\">): Promise<void> {",
+    "  const index = new Map<string, number>();",
+    "  const limit: Record<string, string> | undefined = undefined;",
+    "  if (index.size > 0) return;",
+    "  for (const [k, v] of index) if (v < 10) return;",
+    "}",
+    "",
+  ].join("\n");
+  const mutants = byOperator(generateMutants("engine/src/probe.ts", source), "comparison-flip");
+  assert.deepEqual(descriptions(mutants), ["comparison '>' -> '>='", "comparison '<' -> '<='"]);
+});
+
 test("early-return-before-write fires only under a provable void return type", () => {
   const source = [
     "export async function persist(db: { insert(x: number): void }): Promise<void> {",
