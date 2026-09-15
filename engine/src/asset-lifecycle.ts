@@ -292,8 +292,21 @@ async function assertLifecyclePostingPolicy(
   lines: DisposalLine[],
 ): Promise<void> {
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
-  await tx.execute(sql`select id from accounts where org_id=${orgId}
-    and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
+  if (accountIds.length) {
+    const accounts = (await tx.execute<{ id: string; is_active: boolean; is_summary: boolean }>(sql`
+      select id, is_active, is_summary
+        from accounts
+       where org_id=${orgId}
+         and id=any(${uuidArray(accountIds)}::uuid[])
+       for share`)).rows;
+    const byId = new Map(accounts.map((account) => [account.id, account]));
+    if (accountIds.some((id) => {
+      const account = byId.get(id);
+      return !account || !account.is_active || account.is_summary;
+    })) {
+      throw new AssetLifecycleError("asset posting requires active, non-summary accounts");
+    }
+  }
   const dimensions = [
     { table: "departments", id: asset.department_id },
     { table: "projects", id: asset.project_id },
