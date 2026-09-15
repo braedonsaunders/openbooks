@@ -779,6 +779,31 @@ async function releaseVoidedPayRun(
   orgId: string,
   documentId: string,
 ): Promise<void> {
+  // A posted remittance bill is an AP payment obligation backed by this
+  // run's accrued liabilities. Refuse the source void until that bill is
+  // itself reversed; otherwise the bill would remain payable after the
+  // payroll subledger has been removed from statutory YTD and the next
+  // remittance could pay the same money twice. Locking the bill rows gives
+  // this check the same ordering as posting's remittance freshness guard.
+  const covered = (await tx.execute<{ document_number: string }>(sql`
+    select bill.document_number
+      from pay_runs r
+      join documents bill
+        on bill.org_id = r.org_id and bill.kind = 'vendor_bill' and bill.status = 'posted'
+       and bill.custom ? 'payrollRemittance'
+       and bill.custom->'payrollRemittance'->>'from' <= r.pay_date::text
+       and bill.custom->'payrollRemittance'->>'to' >= r.pay_date::text
+     where r.org_id = ${orgId} and r.document_id = ${documentId}
+     order by bill.created_at, bill.id
+     limit 1
+     for update of bill
+  `)).rows[0];
+  if (covered) {
+    throw new DocumentVoidError(
+      `this pay run is covered by posted payroll remittance bill ${covered.document_number}; void the remittance bill first`,
+    );
+  }
+
   const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs
        set run_status = 'voided', updated_at = now()

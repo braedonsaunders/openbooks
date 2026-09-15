@@ -281,6 +281,105 @@ export async function payrollRemittanceSummary(
     || (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
 }
 
+/**
+ * Reconcile a remittance bill against the committed payroll it snapshots.
+ *
+ * A bill is deliberately created as a normal AP draft, so payroll can be
+ * voided or another run can commit while that draft waits for review. Posting
+ * is the irreversible boundary: lock every pay run in the marked period,
+ * re-read the bill marker, then compare its stored total with the current
+ * destination group. The source locks serialize this check with both commit
+ * and controlled payroll voids; a stale draft therefore fails closed instead
+ * of becoming an over-remittance through the generic AP poster.
+ */
+export async function assertPayrollRemittanceBillCurrent(
+  orgId: string,
+  documentId: string,
+  executor: RemittanceExecutor = db,
+): Promise<void> {
+  const marker = (await executor.execute<{
+    party_id: string | null;
+    total: string;
+    from: string | null;
+    to: string | null;
+    filing_account_id: string | null;
+  }>(sql`
+    select party_id::text as party_id, total::text as total,
+           custom->'payrollRemittance'->>'from' as from,
+           custom->'payrollRemittance'->>'to' as to,
+           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id
+      from documents
+     where org_id = ${orgId} and id = ${documentId}
+       and kind = 'vendor_bill' and custom ? 'payrollRemittance'
+  `)).rows[0];
+  if (!marker) return;
+  if (
+    !marker.party_id
+    || !marker.from
+    || !marker.to
+    || !/^\d{4}-\d{2}-\d{2}$/.test(marker.from)
+    || !/^\d{4}-\d{2}-\d{2}$/.test(marker.to)
+    || marker.from > marker.to
+    || (marker.filing_account_id !== null && !/^[0-9a-f-]{36}$/i.test(marker.filing_account_id))
+  ) {
+    throw new PayrollError("payroll remittance bill has an invalid source marker");
+  }
+
+  // Lock source runs and their documents BEFORE locking the bill below. The
+  // controlled void path already owns a source document before it inspects
+  // posted remittance bills, so this order makes the two boundaries queue
+  // rather than deadlock.
+  await executor.execute(sql`
+    select r.document_id
+      from pay_runs r
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where r.org_id = ${orgId}
+       and r.pay_date between ${marker.from} and ${marker.to}
+     order by r.document_id
+     for update of r, d
+  `);
+
+  const locked = (await executor.execute<{
+    party_id: string | null;
+    total: string;
+    from: string | null;
+    to: string | null;
+    filing_account_id: string | null;
+  }>(sql`
+    select party_id::text as party_id, total::text as total,
+           custom->'payrollRemittance'->>'from' as from,
+           custom->'payrollRemittance'->>'to' as to,
+           custom->'payrollRemittance'->>'filingAccountId' as filing_account_id
+      from documents
+     where org_id = ${orgId} and id = ${documentId}
+       and kind = 'vendor_bill' and custom ? 'payrollRemittance'
+     for update
+  `)).rows[0];
+  if (!locked || !locked.party_id || !locked.from || !locked.to) {
+    throw new PayrollError("payroll remittance bill has an invalid source marker");
+  }
+
+  const groups = await payrollRemittanceSummary(
+    orgId,
+    { from: locked.from, to: locked.to },
+    undefined,
+    executor,
+  );
+  const group = groups.find((candidate) =>
+    candidate.partyId === locked.party_id
+    && candidate.filingAccount.id === (locked.filing_account_id ?? null));
+  if (!group) {
+    throw new PayrollError(
+      "payroll remittance source is no longer committed; regenerate this bill",
+    );
+  }
+  if (cmp(group.total, locked.total) !== 0) {
+    throw new PayrollError(
+      "payroll remittance bill no longer matches committed payroll; regenerate this bill",
+    );
+  }
+}
+
 /** One remittance group = one destination vendor under one filing account. */
 function groupKey(partyId: string | null, filingAccountId: string | null): string {
   return `${partyId ?? ""}::${filingAccountId ?? ""}`;
