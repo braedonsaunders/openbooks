@@ -151,3 +151,78 @@ test("property updates reject assigning an inactive subsidiary", { skip: !proces
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("property creation rejects a control account restricted to another subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enablePropertyManagement(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const branchId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
+      values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Control account branch', 'CAD', 'CA')
+    `);
+    await db.execute(sql`
+      update accounts
+         set subsidiary_id = ${branchId}, subsidiary_include_children = false
+       where org_id = ${org.orgId} and id = ${org.accounts.revenue}
+    `);
+    await assert.rejects(
+      createManagedProperty({
+        orgId: org.orgId,
+        actorId,
+        subsidiaryId: org.subsidiaryId,
+        rentIncomeAccountId: org.accounts.revenue,
+        code: "PROP-CROSS-ACCOUNT",
+        name: "Cross-subsidiary account property",
+        propertyType: "commercial",
+      }),
+      (error: unknown) => error instanceof PropertyManagementError && /restricted to another subsidiary/.test(error.message),
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("property updates reject a control account after its subsidiary restriction changes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enablePropertyManagement(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const property = await createManagedProperty({
+      orgId: org.orgId,
+      actorId,
+      subsidiaryId: org.subsidiaryId,
+      rentIncomeAccountId: org.accounts.revenue,
+      code: "PROP-ACCOUNT-UPDATE",
+      name: "Account update property",
+      propertyType: "commercial",
+    });
+    const branchId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
+      values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Updated account branch', 'CAD', 'CA')
+    `);
+    await db.execute(sql`
+      update accounts
+         set subsidiary_id = ${branchId}, subsidiary_include_children = false
+       where org_id = ${org.orgId} and id = ${org.accounts.revenue}
+    `);
+    await assert.rejects(
+      updateManagedProperty({
+        orgId: org.orgId,
+        actorId,
+        propertyId: property.id,
+        subsidiaryId: org.subsidiaryId,
+        rentIncomeAccountId: org.accounts.revenue,
+        code: "PROP-ACCOUNT-UPDATE",
+        name: "Account update property",
+        propertyType: "commercial",
+        status: "active",
+      }),
+      (error: unknown) => error instanceof PropertyManagementError && /restricted to another subsidiary/.test(error.message),
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
