@@ -33,7 +33,12 @@ import { formatExactRatio } from '../../analytics/_ui/format'
 import { Vital } from '../../analytics/_ui/Vital'
 import { CashForecastConfigDrawer } from './CashForecastConfigDrawer'
 
-const HORIZONS = [4, 8, 12] as const
+/**
+ * Preset switcher values. Mirrors CASH_HORIZON_PRESETS in lib/cash/core.ts
+ * (the client bundle cannot import that server-only module) — pinned by
+ * lib/cash/core.test.ts, which fails if the two drift apart.
+ */
+const HORIZONS = [4, 8, 13, 26] as const
 
 /** Orderable panels; the FIRST visible one renders as the hero (⅔ width). */
 const PANEL_KEYS = ['timeline', 'forecast', 'bridge', 'health', 'accounts'] as const

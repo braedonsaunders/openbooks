@@ -3,7 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Select } from '@openbooks/ui'
 
-/** Horizon selector (4 / 8 / 12 weeks) — drives the ?horizon query param. */
+/** Horizon selector (4 / 8 / 13 / 26 weeks) — drives the ?horizon query param. Mirrors CASH_HORIZON_PRESETS in lib/cash/core.ts; pinned by lib/cash/core.test.ts. */
 export function HorizonControl({ value }: { value: number }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -21,7 +21,8 @@ export function HorizonControl({ value }: { value: number }) {
       <Select value={String(value)} onChange={(e) => set(e.target.value)} triggerClassName="h-7 w-auto text-sm font-medium" aria-label="Forecast horizon">
         <option value="4">4 Weeks</option>
         <option value="8">8 Weeks</option>
-        <option value="12">12 Weeks</option>
+        <option value="13">13 Weeks</option>
+        <option value="26">26 Weeks</option>
       </Select>
     </label>
   )

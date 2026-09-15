@@ -241,6 +241,28 @@ export function withoutWeekEntries(weeks: WeekRow[]): WeekRow[] {
   return weeks.map((w) => ({ ...w, arEntries: [], apEntries: [] }));
 }
 
+/**
+ * Forecast horizon contract — the single source of truth for how far the
+ * cash forecast may project. 13 weeks is the industry-standard rolling
+ * forecast; 26 weeks is the supported cap (a half-year outlook for seasonal
+ * businesses). The Banking cash cockpit and the analytics cashflow dashboard
+ * offer the presets; their loaders accept any whole week count inside the
+ * cap so bookmarked URLs keep resolving.
+ */
+export const MAX_CASH_HORIZON_WEEKS = 26;
+/** Preset horizons offered by the cash forecast switchers. */
+export const CASH_HORIZON_PRESETS = [4, 8, 13, 26] as const;
+/**
+ * Normalize a requested horizon (?horizon=) to a whole week count inside the
+ * cap, falling back to the caller's default for garbage or out-of-range
+ * input. The Banking cockpit defaults to 8, analytics to 4.
+ */
+export function normalizeCashHorizonWeeks(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_CASH_HORIZON_WEEKS) return fallback;
+  return n;
+}
+
 /** A resolved week grid for a horizon anchored at `asOf`. */
 export interface WeekGrid {
   asOfIso: string;

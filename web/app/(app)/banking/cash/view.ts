@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
-import { normalizeMoneyValue, withoutWeekEntries, resolveAsOf } from '../../../../lib/cash/core'
+import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries, resolveAsOf } from '../../../../lib/cash/core'
 import { cashPosition, type CashPosition } from '../../../../lib/cash/cash-position'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { userPageLayout } from '../../../../lib/page-layout'
@@ -52,8 +52,7 @@ export async function loadBankingCash(
   const t = await getTranslations('banking.cash')
   const tBanking = await getTranslations('banking')
 
-  const parsed = Number(sp.horizon)
-  const horizon = parsed === 4 || parsed === 12 ? parsed : 8
+  const horizon = normalizeCashHorizonWeeks(sp.horizon, 8)
 
   // Subsidiary context (multi-subsidiary orgs): the whole cockpit — cash,
   // open items, SQL-backed forecast categories — scopes to the selected view.
