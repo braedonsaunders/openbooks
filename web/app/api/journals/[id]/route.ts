@@ -14,7 +14,7 @@ import {
 } from '../../../../lib/documents'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { isUuid } from '../../../../lib/list-params'
-import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 
@@ -178,6 +178,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         : {}
     const v = validateCustomValues(headerDefs, { ...existingCustom, ...body.custom })
     if (!v.ok) return NextResponse.json({ error: Object.values(v.errors)[0], fieldErrors: v.errors }, { status: 422 })
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids with a tenant-opaque 404 instead of persisting a
+    // cross-tenant pointer. Supplied values only, so legacy bags written
+    // before this fence cannot lock unrelated edits.
+    const suppliedHeaderCustom: Record<string, unknown> = {}
+    for (const key of Object.keys(body.custom)) {
+      if (v.cleaned[key] !== undefined) suppliedHeaderCustom[key] = v.cleaned[key]
+    }
+    const unownedHeaderRefs = await findUnownedCustomReferences(user.orgId, headerDefs, suppliedHeaderCustom)
+    if (unownedHeaderRefs.length > 0) {
+      const def = unownedHeaderRefs[0]!
+      return NextResponse.json({ error: `${def.label} not found in this organization` }, { status: 404 })
+    }
     headerCustom = { ...existingCustom, ...v.cleaned }
   }
 
@@ -199,6 +213,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json(
           { error: `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, fieldErrors: lv.errors },
           { status: 422 },
+        )
+      }
+      // Lines are replaced wholesale, so the whole submitted line bag is
+      // newly supplied: refuse foreign or dangling reference ids with the
+      // same tenant-opaque 404 the line-account precheck below returns.
+      const unownedLineRefs = await findUnownedCustomReferences(user.orgId, lineDefs, lv.cleaned)
+      if (unownedLineRefs.length > 0) {
+        const def = unownedLineRefs[0]!
+        return NextResponse.json(
+          { error: `Line ${i + 1}: ${def.label} not found in this organization` },
+          { status: 404 },
         )
       }
       const lineDims = validateExtraDims(l.extraDims, segments)

@@ -207,3 +207,74 @@ test(
     }
   },
 );
+
+test(
+  "journals PATCH refuses foreign reference custom values on header and lines",
+  { skip: !DB },
+  async () => {
+    const orgA = await createScratchOrg();
+    const orgB = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(orgA.orgId);
+      routeState.authz = {
+        user: { orgId: orgA.orgId, id: adminId },
+        permissions: new Set(),
+        allowedSubsidiaryIds: null,
+      };
+      const documentId = await makeDraftJournal(orgA, adminId, "JE-ALIEN-CF-1");
+      await db.execute(sql`
+        insert into custom_field_defs
+          (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+        values
+          (${randomUUID()}, ${orgA.orgId}, 'documents', 'journal', 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${adminId}, ${adminId}),
+          (${randomUUID()}, ${orgA.orgId}, 'document_lines', 'journal', 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${adminId}, ${adminId})
+      `);
+      const headerAttempt = patchRequest(documentId, {
+        expectedUpdatedAt: await revisionToken(documentId),
+        custom: { ref_party: orgB.customerId },
+      });
+      const refusedHeader = await PATCH(headerAttempt.req, headerAttempt.ctx);
+      assert.equal(
+        refusedHeader.status,
+        404,
+        `expected tenant-opaque 404, got ${refusedHeader.status}: ${JSON.stringify(await refusedHeader.clone().json().catch(() => null))}`,
+      );
+      const storedCustom = (await db.execute<{ custom: Record<string, unknown> }>(sql`
+        select custom from documents where id = ${documentId}
+      `)).rows[0]!.custom;
+      assert.equal(
+        (storedCustom as Record<string, unknown> | undefined)?.ref_party,
+        undefined,
+        "refused header references store nothing",
+      );
+      const savedHeader = patchRequest(documentId, {
+        expectedUpdatedAt: await revisionToken(documentId),
+        custom: { ref_party: orgA.customerId },
+      });
+      assert.equal((await PATCH(savedHeader.req, savedHeader.ctx)).status, 200, "own-org header reference must stay green");
+      const lineAttempt = patchRequest(documentId, {
+        expectedUpdatedAt: await revisionToken(documentId),
+        lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgB.customerId } }],
+      });
+      const refusedLine = await PATCH(lineAttempt.req, lineAttempt.ctx);
+      assert.equal(
+        refusedLine.status,
+        404,
+        `expected tenant-opaque 404, got ${refusedLine.status}: ${JSON.stringify(await refusedLine.clone().json().catch(() => null))}`,
+      );
+      const lines = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
+      `)).rows[0]!.n;
+      assert.equal(lines, 0, "refused line references store nothing");
+      const savedLine = patchRequest(documentId, {
+        expectedUpdatedAt: await revisionToken(documentId),
+        lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgA.customerId } }],
+      });
+      assert.equal((await PATCH(savedLine.req, savedLine.ctx)).status, 200, "own-org line reference must stay green");
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);
