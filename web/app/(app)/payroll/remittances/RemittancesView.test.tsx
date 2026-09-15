@@ -21,7 +21,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { RemittancesView } = await import('./RemittancesView')
 const messages = JSON.parse(readFileSync(new URL('../../../../messages/en/payroll.json', import.meta.url), 'utf8'))
-import type { RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.ts'
+import type { RemittanceGroup } from '../../../../../engine/src/payroll-remittance.ts'
 Object.assign(globalThis, { React })
 
 test('remittance bill payload follows edited dates while preserving unchanged range values', () => {
@@ -60,6 +60,7 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
     partyId: '11111111-1111-4111-8111-111111111111',
     partyName: 'Revenu Québec',
     filingAccount: { id: 'acct-1', accountNumber: '123456789RP0009', name: 'Quebec division', remitterType: 'accelerated_2' },
+    hasUnknownFilingAccount: false,
     vendorKeys: ['rqRemittancePartyId'],
     schedule: {
       vendorSettingsKey: 'rqRemittancePartyId',

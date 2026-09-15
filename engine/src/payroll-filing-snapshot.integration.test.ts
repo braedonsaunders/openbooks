@@ -162,12 +162,16 @@ test(
         t4Slips(fx.orgId, 2026),
         /unknown historical filing account/,
       );
-      await assert.rejects(
-        payrollRemittanceSummary(fx.orgId, {
-          from: "2026-07-01",
-          to: "2026-07-31",
-        }),
-        /unknown historical filing account/,
+      // The remittance summary must NOT inherit the year-end refusal: one
+      // legacy run surfaces unfiled/unknown while the summary keeps working.
+      const groups = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+      assert.ok(groups.length > 0, "legacy payroll still remits into groups");
+      assert.ok(
+        groups.some((g) => g.hasUnknownFilingAccount),
+        "the legacy run's group flags its unattributed filing account",
       );
       const row = {
         stubId,

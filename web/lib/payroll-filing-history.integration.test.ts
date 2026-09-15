@@ -36,6 +36,17 @@ const webRoot = new URL("../", import.meta.url);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // Keep workspace imports inside the checkout under test. node_modules
+    // symlinks resolve @openbooks/* to the main checkout, so without this a
+    // worktree route test would silently exercise main's engine instead of
+    // the worktree's. In the main checkout this maps to the same files.
+    if (specifier === "@openbooks/schema" || specifier.startsWith("@openbooks/")) {
+      const rest =
+        specifier === "@openbooks/schema"
+          ? "schema/src/index.ts"
+          : specifier.slice("@openbooks/".length);
+      return nextResolve(new URL(`../${rest}`, webRoot).href, context);
+    }
     // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
     if (specifier === "server-only") {
@@ -129,10 +140,15 @@ for (const change of [
         } else {
           await markLegacy(fx.orgId);
           const response = await get();
-          assert.equal(response.status, 422);
-          assert.match(
-            (await response.json()).error,
-            /unknown historical filing account/,
+          assert.equal(response.status, 200);
+          const body = await response.json();
+          assert.ok(body.groups.length > 0);
+          assert.ok(
+            body.groups.some(
+              (g: { hasUnknownFilingAccount?: boolean }) =>
+                g.hasUnknownFilingAccount,
+            ),
+            "the legacy run surfaces unfiled without failing the route",
           );
         }
       } finally {
