@@ -351,10 +351,18 @@ export async function restorePageSpec(opts: {
   route: string
   versionId: string
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+  /** `'user'` restores the actor's personal layer; `'org'` (default) the org layer. */
+  scope?: LayoutScope
 }): Promise<{ ok: true; id: string } | SpecRejection> {
+  // The layer being restored. A restore supersedes and republishes within one
+  // layer only — like save and clear, it must never switch off a layer it
+  // does not republish, and a version from another layer is not restorable
+  // into this one.
+  const owner = opts.scope === 'user' ? opts.actorId : null
   const rows = await db.execute<{ spec: unknown; note: string | null; is_active: boolean }>(sql`
     select spec, note, is_active from page_specs
      where org_id = ${opts.orgId} and route = ${opts.route} and id = ${opts.versionId}
+       and user_id is not distinct from ${owner}
      limit 1`)
   const row = rows.rows[0]
   // Scoped to the org AND the route: a version id is not a capability, and a
@@ -367,12 +375,15 @@ export async function restorePageSpec(opts: {
   if (!checked.ok) return checked
 
   return await db.transaction(async (tx) => {
-    // Tenant rows only, as in the save path: a restore publishes a tenant
-    // layout, which shadows a module projection by precedence. The module
-    // row stays active underneath, so a later clear falls back to it.
+    // Tenant rows of this layer only, as in the save path: a restore
+    // publishes a layout that shadows a module projection by precedence. The
+    // module row stays active underneath, so a later clear falls back to it.
+    // Every other layer — the org layout when restoring personal, personal
+    // layouts when restoring org — keeps rendering untouched.
     const superseded = await tx.execute<{ id: string }>(sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
+         and user_id is not distinct from ${owner}
          and extension_version_id is null
       returning id`)
     for (const previous of superseded.rows) {
@@ -383,8 +394,8 @@ export async function restorePageSpec(opts: {
                 ${opts.actorId})`)
     }
     const inserted = await tx.execute<{ id: string }>(sql`
-      insert into page_specs (org_id, route, spec, note, created_by, updated_by)
-      values (${opts.orgId}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
+      insert into page_specs (org_id, user_id, route, spec, note, created_by, updated_by)
+      values (${opts.orgId}, ${owner}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
               ${row.note}, ${opts.actorId}, ${opts.actorId})
       returning id`)
     const id = inserted.rows[0]!.id

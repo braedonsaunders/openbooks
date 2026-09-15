@@ -135,6 +135,10 @@ export async function POST(req: Request) {
       // rules still renders, and holding it to today's stricter checks would
       // make the layout someone wants back the one they cannot have.
       registries: RENDER_REGISTRIES,
+      // `?scope=user` restores the caller's personal layer; default restores
+      // the org layer. Without this a restore would publish into (and switch
+      // off) a layer the caller did not mean to touch.
+      scope: new URL(req.url).searchParams.get('scope') === 'user' ? 'user' : 'org',
     })
     if (!restored.ok) return NextResponse.json({ error: 'restore refused', errors: restored.errors }, { status: 400 })
     return NextResponse.json({ id: restored.id })
