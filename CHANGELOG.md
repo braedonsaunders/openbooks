@@ -19,6 +19,24 @@ changes; each release documents required operator action.
   `psp_settlement_batches.adjustment_amount` and the `adjustment` settlement
   line kind (migration 0144, additive).
 
+### Scheduler topology
+
+- Scheduled work now runs in the worker process only (`npm run worker`, the
+  `worker` Compose service / worker Deployment). The web process no longer
+  starts the scheduler unless `OPENBOOKS_RUN_SCHEDULER=1` is set explicitly
+  (single-process installs), and never under `next dev`
+  (`OPENBOOKS_RUN_SCHEDULER=force` is the only development override). Each
+  process logs one `[scheduler]` line at boot stating which mode it is in.
+  Concurrent worker replicas still run each tick once via the existing
+  Postgres claim lock. No job semantics changed.
+
+### Operator action
+
+- Scheduler topology: multi-process deployments take no action — keep the
+  worker service running (it already runs in `compose.yaml` and the HA
+  reference). Single-process installs that run web without a worker: set
+  `OPENBOOKS_RUN_SCHEDULER=1` on web.
+
 ## [0.1.0-alpha.5] - 2026-09-15
 
 A hardening release. A multi-agent audit read the engine, API, and application

@@ -186,7 +186,9 @@ then:
 2. resolves and records the official `0.1.0-alpha.5` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
-   background worker;
+   background worker (scheduled work — scripts, feeds, billing, outbox, flows,
+   close scans — runs in the worker; the web process schedules only when
+   `OPENBOOKS_RUN_SCHEDULER=1` is set for single-process installs);
 4. runs migrations and grants in a one-shot privileged bootstrap container,
    then starts web and worker containers that receive only a non-superuser,
    non-`BYPASSRLS` database login; and

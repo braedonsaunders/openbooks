@@ -105,6 +105,9 @@ Deployments use three web pods and two workers, pod anti-affinity, topology
 spread, rolling updates, disruption budgets, non-root execution, read-only root
 filesystems, and bounded resources. Tune replicas and resources from measured
 load; more workers are not automatically better for every accounting workload.
+Scheduled ticks run in the worker Deployment (replicas contend once per tick via
+the shared Postgres claim lock); web pods never schedule — do not set
+`OPENBOOKS_RUN_SCHEDULER` on web.
 
 ## Failure testing
 
