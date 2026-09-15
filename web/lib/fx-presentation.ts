@@ -30,11 +30,13 @@ import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 
 /** The org's base (functional) currency — the consolidated presentation currency. */
 export async function presentationCurrency(orgId: string): Promise<string> {
-  const r = await db.execute<{ base_currency: string }>(
-    sql`select base_currency from orgs where id = ${orgId}`,
+  const r = await db.execute(
+    sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`,
   );
-  const base = r.rows[0]?.base_currency;
-  if (!base) throw new Error(`organization ${orgId} has no base currency`);
+  const base = r.rows[0]?.baseCurrency;
+  if (typeof base !== "string" || !base) {
+    throw new Error(`organization ${orgId} has no base currency`);
+  }
   return base;
 }
 
