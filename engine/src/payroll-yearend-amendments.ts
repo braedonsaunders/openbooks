@@ -637,6 +637,15 @@ async function issueOriginal(
   submissions: readonly PayrollFilingSubmission[],
 ): Promise<RecordFilingIssueResult> {
   const { orgId, country, filingKey, taxYear } = input;
+  const alreadyIssued = (revisionNumber: number, revision: string) => new PayrollError(
+    `${filing.label} for ${taxYear} has already been issued (revision `
+    + `${revisionNumber}, `
+    + `${revision}) — correct it with an amendment `
+    + "or a cancellation; a second original would give the agency two competing returns. "
+    + "Slips DISCOVERED since the return was filed are filed as additional originals, which "
+    + "is not produced here: file those slips through the agency's own service and record "
+    + "them there",
+  );
   if (submissions.length > 0) {
     // A slip DISCOVERED after the return went out is neither an amendment nor
     // a cancellation: every agency here files it as an ADDITIONAL original
@@ -645,15 +654,8 @@ async function issueOriginal(
     // which no `PayrollFilingDownload` can express today — and a whole-year
     // file re-sent as an original would give the agency two competing
     // returns. So it is a NAMED gap rather than a wrong file.
-    throw new PayrollError(
-      `${filing.label} for ${taxYear} has already been issued (revision `
-      + `${submissions[submissions.length - 1]!.revisionNumber}, `
-      + `${submissions[submissions.length - 1]!.revision}) — correct it with an amendment `
-      + "or a cancellation; a second original would give the agency two competing returns. "
-      + "Slips DISCOVERED since the return was filed are filed as additional originals, which "
-      + "is not produced here: file those slips through the agency's own service and record "
-      + "them there",
-    );
+    const last = submissions[submissions.length - 1]!;
+    throw alreadyIssued(last.revisionNumber, last.revision);
   }
   const data = await filing.population(orgId, taxYear);
   const rows = data.rows;
@@ -683,6 +685,12 @@ async function issueOriginal(
 
   const submission = await persist(input, {
     revision: "original", revisionNumber: 1, supersedesId: null, file, slips,
+  }).catch((error: unknown) => {
+    // A rival issue committed revision 1 first: the fence held, so the
+    // standing refusal is the accurate one. (No re-read here: the
+    // violation aborted this unit's transaction.)
+    if (error instanceof ConcurrentFilingIssue) throw alreadyIssued(1, "original");
+    throw error;
   });
   return { submission, file, fileRefusal, corrections: [] };
 }
@@ -832,6 +840,19 @@ async function issueCorrection(
     supersedesId: previousSubmission.id,
     file,
     slips,
+  }).catch((error: unknown) => {
+    // A rival correction committed this revision number first: the fence
+    // held, so this build's number is stale. Its content was validated
+    // against a base the rival did not move, but renumbering silently
+    // would fork the supersession chain — refuse and let the operator
+    // review the history. (No re-read here: the violation aborted this
+    // unit's transaction.)
+    if (error instanceof ConcurrentFilingIssue) {
+      throw new PayrollError(
+        `another correction to this ${filing.label} for ${taxYear} was recorded while this one was being built — review the filing history and retry`,
+      );
+    }
+    throw error;
   });
   return { submission, file, fileRefusal, corrections };
 }
@@ -858,6 +879,36 @@ function reportedAsSlip(
   };
 }
 
+/**
+ * The losing half of a concurrent issue: two issuers read the same base and
+ * only one revision number can persist. `payroll_filing_submissions_org_revision`
+ * enforces that in storage under every isolation level (a repeatable-read
+ * snapshot cannot see the rival insert, so no read-side check can); this
+ * carries the conflict out so each issue path can refuse it by name instead
+ * of surfacing a raw unique violation.
+ */
+class ConcurrentFilingIssue extends Error {
+  constructor(readonly revisionNumber: number) {
+    super(`concurrent filing issue collided on revision ${revisionNumber}`);
+  }
+}
+
+/** True when the error is the revision fence rejecting a concurrent issue. */
+function isFilingRevisionConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+    if (
+      candidate.code === "23505"
+      && candidate.constraint === "payroll_filing_submissions_org_revision"
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
 /** Insert the submission and its slip snapshots as one atomic act. */
 async function persist(
   input: RecordFilingIssueInput,
@@ -871,7 +922,9 @@ async function persist(
 ): Promise<PayrollFilingSubmission> {
   const { orgId, actorId, country, filingKey, taxYear } = input;
   const submissionId = await db.transaction(async (tx) => {
-    const inserted = (await tx.execute<{ id: string }>(sql`
+    let id: string;
+    try {
+      const inserted = (await tx.execute<{ id: string }>(sql`
       insert into payroll_filing_submissions
         (org_id, country, filing_key, tax_year, revision, revision_number, supersedes_id,
          note, slip_count, artifact_filename, artifact_content_type, artifact_body,
@@ -883,7 +936,15 @@ async function persist(
               ${actorId}, ${actorId})
       returning id
     `));
-    const id = inserted.rows[0]!.id;
+      id = inserted.rows[0]!.id;
+    } catch (error) {
+      // A rival issue committed this revision number first: the storage
+      // fence held, so refuse by name at the issue paths below. Nothing
+      // else may touch this transaction afterwards — both callers throw
+      // without further reads, and the outer unit rolls back.
+      if (isFilingRevisionConflict(error)) throw new ConcurrentFilingIssue(issue.revisionNumber);
+      throw error;
+    }
     for (const slip of issue.slips) {
       await tx.execute(sql`
         insert into payroll_filing_submission_slips
