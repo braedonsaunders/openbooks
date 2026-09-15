@@ -7,6 +7,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { loadEquipment } from '../_lib'
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
@@ -92,6 +93,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch { return bad('capacity_invalid') }
   const acquiredOn = body.acquiredOn !== undefined ? text(body.acquiredOn) : current.rows[0].acquired_on
   const inServiceOn = body.inServiceOn !== undefined ? text(body.inServiceOn) : current.rows[0].in_service_on
+  // Strict calendar boundary: a shape-valid non-day such as February 30
+  // would otherwise reach the DATE columns and surface as a 500 from
+  // PostgreSQL instead of failing closed here. Only body-supplied values
+  // are checked — stored values already passed this gate on the way in.
+  if (body.acquiredOn !== undefined && acquiredOn !== null && !isIsoCalendarDate(acquiredOn)) return bad('acquired_on_invalid')
+  if (body.inServiceOn !== undefined && inServiceOn !== null && !isIsoCalendarDate(inServiceOn)) return bad('in_service_on_invalid')
   if (acquiredOn && inServiceOn && String(inServiceOn) < String(acquiredOn)) return bad('in_service_before_acquisition')
   try {
     await db.transaction(async (tx) => {
