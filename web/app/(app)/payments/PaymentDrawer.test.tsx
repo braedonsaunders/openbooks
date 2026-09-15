@@ -11,3 +11,11 @@ test('draft payment saves carry the exact document revision token required by th
     'the drawer must echo the loaded updated_at revision on every draft save',
   )
 })
+
+test('final payment posting carries the revision token fenced by post-with-applications', () => {
+  assert.match(
+    source,
+    /fetch\('\/api\/payments\/post-with-applications'[\s\S]*?expectedUpdatedAt:\s*doc\.updated_at/,
+    'the Pay & post action must send the loaded revision so a stale drawer 409s instead of overwriting the allocation set',
+  )
+})

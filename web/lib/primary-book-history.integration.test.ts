@@ -210,6 +210,9 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
     await db.execute(sql`update documents set status='approved' where id=${payment.id}`);
   }
   routeAuth.user = { orgId: org.orgId, id: actor };
+  // post-with-applications fences its draft save on the exact document
+  // revision: read the token the same lossless way the API surface does.
+  const paymentRevision = (await db.execute<{ revision: string }>(sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from documents where id=${payment.id}`)).rows[0]!.revision;
 
   let entered!: (pid: number) => void;
   let release!: () => void;
@@ -226,7 +229,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
     const pid = await enteredPromise;
     posting = path === 'service' ? postPaymentWithApplications(payment.id, undefined, actor, 'ui', { deferEffects: true })
       : postPaymentRoute(new Request('http://audit.local/api/payments/post-with-applications', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId: payment.id, allocations: [sameCurrencyAllocation(lineId, '100')] }) }))
+        body: JSON.stringify({ documentId: payment.id, expectedUpdatedAt: paymentRevision, allocations: [sameCurrencyAllocation(lineId, '100')] }) }))
         .then(async response => { const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body as { entryId: string }; });
     await waitBlocked(pid);
     release();
