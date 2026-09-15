@@ -12,6 +12,7 @@ import {
   validateCustomValues,
 } from "../../../../lib/custom-fields";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
@@ -146,7 +147,10 @@ function uuidArray(ids: string[]) {
   return `{${[...new Set(ids)].join(",")}}`;
 }
 function date(value: unknown) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  // Strict calendar check: a shape-valid non-day such as February 30 must
+  // fail as the date error here, not as a generic save error from the DATE
+  // column deep inside the transaction.
+  return isIsoCalendarDate(value);
 }
 function nonnegativeMoney(value: unknown, nullable = false): string | null | false {
   if ((value == null || value === "") && nullable) return null;

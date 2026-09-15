@@ -329,3 +329,28 @@ test(
     }
   },
 );
+
+test(
+  "PUT rejects an impossible effective date with the date error",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const fixture = await withBypass(seed);
+    try {
+      // February 30 passes a shape check but is not a calendar day: the
+      // save must name the date field, not fail as a generic save error
+      // from the DATE column, and must leave the stored version untouched.
+      const response = await withOrgContext(fixture.orgId, () =>
+        put(fixture, { ...putBody(fixture), effective_from: "2026-02-30" }),
+      );
+      assert.equal(response.status, 422);
+      assert.deepEqual(await response.json(), { errorCode: "effectiveDate" });
+      await withOrgContext(fixture.orgId, async () => {
+        const version = (await db.execute<{ from: string; status: string }>(sql`
+          select effective_from::text as "from", status from item_rate_versions where id = ${fixture.versionId}`));
+        assert.deepEqual(version.rows[0], { from: "2026-07-01", status: "draft" });
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
