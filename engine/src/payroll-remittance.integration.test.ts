@@ -6,6 +6,7 @@ import { db } from "./db.ts";
 import { add, cmp, sum } from "./money.ts";
 import { postDocument } from "./posting.ts";
 import { recordPayRunPayment } from "./payroll-payment.ts";
+import { requestDocumentVoid } from "./document-void.ts";
 import {
   createRemittanceBill,
   payrollRemittanceSummary,
@@ -14,6 +15,7 @@ import {
 import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
 import { t4Slips, t4Summary } from "./payroll-yearend.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -130,6 +132,122 @@ async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
   }
   throw new Error("remittance fence waiter did not reach the advisory lock");
 }
+
+test(
+  "a remittance bill cannot post after its payroll source is voided",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+
+      // A controlled payroll void retires the source from every statutory
+      // consumer. The already-created draft bill is now a stale snapshot and
+      // must not be allowed to move money through the generic AP poster.
+      await db.execute(sql`
+        update pay_runs set run_status = 'voided'
+         where org_id = ${fixture.org.orgId}`);
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await assert.rejects(
+        postDocument(bill.documentId, {
+          control: {
+            ar: fixture.org.accounts.ar,
+            ap: fixture.org.accounts.ap,
+            bank: fixture.org.accounts.bank,
+          },
+        }),
+        /payroll remittance.*(?:voided|no longer)|no longer.*matches committed payroll/i,
+      );
+      assert.equal(
+        (await db.execute<{ status: string }>(sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+        "approved",
+        "a stale remittance bill remains unposted for review/voiding",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "voiding payroll is blocked while a posted remittance bill covers it",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+
+      const expenseAccount = randomUUID();
+      await db.execute(sql`
+        insert into accounts
+          (id, org_id, number, name, type, is_summary, is_active, eliminate,
+           reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values
+          (${expenseAccount}, ${fixture.org.orgId}, '6100', 'Payroll expense', 'expense',
+           false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+      const source = (await db.execute<{ document_id: string }>(sql`
+        select document_id from pay_runs where org_id = ${fixture.org.orgId} limit 1`)).rows[0]!;
+      await db.execute(sql`
+        insert into document_lines (org_id, document_id, line_number, account_id, amount, created_by)
+        values
+          (${fixture.org.orgId}, ${source.document_id}, 1, ${expenseAccount}, '100', ${fixture.actorId}),
+          (${fixture.org.orgId}, ${source.document_id}, 2, ${fixture.liabilityAccountId}, '-100', ${fixture.actorId})`);
+      await db.execute(sql`
+        update documents set status = 'approved'
+         where org_id = ${fixture.org.orgId} and id = ${source.document_id}`);
+      await postDocument(source.document_id, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await postDocument(bill.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+      await assert.rejects(
+        requestDocumentVoid({
+          orgId: fixture.org.orgId,
+          documentId: source.document_id,
+          actorId: fixture.actorId,
+          reason: "remittance bill must be resolved first",
+          reversalDate: fixture.org.date,
+          source: "api",
+        }),
+        /posted payroll remittance bill.*void|void.*remittance bill/i,
+      );
+      assert.equal(
+        (await db.execute<{ status: string }>(sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${source.document_id}`)).rows[0]!.status,
+        "posted",
+        "the source payroll remains posted when the void is refused",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
 
 test(
   "remittance run: accrued CRA liabilities → draft vendor bill; T4 boxes reconcile",

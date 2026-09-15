@@ -50,6 +50,7 @@ import {
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
 import { allocateEntryNumber, nextFreeEntryNumber } from "./entry-number.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
+import { assertPayrollRemittanceBillCurrent } from "./payroll-remittance.ts";
 import {
   readTaxRateProviderConfig,
   readTaxQuoteForDocumentLine,
@@ -1959,6 +1960,9 @@ export async function postDocument(
     // same lock: whichever operation acquires the row first wins, and the
     // other re-checks after it commits.
     await tx.execute(sql`select id from orgs where id = ${doc.orgId} for update`);
+    if (doc.kind === "vendor_bill") {
+      await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, tx);
+    }
     // Resolve the authority only after the organization fence. Reading it
     // before the transaction can retain a demoted book while setup commits.
     // Hold the book row through the first journal insert so its history guard
