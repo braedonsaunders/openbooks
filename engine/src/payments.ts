@@ -1772,7 +1772,12 @@ async function createPaymentRunWithinTransaction(
       createdBy: opts.createdBy,
       partyId,
       bankAccountId: profile.bank_account_id,
-      subsidiaryId: first.subsidiary_id,
+      // An order-converted bill carries no subsidiary (single-entity orders
+      // never set one). Pass undefined so the payment inherits the payee's
+      // subsidiary or the org root — the same books the bill's lines posted
+      // to — instead of an explicit null whose empty scope matches no open
+      // item and fails every such run with "not an open item for this party".
+      subsidiaryId: first.subsidiary_id ?? undefined,
       currency: profile.currency,
       documentDate: paymentDate,
       fxRate: first.fx_rate,
