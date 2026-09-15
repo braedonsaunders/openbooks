@@ -6,6 +6,10 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
 import { PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
+import {
+  payrollRunPopulationScopeFilter,
+  type PayrollSubsidiaryScope,
+} from '@openbooks/engine/src/payroll-scope.ts'
 import { resolveDefinitionToExportData } from './report-run'
 import { exportDataToPdf, orgBranding, resolveLayout, type ExportData, type Translator } from './report-pdf'
 import { parseReportQuery } from './report-filters'
@@ -48,13 +52,22 @@ type RunHeader = {
   run_status: string
 };
 
-async function loadRun(orgId: string, documentId: string): Promise<RunHeader> {
+async function loadRun(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<RunHeader> {
   const r = (await db.execute<RunHeader>(sql`
     select d.document_number, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date, r.run_status
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
+       -- The package names every employee's pay, so the whole run is
+       -- visible only when every stub and adjustment is: a scoped caller
+       -- must own the complete population, exactly as the run detail and
+       -- the GL preview action require.
+       ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
   `))
   const run = r.rows[0]
   if (!run) throw new PayrollError('pay run not found')
@@ -67,8 +80,9 @@ async function glPreviewExportData(
   documentId: string,
   run: RunHeader,
   title: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<ExportData> {
-  const preview = await previewPayRunGl(orgId, documentId)
+  const preview = await previewPayRunGl(orgId, documentId, allowedSubsidiaryIds)
   return {
     title,
     dateRangeLabel: `${run.period_start} – ${run.period_end}`,
@@ -96,8 +110,9 @@ export async function assemblePayRunEvidence(
   orgId: string,
   userId: string,
   documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunEvidence> {
-  const run = await loadRun(orgId, documentId)
+  const run = await loadRun(orgId, documentId, allowedSubsidiaryIds)
   if (run.run_status === 'draft') {
     throw new PayrollError('calculate the pay run before submitting it for approval')
   }
@@ -138,7 +153,7 @@ export async function assemblePayRunEvidence(
 
   const glTitle = `GL preview ${run.document_number}`
   pdfs.push(await exportDataToPdf(
-    await glPreviewExportData(orgId, documentId, run, glTitle), branding, page, { showSummary: true, generatedAt },
+    await glPreviewExportData(orgId, documentId, run, glTitle, allowedSubsidiaryIds), branding, page, { showSummary: true, generatedAt },
   ))
   parts.push(glTitle)
 

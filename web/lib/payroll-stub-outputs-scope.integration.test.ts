@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import type { Authz } from "./authz";
 
-const state: { gate: Authz | null } = { gate: null };
+const state: { gate: Authz | null; reportResolutions: number } = { gate: null, reportResolutions: 0 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-stub-outputs-scope")] = state;
 // The run route imports the JSON boundary through the web `@/` alias, which
 // tsx resolves only under the web tsconfig. Map it to the real module so the
@@ -21,10 +21,28 @@ const MAIN_ROOT_URL = "file:///Users/braedonsaunders/Documents/openbooks/";
 const WORKTREE_ROOT_URL = new URL("../../", import.meta.url).href;
 const gateMock = "data:text/javascript," + encodeURIComponent(
   "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].gate}");
+// resolveDefinitionToExportData requires a Next request scope (report authz
+// reads cookies), which no harness has. The translator-style stub records
+// each resolution and returns empty-but-valid report content: the defect
+// under test is the missing population gate BEFORE any report is resolved,
+// and the report contents themselves are covered by the report suite.
+const reportRunMock = "data:text/javascript," + encodeURIComponent(`
+  export async function resolveDefinitionToExportData() {
+    const state = globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')];
+    state.reportResolutions += 1;
+    return { title: 'mock-evidence', dateRangeLabel: '', summary: [], groups: [] };
+  }
+`);
+const nextIntlMock = "data:text/javascript," + encodeURIComponent(
+  "export async function getTranslations(){return ((key) => key)}");
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+  if (specifier === "next-intl/server") return { shortCircuit: true, url: nextIntlMock };
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
   const parent = decodeURIComponent(context.parentURL ?? "");
+  if (specifier === "./report-run" && parent.endsWith("/web/lib/payroll-evidence.ts")) {
+    return { shortCircuit: true, url: reportRunMock };
+  }
   if (specifier === "../../../../../../lib/feature-gates"
     && parent.endsWith("/api/payroll/runs/[id]/stubs-pdf/route.ts")) {
     return { shortCircuit: true, url: gateMock };
@@ -121,5 +139,39 @@ test("stub email refuses a run carrying an out-of-scope employee", { skip: !proc
     );
     assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()));
     assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
+  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+});
+
+test("approval submission refuses a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { fx, documentId } = await opaqueFixture();
+  try {
+    // The evidence package (journal + register + GL preview) names every
+    // employee's pay, so submitting it for an opaque run must fail closed
+    // before a single report is resolved — like the GL preview action does.
+    state.gate = scopedGate(fx, "payroll.run");
+    state.reportResolutions = 0;
+    const refused = await runAction(
+      new Request("https://openbooks.test/api/payroll/runs/fixture", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "submit-approval" }),
+      }),
+      { params: Promise.resolve({ id: documentId }) },
+    );
+    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
+    assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
+    assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
+
+    state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
+    const submitted = await runAction(
+      new Request("https://openbooks.test/api/payroll/runs/fixture", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "submit-approval" }),
+      }),
+      { params: Promise.resolve({ id: documentId }) },
+    );
+    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
+    assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
   } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
 });
