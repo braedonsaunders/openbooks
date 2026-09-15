@@ -52,6 +52,12 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
+  // A malformed account id dies in the reconcilable-account lookup as an
+  // unhandled uuid throw (raw 500); the GET verb in this file already refuses
+  // it as a domain error, so refuse it here the same way.
+  if (!isUuid(body.accountId)) {
+    return NextResponse.json({ error: 'invalid accountId' }, { status: 400 })
+  }
   const statementBalanceRaw = canonicalDecimal(body.statementBalance, 4)
   if (statementBalanceRaw === null) {
     return NextResponse.json({ error: 'Statement balance must be an exact decimal' }, { status: 422 })
