@@ -65,6 +65,19 @@ jobs:
 
       - name: Load schema
         run: npx tsx scripts/bootstrap.ts
+      - name: Mark database as the owned ephemeral fixture
+        # Scratch-org fixtures fail closed on a database that does not carry
+        # this nonce (engine/src/test-fixtures.ts), so a stray run can never
+        # write to a real database. It is stamped only after the throwaway
+        # service for this job is provisioned.
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER="openbooks-ci-ephemeral-$(uuidgen)"
+          DB=$(psql "$OPENBOOKS_DB_URL" -Atc 'select current_database()')
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
+            -c "comment on database \"$DB\" is '$MARKER'"
+          echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
 
       - name: Run the conformance corpus
         # The ledger tier posts real documents through the accounting kernel.
