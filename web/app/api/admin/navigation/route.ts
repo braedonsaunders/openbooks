@@ -3,7 +3,7 @@ import { pgTextArrayLiteral } from "@/lib/pg-array";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, type Authz } from '../../../../lib/authz'
 import { MODULE_BY_KEY, type OrgNavConfig } from '../../../../lib/nav/registry'
 
 export const runtime = 'nodejs'
@@ -63,8 +63,26 @@ function validate(config: unknown): config is OrgNavConfig {
   return true
 }
 
+/**
+ * Navigation is administered under the catalogue key admin.nav.manage
+ * ("Customize navigation", the key the admin hub tile gates on). Holders of
+ * the historical admin.customization.manage keep their save access so
+ * existing administrators lose nothing.
+ */
+async function guardNavManage(): Promise<Authz | NextResponse> {
+  const navGate = await guardPermission('admin.nav.manage');
+  if (!(navGate instanceof NextResponse)) return navGate;
+  // Preserve the authentication failure from the first gate. Probing the
+  // legacy permission is only a compatibility fallback for an authenticated
+  // user who lacks the new key; it must not turn a 401 into a misleading 403.
+  if (navGate.status === 401) return navGate;
+  const customizationGate = await guardPermission('admin.customization.manage');
+  if (!(customizationGate instanceof NextResponse)) return customizationGate;
+  return NextResponse.json({ error: 'missing permission: admin.nav.manage' }, { status: 403 });
+}
+
 export async function PUT(req: Request) {
-  const gate = await guardPermission('admin.customization.manage')
+  const gate = await guardNavManage()
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
