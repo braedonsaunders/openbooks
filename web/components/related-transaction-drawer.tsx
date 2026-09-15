@@ -172,7 +172,7 @@ export async function loadRelatedTransactionDrawerData({
     const orderKind = kind as OrderKind
     const permission = orderKind === 'purchase_order' ? 'ap.read' : 'ar.read'
     if (!can(authz, permission)) return null
-    const order = await loadOrder(id, authz.user.orgId, orderKind)
+    const order = await loadOrder(id, authz.user.orgId, orderKind, authz.allowedSubsidiaryIds)
     if (!order || !canSeeDocument((order.doc), partyId, authz)) return null
     const roleCondition = orderKind === 'purchase_order'
       ? sql`exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`

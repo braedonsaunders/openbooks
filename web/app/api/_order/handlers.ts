@@ -65,7 +65,7 @@ export function makeGET(cfg: OrderHandlerConfig) {
       if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
       const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
       if (denied) return denied
-      const order = await loadOrder(id, gate.user.orgId, cfg.kind)
+      const order = await loadOrder(id, gate.user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
       if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
       return NextResponse.json(order)
     })
@@ -169,13 +169,13 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             expectedUpdatedAt: body.expectedUpdatedAt,
           })
           if (result.status === 'pending_approval') {
-            const order = await loadOrder(id, user.orgId, cfg.kind)
+            const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
             return NextResponse.json(
               { ...order, voidPending: true, requestId: result.runId },
               { status: 202 },
             )
           }
-          const order = await loadOrder(id, user.orgId, cfg.kind)
+          const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
           return NextResponse.json(order)
         } catch (error) {
           if (error instanceof DocumentVoidError) {
@@ -251,14 +251,14 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             )
           }
           if (submission.gated) {
-            const order = await loadOrder(id, user.orgId, cfg.kind)
+            const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
             return NextResponse.json(
               { ...order, approvalPending: true, requestId: submission.runId },
               { status: 202 },
             )
           }
         }
-        const order = await loadOrder(id, user.orgId, cfg.kind)
+        const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
         return NextResponse.json(order)
       })
     }
@@ -437,7 +437,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
     }
 
-    const order = await loadOrder(id, user.orgId, cfg.kind)
+    const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
     return NextResponse.json(order)
   }
 }
