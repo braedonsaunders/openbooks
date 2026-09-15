@@ -2,6 +2,8 @@ import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { acquireFeatureGateLock, isFeatureEnabled } from './features'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import {
   ProjectWorkBreakdownError,
@@ -22,6 +24,19 @@ type TaskRow = {
   estimated_cost: string | null
   updated_at: string
 };
+
+async function assertProjectsEnabled(orgId: string): Promise<void> {
+  if (!(await isFeatureEnabled(orgId, 'projects'))) {
+    throw new ProjectWorkBreakdownError('Projects feature is disabled', 404)
+  }
+}
+
+async function assertProjectsEnabledTx(tx: Executor, orgId: string): Promise<void> {
+  await acquireFeatureGateLock(orgId, tx)
+  if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
+    throw new ProjectWorkBreakdownError('Projects feature is disabled', 404)
+  }
+}
 
 /**
  * Projects are subsidiary-scoped records: restricted callers may only open
@@ -134,6 +149,7 @@ export async function loadWorkBreakdownTasks(
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkBreakdownTaskClient[]> {
+  await assertProjectsEnabled(orgId)
   await assertProject(db, orgId, projectId, allowedSubsidiaryIds)
   const result = (await db.execute<TaskRow>(sql`
     select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
@@ -154,6 +170,7 @@ export async function createWorkBreakdownTask(args: {
   input: WorkBreakdownTaskInput
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
+    await assertProjectsEnabledTx(tx, args.orgId)
     // The project row is the transaction-scoped sequencing lock for its WBS.
     // Concurrent creates cannot both observe the same max(schedule_order).
     await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'update')
@@ -199,6 +216,7 @@ export async function updateWorkBreakdownTask(args: {
   input: WorkBreakdownTaskInput
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
+    await assertProjectsEnabledTx(tx, args.orgId)
     await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'share')
     const before = await taskSnapshot(
       tx,

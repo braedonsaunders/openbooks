@@ -200,10 +200,14 @@ const scopeHooks = registerHooks({
     if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === './features') return { url: 'mock:features', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/org-feature-lock.ts') return { url: 'mock:org-feature-lock', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
     if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
+    if (url === 'mock:features') return { format: 'module', source: 'export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}', shortCircuit: true }
+    if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
     const source = scopeMockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
     return nextLoad(url, context)
@@ -223,6 +227,8 @@ const routeHooks = registerHooks({
     if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === './features') return { url: 'mock:features', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/org-feature-lock.ts') return { url: 'mock:org-feature-lock', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -264,6 +270,8 @@ const routeHooks = registerHooks({
         shortCircuit: true,
       }
     }
+    if (url === 'mock:features') return { format: 'module', source: 'export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}', shortCircuit: true }
+    if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
     if (url === 'mock:server-only') return { format: 'module', source: '', shortCircuit: true }
     const source = scopeMockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
