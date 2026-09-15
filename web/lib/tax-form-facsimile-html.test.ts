@@ -17,6 +17,10 @@ function result(overrides: Partial<TaxReturnResult> = {}): TaxReturnResult {
     submissionChannel: 'portal_manual',
     watermark: 'Working copy — file electronically through the CRA',
     registrationNumber: null,
+    functionalCurrency: 'CAD',
+    subsidiaryIds: [],
+    registrationId: null,
+    translation: null,
     boxes: [
       { lineCode: '101', label: 'Sales and other revenue', value: '1837186.5000', computed: false, editable: false, pdfField: null },
       { lineCode: '103', label: 'GST/HST collected', value: '238834.2600', computed: false, editable: false, pdfField: null },

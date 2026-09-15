@@ -453,6 +453,7 @@ function FilingCorrectionSectionBody({
       status: 'ready'
       slip: PayrollFilingSlipData
       orgName: string
+      currency: string
       revision: 'amended' | 'cancelled'
       rowId: string
     }
@@ -479,13 +480,15 @@ function FilingCorrectionSectionBody({
     setCancellationReason('')
     try {
       const res = await fetch(correctionHref(revision, 'json'))
-      const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; error?: string }
+      const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; currency?: string; error?: string }
       if (!res.ok || !body.slip) throw new Error(body.error ?? res.statusText)
+      if (!body.currency) throw new Error('slip response is missing its currency')
       if (request !== previewRequest.current) return
       setPreview({
         status: 'ready',
         slip: body.slip,
         orgName: body.orgName ?? '',
+        currency: body.currency,
         revision,
         rowId,
       })
@@ -562,7 +565,7 @@ function FilingCorrectionSectionBody({
 
   const facsimileHtml = useMemo(() => {
     if (preview.status !== 'ready') return ''
-    const { result, layout } = payrollSlipFacsimile(preview.slip, year)
+    const { result, layout } = payrollSlipFacsimile(preview.slip, year, preview.currency)
     return renderTaxFormFacsimileBody(result, { orgName: preview.orgName }, layout)
   }, [preview, year])
 

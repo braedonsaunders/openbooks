@@ -514,7 +514,7 @@ export function FilingSection({
 type SlipState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; slip: PayrollFilingSlipData; orgName: string }
+  | { status: 'ready'; slip: PayrollFilingSlipData; orgName: string; currency: string }
 
 /**
  * One population row's statutory slip in the house flyout: header facts, the
@@ -558,13 +558,17 @@ export function SlipDrawer({
     setState({ status: 'loading' })
     void fetch(slipHref('json'))
       .then(async (res) => {
-        const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; error?: string }
+        const body = (await res.json()) as { slip?: PayrollFilingSlipData; orgName?: string; currency?: string; error?: string }
         if (!alive) return
         if (!res.ok || !body.slip) {
           setState({ status: 'error', message: body.error ?? res.statusText })
           return
         }
-        setState({ status: 'ready', slip: body.slip, orgName: body.orgName ?? '' })
+        if (!body.currency) {
+          setState({ status: 'error', message: 'slip response is missing its currency' })
+          return
+        }
+        setState({ status: 'ready', slip: body.slip, orgName: body.orgName ?? '', currency: body.currency })
       })
       .catch((e: Error) => {
         if (alive) setState({ status: 'error', message: e.message })
@@ -579,7 +583,7 @@ export function SlipDrawer({
   // PDF the footer button downloads.
   const facsimileHtml = useMemo(() => {
     if (state.status !== 'ready') return ''
-    const { result, layout } = payrollSlipFacsimile(state.slip, year)
+    const { result, layout } = payrollSlipFacsimile(state.slip, year, state.currency)
     return renderTaxFormFacsimileBody(result, { orgName: state.orgName }, layout)
   }, [state, year])
 

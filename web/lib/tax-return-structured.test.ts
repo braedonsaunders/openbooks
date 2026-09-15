@@ -12,6 +12,10 @@ function gstr(): TaxReturnResult {
     submissionChannel: 'efile_api',
     watermark: 'Working copy — file on the GST portal',
     registrationNumber: null,
+    functionalCurrency: 'INR',
+    subsidiaryIds: [],
+    registrationId: null,
+    translation: null,
     boxes: [
       { lineCode: '3.1A', label: 'Outward taxable supplies — taxable value', value: '500000.0000', computed: false, editable: false, pdfField: null },
       { lineCode: 'OUT', label: 'Output tax on outward supplies', value: '90000.0000', computed: false, editable: false, pdfField: null },
