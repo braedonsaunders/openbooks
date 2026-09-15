@@ -403,7 +403,7 @@ const SOURCES: Record<string, EntityListSource> = {
     table: 'accounts',
     alias: 'a',
     customFieldTable: 'accounts',
-    baseJoins: (_allowed, today) => accountBaseJoins(today!),
+    baseJoins: (allowed, today) => accountBaseJoins(today!, allowed),
     builtInExpr: ACCOUNT_BUILT_IN_EXPR,
     sorts: ACCOUNT_SORTS,
     defaultSort: sql`a.number`,

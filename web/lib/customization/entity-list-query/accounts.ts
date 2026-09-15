@@ -25,7 +25,18 @@ export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 
  * ran a recursive descendant roll-up over the raw lines once per listed
  * account, which scanned the ledger dozens of times per page.
  */
-export function accountBaseJoins(today: string): SQL {
+export function accountBaseJoins(today: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
+  const ids = allowedSubsidiaryIds == null ? [] : [...allowedSubsidiaryIds]
+  const glSubsidiaryScope = allowedSubsidiaryIds == null
+    ? sql``
+    : ids.length
+      ? sql`and g.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
+      : sql`and false`
+  const lineSubsidiaryScope = allowedSubsidiaryIds == null
+    ? sql``
+    : ids.length
+      ? sql`and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
+      : sql`and false`
   return sql`
   left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
   left join lateral (
@@ -54,6 +65,7 @@ export function accountBaseJoins(today: string): SQL {
         from gl_month_activity g
         join descendants tree on tree.id = g.account_id
        where g.org_id = a.org_id
+         ${glSubsidiaryScope}
          and g.book_id = ${statementBookExpr(sql`a.org_id`)}
          and g.month < date_trunc('month', ${today}::date)::date
       union all
@@ -66,6 +78,7 @@ export function accountBaseJoins(today: string): SQL {
          and e.posting_date >= date_trunc('month', ${today}::date)::date
          and e.posting_date <= ${today}::date
        where l.org_id = a.org_id
+         ${lineSubsidiaryScope}
     )
     select coalesce(sum(m.amt), 0)
            * case when a.type in ('income','income_other','liability_payable','liability_card','liability_current_other','liability_long_term','equity') then -1 else 1 end as amount
