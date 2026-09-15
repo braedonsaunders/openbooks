@@ -9,6 +9,7 @@ import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadTimePolicy } from '../../../lib/time-policy'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   currentWeekStart,
   isIsoDate,
@@ -62,15 +63,19 @@ export async function loadTimesheets(
   // Employee filter — the same active-employee set the editor uses.
   const employees = (await db.execute<{ id: string; name: string | null }>(sql`
     select p.id, p.display_name as name
-      from parties p
-     where p.org_id = ${orgId} and p.is_active
-       and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
-     order by p.display_name`))
+         from parties p
+         where p.org_id = ${orgId} and p.is_active
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
+           and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
+         order by p.display_name`))
 
   // "New timesheet" targets the current user's linked employee (or the first
   // active employee as a fallback picker seed) and the current week.
   const myEmployee = canManage ? await userEmployeeId(orgId, authz.user.id) : null
-  const newTarget = myEmployee ?? employees.rows[0]?.id ?? null
+  const scopedMyEmployee = myEmployee
+    ? await pinTimesheetEmployee(orgId, myEmployee, authz.allowedSubsidiaryIds)
+    : null
+  const newTarget = scopedMyEmployee ?? employees.rows[0]?.id ?? null
   const newHref = newTarget
     ? (`/timesheets?timesheet=${newTarget}:${await currentWeekStart(orgId)}` as const)
     : ('/timesheets' as const)
@@ -80,13 +85,13 @@ export async function loadTimesheets(
   const [openEmployee, openWeekRaw] = openParam ? openParam.split(':') : []
   const requestedEmployeeId = openEmployee && isUuid(openEmployee) ? openEmployee : null
   const openEmployeeId = requestedEmployeeId
-    ? await pinTimesheetEmployee(orgId, requestedEmployeeId)
+    ? await pinTimesheetEmployee(orgId, requestedEmployeeId, authz.allowedSubsidiaryIds)
     : null
   const openWeek = openWeekRaw && isIsoDate(openWeekRaw) ? weekStart(openWeekRaw) : null
   const [pickers, weekPayload, lineFieldDefs] = openEmployeeId && openWeek
     ? await Promise.all([
-        loadPickers(orgId, openEmployeeId),
-        loadWeek(orgId, openEmployeeId, openWeek),
+        loadPickers(orgId, openEmployeeId, authz.allowedSubsidiaryIds),
+        loadWeek(orgId, openEmployeeId, openWeek, authz.allowedSubsidiaryIds),
         loadFieldDefs('time_entries'),
       ])
     : [null, null, []]

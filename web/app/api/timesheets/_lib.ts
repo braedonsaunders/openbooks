@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { add } from '@openbooks/engine/src/money.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   lockReasonsFor,
   weekLockReasons,
@@ -516,6 +517,7 @@ export interface TimesheetPickers {
 export async function loadPickers(
   orgId: string,
   includeEmployeeId?: string | null,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<TimesheetPickers> {
   const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
   // Equipment stays on stored week entries. The picker only omits the kind
@@ -533,9 +535,10 @@ export async function loadPickers(
                select 1 from employee_roles r
                 where r.party_id = p.id and r.org_id = p.org_id and r.is_active
              )) as currently_active
-        from parties p
-       where p.org_id = ${orgId}
-         and (
+            from parties p
+           where p.org_id = ${orgId}
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
+             and (
            (p.is_active and exists (
              select 1 from employee_roles r
               where r.party_id = p.id and r.org_id = p.org_id and r.is_active
@@ -544,8 +547,10 @@ export async function loadPickers(
          )
        order by p.display_name`),
     db.execute<Record<string, unknown>>(sql`
-      select id, code, name from projects
-       where org_id = ${orgId} and is_active order by name`),
+          select p.id, p.code, p.name from projects p
+           where p.org_id = ${orgId} and p.is_active
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
+           order by p.name`),
     db.execute<Record<string, unknown>>(sql`
       select id, code, name from items
        where org_id = ${orgId} and is_active
@@ -555,8 +560,10 @@ export async function loadPickers(
       select id, name, cost_multiplier, is_billable_default from time_types
        where org_id = ${orgId} and is_active order by cost_multiplier`),
     db.execute<Record<string, unknown>>(sql`
-      select id, code, name from departments
-       where org_id = ${orgId} and is_active order by name`),
+          select d.id, d.code, d.name from departments d
+           where d.org_id = ${orgId} and d.is_active
+             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null, { orgWideNull: true })}
+           order by d.name`),
   ]))
 
   const withCode = (r: Record<string, unknown>): PickerOption => ({
