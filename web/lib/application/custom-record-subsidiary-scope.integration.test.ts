@@ -13,7 +13,7 @@ registerHooks({
   },
 })
 
-const { listRecords, getRecord } = await import('./records.ts')
+const { createApplicationRecord, listRecords, getRecord } = await import('./records.ts')
 const { ApplicationError } = await import('./errors.ts')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -100,6 +100,82 @@ test(
           (error: unknown) => error instanceof ApplicationError && error.code === 'not_found',
         )
       })
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+test(
+  'application custom-record create rejects an out-of-scope nested subsidiary_id',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeKey = `v1-write-${randomUUID().replaceAll('-', '').slice(0, 8)}`
+    const { org, actorId, branch, typeId } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      const branchId = randomUUID()
+      const customTypeId = randomUUID()
+      const fields = [{
+        id: 'main',
+        title: 'Details',
+        fields: [
+          { id: 'subsidiary_id', type: 'text', label: 'Subsidiary' },
+          { id: 'title', type: 'text', label: 'Title' },
+        ],
+      }]
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values
+          (${branchId}, ${created.orgId}, ${created.subsidiaryId}, 'V1 Write Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `)
+      await db.execute(sql`
+        insert into custom_record_types
+          (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+        values
+          (${customTypeId}, ${created.orgId}, ${typeKey}, 'V1 Write Scope', 'V1 Write Scopes',
+           ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
+      `)
+      return { org: created, actorId: actor, branch: branchId, typeId: customTypeId }
+    })
+    const user = {
+      id: actorId,
+      email: 'v1-records-write-scope@scratch.test',
+      name: 'V1 Records Write Scope',
+      roles: [{ key: 'admin', name: 'Admin' }],
+      orgId: org.orgId,
+      envKind: 'production' as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: actorId,
+      homeOrgId: org.orgId,
+    }
+    const context = {
+      authz: { user, permissions: new Set(['*']), allowedSubsidiaryIds: new Set([org.subsidiaryId]) },
+      source: 'api' as const,
+      requestId: randomUUID(),
+      apiKeyId: null,
+    }
+    try {
+      await assert.rejects(
+        withOrgContext(org.orgId, () => createApplicationRecord(context, {
+          typeKey,
+          body: {
+            // The transport-level field passes its existing guard, while the
+            // dynamic custom-record payload attempts to move the row outside scope.
+            subsidiaryId: org.subsidiaryId,
+            data: { subsidiary_id: branch, title: 'must not persist' },
+          },
+          idempotencyKey: `v1-write-${randomUUID()}`,
+        })),
+        (error: unknown) => error instanceof ApplicationError && error.code === 'not_found',
+      )
+      const rows = await withBypass(() => db.execute(sql`
+        select count(*)::text as count from custom_records
+         where org_id = ${org.orgId} and type_id = ${typeId}
+      `))
+      assert.equal(rows.rows[0]?.count, '0')
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId))
     }
