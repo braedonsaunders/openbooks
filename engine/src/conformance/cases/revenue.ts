@@ -605,4 +605,104 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       };
     },
   },
+
+  // -------------------------------------------------------------------------
+  // Changes in estimate and contract modifications (over-time contracts)
+  // -------------------------------------------------------------------------
+  {
+    id: "rev-percent-complete-catch-up",
+    title: "A change in the progress estimate is caught up in the current period",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-25-31",
+        kind: "requirement",
+        requirement:
+          "Progress toward complete satisfaction of an over-time obligation is remeasured each period with a single method applied consistently.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.39",
+        kind: "requirement",
+        requirement:
+          "A single method of measuring progress is applied to each over-time obligation and updated as circumstances change.",
+      },
+    ],
+    support: "supported",
+    tier: "computation",
+    assertion:
+      "Revising the estimated progress restates the cumulative target and books only the delta in the current period — an upward revision recognises more, a downward revision reverses what was already recognised, and prior periods are never restated.",
+    facts: [
+      "Obligation amount 1,200.00 recognised by percentage of completion.",
+      "In March the estimate rises to 60% complete with 500.00 already recognised: the cumulative target is 720.00, so 220.00 is recognised in March.",
+      "In April the estimate falls to 40% complete with 720.00 recognised: the cumulative target is 480.00, so 240.00 is reversed in April.",
+    ],
+    expected: {
+      values: {
+        marchCatchUp: "220.0000",
+        aprilReversal: "-240.0000",
+      },
+    },
+    run: () => {
+      const march = computeRecognitionSchedule({
+        total: "1200.00",
+        method: "percent_complete",
+        startOn: "2026-03-01",
+        percentComplete: "60",
+        alreadyRecognized: "500",
+      });
+      const april = computeRecognitionSchedule({
+        total: "1200.00",
+        method: "percent_complete",
+        startOn: "2026-04-01",
+        percentComplete: "40",
+        alreadyRecognized: "720",
+      });
+      return {
+        values: {
+          marchCatchUp: march[0]!.planned,
+          aprilReversal: april[0]!.planned,
+        },
+      };
+    },
+  },
+
+  {
+    id: "rev-contract-modification",
+    title: "A contract modification is assessed as a separate contract or as part of the existing one",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-25-10",
+        kind: "requirement",
+        requirement:
+          "A change to the scope or price of a contract is accounted for as a separate contract when the added promises are distinct and priced at their standalone selling prices, and otherwise by remeasuring the existing obligation.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.18",
+        kind: "requirement",
+        requirement:
+          "A contract modification is a separate contract only when distinct promises are added for consideration reflecting their standalone selling prices.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.",
+    facts: [
+      "A twelve-month service for 1,200.00 (100.00 a month); 300.00 is recognised in the first three months.",
+      "In month four the parties add distinct services priced at their standalone selling price of 900.00 over the remaining nine months.",
+      "The modification is a separate contract: the original 100.00 a month continues and 100.00 a month is recognised for the added services.",
+    ],
+    gap: "The revenue engine has no contract-modification assessment: setContractPricing can overwrite a contract's total price but nothing classifies a scope-or-price change as a separate contract, a prospective remeasurement, or a cumulative catch-up, and obligations and schedules are never remapped for it.",
+    expected: {
+      values: {
+        recognizedToDate: "300.0000",
+        originalMonthlyRecognition: "100.0000",
+        addedMonthlyRecognition: "100.0000",
+        remainingTransactionPrice: "1800.0000",
+      },
+    },
+  },
 ];
