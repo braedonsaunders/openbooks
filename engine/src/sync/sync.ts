@@ -270,6 +270,21 @@ export function unresolvedSourceDeletionCandidates(
  * truth scope: an open balance the source never lists is a divergence, not
  * coverage — except a zero balance, which is exactly what a closed, voided,
  * or paid document that the source no longer reports looks like. */
+/**
+ * Document kinds whose per-document unpaid balance is compared against the
+ * source's openItems() truth. This must cover every kind a connector lists as
+ * open-item truth: NetSuite reports expense reports (ExpRept) as payables
+ * alongside bills, so a list that stops at invoices/bills/credits reads every
+ * expense report as "missing" and fails the financial gate on a clean ledger.
+ */
+export const OPEN_ITEM_DOCUMENT_KINDS = [
+  "customer_invoice",
+  "vendor_bill",
+  "expense_report",
+  "customer_credit",
+  "vendor_credit",
+] as const;
+
 export function verifyOpenItems(
   truth: readonly SourceOpenItem[],
   target: readonly SourceOpenItem[],
@@ -388,16 +403,16 @@ export async function verifyCurrentLedgerState(
   let openItems: SyncResult["openItems"] = null;
   if (source.openItems) {
     const truth = await source.openItems();
-    // Per-document unpaid truth covers the commercial AR/AP documents
-    // (invoices, bills, credits) — every connector's openItems() population.
-    // Settlement instruments (payments, deposits), journals, and transfers
-    // are proven through the application graph and trial balance instead; a
-    // residual there must never read as invoice-truth divergence.
+    // Per-document unpaid truth covers the commercial AR/AP documents every
+    // connector lists in openItems() — see OPEN_ITEM_DOCUMENT_KINDS. Settlement
+    // instruments (payments, deposits), journals, and transfers are proven
+    // through the application graph and trial balance instead; a residual
+    // there must never read as invoice-truth divergence.
     const mine = (await db.execute<SourceOpenItem>(sql`
       select custom->>${refKey} as ref, coalesce(open_balance, 0) as unpaid
         from documents
        where org_id = ${orgId} and custom->>${refKey} is not null
-         and kind in ('customer_invoice', 'vendor_bill', 'customer_credit', 'vendor_credit')
+         and kind in (${sql.join(OPEN_ITEM_DOCUMENT_KINDS.map((kind) => sql`${kind}`), sql`, `)})
     `));
     openItems = verifyOpenItems(truth, mine.rows);
   }

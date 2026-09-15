@@ -16,6 +16,8 @@ import {
   type SyncResult,
 } from "./sync.ts";
 import type { NativeDocument } from "./native.ts";
+import { TTYPE_KIND } from "./netsuite-native.ts";
+import { OPEN_ITEM_DOCUMENT_KINDS } from "./sync.ts";
 
 function result(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -361,4 +363,18 @@ test("open-item verification ignores a zero balance the source no longer reports
     ),
     { checked: 1, matches: 1, mismatches: [] },
   );
+});
+
+test("open-item verification compares every kind the NetSuite truth query lists", () => {
+  // netsuite-source.openItems() selects CustInvc, VendBill and ExpRept plus the
+  // two credit types. Every one must map to a kind the local comparison
+  // selects, or a clean ledger fails the financial gate with thousands of
+  // "missing" refs (2026-09-14: 9,109 expense reports).
+  const truthTypes = ["CustInvc", "VendBill", "ExpRept", "VendCred", "CustCred"];
+  const compared = new Set<string>(OPEN_ITEM_DOCUMENT_KINDS);
+  for (const type of truthTypes) {
+    const kind = TTYPE_KIND[type];
+    assert.ok(kind, `${type} has no native kind`);
+    assert.ok(compared.has(kind), `${type} → ${kind} is not compared against open-item truth`);
+  }
 });
