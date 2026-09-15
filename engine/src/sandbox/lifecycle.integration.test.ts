@@ -119,6 +119,83 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
   }
 });
 
+test("refresh rebuilds maintained aggregates instead of accumulating cloned rows", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const sandboxName = `Aggregate refresh ${randomUUID()}`;
+  let sandboxId: string | null = null;
+  try {
+    const invoiceEntryId = randomUUID();
+    const invoiceLineId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const paymentLineId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values
+        (${invoiceEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`AGG-INV-${invoiceEntryId.slice(0, 8)}`},
+         ${org.date}, ${org.periodId}, 'draft', 'manual'),
+        (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`AGG-PAY-${paymentEntryId.slice(0, 8)}`},
+         ${org.date}, ${org.periodId}, 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+      values
+        (${invoiceLineId}, ${org.orgId}, ${invoiceEntryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
+        (${randomUUID()}, ${org.orgId}, ${invoiceEntryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
+        (${paymentLineId}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
+        (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)`);
+    await db.execute(sql`
+      update journal_entries
+         set status = 'posted', posted_at = now()
+       where org_id = ${org.orgId}
+         and id in (${invoiceEntryId}, ${paymentEntryId})`);
+    await db.execute(sql`
+      insert into applications
+        (id, org_id, from_line_id, to_line_id, amount, source_amount,
+         source_transaction_amount, source_transaction_currency, target_transaction_amount,
+         target_transaction_currency, settlement_rate, settlement_rate_source,
+         settlement_rate_reference, applied_on)
+      values
+        (${randomUUID()}, ${org.orgId}, ${paymentLineId}, ${invoiceLineId}, 100, 100,
+         100, 'CAD', 100, 'CAD', 1, 'same_currency', 'aggregate refresh test', ${org.date})`);
+    const created = await createSandbox({
+      productionOrgId: org.orgId,
+      name: sandboxName,
+      tier: "full",
+      masked: false,
+    });
+    sandboxId = created.sandboxId;
+
+    const aggregateSnapshot = async (): Promise<{ gl: unknown[]; payments: unknown[] }> => ({
+      gl: (await db.execute(sql`
+        select account_id::text, book_id::text, month::text, subsidiary_id::text,
+               debit_total::text, credit_total::text, line_count::text
+          from gl_month_activity
+         where org_id = ${created.sandboxOrgId}
+         order by account_id, book_id, month, subsidiary_id`)).rows,
+      payments: (await db.execute(sql`
+        select party_id::text, account_type, settled_on::text, n::text, sum_days::text, sum_days_sq::text
+          from party_payment_stats
+         where org_id = ${created.sandboxOrgId}
+         order by party_id, account_type, settled_on`)).rows,
+    });
+    const before = await aggregateSnapshot();
+    assert.ok(before.gl.length >= 3, "the initial clone must maintain GL aggregates from posted lines");
+    assert.deepEqual(before.payments.length, 1, "the initial clone must maintain payment aggregates from applications");
+
+    await refreshSandbox(sandboxId, { keepCustomizations: false });
+    assert.deepEqual(await aggregateSnapshot(), before, "refresh must rebuild, not double-count, maintained aggregates");
+  } finally {
+    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
+    else {
+      const failed = (await db.execute<{ id: string }>(sql`
+        select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`));
+      for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("an as-of sandbox refuses posted activity after its cutoff instead of failing on a deferred foreign key", { skip: !DB }, async () => {
   // Trimming journal entries past the cutoff while copying every document
   // leaves post-cutoff documents pointing at entries that were never copied,
