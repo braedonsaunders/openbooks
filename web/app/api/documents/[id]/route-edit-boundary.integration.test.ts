@@ -157,4 +157,40 @@ test('documents PATCH refuses a foreign-organization party with a tenant-opaque 
   }
 })
 
+test('documents PATCH refuses foreign reference custom values on header and lines', { skip: !DB }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    state.orgId = orgA.orgId
+    state.actorId = randomUUID()
+    const id = await makeDraftBill(orgA)
+    await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
+      values
+        (${randomUUID()}, ${orgA.orgId}, 'documents', 'vendor_bill', 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId}),
+        (${randomUUID()}, ${orgA.orgId}, 'document_lines', 'vendor_bill', 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
+    `)
+    // Header: a foreign-org party id is well-formed but another tenant's.
+    const refusedHeader = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), custom: { ref_party: orgB.vendorId } })
+    assert.equal(refusedHeader.status, 404, `expected tenant-opaque 404, got ${refusedHeader.status}: ${JSON.stringify(refusedHeader.json)}`)
+    const storedCustom = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${orgA.orgId}`)).rows[0]!.custom
+    assert.equal(storedCustom?.ref_party, undefined, 'refused header references store nothing')
+    // An own-org reference still saves.
+    const savedHeader = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), custom: { ref_party: orgA.vendorId } })
+    assert.equal(savedHeader.status, 200, `own-org header reference must stay green: ${JSON.stringify(savedHeader.json)}`)
+    // Lines: same fence, naming the offending line.
+    const line = (ref: string) => ({ accountId: orgA.accounts.cogs, amount: '10', description: 'probe', custom: { line_ref: ref } })
+    const refusedLine = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line(orgB.vendorId)] })
+    assert.equal(refusedLine.status, 404, `expected tenant-opaque 404, got ${refusedLine.status}: ${JSON.stringify(refusedLine.json)}`)
+    const lines = (await db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${orgA.orgId}`)).rows[0]!.n
+    assert.equal(lines, 0, 'refused line references store nothing')
+    const savedLine = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line(orgA.vendorId)] })
+    assert.equal(savedLine.status, 200, `own-org line reference must stay green: ${JSON.stringify(savedLine.json)}`)
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
+  }
+})
+
 

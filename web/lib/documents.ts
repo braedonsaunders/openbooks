@@ -12,7 +12,7 @@ import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, p
 import { canonicalDecimal } from './exact-decimal'
 import { DOC_KINDS, DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
 import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
-import { loadFieldDefs, validateCustomValues } from './custom-fields'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
@@ -854,6 +854,20 @@ export async function applyDocumentEdit(
     const existingCustom = current.custom ?? {}
     const v = validateCustomValues(headerDefs, { ...existingCustom, ...supplied })
     if (!v.ok) throw new DocumentEditError(422, Object.values(v.errors)[0]!, v.errors)
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids with a tenant-opaque 404 instead of persisting a
+    // cross-tenant pointer. Supplied values only, so legacy bags written
+    // before this fence cannot lock unrelated edits.
+    const suppliedHeaderCustom: Record<string, unknown> = {}
+    for (const key of Object.keys(supplied)) {
+      if (v.cleaned[key] !== undefined) suppliedHeaderCustom[key] = v.cleaned[key]
+    }
+    const unownedHeaderRefs = await findUnownedCustomReferences(orgId, headerDefs, suppliedHeaderCustom)
+    if (unownedHeaderRefs.length > 0) {
+      const def = unownedHeaderRefs[0]!
+      throw new DocumentEditError(404, `${def.label} not found in this organization`, { [def.key]: 'not found in this organization' })
+    }
     headerCustom = { ...existingCustom, ...v.cleaned }
     for (const def of headerDefs) {
       if (Object.prototype.hasOwnProperty.call(supplied, def.key) && supplied[def.key] == null) {
@@ -984,6 +998,14 @@ export async function applyDocumentEdit(
       const l = computed.lines[i]! as (typeof computed.lines)[number] & DocumentLineInput
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
+      // Lines are replaced wholesale, so the whole submitted line bag is
+      // newly supplied: refuse foreign or dangling reference ids here, the
+      // same tenant-opaque 404 the native line-ref precheck above returns.
+      const unownedLineRefs = await findUnownedCustomReferences(orgId, lineDefs, lv.cleaned)
+      if (unownedLineRefs.length > 0) {
+        const def = unownedLineRefs[0]!
+        throw new DocumentEditError(404, `Line ${i + 1}: ${def.label} not found in this organization`, { [def.key]: 'not found in this organization' })
+      }
       const lineDims = validateExtraDims(l.extraDims ?? {}, segments)
       if (!lineDims.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${lineDims.error}`)
       let unitPrice: string | null = null
