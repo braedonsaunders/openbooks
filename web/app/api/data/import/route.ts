@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { BankingError } from '@openbooks/engine/src/banking.ts'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../../lib/authz'
 import { parseJsonBody } from '../../../../lib/api/json'
 import { getResource } from '../../../../lib/data-io/resources'
-import { guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
+import { guessMapping, ImportParseError, MAX_IMPORT_ROWS, parseImportFile } from '../../../../lib/data-io/parse'
 import {
   CELL_PROVENANCE_KEY,
   IMPORT_FORMATS,
@@ -85,7 +86,21 @@ export async function POST(req: Request) {
   }
 
   if (mode === 'parse') {
-    const parsed = await parseImportFile(format, { text: body.text, base64: body.base64 })
+    let parsed
+    try {
+      parsed = await parseImportFile(format, { text: body.text, base64: body.base64 })
+    } catch (error) {
+      // A file the parser refuses (duplicate columns, empty CSV, ...) is a
+      // caller error, not a server failure — report it instead of a 500. A
+      // banking-domain refusal keeps its own API status.
+      if (error instanceof ImportParseError) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      if (error instanceof BankingError) {
+        return NextResponse.json({ error: error.message }, { status: error.status })
+      }
+      throw error
+    }
     const fields = await resource.fields()
     const mapping = guessMapping(parsed.headers, fields.map((f) => f.key))
     return NextResponse.json({
@@ -93,6 +108,8 @@ export async function POST(req: Request) {
       rows: parsed.rows,
       sample: parsed.rows.slice(0, 20),
       total: parsed.rows.length,
+      truncated: parsed.truncated,
+      maxRows: MAX_IMPORT_ROWS,
       fields,
       mapping,
     })

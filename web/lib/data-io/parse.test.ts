@@ -91,6 +91,48 @@ test('XLSX parsing retains numeric, formula, and text cell provenance', async ()
   })
 })
 
+test('CSV parsing refuses duplicate headers instead of silently dropping a column', async () => {
+  // Two "amount" columns collapse to one key downstream, so the first
+  // column's money would vanish without a trace. Fail closed at the boundary.
+  await assert.rejects(
+    () => parseImportFile('csv', { text: 'documentDate,amount,amount\n2026-01-01,100,200\n' }),
+    /duplicate.*amount/i,
+  )
+})
+
+test('CSV parsing treats trim-equal headers as duplicates', async () => {
+  await assert.rejects(
+    () => parseImportFile('csv', { text: 'amount, amount \n1,2\n' }),
+    /duplicate/i,
+  )
+})
+
+test('XLSX parsing refuses duplicate headers', async () => {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  sheet.addRow(['documentDate', 'amount', 'amount'])
+  sheet.addRow(['2026-01-01', 100, 200])
+  const buffer = await workbook.xlsx.writeBuffer()
+  await assert.rejects(
+    () => parseImportFile('xlsx', { base64: Buffer.from(buffer as ArrayBuffer).toString('base64') }),
+    /duplicate.*amount/i,
+  )
+})
+
+test('CSV parsing reports truncation instead of silently dropping rows past the cap', async () => {
+  const lines = ['documentDate,amount']
+  for (let i = 0; i < 20_001; i++) lines.push(`2026-01-${String((i % 28) + 1).padStart(2, '0')},${i}`)
+  const parsed = await parseImportFile('csv', { text: lines.join('\n') })
+  assert.equal(parsed.rows.length, 20_000)
+  assert.equal(parsed.truncated, true)
+})
+
+test('CSV parsing marks small files as complete', async () => {
+  const parsed = await parseImportFile('csv', { text: 'documentDate,amount\n2026-01-01,100\n' })
+  assert.equal(parsed.rows.length, 1)
+  assert.equal(parsed.truncated, false)
+})
+
 test('XLSX parsing retains array-formula child provenance for numeric and string results', async () => {
   const parsed = await parseImportFile('xlsx', { base64: await arrayFormulaWorkbook() })
 

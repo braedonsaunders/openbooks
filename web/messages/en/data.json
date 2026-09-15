@@ -41,6 +41,7 @@
     "next": "Continue",
     "back": "Back",
     "mapHint": "Match each column in your file to a field. Unmapped columns are ignored.",
+    "truncatedWarning": "Only the first {n} rows were read — the rest of the file was left out. Split the file and import the remainder separately.",
     "sourceColumn": "File column",
     "targetField": "Field",
     "ignore": "— Ignore —",

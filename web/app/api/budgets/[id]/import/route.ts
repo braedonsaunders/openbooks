@@ -7,14 +7,13 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { subsidiariesInScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { parseImportFile } from '../../../../../lib/data-io/parse'
+import { ImportParseError, parseImportFile } from '../../../../../lib/data-io/parse'
 import type { ImportFormat } from '../../../../../lib/data-io/types'
 import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from '../../../../../lib/budget-mutations'
 
 export const runtime = 'nodejs'
 
 const FORMATS = ['csv', 'xlsx'] as const
-const MAX_ROWS = 20_000
 
 type Lookup = { id: string; key: string; name: string; type?: string }
 
@@ -50,12 +49,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const expectedRevision = Number(body.expectedRevision)
   if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
 
-  const parsed = await parseImportFile(format, {
-    text: typeof body.text === 'string' ? body.text : undefined,
-    base64: typeof body.base64 === 'string' ? body.base64 : undefined,
-  })
+  let parsed
+  try {
+    parsed = await parseImportFile(format, {
+      text: typeof body.text === 'string' ? body.text : undefined,
+      base64: typeof body.base64 === 'string' ? body.base64 : undefined,
+    })
+  } catch (error) {
+    if (error instanceof ImportParseError) {
+      return NextResponse.json({ error: 'duplicate_columns', detail: error.message }, { status: 422 })
+    }
+    throw error
+  }
   if (parsed.rows.length === 0) return NextResponse.json({ error: 'file_has_no_rows' }, { status: 422 })
-  if (parsed.rows.length > MAX_ROWS) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
+  // The parser caps rows at its own MAX_IMPORT_ROWS; the truncation flag (not
+  // the capped length) is what proves the file fit.
+  if (parsed.truncated) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
 
   const scenarioResult = (await db.execute<{ fiscal_year: number; status: string; revision: number }>(sql`
     select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}

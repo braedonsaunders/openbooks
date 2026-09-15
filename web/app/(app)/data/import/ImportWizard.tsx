@@ -58,6 +58,7 @@ export function ImportWizard() {
 
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
+  const [truncatedMax, setTruncatedMax] = useState<number | null>(null)
   const [fields, setFields] = useState<Field[]>([])
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [importMode, setImportMode] = useState<'insert' | 'upsert'>('upsert')
@@ -173,6 +174,7 @@ export function ImportWizard() {
       if (!d.headers?.length) throw new Error('No columns found in the file')
       setHeaders(d.headers)
       setRows(d.rows ?? [])
+      setTruncatedMax(d.truncated ? (typeof d.maxRows === 'number' ? d.maxRows : 20000) : null)
       setFields(d.fields ?? [])
       setMapping(d.mapping ?? {})
       setStep('mapping')
@@ -229,6 +231,7 @@ export function ImportWizard() {
     setBase64('')
     setHeaders([])
     setRows([])
+    setTruncatedMax(null)
     setFields([])
     setMapping({})
     setPreview(null)
@@ -399,6 +402,11 @@ export function ImportWizard() {
       {step === 'mapping' && (
         <div className="space-y-5">
           <p className="text-sm text-muted-foreground">{t('import.mapHint')}</p>
+          {truncatedMax !== null && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              {t('import.truncatedWarning', { n: truncatedMax })}
+            </div>
+          )}
           {!selectedCanPost && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">{t('import.mode')}</label>
