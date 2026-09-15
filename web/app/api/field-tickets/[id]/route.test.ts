@@ -114,7 +114,8 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:features', `export async function isFeatureEnabled() { return true }`],
+  ['mock:features', `export async function isFeatureEnabled() { return true }\n     export async function acquireFeatureGateLock() {}`],
+  ['mock:org-feature-lock', `export async function lockAndCheckOrgFeature() { return true }`],
   [
     'mock:signing',
     `export async function sendTicketForSignature() {
@@ -128,6 +129,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/field-ticket-signing', 'mock:signing'],
+  ['@openbooks/engine/src/org-feature-lock.ts', 'mock:org-feature-lock'],
 ])
 
 const hooks = registerHooks({
@@ -140,6 +142,11 @@ const hooks = registerHooks({
     // Forward Next.js-style aliases to the real modules they point at.
     if (specifier.startsWith('@/lib/') && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context)
+    }
+    // The ticket service gates itself on the same feature module via a
+    // sibling-relative specifier; route it to the same mock.
+    if (specifier === './features' && context.parentURL?.endsWith('/lib/field-tickets.ts')) {
+      return { url: 'mock:features', shortCircuit: true }
     }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }

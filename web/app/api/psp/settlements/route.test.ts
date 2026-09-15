@@ -151,7 +151,7 @@ const mockSources = new Map<string, string>([
 
       export async function importSettlementBatch(orgId, userId, parsed, accounts) {
         state.domainCalls.push({ action: 'import', orgId, userId, input: { parsed, accounts } })
-        return { batchId: 'batch-1', created: true }
+        return { batchId: '00000000-0000-4000-8000-0000000000b1', created: true }
       }
 
       export async function postSettlementBatch(orgId, batchId, userId) {
@@ -293,12 +293,12 @@ const reconciliationActions: Array<{
       transactions: [],
     },
   },
-  { action: "post", body: { action: "post", batchId: "batch-1" } },
+  { action: "post", body: { action: "post", batchId: "00000000-0000-4000-8000-0000000000b1" } },
   {
     action: "reverse",
     body: {
       action: "reverse",
-      batchId: "batch-1",
+      batchId: "00000000-0000-4000-8000-0000000000b1",
       reversalDate: "2026-08-24",
       reason: "Provider recalled the payout",
     },
