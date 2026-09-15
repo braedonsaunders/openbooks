@@ -226,7 +226,7 @@ const DATE_KEYS = new Set([
 ])
 
 function patchValue(key: string, value: unknown) {
-  if (value === '' && DATE_KEYS.has(key)) return null
+  if (value === '' && (DATE_KEYS.has(key) || key === 'parentTaskId' || key === 'calendarId')) return null
   // Strict calendar boundary: a shape-valid non-day such as February 30
   // would otherwise reach the DATE columns and surface as a 500 from
   // PostgreSQL instead of failing closed here.
@@ -264,6 +264,39 @@ function persistScheduleAssignmentUnits(value: unknown): string | 'invalid' {
   }
 }
 
+/** Confirm a parent pin names a task in this project without closing a loop. */
+async function assertParentInProjectTree(
+  orgId: string,
+  projectId: string,
+  taskId: string,
+  parentId: string,
+  exec: Executor,
+) {
+  if (parentId === taskId) throw new ScheduleError('a task cannot be its own parent', 422)
+  if (!isUuid(parentId)) throw new ScheduleError('parentTaskId must be a valid id', 422)
+  const parent = (await exec.execute<{ id: string }>(sql`
+    select id from project_tasks
+     where id = ${parentId} and org_id = ${orgId} and project_id = ${projectId}`))
+  if (!parent.rows[0]) throw new ScheduleError('parent task not found in this project', 404)
+  const cycle = (await exec.execute<{ loop: boolean }>(sql`
+    select exists (
+      with recursive chain(id, depth) as (
+        select ${parentId}::uuid, 0
+        union all
+        select task.parent_id, chain.depth + 1
+          from project_tasks task
+          join chain on chain.id = task.id
+         where task.org_id = ${orgId}
+           and chain.depth < 100
+           and task.parent_id is not null
+      )
+      select 1 from chain where id = ${taskId}::uuid and depth > 0
+    ) as loop`))
+  if (cycle.rows[0]?.loop) {
+    throw new ScheduleError('a task cannot be parented under its own descendant', 422)
+  }
+}
+
 /** `exec` lets callers run the patch inside an open transaction. */
 type Executor = Pick<typeof db, 'execute'>
 
@@ -278,6 +311,15 @@ async function applyTaskPatch(
   const entries = Object.entries(patch).filter(
     ([key, value]) => key in TASK_COLUMNS && value !== undefined,
   )
+
+  // The outline is a project-bounded tree: a parent pin must name a task in
+  // this project, never the task itself, and never a descendant — otherwise
+  // the plan silently corrupts (cross-project ghosts, self loops, ancestor
+  // cycles) while every other write here is project-scoped.
+  const parentEntry = entries.find(([key]) => key === 'parentTaskId')
+  if (parentEntry && parentEntry[1] != null && parentEntry[1] !== '') {
+    await assertParentInProjectTree(orgId, projectId, taskId, String(parentEntry[1]), exec)
+  }
 
   if (entries.length > 0) {
     const assignments = entries.map(
