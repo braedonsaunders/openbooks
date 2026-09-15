@@ -55,9 +55,10 @@ export async function approveSubmittedTimeEntries(
   return withOrgTransaction(options.orgId, async () => {
     // The week's header owns the lifecycle: lock it first so a concurrent
     // submission cannot interleave gate creation with this approval, then
-    // refuse weeks no approval may consume.
-    const header = ((await db.execute<{ id: string }>(sql`
-      select id from timesheet_weeks
+    // refuse weeks no approval may consume. The locked status is the audit
+    // before-image for the approval evidence written below.
+    const header = ((await db.execute<{ id: string; status: string }>(sql`
+      select id, status from timesheet_weeks
        where org_id = ${options.orgId}
          and employee_party_id = ${options.employeePartyId}
          and week_start = ${week}::date
@@ -113,6 +114,33 @@ export async function approveSubmittedTimeEntries(
       options.actorId,
       null,
     )
+    // Durable approval evidence, part of the same atomic unit: the status
+    // flip above throws unless exactly one header row exists for this week,
+    // so a header id is known here — prefer the locked row, else read the
+    // row the flip just stamped (a concurrent header insert racing our
+    // initial read). An audit failure rolls the approval back with it, so an
+    // unattributed or unauditable approval of hours that may already have
+    // posted labor cost and overhead journals cannot persist.
+    const headerId =
+      header?.id ??
+      ((await db.execute<{ id: string }>(sql`
+        select id from timesheet_weeks
+         where org_id = ${options.orgId}
+           and employee_party_id = ${options.employeePartyId}
+           and week_start = ${week}::date
+      `)).rows[0]?.id ?? null)
+    if (!headerId) throw new Error('timesheet week not found')
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${options.orgId}, 'timesheet_weeks', ${headerId}, 'update', ${JSON.stringify({
+        event: 'approved',
+        actor: { kind: 'user', userId: options.actorId },
+        before: { status: header?.status ?? null },
+        after: { status: 'approved' },
+        entryIds: ids,
+        weekStart: week,
+      })}::jsonb, ${options.actorId})
+    `)
     return ids
   })
 }
