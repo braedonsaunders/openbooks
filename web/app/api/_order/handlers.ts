@@ -9,6 +9,7 @@ import { isUuid } from '../../../lib/list-params'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
 import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
@@ -116,6 +117,23 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data as OrderPatchBody
+
+    // Header dates land in DATE columns: an impossible calendar date
+    // (2026-02-30) trips a raw storage 22008 failure instead of a domain
+    // error, so refuse it here with the shared ISO calendar policy before
+    // any further read or write. A null due date clears the field.
+    if (body.documentDate !== undefined && !isIsoCalendarDate(body.documentDate)) {
+      return NextResponse.json(
+        { error: 'Document date must be a valid calendar date (YYYY-MM-DD)' },
+        { status: 422 },
+      )
+    }
+    if (body.dueDate !== undefined && body.dueDate !== null && !isIsoCalendarDate(body.dueDate)) {
+      return NextResponse.json(
+        { error: 'Due date must be a valid calendar date (YYYY-MM-DD)' },
+        { status: 422 },
+      )
+    }
 
     // A restricted caller may re-home a draft only within their visible
     // subsidiaries; clearing the header subsidiary entirely is also denied
