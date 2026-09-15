@@ -1,5 +1,5 @@
 import { test } from "@playwright/test";
-import { authedContext, dismissSetupWizard } from "../auth";
+import { authedContext } from "../auth";
 import {
   AMT,
   api,
