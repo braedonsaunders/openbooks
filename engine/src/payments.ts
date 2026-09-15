@@ -3503,7 +3503,7 @@ export function buildSepaFile(opts: {
   const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
   const nb = opts.payments.length;
   const tx = opts.payments.map((p) => {
-    const bic = (p.creditorBic ?? "").trim();
+    const bic = (p.creditorBic ?? "").trim().toUpperCase();
     const iban = p.creditorIban.replace(/\s/g, "").toUpperCase();
     return `      <CdtTrfTxInf>
         <PmtId><EndToEndId>${xmlEsc(p.endToEndId.slice(0, 35))}</EndToEndId></PmtId>

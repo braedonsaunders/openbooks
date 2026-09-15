@@ -244,6 +244,21 @@ test("the SEPA credit file refuses a malformed creditor BIC when supplied", () =
   );
 });
 
+test("the SEPA credit file normalizes a lowercase creditor BIC", () => {
+  const content = buildSepaFile({
+    settings: SEPA_SETTINGS,
+    messageId: "MSG-0001",
+    creationDateTime: "2026-03-03T00:00:00",
+    executionDate: "2026-03-05",
+    payments: [{
+      ...sepaPayment("125.00"),
+      creditorBic: "cobadeffxxx",
+    }],
+  });
+  assert.match(content, /<BIC>COBADEFFXXX<\/BIC>/);
+  assert.doesNotMatch(content, /<BIC>cobadeffxxx<\/BIC>/);
+});
+
 test("the NACHA credit file refuses a blank receiving account number", () => {
   assert.throws(
     () => nachaFile("   "),
