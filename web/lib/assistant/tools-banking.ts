@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { reconciliationTotals } from "@openbooks/engine/src/banking.ts";
 import { isFeatureEnabled } from "../features";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { uuidInput, num, capList } from "./tools-shared";
 
@@ -33,8 +34,9 @@ const listBankReconciliations: AssistantToolDef = {
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
-        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${a.accountId ? sql` and r.account_id = ${a.accountId}` : sql``}
        order by r.created_at desc
        limit ${limit}
@@ -74,8 +76,9 @@ const getBankReconciliation: AssistantToolDef = {
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
-        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${authz.user.orgId} and r.id = ${a.reconciliationId}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
     `));
     const recon = rows.rows[0];
     if (!recon) return { ok: false, error: "reconciliation_not_found" };
@@ -120,6 +123,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
     const a = raw as { accountId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
     const where = sql`l.org_id = ${authz.user.orgId} and l.match_status = 'unmatched'
+      ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
       ${a.accountId ? sql` and l.account_id = ${a.accountId}` : sql``}`;
     const [rows, count] = (await Promise.all([
       db.execute<Record<string, unknown>>(sql`
@@ -131,7 +135,12 @@ const listUnmatchedBankLines: AssistantToolDef = {
          order by l.posted_on desc, l.line_number
          limit ${limit}
       `),
-      db.execute<{ n: string }>(sql`select count(*) as n from bank_statement_lines l where ${where}`),
+      db.execute<{ n: string }>(sql`
+        select count(*) as n
+          from bank_statement_lines l
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
+         where ${where}
+      `),
     ]));
     const total = Number(count.rows[0]?.n ?? 0);
     const { items, truncated } = capList(
