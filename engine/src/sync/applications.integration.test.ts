@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../db.ts";
 import { reconcileApplications } from "./applications.ts";
-import { requestDocumentVoid } from "../document-void.ts";
+import { DocumentVoidError, requestDocumentVoid } from "../document-void.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -901,6 +901,139 @@ test(
       const written = await db.execute<{ count: string }>(sql`
         select count(*)::text as count from applications where org_id = ${org.orgId}`);
       assert.equal(written.rows[0]!.count, "0");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a void racing the mirror converges without double-settling or dead-line writes",
+  { skip: !DB },
+  async () => {
+    // Two users at once with no staging: the mirror and a controlled void of
+    // the invoiced side start together. Both take the same id-ordered
+    // endpoint locks, so they serialize completely — first committer wins
+    // and the loser converges cleanly. Asserted order-agnostically: no live
+    // application may reference a reversed line, neither side may fail raw,
+    // and a voided invoice is never settled by the mirror.
+    const org = await createScratchOrg();
+    const paymentDocumentId = randomUUID();
+    const appliedDocumentId = randomUUID();
+    const paymentEntryId = randomUUID();
+    const appliedEntryId = randomUUID();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Race Auditor", "admin");
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'customer_payment', 'PAY-CONVERGE',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 100, 0, 100, '{"sourceId":"payment-converge"}'::jsonb),
+          (${appliedDocumentId}, ${org.orgId}, 'customer_invoice', 'INV-CONVERGE',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 100, 0, 100, '{"sourceId":"invoice-converge"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-CONVERGE', ${org.date}, ${org.periodId}, 'Converge payment',
+           'draft', ${paymentDocumentId}, 'document'),
+          (${appliedEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'INV-CONVERGE', ${org.date}, ${org.periodId}, 'Converge invoice',
+           'draft', ${appliedDocumentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 100, 'CAD', 100, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, -100, 'CAD', -100, 1, null, false),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, -100, 'CAD', -100, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${appliedEntryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, 100, 'CAD', 100, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (${paymentEntryId}, ${appliedEntryId})
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${paymentEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${paymentDocumentId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${appliedEntryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${appliedDocumentId}
+      `);
+
+      const [mirrorOutcome, voidOutcome] = await Promise.all([
+        reconcileApplications(org.orgId, "sourceId", [
+          { paymentRef: "payment-converge", appliedRef: "invoice-converge", amount: "100" },
+        ]).then(
+          (stats) => ({ ok: true as const, stats }),
+          (error: unknown) => ({ ok: false as const, error }),
+        ),
+        requestDocumentVoid({
+          documentId: appliedDocumentId,
+          orgId: org.orgId,
+          actorId,
+          reason: "void racing the settlement mirror",
+          reversalDate: org.date,
+          source: "api",
+        }).then(
+          (result) => ({ ok: true as const, result }),
+          (error: unknown) => ({ ok: false as const, error }),
+        ),
+      ]);
+
+      // Neither side fails raw: the mirror converges (settles or cleanly
+      // skips) and the void either completes or meets its live-application
+      // refusal when the mirror settled first.
+      if (!mirrorOutcome.ok) {
+        assert.match(String(mirrorOutcome.error), /voided or reposted/);
+      }
+      if (!voidOutcome.ok) {
+        assert.ok(voidOutcome.error instanceof DocumentVoidError, String(voidOutcome.error));
+      }
+      const mirrorInserted = mirrorOutcome.ok ? mirrorOutcome.stats.inserted : 0;
+      const voidVoided = voidOutcome.ok && voidOutcome.result.status === "voided";
+      assert.ok(
+        !(voidVoided && mirrorInserted > 0),
+        "a voided invoice is never settled by the mirror",
+      );
+      const dead = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count
+          from applications a
+         where a.org_id = ${org.orgId}
+           and a.unapplied_at is null
+           and exists (
+             select 1
+               from journal_lines l
+               join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+              where l.id in (a.from_line_id, a.to_line_id)
+                and e.status = 'reversed'
+           )`);
+      assert.equal(dead.rows[0]!.count, "0");
+      const applied = await db.execute<{ total: string }>(sql`
+        select coalesce(sum(case when to_line_id in (
+          select id from journal_lines where entry_id = ${appliedEntryId}
+        ) then amount else 0 end), 0)::text as total
+          from applications
+         where org_id = ${org.orgId} and unapplied_at is null`);
+      assert.ok(Number(applied.rows[0]!.total) <= 100, `over-applied: ${applied.rows[0]!.total}`);
     } finally {
       await dropScratchOrg(org.orgId);
     }
