@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { RECORD_TYPE_BY_KEY } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
+import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,11 @@ export async function PUT(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   const layoutId = body.layoutId ?? null;
+  // A malformed id would surface as a Postgres uuid throw and a raw 500;
+  // resolve it through the same 404 as an unknown layout.
+  if (layoutId && !isUuid(layoutId)) {
+    return NextResponse.json({ error: "form layout not found" }, { status: 404 });
+  }
   if (layoutId) {
     // The preferred form must be one of this org's layouts for this record type.
     const owned = (await db.execute(sql`
