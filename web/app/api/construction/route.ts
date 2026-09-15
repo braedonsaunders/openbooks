@@ -225,6 +225,7 @@ export async function POST(req: Request) {
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
           const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
           if (used.rows.length) throw new ConstructionBillingError("A schedule line used by an application is immutable; use a change order");
+          if (before.rows[0].change_order_id) throw new ConstructionBillingError("A controlled schedule line is immutable; use a change order");
           const description = String(body.description ?? "").trim();
           const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
           if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
