@@ -46,6 +46,22 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
 
 export class ConsolidationError extends Error {}
 
+/**
+ * Postgres serialization failures (code 40001) surface wrapped in
+ * driver/pool `cause` chains of varying depth. Walk the chain — bounded, pg
+ * nests only a few levels — so a concurrent source change fails closed with
+ * a retryable ConsolidationError instead of a raw driver error.
+ */
+export function isSerializationConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current && typeof current === "object"; depth++) {
+    const failure = current as { code?: string; cause?: unknown };
+    if (failure.code === "40001") return true;
+    current = failure.cause;
+  }
+  return false;
+}
+
 /** Anything a phase can run against: the pooled `db` or one open transaction. */
 type Runner = Pick<typeof db, "execute">;
 
@@ -61,13 +77,8 @@ async function withOwnershipSourceTransaction<T>(orgId: string, work: (tx: Runne
   try {
     return await withOrgContext(orgId, () => db.transaction(work, { isolationLevel: "serializable" }));
   } catch (error) {
-    let current: unknown = error;
-    for (let depth = 0; depth < 6 && current && typeof current === "object"; depth++) {
-      const failure = current as { code?: string; cause?: unknown };
-      if (failure.code === "40001") {
-        throw new ConsolidationError("consolidation sources changed concurrently (could not serialize access); retry the complete consolidation");
-      }
-      current = failure.cause;
+    if (isSerializationConflict(error)) {
+      throw new ConsolidationError("consolidation sources changed concurrently (could not serialize access); retry the complete consolidation");
     }
     throw error;
   }

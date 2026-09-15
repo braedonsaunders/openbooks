@@ -446,6 +446,58 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
   }
 });
 
+test("an elimination rerun with emptied activity reverses the prior entry and reports zero lines", { skip: !DB }, async () => {
+  // Regression: once every activity group nets to zero the rerun must reverse
+  // the prior elimination and return lineCount 0 — never a replacement entry.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const eliminationSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${eliminationSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      update accounts set eliminate = true
+       where id in (${org.accounts.ar}, ${org.accounts.ap})`);
+
+    const postPair = async (tag: string, flip: boolean) => {
+      const entry = randomUUID();
+      const ar = flip ? "-100.0000" : "100.0000";
+      const ap = flip ? "100.0000" : "-100.0000";
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${tag}, ${org.date}, ${org.periodId}, ${tag}, 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values
+          (${org.orgId}, ${entry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${ar}, 'CAD', ${ar}, '1'),
+          (${org.orgId}, ${entry}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, ${ap}, 'CAD', ${ap}, '1')`);
+      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+    };
+    await postPair("IC-PAIR", false);
+
+    const first = await runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.equal(first.lineCount, 2);
+
+    // Exact offsets zero every activity group, so the rerun sees no activity.
+    await postPair("IC-OFFSET", true);
+
+    const second = await runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.equal(second.lineCount, 0, "an activity-free rerun posts no replacement lines");
+    assert.ok(second.entryId, "the prior entry's reversal is still reported");
+    assert.notEqual(second.entryId, first.entryId);
+    const firstStatus = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where id = ${first.entryId}`));
+    assert.equal(firstStatus.rows[0]!.status, "reversed", "the prior elimination is reversed");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("auto-elimination translates intercompany P&L activity at the average FX rate", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
