@@ -382,7 +382,13 @@ export async function createSubcontract(input: {
     const scope = (await tx.execute<{ currency: string | null; vendor_ok: boolean; po_ok: boolean }>(sql`
       select p.subsidiary_id,
              coalesce(${input.currency ?? null}, vr.currency, s.base_currency, o.base_currency) as currency,
-             exists(select 1 from vendor_roles vr2 where vr2.org_id = p.org_id and vr2.party_id = ${input.vendorId} and vr2.is_active) as vendor_ok,
+             exists(
+               select 1
+                 from vendor_roles vr2
+                 join parties vendor_party on vendor_party.org_id = vr2.org_id and vendor_party.id = vr2.party_id
+                where vr2.org_id = p.org_id and vr2.party_id = ${input.vendorId}
+                  and vr2.is_active and vendor_party.is_active
+             ) as vendor_ok,
              (${input.purchaseOrderId ?? null}::uuid is null or exists(
                select 1 from documents d where d.org_id = p.org_id and d.id = ${input.purchaseOrderId ?? null}
                  and d.kind = 'purchase_order' and d.project_id = p.id and d.party_id = ${input.vendorId}
