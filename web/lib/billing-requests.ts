@@ -5,6 +5,7 @@ import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { resolveInvoicingPreference } from "./invoicing-preference.ts";
 import { loadProjectType } from "./project-type";
 import { canonicalDecimal } from "./exact-decimal";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { isFeatureEnabled } from "./features";
 import { subsidiaryVisibleFilter } from "./subsidiaries";
 
@@ -47,6 +48,11 @@ const BASES = new Set([
   "field_ticket",
 ]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
+}
 
 export async function createBillingRequest(
   orgId: string,
@@ -113,6 +119,14 @@ export async function createBillingRequest(
     throw new Error(
       "Field Tickets may be selected only for Field Ticket billing",
     );
+  }
+  // start_date/cutoff_date are date columns: refuse anything that is not a
+  // real calendar day before the write, or Postgres dies with a raw failure
+  // that the route can only surface as driver text.
+  for (const [label, value] of [["Start date", input.startDate], ["Cutoff date", input.cutoffDate]] as const) {
+    if (value != null && value !== "" && !isIsoCalendarDate(value)) {
+      throw new Error(`${label} must be a real calendar date (YYYY-MM-DD)`);
+    }
   }
   const backupRequired = input.backupRequired ?? eff.backupRequired;
   const backupType =
@@ -216,6 +230,10 @@ export async function createBillingRequest(
       const exact = canonicalDecimal(input.drawAmount, 4);
       if (exact === null)
         throw new Error("Draw amount must be an exact decimal");
+      // draw_amount is numeric(19,4): a wider figure would die in Postgres
+      // with a raw failure the route can only surface as driver text.
+      if (wholeDigits(exact) > 15)
+        throw new Error("Draw amount is out of range — at most 15 whole digits fit the ledger");
       try {
         drawAmount = normalizeMoney(exact);
       } catch {
