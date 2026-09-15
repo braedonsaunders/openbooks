@@ -55,6 +55,47 @@ export async function loadGateHeader(gateId: string, orgId: string): Promise<Gat
 }
 
 /**
+ * Resolve the legal entity behind a flow subject before a direct read. Flow
+ * subjects are polymorphic: documents (including field tickets and pay runs)
+ * carry their own subsidiary, while bank-account and timesheet subjects
+ * inherit it from their party. A missing/non-entity subsidiary is deliberately
+ * returned as null so restricted callers fail closed through
+ * guardSubsidiaryScope, while unrestricted callers can still let the adapter
+ * decide whether the subject exists.
+ */
+export async function loadFlowSubjectSubsidiary(
+  subjectKind: string,
+  subjectId: string,
+  orgId: string,
+): Promise<string | null> {
+  const r = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select case
+             when ${subjectKind} = 'party_bank_account' then (
+               select p.subsidiary_id
+                 from party_bank_accounts ba
+                 join parties p on p.id = ba.party_id and p.org_id = ba.org_id
+                where ba.id = ${subjectId} and ba.org_id = ${orgId}
+             )
+             when ${subjectKind} = 'timesheet_week' then (
+               select p.subsidiary_id
+                 from timesheet_weeks tw
+                 join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
+                where tw.id = ${subjectId} and tw.org_id = ${orgId}
+             )
+             when ${subjectKind} in ('budget_scenario', 'close_run') then null
+             else (
+               select d.subsidiary_id
+                 from documents d
+                where d.id = ${subjectId}
+                  and d.org_id = ${orgId}
+                  and d.kind = ${subjectKind}
+             )
+           end as "subsidiaryId"
+  `))
+  return r.rows[0]?.subsidiaryId ?? null
+}
+
+/**
  * Map an engine GateError onto an HTTP status. The engine throws one error
  * class with human-readable messages; the route pre-checks catch the common
  * cases (404 missing, 409 already decided) so this mapping only has to cover

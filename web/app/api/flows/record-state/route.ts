@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
 import { gateDecisionCapability, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
-import { requireFlowsSession } from '../_lib'
+import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -89,6 +90,15 @@ export async function GET(req: Request) {
   const orgId = authz.user.orgId
   const adapter = getFlowAdapter(subjectKind)
   if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
+  // Scope the direct read before asking the adapter for status. Otherwise a
+  // restricted caller can forge a subject id from another subsidiary and
+  // learn its lifecycle plus approver/history metadata even though the record
+  // is hidden from every subsidiary-scoped list.
+  const denied = guardSubsidiaryScope(
+    authz,
+    await loadFlowSubjectSubsidiary(subjectKind, subjectId, orgId),
+  )
+  if (denied) return denied
   const status = await withOrgContext(orgId, () => adapter.getStatus(subjectId))
   if (status === null) return NextResponse.json({ error: 'record not found' }, { status: 404 })
 
