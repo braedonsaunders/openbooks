@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
@@ -13,6 +14,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const missing = await db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
