@@ -89,3 +89,45 @@ test('documents/actions refuses unknown actions instead of posting them under th
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('documents/actions double submit: one winner, one 422, never a 500', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // Two users at once on the same draft: both submitters read `draft` before
+  // either commits, so the engine serializes them on the document row lock
+  // and the loser must meet a lifecycle refusal — never a raw 500 from the
+  // unlocked pre-read racing the approval release.
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Sales rep', 'sales_rep'))
+    const invoiceId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions='["ar.read","ar.create"]'::jsonb where org_id=${org.orgId} and key='sales_rep'`)
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${`ACT-${invoiceId.slice(0, 8)}`},
+                ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date},
+                'CAD', '1', '100', '0', '100', ${actor})`)
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`)
+    })
+    state.user = { id: actor, orgId: org.orgId, name: 'Sales rep', email: 'rep@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+
+    const outcomes = await withOrgContext(org.orgId, () =>
+      Promise.allSettled([
+        POST(request({ action: 'submit', documentId: invoiceId })),
+        POST(request({ action: 'submit', documentId: invoiceId })),
+      ]),
+    )
+    const statuses = outcomes.map((outcome) => {
+      assert.equal(outcome.status, 'fulfilled')
+      return outcome.status === 'fulfilled' ? outcome.value.status : -1
+    })
+    assert.deepEqual([...statuses].sort(), [200, 422])
+    assert.deepEqual(await documentState(org.orgId, invoiceId), { status: 'approved', postedEntryId: null })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
