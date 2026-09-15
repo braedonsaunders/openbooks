@@ -3,6 +3,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* CRM leads and prospects                                             */
@@ -37,6 +38,8 @@ export const CRM_ACCOUNT_SORTS: Record<string, SQL> = {
 function crmAccountFilterPredicate(clause: FilterClause): SQL | null {
   const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
   const ref = (column: SQL) => {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`${column} = ${value}`
     if (clause.operator === 'ne') return sql`${column} <> ${value}`
     return null
@@ -63,8 +66,14 @@ function crmAccountWhere(
     const predicate = crmAccountFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
-  if (adhoc.filters?.status_id) parts.push(sql`and cp.status_id = ${adhoc.filters.status_id}`)
-  if (adhoc.filters?.owner_user_id) parts.push(sql`and cp.owner_user_id = ${adhoc.filters.owner_user_id}`)
+  if (adhoc.filters?.status_id) {
+    const refused = uuidOrFalse(adhoc.filters.status_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and cp.status_id = ${adhoc.filters.status_id}`)
+  }
+  if (adhoc.filters?.owner_user_id) {
+    const refused = uuidOrFalse(adhoc.filters.owner_user_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and cp.owner_user_id = ${adhoc.filters.owner_user_id}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (p.display_name ilike ${query} or p.email ilike ${query} or p.phone ilike ${query})`)
@@ -137,6 +146,8 @@ function activityFilterPredicate(clause: FilterClause): SQL | null {
   if (clause.key === 'status') return select(sql`a.status`)
   if (clause.key === 'priority') return select(sql`a.priority`)
   if (clause.key === 'assigned_user_id') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`a.assigned_user_id = ${value}`
     if (clause.operator === 'ne') return sql`a.assigned_user_id <> ${value}`
   }
@@ -151,7 +162,10 @@ export function activityWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: s
   }
   if (adhoc.filters?.kind) parts.push(sql`and a.kind = ${adhoc.filters.kind}`)
   if (adhoc.filters?.status) parts.push(sql`and a.status = ${adhoc.filters.status}`)
-  if (adhoc.filters?.assigned_user_id) parts.push(sql`and a.assigned_user_id = ${adhoc.filters.assigned_user_id}`)
+  if (adhoc.filters?.assigned_user_id) {
+    const refused = uuidOrFalse(adhoc.filters.assigned_user_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and a.assigned_user_id = ${adhoc.filters.assigned_user_id}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (a.subject ilike ${query} or a.body ilike ${query} or customer.name ilike ${query})`)
