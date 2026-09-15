@@ -558,13 +558,13 @@ export async function importSettlementBatch(
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into psp_settlement_batches (
         id, org_id, provider, external_ref, status, currency,
-        gross_amount, fee_amount, refund_amount, dispute_amount, net_amount, fx_amount,
+        gross_amount, fee_amount, refund_amount, dispute_amount, adjustment_amount, net_amount, fx_amount,
         settlement_date, bank_account_id, fee_account_id, dispute_account_id, fx_account_id,
         clearing_account_id, subsidiary_id, source_payload, line_count, memo, created_by, updated_by
       ) values (
         ${proposedId}, ${orgId}, ${parsed.provider}, ${parsed.externalRef}, 'draft', ${currency},
         ${totals.grossAmount}, ${totals.feeAmount}, ${totals.refundAmount}, ${totals.disputeAmount},
-        ${totals.netAmount}, ${totals.fxAmount}, ${parsed.settlementDate},
+        ${totals.adjustmentAmount}, ${totals.netAmount}, ${totals.fxAmount}, ${parsed.settlementDate},
         ${accounts.bankAccountId ?? null}, ${accounts.feeAccountId ?? null},
         ${accounts.disputeAccountId ?? null}, ${accounts.fxAccountId ?? null},
         ${accounts.clearingAccountId ?? null}, ${accounts.subsidiaryId ?? null},
@@ -606,6 +606,7 @@ export async function importSettlementBatch(
         fee_amount = ${totals.feeAmount},
         refund_amount = ${totals.refundAmount},
         dispute_amount = ${totals.disputeAmount},
+        adjustment_amount = ${totals.adjustmentAmount},
         net_amount = ${totals.netAmount},
         fx_amount = ${totals.fxAmount},
         settlement_date = ${parsed.settlementDate},
@@ -670,6 +671,7 @@ export async function postSettlementBatch(
         fee_amount: string;
         refund_amount: string;
         dispute_amount: string;
+        adjustment_amount: string;
         net_amount: string;
         fx_amount: string;
         settlement_date: string;
@@ -780,6 +782,17 @@ export async function postSettlementBatch(
         accountId: disputeAcct!,
         amount: b.dispute_amount,
         memo: "PSP disputes",
+      });
+    }
+    // Adjustments (e.g. Chargebee amount_adjusted) clear against the same
+    // customer-balance pool as refunds — the gross charges credited clearing,
+    // so the write-off/credit leg debits it — but on their own journal line
+    // so the GL tells write-offs apart from cash refunds.
+    if (!isZero(b.adjustment_amount)) {
+      jlines.push({
+        accountId: b.clearing_account_id,
+        amount: b.adjustment_amount,
+        memo: "PSP adjustments",
       });
     }
     // CR clearing for gross charges (or residual).

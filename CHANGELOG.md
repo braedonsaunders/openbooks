@@ -4,6 +4,21 @@ OpenBooks follows [Semantic Versioning](https://semver.org/) while its public
 API and deployment format stabilize. Alpha releases may contain breaking
 changes; each release documents required operator action.
 
+## [Unreleased]
+
+### Integrations
+
+- Chargebee settlement imports now receipt what was actually collected.
+  `amount_paid` is the booked receipt, `amount_adjusted` posts as its own
+  adjustment line against the customer (carrying the provider's reason when
+  the export surfaces one) instead of being silently dropped, and the import
+  refuses to post when the provider total does not foot to amount paid plus
+  adjustments plus applied credits — naming the invoice rather than booking
+  an unreconciled receipt. Adjustments are tracked apart from refunds in
+  batch totals and post as their own clearing line. Schema gains
+  `psp_settlement_batches.adjustment_amount` and the `adjustment` settlement
+  line kind (migration 0144, additive).
+
 ## [0.1.0-alpha.5] - 2026-09-15
 
 A hardening release. A multi-agent audit read the engine, API, and application
