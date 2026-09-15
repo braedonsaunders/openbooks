@@ -129,7 +129,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
   const trendFrom = weekStarts[0]!
   const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
-  const docScope = subArr ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``
+  const docScope = subArr ? sql` and d.subsidiary_id = any(${subArr})` : sql``
 
   const [apRes, topRes, trendRes, badgeRes, poRowsRes, orgRes] = (await Promise.all([
     // Open payables aggregate — open bill/expense items with remaining balance.

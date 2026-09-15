@@ -131,7 +131,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}
             and d.document_date >= ${ago7}
-            ${subArr ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``}) as txns_7d
+            ${subArr ? sql`and d.subsidiary_id = any(${subArr})` : sql``}) as txns_7d
     `),
   ]))
 
