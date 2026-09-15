@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**75 passing · 0 failing · 10 gaps · 0 not run**
+**75 passing · 0 failing · 14 gaps · 0 not run**
 
-Commit `27b75e9d0d1c7cb3266c37e56e8f95b3bc981c1d` · 2026-09-15T21:22:06.529Z
+2026-09-15T22:16:46.279Z
 
 ## AL DOR
 
@@ -71,12 +71,17 @@ Commit `27b75e9d0d1c7cb3266c37e56e8f95b3bc981c1d` · 2026-09-15T21:22:06.529Z
 | **A finance lease reports interest and amortisation separately**<br><sub>A finance lease produces a front-loaded total charge with the interest element presented in finance costs rather than operating expenses — the split that changes reported operating profit and every coverage ratio computed from it.</sub> | ASC 842 842-20-25-5<br>IFRS 16.49 | PASS | Implemented |
 | **A US GAAP operating lease reports a single straight-line lease cost**<br><sub>A lease meeting no finance criterion classifies as operating under US GAAP and charges one flat amount to operating expense each year — while still carrying the asset and liability on the balance sheet, the liability unwinding on the interest method and the right-of-use asset absorbing the difference.</sub> | ASC 842 842-20-25-6<br>ASC 842 842-10-25-2 | PASS | Implemented |
 | **A change in the lease payments or term remeasures the liability and the right-of-use asset**<br><sub>Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.</sub> | ASC 842 842-10-35-4<br>IFRS 16.39 | GAP | Not implemented |
+| **Terminating a lease early derecognises both balances and recognises the net difference**<br><sub>Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.</sub> | ASC 842 842-10-40-1<br>IFRS 16.46 | GAP | Not implemented |
 
 ### ASC 842 — shortfalls
 
 **lease-remeasurement — A change in the lease payments or term remeasures the liability and the right-of-use asset**
 
 > The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.
+
+**lease-early-termination — Terminating a lease early derecognises both balances and recognises the net difference**
+
+> The lease engine has no termination path: nothing derecognises the liability and right-of-use asset before term, books a termination penalty, or measures the termination gain or loss — an ended lease keeps its frozen schedule on the books.
 
 ## CDTFA Reg 1684
 
@@ -140,6 +145,23 @@ Commit `27b75e9d0d1c7cb3266c37e56e8f95b3bc981c1d` · 2026-09-15T21:22:06.529Z
 | Requirement | Citation | Status | Conformance |
 | --- | --- | --- | --- |
 | **Scrapping an asset with no proceeds recognises the whole carrying amount as a loss**<br><sub>A write-off with no proceeds charges the full remaining carrying amount to profit or loss and produces a balanced entry with no proceeds line at all.</sub> | IAS 16.67<br>ASC 360 360-10-40-5 | PASS | Implemented |
+| **Selling part of an asset derecognises the pro-rata carrying amount**<br><sub>Selling forty percent of a machine removes forty percent of its cost and forty percent of its accumulated depreciation, and the gain is measured against the forty-percent carrying amount — the remaining sixty percent keeps depreciating untouched.</sub> | IAS 16.68<br>ASC 360 360-10-40-1 | GAP | Not implemented |
+| **Moving an asset between subsidiaries carries its basis and eliminates the internal gain**<br><sub>An asset moving between legal entities keeps its carrying amount as the group's basis: the transferor's internal gain is eliminated on consolidation, the transferee depreciates the transferred basis, and no depreciation is lost or double-counted in the move.</sub> | IAS 16.67<br>ASC 360 360-10-40-1 | GAP | Not implemented |
+| **Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns**<br><sub>An entity reporting on a 4-4-5 retail calendar depreciates week-based periods — four weeks, four weeks, five weeks — with each period carrying its share of the annual charge, so the full useful life is covered with nothing skipped and nothing doubled.</sub> | IAS 16.60<br>ASC 360 360-10-35-4 | GAP | Not implemented |
+
+### IAS 16 — shortfalls
+
+**ppe-partial-disposal — Selling part of an asset derecognises the pro-rata carrying amount**
+
+> Disposal is whole-asset only: disposeAsset takes the full cost and the full posted accumulated depreciation, with no portion or percentage — a partial sale can only be recorded as a manual journal with no schedule split behind it.
+
+**ppe-intercompany-transfer — Moving an asset between subsidiaries carries its basis and eliminates the internal gain**
+
+> No transfer path exists: moving an asset between subsidiaries means a manual disposal in one entity and a manual capitalisation in the other, with no linkage, no basis carryover, and no elimination entry for the internal gain.
+
+**ppe-depreciation-445-calendar — Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns**
+
+> Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.
 
 ## IAS 2
 
