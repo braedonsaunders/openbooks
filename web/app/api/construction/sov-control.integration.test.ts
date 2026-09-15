@@ -107,3 +107,41 @@ test('approving a targeted change order controls the repriced schedule line', { 
     assert.equal((await db.execute<{ scheduled_value: string }>(sql`select scheduled_value::text from sov_lines where org_id=${org.orgId} and id=${target}`)).rows[0]!.scheduled_value, '1500.0000')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
+
+/**
+ * The income-account pin binds its id into a uuid column. A malformed id
+ * must be the same clean 422 as an unknown account — never a PostgreSQL
+ * uuid cast error escaping as a 500. Same class as the change-order target
+ * id fix; this is its addSov/updateSov sibling.
+ */
+test('SOV writes refuse a malformed income account with a domain error', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actor = await createScratchUser(org.orgId, 'SOV writer', 'reviewer')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    session.user = { id: actor, orgId: org.orgId, name: 'SOV writer', email: 'sov@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+
+    const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
+    const typeId = randomUUID(), project = randomUUID(), plain = randomUUID()
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
+    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'sov account fixture')`)
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
+      values (${project},${org.orgId},${org.subsidiaryId},'SOV-ACCT','SOV account job',${org.customerId},${typeId},'active',true)`)
+    await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order) values (${plain},${org.orgId},${project},'Direct line','1000',1)`)
+
+    const addRefused = await post(construction.POST, org.orgId, {
+      action: 'addSov', projectId: project, description: 'Bad account line', scheduledValue: '100', incomeAccountId: 'not-a-uuid',
+    })
+    assert.equal(addRefused.status, 422)
+    assert.match((await addRefused.json()).error, /Income account/)
+
+    const updateRefused = await post(construction.POST, org.orgId, {
+      action: 'updateSov', id: plain, description: 'Renamed', scheduledValue: '1200', incomeAccountId: 'not-a-uuid',
+    })
+    assert.equal(updateRefused.status, 422)
+    assert.match((await updateRefused.json()).error, /Income account/)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id=${org.orgId} and project_id=${project}`)).rows[0]!.n, 1)
+  } finally { session.user = null; await dropScratchOrg(org.orgId) }
+})

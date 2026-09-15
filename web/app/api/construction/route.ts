@@ -102,6 +102,9 @@ export async function GET(req: Request) {
 async function pinIncomeAccount(exec: SqlExecutor, orgId: string, accountId: unknown): Promise<string | null> {
   if (accountId == null || accountId === "") return null;
   const id = String(accountId);
+  // A malformed id names no account: same answer as an unknown one, never
+  // a PostgreSQL uuid cast error escaping as a 500.
+  if (!isUuid(id)) throw new ConstructionBillingError("Income account not found");
   const owned = (await exec.execute(sql`
     select 1 from accounts
      where org_id = ${orgId} and id = ${id} and is_active and not is_summary
