@@ -1,9 +1,13 @@
 /**
  * OpenBooks background worker — a standalone process (run: `tsx
  * engine/src/worker/index.ts`, or the `worker` compose service). Consumes the
- * BullMQ queues (emails, reports) and runs the report-schedule scanner. This is
- * the durable, horizontally-scalable home for scheduled work — reports today,
- * scripts/notifications next (add a queue + consumer here).
+ * BullMQ queues (emails, reports) and owns ALL scheduled ticks: the full
+ * scheduled-work scan set (engine/src/scheduler.ts) plus the report, sandbox,
+ * overhead, mirror, and backup schedulers. This is the durable,
+ * horizontally-scalable home for scheduled work — the web process never
+ * schedules unless explicitly opted in for single-process installs (see
+ * engine/src/scheduler-mode.ts). N replicas still run each tick once via the
+ * shared Postgres claim locks.
  */
 import { closeJobConnections, markWorkerHeartbeat } from "@openbooks/jobs";
 import { writeFile, unlink } from "node:fs/promises";
@@ -19,6 +23,7 @@ import { startOverheadScheduler } from "./overhead-scheduler.ts";
 import { createApCaptureWorker } from "./ap-capture-worker.ts";
 import { createBackupWorker } from "./backup-worker.ts";
 import { startBackupScheduler } from "./backup-scheduler.ts";
+import { ensureScheduler } from "../scheduler.ts";
 import { assertSafeRuntimeDatabaseRole, pool } from "../db.ts";
 import { assertS3Ready, s3Enabled } from "../file-storage.ts";
 import { startTelemetry, stopTelemetry } from "../telemetry.ts";
@@ -75,11 +80,16 @@ async function main(): Promise<void> {
   startMirrorScheduler();
   startOverheadScheduler();
   startBackupScheduler();
+  // The worker owns scheduled ticks: scripts, feeds, billing, outbox, flows,
+  // and close scans (engine/src/scheduler.ts), claimed once across replicas
+  // by the shared Postgres lock. The web process schedules only on explicit
+  // single-process opt-in.
+  ensureScheduler();
 
   for (const w of workers) {
     w.on("failed", (job, err) => console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message));
   }
-  console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture, backup; report + sandbox + backup schedulers ticking");
+  console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture, backup; scheduled ticks owned (scripts, feeds, billing, outbox, flows, close) + report + sandbox + backup schedulers ticking");
 
   const heartbeat = async () => {
     try {
