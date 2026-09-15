@@ -1,7 +1,47 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
+import { normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./payroll-scope.ts";
+
+/**
+ * Adjustment money must be an exact 4dp amount the numeric(19,4) column can
+ * hold: anything wider died at storage with a driver error.
+ */
+function persistAdjustmentMoney(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new PayrollError("adjustment amount must be an exact decimal of at most 4 decimal places");
+  }
+  let amount: string;
+  try {
+    amount = normalizeMoney(exact);
+  } catch {
+    throw new PayrollError("adjustment amount must be an exact decimal of at most 4 decimal places");
+  }
+  if (amount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+    throw new PayrollError("adjustment amount is out of range — at most 15 whole digits fit the ledger");
+  }
+  return amount;
+}
+
+/**
+ * Adjustment hours persist into numeric(12,2): at most 2dp and ten whole
+ * digits. Anything past 2dp was silently rounded by the column; anything
+ * wider died at storage. Negative hours are refused — a correction is a
+ * separate adjustment, not a sign flip smuggled into one cell.
+ */
+function persistAdjustmentHours(value: unknown): string {
+  const exact = canonicalDecimal(value, 2);
+  if (exact === null || exact.startsWith("-")) {
+    throw new PayrollError("adjustment hours must be a non-negative decimal of at most 2 decimal places");
+  }
+  if (exact.replace(/^[+]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) {
+    throw new PayrollError("adjustment hours are out of range — at most 10 whole digits fit the ledger");
+  }
+  return exact;
+}
 
 export type PayRunAdjustmentMutation =
   | {
@@ -83,13 +123,21 @@ export async function mutatePayRunAdjustment(input: {
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
+      // amount is numeric(19,4) and hours numeric(12,2): the values reach the
+      // columns verbatim, so an oversized paste died at storage with a driver
+      // error and 4dp hours were silently rounded to the column scale. Fail
+      // closed here with a named error before any write.
+      const amount = persistAdjustmentMoney(mutation.amount);
+      const hours = mutation.hours == null || mutation.hours === ""
+        ? null
+        : persistAdjustmentHours(mutation.hours);
       await tx.execute(sql`
         insert into pay_run_adjustments
           (org_id, pay_run_document_id, employee_party_id, adjustment_type,
            component_id, amount, hours, replace_component, note, created_by, updated_by)
         values
           (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
-           ${mutation.componentId}, ${mutation.amount}, ${mutation.hours ?? null},
+           ${mutation.componentId}, ${amount}, ${hours},
            ${mutation.replaceComponent === true}, ${mutation.note ?? null}, ${actorId}, ${actorId})
       `);
       changed = true;
