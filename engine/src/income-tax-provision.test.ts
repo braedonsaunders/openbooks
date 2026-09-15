@@ -241,3 +241,18 @@ test("rate reconciliation steps sum to the total expense", () => {
     .reduce((a, s) => a + Number(s.amount), 0);
   assert.ok(Math.abs(stepsTotal - Number(c.totalExpense)) < 0.005);
 });
+
+test("rate reconciliation percents round half away from zero, not truncate", () => {
+  // 24.69 / 200 = 12.345%: truncation prints 12.34%, correct 2dp rounding is 12.35%.
+  const c = buildProvision({
+    pretaxBookIncome: "200.0000",
+    enactedRatePercent: "12.345",
+    permanentDifferences: [],
+    lossCarryforwardUsed: "0",
+    valuationAllowance: "0",
+    differences: [],
+  });
+  assert.equal(c.totalExpense, "24.6900");
+  assert.equal(c.effectiveRatePercent, "12.35");
+  assert.equal(c.rateReconciliation.find((s) => s.key === "total")!.percent, "12.35");
+});
