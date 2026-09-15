@@ -316,7 +316,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
       actions={
         <button
           type="button"
-          onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, Math.round(r.spend), (r.sharePct * 100).toFixed(1), r.bills, Math.round(r.avgBill), r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
+          onClick={() => exportCsv('vendors', [t('table.vendor'), t('table.spend'), t('csv.sharePct'), t('table.bills'), t('kpi.avgBill'), t('csv.onTimePct'), t('table.score'), t('table.tier')], rows.map((r) => [r.name, r.spend, (r.sharePct * 100).toFixed(1), r.bills, r.avgBill, r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), t(`tier.${r.tier}`)]), today)}
           className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           <Download size={11} /> CSV
