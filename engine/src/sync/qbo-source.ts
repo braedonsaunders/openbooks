@@ -1,6 +1,6 @@
 import { addCalendarDays, businessToday, parseIsoDate } from "../business-date.ts";
 import { QboClient } from "../qbo.ts";
-import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
+import { formatMoney, fromUnits, toUnits } from "../money.ts";
 import { buildNativeFromQbo, isQboVoided, qboVoidNote, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -245,20 +245,29 @@ export class QboSource implements MigrationSource {
     }
 
     // Applications: the FULL LinkedTxn graph from payments (delta-safe applier).
+    // Linked amounts ride along STATED — the payment's own CurrencyRef amount
+    // at its ExchangeRate (Intuit links same-currency transactions only, and
+    // ExchangeRate prices that payment's currency home). The reconciler
+    // converts centrally and refuses anything it cannot price; nothing here
+    // converts or defaults a rate. A missing CurrencyRef means a
+    // home-currency payment, so it falls back to the company base.
     for (const entity of ["Payment", "BillPayment"] as const) {
       const pays = await this.client.queryAll<QboTxn>(entity);
       for (const p of pays) {
         if (isQboVoided(p)) continue;
-        const rate = p.ExchangeRate && p.ExchangeRate > 0 ? p.ExchangeRate : 1;
+        const currency = p.CurrencyRef?.value ?? ctx.baseCurrency;
+        const rate = p.ExchangeRate && p.ExchangeRate > 0 ? String(p.ExchangeRate) : null;
         for (const l of p.Line ?? []) {
-          const amt = mulDecimal(String(l.Amount ?? 0), String(rate));
-          if (toUnits(amt) <= 0n) continue;
+          const raw = String(l.Amount ?? 0);
+          if (toUnits(raw) <= 0n) continue;
           for (const lt of l.LinkedTxn ?? []) {
             if (lt.TxnType === "Invoice" || lt.TxnType === "Bill") {
               applications.push({
                 paymentRef: `${entity}:${p.Id}`,
                 appliedRef: `${lt.TxnType}:${lt.TxnId}`,
-                amount: formatMoney(amt, 2),
+                amount: raw,
+                currency,
+                rate,
               });
             } else if (lt.TxnType === "CreditMemo" || lt.TxnType === "VendorCredit") {
               // A zero-amount payment can consume a credit against the other
@@ -268,7 +277,9 @@ export class QboSource implements MigrationSource {
                 applications.push({
                   paymentRef: `${lt.TxnType}:${lt.TxnId}`,
                   appliedRef: `${target.TxnType}:${target.TxnId}`,
-                  amount: formatMoney(amt, 2),
+                  amount: raw,
+                  currency,
+                  rate,
                 });
               }
             }

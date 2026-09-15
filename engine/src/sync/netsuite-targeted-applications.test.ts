@@ -29,6 +29,7 @@ test("targeted NetSuite pulls include payment links touching either document sid
             nextdoc: "20",
             nextline: "2",
             foreignamount: "25.0000",
+            paycurrency: "CAD",
             payexrate: "1",
           },
         ];
@@ -43,7 +44,7 @@ test("targeted NetSuite pulls include payment links touching either document sid
   );
 
   assert.deepEqual(changes.applications, [
-    { paymentRef: "20", appliedRef: "10", amount: "25.0000" },
+    { paymentRef: "20", appliedRef: "10", amount: "25.0000", currency: "CAD", rate: "1" },
   ]);
   assert.match(
     queries.find((query) => /nexttransactionlinelink/i.test(query))!,

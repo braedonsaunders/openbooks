@@ -316,7 +316,18 @@ export class OdooSource implements MigrationSource {
       // Payable: credit side = the bill (open item), debit side settles it.
       const [paymentRef, appliedRef] =
         type === "liability_payable" ? [debit.moveId, credit.moveId] : [credit.moveId, debit.moveId];
-      applications.push({ paymentRef, appliedRef, amount: formatMoney(String(p.amount), 2) });
+      // `amount` is company currency (Odoo multi-currency docs: reconciliation
+      // matches "the invoice price in the invoice currency and the ... amount
+      // in your company currency"; the foreign legs ride
+      // debit/credit_amount_currency instead). No producer rate exists on a
+      // partial, so the reconciler prices the link from the booked lines.
+      applications.push({
+        paymentRef,
+        appliedRef,
+        amount: formatMoney(String(p.amount), 2),
+        currency: this.baseCurrency,
+        rate: null,
+      });
     }
 
     return {

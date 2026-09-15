@@ -11,7 +11,6 @@ import {
   NETSUITE_TRANSACTION_WATERMARK_QUERY,
   netSuiteCreditOpenBalance,
   netSuiteLineColumns,
-  netSuiteSettlementAmount,
   numericIdWindows,
   parseNetSuiteMappings,
   toSourceApplicationLinks,
@@ -1306,75 +1305,47 @@ test("NetSuite foreign documents without a usable rate fail closed", () => {
   }
 });
 
-test("NetSuite settlement links convert to the payer's functional currency", () => {
-  // The reconciler settles functional carrying amounts, so a 100 EUR link
-  // paid at 1.3687 must arrive as 136.8700 — passing the foreign face value
-  // through under-settles by the FX spread while reporting unallocated zero.
-  assert.equal(
-    netSuiteSettlementAmount({
-      previousdoc: "7",
-      previousline: "0",
-      nextdoc: "8",
-      nextline: "0",
-      foreignamount: "100",
-      payexrate: "1.3687",
-    }),
-    "136.8700",
-  );
-  assert.equal(
-    netSuiteSettlementAmount({
-      previousdoc: "7",
-      previousline: "0",
-      nextdoc: "8",
-      nextline: "0",
-      foreignamount: "250.50",
-      payexrate: "1",
-    }),
-    "250.5000",
-  );
-  assert.throws(
-    () =>
-      netSuiteSettlementAmount({
-        previousdoc: "7",
-        previousline: "0",
-        nextdoc: "8",
-        nextline: "0",
-        foreignamount: "100",
-      }),
-    /carries no payer exchange rate/,
-  );
-  assert.throws(
-    () =>
-      netSuiteSettlementAmount({
-        previousdoc: "7",
-        previousline: "0",
-        nextdoc: "8",
-        nextline: "0",
-        foreignamount: "100",
-        payexrate: "bogus",
-      }),
-    /unusable amount or rate/,
-  );
-});
-
-test("NetSuite link mapping dedupes, drops non-positive, and converts", () => {
+test("NetSuite link mapping states stated terms and never converts", () => {
+  // The mapper forwards the transaction-currency face value with the paying
+  // transaction's currency and rate; the reconciler converts centrally and
+  // refuses anything it cannot price. A missing rate rides along (same-side
+  // books rates still resolve it) instead of failing the pull.
   const link = {
     previousdoc: "7",
     previousline: "0",
     nextdoc: "8",
     nextline: "0",
     foreignamount: "100",
+    paycurrency: "EUR",
     payexrate: "1.2",
   };
-  assert.deepEqual(toSourceApplicationLinks([link, { ...link }]), [
-    { paymentRef: "8", appliedRef: "7", amount: "120.0000" },
+  assert.deepEqual(toSourceApplicationLinks([link, { ...link }], "USD"), [
+    { paymentRef: "8", appliedRef: "7", amount: "100", currency: "EUR", rate: "1.2" },
   ]);
   assert.deepEqual(
-    toSourceApplicationLinks([{ ...link, foreignamount: "0" }]),
+    toSourceApplicationLinks([{ ...link, paycurrency: null, payexrate: null }], "USD"),
+    [{ paymentRef: "8", appliedRef: "7", amount: "100", currency: "USD", rate: null }],
+  );
+  // A display label still resolves (Canadian Dollar is a wired alias); a
+  // stated-but-unresolvable value stays empty so the reconciler refuses it.
+  assert.deepEqual(
+    toSourceApplicationLinks([{ ...link, paycurrency: "Canadian Dollar" }], "USD"),
+    [{ paymentRef: "8", appliedRef: "7", amount: "100", currency: "CAD", rate: "1.2" }],
+  );
+  assert.deepEqual(
+    toSourceApplicationLinks([{ ...link, paycurrency: "Martian Credits" }], "USD"),
+    [{ paymentRef: "8", appliedRef: "7", amount: "100", currency: "", rate: "1.2" }],
+  );
+  assert.deepEqual(
+    toSourceApplicationLinks([{ ...link, foreignamount: "0" }], "USD"),
     [],
   );
   assert.throws(
-    () => toSourceApplicationLinks([link, { ...link, payexrate: "1.3" }]),
+    () => toSourceApplicationLinks([link, { ...link, payexrate: "1.3" }], "USD"),
+    /conflicting application link 7:0:8:0/,
+  );
+  assert.throws(
+    () => toSourceApplicationLinks([link, { ...link, paycurrency: "USD" }], "USD"),
     /conflicting application link 7:0:8:0/,
   );
 });

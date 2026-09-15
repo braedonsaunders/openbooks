@@ -250,14 +250,37 @@ export class XeroSource implements MigrationSource {
 
     // Applications: every Payment settles its invoice; credit-note Allocations
     // settle theirs. Pull FULL graphs (the reconciler is delta-safe).
+    // Every link amount is denominated in the INVOICE's currency (per Xero's
+    // single-currency documents: Payment.Amount and Allocation.Amount are
+    // capped by the invoice outstanding, so they price in the invoice's
+    // currency). Build an invoice → { currency, rate } map with one
+    // un-windowed pull so links against out-of-window invoices stay stated.
+    const invMeta = await this.client.listAll<XeroDoc>("Invoices", "Invoices");
+    const invFx = new Map<string, { currency: string; rate: string | null }>();
+    for (const v of invMeta) {
+      if (v.InvoiceID && v.CurrencyCode) {
+        invFx.set(v.InvoiceID, {
+          currency: v.CurrencyCode,
+          rate: typeof v.CurrencyRate === "number" && v.CurrencyRate > 0 ? String(v.CurrencyRate) : null,
+        });
+      }
+    }
     const pays = await this.client.listAll<XeroDoc & { Amount?: number; CurrencyRate?: number }>("Payments", "Payments");
     for (const p of pays) {
       if ((p.Status ?? "") === "DELETED" || !p.Invoice?.InvoiceID || !(p.Amount && p.Amount > 0)) continue;
-      const rate = p.CurrencyRate && p.CurrencyRate > 0 ? p.CurrencyRate : 1;
+      const inv = invFx.get(p.Invoice.InvoiceID);
+      const producerRate =
+        typeof p.CurrencyRate === "number" && p.CurrencyRate > 0 ? String(p.CurrencyRate) : null;
       applications.push({
         paymentRef: `Payment:${p.PaymentID}`,
         appliedRef: `Invoice:${p.Invoice.InvoiceID}`,
-        amount: formatMoney(mulDecimal(String(p.Amount), String(rate)), 2),
+        amount: String(p.Amount),
+        // Xero payments price in the invoice's currency (Amount is capped by
+        // the invoice outstanding). The producer rate is the payment's own
+        // Xero rate (home-per-invoice-ccy). A missing invoice code means a
+        // deleted invoice; the reconciler refuses the link honestly.
+        currency: inv?.currency ?? "",
+        rate: inv && producerRate ? producerRate : inv?.rate ?? null,
       });
     }
     const credits = await this.client.listAll<
@@ -265,13 +288,25 @@ export class XeroSource implements MigrationSource {
     >("CreditNotes", "CreditNotes");
     for (const c of credits) {
       if (!["AUTHORISED", "PAID"].includes(c.Status ?? "")) continue;
-      const rate = c.CurrencyRate && c.CurrencyRate > 0 ? c.CurrencyRate : 1;
       for (const a of c.Allocations ?? []) {
         if (!a.Invoice?.InvoiceID || !(a.Amount && a.Amount > 0)) continue;
+        const inv = invFx.get(a.Invoice.InvoiceID);
         applications.push({
           paymentRef: `CreditNote:${c.CreditNoteID}`,
           appliedRef: `Invoice:${a.Invoice.InvoiceID}`,
-          amount: formatMoney(mulDecimal(String(a.Amount), String(rate)), 2),
+          amount: String(a.Amount),
+          // Allocation.Amount prices in the invoice's currency, so the
+          // producer rate is the INVOICE's own Xero rate (same-currency
+          // allocations — the Xero norm — make this identical to the
+          // credit-note rate the old code used).
+          // Published gap: the sign convention of credit-note Allocation
+          // amounts on the wire is unproven (no live multi-currency tenant
+          // observed) — the positive-amount guard above assumes applications
+          // arrive unsigned, matching the payment leg. If Xero ever signs
+          // them, the guard silently drops the leg and the invoice stays
+          // open (visible), rather than settling backwards.
+          currency: inv?.currency ?? "",
+          rate: inv?.rate ?? null,
         });
       }
     }

@@ -256,7 +256,18 @@ export class DynamicsSource implements MigrationSource {
               memo: `Settlement of ${t.number}`, referenceNumber: `PAY-${t.number}`,
               lines: [{ accountId: bank, itemId: null, amount: settledAmount, taxAmount: "0", taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: "Payment", lineNumber: 1 }],
             });
-            applications.push({ paymentRef: `${entity}Payment:${t.id}`, appliedRef: `${entity}:${t.id}`, amount: settledAmount });
+            // Both legs come from this one invoice object, so the settled
+            // delta shares its currencyCode (blank = LCY = base). BC exposes
+            // no settlement FX rate here: no producer rate is stated, so a
+            // foreign link resolves through the books' own line rates and
+            // refuses loudly on any mismatch.
+            applications.push({
+              paymentRef: `${entity}Payment:${t.id}`,
+              appliedRef: `${entity}:${t.id}`,
+              amount: settledAmount,
+              currency: t.currencyCode?.trim() || this.baseCurrency,
+              rate: null,
+            });
           }
         }
       }
@@ -273,10 +284,17 @@ export class DynamicsSource implements MigrationSource {
         else documents.push(built);
         if (p.appliesToInvoiceId && p.amount) {
           const invEntity = entity === "customerPayment" ? "salesInvoice" : "purchaseInvoice";
+          // Published gap: the denomination of standalone payment-journal
+          // `amount`s is unproven (see the adapter note in source.ts). State
+          // the payment's own currencyCode when present — otherwise the
+          // company base — with no rate, so any mismatch resolves through
+          // the books' own line rates or refuses loudly.
           applications.push({
             paymentRef: `${entity}:${p.id}`,
             appliedRef: `${invEntity}:${p.appliesToInvoiceId}`,
             amount: formatMoney(fromUnits(toUnits(String(p.amount)) < 0n ? -toUnits(String(p.amount)) : toUnits(String(p.amount))), 2),
+            currency: p.currencyCode?.trim() || this.baseCurrency,
+            rate: null,
           });
         }
       }

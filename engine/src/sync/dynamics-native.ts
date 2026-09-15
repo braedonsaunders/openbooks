@@ -46,6 +46,9 @@ export interface BCDoc {
   totalTaxAmount?: number;
   totalAmountIncludingTax?: number;
   remainingAmount?: number;
+  /** BC v2.0 document currency (Microsoft Learn: "the currency code for the
+   *  invoice"). Blank means LCY — the company base. */
+  currencyCode?: string;
   // payment-journal shapes
   journalId?: string;
   amount?: number;

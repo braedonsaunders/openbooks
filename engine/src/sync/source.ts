@@ -40,11 +40,57 @@ export interface EntityStream {
 
 // --- Native transaction stream ------------------------------------------------
 
-/** A source settlement link: payment/credit → the open item it settled. */
+/**
+ * A source settlement link: payment/credit → the open item it settled.
+ *
+ * `amount` is stated in `currency` — NEVER assumed functional. The
+ * reconciler resolves every link to functional carrying value itself (base
+ * amounts pass through; amounts in a payment line's currency convert at the
+ * line's booked rate; anything else needs `rate`) and REFUSES links whose
+ * currency it cannot resolve, with a named error. A refused link fails the
+ * run honestly; it is never silently under-applied.
+ *
+ * Per-adapter denomination (each cited from the vendor's public contract):
+ * - NetSuite `nexttransactionlinelink.foreignamount` is transaction currency;
+ *   the adapter also states the paying transaction's `exchangerate` and its
+ *   `BUILTIN.DF(currency)` display value, resolved through the same
+ *   `netSuiteCurrencyIso` rule the document builder uses (unstated = source
+ *   base; unresolvable stays empty and refuses).
+ * - QBO links carry the payment's `CurrencyRef` amount at its `ExchangeRate`
+ *   (Intuit: linked transactions share one currency; ExchangeRate converts
+ *   that payment's currency to home).
+ * - Xero payment/allocation `Amount` must not exceed the invoice outstanding,
+ *   i.e. it is denominated in the invoice's `CurrencyCode`, at the
+ *   payment's/credit's own `CurrencyRate` (Xero: rate "only used for
+ *   non-base-currency invoices").
+ * - Odoo `account.partial.reconcile.amount` is company currency (Odoo:
+ *   reconciliation matches "the invoice price in the invoice currency and
+ *   the ... amount in your company currency").
+ * - ERPNext Payment Entry `allocated_amount` is denominated in the invoice's
+ *   account currency (ERPNext docs: "Allocate the invoice in its account
+ *   currency"). The per-reference `exchange_rate` direction is unproven, so
+ *   no producer rate is stated — foreign links price from the books or refuse.
+ * - Dynamics states the invoice's `currencyCode` (Microsoft Learn: "the
+ *   currency code for the invoice"); both link legs come from that one
+ *   invoice object, so the settled delta shares it. The denomination of
+ *   standalone payment-journal `amount`s is NOT established — see the adapter
+ *   note — so those links resolve through the books' own line rates and
+ *   refuse loudly on any mismatch.
+ */
 export interface SourceApplicationLink {
   paymentRef: string;
   appliedRef: string;
+  /** Positive decimal string, stated in `currency`. */
   amount: string;
+  /** ISO 4217 code the amount is stated in, as reported by the source. */
+  currency: string;
+  /**
+   * Functional currency per unit of `currency`, when the producer knows the
+   * rate the source applied. Fallback only: the books' own line rate prices
+   * any currency it already carries. Never defaulted — an absent rate plus
+   * an unresolvable currency refuses the link.
+   */
+  rate?: string | null;
 }
 
 export interface NativeChanges {

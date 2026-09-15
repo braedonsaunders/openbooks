@@ -145,18 +145,31 @@ test(
       update documents set posted_entry_id = ${invEntry}, posting_period_id = ${o.periodId},
         status = 'posted' where id = ${invDoc} and org_id = ${o.orgId}`);
 
-    const links = toSourceApplicationLinks([
+    // Stated terms now: the reconciler converts centrally at the booked line
+    // rate (1.2 here, matching the payer rate), so the proof expectations —
+    // both balances 0.0000, clean re-run — are unchanged.
+    const links = toSourceApplicationLinks(
+      [
       {
         previousdoc: "inv-fxns",
         previousline: "0",
         nextdoc: "pay-fxns",
         nextline: "0",
         foreignamount: "100",
+        paycurrency: "EUR",
         payexrate: "1.2",
       },
-    ]);
+      ],
+      "CAD",
+    );
     assert.deepEqual(links, [
-      { paymentRef: "pay-fxns", appliedRef: "inv-fxns", amount: "120.0000" },
+      {
+        paymentRef: "pay-fxns",
+        appliedRef: "inv-fxns",
+        amount: "100",
+        currency: "EUR",
+        rate: "1.2",
+      },
     ]);
 
     const first = await reconcileApplications(o.orgId, "nsId", links);
