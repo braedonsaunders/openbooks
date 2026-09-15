@@ -2200,7 +2200,7 @@ async function upsertLock(args: {
  * check (period_posting_fence, migration 0022) and holds it to commit, so an
  * in-flight journal posting either commits before a close's final refresh or
  * is rejected by the trigger after the locks flip to 'closed'. */
-function periodScopeAdvisoryLock(executor: SqlExecutor, orgId: string, periodId: string, bookId: string): Promise<unknown> {
+export function periodScopeAdvisoryLock(executor: SqlExecutor, orgId: string, periodId: string, bookId: string): Promise<unknown> {
   return executor.execute(sql`
     select pg_advisory_xact_lock(
       hashtextextended(${`period-lock:${orgId}:${periodId}:${bookId}`}, 0)

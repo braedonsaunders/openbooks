@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../db.ts";
-import { CLOSE_MODULES, ensureCloseDefaults } from "../close.ts";
+import { CLOSE_MODULES, ensureCloseDefaults, periodScopeAdvisoryLock } from "../close.ts";
 import { canonicalDecimal } from "../exact-decimal.ts";
 import { normalizeMoney } from "../money.ts";
 import type {
@@ -401,7 +401,7 @@ async function loadAccountingPeriods(
   const books = (await db.execute(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_active
-     order by is_primary desc, created_at
+     order by is_primary desc, created_at, id
   `)) as { rows: { id: string }[] };
   if (books.rows.length === 0) {
     s.skipped += records.length;
@@ -424,70 +424,79 @@ async function loadAccountingPeriods(
       continue;
     }
 
-    const existing = (await db.execute(sql`
-      select id from accounting_periods
-       where org_id = ${orgId}
-         and fiscal_calendar_id = ${defaults.calendarId}
-         and fiscal_year = ${fiscalYear}
-         and period_number = ${periodNumber}
-       limit 1
-    `)) as { rows: { id: string }[] };
-    const period = (await db.execute(sql`
-      insert into accounting_periods
-        (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
-         starts_on, ends_on, is_adjustment, custom)
-      values (${orgId}, ${defaults.calendarId}, ${fiscalYear}, ${periodNumber},
-              ${name}, ${startsOn}, ${endsOn}, ${f.isAdjustment === true},
-              ${JSON.stringify({ [refKey]: rec.sourceRef })}::jsonb)
-      on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number)
-      do update set name = excluded.name, starts_on = excluded.starts_on,
-        ends_on = excluded.ends_on, is_adjustment = excluded.is_adjustment,
-        custom = accounting_periods.custom || excluded.custom,
-        updated_at = now()
-      where accounting_periods.org_id = ${orgId}
-      returning id
-    `)) as { rows: { id: string }[] };
-    const periodId = period.rows[0]?.id;
-    if (!periodId) {
-      s.skipped++;
-      continue;
-    }
-    existing.rows[0] ? s.updated++ : s.created++;
-
-    const fullyClosed = f.closed === true || f.allLocked === true;
-    const moduleStates = f.moduleStates && typeof f.moduleStates === "object" && !Array.isArray(f.moduleStates)
-      ? f.moduleStates as Record<string, unknown>
-      : {};
-    const closedAt = str(f.closedAt);
-    for (const book of books.rows) {
-      for (const module of CLOSE_MODULES) {
-        const closed = fullyClosed ||
-          (module === "ar" && f.arLocked === true) ||
-          (module === "ap" && f.apLocked === true);
-        const explicitState = moduleStates[module];
-        const state = explicitState === "closed" || explicitState === "soft_closed" || explicitState === "open"
-          ? explicitState
-          : closed ? "closed" : "open";
-        await db.execute(sql`
-          insert into period_locks
-            (org_id, period_id, book_id, module, state, locked_at, reason)
-          values (${orgId}, ${periodId}, ${book.id}, ${module},
-                  ${state},
-                  ${state !== "open" ? closedAt : null},
-                  'close.importedPeriodLockReason')
-          on conflict (org_id, period_id, book_id, subsidiary_id, module)
-          do update set state = excluded.state,
-            locked_at = excluded.locked_at,
-            reason = excluded.reason,
-            reopen_expires_at = null,
-            version = period_locks.version + 1,
-            updated_at = now()
-          where (period_locks.reason is null
-             or period_locks.reason = 'close.importedPeriodLockReason')
-            and period_locks.org_id = ${orgId}
-        `);
+    // One transaction per period: the definition and every book/module lock
+    // land atomically, and the 0022 exclusive fence serializes these lock
+    // writes against in-flight postings (shared side in je_guard) and local
+    // close writers (setPeriodLockState/closeApprovedRun). Books iterate in a
+    // total, stable order so concurrent mirrors acquire the per-book fences
+    // in the same sequence instead of deadlocking.
+    await db.transaction(async (tx) => {
+      const existing = (await tx.execute(sql`
+        select id from accounting_periods
+         where org_id = ${orgId}
+           and fiscal_calendar_id = ${defaults.calendarId}
+           and fiscal_year = ${fiscalYear}
+           and period_number = ${periodNumber}
+         limit 1
+      `)) as { rows: { id: string }[] };
+      const period = (await tx.execute(sql`
+        insert into accounting_periods
+          (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+           starts_on, ends_on, is_adjustment, custom)
+        values (${orgId}, ${defaults.calendarId}, ${fiscalYear}, ${periodNumber},
+                ${name}, ${startsOn}, ${endsOn}, ${f.isAdjustment === true},
+                ${JSON.stringify({ [refKey]: rec.sourceRef })}::jsonb)
+        on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number)
+        do update set name = excluded.name, starts_on = excluded.starts_on,
+          ends_on = excluded.ends_on, is_adjustment = excluded.is_adjustment,
+          custom = accounting_periods.custom || excluded.custom,
+          updated_at = now()
+        where accounting_periods.org_id = ${orgId}
+        returning id
+      `)) as { rows: { id: string }[] };
+      const periodId = period.rows[0]?.id;
+      if (!periodId) {
+        s.skipped++;
+        return;
       }
-    }
+      existing.rows[0] ? s.updated++ : s.created++;
+
+      const fullyClosed = f.closed === true || f.allLocked === true;
+      const moduleStates = f.moduleStates && typeof f.moduleStates === "object" && !Array.isArray(f.moduleStates)
+        ? f.moduleStates as Record<string, unknown>
+        : {};
+      const closedAt = str(f.closedAt);
+      for (const book of books.rows) {
+        await periodScopeAdvisoryLock(tx, orgId, periodId, book.id);
+        for (const module of CLOSE_MODULES) {
+          const closed = fullyClosed ||
+            (module === "ar" && f.arLocked === true) ||
+            (module === "ap" && f.apLocked === true);
+          const explicitState = moduleStates[module];
+          const state = explicitState === "closed" || explicitState === "soft_closed" || explicitState === "open"
+            ? explicitState
+            : closed ? "closed" : "open";
+          await tx.execute(sql`
+            insert into period_locks
+              (org_id, period_id, book_id, module, state, locked_at, reason)
+            values (${orgId}, ${periodId}, ${book.id}, ${module},
+                    ${state},
+                    ${state !== "open" ? closedAt : null},
+                    'close.importedPeriodLockReason')
+            on conflict (org_id, period_id, book_id, subsidiary_id, module)
+            do update set state = excluded.state,
+              locked_at = excluded.locked_at,
+              reason = excluded.reason,
+              reopen_expires_at = null,
+              version = period_locks.version + 1,
+              updated_at = now()
+            where (period_locks.reason is null
+               or period_locks.reason = 'close.importedPeriodLockReason')
+              and period_locks.org_id = ${orgId}
+          `);
+        }
+      }
+    });
   }
 }
 
