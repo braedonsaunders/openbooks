@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
-import { addCalendarDays, businessToday } from "./business-date.ts";
+import { addCalendarDays, businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
 import { financialClosePeriodScope, revaluationReadiness } from "./fx-revaluation.ts";
 
@@ -1053,6 +1053,12 @@ export async function startCloseRun(args: {
   }
   if (!configuration.rows[0]?.package_ok)
     throw new CloseError("active reporting package not found");
+  // A shape-valid non-day such as February 30 would otherwise reach the
+  // target_close_date DATE column and surface as a raw storage throw (HTTP 500
+  // at the runs route, which only maps CloseError to 422).
+  if (args.targetCloseDate !== undefined && !isIsoCalendarDate(args.targetCloseDate)) {
+    throw new CloseError("target close date must be a real calendar date (YYYY-MM-DD)");
+  }
   const targetCloseDate =
     args.targetCloseDate ?? addBusinessDays(period.ends_on, 5);
 
