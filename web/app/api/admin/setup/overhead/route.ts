@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     if (!typeIds.length || !overhead?.method) {
       return NextResponse.json({ error: 'projectTypeIds + overhead required' }, { status: 400 })
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || !isCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
     if (typeIds.some((id) => !isUuid(id))) {
