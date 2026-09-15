@@ -40,6 +40,11 @@ export const dynamic = "force-dynamic";
 function exactMoney(value: unknown): string | null {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) return null;
+  // canonicalDecimal bounds scale, not magnitude: a pasted 20-digit figure
+  // would otherwise sail through every action below and die in Postgres as a
+  // raw numeric overflow (HTTP 500). All subcontract money columns are
+  // numeric(19,4), which holds 15 whole digits.
+  if (exact.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) return null;
   try {
     return normalizeMoney(exact);
   } catch {
