@@ -29,7 +29,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid_fiscal_year' }, { status: 422 })
   }
   const requestedYear = body.fiscalYear === undefined ? null : body.fiscalYear
-  const kind = BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? (body.kind as string) : 'budget'
+  if (body.kind !== undefined && (typeof body.kind !== 'string' || !BUDGET_KINDS.includes(body.kind as "forecast" | "budget"))) {
+    return NextResponse.json({ error: 'invalid_kind' }, { status: 422 })
+  }
+  const kind = body.kind === undefined ? 'budget' : body.kind
   if (body.sourceScenarioId !== undefined && (typeof body.sourceScenarioId !== 'string' || !isUuid(body.sourceScenarioId))) {
     return NextResponse.json({ error: 'invalid_source_scenario_id' }, { status: 422 })
   }
