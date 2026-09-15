@@ -3,6 +3,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { dateOrFalse, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Opportunities                                                       */
@@ -51,6 +52,8 @@ function opportunityFilterPredicate(clause: FilterClause): SQL | null {
     return operator === 'in' ? sql`${col} in (${list})` : sql`${col} not in (${list})`
   }
   const ref = (col: SQL): SQL | null => {
+    const refused = uuidOrFalse(opportunitySingle(value))
+    if (refused) return refused
     if (operator === 'eq') return sql`${col} = ${opportunitySingle(value)}`
     if (operator === 'ne') return sql`${col} <> ${opportunitySingle(value)}`
     return null
@@ -66,12 +69,19 @@ function opportunityFilterPredicate(clause: FilterClause): SQL | null {
     case 'owner_user_id': return ref(sql`o.owner_user_id`)
     case 'party_id': return ref(sql`o.party_id`)
     case 'forecast_category': return select(sql`o.forecast_category`)
-    case 'expected_close_date':
+    case 'expected_close_date': {
+      const refused = dateOrFalse(opportunitySingle(value))
+      if (refused) return refused
       if (operator === 'eq') return sql`o.expected_close_date = ${opportunitySingle(value)}`
       if (operator === 'gte') return sql`o.expected_close_date >= ${opportunitySingle(value)}`
       if (operator === 'lte') return sql`o.expected_close_date <= ${opportunitySingle(value)}`
-      if (operator === 'between') return sql`o.expected_close_date between ${opportunitySingle(value)} and ${opportunitySingle(clause.to)}`
+      if (operator === 'between') {
+        const refusedTo = dateOrFalse(opportunitySingle(clause.to))
+        if (refusedTo) return refusedTo
+        return sql`o.expected_close_date between ${opportunitySingle(value)} and ${opportunitySingle(clause.to)}`
+      }
       return null
+    }
     case 'title':
       if (operator === 'eq') return sql`o.title = ${opportunitySingle(value)}`
       if (operator === 'contains') return sql`o.title ilike ${`%${opportunitySingle(value)}%`}`
@@ -96,8 +106,14 @@ export function opportunityWhere(
     if (predicate) parts.push(sql`and ${predicate}`)
   }
   const quick = adhoc.filters ?? {}
-  if (quick.status_id) parts.push(sql`and o.status_id = ${quick.status_id}`)
-  if (quick.owner_user_id) parts.push(sql`and o.owner_user_id = ${quick.owner_user_id}`)
+  if (quick.status_id) {
+    const refused = uuidOrFalse(quick.status_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and o.status_id = ${quick.status_id}`)
+  }
+  if (quick.owner_user_id) {
+    const refused = uuidOrFalse(quick.owner_user_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and o.owner_user_id = ${quick.owner_user_id}`)
+  }
   if (quick.forecast_category) parts.push(sql`and o.forecast_category = ${quick.forecast_category}`)
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
