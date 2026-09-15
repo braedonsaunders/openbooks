@@ -438,7 +438,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
@@ -508,12 +508,22 @@ jobs:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
         run: npm run build -w web
 
-      - name: Playwright smoke suite
+      - name: Playwright app suite
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
           E2E_PRODUCTION: "1"
           E2E_IGNORE_HTTPS_ERRORS: "1"
-        run: npx playwright test
+        run: npx playwright test --grep-invert "quote-to-cash"
+
+      - name: Playwright quote-to-cash workflows
+        # End-to-end workflow suite (quote → cash, credit memo, FX). Same
+        # runner and server; separate invocation so its runtime is visible and
+        # it can carry its own budget under the job timeout.
+        env:
+          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+          E2E_PRODUCTION: "1"
+          E2E_IGNORE_HTTPS_ERRORS: "1"
+        run: npx playwright test e2e/workflows
 
       - name: Upload Playwright report
         if: always()
