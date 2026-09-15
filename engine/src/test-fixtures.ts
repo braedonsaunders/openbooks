@@ -979,6 +979,11 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
   await db.transaction(async (tx) => {
     await guardTeardownTransaction(tx, orgId, kind);
     await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and ${disposableOrgPredicate(kind)}`);
+    // Password-reset tokens predate tenant scoping: they carry only user_id
+    // and intentionally have no FK, so deleting users would otherwise leave
+    // an orphaned credential record behind in the global auth tables.
+    await tx.execute(sql`delete from auth_password_resets
+      where user_id in (select id from users where org_id = ${orgId})`);
     await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
     // Remove capture evidence before its protected source files. These guards

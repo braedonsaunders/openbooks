@@ -38,6 +38,10 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
   try {
     const actorId = await createScratchUser(org.orgId, "Teardown Actor", "accountant");
     const deps = { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+    const resetId = randomUUID();
+    await db.execute(sql`
+      insert into auth_password_resets (id, user_id, token_hash, expires_at)
+      values (${resetId}, ${actorId}, ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, now() + interval '30 minutes')`);
 
     // Documents + journal entries: a POSTED vendor bill (posted_entry_id ↔
     // source_document_id is the FK cycle the teardown must break).
@@ -141,6 +145,9 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
       select (select count(*)::int from file_versions where id = ${versionId}) as versions,
              (select count(*)::int from file_blobs where version_id = ${versionId}) as blobs`));
     assert.deepEqual(blobLeft.rows[0], { versions: 0, blobs: 0 });
+    const resetLeft = await db.execute<{ count: number }>(sql`
+      select count(*)::int as count from auth_password_resets where id = ${resetId}`);
+    assert.equal(resetLeft.rows[0]?.count, 0, "teardown must remove password-reset rows owned by the deleted users");
 
     // And a second call is an idempotent no-op.
     await dropScratchOrg(org.orgId);
