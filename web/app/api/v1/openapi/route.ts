@@ -11,6 +11,10 @@ export async function GET(req: Request) {
 
   const proto = req.headers.get("x-forwarded-proto") ?? "http";
   const host = req.headers.get("host") ?? "localhost";
-  const spec = await generateOpenApiSpec(gate.user.orgId, `${proto}://${host}`);
+  const spec = await generateOpenApiSpec(
+    gate.user.orgId,
+    `${proto}://${host}`,
+    gate.user.roles.map(({ key }) => key),
+  );
   return NextResponse.json(spec);
 }
