@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { sum } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
+import { lockAndCheckPayrollRunPopulation } from "./payroll-scope.ts";
 import {
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
@@ -72,6 +73,10 @@ export async function issuePayRunCheques(input: {
     if (run.run_status !== "committed") {
       throw new PayrollError("commit the pay run before printing its cheques");
     }
+    // Cheque numbers cannot be recalled once printed: a scoped caller must
+    // own the complete population, exactly as the bank file and every other
+    // run action require. Fail closed before the first number is allocated.
+    await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, allowedSubsidiaryIds);
 
     const stubs = (await tx.execute<{
         id: string; employee_party_id: string; name: string; net_pay: string;

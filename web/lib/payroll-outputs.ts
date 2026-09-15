@@ -7,6 +7,7 @@ import {
   type PasswordTokenCatalog,
 } from '@openbooks/pdf'
 import { db } from '@openbooks/engine/src/db.ts'
+import type { Authz } from './authz'
 import { issuePayRunCheques } from '@openbooks/engine/src/payroll-cheques.ts'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { resolvePdfTemplate } from './pdf-templates/store'
@@ -163,10 +164,11 @@ export async function mergedRunChequesPdf(
   orgId: string,
   documentId: string,
   actorId: string,
+  allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
 ): Promise<{ pdf: Uint8Array; count: number; issued: number } | null> {
   const template = await resolvePdfTemplate(orgId, 'payroll_cheque', null)
   if (!template) return null
-  const batch = await issuePayRunCheques({ orgId, documentId, actorId })
+  const batch = await issuePayRunCheques({ orgId, documentId, actorId, allowedSubsidiaryIds })
   if (batch.cheques.length === 0) return null
 
   const merged = await PDFDocument.create()

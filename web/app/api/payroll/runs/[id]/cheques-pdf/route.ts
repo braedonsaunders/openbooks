@@ -35,7 +35,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
   try {
-    const merged = await mergedRunChequesPdf(gate.user.orgId, id, gate.user.id)
+    const merged = await mergedRunChequesPdf(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
     if (!merged) return NextResponse.json({ error: 'no cheques to print' }, { status: 404 })
     const stamp = await businessToday(gate.user.orgId)
     return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
