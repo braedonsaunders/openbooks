@@ -115,6 +115,16 @@ export async function POST(req: Request) {
 
     // Clear the approval stamp with the status: a row reading "draft" while it
     // still names an approver would misreport who signed off on what.
+    // Lock the header for its audit before-image: the pre-transaction read
+    // above confirmed an approved week, and this row pins what the unwind
+    // transitions from under concurrency.
+    const header = ((await db.execute<{ id: string; status: string }>(sql`
+      select id, status from timesheet_weeks
+       where org_id = ${orgId}
+         and employee_party_id = ${employee}
+         and week_start = ${week}::date
+       for update
+    `)).rows[0])
     await setTimesheetWeekStatus(
       orgId,
       employee,
@@ -132,6 +142,21 @@ export async function POST(req: Request) {
          and employee_party_id = ${employee}
          and worked_on >= ${weekFrom} and worked_on <= ${weekTo}
          and status = 'approved'`)
+    // Durable unwind evidence, part of the same atomic unit: unwinding an
+    // approval without it would leave hours editable again with no record of
+    // who cleared the sign-off. An audit failure rolls the reopen back with it.
+    if (header) {
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
+          event: 'reopened',
+          actor: { kind: 'user', userId: user.id },
+          before: { status: header.status },
+          after: { status: 'draft' },
+          weekStart: week,
+        })}::jsonb, ${user.id})
+      `)
+    }
 
     return NextResponse.json(await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds))
   })
