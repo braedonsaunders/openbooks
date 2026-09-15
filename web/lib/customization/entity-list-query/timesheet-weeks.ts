@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
+import { uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Timesheet weeks                                                     */
@@ -29,6 +30,10 @@ function timesheetWeekFilterPredicate(clause: FilterClause): SQL | null {
   const column = clause.key === 'status' ? sql`tw.status`
     : clause.key === 'employee_party_id' ? sql`tw.employee_party_id` : null
   if (!column) return null
+  if (clause.key !== 'status') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
+  }
   if (clause.operator === 'eq') return sql`${column} = ${value}`
   if (clause.operator === 'ne') return sql`${column} <> ${value}`
   return null
@@ -47,7 +52,10 @@ export function timesheetWeekWhere(
     if (predicate) parts.push(sql`and ${predicate}`)
   }
   if (adhoc.filters?.status) parts.push(sql`and tw.status = ${adhoc.filters.status}`)
-  if (adhoc.filters?.employee_party_id) parts.push(sql`and tw.employee_party_id = ${adhoc.filters.employee_party_id}`)
+  if (adhoc.filters?.employee_party_id) {
+    const refused = uuidOrFalse(adhoc.filters.employee_party_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and tw.employee_party_id = ${adhoc.filters.employee_party_id}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and employee.display_name ilike ${query}`)
