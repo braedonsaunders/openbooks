@@ -109,6 +109,12 @@ export async function POST(req: Request) {
   if (gracePeriodDays === null) {
     return NextResponse.json({ error: "gracePeriodDays must be a non-negative integer" }, { status: 400 });
   }
+  // An explicitly supplied active flag must be a real boolean: loose
+  // coercion would let isActive: "false" silently ACTIVATE a collections
+  // ladder the admin tried to switch off. Omission stays active.
+  if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+    return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+  }
 
   const id = await db.transaction(async (tx) => {
     const created = (await tx.execute<Record<string, unknown>>(sql`
@@ -116,7 +122,7 @@ export async function POST(req: Request) {
                                     reply_to, is_active, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${appliesToKind},
               ${gracePeriodDays}, ${minBalance},
-              ${(body.replyTo as string | null) ?? null}, ${body.isActive !== false},
+              ${(body.replyTo as string | null) ?? null}, ${(body.isActive as boolean | undefined) ?? true},
               ${authz.user.id}, ${authz.user.id})
       returning *
     `));
