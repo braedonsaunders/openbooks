@@ -41,6 +41,19 @@ function validStages(raw: unknown): StageInput[] | null {
   return stages;
 }
 
+/**
+ * Grace days are stored into an integer column. Anything that is not a
+ * non-negative integer is a client error, never a storage error surfacing
+ * as a 500. Same contract as the collection POST.
+ */
+function parseGracePeriodDays(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === '') return 0;
+  if (typeof raw === 'boolean') return null;
+  const days = Number(raw);
+  if (!Number.isInteger(days) || days < 0) return null;
+  return days;
+}
+
 async function owned(orgId: string, id: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from dunning_policies where id = ${id} and org_id = ${orgId}`,
@@ -75,6 +88,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     minBalance = normalizeMoney(minBalanceRaw);
   }
+  // PATCH enforces the same field contracts as POST: the non-empty name and
+  // a storable grace period.
+  if ("name" in body && (typeof body.name !== "string" || !body.name.trim())) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
+  let gracePeriodDays: number | undefined;
+  if ("gracePeriodDays" in body) {
+    const parsed = parseGracePeriodDays(body.gracePeriodDays);
+    if (parsed === null) {
+      return NextResponse.json({ error: "gracePeriodDays must be a non-negative integer" }, { status: 400 });
+    }
+    gracePeriodDays = parsed;
+  }
 
   await db.transaction(async (tx) => {
     // Snapshot the current policy and its ladder before anything changes.
@@ -87,7 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const sets = [];
     if ("name" in body) sets.push(sql`name = ${body.name as string}`);
     if ("appliesToKind" in body) sets.push(sql`applies_to_kind = ${body.appliesToKind as string}`);
-    if ("gracePeriodDays" in body) sets.push(sql`grace_period_days = ${Number(body.gracePeriodDays)}`);
+    if (gracePeriodDays !== undefined) sets.push(sql`grace_period_days = ${gracePeriodDays}`);
     if (minBalance !== undefined) sets.push(sql`min_balance = ${minBalance}`);
     if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
     if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
