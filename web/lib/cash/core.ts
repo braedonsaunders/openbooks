@@ -7,6 +7,7 @@ import { evaluateFormula } from "./formula";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
 import { statementBookExpr } from '../gl-summary'
+import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 
 export { openItems } from './open-items'
 
@@ -1015,34 +1016,47 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
          and posting_date <= ${asOf}
     ),
     movement as (
-      select g.account_id, (g.debit_total - g.credit_total) as amt
+      -- Legs are stamped in their line entity's functional currency on BOTH
+      -- branches (the summary keeps subsidiary id), so each leg carries its
+      -- functional out for presentation translation below.
+      select g.account_id, (g.debit_total - g.credit_total) as amt, sub.base_currency as func
         from gl_month_activity g
+        left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = ${orgId}
        where g.org_id = ${orgId}
          and g.book_id = ${statementBookExpr(orgId)}
          and g.account_id in (select id from bank_accounts)
          and g.month < date_trunc('month', ${asOf}::date)::date
          ${subScope(sql`g.subsidiary_id`, subIds)}
       union all
-      select l.account_id, l.amount
+      select l.account_id, l.amount, sub.base_currency as func
         from sliver_entries se
         join journal_lines l on l.entry_id = se.id and l.org_id = ${orgId}
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = ${orgId}
        where l.account_id in (select id from bank_accounts)
          ${subScope(sql`l.subsidiary_id`, subIds)}
     )
-    select a.id, a.name, a.number, coalesce(sum(m.amt), 0) as balance
+    select a.id, a.name, a.number, m.func, coalesce(sum(m.amt), 0) as balance
     from accounts a
     left join movement m on m.account_id = a.id
     where a.org_id = ${orgId} and a.type = 'asset_bank' and a.is_summary = false and a.is_active
       ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
-    group by a.id, a.name, a.number
-    order by coalesce(sum(m.amt), 0) desc
+    group by a.id, a.name, a.number, m.func
   `));
-  return r.rows.map((x) => ({
-    id: String(x.id),
-    name: String(x.name),
-    number: x.number == null ? null : String(x.number),
-    balance: normalizeMoneyValue(String(x.balance)),
-  }));
+  // A consolidated view spans functionals: translate each (account,
+  // functional) leg at the closing spot and re-sum per account. Missing rate
+  // coverage fails closed — never a mixed-functional total.
+  const base = await presentationCurrency(orgId);
+  const legs = r.rows as { id: string; name: string; number: string | null; func: string | null; balance: string }[];
+  const rates = await presentationRates(orgId, base, legs.map((x) => x.func ?? null), asOf);
+  const byAccount = new Map<string, { id: string; name: string; number: string | null; legs: string[] }>();
+  for (const x of legs) {
+    const cur = byAccount.get(String(x.id)) ?? { id: String(x.id), name: String(x.name), number: x.number == null ? null : String(x.number), legs: [] };
+    cur.legs.push(multiplyMoney(String(x.balance), rates.get(lineFunctional(x.func ?? null, base))!));
+    byAccount.set(String(x.id), cur);
+  }
+  return [...byAccount.values()]
+    .map((a) => ({ id: a.id, name: a.name, number: a.number, balance: normalizeMoneyValue(sumMoney(a.legs)) }))
+    .sort((x, y) => compareMoney(y.balance, x.balance));
 }
 
 export function bucketOf(daysPastDue: number): string {
