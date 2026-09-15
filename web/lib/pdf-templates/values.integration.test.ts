@@ -67,3 +67,34 @@ test('findSamplePdfRecordId honours the caller subsidiary scope', { skip: !proce
     await dropScratchOrg(org.orgId)
   }
 })
+
+/**
+ * The field-ticket template catalog advertises a party address merge field.
+ * It must print the customer's default billing address like every sibling
+ * record type — never a silent blank.
+ */
+test('field-ticket merge values populate the customer party address', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { withBypassContext } = await import('@openbooks/engine/src/db.ts')
+  const { seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
+  const { createFieldTicket } = await import('../field-tickets')
+  const { loadPdfRecordValues } = await import('./values')
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      await db.execute(sql`insert into addresses
+        (id, org_id, party_id, label, line1, city, region, postal_code, country, is_default_billing)
+        values (${randomUUID()}, ${org.orgId}, ${org.customerId}, 'HQ', '400 King St W', 'Toronto', 'ON', 'M5V 1K2', 'CA', true)`)
+      const actor = (await seedFlowActors(org.orgId)).adminId
+      const projectId = randomUUID()
+      await db.execute(sql`insert into projects
+        (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+        values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'ADDR-1', 'Address job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+      const created = await createFieldTicket(org.orgId, actor, { projectId })
+      const record = await loadPdfRecordValues('field_ticket', org.orgId, created.id)
+      assert.equal(record?.values.party_address, '400 King St W, Toronto, ON, M5V 1K2, CA')
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})

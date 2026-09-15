@@ -522,10 +522,27 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     return rowVals
   })
 
-  const party = (await db.execute<{ display_name: string | null; email: string | null; phone: string | null }>(sql`
-    select display_name, email, phone from parties
-     where org_id = ${orgId} and id = (select party_id from documents where id = ${id} and org_id = ${orgId})
+  const party = (await db.execute<{ display_name: string | null; email: string | null; phone: string | null; line1: string | null; line2: string | null; city: string | null; region: string | null; postal_code: string | null; country: string | null }>(sql`
+    select p.display_name, p.email, p.phone,
+           a.line1, a.line2, a.city, a.region, a.postal_code, a.country
+      from parties p
+      left join lateral (
+        select * from addresses where party_id = p.id
+         order by is_default_billing desc, created_at limit 1
+      ) a on true
+     where p.org_id = ${orgId} and p.id = (select party_id from documents where id = ${id} and org_id = ${orgId})
   `))
+
+  // The customer's default billing address, like the document loader prints —
+  // the catalog advertises this merge field, so it must never stay blank.
+  const partyAddress = [
+    party.rows[0]?.line1,
+    party.rows[0]?.line2,
+    [party.rows[0]?.city, party.rows[0]?.region, party.rows[0]?.postal_code].filter(Boolean).join(', '),
+    party.rows[0]?.country,
+  ]
+    .filter(Boolean)
+    .join(', ')
 
   const totalHours = ticket.entries.reduce((a, e) => a + (Number(e.hours) || 0), 0)
   const dayLabel = (dayIso: string) => {
@@ -546,7 +563,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     party_name: party.rows[0]?.display_name ?? ticket.customerName,
     party_email: party.rows[0]?.email ?? '',
     party_phone: party.rows[0]?.phone ?? '',
-    party_address: '',
+    party_address: partyAddress,
     labor_total: m(ticket.laborTotal),
     lines_total: m(ticket.linesTotal),
     grand_total: m(ticket.grandTotal),
