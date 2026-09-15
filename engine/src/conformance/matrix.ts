@@ -12,11 +12,13 @@
  */
 
 import { toUnits } from "../money.ts";
+import { CONSTRUCTION_CASES } from "./cases/construction.ts";
 import { FOREIGN_CURRENCY_CASES } from "./cases/foreign-currency.ts";
 import { INCOME_TAX_CASES } from "./cases/income-tax.ts";
 import { INVENTORY_CASES } from "./cases/inventory.ts";
 import { LEASE_CASES } from "./cases/leases.ts";
 import { LONG_LIVED_ASSET_CASES } from "./cases/long-lived-assets.ts";
+import { PROVISION_CASES } from "./cases/provisions.ts";
 import { REVENUE_CASES } from "./cases/revenue.ts";
 import type { ConformanceCase } from "./types.ts";
 
@@ -27,6 +29,8 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...INVENTORY_CASES,
   ...LONG_LIVED_ASSET_CASES,
   ...INCOME_TAX_CASES,
+  ...CONSTRUCTION_CASES,
+  ...PROVISION_CASES,
 ];
 
 /**
@@ -52,6 +56,8 @@ export const REGISTERED_FLOORS: readonly {
   { area: "inventory", source: INVENTORY_CASES, minimum: 7 },
   { area: "long-lived assets", source: LONG_LIVED_ASSET_CASES, minimum: 5 },
   { area: "income tax", source: INCOME_TAX_CASES, minimum: 10 },
+  { area: "construction", source: CONSTRUCTION_CASES, minimum: 4 },
+  { area: "provisions", source: PROVISION_CASES, minimum: 2 },
 ];
 
 /** Every standard the corpus makes a claim about, in citation order. */
