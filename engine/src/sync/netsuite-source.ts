@@ -1,7 +1,7 @@
 import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../netsuite.ts";
 import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money.ts";
-import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
+import { buildNativeFromNetSuite, type NetSuiteTaxCodeFallbacks, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
   EntityStream,
@@ -108,6 +108,12 @@ export interface NetSuiteAccountMappings {
    * convention, not a NetSuite semantic, so it is tenant-owned: without an
    * entry here the stock reading in NS_BILLING applies. */
   projectBillingTypes?: Record<string, (typeof PROJECT_TYPE_KEYS)[number]>;
+  /** Tenant-owned fallback tax codes for source lines that carry tax money
+   * but name no resolvable tax code, keyed by transaction side (sales /
+   * purchase). Each value is a source tax-code internal id, resolved against
+   * the mirrored tax codes (a rate string is also accepted). With no
+   * configured value the builder fails closed instead of inventing a code. */
+  taxCodeFallbacks?: NetSuiteTaxCodeFallbacks;
 }
 
 /**
@@ -207,6 +213,28 @@ export function uniqueNetSuiteApplicationLinks(rows: NsApplicationLink[]): NsApp
   return [...unique.values()].map(({ row }) => row);
 }
 
+function parseNetSuiteTaxCodeFallbacks(value: unknown): NetSuiteTaxCodeFallbacks {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("NetSuite tax code fallbacks must be an object");
+  }
+  const fallbacks: NetSuiteTaxCodeFallbacks = {};
+  for (const [key, target] of Object.entries(value as Record<string, unknown>)) {
+    if (key !== "sales" && key !== "purchase") {
+      throw new Error(`NetSuite tax code fallback ${key} is invalid (use sales and/or purchase)`);
+    }
+    const id = typeof target === "string" ? target.trim() : "";
+    if (!/^-?\d+(\.\d+)?$/.test(id)) {
+      throw new Error(`NetSuite tax code fallback ${key} must be a source tax-code id or rate`);
+    }
+    if (key === "sales") fallbacks.sales = id;
+    else fallbacks.purchase = id;
+  }
+  if (Object.keys(fallbacks).length === 0) {
+    throw new Error("NetSuite tax code fallbacks must configure sales and/or purchase");
+  }
+  return fallbacks;
+}
+
 export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
   if (value == null || value === "") return {};
   const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
@@ -223,6 +251,9 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
         }
         return [key.toLowerCase(), normalized];
       })) as NetSuiteAccountMappings["projectStatuses"];
+  const taxCodeFallbacks = raw.taxCodeFallbacks == null
+    ? undefined
+    : parseNetSuiteTaxCodeFallbacks(raw.taxCodeFallbacks);
   const projectBillingTypes = raw.projectBillingTypes == null
     ? undefined
     : Object.fromEntries(Object.entries(raw.projectBillingTypes as Record<string, unknown>).map(([key, target]) => {
@@ -251,6 +282,7 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
       ) ?? undefined,
     projectStatuses,
     projectBillingTypes,
+    taxCodeFallbacks,
   };
 }
 
@@ -1165,7 +1197,7 @@ export class NetSuiteSource implements MigrationSource {
     for (const header of headers) {
       const raw = linesByTxn.get(String(header.id));
       if (!raw?.length) continue;
-      const built = buildNativeFromNetSuite(ctx, { ...header, id: String(header.id) }, raw);
+      const built = buildNativeFromNetSuite(ctx, { ...header, id: String(header.id) }, raw, { taxCodeFallbacks: this.mappings.taxCodeFallbacks });
       if ("skip" in built) {
         if (built.skip.startsWith("non-ledger source transaction")) nonLedgerRefs.push(String(header.id));
         else unbuildable.push({ ref: String(header.id), reason: built.skip });
@@ -1282,7 +1314,7 @@ export class NetSuiteSource implements MigrationSource {
     for (const h of headers) {
       const raw = linesByTxn.get(String(h.id));
       if (!raw || raw.length === 0) continue;
-      const built = buildNativeFromNetSuite(ctx, { ...h, id: String(h.id) }, raw);
+      const built = buildNativeFromNetSuite(ctx, { ...h, id: String(h.id) }, raw, { taxCodeFallbacks: this.mappings.taxCodeFallbacks });
       if ("skip" in built) {
         if (built.skip.startsWith("non-ledger source transaction")) {
           nonLedgerRefs.push(String(h.id));

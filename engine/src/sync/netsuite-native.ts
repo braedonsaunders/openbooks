@@ -194,10 +194,66 @@ export interface BuiltNative {
   taxComputedMatch: boolean;
 }
 
+/**
+ * Per-connection fallback tax codes for NetSuite lines that carry source tax
+ * money but name no resolvable tax code. Tenant-owned: each account's
+ * chart uses its own tax-code identities, so the shared connector must not
+ * assume any rate. With no configured value for the transaction's side the
+ * builder fails closed instead of inventing a code.
+ */
+export interface NetSuiteTaxCodeFallbacks {
+  /** Fallback for customer-side documents (invoices, credits, sales orders). */
+  sales?: string;
+  /** Fallback for supplier/expense-side documents (bills, expenses, cards). */
+  purchase?: string;
+}
+
+export interface BuildNetSuiteOptions {
+  taxCodeFallbacks?: NetSuiteTaxCodeFallbacks;
+}
+
+/** Customer-side document kinds resolve the sales fallback; all others purchase. */
+const SALES_TAX_FALLBACK_KINDS = new Set([
+  "customer_invoice",
+  "customer_credit",
+  "sales_order",
+]);
+
+function resolveFallbackTaxCodeId(
+  ctx: NativeContext,
+  fallbacks: NetSuiteTaxCodeFallbacks | undefined,
+  kind: string,
+  docRef: string,
+  lineRef: string,
+): string | { skip: string } {
+  const side = SALES_TAX_FALLBACK_KINDS.has(kind) ? "sales" : "purchase";
+  const configured = (fallbacks?.[side] ?? "").trim();
+  if (!configured) {
+    return {
+      skip: `no configured ${side} tax code fallback for source transaction ${docRef} line ${lineRef}`,
+    };
+  }
+  // Explicit source identity first (mirrors lineTaxCode's preference for the
+  // source code over rate inference), then the tenant's rate reading.
+  const byRef = ctx.taxCodeByRef.get(configured);
+  if (byRef) return byRef;
+  const byRate =
+    ctx.taxByRate.get(configured) ??
+    ctx.taxByRate.get(configured.replace(/\.0+$/, "")) ??
+    (/^-?\d+(\.\d+)?$/.test(configured)
+      ? ctx.taxByRate.get(normalizeMoney(configured))
+      : undefined);
+  if (byRate) return byRate.id;
+  return {
+    skip: `configured ${side} tax code fallback "${configured}" matches no tax code for source transaction ${docRef} line ${lineRef}`,
+  };
+}
+
 export function buildNativeFromNetSuite(
   ctx: NativeContext,
   h: NsHeader,
   rawLines: NsLine[],
+  opts?: BuildNetSuiteOptions,
 ): BuiltNative | { skip: string } {
   const tt = h.ttype;
 
@@ -601,8 +657,15 @@ export function buildNativeFromNetSuite(
           first.row.taxAmount = fromUnits(delta);
           first.row.taxOverridden = true;
           if (!first.row.taxCodeId) {
-            first.row.taxCodeId =
-              ctx.taxByRate.get("13")?.id ?? ctx.taxByRate.get("5")?.id ?? null;
+            const fallback = resolveFallbackTaxCodeId(
+              ctx,
+              opts?.taxCodeFallbacks,
+              effKind,
+              h.tranid ?? h.id,
+              first.row.sourceLineRef ?? String(first.row.lineNumber),
+            );
+            if (typeof fallback !== "string") return fallback;
+            first.row.taxCodeId = fallback;
           }
         }
       }
@@ -617,8 +680,15 @@ export function buildNativeFromNetSuite(
     carrier.row.taxAmount = fromUnits(nsAbs);
     carrier.row.taxOverridden = true;
     if (!carrier.row.taxCodeId) {
-      carrier.row.taxCodeId =
-        ctx.taxByRate.get("13")?.id ?? ctx.taxByRate.get("5")?.id ?? null;
+      const fallback = resolveFallbackTaxCodeId(
+        ctx,
+        opts?.taxCodeFallbacks,
+        effKind,
+        h.tranid ?? h.id,
+        carrier.row.sourceLineRef ?? String(carrier.row.lineNumber),
+      );
+      if (typeof fallback !== "string") return fallback;
+      carrier.row.taxCodeId = fallback;
     }
   }
   return finish(false);
