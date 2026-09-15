@@ -58,6 +58,7 @@ const mockSources = new Map<string, string>([
         },
       }
       export async function withBypassContext(work) { return work() }
+      export function ambientTenantOrgId() { return null }
     `,
   ],
   [

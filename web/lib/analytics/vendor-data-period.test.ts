@@ -84,6 +84,7 @@ const mockSources = new Map<string, string>([
           throw new Error('unexpected vendor data query: ' + query.text)
         },
       }
+      export function ambientTenantOrgId() { return null }
     `,
   ],
 ]);

@@ -49,6 +49,7 @@ const mockSources = new Map<string, string>([
         },
       }
       export const schema = {}
+      export function ambientTenantOrgId() { return null }
       export async function withBypassContext(work) { return work() }
     `,
   ],
