@@ -5,7 +5,8 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
-import { releaseCamBillingProvenance, releaseBillingProvenance, releaseVendorBillProvenance, releaseVendorRetainageProvenance } from "./billing-provenance.ts";
+import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance, releaseVendorRetainageProvenance } from "./billing-provenance.ts";
+import { releaseCaptureMaterialization } from "./ap-capture-service.ts";
 
 /**
  * Physical deletion is intentionally limited to drafts. Once a document has
@@ -71,6 +72,23 @@ export async function deleteDocument(
       // Voided bills keep their row as posted-history provenance instead.
       await releaseVendorRetainageProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
     }
+    if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
+      // The capture item points at this draft (RESTRICT); without releasing it
+      // first the row delete fails — and a discarded draft must return its
+      // capture to the review queue for correction and re-materialization.
+      await releaseCaptureMaterialization(tx, doc.orgId, documentId, {
+        actorId: userId,
+        reason: audit.reason?.trim() || "draft_discarded",
+      });
+    }
+    // A discarded draft child returns its conversion/capture cover to the
+    // source order lines before its own lines disappear, so the remainder is
+    // convertible and billable again. Runs before the link/line deletes below.
+    await releaseConvertedOrderQuantities(tx, doc.orgId, documentId, {
+      actorId: userId,
+      reason: audit.reason?.trim() || "draft_discarded",
+      source: audit.source ?? "ui",
+    });
     await tx.execute(
       sql`delete from document_links where org_id = ${doc.orgId} and (from_document_id = ${documentId} or to_document_id = ${documentId})`,
     );

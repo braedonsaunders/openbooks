@@ -907,21 +907,27 @@ export async function convertOrder(
       const taxAmount = mulRatio(r.remainder.taxAmount, r.units, remainderUnits)
       convertedAmounts.push(amount)
       convertedTaxes.push(taxAmount)
+      // The exact billed-quantity advance for this line (see the guarded
+      // quantity_billed update below). A void or draft-delete of this child
+      // restores precisely this cover to the source line — without it the
+      // billed remainder strands and the source can never be re-converted.
+      const coveredQty = fromQuantityUnits(r.units)
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
               location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
-              ${fromQuantityUnits(r.units)}, ${l.unit}, ${l.unit_price}, ${amount},
+              ${coveredQty}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable},
-              ${JSON.stringify(
+              ${JSON.stringify({
                 // A bill line drawn from a purchase-order line keeps that
                 // provenance: bill posting uses it to clear received-not-billed
                 // for stock a goods receipt already brought in, instead of
                 // receiving the stock a second time.
-                doc.kind === 'purchase_order' && target.kind === 'vendor_bill' ? { purchaseOrderLineId: l.id } : {},
-              )}::jsonb, ${userId})
+                ...(doc.kind === 'purchase_order' && target.kind === 'vendor_bill' ? { purchaseOrderLineId: l.id } : {}),
+                convertedFrom: { documentId: sourceId, lineId: l.id, quantity: coveredQty },
+              })}::jsonb, ${userId})
         returning id
       `))
       const newLineId = inserted.rows[0]!.id
@@ -990,7 +996,6 @@ export async function convertOrder(
       // same ceiling the remainder was computed from, so a concurrent channel
       // that consumed the cover makes THIS conversion fail whole (the row
       // lock already serializes; the predicate documents and enforces it).
-      const coveredQty = fromQuantityUnits(r.units)
       const receiptRequired = l.item_id != null && lineRequiresReceipt(l.item_kind ?? null)
       const advanced = (await tx.execute<{ id: string }>(sql`
         update document_lines set quantity_billed = quantity_billed + ${coveredQty}, updated_by = ${userId}

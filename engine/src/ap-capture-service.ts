@@ -535,6 +535,49 @@ export class CaptureMaterializationError extends Error {
   }
 }
 
+/**
+ * Release a capture item whose draft bill/credit is discarded. Called from
+ * draft delete (posted documents keep their row as materialized history).
+ * Returns the item to the review queue with its document link cleared so the
+ * same capture can be corrected and re-materialized; the discard is recorded
+ * as capture evidence. Fails closed when the item already moved past
+ * 'materialized' (a later lifecycle owns it now).
+ */
+export async function releaseCaptureMaterialization(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+  audit: { actorId: string | null; reason: string },
+): Promise<void> {
+  const items = (await tx.execute<{ id: string; status: string }>(sql`
+    select id, status from ap_capture_items
+     where org_id = ${orgId} and document_id = ${documentId}
+     for update
+  `)).rows;
+  for (const item of items) {
+    if (item.status !== "materialized") {
+      throw new CaptureMaterializationError(
+        "this document's capture item is no longer materialized — resolve the capture before deleting",
+      );
+    }
+    const released = (await tx.execute<{ id: string }>(sql`
+      update ap_capture_items
+         set status = 'needs_review', document_id = null, materialized_at = null,
+             updated_at = now(), updated_by = ${audit.actorId}
+       where id = ${item.id} and org_id = ${orgId} and status = 'materialized'
+       returning id
+    `)).rows[0];
+    if (!released) {
+      throw new CaptureMaterializationError("the capture item changed while it was being released");
+    }
+    await tx.execute(sql`
+      insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+      values (${orgId}, ${item.id}, 'draft_discarded',
+              ${JSON.stringify({ documentId, reason: audit.reason })}::jsonb, ${audit.actorId})
+    `);
+  }
+}
+
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /** Effective permission check for engine-side authority gates (role grants + overrides). */
