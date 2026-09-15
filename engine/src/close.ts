@@ -2619,6 +2619,35 @@ export async function decidePeriodReopen(args: {
         throw new CloseError("GL must be included before a closed subledger can be reopened");
       }
     }
+    // A window on a scope that is not actually closed is a pure time bomb:
+    // the lock row it writes (state 'open' plus an expiry) blocks posting
+    // once stale, and the automatic re-close then flips an open period to
+    // 'closed'. Every requested module must currently block posting — the
+    // same effective-lock resolution the posting fence uses (exact row, else
+    // the org-wide row) — so a mistaken or padded request is refused and the
+    // operator narrows it to the closed modules instead.
+    const openModules: CloseModule[] = [];
+    for (const module of modules) {
+      const governing = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+        select state, reopen_expires_at from period_locks
+         where org_id = ${args.orgId} and period_id = ${row.period_id}
+           and book_id = ${row.book_id} and module = ${module}
+           and (subsidiary_id is not distinct from ${row.subsidiary_id}::uuid or subsidiary_id is null)
+         order by (subsidiary_id is not null) desc limit 1`));
+      const lock = governing.rows[0];
+      if (!periodLockBlocksPosting(lock && {
+        state: lock.state,
+        reopenExpiresAt: lock.reopen_expires_at,
+        reason: null,
+      }, false)) {
+        openModules.push(module);
+      }
+    }
+    if (openModules.length > 0) {
+      throw new CloseError(
+        `cannot reopen ${openModules.join(", ")}: no closed lock in the requested scope — nothing to reopen; narrow the request to the closed modules`,
+      );
+    }
     for (const module of modules) {
       await upsertLock({
         tx,
