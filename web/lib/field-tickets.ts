@@ -231,6 +231,12 @@ export async function updateTicketHeader(
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
       }
+      // Strict calendar boundary (mirrors ticket creation): a shape-valid
+      // non-day such as February 30 would otherwise reach the DATE columns
+      // and surface as a 500 from PostgreSQL instead of failing closed here.
+      if (patch.documentDate !== undefined && !isIsoCalendarDate(patch.documentDate)) {
+        throw new FieldTicketError('Invalid ticket date')
+      }
       const ft = { ...doc.fieldTicket }
 
       // Resolve every column ONCE in JS (a column may only be assigned once).
