@@ -552,7 +552,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         actions={
           <button
             type="button"
-            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, Math.round(a.currentAmount), Math.round(a.priorAmount), Math.round(a.twoBackAmount), a.changePct.toFixed(1), Math.round(a.projectedAmount), a.velocity.toFixed(1), a.acceleration.toFixed(1), t(`trend.${a.trend}`)]), today)}
+            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, a.currentAmount, a.priorAmount, a.twoBackAmount, a.changePct.toFixed(1), a.projectedAmount, a.velocity.toFixed(1), a.acceleration.toFixed(1), t(`trend.${a.trend}`)]), today)}
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <Download size={11} /> CSV
