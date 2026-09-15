@@ -145,6 +145,31 @@ export function transactionResource(
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): DataResource {
   const cols = transactionFields(cfg)
+  /**
+   * Export file headers: the importable fields minus the flat single-line
+   * convenience inputs (import-only sugar; `lines` carries them). Derived
+   * from fields() — never a hand list — so kind-inapplicable keys
+   * (dueDate/party/reference on kinds without those concepts) are omitted
+   * instead of exported as permanent nulls, feature-gated keys
+   * (currency/subsidiary) follow the importer's gate, and lifecycle metadata
+   * (status) is not an export column: an import restarts at draft by design
+   * and re-posts only through the explicit post mode. Row objects still carry
+   * the full shape (id, status) for programmatic consumers.
+   */
+  const exportColumns = async (): Promise<{ key: string; label: string }[]> => {
+    const [multiCurrency, multiSubsidiary] = await Promise.all([
+      orgFeatureEnabled(orgId, 'multiCurrency'),
+      orgFeatureEnabled(orgId, 'multiSubsidiary'),
+    ])
+    return cols
+      .filter(
+        (f) =>
+          !['account', 'amount', 'description', 'taxCode'].includes(f.key) &&
+          (f.key !== 'currency' || multiCurrency) &&
+          (f.key !== 'subsidiary' || multiSubsidiary),
+      )
+      .map((f) => ({ key: f.key, label: f.label }))
+  }
   return {
     descriptor: transactionDescriptor(cfg),
     async fields() {
@@ -159,11 +184,7 @@ export function transactionResource(
       )
     },
     async columns() {
-      // Export shape: header fields + a JSON `lines` column (skip the flat
-      // single-line convenience inputs, which are import-only sugar).
-      return cols
-        .filter((f) => !['account', 'amount', 'description', 'taxCode'].includes(f.key))
-        .map((f) => ({ key: f.key, label: f.label }))
+      return exportColumns()
     },
     async read(readCtx?: ReadCtx) {
       const resolver = new RefResolver(orgId)
@@ -226,18 +247,7 @@ export function transactionResource(
         })
       }
       void resolver
-      const columns = [
-        { key: 'documentNumber', label: 'documentNumber' },
-        { key: 'documentDate', label: 'documentDate' },
-        { key: 'dueDate', label: 'dueDate' },
-        { key: 'party', label: 'party' },
-        { key: 'subsidiary', label: 'subsidiary' },
-        { key: 'reference', label: 'reference' },
-        { key: 'currency', label: 'currency' },
-        { key: 'memo', label: 'memo' },
-        { key: 'status', label: 'status' },
-        { key: 'lines', label: 'lines' },
-      ]
+      const columns = await exportColumns()
       return { fields: cols, columns, rows }
     },
     async write(rows, _mode, ctx) {
