@@ -104,6 +104,8 @@ export interface SubLine {
   currency?: string;
   fxRate?: string;
   subsidiaryId: string;
+  /** Party carried by this journal leg, when the line identifies an entity. */
+  partyId?: string | null;
   departmentId?: string | null;
   locationId?: string | null;
   classId?: string | null;
@@ -164,6 +166,46 @@ export async function validateSubsidiaryRestrictions(
       if (!allowed.has(opts.docSubsidiaryId)) {
         throw new SubsidiaryError(
           `"${p.name}" does not transact with subsidiary "${ctx.byId.get(opts.docSubsidiaryId)?.name}" — add it on the entity record first`,
+        );
+      }
+    }
+  }
+
+  // Manual journals may identify a different customer/vendor on each line.
+  // Validate those line entities against the subsidiary stamped on that same
+  // line; checking only the document header party would let a root-only party
+  // ride a child-subsidiary AR/AP leg and corrupt per-entity aging.
+  const linePartyIds = [...new Set(
+    lines
+      .map((line) => line.partyId)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  if (linePartyIds.length > 0) {
+    const r = (await runner.execute<{
+      id: string;
+      name: string;
+      subsidiaryId: string | null;
+      extra: string[];
+    }>(sql`
+      select p.id, p.display_name as name, p.subsidiary_id as "subsidiaryId",
+             coalesce(json_agg(ps.subsidiary_id) filter (where ps.subsidiary_id is not null), '[]') as extra
+        from parties p
+        left join party_subsidiaries ps
+          on ps.party_id = p.id and ps.org_id = p.org_id
+       where p.org_id = ${opts.orgId}
+         and p.id = any(${uuidArray(linePartyIds)}::uuid[])
+       group by p.id`));
+    const byParty = new Map(r.rows.map((party) => [party.id, party]));
+    for (const line of lines) {
+      if (!line.partyId) continue;
+      const party = byParty.get(line.partyId);
+      if (!party) {
+        throw new SubsidiaryError(`party ${line.partyId} does not exist in this organization`);
+      }
+      const allowed = new Set([party.subsidiaryId ?? ctx.rootId, ...party.extra]);
+      if (!allowed.has(line.subsidiaryId)) {
+        throw new SubsidiaryError(
+          `"${party.name}" does not transact with subsidiary "${ctx.byId.get(line.subsidiaryId)?.name}" — add it on the entity record first`,
         );
       }
     }
