@@ -254,3 +254,24 @@ test('GET exposes the exact persisted revision so callers can fence their next s
   // Values and the exact revision arrive from the same service snapshot.
   assert.equal(payload.doc.updated_at, STORED_REVISION)
 })
+
+test('PATCH forwards credit applications to the engine instead of dropping them', async () => {
+  reset()
+  routeState.report = { doc: { id: PAYMENT_ID, updated_at: STORED_REVISION }, bankAccountId: null, allocations: [], applied: [] }
+  const credit = {
+    fromLineId: '00000000-0000-4000-8000-00000000c001',
+    toLineId: '00000000-0000-4000-8000-00000000c002',
+    amount: '30.00',
+    sourceDocumentId: '00000000-0000-4000-8000-00000000c003',
+  }
+  const canonicalCredit = { ...credit, amount: '30.0000' }
+
+  const response = await patch({ expectedUpdatedAt: STORED_REVISION, creditAllocations: [credit] })
+
+  assert.equal(response.status, 200)
+  assert.equal(routeState.updates.length, 1)
+  // The engine validates and persists credit applications; the route must not
+  // silently strip them, or a receipt can never apply a credit memo.
+  // (exactMoney canonicalizes the amount to ledger scale.)
+  assert.deepEqual((routeState.updates[0]!.patch as Record<string, unknown>).creditAllocations, [canonicalCredit])
+})
