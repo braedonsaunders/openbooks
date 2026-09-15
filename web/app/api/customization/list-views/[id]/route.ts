@@ -82,10 +82,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     changes.config = true;
   }
   if (body.isDefault !== undefined) {
+    // A truthy non-boolean would otherwise reach the boolean column and
+    // either coerce silently ('yes'::boolean) or abort the update with an
+    // unhandled storage error surfaced as a 500; collection POST coerces
+    // with !!, but an explicit PATCH value outside the domain is refused.
+    if (typeof body.isDefault !== 'boolean') {
+      return NextResponse.json({ error: 'isDefault must be a boolean' }, { status: 400 });
+    }
     sets.push(sql`is_default = ${body.isDefault}`);
     changes.isDefault = body.isDefault;
   }
   if (body.isActive !== undefined) {
+    if (typeof body.isActive !== 'boolean') {
+      return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 });
+    }
     sets.push(sql`is_active = ${body.isActive}`);
     changes.isActive = body.isActive;
   }
