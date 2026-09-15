@@ -791,7 +791,16 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         project_type_id=coalesce((select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), project_type_id),
         customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
         customer_po_number=${vals.po}, contract_value=coalesce(${contractValue}, contract_value),
-        starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive} where id=${id} and org_id=${orgId}`);
+        starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive},
+        -- Heal grandfathered rows into the source-identity fence: rows landed
+        -- by older adapter runs carry only the adapter refKey and no source
+        -- envelope, so the unique fence cannot see them and a re-keyed adapter
+        -- could silently mirror the same job twice. Absent-only: never touch
+        -- another system's attribution.
+        custom = case when custom->'source' is null
+          then custom || jsonb_build_object('source', jsonb_build_object('system', ${ctx.sourceName}::text, 'externalId', ${rec.sourceRef}::text))
+          else custom end
+        where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
