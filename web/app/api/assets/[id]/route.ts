@@ -526,6 +526,22 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   `))
   if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
+  // Lifecycle events are storage-append-only (asset_event_append_only_guard):
+  // an impairment, revaluation, disposal, write-off, or reversal can never be
+  // deleted, only reversed. Refuse the delete up front with a domain 409 like
+  // the depreciation-evidence guard below instead of attempting the delete
+  // and tripping the storage guard as a raw 500. The posted journals stay
+  // linked to their event evidence either way.
+  const lifecycle = (await db.execute(sql`
+    select 1 from asset_events where asset_id = ${id} and org_id = ${user.orgId}
+     limit 1`))
+  if (lifecycle.rows[0]) {
+    return NextResponse.json(
+      { error: 'This asset has lifecycle history and cannot be deleted. Reverse the lifecycle event instead.' },
+      { status: 409 },
+    )
+  }
+
   const evidence = (await db.execute(sql`
     select 1
       from depreciation_schedules s

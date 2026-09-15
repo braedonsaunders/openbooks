@@ -55,11 +55,12 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?asset-basis-posting-race-test";
-const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+const { PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/db.ts");
 const { buildSchedule } = await import("@openbooks/engine/src/depreciation.ts");
+const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/src/asset-lifecycle.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
   "@openbooks/engine/src/test-fixtures.ts",
 );
@@ -256,6 +257,136 @@ test(
       assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
       const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId} and org_id = ${fixture.orgId}`)).rows[0]?.custom;
       assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(fixture.orgId);
+    }
+  },
+);
+
+interface LifecycleFixture {
+  orgId: string;
+  actorId: string;
+  assetId: string;
+  date: string;
+}
+
+// An asset carrying posted lifecycle journals but NO posted depreciation
+// lines: the DELETE evidence guard only inspects schedule lines, so this is
+// the shape that proves whether lifecycle history blocks deletion.
+async function seedAssetWithGainLossCategory(tag: string): Promise<LifecycleFixture> {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const categoryId = randomUUID();
+  const assetId = randomUUID();
+
+  await db.execute(sql`
+    insert into asset_categories
+      (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
+       depreciation_expense_account_id, gain_loss_account_id, default_method,
+       default_life_months, default_convention, tax_attributes, is_active)
+    values (${categoryId}, ${org.orgId}, 'Lifecycle-test equipment', ${org.accounts.invAsset},
+            ${org.accounts.clearing}, ${org.accounts.adjustment}, ${org.accounts.adjustment},
+            'straight_line', 12, 'full_month', '{}'::jsonb, true)`);
+  await db.execute(sql`
+    insert into fixed_assets
+      (id, org_id, subsidiary_id, category_id, asset_number, name, status,
+       acquired_on, in_service_on, acquisition_cost, salvage_value,
+       depreciation_method, useful_life_months, custom)
+    values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, ${tag},
+            'Lifecycle-test asset', 'in_service', ${org.date}, ${org.date}, '12000.0000',
+            '2000.0000', 'straight_line', 12, '{}'::jsonb)`);
+  await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+  return { orgId: org.orgId, actorId, assetId, date: org.date };
+}
+
+function deleteRequest(fixture: LifecycleFixture): Request {
+  routeState.authz = {
+    user: { orgId: fixture.orgId, id: fixture.actorId },
+    allowedSubsidiaryIds: null,
+  };
+  return new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, { method: "DELETE" });
+}
+
+test(
+  "asset DELETE refuses an impaired asset and keeps its posted journals",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedAssetWithGainLossCategory("IMPAIRED-ASSET");
+    try {
+      await remeasureAsset(fixture.orgId, fixture.assetId, {
+        newCarryingValue: "9000.0000",
+        date: fixture.date,
+        actorId: fixture.actorId,
+      });
+      const before = await db.execute<{ events: number; postedJournals: number; postedLines: number }>(sql`
+        select (select count(*)::int from asset_events
+                 where org_id = ${fixture.orgId} and asset_id = ${fixture.assetId}) as events,
+               (select count(*)::int from journal_entries je
+                  join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
+                 where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
+                   and je.status = 'posted') as "postedJournals",
+               (select count(*)::int from depreciation_schedule_lines l
+                  join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+                 where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}
+                   and l.posted_amount is not null) as "postedLines"`);
+      assert.equal(before.rows[0]?.events, 1, "the fixture must carry an impairment event");
+      assert.equal(before.rows[0]?.postedJournals, 1, "the fixture must carry a posted impairment journal");
+      assert.equal(before.rows[0]?.postedLines, 0, "the fixture must have no posted depreciation lines");
+
+      const response = await DELETE(deleteRequest(fixture), {
+        params: Promise.resolve({ id: fixture.assetId }),
+      });
+      assert.equal(response.status, 409, `impaired asset delete must be refused: ${JSON.stringify(await response.json())}`);
+
+      const after = await db.execute<{ assets: number; events: number; postedJournals: number }>(sql`
+        select (select count(*)::int from fixed_assets
+                 where org_id = ${fixture.orgId} and id = ${fixture.assetId}) as assets,
+               (select count(*)::int from asset_events
+                 where org_id = ${fixture.orgId} and asset_id = ${fixture.assetId}) as events,
+               (select count(*)::int from journal_entries je
+                  join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
+                 where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
+                   and je.status = 'posted') as "postedJournals"`);
+      assert.equal(after.rows[0]?.assets, 1, "the refused delete must keep the asset");
+      assert.equal(after.rows[0]?.events, 1, "the refused delete must keep the impairment event");
+      assert.equal(after.rows[0]?.postedJournals, 1, "the refused delete must keep the posted journal linked");
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "asset DELETE refuses a disposed asset and keeps its disposal evidence",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedAssetWithGainLossCategory("DISPOSED-ASSET");
+    try {
+      await disposeAsset(fixture.orgId, fixture.assetId, {
+        date: fixture.date,
+        actorId: fixture.actorId,
+        writeOff: true,
+      });
+
+      const response = await DELETE(deleteRequest(fixture), {
+        params: Promise.resolve({ id: fixture.assetId }),
+      });
+      assert.equal(response.status, 409, `disposed asset delete must be refused: ${JSON.stringify(await response.json())}`);
+
+      const after = await db.execute<{ status: string; events: number; postedJournals: number }>(sql`
+        select (select status from fixed_assets
+                 where org_id = ${fixture.orgId} and id = ${fixture.assetId}) as status,
+               (select count(*)::int from asset_events
+                 where org_id = ${fixture.orgId} and asset_id = ${fixture.assetId}) as events,
+               (select count(*)::int from journal_entries je
+                  join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
+                 where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
+                   and je.status = 'posted') as "postedJournals"`);
+      assert.equal(after.rows[0]?.status, "written_off");
+      assert.equal(after.rows[0]?.events, 1, "the refused delete must keep the disposal event");
+      assert.equal(after.rows[0]?.postedJournals, 1, "the refused delete must keep the posted disposal journal linked");
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(fixture.orgId);
