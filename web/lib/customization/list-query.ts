@@ -1,6 +1,8 @@
 import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
+import { isUuid } from "../list-params";
 import type {
   ListViewConfig,
   ListColumnPlacement,
@@ -212,6 +214,20 @@ export interface AdhocFilters {
   filters?: Record<string, string | undefined>
 }
 
+/**
+ * Malformed filter values reach typed columns uncast: a crafted quick-filter
+ * value or a saved view holding one dies at the database as a raw uuid/date
+ * throw and the whole list page 500s. Fail such predicates closed to an
+ * empty match instead — the same fail-closed contract the write paths use.
+ */
+function uuidOrFalse(value: string): SQL | null {
+  return isUuid(value) ? null : sql`false`
+}
+
+function dateOrFalse(value: string): SQL | null {
+  return isIsoCalendarDate(value) ? null : sql`false`
+}
+
 function filterPredicate(clause: FilterClause): SQL | null {
   const { key, operator } = clause
   const value = clause.value
@@ -238,16 +254,29 @@ function filterPredicate(clause: FilterClause): SQL | null {
         return operator === "in" ? sql`d.kind in (${list})` : sql`d.kind not in (${list})`
       }
       return null
-    case "party_id":
-      if (operator === "eq") return sql`d.party_id = ${single(value)}`
-      if (operator === "ne") return sql`d.party_id <> ${single(value)}`
+    case "party_id": {
+      const id = single(value)
+      const refused = uuidOrFalse(id)
+      if (refused) return refused
+      if (operator === "eq") return sql`d.party_id = ${id}`
+      if (operator === "ne") return sql`d.party_id <> ${id}`
       return null
-    case "document_date":
-      if (operator === "eq") return sql`d.document_date = ${single(value)}`
-      if (operator === "gte") return sql`d.document_date >= ${single(value)}`
-      if (operator === "lte") return sql`d.document_date <= ${single(value)}`
-      if (operator === "between") return sql`d.document_date between ${single(value)} and ${single(to)}`
+    }
+    case "document_date": {
+      const day = single(value)
+      const refusedDay = dateOrFalse(day)
+      if (refusedDay) return refusedDay
+      if (operator === "eq") return sql`d.document_date = ${day}`
+      if (operator === "gte") return sql`d.document_date >= ${day}`
+      if (operator === "lte") return sql`d.document_date <= ${day}`
+      if (operator === "between") {
+        const upper = single(to)
+        const refusedUpper = dateOrFalse(upper)
+        if (refusedUpper) return refusedUpper
+        return sql`d.document_date between ${day} and ${upper}`
+      }
       return null
+    }
     case "reference_number":
       if (operator === "eq") return sql`d.reference_number = ${single(value)}`
       if (operator === "contains") return sql`d.reference_number ilike ${"%" + single(value) + "%"}`
@@ -289,10 +318,20 @@ export function documentWhere(
   }
   if (adhoc.status) parts.push(sql`and d.status = ${adhoc.status}`)
   if (adhoc.kind) parts.push(sql`and d.kind = ${adhoc.kind}`)
-  if (adhoc.filters?.party_id) parts.push(sql`and d.party_id = ${adhoc.filters.party_id}`)
-  if (adhoc.vendor) parts.push(sql`and d.party_id = ${adhoc.vendor}`)
-  if (adhoc.from) parts.push(sql`and d.document_date >= ${adhoc.from}`)
-  if (adhoc.to) parts.push(sql`and d.document_date <= ${adhoc.to}`)
+  // Reference and date quick-filter values arrive from URL params uncast;
+  // a malformed one must empty the list, never 500 it (see uuidOrFalse).
+  if (adhoc.filters?.party_id) {
+    parts.push(isUuid(adhoc.filters.party_id) ? sql`and d.party_id = ${adhoc.filters.party_id}` : sql`and false`)
+  }
+  if (adhoc.vendor) {
+    parts.push(isUuid(adhoc.vendor) ? sql`and d.party_id = ${adhoc.vendor}` : sql`and false`)
+  }
+  if (adhoc.from) {
+    parts.push(isIsoCalendarDate(adhoc.from) ? sql`and d.document_date >= ${adhoc.from}` : sql`and false`)
+  }
+  if (adhoc.to) {
+    parts.push(isIsoCalendarDate(adhoc.to) ? sql`and d.document_date <= ${adhoc.to}` : sql`and false`)
+  }
   if (adhoc.q)
     parts.push(
       sql`and (d.document_number ilike ${"%" + adhoc.q + "%"} or p.display_name ilike ${"%" + adhoc.q + "%"} or d.reference_number ilike ${"%" + adhoc.q + "%"})`,
@@ -320,6 +359,10 @@ export function bankTransactionWhere(
   const accountClauses = view.filters.filter((filter) => filter.key === 'bank_account_id')
   for (const clause of accountClauses) {
     const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+    if (!isUuid(value)) {
+      parts.push(sql`and false`)
+      continue
+    }
     if (clause.operator === 'eq') {
       parts.push(sql`and exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
     } else if (clause.operator === 'ne') {
@@ -327,7 +370,11 @@ export function bankTransactionWhere(
     }
   }
   if (adhoc.filters?.bank_account_id) {
-    parts.push(sql`and exists (select 1 from accounts a where a.id = ${adhoc.filters.bank_account_id} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
+    parts.push(
+      isUuid(adhoc.filters.bank_account_id)
+        ? sql`and exists (select 1 from accounts a where a.id = ${adhoc.filters.bank_account_id} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`
+        : sql`and false`,
+    )
   }
   return sql.join(parts, sql` `)
 }
@@ -356,6 +403,10 @@ export function payRunWhere(
       if (clause.operator === "eq") parts.push(sql`and ${PAY_RUN_STAGE_MATCH(value)}`);
       else if (clause.operator === "ne") parts.push(sql`and not (${PAY_RUN_STAGE_MATCH(value)})`);
     } else if (clause.key === "pay_schedule_id" && value) {
+      if (!isUuid(value)) {
+        parts.push(sql`and false`);
+        continue;
+      }
       const match = sql`exists (select 1 from pay_runs pr where pr.document_id = d.id and pr.org_id = d.org_id and pr.pay_schedule_id = ${value})`;
       if (clause.operator === "eq") parts.push(sql`and ${match}`);
       else if (clause.operator === "ne") parts.push(sql`and not ${match}`);
@@ -363,8 +414,12 @@ export function payRunWhere(
   }
   if (adhoc.filters?.run_stage) parts.push(sql`and ${PAY_RUN_STAGE_MATCH(adhoc.filters.run_stage)}`);
   if (adhoc.filters?.pay_schedule_id) {
-    parts.push(sql`and exists (
-      select 1 from pay_runs pr where pr.document_id = d.id and pr.org_id = d.org_id and pr.pay_schedule_id = ${adhoc.filters.pay_schedule_id})`);
+    parts.push(
+      isUuid(adhoc.filters.pay_schedule_id)
+        ? sql`and exists (
+      select 1 from pay_runs pr where pr.document_id = d.id and pr.org_id = d.org_id and pr.pay_schedule_id = ${adhoc.filters.pay_schedule_id})`
+        : sql`and false`,
+    );
   }
   return sql.join(parts, sql` `);
 }
