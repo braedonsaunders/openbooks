@@ -122,6 +122,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const docScope = subArr ? sql` and d.subsidiary_id = any(${subArr})` : sql``
+  const dsoScope = subArr ? sql` and bl.subsidiary_id = any(${subArr})` : sql``
   const q = calendarQuarterBounds(today)
 
   const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast, orgRes] = (await Promise.all([
@@ -164,7 +165,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
        where ap.org_id = ${orgId}
          and ba.type = 'asset_receivable' and ap.unapplied_at is null
          and pl.posting_date >= ${ago365}
-         and pl.posting_date <= ${today}
+         and pl.posting_date <= ${today}${dsoScope}
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.
     db.execute(sql`
