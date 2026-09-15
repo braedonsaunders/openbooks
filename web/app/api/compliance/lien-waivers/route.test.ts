@@ -37,10 +37,10 @@ describe('lien-waiver lifecycle atomicity', () => {
 
 describe('compliance money arithmetic', () => {
   it('uses exact money arithmetic for blocked exposure', () => {
-    assert.match(complianceLoader, /import \{ formatMoney, sum \} from/)
+    assert.match(complianceLoader, /import \{ formatMoney, (?:mulRate, )?sum \} from/)
     assert.match(
       complianceLoader,
-      /const blockedExposure = sum\([\s\S]*blocked\.filter\(\(b\) => b\.decision === ['"]blocked['"]\)/
+      /const blockedExposure = sum\([\s\S]*blocked\s*\.filter\(\(b\) => b\.decision === ['"]blocked['"]\)[\s\S]*mulRate\(b\.openBalance, b\.fxRate\)/
     )
     assert.match(complianceLoader, /blockedExposure: formatMoney\(blockedExposure, 2\)/)
   })

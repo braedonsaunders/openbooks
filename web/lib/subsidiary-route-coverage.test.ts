@@ -127,7 +127,7 @@ test('documents/actions resolves the full document row including its subsidiary'
 test('expense reports are kind-pinned fail-closed on read, autosave, delete and lifecycle', () => {
   const detail = source('app/api/expenses/[id]/route.ts')
   assert.match(detail, /select subsidiary_id as "subsidiaryId" from documents where id = \$\{id\} and kind = 'expense_report'/)
-  assert.match(detail, /select status, document_date, subsidiary_id as "subsidiaryId" from documents where id = \$\{id\} and kind = 'expense_report'/)
+  assert.match(detail, /select status, document_date, subsidiary_id as "subsidiaryId"(?:, custom)? from documents where id = \$\{id\} and kind = 'expense_report'/)
   const actions = source('app/api/expenses/actions/route.ts')
   assert.match(actions, /select id, status, subsidiary_id as "subsidiaryId" from documents where id = \$\{id\} and kind = 'expense_report'/)
   // Both submit and post resolve through the helper: an out-of-scope report

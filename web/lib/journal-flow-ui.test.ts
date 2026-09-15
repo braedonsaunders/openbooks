@@ -58,5 +58,7 @@ test('journal drawer keeps immutable lifecycle states out of edit mode', () => {
   assert.match(actions, /onClick=\{voidJournal\}/)
   assert.match(voidWorkflow, /promptDialog\(/)
   assert.match(voidWorkflow, /fetch\(\s*`\/api\/documents\/\$\{doc\.id\}\/void`/)
-  assert.match(voidWorkflow, /body: JSON\.stringify\(\{ reason \}\)/)
+  // The void call carries the reason AND the exact document revision: the
+  // void route fences on the token, so a bare { reason } body is a dead button.
+  assert.match(voidWorkflow, /body: JSON\.stringify\(\{ reason, expectedUpdatedAt: voidRevision \}\)/)
 })
