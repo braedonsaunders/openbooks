@@ -208,6 +208,14 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       rowsCopied += n;
     }
     await rebaseClonedJsonReferences({ ...opts, copiedTables: new Set(perTable.map(row => row.table)) });
+    // These rollups are intentionally excluded from the clone catalog because
+    // they are maintained projections, not source evidence. Rebuild them after
+    // every copy: application rows can be inserted before their journal-line
+    // endpoints (composite tenant FKs are deferred), so their row trigger may
+    // legitimately have no effect during the bulk load. A rebuild also clears
+    // stale values left by a refresh before applying the new source snapshot.
+    await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
+    await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
   });
 
   return { tablesCopied: perTable.length, rowsCopied, perTable };
