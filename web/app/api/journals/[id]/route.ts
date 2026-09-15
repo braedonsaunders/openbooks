@@ -215,6 +215,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Line accounts are the tenant's chart of accounts. The lines FK is
+  // tenant-coherent, so a foreign account dies at the re-insert as an
+  // unhandled storage error; refuse it here with a domain 404 that reveals
+  // nothing about other tenants' charts (same contract as the shared
+  // applyDocumentEdit service). Shape validation above guarantees uuidIds.
+  if (preparedLines) {
+    const lineAccountIds = [...new Set(preparedLines.map((l) => l.accountId))]
+    const owned = lineAccountIds.length
+      ? (await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${user.orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`)).rows
+      : []
+    if (owned.length !== lineAccountIds.length) {
+      return NextResponse.json({ error: 'account not found in this organization' }, { status: 404 })
+    }
+  }
+
   try {
     await runDocumentVersionedTransaction<
       RouteTransaction,
