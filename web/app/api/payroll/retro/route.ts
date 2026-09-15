@@ -153,10 +153,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'payDate must be a date' }, { status: 422 })
   }
 
-  const requestedEmployees = body.employeePartyIds === undefined
+  // An explicitly empty list is the workspace's default state (no
+  // exclusions checked, no employee filter applied) and means the same as
+  // an absent key. uuidList already folds [] to undefined; the checks below
+  // must not mistake that fold for a malformed value, or every UI propose
+  // that excludes nothing is refused with 422.
+  const employeeIdsInput =
+    Array.isArray(body.employeePartyIds) && body.employeePartyIds.length === 0
+      ? undefined
+      : body.employeePartyIds;
+  const requestedEmployees = employeeIdsInput === undefined
     ? undefined
-    : uuidList(body.employeePartyIds)
-  if (body.employeePartyIds !== undefined && !requestedEmployees) {
+    : uuidList(employeeIdsInput)
+  if (employeeIdsInput !== undefined && !requestedEmployees) {
     return NextResponse.json({ error: 'employeePartyIds must be UUIDs' }, { status: 422 })
   }
   const employeePartyIds = await scopedRetroEmployees(
@@ -166,8 +175,12 @@ export async function POST(req: Request) {
   )
   if (employeePartyIds instanceof NextResponse) return employeePartyIds
 
-  const excludedSourcePayRunDocumentIds = uuidList(body.excludeSourcePayRunDocumentIds)
-  if (body.excludeSourcePayRunDocumentIds !== undefined && !excludedSourcePayRunDocumentIds) {
+  const exclusionsInput =
+    Array.isArray(body.excludeSourcePayRunDocumentIds) && body.excludeSourcePayRunDocumentIds.length === 0
+      ? undefined
+      : body.excludeSourcePayRunDocumentIds;
+  const excludedSourcePayRunDocumentIds = exclusionsInput === undefined ? undefined : uuidList(exclusionsInput)
+  if (exclusionsInput !== undefined && !excludedSourcePayRunDocumentIds) {
     return NextResponse.json({ error: 'excludeSourcePayRunDocumentIds must be UUIDs' }, { status: 422 })
   }
   const deniedExcluded = await guardExcludedSourceRuns(
