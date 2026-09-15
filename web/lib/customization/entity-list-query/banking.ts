@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { dateOrFalse, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Bank reconciliations                                                */
@@ -41,14 +42,22 @@ function bankReconciliationFilterPredicate(clause: FilterClause): SQL | null {
     }
   }
   if (clause.key === 'account_id') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`r.account_id = ${value}`
     if (clause.operator === 'ne') return sql`r.account_id <> ${value}`
   }
   if (clause.key === 'through_date') {
+    const refusedDay = dateOrFalse(value)
+    if (refusedDay) return refusedDay
     if (clause.operator === 'eq') return sql`r.through_date = ${value}`
     if (clause.operator === 'gte') return sql`r.through_date >= ${value}`
     if (clause.operator === 'lte') return sql`r.through_date <= ${value}`
-    if (clause.operator === 'between') return sql`r.through_date between ${value} and ${String(clause.to ?? '')}`
+    if (clause.operator === 'between') {
+      const refusedUpper = dateOrFalse(String(clause.to ?? ''))
+      if (refusedUpper) return refusedUpper
+      return sql`r.through_date between ${value} and ${String(clause.to ?? '')}`
+    }
   }
   return null
 }
@@ -69,7 +78,10 @@ export function bankReconciliationWhere(
     if (predicate) parts.push(sql`and ${predicate}`)
   }
   if (adhoc.filters?.status) parts.push(sql`and r.status = ${adhoc.filters.status}`)
-  if (adhoc.filters?.account_id) parts.push(sql`and r.account_id = ${adhoc.filters.account_id}`)
+  if (adhoc.filters?.account_id) {
+    const refused = uuidOrFalse(adhoc.filters.account_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and r.account_id = ${adhoc.filters.account_id}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (r.through_date::text ilike ${query} or bank_account.number ilike ${query} or bank_account.name ilike ${query})`)
@@ -125,14 +137,22 @@ function bankStatementFilterPredicate(clause: FilterClause): SQL | null {
     }
   }
   if (clause.key === 'account_id') {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
     if (clause.operator === 'eq') return sql`bs.account_id = ${value}`
     if (clause.operator === 'ne') return sql`bs.account_id <> ${value}`
   }
   if (clause.key === 'statement_date') {
+    const refusedDay = dateOrFalse(value)
+    if (refusedDay) return refusedDay
     if (clause.operator === 'eq') return sql`bs.statement_date = ${value}`
     if (clause.operator === 'gte') return sql`bs.statement_date >= ${value}`
     if (clause.operator === 'lte') return sql`bs.statement_date <= ${value}`
-    if (clause.operator === 'between') return sql`bs.statement_date between ${value} and ${String(clause.to ?? '')}`
+    if (clause.operator === 'between') {
+      const refusedUpper = dateOrFalse(String(clause.to ?? ''))
+      if (refusedUpper) return refusedUpper
+      return sql`bs.statement_date between ${value} and ${String(clause.to ?? '')}`
+    }
   }
   return null
 }
@@ -153,7 +173,10 @@ export function bankStatementWhere(
     if (predicate) parts.push(sql`and ${predicate}`)
   }
   if (adhoc.filters?.source) parts.push(sql`and bs.source = ${adhoc.filters.source}`)
-  if (adhoc.filters?.account_id) parts.push(sql`and bs.account_id = ${adhoc.filters.account_id}`)
+  if (adhoc.filters?.account_id) {
+    const refused = uuidOrFalse(adhoc.filters.account_id)
+    parts.push(refused ? sql`and ${refused}` : sql`and bs.account_id = ${adhoc.filters.account_id}`)
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (bs.statement_date::text ilike ${query} or bs.source ilike ${query} or statement_account.number ilike ${query} or statement_account.name ilike ${query})`)
