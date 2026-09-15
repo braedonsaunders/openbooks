@@ -15,7 +15,7 @@ import {
   DocumentEditError,
   requireDocumentEditRevision,
 } from '../../../../lib/documents'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
@@ -46,6 +46,16 @@ const paymentPatchBody = z.object({
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
+  // Credit-memo applications (engine CreditAllocationInput). The engine
+  // validates endpoints, signs, and capacity at save and at posting; the
+  // route only shapes them. Without this field a receipt can never apply a
+  // credit memo through the product API.
+  creditAllocations: z.array(z.object({
+    fromLineId: uuidId,
+    toLineId: uuidId,
+    amount: exactMoney(),
+    sourceDocumentId: uuidId,
+  })).optional(),
 })
 
 /** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly.
@@ -109,7 +119,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const allocationTargetsDenied = await assertAllocationTargetsInScope(
     gate.authz,
-    (body.allocations ?? []).map((a) => a.openLineId),
+    [
+      ...(body.allocations ?? []).map((a) => a.openLineId),
+      ...(body.creditAllocations ?? []).flatMap((a) => [a.fromLineId, a.toLineId]),
+    ],
   )
   if (allocationTargetsDenied) return allocationTargetsDenied
 
@@ -123,6 +136,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         referenceNumber: body.referenceNumber,
         memo: body.memo,
         allocations: body.allocations,
+        creditAllocations: body.creditAllocations,
       },
       gate.authz.user.id,
       gate.authz.user.orgId,
