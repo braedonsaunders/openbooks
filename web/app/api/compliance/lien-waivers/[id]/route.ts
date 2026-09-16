@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardLienWaiverFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
@@ -10,6 +10,11 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
 
 type Action = 'request' | 'receive' | 'sign' | 'reject' | 'void' | 'update'
 
@@ -105,6 +110,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           return NextResponse.json({ error: 'the name of the person who signed is required' }, { status: 400 })
         }
         const signedAt = body.signedAt ?? (await businessToday(orgId))
+        // The sign stamps this straight to timestamptz: a non-calendar date
+        // would otherwise die in Postgres with a raw driver failure.
+        if (!isIsoCalendarDate(signedAt)) {
+          return NextResponse.json({ error: 'signed date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+        }
         // Evidence of the attestation, not a digital signature: who in this
         // organisation recorded the executed document, and when.
         const evidence = {
@@ -140,6 +150,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
            where org_id = ${orgId} and id = ${id}`)
       } else {
         const amountRaw = body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
+        // lien_waivers.amount is numeric(19,4): refuse whole-digit widths the
+        // column cannot hold before any write.
+        if (amountRaw !== null && wholeDigits(amountRaw) > 15) {
+          return NextResponse.json({ error: 'amount must fit within numeric(19,4)' }, { status: 422 })
+        }
+        // through_date casts straight to date: require a real calendar day
+        // before any write, instead of leaking the cast failure.
+        if (body.throughDate !== undefined && body.throughDate !== null && !isIsoCalendarDate(body.throughDate)) {
+          return NextResponse.json({ error: 'through date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+        }
         if (body.amount != null && body.amount !== '' && amountRaw === null) {
           return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
         }
