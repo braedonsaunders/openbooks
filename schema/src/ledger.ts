@@ -202,6 +202,14 @@ export const journalLines = pgTable(
     /** Bank/card reconciliation state for reconcilable accounts. */
     reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
     reconciliationId: uuid("reconciliation_id"),
+    /**
+     * Source-system cleared evidence mirrored by a connector (0158): the day
+     * the source reports this line cleared, plus the stable connector key.
+     * Append-only, always set together; the stamp says what the source
+     * reported, never what the mirror inferred.
+     */
+    sourceClearedDate: date("source_cleared_date"),
+    sourceClearedConnector: text("source_cleared_connector"),
 
     custom: jsonb("custom").notNull().default({}),
   },
