@@ -22,6 +22,17 @@ registerHooks({
 });
 
 const { createRecord, updateRecord } = await import("./writers.ts");
+const { documentRevisionSql } = await import("@openbooks/engine/src/document-revision.ts");
+
+/** Current optimistic-concurrency token for a custom record (opaque wire form). */
+async function revisionOf(id: string): Promise<string> {
+  const rows = await withBypass(() =>
+    db.execute<{ revision: string }>(sql`
+      select ${documentRevisionSql(sql`updated_at`)} as revision
+        from custom_records where id = ${id}`),
+  );
+  return rows.rows[0]!.revision;
+}
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
@@ -166,9 +177,11 @@ test(
       const createdId = (created.body as { record: { id: string } }).record.id;
 
       // UPDATE swapping in a foreign-org reference must fail closed and leave the row untouched.
+      const createdRevision = await revisionOf(createdId);
       const refusedUpdate = await withOrgContext(orgA.orgId, () =>
         updateRecord(user, resolved, fields, createdId, {
           data: { vendor: foreignParty },
+          expectedUpdatedAt: createdRevision,
         }, { allowedSubsidiaryIds: null }),
       );
       assert.equal(
@@ -198,9 +211,11 @@ test(
            ${JSON.stringify({ vendor: foreignParty, acct: ownAccount })}::jsonb,
            'legacy', 'active', ${actorId}, ${actorId})
       `));
+      const legacyRevision = await revisionOf(legacyId);
       const legacyTouch = await withOrgContext(orgA.orgId, () =>
         updateRecord(user, resolved, fields, legacyId, {
           data: { acct: ownAccount },
+          expectedUpdatedAt: legacyRevision,
         }, { allowedSubsidiaryIds: null }),
       );
       assert.equal(
