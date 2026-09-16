@@ -195,6 +195,14 @@ export function buildDrillTarget(args: {
 }): ReportDrillTarget | null {
   const { column } = args
   if (args.budgetScenarioId) {
+    // The drill must tie to the displayed report window, not the scenario's
+    // whole fiscal year: carry the dated columns' range (the actual column
+    // carries the resolved window) exactly like every other drill target.
+    const datedWindows = [column, ...(args.sourceColumns ?? [])].filter(
+      (source): source is DrillColumn & { to: string } => !!source.to,
+    )
+    const windowFroms = datedWindows.map((source) => source.from).filter((value): value is string => !!value)
+    const windowTos = datedWindows.map((source) => source.to)
     return {
       kind: 'budget',
       label: args.label,
@@ -203,6 +211,8 @@ export function buildDrillTarget(args: {
       accountIds: args.accountId ? [args.accountId] : undefined,
       accountTypes: args.drillTypes,
       dims: args.reportDims,
+      from: windowFroms.length ? windowFroms.reduce((a, b) => (a < b ? a : b)) : undefined,
+      to: windowTos.length ? windowTos.reduce((a, b) => (a > b ? a : b)) : undefined,
     }
   }
   const sourceColumns = column.kind === 'amount'

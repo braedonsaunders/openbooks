@@ -43,6 +43,9 @@ export type ReportDrillTarget =
       accountIds?: string[]
       accountTypes?: string[]
       dims?: StatementDimFilter
+      /** Report window the drill must tie to; absent keeps the scenario year. */
+      from?: string
+      to?: string
     }
   | {
       kind: 'orders'
@@ -228,6 +231,9 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     if (!scenarioId || !['actual', 'budget', 'variance'].includes(String(input.scope))) return null
     if (input.accountIds !== undefined && !accountIds) return null
     if (input.accountTypes !== undefined && (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)) return null
+    const from = input.from === undefined ? undefined : stringValue(input.from, 10) ?? undefined
+    const to = input.to === undefined ? undefined : stringValue(input.to, 10) ?? undefined
+    if ((from && !ISO_DATE.test(from)) || (to && !ISO_DATE.test(to))) return null
     return {
       kind: 'budget',
       label,
@@ -236,6 +242,8 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       accountIds,
       accountTypes,
       dims: dimsValue(input.dims),
+      from,
+      to,
     }
   }
 
