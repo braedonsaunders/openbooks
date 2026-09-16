@@ -118,6 +118,18 @@ export async function loadAgentsOverview(
   const mapped: AgentsOverviewRow[] = rows.map((row) => {
     const name = t(`setup.agents.packs.${row.agentKey}.title`)
     const activeDetectors = row.policy.detectors.filter((detector) => detector.enabled).length
+    const lastRunLine = row.lastRun
+      ? t('setup.agents.overview.lastRun', {
+          date: new Date(row.lastRun.startedAt).toLocaleString(),
+          status: t(`setup.agents.overview.runStatus.${row.lastRun.status}`),
+        })
+      : t('setup.agents.overview.neverRun')
+    const nextRunLine =
+      row.policy.nextRunAt && featureEnabled && row.policy.enabled && row.policy.automaticRuns
+        ? ` · ${t('setup.agents.overview.nextRun', {
+            date: new Date(row.policy.nextRunAt).toLocaleString(),
+          })}`
+        : ''
     return {
       id: row.agentKey,
       agentKey: row.agentKey,
@@ -137,12 +149,7 @@ export async function loadAgentsOverview(
       })} · ${t('setup.agents.overview.materialitySummary', {
         amount: row.policy.materialityThreshold,
       })}`,
-      lastRunLine: row.lastRun
-        ? t('setup.agents.overview.lastRun', {
-            date: new Date(row.lastRun.startedAt).toLocaleString(),
-            status: t(`setup.agents.overview.runStatus.${row.lastRun.status}`),
-          })
-        : t('setup.agents.overview.neverRun'),
+      lastRunLine: `${lastRunLine}${nextRunLine}`,
       lastRunStartedAt: row.lastRun?.startedAt ?? '',
       findingsLine: t('setup.agents.overview.openFindings', { count: row.openFindings }),
       openFindings: row.openFindings,

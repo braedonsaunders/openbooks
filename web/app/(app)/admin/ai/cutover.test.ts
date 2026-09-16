@@ -45,6 +45,22 @@ test('the provider view loads no agent policy or drawer selection', () => {
   assert.match(view, /requirePermission\(['"]admin\.ai\.manage['"]\)/, 'provider page keeps its own gate')
 })
 
+test('the provider cross-links render through the shared button', () => {
+  // Both neighbour links (Agents setup, capture queue) must ride Button
+  // asChild — never a bare anchor — so they keep house geometry.
+  for (const href of ['/admin/setup/agents', '/ap/capture']) {
+    const at = form.indexOf(`href="${href}"`)
+    assert.ok(at !== -1, `provider form must link ${href}`)
+    const buttonAt = form.lastIndexOf('<Button', at)
+    assert.ok(buttonAt !== -1 && form.slice(buttonAt, at).includes('asChild'), `${href} must render inside Button asChild`)
+  }
+  assert.doesNotMatch(
+    form,
+    /<button type="button" onClick=\{clearDocumentCaptureKey\}/,
+    'the remove-key action must use the shared Button, not a hand-rolled button',
+  )
+})
+
 test('the provider save persists agents only when the caller sent them', () => {
   assert.match(
     providerRoute,
