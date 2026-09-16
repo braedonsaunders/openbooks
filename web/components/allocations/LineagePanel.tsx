@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { buildLineageQuery, shortId, type LineageAnchorInput } from './lineage-helpers'
@@ -37,28 +37,30 @@ export function LineagePanel({
   const [rows, setRows] = useState<LineageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setError(null)
-    let url: string
-    try {
-      url = buildLineageQuery(anchor)
-    } catch {
-      setRows([])
-      return
-    }
-    const res = await fetch(url)
-    if (!res.ok) {
-      setError(t('loadFailed'))
-      setRows([])
-      return
-    }
-    const body = (await res.json()) as { rows: LineageRow[] }
-    setRows(body.rows.slice(0, pageSize))
-  }, [anchor, pageSize, t])
-
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    Promise.resolve()
+      .then(() => buildLineageQuery(anchor))
+      .then(
+        (url) =>
+          fetch(url).then(async (res) => {
+            if (cancelled) return
+            if (!res.ok) {
+              setError(t('loadFailed'))
+              setRows([])
+              return
+            }
+            const body = (await res.json()) as { rows: LineageRow[] }
+            if (!cancelled) setRows(body.rows.slice(0, pageSize))
+          }),
+        () => {
+          if (!cancelled) setRows([])
+        },
+      )
+    return () => {
+      cancelled = true
+    }
+  }, [anchor, pageSize, t])
 
   if (rows === null) return <p className="text-sm text-slate-500">{'…'}</p>
   if (error) return <p className="text-sm text-red-600">{error}</p>

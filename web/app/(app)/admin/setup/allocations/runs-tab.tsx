@@ -194,30 +194,38 @@ export function RunsTab() {
   const [preview, setPreview] = useState<Computation | null>(null)
   const [detail, setDetail] = useState<(RunRow & { computation?: Computation; fingerprint?: string | null }) | null>(null)
 
-  const load = useCallback(async () => {
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = useCallback(() => setReloadKey((key) => key + 1), [])
+
+  useEffect(() => {
+    let cancelled = false
     const params = new URLSearchParams()
     if (filterRule) params.set('ruleId', filterRule)
     if (filterPeriod) params.set('periodId', filterPeriod)
     if (filterStatus) params.set('status', filterStatus)
-    const [runsRes, optionsRes] = await Promise.all([
-      fetch(`/api/allocations/runs?${params}`),
-      fetch('/api/allocations/options'),
-    ])
-    if (!runsRes.ok || !optionsRes.ok) {
-      setError(t('loadFailed'))
-      return
+    Promise.all([fetch(`/api/allocations/runs?${params}`), fetch('/api/allocations/options')]).then(
+      async ([runsRes, optionsRes]) => {
+        if (cancelled) return
+        if (!runsRes.ok || !optionsRes.ok) {
+          setError(t('loadFailed'))
+          return
+        }
+        setError(null)
+        const body = (await runsRes.json()) as { runs: RunRow[]; total: number }
+        if (cancelled) return
+        setRuns(body.runs)
+        setTotal(body.total)
+        const full = (await optionsRes.json()) as Options & Record<string, Option[]>
+        setOptions({ rules: full.rules, periods: full.periods, books: full.books, subsidiaries: full.subsidiaries })
+      },
+      () => {
+        if (!cancelled) setError(t('loadFailed'))
+      },
+    )
+    return () => {
+      cancelled = true
     }
-    setError(null)
-    const body = (await runsRes.json()) as { runs: RunRow[]; total: number }
-    setRuns(body.runs)
-    setTotal(body.total)
-    const full = (await optionsRes.json()) as Options & Record<string, Option[]>
-    setOptions({ rules: full.rules, periods: full.periods, books: full.books, subsidiaries: full.subsidiaries })
-  }, [filterRule, filterPeriod, filterStatus, t])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  }, [filterRule, filterPeriod, filterStatus, t, reloadKey])
 
   async function runPreview() {
     setPreview(null)
@@ -277,7 +285,7 @@ export function RunsTab() {
       )
       return
     }
-    await load()
+    reload()
     await openDetail(detail.id)
   }
 
