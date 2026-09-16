@@ -94,6 +94,18 @@ test('close FX checks use entity functional currency and accept inverse spot quo
   } finally {await dropScratchOrg(org.orgId);}
 });
 
+test('posting-period-missing ignores period-less documents dated outside the run period', {skip:!enabled}, async () => {
+  const {org,actor}=await setup();
+  try {
+    const outside = randomUUID(), inside = randomUUID();
+    await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
+      values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${outside},'2026-01-15','CAD',10,0,10),
+             (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${inside},${org.date},'CAD',10,0,10)`);
+    const runId=await run(org,actor);
+    assert.equal((await counts(org.orgId,runId))['posting-period-missing'],1);
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
 test('material variances cannot cancel between entities with unlike functional currencies', {skip:!enabled}, async () => {
   const {org,actor,other}=await setup();
   try {
