@@ -27,7 +27,17 @@ export interface HealthFinding {
   detail: string;
 }
 
-export interface HealthStrings {
+/** No-data notes inside the ratio engine (financial-health.ts core). */
+export interface FinancialHealthNotes {
+  noDA: string;
+  noBalanceSheet: string;
+  noHeadcount: string;
+  noInterestExpense: string;
+  /** `revenue` is pre-formatted money (existing formatter). */
+  perEmployees(revenue: string, headcount: number): string;
+}
+
+export interface HealthStrings extends FinancialHealthNotes {
   locale: string;
   monthLabel(ym: string): string;
   /** Map the SQL `coalesce(…, 'Unassigned')` sentinel to the request language. */
@@ -78,9 +88,19 @@ const MARGIN: Record<MarginStageKey, string> = {
   otherIncome: "Other Income",
 };
 
+/** Exact legacy English no-data notes (byte-identical to the ratio engine). */
+export const englishFinancialHealthNotes: FinancialHealthNotes = {
+  noDA: "No depreciation/amortization accounts found",
+  noBalanceSheet: "No balance sheet data",
+  noHeadcount: "No active employee records",
+  noInterestExpense: "No interest expense",
+  perEmployees: (revenue, headcount) => `${revenue} / ${headcount} employees`,
+};
+
 /** Exact legacy English sentences (byte-identical to the pre-catalog loader). */
 export const englishHealthStrings: HealthStrings = {
   locale: "en",
+  ...englishFinancialHealthNotes,
   monthLabel: legacyMonthLabel,
   displaySegmentName: (_id, name) => name,
   pnlLine: (key) => PNL[key],
@@ -121,6 +141,12 @@ export function healthStrings(t: CatalogMessageFn, locale: string): HealthString
   });
   return {
     locale,
+    noDA: t("financialHealth.ratioNotes.noDA"),
+    noBalanceSheet: t("financialHealth.ratioNotes.noBalanceSheet"),
+    noHeadcount: t("financialHealth.ratioNotes.noHeadcount"),
+    noInterestExpense: t("financialHealth.ratioNotes.noInterestExpense"),
+    perEmployees: (revenue, headcount) =>
+      t("financialHealth.ratioNotes.perEmployees", { revenue, count: headcount }),
     monthLabel: catalogMonthLabel(t),
     displaySegmentName: (id, name) =>
       id === "unassigned" && name === "Unassigned" ? t("financialHealth.labels.unassignedSegment") : name,
@@ -157,4 +183,49 @@ export function healthStrings(t: CatalogMessageFn, locale: string): HealthString
       detail: t("financialHealth.findings.revenueSpike.detail", { amount, avg }),
     }),
   };
+}
+
+const RATIO_IDS = [
+  "gross_margin",
+  "operating_margin",
+  "ebitda_margin",
+  "net_margin",
+  "roa",
+  "roe",
+  "roic",
+  "roce",
+  "rev_per_employee",
+  "gp_per_employee",
+  "asset_turnover",
+  "cogs_ratio",
+  "opex_ratio",
+  "operating_leverage",
+  "interest_coverage",
+  "rule_of_40",
+] as const;
+
+export interface RatioDefText {
+  label: string;
+  formula: string;
+  desc: string;
+  interpret: string;
+}
+
+/**
+ * Catalog-backed ratio dictionary — same shape as RATIO_DEFS, every field in
+ * the request locale. RATIO_DEFS itself stays the static English table for
+ * surfaces outside the analytics dashboards.
+ */
+export function localizedRatioDefs(t: CatalogMessageFn): Record<string, RatioDefText> {
+  return Object.fromEntries(
+    RATIO_IDS.map((id) => [
+      id,
+      {
+        label: t(`financialHealth.ratios.${id}.label`),
+        formula: t(`financialHealth.ratios.${id}.formula`),
+        desc: t(`financialHealth.ratios.${id}.desc`),
+        interpret: t(`financialHealth.ratios.${id}.interpret`),
+      },
+    ]),
+  );
 }

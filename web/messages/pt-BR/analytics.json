@@ -206,6 +206,111 @@
     },
     "labels": {
       "unassignedSegment": "Não atribuído"
+    },
+    "ratios": {
+      "gross_margin": {
+        "label": "Margem bruta",
+        "formula": "Lucro bruto / Receita",
+        "desc": "Parcela da receita restante após o custo direto.",
+        "interpret": "Quanto maior, melhor. Empresas de serviços miram tipicamente 35–50 %."
+      },
+      "operating_margin": {
+        "label": "Margem operacional",
+        "formula": "Resultado operacional / Receita",
+        "desc": "Rentabilidade da operação central, antes de juros e itens não operacionais.",
+        "interpret": "Acima de 15 % é sólido para a maioria dos negócios."
+      },
+      "ebitda_margin": {
+        "label": "Margem EBITDA",
+        "formula": "(Resultado operacional + Depreciação + Amortização) / Receita",
+        "desc": "Rentabilidade operacional antes de encargos não caixa e financiamento.",
+        "interpret": "Acima de 20 % é saudável; útil para comparar estruturas de capital."
+      },
+      "net_margin": {
+        "label": "Margem líquida",
+        "formula": "Lucro líquido / Receita",
+        "desc": "Lucro final como parcela da receita, depois de tudo.",
+        "interpret": "Acima de 10 % é saudável na maioria dos setores."
+      },
+      "roa": {
+        "label": "Retorno sobre ativos",
+        "formula": "Lucro líquido / Ativos totais",
+        "desc": "Eficiência com que os ativos geram lucro.",
+        "interpret": "Acima de 8 % indica bom uso dos ativos."
+      },
+      "roe": {
+        "label": "Retorno sobre patrimônio",
+        "formula": "Lucro líquido / Patrimônio total",
+        "desc": "Retorno gerado sobre o patrimônio dos acionistas.",
+        "interpret": "Acima de 15 % é geralmente considerado sólido."
+      },
+      "roic": {
+        "label": "Retorno sobre capital investido",
+        "formula": "NOPAT / Capital investido",
+        "desc": "Retorno de todo o capital investido. NOPAT = Resultado operacional × (1 − 25 % de imposto presumido). Capital investido = Patrimônio + Dívida de longo prazo.",
+        "interpret": "Acima do custo de capital (tipicamente 8–12 %) cria valor."
+      },
+      "roce": {
+        "label": "Retorno sobre capital empregado",
+        "formula": "Resultado operacional / Capital investido",
+        "desc": "Retorno operacional antes de impostos do capital empregado.",
+        "interpret": "Acima de 15 % indica alocação eficiente de capital."
+      },
+      "rev_per_employee": {
+        "label": "Receita por funcionário",
+        "formula": "Receita / Headcount no fim do período",
+        "desc": "Produtividade comercial da equipe.",
+        "interpret": "Os benchmarks variam muito por setor, geografia e moeda."
+      },
+      "gp_per_employee": {
+        "label": "Lucro bruto por funcionário",
+        "formula": "Lucro bruto / Headcount no fim do período",
+        "desc": "Valor que cada funcionário agrega após custos diretos.",
+        "interpret": "Um sinal de produtividade mais puro que receita por cabeça."
+      },
+      "asset_turnover": {
+        "label": "Giro dos ativos",
+        "formula": "Receita / Ativos totais",
+        "desc": "Receita gerada por unidade monetária de ativos.",
+        "interpret": "Acima de 1,0x, os ativos giram mais de uma vez ao ano."
+      },
+      "cogs_ratio": {
+        "label": "Razão de CMV",
+        "formula": "CMV / Receita",
+        "desc": "Custo direto como parcela da receita. Menor é melhor.",
+        "interpret": "O inverso da margem bruta — mantê-lo abaixo da meta."
+      },
+      "opex_ratio": {
+        "label": "Razão de despesas operacionais",
+        "formula": "Despesas operacionais / Receita",
+        "desc": "Estrutura como parcela da receita. Menor é melhor.",
+        "interpret": "Controlá-la é a alavanca entre a margem bruta e a operacional."
+      },
+      "operating_leverage": {
+        "label": "Alavancagem operacional",
+        "formula": "Δ Resultado operacional % / Δ Receita %",
+        "desc": "Quanto o resultado operacional se move ante uma mudança na receita.",
+        "interpret": "Acima de 1,0x, os lucros crescem mais rápido que a receita."
+      },
+      "interest_coverage": {
+        "label": "Cobertura de juros",
+        "formula": "Resultado operacional / Outras despesas",
+        "desc": "Vezes que o resultado operacional cobre as despesas não operacionais (juros).",
+        "interpret": "Acima de 5x é confortável; abaixo de 1,5x é um alerta."
+      },
+      "rule_of_40": {
+        "label": "Regra dos 40",
+        "formula": "Crescimento da receita % + Margem operacional %",
+        "desc": "Equilibra crescimento e rentabilidade em um só número.",
+        "interpret": "40 ou mais é excelente — troque crescimento por margem ou vice-versa."
+      }
+    },
+    "ratioNotes": {
+      "noDA": "Nenhuma conta de depreciação/amortização encontrada",
+      "noBalanceSheet": "Sem dados de balanço",
+      "noHeadcount": "Sem funcionários ativos",
+      "noInterestExpense": "Sem despesas com juros",
+      "perEmployees": "{revenue} / {count, plural, one {# funcionário} other {# funcionários}}"
     }
   },
   "customer": {

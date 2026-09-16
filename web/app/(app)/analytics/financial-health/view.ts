@@ -4,11 +4,10 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { RATIO_DEFS } from '../../../../lib/analytics/financial-health'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { healthData } from '../../../../lib/analytics/health-data'
-import { healthStrings } from '../../../../lib/analytics/health-strings'
+import { healthStrings, localizedRatioDefs } from '../../../../lib/analytics/health-strings'
 import type { FinancialHealthView } from './FinancialHealthView'
 
 /**
@@ -23,9 +22,9 @@ import type { FinancialHealthView } from './FinancialHealthView'
  * and decomposing them into generic blocks would reimplement the component
  * rather than compose it.
  *
- * Loader work copied VERBATIM from page.tsx. `RATIO_DEFS` is a static table of ratio
- * definitions, not a component or a capability, so it travels as plain data
- * through the widget exactly as the page passed it as a prop.
+ * Loader work copied VERBATIM from page.tsx. Ratio definitions travel as plain
+ * data through the widget exactly as the page passed them as a prop — resolved
+ * from the analytics catalog (`localizedRatioDefs`) in the request locale.
  */
 
 type ViewProps = Parameters<typeof FinancialHealthView>[0]
@@ -46,12 +45,12 @@ export async function loadFinancialHealth(sp: Record<string, string | undefined>
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  // Finding sentences resolve through the analytics catalog in the request
-  // locale — the same locale the statements use. (RATIO_DEFS stays the
-  // static English table until the ratio-defs catalog lands; defs travel as
-  // plain data through the widget exactly as before.)
+  // Finding sentences and ratio definitions resolve through the analytics
+  // catalog in the request locale — the same locale the statements use.
+  // Direct loader callers keep the English defaults.
   const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
-  const strings = healthStrings((key, values) => tc(key, values), locale)
+  const boundT = (key: string, values?: Record<string, string | number>) => tc(key, values)
+  const strings = healthStrings(boundT, locale)
   const [data, budgetsEnabled] = await Promise.all([
     healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     isFeatureEnabled(authz.user.orgId, 'budgets'),
@@ -61,7 +60,7 @@ export async function loadFinancialHealth(sp: Record<string, string | undefined>
     title: t('title'),
     backLabel: t('backToHub'),
     periodLabel: period.label,
-    defs: RATIO_DEFS,
+    defs: localizedRatioDefs(boundT),
     budgetsEnabled,
     data,
   }

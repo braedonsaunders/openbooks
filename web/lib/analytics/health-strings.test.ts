@@ -44,6 +44,17 @@ test('the English default pins the exact legacy sentences', () => {
   assert.equal(s.marginOutlier('Mar', '10.0', '40.0').title, 'Margin outlier in Mar')
   assert.equal(s.displaySegmentName('unassigned', 'Unassigned'), 'Unassigned')
   assert.equal(s.displaySegmentName('dept-1', 'Ops'), 'Ops')
+  assert.equal(s.noDA, 'No depreciation/amortization accounts found')
+  assert.equal(s.noInterestExpense, 'No interest expense')
+  assert.equal(s.perEmployees('$1M', 1), '$1M / 1 employees')
+})
+
+test('the ratio no-data notes render in the request locale with ICU plurals', () => {
+  const s = healthStrings(catalogTranslator('fr'), 'fr')
+  assert.equal(s.noDA, 'Aucun compte de dotations aux amortissements trouvé')
+  assert.equal(s.noInterestExpense, "Aucune charge d'intérêts")
+  assert.equal(s.perEmployees('$1M', 1), '$1M / 1 salarié')
+  assert.equal(s.perEmployees('$1M', 42), '$1M / 42 salariés')
 })
 
 test('the French catalog renders French findings and reuses the pnl line names', () => {
