@@ -58,6 +58,13 @@ export const PERMISSION_CATALOGUE = [
   "budgets.read",
   "budgets.manage",
   "budgets.approve",
+  // Allocation kernel: read sees rules, runs, and lineage; manage authors
+  // rules and drivers; run previews, posts, reverses, and re-runs (posting
+  // additionally requires gl.post); approve acts on approval gates.
+  "allocations.read",
+  "allocations.manage",
+  "allocations.run",
+  "allocations.approve",
   // Insights — native BI (cards, dashboards, library)
   "insights.read",
   "insights.create",
@@ -254,6 +261,16 @@ export const PERMISSION_GROUPS: {
       { key: "budgets.read", labelKey: permissionLabelKey("budgets.read") },
       { key: "budgets.manage", labelKey: permissionLabelKey("budgets.manage") },
       { key: "budgets.approve", labelKey: permissionLabelKey("budgets.approve") },
+    ],
+  },
+  {
+    key: "allocations",
+    labelKey: "permissions.groups.allocations",
+    permissions: [
+      { key: "allocations.read", labelKey: permissionLabelKey("allocations.read") },
+      { key: "allocations.manage", labelKey: permissionLabelKey("allocations.manage") },
+      { key: "allocations.run", labelKey: permissionLabelKey("allocations.run") },
+      { key: "allocations.approve", labelKey: permissionLabelKey("allocations.approve") },
     ],
   },
   {
@@ -504,6 +521,10 @@ export const BUILT_IN_ROLES: Record<
       "budgets.read",
       "budgets.manage",
       "budgets.approve",
+      "allocations.read",
+      "allocations.manage",
+      "allocations.run",
+      "allocations.approve",
       "insights.read",
       "insights.create",
       "insights.publish",
@@ -576,6 +597,9 @@ export const BUILT_IN_ROLES: Record<
       "reports.create",
       "budgets.read",
       "budgets.manage",
+      "allocations.read",
+      "allocations.manage",
+      "allocations.run",
       "insights.read",
       "records.read",
       "records.create",
@@ -618,6 +642,8 @@ export const BUILT_IN_ROLES: Record<
       "reports.read",
       "budgets.read",
       "budgets.approve",
+      "allocations.read",
+      "allocations.approve",
       "insights.read",
       "records.read",
       "compliance.read",
@@ -634,7 +660,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "data.export", "apps.use"],
   },
   sales_manager: {
     name: "Sales Manager",

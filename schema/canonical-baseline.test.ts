@@ -1654,7 +1654,21 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
   const snapshot = JSON.parse(
     migration.match(/SET scopes = '(\[[\s\S]*?\])'::jsonb/)?.[1] ?? "null",
   ) as string[];
-  assert.deepEqual(snapshot, [...PERMISSION_CATALOGUE]);
+  // The backfill stamped the catalogue as of 0031. Keys added after it stay
+  // listed here explicitly, so a future addition still fails closed until it
+  // is reviewed and pinned — the historical snapshot itself never changes.
+  // Allocation kernel (fleet A10): read sees rules/runs/lineage, manage
+  // authors rules and drivers, run executes, approve decides gates.
+  const postSnapshotAdditions = [
+    "allocations.read",
+    "allocations.manage",
+    "allocations.run",
+    "allocations.approve",
+  ];
+  assert.deepEqual(
+    snapshot,
+    [...PERMISSION_CATALOGUE].filter((key) => !postSnapshotAdditions.includes(key)),
+  );
 
   // Storage owns the invariant for every writer afterwards: the empty shape
   // is unrepresentable (non-empty JSON array CHECK, validated) and the '[]'
