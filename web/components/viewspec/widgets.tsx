@@ -114,7 +114,7 @@ import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPack
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
 import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
-import { AgentsTriage } from '../../app/(app)/agents/AgentsTriage'
+import { AgentsTriageKeys } from '../../app/(app)/agents/AgentsTriageKeys'
 import { AgentsBriefingActions } from '../../app/(app)/agents/AgentsBriefingActions'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
@@ -1342,8 +1342,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'agents-activity-workspace': (props) => (
     <AgentsActivityWorkspace {...(props as unknown as ComponentProps<typeof AgentsActivityWorkspace>)} />
   ),
-  'agents-triage': (props) => (
-    <AgentsTriage {...(props as unknown as ComponentProps<typeof AgentsTriage>)} />
+  /** Keyboard + bulk selection over the inbox's row links — the shared list
+   *  cannot host ephemeral selection or global key handling. */
+  'agents-triage-keys': (props) => (
+    <AgentsTriageKeys {...(props as unknown as ComponentProps<typeof AgentsTriageKeys>)} />
   ),
   /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
    *  the stat-tile block's (same arrangement as `equipment-kpi-strip`). */

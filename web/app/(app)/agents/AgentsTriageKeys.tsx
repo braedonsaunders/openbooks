@@ -7,7 +7,7 @@ import { Check, RotateCcw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 
-export interface TriageRow {
+export interface TriageKeyRow {
   id: string
   href: string
   hasProposal: boolean
@@ -15,24 +15,24 @@ export interface TriageRow {
 }
 
 /**
- * The workbench's interactive layer over the server-rendered inbox:
- * changed-since-last-visit banner, keyboard triage, and bulk actions.
- *
- * The list itself stays server-rendered (same table vocabulary as every
- * other screen); this island only highlights rows by their finding link and
- * fires the same PATCH transitions the drawer uses, then refreshes. Row
- * selection is ephemeral — navigating filters clears it.
+ * The workbench's keyboard + bulk-selection layer over the server-rendered
+ * inbox: changed-since-last-visit banner, j/k/a/d/s triage, and bulk
+ * review/resolve. The shared list cannot host ephemeral selection or global
+ * key handling, so this compact island binds to the list's row links: it
+ * highlights rows by their finding href and fires the same PATCH transitions
+ * the drawer uses, then refreshes. Row selection is ephemeral — navigating
+ * filters clears it.
  *
  * Keys: j/k move · Enter opens · x selects · a applies (opens the drawer on
  * the proposal card) · d dismisses (opens the drawer for the reason) ·
  * s parks the finding In review.
  */
-export function AgentsTriage({
+export function AgentsTriageKeys({
   rows,
   canWrite,
   orgId,
 }: {
-  rows: TriageRow[]
+  rows: TriageKeyRow[]
   canWrite: boolean
   orgId: string
 }) {
