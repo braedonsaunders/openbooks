@@ -154,9 +154,9 @@ test("cash cockpit switchers offer the core horizon presets", () => {
   const cockpit = readFileSync(join(import.meta.dirname, "../../app/(app)/banking/cash/CashCockpit.tsx"), "utf8");
   assert.match(cockpit, /HORIZONS = \[4, 8, 13, 26\]/);
   const control = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/HorizonControl.tsx"), "utf8");
-  assert.match(control, /<option value="13">13 Weeks<\/option>/);
-  assert.match(control, /<option value="26">26 Weeks<\/option>/);
-  assert.doesNotMatch(control, /<option value="12">/);
+  // The control renders its options from one literal (labels are localized).
+  assert.match(control, /\[4, 8, 13, 26\]\.map\(/);
+  assert.doesNotMatch(control, /\b12\b/);
   const bankingView = readFileSync(join(import.meta.dirname, "../../app/(app)/banking/cash/view.ts"), "utf8");
   assert.match(bankingView, /normalizeCashHorizonWeeks\(sp\.horizon, 8\)/);
   const analyticsView = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/view.ts"), "utf8");
