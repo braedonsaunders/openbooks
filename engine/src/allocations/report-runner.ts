@@ -15,6 +15,8 @@ import {
   type ReportMeasure,
 } from "@openbooks/reports";
 import { db, pool } from "../db.ts";
+import { dataDependentFeatureDefault } from "../feature-defaults.ts";
+import { featureEnabled, type FeatureState } from "../feature-registry.ts";
 import { add, normalizeDecimal } from "../money.ts";
 import { actorHasPermission } from "../actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../actor-subsidiaries.ts";
@@ -82,7 +84,7 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
   if (entity.requiredPermission && !(await actorHasPermission(db, orgId, actorId, entity.requiredPermission))) {
     throw new DriverNotAvailableError("actor cannot run reports on this entity");
   }
-  if (entity.featureKey && !(await featureEnabled(orgId, entity.featureKey))) {
+  if (entity.featureKey && !(await reportEntityEnabled(orgId, entity.featureKey))) {
     throw new DriverNotAvailableError("the report entity's feature is disabled");
   }
   const subsidiaryIds = await actorAllowedSubsidiaryIds(db, orgId, actorId);
@@ -156,10 +158,20 @@ async function fiscalStartMonth(orgId: string): Promise<number> {
   return m >= 1 && m <= 12 ? m : 1;
 }
 
-async function featureEnabled(orgId: string, key: string): Promise<boolean> {
-  const r = (await db.execute<{ on: boolean | null }>(sql`
-    select (settings->'features'->>${key})::boolean as on from orgs where id = ${orgId}`));
-  return r.rows[0]?.on === true;
+/**
+ * The report routes' feature gate, resolved through the authoritative
+ * registry (defaults, parent/dependency gates, data-dependent defaults) —
+ * never a raw stored-true check, or the runner and the routes disagree
+ * about which entities a driver may measure.
+ */
+async function reportEntityEnabled(orgId: string, key: string): Promise<boolean> {
+  const r = (await db.execute<{ f: FeatureState | null }>(sql`
+    select settings->'features' as f from orgs where id = ${orgId}`));
+  const state = r.rows[0]?.f ?? {};
+  if (key === "multiSubsidiary" || key === "multiCurrency") {
+    return dataDependentFeatureDefault(db, orgId, key, state);
+  }
+  return featureEnabled(state, key);
 }
 
 /**
