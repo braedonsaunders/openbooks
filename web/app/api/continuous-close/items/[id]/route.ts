@@ -11,6 +11,7 @@ import {
   readableContinuousCloseAgents,
 } from "../../../../../lib/continuous-close";
 import { loadWorkItemDetail } from "../../../../../lib/agents/work-item";
+import { findingProposalCommand } from "../../../../../lib/agents/proposals";
 
 const ACTION_STATUS = {
   review: "in_review",
@@ -39,7 +40,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     readableContinuousCloseAgents(authz),
   );
   if (!item) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  return NextResponse.json({ ok: true, item, canWrite: can(authz, "assistant.write") });
+  const canWrite = can(authz, "assistant.write");
+  return NextResponse.json({
+    ok: true,
+    item,
+    canWrite,
+    proposal: canWrite ? findingProposalCommand(authz, item.summary) : null,
+  });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

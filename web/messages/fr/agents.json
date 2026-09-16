@@ -1,0 +1,35 @@
+{
+  "metaTitle": "Agents",
+  "title": "Agents",
+  "description": "Tous les constats des agents dans une boîte classée — trier, appliquer les propositions et bien commencer la journée.",
+  "configure": "Configurer les agents",
+  "search": "Rechercher des constats…",
+  "facets": {
+    "pack": "Agent",
+    "severity": "Gravité",
+    "status": "Statut",
+    "subsidiary": "Filiale",
+    "proposal": "Proposition",
+    "all": "Tous",
+    "withProposal": "Avec proposition",
+    "unresolved": "Sans filiale liée"
+  },
+  "subsidiaryHelp": "La filiale est déduite des constats liés à un compte ; les autres restent non rattachés.",
+  "lastVisit": "Nouveautés depuis le {date}",
+  "markSeen": "Marquer comme vu",
+  "triage": {
+    "hint": "j/k naviguer · Entrée ouvrir · x sélectionner · a appliquer · d rejeter · s classer à examiner",
+    "selected": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+    "review": "Commencer l'examen",
+    "resolve": "Résoudre",
+    "clear": "Effacer"
+  },
+  "empty": {
+    "title": "Boîte vide",
+    "description": "Aucun constat ne correspond à ces filtres.",
+    "action": "Effacer les filtres"
+  },
+  "proposal": {
+    "badge": "Proposition"
+  }
+}

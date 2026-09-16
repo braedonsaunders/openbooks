@@ -30,6 +30,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'agents-library-workspace': { props: [], open: true },
   'agents-overview-workspace': { props: [], open: true },
   'agents-policy-workspace': { props: [], open: true },
+  'agents-triage': { props: [], open: true },
   'aging-strip': { props: ['cells', 'total', 'totalDrill', 'totalLabel'] },
   'ai-settings-form': { props: ['detectorSpecs', 'initial', 'selectedAgentKey', 'specs'] },
   'analytics-hub': { props: ['description', 'groups', 'title'] },

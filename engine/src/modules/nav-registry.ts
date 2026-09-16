@@ -527,9 +527,12 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'reports.read',
   },
   {
+    // The Agent Workbench home. The key stays `continuous-close` (tenant
+    // configurations reference module keys); /continuous-close redirects to
+    // /agents, preserving ?item= deep links.
     key: 'continuous-close',
-    href: '/continuous-close',
-    label: 'Close Monitor',
+    href: '/agents',
+    label: 'Agents',
     iconKey: 'activity',
     group: 'accounting',
     subgroup: 'close',

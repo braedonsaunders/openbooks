@@ -592,6 +592,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/agents': {
+    route: '/agents',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/agents/view')
+      return {
+        load: (input) => m.loadAgents(input.searchParams ?? {}),
+        spec: (data) => m.agentsSpec(data as never),
+      }
+    },
+  },
   '/analytics': {
     route: '/analytics',
     segments: [],

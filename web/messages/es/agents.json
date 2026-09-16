@@ -1,0 +1,35 @@
+{
+  "metaTitle": "Agentes",
+  "title": "Agentes",
+  "description": "Todos los hallazgos de los agentes en una bandeja clasificada: clasifica, aplica propuestas y empieza el día informado.",
+  "configure": "Configurar agentes",
+  "search": "Buscar hallazgos…",
+  "facets": {
+    "pack": "Agente",
+    "severity": "Gravedad",
+    "status": "Estado",
+    "subsidiary": "Subsidiaria",
+    "proposal": "Propuesta",
+    "all": "Todos",
+    "withProposal": "Con propuesta",
+    "unresolved": "Sin subsidiaria vinculada"
+  },
+  "subsidiaryHelp": "La subsidiaria se resuelve en hallazgos vinculados a cuentas; el resto queda sin asignar.",
+  "lastVisit": "Novedades desde el {date}",
+  "markSeen": "Marcar como visto",
+  "triage": {
+    "hint": "j/k moverse · Intro abrir · x seleccionar · a aplicar · d descartar · s aparcar en revisión",
+    "selected": "{count, plural, one {# seleccionado} other {# seleccionados}}",
+    "review": "Iniciar revisión",
+    "resolve": "Resolver",
+    "clear": "Limpiar"
+  },
+  "empty": {
+    "title": "Bandeja vacía",
+    "description": "Ningún hallazgo coincide con estos filtros.",
+    "action": "Limpiar filtros"
+  },
+  "proposal": {
+    "badge": "Propuesta"
+  }
+}

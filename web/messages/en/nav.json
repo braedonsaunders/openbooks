@@ -2,7 +2,7 @@
   "modules": {
     "dashboard": "Dashboard",
     "assistant": "Assistant",
-    "continuous-close": "Close Monitor",
+    "continuous-close": "Agents",
     "approvals": "Approvals",
     "insights": "Dashboards",
     "purchase-orders": "Purchase Orders",

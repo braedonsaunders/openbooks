@@ -4,7 +4,7 @@
   "description": "Surveille en continu la préparation à la clôture et présente les exceptions comptables et financières étayées par des preuves.",
   "search": "Rechercher des constats…",
   "tabs": { "ariaLabel": "Sections de la clôture continue", "findings": "Constats", "reports": "Rapports" },
-  "agents": { "accounting": "Comptabilité", "finance": "Finance", "forensics": "Forensique", "tax": "Fiscalité", "payroll": "Paie" },
+  "agents": { "accounting": "Comptabilité", "finance": "Finance", "forensics": "Forensique", "collections": "Recouvrement", "payables": "Comptes fournisseurs", "reconciliation": "Rapprochement bancaire", "hygiene": "Hygiène des données", "tax": "Fiscalité", "payroll": "Paie" },
   "metrics": { "active": "Actifs", "critical": "Critiques", "accounting": "Constats comptables", "finance": "Constats financiers" },
   "filters": { "agent": "Agent", "severity": "Gravité" },
   "severity": { "info": "Information", "warning": "Avertissement", "critical": "Critique" },

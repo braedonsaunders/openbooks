@@ -2,7 +2,7 @@
   "modules": {
     "dashboard": "Tableau de bord",
     "assistant": "Assistant IA",
-    "continuous-close": "Suivi de clôture",
+    "continuous-close": "Agents",
     "approvals": "Approbations",
     "insights": "Tableaux de bord",
     "purchase-orders": "Bons de commande",

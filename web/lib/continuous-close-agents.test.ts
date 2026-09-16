@@ -50,6 +50,9 @@ test("every registered pack declares read grants", () => {
   assert.match(lib, /collections: \["ar\.read"\]/);
   assert.match(lib, /payables: \["ap\.read"\]/);
   assert.match(lib, /reconciliation: \["banking\.read", "banking\.reconcile"\]/);
+  assert.match(lib, /forensics: \["gl\.read", "ap\.read", "ar\.read", "expenses\.read"\]/);
+  assert.match(lib, /tax: \["gl\.read", "close\.read", "ap\.read", "ar\.read", "expenses\.read"\]/);
+  assert.match(lib, /payroll: \["payroll\.read", "close\.read"\]/);
   // assistant.use stays the outer doorway for every pack.
   assert.match(lib, /if \(!can\(authz, "assistant\.use"\)\) return false/);
 });

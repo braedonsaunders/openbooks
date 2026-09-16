@@ -28,6 +28,8 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
+import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
+import { findingSummaryLine } from '../../../lib/agents/summary'
 import type { ContinuousCloseWorkItem } from './WorkItemDrawer'
 
 /**
@@ -156,6 +158,7 @@ export interface ContinuousCloseData {
     item: ContinuousCloseWorkItem
     closeHref: string
     canWrite: boolean
+    proposal: FindingProposalCommand | null
   } | null
   narrativeDrawerOpen: boolean
   narrativeDrawer: Record<string, unknown> | null
@@ -293,14 +296,12 @@ export async function loadContinuousClose(
   const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
   const dateTime = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' })
 
-  /** The one-line description under a finding's title. */
+  /** The one-line description under a finding's title (shared with /agents). */
   function summaryLabel(summary: Record<string, unknown>): string {
-    if (summary.accountName)
-      return [summary.accountNumber, summary.accountName].filter(Boolean).join(' · ')
-    if (summary.scenarioName) return String(summary.scenarioName)
-    if (summary.currentPeriod) return `${summary.currentPeriod} / ${summary.priorPeriod}`
-    if (summary.count != null) return t('summary.records', { count: Number(summary.count) })
-    return t('summary.review')
+    return findingSummaryLine(
+      (key, values) => t(key, values as never),
+      summary,
+    )
   }
 
   return {
@@ -415,7 +416,14 @@ export async function loadContinuousClose(
     sort: params.sort,
     dir: params.dir,
     itemDrawerOpen: Boolean(selected),
-    itemDrawer: selected ? { item: selected, closeHref, canWrite } : null,
+    itemDrawer: selected
+      ? {
+          item: selected,
+          closeHref,
+          canWrite,
+          proposal: canWrite ? findingProposalCommand(authz, selected.summary) : null,
+        }
+      : null,
     narrativeDrawerOpen: Boolean(selectedNarrative),
     narrativeDrawer: selectedNarrative
       ? {

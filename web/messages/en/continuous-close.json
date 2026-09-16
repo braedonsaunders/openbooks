@@ -8,6 +8,10 @@
     "accounting": "Accounting",
     "finance": "Finance",
     "forensics": "Forensics",
+    "collections": "Collections",
+    "payables": "Payables",
+    "reconciliation": "Bank reconciliation",
+    "hygiene": "Data hygiene",
     "tax": "Tax",
     "payroll": "Payroll"
   },
