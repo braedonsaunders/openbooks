@@ -1065,7 +1065,8 @@
       "fiscal_quarter": "trimestre fiscal",
       "fiscal_year": "ejercicio fiscal"
     },
-    "csvSection": "Sección"
+    "csvSection": "Sección",
+    "exportTruncated": "Mostrando las primeras {shown} de {total} filas — reduzca el período o agregue filtros para ver todo."
   },
   "builtIns": {
     "ap-aging-by-vendor": {

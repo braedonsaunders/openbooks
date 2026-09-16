@@ -10,7 +10,15 @@ import type { ReportRunLabels, ReportEntity } from "@openbooks/reports";
  * reports.run.*; every entity and column is enumerated there. A measure's
  * user-authored `label` (stored in the plan) is data and renders verbatim.
  */
-export async function reportRunLabels(): Promise<ReportRunLabels> {
+/** ReportRunLabels plus the paged-export truncation notice. Kept web-local
+ *  (not on the shared label type) so the streaming export needs no
+ *  cross-package surface: orchestration falls back to English when a custom
+ *  label set omits the hook, exactly like the engine's `${n} row(s)` default. */
+export type PagedExportLabels = ReportRunLabels & {
+  exportTruncated?: (shown: number, total: number) => string
+}
+
+export async function reportRunLabels(): Promise<PagedExportLabels> {
   const t = await getTranslations("reports");
   const column = (entity: ReportEntity, key: string) => entity.key.startsWith('custom:') ? entity.columns.find(c => c.key === key)?.label ?? key : t(`catalog.columns.${entity.key}.${key}`);
   return {
@@ -39,6 +47,7 @@ export async function reportRunLabels(): Promise<ReportRunLabels> {
     bool: (v) => t(v ? "run.yes" : "run.no"),
     enumValue: (v) => (t.has(`catalog.enumValues.${v}`) ? t(`catalog.enumValues.${v}`) : null),
     entityLabel: (entity) => entity.key.startsWith('custom:') ? entity.label : t(`catalog.entities.${entity.key}.label`),
+    exportTruncated: (shown, total) => t("run.exportTruncated", { shown, total }),
   };
 }
 

@@ -1065,7 +1065,8 @@
       "fiscal_quarter": "trimestre fiscal",
       "fiscal_year": "ano fiscal"
     },
-    "csvSection": "Seção"
+    "csvSection": "Seção",
+    "exportTruncated": "Mostrando as primeiras {shown} de {total} linhas — restrinja o período ou adicione filtros para ver tudo."
   },
   "export": {
     "pdf": "PDF",

@@ -144,6 +144,21 @@ export function runResultToExportData(
   }
 }
 
+/** Tabular renderers print groups only, so a summary carried solely in
+ *  `summary` would vanish from CSV/XLSX — including truncation notices, which
+ *  would then read as complete files. Repeat it as trailing footer rows (raw
+ *  values, matching the file's own exact-decimal cells). Shared by the
+ *  buffered adapter below and the page-streaming exporters, which append the
+ *  same rows to their last slot/sheet. */
+export function exportSummaryFooterRows(summary: ReportSummaryItem[]): string[][] {
+  return summary
+    .map((item) => (item.value === '' || item.value === null || item.value === undefined
+      ? item.label
+      : `${item.label}: ${String(item.value)}`))
+    .filter((text) => text !== '')
+    .map((text) => [text])
+}
+
 /** ExportData → ReportRunResult for Excel/CSV. Flagged money columns retain
  *  the ledger's exact decimal strings so CSV text and XLSX text cells cannot
  *  silently replace them with the nearest IEEE-754 value. */
@@ -158,16 +173,7 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     isEmpty: g.isEmpty,
   }))
   const rowCount = data.groups.reduce((n, g) => n + g.rows.length, 0)
-  // Tabular renderers print groups only, so a summary carried solely in
-  // `summary` would vanish from CSV/XLSX — including truncation notices, which
-  // would then read as complete files. Repeat it as trailing footer rows
-  // (raw values, matching the file's own exact-decimal cells).
-  const footers = data.summary
-    .map((item) => (item.value === '' || item.value === null || item.value === undefined
-      ? item.label
-      : `${item.label}: ${String(item.value)}`))
-    .filter((text) => text !== '')
-    .map((text) => [text])
+  const footers = exportSummaryFooterRows(data.summary)
   if (footers.length > 0) {
     const last = groups[groups.length - 1]
     if (last) last.rows.push(...footers)

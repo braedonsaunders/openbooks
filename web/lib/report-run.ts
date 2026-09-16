@@ -6,6 +6,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,
+  REPORT_ENTITY_MAP,
+  type ReportCustomQuery,
   type ReportRuleGroup,
 } from '@openbooks/reports'
 import {
@@ -45,6 +47,8 @@ import {
   executeReportAllPages,
   mergeReportFilters,
   reportPeriodField,
+  streamPagedReportCsv,
+  streamPagedReportXlsx,
 } from './custom-reports'
 import { isReportUuidParam, type ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
@@ -331,6 +335,41 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
  *    then route through `resolveReport` (flattening a StatementView to ExportData).
  *  - query: execute the entity plan and shape it to ExportData.
  */
+type ReportDefinitionRecord = {
+  kind: string
+  slug: string
+  report_type: string
+  name: string
+  description: string | null
+  query: Record<string, unknown> | null
+  statement: { kind?: string; params?: Record<string, string> } | null
+}
+
+/**
+ * Load one definition as SAVED NOW — never a copy captured at scheduling
+ * time — and enforce the execution principal's access to that current
+ * definition (a schedule's authorization snapshot only pins who runs it and
+ * their subsidiary scope). Shared by the buffered and streaming runners so a
+ * scheduled delivery reflects the report's current columns and filters,
+ * exactly like an on-demand run, on both paths.
+ */
+async function loadAuthorizedDefinition(orgId: string, id: string): Promise<{
+  row: ReportDefinitionRecord
+  authz: Awaited<ReturnType<typeof requireReportAuthz>>
+}> {
+  const r = (await db.execute<ReportDefinitionRecord>(sql`
+    select kind, slug, report_type, name, description, query, statement
+      from report_definitions
+     where id = ${id} and org_id = ${orgId}
+  `))
+  const row = r.rows[0]
+  if (!row) throw new Error('report not found')
+
+  const authz = await requireReportAuthz(orgId)
+  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization['definition']))) throw new Error('Report access denied')
+  return { row, authz }
+}
+
 export async function resolveDefinitionToExportData(
   orgId: string,
   id: string,
@@ -338,29 +377,7 @@ export async function resolveDefinitionToExportData(
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
 ): Promise<ExportData> {
-  const r = (await db.execute<{
-      kind: string
-      slug: string
-      report_type: string
-      name: string
-      description: string | null
-      query: Record<string, unknown> | null
-      statement: { kind?: string; params?: Record<string, string> } | null
-    }>(sql`
-    select kind, slug, report_type, name, description, query, statement
-      from report_definitions
-     where id = ${id} and org_id = ${orgId}
-  `))
-  // Always the definition as SAVED NOW — never a copy captured at scheduling
-  // time — so a scheduled delivery reflects the report's current columns and
-  // filters, exactly like an on-demand run. The execution principal must be
-  // able to run that current definition (a schedule's authorization snapshot
-  // only pins who runs it and their subsidiary scope).
-  const row = r.rows[0]
-  if (!row) throw new Error('report not found')
-
-  const authz = await requireReportAuthz(orgId)
-  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization['definition']))) throw new Error('Report access denied')
+  const { row, authz } = await loadAuthorizedDefinition(orgId, id)
 
   if (row.report_type === 'statement') {
     const spec = row.statement ?? {}
@@ -382,6 +399,29 @@ export async function resolveDefinitionToExportData(
   // query-type definition → entity engine → ExportData. An explicit period in
   // the request replaces the plan's stored date window (same as the report
   // screen's picker); absent params — e.g. scheduled runs — keep the plan.
+  const { query, title, dateRangeLabel } = await planDefinitionQuery(row, authz, p, ctx, options)
+  // Pageable entity exports deliberately collect every causally stable page;
+  // they never inherit the interactive page or the engine's legacy 10k cap.
+  const result = await executeReportAllPages(orgId, query)
+  return runResultToExportData(result, {
+    title,
+    dateRangeLabel,
+  })
+}
+
+/**
+ * Build the executable entity plan for a query-type definition: validate the
+ * saved plan against the catalog, layer schedule overrides, bind built-in URL
+ * filters, and apply an explicit request period. Shared by the buffered and
+ * streaming runners so both execute the same plan.
+ */
+async function planDefinitionQuery(
+  row: ReportDefinitionRecord,
+  authz: Awaited<ReturnType<typeof requireReportAuthz>>,
+  p: URLSearchParams,
+  ctx: ResolveReportCtx,
+  options: { extraFilters?: ReportRuleGroup | null } = {},
+): Promise<{ query: ReportCustomQuery; title: string; dateRangeLabel: string }> {
   if (!row.query) throw new Error('report has no query')
   const entityMap = await reportEntityCatalog(authz)
   let query = mergeReportFilters(validateCatalogReportQuery(row.query, entityMap), options.extraFilters, entityMap)
@@ -401,11 +441,57 @@ export async function resolveDefinitionToExportData(
   if (periodField) {
     query = applyPeriodOverride(query, periodField, { from: ctx.period.from, to: ctx.period.to })
   }
-  // Pageable entity exports deliberately collect every causally stable page;
-  // they never inherit the interactive page or the engine's legacy 10k cap.
-  const result = await executeReportAllPages(orgId, query)
-  return runResultToExportData(result, {
+  return {
+    query,
     title: builtIn ? ctx.t(`builtIns.${row.slug}.name`) : row.name,
     dateRangeLabel: periodField ? ctx.period.label ?? '' : '',
+  }
+}
+
+/**
+ * Stream a paged-entity query definition to CSV or XLSX page by page (bounded
+ * memory, per-page snapshots, hard row cap with a disclosed footer) — the
+ * bounded twin of the executeReportAllPages tail above, executing the same
+ * plan. Non-paged and statement definitions keep the buffered path.
+ */
+export async function streamDefinitionExport(
+  orgId: string,
+  id: string,
+  p: URLSearchParams,
+  ctx: ResolveReportCtx,
+  opts: {
+    format: 'csv' | 'xlsx'
+    sectionHeader?: string
+    generatedAt?: Date
+    rowCap?: number
+  },
+): Promise<({ format: 'csv'; csv: string } | { format: 'xlsx'; xlsx: Buffer }) & {
+  rowCount: number
+  totalRows: number
+  truncated: boolean
+}> {
+  const { row, authz } = await loadAuthorizedDefinition(orgId, id)
+  if (row.report_type === 'statement') throw new Error('Streaming export needs a query definition')
+  const plan = await planDefinitionQuery(row, authz, p, ctx)
+  const entity = REPORT_ENTITY_MAP[plan.query.entity]
+  if (plan.query.mode !== 'rows' || !entity?.pagination) {
+    throw new Error('Streaming export needs a paged rows-mode entity')
+  }
+  if (opts.format === 'csv') {
+    const out = await streamPagedReportCsv(orgId, plan.query, {
+      title: plan.title,
+      dateRangeLabel: plan.dateRangeLabel,
+      sectionHeader: opts.sectionHeader,
+      generatedAt: opts.generatedAt,
+      rowCap: opts.rowCap,
+    })
+    return { format: 'csv' as const, ...out }
+  }
+  const out = await streamPagedReportXlsx(orgId, plan.query, {
+    title: plan.title,
+    dateRangeLabel: plan.dateRangeLabel,
+    generatedAt: opts.generatedAt,
+    rowCap: opts.rowCap,
   })
+  return { format: 'xlsx' as const, ...out }
 }

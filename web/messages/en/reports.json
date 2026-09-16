@@ -1054,6 +1054,7 @@
       "fiscal_year": "fiscal year"
     },
     "csvSection": "Section",
+    "exportTruncated": "Showing the first {shown} of {total} rows — narrow the period or add filters to see everything.",
     "subtotal": "{level} — total",
     "grandTotals": "Grand totals"
   },
