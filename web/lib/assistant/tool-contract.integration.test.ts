@@ -30,7 +30,8 @@ registerHooks({
   },
 });
 
-const { withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { ASSISTANT_TOOLS, executeAssistantTool } = await import("./registry");
 const { MAX_ROW_STRING } = await import("./tools-shared");
@@ -76,6 +77,15 @@ const READER_PERMS = [
   "banking.read",
   "banking.reconcile",
   "documents.read",
+  "documents.manage",
+  "items.read",
+  "assets.read",
+  "crm.opportunities.read",
+  "crm.accounts.read",
+  "crm.activities.read",
+  "crm.forecasts.read",
+  "close.reopen",
+  "periods.manage",
   "admin.setup.manage",
   "admin.audit.read",
 ];
@@ -91,6 +101,17 @@ const EMPTY_STORE: Record<string, string> = {
   payroll_entitlements: "employee_not_found",
   get_file: "file_not_found",
   get_continuous_close_finding: "finding_not_found",
+  get_opportunity: "opportunity_not_found",
+  get_crm_account: "crm_account_not_found",
+  get_crm_activity: "crm_activity_not_found",
+  get_subscription: "subscription_not_found",
+  get_close_run_status: "close_run_not_found",
+  get_item: "not found",
+  get_order: "not found",
+  get_asset: "not found",
+  get_equipment: "not found",
+  get_subcontract: "not found",
+  get_wip_prebill: "not found",
 };
 
 const FEATURE_OFF = new Set(["bank_feeds_feature_disabled", "feature_disabled"]);
@@ -142,10 +163,32 @@ function firstString(value: unknown, path: string[]): string | null {
   return typeof current === "string" ? current : null;
 }
 
+/**
+ * Optional modules the new coverage tools read from. The harness proves the
+ * tools' real paths (not just their feature-off refusals), so the scratch
+ * org switches these on with the same settings write the feature-fence tests
+ * use — reads need no installed baseline beyond the flag.
+ */
+const HARNESS_FEATURES = [
+  "crm",
+  "subscriptionBilling",
+  "inventory",
+  "orders",
+  "fixedAssets",
+  "equipment",
+  "subcontracts",
+  "wipBilling",
+];
+
 test("assistant read-tool contract harness", DB_ONLY, async (t) => {
   const org = await createScratchOrg();
   const sizes: { tool: string; bytes: number; outcome: string }[] = [];
   try {
+    const flags = Object.fromEntries(HARNESS_FEATURES.map((key) => [key, true]));
+    await db.execute(sql`
+      update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
+      where id = ${org.orgId}
+    `);
     const authz = readerAuthz(org.orgId);
     await withOrgContext(org.orgId, async () => {
       // Resolve seed-dependent ids from the scratch org's own list tools.
@@ -192,6 +235,18 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_file: { id: randomUUID() },
         get_continuous_close_finding: { findingId: randomUUID() },
         list_setup_records: { entityKey: "extension-settings" },
+        get_opportunity: { opportunityId: randomUUID() },
+        get_crm_account: { partyId: randomUUID() },
+        get_crm_activity: { activityId: randomUUID() },
+        get_subscription: { subscriptionId: randomUUID() },
+        get_item: { id: randomUUID() },
+        get_order: { kind: "sales_order", id: randomUUID() },
+        get_asset: { id: randomUUID() },
+        asset_tax_pools: { taxYear: 2025 },
+        get_equipment: { id: randomUUID() },
+        get_subcontract: { id: randomUUID() },
+        get_wip_prebill: { id: randomUUID() },
+        get_close_run_status: { runId: randomUUID() },
       };
 
       const readTools = ASSISTANT_TOOLS.filter((tool) => tool.category !== "write");
