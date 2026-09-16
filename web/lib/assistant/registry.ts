@@ -18,6 +18,7 @@ import { BANKING_TOOLS } from "./tools-banking";
 import { CLOSE_TOOLS } from "./tools-close";
 import { CONSTRUCTION_TOOLS } from "./tools-construction";
 import { CRM_TOOLS } from "./tools-crm";
+import { SUBSCRIPTION_TOOLS } from "./tools-subscriptions";
 import { PROJECT_TOOLS } from "./tools-projects";
 import { TAX_TOOLS } from "./tools-tax";
 import { FILE_TOOLS } from "./tools-files";
@@ -47,6 +48,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...TAX_TOOLS,
   ...CONSTRUCTION_TOOLS,
   ...CRM_TOOLS,
+  ...SUBSCRIPTION_TOOLS,
   ...ANALYTICS_TOOLS,
   ...REPORTING_TOOLS,
   ...BANKING_TOOLS,
