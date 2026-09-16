@@ -149,6 +149,23 @@ test("the payroll pack registers its detectors and defaults on", () => {
   );
 });
 
+test("the projects pack registers its detectors and defaults on", () => {
+  assert.deepEqual(
+    detectorSpecsForAgent("projects").map((spec) => spec.detectorKey),
+    [
+      "project_negative_margin",
+      "project_budget_overrun",
+      "project_stale_unbilled",
+    ],
+  );
+  const defaults = defaultContinuousCloseDetectors("projects");
+  assert.deepEqual(
+    enabledDetectorKeys(defaults),
+    defaults.map((detector) => detector.detectorKey),
+    "projects controls all default on",
+  );
+});
+
 test("new-pack detector tuning validates like the original packs", () => {
   const configured = normalizeContinuousCloseDetectors("collections", {
     overdue_customer_balance: {

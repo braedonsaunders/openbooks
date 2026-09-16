@@ -13,7 +13,8 @@
     "reconciliation": "Bank reconciliation",
     "hygiene": "Data hygiene",
     "tax": "Tax",
-    "payroll": "Payroll"
+    "payroll": "Payroll",
+    "projects": "Projects"
   },
   "metrics": {
     "active": "Active",
@@ -108,6 +109,18 @@
     "payroll_yearend_gaps": {
       "title": "Year-end filing gap",
       "description": "A slip requirement is unmet."
+    },
+    "project_negative_margin": {
+      "title": "Negative project margin",
+      "description": "A project is running at a loss."
+    },
+    "project_budget_overrun": {
+      "title": "Project budget overrun",
+      "description": "Cost plus commitments passed the approved budget."
+    },
+    "project_stale_unbilled": {
+      "title": "Stale unbilled work",
+      "description": "Billable work is still uninvoiced past the cutoff."
     },
     "missing_approved_budget": {
       "title": "No approved budget",
