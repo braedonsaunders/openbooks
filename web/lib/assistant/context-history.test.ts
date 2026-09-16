@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyHistoryBudget,
+  collectPriorToolNames,
   estimateHistoryTokens,
   HISTORY_SUMMARY_PREFIX,
   KEEP_FULL_ASSISTANT_TURNS,
@@ -189,6 +190,46 @@ test("summarizeToolOutputForHistory reports errors instead of figures", () => {
 test("summarizeToolOutputForHistory caps pathological outputs", () => {
   const huge = summarizeToolOutputForHistory({ ok: true, data: { blob: "x".repeat(10_000) } });
   assert.ok(huge.length <= 300, `summary not capped (${huge.length} chars)`);
+});
+
+test("collectPriorToolNames lists called tools oldest-first, deduped", () => {
+  const names = collectPriorToolNames(longConversation());
+  assert.deepEqual(names, [
+    "cash_position",
+    "party_concentration",
+    "find_documents",
+    "profit_and_loss",
+    "rank_projects",
+    "tax_return",
+  ]);
+  assert.deepEqual(collectPriorToolNames([{ role: "user", parts: [textPart("hi")] }]), []);
+});
+
+test("budgeted history still converts to model messages", async () => {
+  const { convertToModelMessages, tool } = await import("ai");
+  const { z } = await import("zod");
+  const stub = () =>
+    tool({ description: "stub", inputSchema: z.object({}), execute: async () => ({ ok: true as const, data: {} }) });
+  const tools = {
+    cash_position: stub(),
+    party_concentration: stub(),
+    find_documents: stub(),
+    profit_and_loss: stub(),
+    rank_projects: stub(),
+    tax_return: stub(),
+  };
+  const budgeted = applyHistoryBudget(longConversation());
+  const modelMessages = await convertToModelMessages(
+    budgeted as unknown as Parameters<typeof convertToModelMessages>[0],
+    {
+      tools,
+      ignoreIncompleteToolCalls: true,
+    },
+  );
+  assert.ok(modelMessages.length > 0, "conversion produced no messages");
+  const serialized = JSON.stringify(modelMessages);
+  assert.match(serialized, /Cash is negative \$185,754\.98/, "prose answer lost in conversion");
+  assert.match(serialized, /cash_position/, "recent tool evidence lost in conversion");
 });
 
 test("short conversations pass through untouched", () => {

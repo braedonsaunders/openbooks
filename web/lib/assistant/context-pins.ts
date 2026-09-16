@@ -11,6 +11,7 @@
  */
 
 import { assistantEntitiesFromToolOutput } from "./entities";
+import type { HistoryPart } from "./context-history";
 import type { ResolvedEntityKind } from "./context-summary";
 
 export type EntityPin = { id: string; label: string };
@@ -102,6 +103,24 @@ export function updatePinsFromToolOutput(
   }
 
   return pins;
+}
+
+/**
+ * Fold a whole part list (a persisted turn, or the live turn's new parts)
+ * into the pins. Non-tool parts are ignored.
+ */
+export function foldPartsIntoPins(pins: EntityPins, parts: readonly HistoryPart[]): EntityPins {
+  let current = pins;
+  for (const part of parts) {
+    if (part.type !== "dynamic-tool" && !part.type.startsWith("tool-")) continue;
+    const name = typeof part.toolName === "string" && part.toolName
+      ? part.toolName
+      : part.type.startsWith("tool-")
+        ? part.type.slice("tool-".length)
+        : part.type;
+    current = updatePinsFromToolOutput(current, name, "output" in part ? part.output : null);
+  }
+  return current;
 }
 
 /** Pronouns and demonstrative references that should resolve from the pins. */

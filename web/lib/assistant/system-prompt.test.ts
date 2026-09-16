@@ -47,6 +47,37 @@ describe("assistantSystemPrompt fiscal context", () => {
   });
 });
 
+describe("assistantSystemPrompt conversation memory", () => {
+  const fiscal = fiscalContextFor("2026-08-16", 4);
+  const base = {
+    orgName: "Northfield Services Inc",
+    baseCurrency: "CAD",
+    userName: "Alex",
+    today: "2026-08-16",
+    fiscal,
+    canWrite: false,
+  };
+
+  it("omits the memory block when there is nothing to remember", () => {
+    const prompt = assistantSystemPrompt(base);
+    assert.doesNotMatch(prompt, /Conversation memory/);
+  });
+
+  it("injects rendered memory sections verbatim", () => {
+    const prompt = assistantSystemPrompt({
+      ...base,
+      memorySections: ["## pinned_entities\n- document: bill BILL-0871 (abc)"],
+    });
+    assert.match(prompt, /Conversation memory:/);
+    assert.match(prompt, /BILL-0871/);
+  });
+
+  it("states the adaptive step budget for the turn", () => {
+    assert.match(assistantSystemPrompt({ ...base, maxSteps: 6 }), /budget of about 6 tool steps/);
+    assert.match(assistantSystemPrompt(base), /budget of about 12 tool steps/);
+  });
+});
+
 describe("fiscalCalendarLine", () => {
   it("degenerates cleanly for a January (calendar-year) org", () => {
     const line = fiscalCalendarLine(fiscalContextFor("2026-08-16", 1));
