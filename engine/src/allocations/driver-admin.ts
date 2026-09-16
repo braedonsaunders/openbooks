@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
+import { documentRevisionSql } from "../document-revision.ts";
 import { normalizeDecimal } from "../money.ts";
 import type {
   AccountScope,
@@ -71,6 +72,26 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
     current = (current as { cause?: unknown }).cause;
   }
   return false;
+}
+
+/**
+ * Optimistic-concurrency check on the canonical revision token (the same
+ * documentRevisionSql spelling rule mutations use). undefined skips the
+ * check; anything else must match exactly.
+ */
+async function requireDriverRevision(
+  tx: SqlExecutor,
+  table: "allocation_drivers" | "allocation_driver_values",
+  orgId: string,
+  id: string,
+  expected: string | undefined,
+  what: string,
+): Promise<void> {
+  if (expected === undefined) return;
+  const rows = await tx.execute<{ match: boolean }>(sql`
+    select (${documentRevisionSql(sql`updated_at`)} = ${expected}) as match
+      from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`);
+  if (!rows.rows[0]?.match) fail("stale", `${what} changed since you read it; reload and retry`);
 }
 
 /** Bind a uuid array for `= any(...::uuid[])` (drizzle has no array params). */
@@ -259,7 +280,7 @@ function mapDriver(row: Record<string, unknown>): AllocationDriver {
     key: String(row.key),
     name: String(row.name),
     description: (row.description as string | null) ?? null,
-    updatedAt: row.updated_at == null ? null : new Date(String(row.updated_at)).toISOString(),
+    updatedAt: typeof row.revision === "string" ? row.revision : null,
     unit: (row.unit as string | null) ?? null,
     dimension: String(row.dimension) as AllocationDimension,
     sourceKind: String(row.source_kind) as AllocationDriverSourceKind,
@@ -329,9 +350,11 @@ export async function listDrivers(
   const ex = opts?.executor ?? db;
   const rows = opts?.includeInactive
     ? await ex.execute<Record<string, unknown>>(sql`
-        select * from allocation_drivers where org_id = ${orgId} order by name, key`)
+        select *, ${documentRevisionSql(sql`updated_at`)} as revision
+          from allocation_drivers where org_id = ${orgId} order by name, key`)
     : await ex.execute<Record<string, unknown>>(sql`
-        select * from allocation_drivers where org_id = ${orgId} and is_active order by name, key`);
+        select *, ${documentRevisionSql(sql`updated_at`)} as revision
+          from allocation_drivers where org_id = ${orgId} and is_active order by name, key`);
   return rows.rows.map(mapDriver);
 }
 
@@ -343,7 +366,8 @@ export async function getDriver(
   if (!isUuid(id)) return null;
   const ex = executor ?? db;
   const rows = await ex.execute<Record<string, unknown>>(sql`
-    select * from allocation_drivers where org_id = ${orgId} and id = ${id}`);
+    select *, ${documentRevisionSql(sql`updated_at`)} as revision
+      from allocation_drivers where org_id = ${orgId} and id = ${id}`);
   const row = rows.rows[0];
   return row ? mapDriver(row) : null;
 }
@@ -373,7 +397,7 @@ export async function createDriver(
           (${orgId}, ${key}, ${name}, ${input.description ?? null}, ${input.unit ?? null},
            ${dimension}, ${input.sourceKind}, ${JSON.stringify(config)}::jsonb,
            ${input.isActive ?? true}, ${actorId}, ${actorId})
-        returning *`);
+        returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
       row = inserted.rows[0]!;
     } catch (error) {
       if (isUniqueViolation(error, "allocation_drivers_org_key")) {
@@ -398,13 +422,7 @@ export async function updateDriver(
       select * from allocation_drivers where org_id = ${orgId} and id = ${id} for update`);
     const before = current.rows[0];
     if (!before) fail("not_found", "driver not found");
-    if (patch.expectedUpdatedAt !== undefined) {
-      const seen = new Date(patch.expectedUpdatedAt).getTime();
-      const stored = new Date(String(before.updated_at)).getTime();
-      if (Number.isNaN(seen) || seen !== stored) {
-        fail("stale", "driver changed since you read it; reload and retry");
-      }
-    }
+    await requireDriverRevision(tx, "allocation_drivers", orgId, id, patch.expectedUpdatedAt, "driver");
     const nextSourceKind = patch.sourceKind ?? (String(before.source_kind) as AllocationDriverSourceKind);
     if (!DRIVER_SOURCE_KINDS.includes(nextSourceKind)) {
       fail("validation", `unknown sourceKind: ${String(patch.sourceKind)}`);
@@ -437,7 +455,7 @@ export async function updateDriver(
              is_active = ${patch.isActive ?? Boolean(before.is_active)},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id}
-       returning *`);
+       returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
     const after = updated.rows[0]!;
     await audit(tx, orgId, "allocation_drivers", id, "update", { before, after }, actorId);
     return mapDriver(after);
@@ -539,7 +557,7 @@ export async function createDriverValue(
           (org_id, driver_id, dimension_value_id, effective_from, effective_to, value, note, created_by, updated_by)
         values
           (${orgId}, ${driverId}, ${input.dimensionValueId}, ${from}, ${to}, ${value}, ${input.note ?? null}, ${actorId}, ${actorId})
-        returning *`);
+        returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
       row = inserted.rows[0]!;
     } catch (error) {
       if (isUniqueViolation(error, "allocation_driver_values_unique")) {
@@ -564,11 +582,7 @@ export async function updateDriverValue(
       select * from allocation_driver_values where org_id = ${orgId} and id = ${id} for update`);
     const before = current.rows[0];
     if (!before) fail("not_found", "driver value not found");
-    if (patch.expectedUpdatedAt !== undefined) {
-      const seen = new Date(patch.expectedUpdatedAt).getTime();
-      const stored = new Date(String(before.updated_at)).getTime();
-      if (Number.isNaN(seen) || seen !== stored) fail("stale", "value changed since you read it; reload and retry");
-    }
+    await requireDriverRevision(tx, "allocation_driver_values", orgId, id, patch.expectedUpdatedAt, "driver value");
     // effectiveFrom is immutable: the unique key is (driver, value, from), so
     // a start-date change is a delete + insert, never a silent re-key.
     const from = String(before.effective_from).slice(0, 10);
@@ -586,7 +600,7 @@ export async function updateDriverValue(
              note = ${patch.note !== undefined ? patch.note : (before.note as string | null)},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id}
-       returning *`);
+       returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
     const after = updated.rows[0]!;
     await audit(tx, orgId, "allocation_driver_values", id, "update", { before, after }, actorId);
     return mapDriverValue(after);

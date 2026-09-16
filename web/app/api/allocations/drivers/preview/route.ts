@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
+import { createReportDriverRunner } from "../../../../../lib/allocations-report-runner";
+import { DriverAdminError } from "../../../../../../engine/src/allocations/driver-admin.ts";
 import {
-  EnginePendingError,
+  DriverNotAvailableError,
+  previewDriverVector,
+} from "../../../../../../engine/src/allocations/drivers.ts";
+import {
   getDimensionValueLabels,
-  previewManualDriverVector,
   vectorShares,
 } from "../../../../../../engine/src/allocations/a8-shims.ts";
-import { getDriver } from "../../../../../../engine/src/allocations/driver-admin.ts";
 
 export const runtime = "nodejs";
 
@@ -20,9 +23,11 @@ const previewBodySchema = z.object({
 
 /**
  * Driver vector preview (A8): period picker (or exact date) → the
- * dimension value → weight table with exact shares. Manual drivers resolve
- * for real here; every other source kind reports `engine_pending` until
- * A2's resolvers land (HTTP 503, never a guessed vector).
+ * dimension value → weight table with exact shares, resolved by A2's
+ * previewDriverVector with the real ReportDriverRunner for
+ * report_definition drivers. Drivers that cannot be computed (no GL
+ * activity, empty manual table, report refused) answer 422 with the
+ * reason — never a guessed vector.
  */
 export async function POST(req: Request) {
   const gate = await guardAllocations("allocations.read");
@@ -35,27 +40,34 @@ export async function POST(req: Request) {
   }
   try {
     const asOf = periodId !== undefined ? { periodId } : { date: date! };
-    const { vector, date: resolved } = await previewManualDriverVector(gate.user.orgId, driverId, asOf);
-    const driver = await getDriver(gate.user.orgId, driverId);
-    const labels = driver ? await getDimensionValueLabels(gate.user.orgId, driver.dimension, [...vector.keys()]) : new Map();
-    const shares = vectorShares(vector);
+    const result = await previewDriverVector(
+      { orgId: gate.user.orgId, driverId, asOf, actorId: gate.user.id },
+      { reportRunner: createReportDriverRunner(gate) },
+    );
+    const labels = await getDimensionValueLabels(
+      gate.user.orgId,
+      result.driver.dimension,
+      result.vector.map((entry) => entry.key),
+    );
+    const shares = vectorShares(new Map(result.vector.map((entry) => [entry.key, entry.value] as [string, string])));
     return NextResponse.json({
       driverId,
-      date: resolved,
-      rows: [...vector.entries()].map(([id, value]) => ({
-        id,
-        label: labels.get(id) ?? id,
-        value,
-        share: shares.get(id) ?? "0.0000",
+      // The as-of actually read: the input date itself, or the period end
+      // A2 resolves a period to (GL kinds aggregate the month window).
+      date: periodId !== undefined ? result.to : date,
+      rows: result.vector.map((entry) => ({
+        id: entry.key,
+        label: labels.get(entry.key) ?? entry.key,
+        value: entry.value,
+        share: shares.get(entry.key) ?? "0.0000",
       })),
     });
   } catch (error) {
-    if (error instanceof EnginePendingError) {
-      const status = error.ownerShard === "A8" ? 404 : 503;
-      return NextResponse.json(
-        { errorCode: "engine_pending", owner: error.ownerShard, detail: error.message },
-        { status },
-      );
+    if (error instanceof DriverNotAvailableError) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    if (error instanceof DriverAdminError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     throw error;
   }

@@ -173,7 +173,7 @@ test("manual values: exact decimals, overlap guard, end-dating, onDate read", { 
   }
 });
 
-test("update refuses a stale revision token", { skip: !DB }, async () => {
+test("revision tokens round-trip; stale tokens refused", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -183,6 +183,19 @@ test("update refuses a stale revision token", { skip: !DB }, async () => {
       dimension: "department",
       sourceKind: "manual",
     });
+    assert.ok(driver.updatedAt, "create returns the canonical revision token");
+    const renamed = await updateDriver(org.orgId, actorId, driver.id, {
+      name: "Fresh",
+      expectedUpdatedAt: driver.updatedAt ?? undefined,
+    });
+    assert.equal(renamed.name, "Fresh");
+    await assert.rejects(
+      () => updateDriver(org.orgId, actorId, driver.id, {
+        name: "Stale edit",
+        expectedUpdatedAt: driver.updatedAt ?? undefined,
+      }),
+      (error: unknown) => error instanceof DriverAdminError && error.code === "stale",
+    );
     await assert.rejects(
       () => updateDriver(org.orgId, actorId, driver.id, {
         name: "Stale edit",

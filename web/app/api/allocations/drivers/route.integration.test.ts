@@ -132,7 +132,7 @@ test("drivers CRUD round trip with revision token", { skip: !DB }, async () => {
       sourceKind: "manual",
     }));
     assert.equal(created.status, 201);
-    const createdBody = (await created.json()) as { driver: { id: string; key: string } };
+    const createdBody = (await created.json()) as { driver: { id: string; key: string; updatedAt: string } };
     const id = createdBody.driver.id;
 
     const bad = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
@@ -157,12 +157,10 @@ test("drivers CRUD round trip with revision token", { skip: !DB }, async () => {
     });
     assert.equal(malformed.status, 404);
 
-    const stored = await db.execute<{ updated_at: string }>(sql`
-      select updated_at::text as updated_at from allocation_drivers where id = ${id}`);
     const patched = await itemRoute.PATCH(
       jsonRequest(`/api/allocations/drivers/${id}`, "PATCH", {
         name: "Renamed",
-        expectedUpdatedAt: stored.rows[0]?.updated_at,
+        expectedUpdatedAt: createdBody.driver.updatedAt,
       }),
       { params: Promise.resolve({ id }) },
     );
@@ -192,7 +190,7 @@ test("drivers CRUD round trip with revision token", { skip: !DB }, async () => {
   }
 });
 
-test("driver preview returns exact shares; non-manual is pending on A2", { skip: !DB }, async () => {
+test("driver preview returns exact shares; empty drivers report why", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -242,12 +240,31 @@ test("driver preview returns exact shares; non-manual is pending on A2", { skip:
       config: { accountScope: { kind: "any" } },
     }));
     const glId = ((await gl.json()) as { driver: { id: string } }).driver.id;
-    const pending = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
+    // A2 resolves for real now. A date as-of with no posted lines yields
+    // an empty vector (nothing to weight — shown as "no weights", never
+    // zeros); the period fast path reports why it cannot compute.
+    const empty = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
       driverId: glId,
       date: "2026-05-01",
     }));
-    assert.equal(pending.status, 503);
-    assert.equal(((await pending.json()) as { errorCode: string }).errorCode, "engine_pending");
+    assert.equal(empty.status, 200);
+    assert.deepEqual(((await empty.json()) as { rows: unknown[] }).rows, []);
+    // A native measure with no data source for the dimension explains
+    // itself — 422 with the reason, never a guessed vector.
+    const native = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
+      key: "preview-native",
+      name: "Preview native",
+      dimension: "class",
+      sourceKind: "native_measure",
+      config: { measure: "headcount" },
+    }));
+    const nativeId = ((await native.json()) as { driver: { id: string } }).driver.id;
+    const unavailable = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
+      driverId: nativeId,
+      date: "2026-05-01",
+    }));
+    assert.equal(unavailable.status, 422);
+    assert.match(((await unavailable.json()) as { error: string }).error, /no data source/);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);
