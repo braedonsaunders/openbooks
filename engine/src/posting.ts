@@ -18,6 +18,7 @@ import {
   runTriggerScripts,
   type ScriptContext,
 } from "./scripting.ts";
+import { assertDocumentMutationRefsOwned } from "./document-mutation-refs.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
   absorbFxRoundingResidual,
@@ -1824,6 +1825,13 @@ export async function postDocument(
     return merged;
   }, {});
   if (Object.keys(mutations).length > 0) {
+    // Same fence as the submit path: before_post script mutations write
+    // around applyDocumentEdit, so shapes and org ownership are proven here.
+    await assertDocumentMutationRefsOwned(
+      doc.orgId,
+      doc.kind,
+      Object.entries(mutations).map(([field, value]) => ({ field, value })),
+    );
     const [updated] = await db
       .update(schema.documents)
       .set(mutations)

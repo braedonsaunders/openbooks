@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
+import { assertDocumentMutationRefsOwned } from "../document-mutation-refs.ts";
 import { assertExpenseEmployee } from "../expense-validation.ts";
 import { runRecordFlows } from "./run.ts";
 
@@ -113,6 +114,14 @@ async function submitForApprovalLocked(
     }
     const mutations = Object.assign({}, ...outcomes.map((o) => o.set ?? {}));
     if (Object.keys(mutations).length > 0) {
+      // Script mutations write around applyDocumentEdit: prove shapes and org
+      // ownership here, or a well-formed foreign id persists as a silent
+      // cross-tenant pointer (custom jsonb has no constraint at all).
+      await assertDocumentMutationRefsOwned(
+        doc.orgId,
+        doc.kind,
+        Object.entries(mutations).map(([field, value]) => ({ field, value })),
+      );
       await db.update(schema.documents).set(mutations).where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
     }
   }
