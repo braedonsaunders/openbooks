@@ -109,7 +109,7 @@ import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remit
 import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
-import { AgentsOverviewWorkspace } from '../../app/(app)/admin/setup/agents/AgentsOverviewWorkspace'
+import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
 import { AgentsLibraryWorkspace } from '../../app/(app)/admin/setup/agents/library/AgentsLibraryWorkspace'
 import { AgentPolicyWorkspace } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyWorkspace'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
@@ -1287,9 +1287,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'features-workspace': (props) => (
     <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
   ),
-  /** Whole props bag — the island owns its header, cards and toggle flow. */
-  'agents-overview-workspace': (props) => (
-    <AgentsOverviewWorkspace {...(props as unknown as ComponentProps<typeof AgentsOverviewWorkspace>)} />
+  /** One pack's fenced enable switch + run-now for the Agents overview table. */
+  'agents-pack-actions': (props) => (
+    <AgentsPackActions
+      agentKey={str(props, 'agentKey') ?? ''}
+      policy={(props.policy as ComponentProps<typeof AgentsPackActions>['policy']) ?? {}}
+      packTitle={str(props, 'packTitle') ?? ''}
+      enabled={props.enabled === true}
+      featureEnabled={props.featureEnabled === true}
+    />
   ),
   /** Whole props bag — the catalog island owns its sections and install flow. */
   'agents-library-workspace': (props) => (
@@ -1397,6 +1403,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
    *  the stat-tile block's. */
   'equipment-kpi-strip': (props) => (
+    <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
+  ),
+  /** The generic KPI strip — every KPI row is the house KpiStrip. */
+  'kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
   'new-equipment': () => <NewEquipmentButton />,

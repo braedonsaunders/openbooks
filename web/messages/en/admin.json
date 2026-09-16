@@ -1554,7 +1554,23 @@
         "toggleFailed": "Couldn't save the pack setting.",
         "scanComplete": "{count, plural, one {# finding} other {# findings}} detected",
         "scanFailed": "The scan failed to start.",
-        "guideLink": "Setup guide"
+        "guideLink": "Setup guide",
+        "columns": {
+          "pack": "Pack",
+          "status": "Status",
+          "schedule": "Schedule",
+          "lastRun": "Last run",
+          "findings": "Findings",
+          "policy": "Policy",
+          "actions": "Actions"
+        },
+        "kpis": {
+          "enabled": "Packs on",
+          "enabledValue": "{count} of {total}",
+          "openFindings": "Open findings",
+          "runs7d": "Runs · 7 days",
+          "failed7d": "Failed · 7 days"
+        }
       },
       "library": {
         "title": "Library",

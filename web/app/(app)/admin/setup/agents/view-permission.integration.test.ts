@@ -24,16 +24,24 @@ const mockAuthz = `
   }
 `;
 
+const mockIntl = `
+  export async function getTranslations(namespace) {
+    return (key, _vars) => namespace + ':' + key;
+  }
+`;
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (
-      context.parentURL?.includes("/admin/setup/agents/view.ts") &&
-      specifier === "../../../../../lib/authz"
-    ) {
-      return { url: "mock:agents-overview-authz", shortCircuit: true };
+    if (context.parentURL?.includes("/admin/setup/agents/view.ts")) {
+      if (specifier === "../../../../../lib/authz") {
+        return { url: "mock:agents-overview-authz", shortCircuit: true };
+      }
+      if (specifier === "next-intl/server") {
+        return { url: "mock:agents-overview-intl", shortCircuit: true };
+      }
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
@@ -43,6 +51,9 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:agents-overview-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
+    }
+    if (url === "mock:agents-overview-intl") {
+      return { format: "module", source: mockIntl, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -73,10 +84,10 @@ test("a setup manager sees one overview row per registered pack", { skip: !DB },
       data.rows.map((row) => row.agentKey).sort(),
       [...CONTINUOUS_CLOSE_AGENT_KEYS].sort(),
     );
-    assert.equal(data.featureEnabled, true, "the module switch defaults on");
+    assert.equal(data.rows[0]?.featureEnabled, true, "the module switch defaults on");
     for (const row of data.rows) {
       assert.equal(row.policy.enabled, false, `${row.agentKey} must default to disabled`);
-      assert.equal(row.lastRun, null);
+      assert.equal(row.lastRunStartedAt, "");
       assert.equal(row.openFindings, 0);
     }
   } finally {
