@@ -250,14 +250,15 @@ async function persistMasterMutation(
   table: string,
   action: 'insert' | 'update',
   ctx: WriteCtx,
-  mutate: (tx: SqlExecutor) => Promise<string>,
+  before: Record<string, unknown> | null,
+  mutate: (tx: SqlExecutor) => Promise<{ rowId: string; after: Record<string, unknown> | null }>,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`savepoint master_import_row`)
     try {
-      const rowId = await mutate(tx)
+      const { rowId, after } = await mutate(tx)
       if (!rowId) throw new Error('master-data mutation did not return an id')
-      await auditRaw(tx, table, rowId, action, ctx)
+      await auditRow(tx, table, rowId, action, ctx, before, after)
       await tx.execute(sql`release savepoint master_import_row`)
     } catch (error) {
       await tx.execute(sql`rollback to savepoint master_import_row`)
@@ -448,26 +449,25 @@ async function writeMaster(
       let existingCustom: Record<string, unknown> = {}
       let storedKind: string | undefined
       let storedAccount: { type?: string; name?: string; reconcilable?: boolean; is_summary?: boolean } | undefined
+      // The full stored row doubles as the update's audit before-image.
+      let beforeRow: Record<string, unknown> | null = null
       if (nkVal) {
         const found = (await db.execute(sql`
-          select id, custom${m.key === 'items' ? sql`, kind` : sql``}${m.key === 'accounts' ? sql`, type, name, reconcilable, is_summary` : sql``} from ${sql.raw(m.table)}
+          select * from ${sql.raw(m.table)}
            where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`)) as {
-          rows: {
-            id: string
-            custom: Record<string, unknown>
-            kind?: string
-            type?: string
-            name?: string
-            reconcilable?: boolean
-            is_summary?: boolean
-          }[]
+          rows: Record<string, unknown>[]
         }
-        existingId = found.rows[0]?.id ?? null
-        existingCustom = found.rows[0]?.custom ?? {}
-        storedKind = found.rows[0]?.kind
-        if (m.key === 'accounts' && found.rows[0]) {
-          const row = found.rows[0]
-          storedAccount = { type: row.type, name: row.name, reconcilable: row.reconcilable, is_summary: row.is_summary }
+        beforeRow = (found.rows[0] ?? null) as Record<string, unknown> | null
+        existingId = typeof beforeRow?.id === 'string' ? beforeRow.id : null
+        existingCustom = (beforeRow?.custom as Record<string, unknown> | undefined) ?? {}
+        storedKind = typeof beforeRow?.kind === 'string' ? beforeRow.kind : undefined
+        if (m.key === 'accounts' && beforeRow) {
+          storedAccount = {
+            type: beforeRow.type as string | undefined,
+            name: beforeRow.name as string | undefined,
+            reconcilable: beforeRow.reconcilable as boolean | undefined,
+            is_summary: beforeRow.is_summary as boolean | undefined,
+          }
         }
       }
 
@@ -536,11 +536,14 @@ async function writeMaster(
           parts.push(sql`custom = ${JSON.stringify(mergedCustom)}::jsonb`)
           parts.push(sql`updated_by = ${ctx.actorId}`)
           parts.push(sql`updated_at = now()`)
-          await persistMasterMutation(m.table, 'update', ctx, async (tx) => {
-            await tx.execute(sql`
+          await persistMasterMutation(m.table, 'update', ctx, beforeRow, async (tx) => {
+            const written = (await tx.execute(sql`
               update ${sql.raw(m.table)} set ${sql.join(parts, sql`, `)}
-               where id = ${existingId} and org_id = ${ctx.orgId}`)
-            return existingId
+               where id = ${existingId} and org_id = ${ctx.orgId}
+               returning *`)) as { rows: Record<string, unknown>[] }
+            const after = written.rows[0] ?? null
+            if (!after) throw new Error('master-data mutation did not return a row')
+            return { rowId: existingId, after }
           })
         }
         outcome.updated++
@@ -557,12 +560,16 @@ async function writeMaster(
             [...cols.map((c) => sql`${c.value}`), sql`${JSON.stringify(mergedCustom)}::jsonb`],
             sql`, `,
           )
-          await persistMasterMutation(m.table, 'insert', ctx, async (tx) => {
+          await persistMasterMutation(m.table, 'insert', ctx, null, async (tx) => {
             const ins = (await tx.execute(sql`
-              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning id`)) as {
-              rows: { id: string }[]
+              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning *`)) as {
+              rows: Record<string, unknown>[]
             }
-            return String(ins.rows[0]?.id ?? '')
+            const after = ins.rows[0] ?? null
+            if (!after || typeof after.id !== 'string') {
+              throw new Error('master-data mutation did not return a row')
+            }
+            return { rowId: after.id, after }
           })
         }
         outcome.created++
@@ -593,8 +600,17 @@ async function writeMaster(
   return outcome
 }
 
-async function auditRaw(executor: SqlExecutor, table: string, rowId: string, action: 'insert' | 'update', ctx: WriteCtx) {
+async function auditRow(
+  executor: SqlExecutor,
+  table: string,
+  rowId: string,
+  action: 'insert' | 'update',
+  ctx: WriteCtx,
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+) {
   await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${ctx.orgId}, ${table}, ${rowId}, ${action}, ${JSON.stringify({ source: 'import' })}, ${ctx.actorId})`)
+    values (${ctx.orgId}, ${table}, ${rowId}, ${action},
+            ${JSON.stringify({ source: 'import', before, after })}::jsonb, ${ctx.actorId})`)
 }

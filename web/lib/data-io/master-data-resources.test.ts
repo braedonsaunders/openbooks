@@ -130,6 +130,13 @@ const mockSources = new Map<string, string>([
         }
         const table = tableFromRead(text)
         if (table) return { rows: state.readRows[table] ?? [] }
+        // Storage returns the written row (the resource evidences it); model
+        // the same so contract changes to the mutation shape stay honest.
+        const updated = text.match(/^\\s*update\\s+(accounts|items|parties)\\b/i)?.[1]?.toLowerCase()
+        if (updated) {
+          const row = (state.readRows[updated] ?? [])[0]
+          return { rows: [row ? { ...row } : { id: ids[updated] }] }
+        }
         return { rows: [] }
       }
 
