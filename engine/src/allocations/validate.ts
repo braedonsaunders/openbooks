@@ -390,6 +390,34 @@ export function validateRuleVersion(
     });
   }
 
+  // A net_zero_pair must never move an account balance, so its legs always
+  // reuse the source account: any named target account makes the version
+  // un-runnable (period runs and posting both refuse it). Refuse at publish
+  // instead of letting the operator ship a version that can never post.
+  if (version.impact === "net_zero_pair") {
+    if (version.targetKind === "explicit") {
+      for (const t of targets) {
+        if (t.targetAccountId !== null && t.targetAccountId !== undefined) {
+          problems.push({
+            code: "net_zero_account",
+            message: `net_zero_pair targets must use the source account; target "${t.id ?? `sequence:${t.sequence}`}" names an account`,
+            field: "targetAccountId",
+            targetId: t.id,
+          });
+        }
+      }
+    } else {
+      const dynamicAccount = version.dynamicTarget?.targetAccountId;
+      if (dynamicAccount !== null && dynamicAccount !== undefined) {
+        problems.push({
+          code: "net_zero_account",
+          message: "net_zero_pair dynamic targets must use the source account, not a target account",
+          field: "dynamicTarget",
+        });
+      }
+    }
+  }
+
   if (version.residualPolicy === "explicit_target") {
     if (version.residualTargetId === null || version.residualTargetId === undefined) {
       problems.push({
