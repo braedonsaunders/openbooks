@@ -106,6 +106,10 @@ export interface NsLine {
   memo?: string | null;
   /** 'T' when the source marks the line rebillable to the job's customer. */
   isbillable?: string | null;
+  /** 'T' when the source marks the line cleared (bank-reconciliation evidence). */
+  cleared?: string | null;
+  /** MM/DD/YYYY clear date, when the source states one. */
+  cleareddate?: string | null;
   /** Rebill markup, from whichever line field the account mapped. */
   markup?: string | null;
   /**
@@ -178,6 +182,22 @@ const round2 = (u: bigint): bigint => {
 export const parseNsDate = (mmddyyyy: string): string => {
   const [m, d, y] = mmddyyyy.split("/");
   return `${y}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`;
+};
+
+/**
+ * Source cleared evidence for one posting line (0158): the SuiteQL
+ * `cleared/cleareddate` markers as `NativeDocLine` evidence. A cleared line
+ * without a clear date falls back to the transaction date — understated
+ * evidence is safe, invented evidence is not. Uncleared lines carry explicit
+ * negative evidence so downstream unanimity never reads absence as cleared.
+ */
+const nsClearedEvidence = (
+  l: NsLine,
+  fallbackIso: string,
+): { sourceCleared: boolean; sourceClearedDate: string | null } => {
+  if (l.cleared !== "T") return { sourceCleared: false, sourceClearedDate: null };
+  const raw = (l.cleareddate ?? "").trim();
+  return { sourceCleared: true, sourceClearedDate: raw ? parseNsDate(raw) : fallbackIso };
 };
 
 const glUnits = (l: NsLine): bigint =>
@@ -505,6 +525,7 @@ export function buildNativeFromNetSuite(
       // expenses remain billable to the project's customer.
       isBillable,
       sourceLineRef: l.id == null ? null : String(l.id),
+      ...nsClearedEvidence(l, documentDate),
       markupPercent,
       billAmount: netSuiteBillAmount(
         effKind,
@@ -593,6 +614,8 @@ export function buildNativeFromNetSuite(
       description: src.l.memo ?? null,
       lineNumber: ++lineNo,
       subsidiaryId: sub(src.l),
+      sourceLineRef: src.l.id == null ? null : String(src.l.id),
+      ...nsClearedEvidence(src.l, documentDate),
     });
     return finish(nsTaxUnits === 0n);
   }
