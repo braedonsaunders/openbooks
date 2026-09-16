@@ -17,7 +17,7 @@ import {
   getUserRoleTier,
   type RoleTier,
 } from './_role-tier'
-import { DashboardLayoutInputSchema } from './_layout-input'
+import { DashboardLayoutInputSchema, clampToWidgetMinimums } from './_layout-input'
 
 type DashboardDefault = {
   layout: DashboardLayoutData
@@ -110,7 +110,7 @@ export async function loadDashboardLayout(
   const storedQuickActions = (row.layout as Partial<DashboardLayoutData>).quickActions
   return {
     layout: {
-      widgets: parsed.data.widgets,
+      widgets: clampToWidgetMinimums(parsed.data.widgets),
       ...(Array.isArray(storedQuickActions) ? { quickActions: storedQuickActions } : {}),
     },
     role,

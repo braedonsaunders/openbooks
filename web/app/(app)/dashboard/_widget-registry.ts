@@ -115,7 +115,10 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     labelKey: 'quickActions.title',
     descriptionKey: 'catalog.quickActions',
     defaultSize: { w: 12, h: 3 },
-    minSize: { w: 3, h: 3 },
+    // Four columns is the narrowest card that shows two full-width action
+    // labels side by side; four rows the shortest that shows the six default
+    // actions without scrolling.
+    minSize: { w: 4, h: 4 },
   },
   'kpi-cash-balance': {
     id: 'kpi-cash-balance',
