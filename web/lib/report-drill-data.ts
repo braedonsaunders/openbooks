@@ -68,53 +68,16 @@ const linkedOrderPredicate = sql`
   )`
 
 /**
- * Budget lines have no subsidiary column. A dimension can still carry an
- * entity owner, so every assigned dimension must either be shared (null owner)
- * or belong to the caller's allowed subsidiaries. Lines with no entity-owned
- * dimension cannot be attributed safely and are denied for restricted callers.
+ * Budget lines carry their own legal entity (bl.subsidiary_id, not null), so
+ * the drill scopes them with the same house rule as every sibling reader —
+ * the budget vs actual report, the scenario list totals, and the module-home
+ * scenario gate all key on the line subsidiary. Attributing lines through
+ * dimension owners instead both leaked other-entity lines wearing one of the
+ * caller's dimensions and denied the caller's own undimensioned lines, which
+ * the report and the list beside the drill both showed.
  */
 function budgetSubsidiaryFilter(authz: Authz): ReturnType<typeof sql> {
-  const allowed = authz.allowedSubsidiaryIds
-  if (allowed === null) return sql``
-  if (allowed.size === 0) return sql`and false`
-  const ids = `{${[...allowed].join(',')}}`
-  return sql`and (
-    (
-      (bl.project_id is not null and exists (
-        select 1 from projects bp_owner
-         where bp_owner.id = bl.project_id and bp_owner.org_id = bl.org_id
-           and bp_owner.subsidiary_id = any(${ids}::uuid[])))
-      or (bl.department_id is not null and exists (
-        select 1 from departments bd_owner
-         where bd_owner.id = bl.department_id and bd_owner.org_id = bl.org_id
-           and bd_owner.subsidiary_id = any(${ids}::uuid[])))
-      or (bl.location_id is not null and exists (
-        select 1 from locations bx_owner
-         where bx_owner.id = bl.location_id and bx_owner.org_id = bl.org_id
-           and bx_owner.subsidiary_id = any(${ids}::uuid[])))
-      or (bl.class_id is not null and exists (
-        select 1 from classes bc_owner
-         where bc_owner.id = bl.class_id and bc_owner.org_id = bl.org_id
-           and bc_owner.subsidiary_id = any(${ids}::uuid[])))
-    )
-    and
-    (bl.project_id is null or exists (
-      select 1 from projects bp
-       where bp.id = bl.project_id and bp.org_id = bl.org_id
-         and (bp.subsidiary_id is null or bp.subsidiary_id = any(${ids}::uuid[]))))
-    and (bl.department_id is null or exists (
-      select 1 from departments bd
-       where bd.id = bl.department_id and bd.org_id = bl.org_id
-         and (bd.subsidiary_id is null or bd.subsidiary_id = any(${ids}::uuid[]))))
-    and (bl.location_id is null or exists (
-      select 1 from locations bx
-       where bx.id = bl.location_id and bx.org_id = bl.org_id
-         and (bx.subsidiary_id is null or bx.subsidiary_id = any(${ids}::uuid[]))))
-    and (bl.class_id is null or exists (
-      select 1 from classes bc
-       where bc.id = bl.class_id and bc.org_id = bl.org_id
-         and (bc.subsidiary_id is null or bc.subsidiary_id = any(${ids}::uuid[]))))
-  )`
+  return subsidiaryVisibleFilter(sql`bl.subsidiary_id`, authz.allowedSubsidiaryIds)
 }
 
 /**
