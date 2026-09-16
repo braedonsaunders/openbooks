@@ -32,10 +32,19 @@ deploys itself from a version tag.
 - Statement-format arithmetic goes through the engine money helpers;
   boolean custom-field list values extract as real booleans; workspace
   package edges that were imported undeclared are now declared.
+- Posted journal lines cannot be re-homed onto another entry (0165).
+- Optimistic-concurrency tokens advance a `revision_seq` counter on every
+  update, independent of the editable `updated_at` display timestamp (0167).
+- Retainage draws and releases settle in whole currency minor units and
+  refuse a release that would invert draw/reversal posting order.
+- Overhead published rates and preview share one exact decimal contract.
 
 ### Operator action
 
-- No migrations. No data changes.
+- Two additive forward migrations: `0165_jl_guard_original_parent_immutability`
+  (replaces `jl_guard()`; no data rewrite) and
+  `0167_document_revision_counter` (`revision_seq` column and bump trigger
+  on revisioned tables; existing rows backfill 0). No other data changes.
 
 ## [0.1.0-alpha.9] - 2026-09-16
 

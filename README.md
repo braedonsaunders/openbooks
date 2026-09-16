@@ -726,8 +726,10 @@ swarm pin is swapped only after migrations from that exact digest succeed
 and the health endpoint reports the tag. It also ships integrity fixes for
 period-run posting after a rule is retired, report-backed allocation
 drivers, payment bank-return evidence, sync identity writes, and a few
-adjacent platform edges. No migrations. See the changelog for the areas
-touched and the operator notes.
+adjacent platform edges, plus two additive migrations: original-parent
+immutability on posted journal lines (0165) and a strictly increasing
+`revision_seq` counter for optimistic concurrency (0167). See the changelog
+for the areas touched and the operator notes.
 
 Good uses today:
 
