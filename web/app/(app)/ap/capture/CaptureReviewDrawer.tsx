@@ -160,8 +160,8 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
       <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1.05fr)_minmax(32rem,.95fr)]">
         <section className="min-h-[38vh] border-b border-slate-200 bg-slate-100 lg:min-h-0 lg:border-r lg:border-b-0 dark:border-slate-800 dark:bg-slate-950">
           {initial.contentType.startsWith('image/') && initial.contentType !== 'image/tiff' ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <div className="relative h-full w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`/api/ap-capture/${initial.id}/file`} alt={t('sourcePreviewAlt', { name: initial.original_filename })} className="h-full w-full object-contain" />
               {activeEvidence?.polygon ? (
                 <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${activeEvidence.polygon.width} ${activeEvidence.polygon.height}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
