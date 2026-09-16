@@ -22,8 +22,11 @@ test('the chat registry appends installed app tools after the static catalogs', 
   assert.match(registry, /listAppToolViews\(authz\.user\.orgId, authz, features\)/)
   assert.match(registry, /if \(taken\.has\(view\.name\)\) continue/)
   assert.match(registry, /if \(!canRunTool\(authz, def, features\)\) continue/)
-  assert.match(chatRoute, /buildToolRegistryAsync/)
-  assert.match(chatRoute, /await buildToolRegistryAsync\(authz, features\)/)
+  // The route builds the two-stage turn; buildChatTurn is the one place that
+  // calls buildToolRegistryAsync, so app tools ride along with the same gates.
+  assert.match(chatRoute, /await buildChatTurn\(authz, features, prompt, priorNames\)/)
+  assert.match(registry, /export async function buildChatTurn/)
+  assert.match(registry, /const tools = await buildToolRegistryAsync\(authz, features, \{/)
 })
 
 test('named app-tool execution resolves through the same gated path', () => {

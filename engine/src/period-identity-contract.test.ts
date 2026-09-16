@@ -8,7 +8,9 @@ function source(file: string): string {
 }
 
 test("period-specific accounting logic uses exact ledger period identity", () => {
-  const continuousClose = source("engine/src/continuous-close.ts");
+  // The detectors moved from continuous-close.ts into the agent packs
+  // (engine/src/agents/*); the finance pack owns both period-scoped reads.
+  const continuousClose = source("engine/src/agents/finance.ts");
   assert.match(
     continuousClose,
     /e\.period_id in \(select id from selected_periods\)/,
