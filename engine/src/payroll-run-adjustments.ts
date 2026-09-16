@@ -43,6 +43,21 @@ function persistAdjustmentHours(value: unknown): string {
   return exact;
 }
 
+/**
+ * Canonicalize API-supplied adjustment hours for the numeric(12,2) column:
+ * at most 2dp, non-negative, ten whole digits. Returns null for absent input
+ * (no hours) and for anything unpersistable. HTTP seams must use this — NOT
+ * the 4dp money normalizer, which pads every value past the column scale so
+ * the engine gate below rejects even whole hours.
+ */
+export function canonicalAdjustmentHours(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const exact = canonicalDecimal(value, 2);
+  if (exact === null || exact.startsWith("-")) return null;
+  if (exact.replace(/^[+]/, "").split(".")[0]!.replace(/^0+/, "").length > 10) return null;
+  return exact;
+}
+
 export type PayRunAdjustmentMutation =
   | {
       action: "add";
