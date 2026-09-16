@@ -25,6 +25,19 @@ test('package editing preserves binary bytes and explicit denied grants and reje
   const files=packageSourceFiles(bundle)
   assert.throws(()=>packageFromSourceFiles([...files,files[1]!]),/unique path/)
 })
+test('both starters demonstrate one sample assistant tool served by a bundled endpoint', () => {
+  for (const renderer of ['native','sandbox'] as const) {
+    const bundle = createAppStarter(renderer)
+    const manifest = parseManifest(bundle.manifest).manifest!
+    assert.equal(manifest.tools.length, 1)
+    const tool = manifest.tools[0]!
+    assert.equal(tool.handler, 'sample-tool')
+    assert.equal(tool.readOnly, true)
+    const endpoint = manifest.endpoints.find((e) => e.name === tool.handler)
+    assert.ok(endpoint, 'the sample tool handler must be a declared endpoint')
+    assert.ok(bundle.files.some((f) => f.path === endpoint!.file), 'the endpoint file must ship in the bundle')
+  }
+})
 test('version suggestion creates a new patch label without number precision loss',()=>{
   assert.equal(nextAppVersion('1'),'1.0.1')
   assert.equal(nextAppVersion('2.3.9-beta'),'2.3.10')
