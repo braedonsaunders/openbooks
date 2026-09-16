@@ -246,6 +246,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0150_applications_org_line_indexes.sql",
     "0151_continuous_close_agent_packs.sql",
     "0152_ai_conversation_memory.sql",
+    "0155_continuous_close_agent_packs_b03.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

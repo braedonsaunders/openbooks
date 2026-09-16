@@ -27,6 +27,8 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { loadAgentInbox } = await import('./inbox');
+const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import('@openbooks/engine/src/continuous-close-config.ts');
+const { AGENT_READ_PERMS } = await import('../continuous-close');
 
 async function seedFinding(orgId: string, row: {
   agent?: string; type?: string; severity?: string; status?: string;
@@ -90,8 +92,16 @@ test('inbox ranks stale material findings first and reports facets', { skip: !pr
       assert.equal(inbox.facets.severities.find((f) => f.key === 'critical')?.count, 1);
       assert.equal(inbox.facets.subsidiaries.find((f) => f.id === org.subsidiaryId)?.count, 1);
       assert.equal(inbox.facets.unresolvedSubsidiary, 2);
-      // gl.read opens accounting + hygiene + forensics; reports.read/budgets.read open finance.
-      assert.deepEqual(inbox.readablePacks, ['accounting', 'finance', 'hygiene', 'forensics']);
+      // Readable packs derive from the registry + grant map, never a
+      // hardcoded list: the next pack must not break this test. READER holds
+      // gl.read (accounting, hygiene, forensics, tax) and
+      // reports.read/budgets.read (finance).
+      assert.deepEqual(
+        inbox.readablePacks,
+        CONTINUOUS_CLOSE_AGENT_KEYS.filter((key) =>
+          AGENT_READ_PERMS[key].some((perm) => (READER as readonly string[]).includes(perm)),
+        ),
+      );
       // Proposal filter narrows to the carrier row.
       const proposed = await loadAgentInbox(authz, { hasProposal: true });
       assert.equal(proposed.total, 1);

@@ -999,6 +999,22 @@
           "title": "Factures en double",
           "description": "Repère les documents fournisseurs avec le même tiers, la même nature et le même montant comptabilisés dans la fenêtre de doublons."
         },
+        "tax_missing_codes": {
+          "title": "Documents sans code fiscal",
+          "description": "Repère les documents comptabilisés dont les lignes non taxées échappent à la déclaration."
+        },
+        "tax_missing_registration": {
+          "title": "Immatriculation fiscale manquante",
+          "description": "Signale les formulaires actifs sans numéro d’immatriculation au dossier."
+        },
+        "tax_return_blocked": {
+          "title": "Déclaration bloquée",
+          "description": "Signale les déclarations configurées que le moteur fiscal ne peut pas calculer."
+        },
+        "tax_unlocked_period": {
+          "title": "Période fiscale non verrouillée",
+          "description": "Signale la dernière période terminée sans verrou fiscal fermé."
+        },
         "missing_approved_budget": {
           "title": "Budget approuvé manquant",
           "description": "Confirme qu’un budget approuvé couvre la période d’exploitation actuelle avant l’analyse des écarts."
@@ -1110,6 +1126,11 @@
         "title": "Agent forensique",
         "description": "Contrôles continus des anomalies de dépenses.",
         "coverage": "Vérifie les comptabilisations du week-end, les chiffres ronds, les montants juste sous les seuils et les factures en double."
+      },
+      "tax": {
+        "title": "Agent fiscal",
+        "description": "Contrôles continus de préparation des déclarations.",
+        "coverage": "Vérifie les codes fiscaux manquants, les immatriculations, les déclarations calculables et les verrous de période."
       },
       "lastRun": "Dernière exécution : {date} · {status}",
       "nextRun": "Prochaine exécution planifiée : {date}",
@@ -1420,6 +1441,12 @@
           "description": "Comptabilisations du week-end, chiffres ronds, montants juste sous les seuils et factures en double.",
           "reads": "Documents de dépenses et tableau de bord sentinelle.",
           "proposes": "Liens de révision vers le tableau sentinelle sur chaque constat — révision uniquement, aucune écriture."
+        },
+        "tax": {
+          "title": "Fiscalité",
+          "description": "Codes fiscaux manquants, formulaires non immatriculés, déclarations incalculables et périodes non verrouillées.",
+          "reads": "Documents comptabilisés, formulaires, immatriculations et verrous de période.",
+          "proposes": "Liens de révision de la déclaration sur chaque constat — révision uniquement, aucune écriture."
         }
       }
     },
