@@ -17,7 +17,11 @@ import {
 
 const source = (path: string) => readFileSync(path, "utf8");
 const profiles = source("web/app/api/payroll/profiles/route.ts");
-const setup = source("web/app/api/admin/setup/[entity]/route.ts");
+// The setup checks moved verbatim from the admin setup route into the shared
+// setup command layer (web/lib/setup/write.ts), which the route and the
+// assistant/MCP setup-record tools both call — pin the library, not the thin
+// route adapter.
+const setup = source("web/lib/setup/write.ts");
 
 test("the payroll profile API refuses an undeclared labour jurisdiction by name", () => {
   // The route asks the pack declarations, and returns THEIR message verbatim —

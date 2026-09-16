@@ -68,8 +68,11 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
 );
 
 test("segment hierarchy API validation walks scoped descendants before the write", () => {
+  // The validation moved verbatim from the admin setup route into the shared
+  // setup command layer (web/lib/setup/write.ts) — pin the library, not the
+  // thin route adapter.
   const source = readFileSync(
-    new URL("../app/api/admin/setup/[entity]/route.ts", import.meta.url),
+    new URL("./setup/write.ts", import.meta.url),
     "utf8",
   );
   assert.match(
