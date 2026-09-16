@@ -6,6 +6,89 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-09-16
+
+Assistant and agents release. A live benchmark of the in-app assistant on a
+real ledger (three models, graded against tool output) showed nearly every
+lost point was a tool-surface gap; two agent fleets closed those gaps, made
+the model's context proportional to the question, generalised the
+background-agent runtime, and gave agent work a home in the product.
+Everything the assistant and MCP clients can do reuses the same services,
+permission gates, subsidiary scoping, and feature switches as the screens.
+
+### Assistant and MCP
+
+- One capability catalog for chat and `/mcp`: read tools across ledger,
+  reporting, banking, payroll, tax, projects (portfolio ranking), inventory,
+  orders, fixed assets, equipment, subcontracts and WIP, CRM, subscriptions,
+  property, time, expenses, close and periods, FX, budgets, files, data-io,
+  sync, environments, PDF templates, reporting deliveries, and admin reads
+  (secrets never leave the server). Governed commands with a review card and
+  idempotency key: settings, feature switches, setup records, journal post,
+  bank reconciliation actions, FX revaluation, budget cells, file upload.
+- Tools of disabled modules are hidden from the model, MCP, and the close
+  agents; the system prompt states the org's module switchboard; every tool
+  declares its feature key, and parity tests pin feature, permission,
+  subsidiary scoping, and chat/MCP visibility.
+- Context proportional to the question: a 24-tool core is always on,
+  `find_tools` activates a module's tools mid-turn, a pre-router pre-activates
+  modules from the message, tool results are compacted for the model (full
+  results still stream and persist), older turns become summaries, a rolling
+  conversation summary with resolved entities persists per conversation
+  (migration 0152), pronouns resolve from pinned entities, and step budgets
+  adapt. A typical turn now sends roughly 6k–13k tokens of tool definitions
+  instead of 45k.
+- Turns can no longer end silently: the last permitted step must answer, and
+  a turn that produced no prose gets a visible fallback. Engine domain errors
+  reach the model as actionable messages instead of `tool_failed`.
+- Strict provider compatibility: every tool schema is linted for RE2-safe
+  patterns, described properties, and bounded sizes (an unescaped bracket
+  had made one provider reject the whole catalog); a contract harness runs
+  every read tool against a scratch org under a size budget.
+- App packages declare their own assistant/MCP tools (`tools[]` in the
+  manifest with validated JSON-schema inputs and install-time contract
+  checks); they run through the app runtime with governance evidence and use
+  the same confirmation path as built-in mutations.
+- `describe_capabilities` answers "what can you do" from the live catalog.
+
+### Agents
+
+- The continuous-close runtime is a registry of agent packs: accounting,
+  finance, collections, payables, reconciliation, data hygiene, forensics,
+  tax readiness, payroll compliance, project margin, and cash alerts
+  (migrations 0151 and 0155 widen the agent-key constraints). Packs read and
+  propose; nothing runs a write without a confirmed review card.
+- Agents are a first-party Setup category: overview with enable switches and
+  run-now, a library, per-pack policy pages with detector controls and
+  notification routing (migration 0154), and an activity log. `/admin/ai`
+  is provider configuration only.
+- Agent Workbench at `/agents`: a ranked inbox with keyboard and bulk triage,
+  a proposals lane rendering the same review cards as chat, a cached morning
+  briefing with email send, ask-about-this handoff into chat, assignment with
+  due dates and notes (migration 0153), and a dashboard tile.
+
+### Connectors, banking, assets, currencies
+
+- Connectors mirror cleared markers and party merges/holds and carry source
+  reconciliation evidence on every mirror run; a source-evidenced sign-off
+  engine can close reconciliations from that evidence (migration 0158).
+- Fixed assets and lessee schedules continue from opening balances
+  (migration 0156); the fixed-asset register import carries openings in.
+- The currency registry is the full active ISO 4217 list, backfilled for
+  existing tenants (migration 0157), with localized picker labels.
+- Analytics sentences, sentinel forensics, ratio definitions, and health
+  findings are localizable; sentinel duplicate groups and per-currency stats
+  corrected; close readiness ignores non-posting order kinds.
+
+### Operator action
+
+- Eight additive migrations (0151–0158) run automatically before the new
+  code serves. No data is reinterpreted.
+- Agent packs beyond accounting and finance are off until enabled under
+  Setup → Agents; the `continuousClose` feature still gates the runtime.
+- The MCP endpoint requires the `apiAccess` and `mcpAccess` features and an
+  API key; provider model lists are cached for ten minutes.
+
 ## [0.1.0-alpha.6] - 2026-09-15
 
 Defect-remediation release: ~300 atomic fixes from a third audit fleet
