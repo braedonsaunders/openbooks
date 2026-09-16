@@ -71,6 +71,46 @@ test("vendor application treats stored materials as a cumulative balance", () =>
     netDue: "90.0000",
   });
 });
+test("vendor two-decimal settlement rounds the cumulative retained amount and carries the residual", () => {
+  const result = computeVendorApplication([{
+    sovLineId: "line-1",
+    scheduledValue: "10000",
+    previousEarned: "0",
+    previousMaterialsStored: "0",
+    workCompletedThisPeriod: "3333.33",
+    materialsStoredCurrent: "0",
+    retainagePercent: "10",
+  }, {
+    sovLineId: "line-2",
+    scheduledValue: "10000",
+    previousEarned: "0",
+    previousMaterialsStored: "0",
+    workCompletedThisPeriod: "3333.33",
+    materialsStoredCurrent: "0",
+    retainagePercent: "5",
+  }], { minorUnits: 2 });
+  // Exact 333.333 + 166.6665 settles 333.33 + 166.67 = 500.00 exactly.
+  assert.equal(result.lines[0]!.retainageThisPeriod, "333.3300");
+  assert.equal(result.lines[1]!.retainageThisPeriod, "166.6700");
+  assert.equal(result.retainageThisPeriod, "500.0000");
+  assert.equal(result.netDue, "6166.6600");
+});
+
+test("vendor prior-draw replay carries the residual across draws", () => {
+  const result = computeVendorApplication([{
+    sovLineId: "line-1",
+    scheduledValue: "10000",
+    previousEarned: "333.33",
+    previousMaterialsStored: "0",
+    workCompletedThisPeriod: "333.33",
+    materialsStoredCurrent: "0",
+    retainagePercent: "10",
+  }], { minorUnits: 2, priorExactRetainage: ["33.3333"] });
+  // Cumulative exact 66.6666 rounds to 66.67; 33.33 already settled.
+  assert.equal(result.retainageThisPeriod, "33.3400");
+  assert.equal(result.lines[0]!.earnedToDate, "666.6600");
+});
+
 test("vendor application prevents stored-material double pay and overbilling", () => {
   assert.throws(() => computeVendorApplication([{
     sovLineId: "line-1",
