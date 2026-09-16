@@ -167,3 +167,13 @@ export {
   type RerunInput,
   type ReverseRunInput,
 } from "./a8-shims.ts";
+export {
+  ALLOCATION_RUN_OUTBOX_KIND,
+  allocationRunOccurrenceKey,
+  ensureAllocationRunOutboxRows,
+  parseRunAllocationConfig,
+  previewInputFor,
+  processAllocationRunOutboxRow,
+  runAllocationCloseAction,
+  type RunAllocationConfig,
+} from "./scheduling.ts";

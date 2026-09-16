@@ -550,7 +550,8 @@
       "complete_task": "完成任务",
       "create_task": "创建任务",
       "generate_report": "生成报表",
-      "start_flow": "启动流程"
+      "start_flow": "启动流程",
+      "run_allocation": "执行分摊"
     },
     "reports": {
       "balance-sheet": "资产负债表",

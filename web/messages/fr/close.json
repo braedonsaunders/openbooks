@@ -558,7 +558,8 @@
       "complete_task": "Terminer la tâche",
       "create_task": "Créer une tâche",
       "generate_report": "Générer un rapport",
-      "start_flow": "Démarrer un flux"
+      "start_flow": "Démarrer un flux",
+      "run_allocation": "Exécuter la répartition"
     },
     "reports": {
       "balance-sheet": "Bilan",

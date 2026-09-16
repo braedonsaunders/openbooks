@@ -550,7 +550,8 @@
       "complete_task": "Aufgabe abschließen",
       "create_task": "Aufgabe erstellen",
       "generate_report": "Bericht generieren",
-      "start_flow": "Flow starten"
+      "start_flow": "Flow starten",
+      "run_allocation": "Umlage ausführen"
     },
     "reports": {
       "balance-sheet": "Bilanz",
