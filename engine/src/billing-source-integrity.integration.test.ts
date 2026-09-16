@@ -203,7 +203,13 @@ for (const scenario of ["vendor release", "vendor application", "customer progre
     const originalSnapshot = (await snapshot(f, id))!.lines;
     const changed = scenario.endsWith("release") ? original.map(l => ({ ...l, amount: "150", unitPrice: "150" })) : original.filter(l => !String(l.amount).startsWith("-"));
     await refuseEdit(f, id, { lines: changed });
-    await refuseEdit(f, id, { partyId: randomUUID() });
+    // A random uuid would trip the entity ownership fence first; a real but
+    // unrelated party in the same org passes ownership so the refusal under
+    // test is the source-billing-workflow one.
+    const otherParty = randomUUID();
+    await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active)
+      values(${otherParty},${f.org.orgId},${customer ? "customer" : "vendor"},'Unrelated party',true)`);
+    await refuseEdit(f, id, { partyId: otherParty });
     await refuseEdit(f, id, { documentDate: "2026-01-01" });
     await refuseEdit(f, id, { lines: original.map(l => ({ ...l, accountId: f.org.accounts.bank })) });
     await refuseEdit(f, id, { lines: original.map(l => ({ ...l, description: "Changed source description" })) });
