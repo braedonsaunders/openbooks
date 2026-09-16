@@ -9,6 +9,13 @@ import {
 } from "../api/registry-data";
 import { decideApproval, listApprovalWorklist } from "./approvals";
 import {
+  matchStatementLine,
+  matchStatementLineWithJournal,
+  signOffReconciliation,
+  startReconciliationSession,
+  unmatchStatementLineAction,
+} from "./banking";
+import {
   advanceCloseRun,
   createReopenRequest,
   decideReopenRequest,
@@ -585,6 +592,46 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({ documentId: UUID, allocations: z.array(allocationSchema).min(1).max(1000).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
     execute: async (context, input) => ({ ok: true, ...await postPayment(context, input) }),
+  }),
+  definition({
+    name: "start_reconciliation", title: "Start Reconciliation",
+    description: "Start a bank reconciliation session for an account through an explicit through-date and statement balance (one open session per account). Returns the session id; match lines with match_bank_line, then sign off.",
+    inputSchema: z.object({ accountId: UUID, throughDate: DATE, statementBalance: SIGNED_MONEY, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
+    execute: async (context, input) => ({ ok: true, ...(await startReconciliationSession(context, input)) }),
+  }),
+  definition({
+    name: "match_bank_line", title: "Match Bank Line",
+    description: "Manually pair one unmatched bank statement line with one or more posted journal lines in a reconciliation session. The journal total must equal the statement line exactly. Returns the session totals (difference must reach zero before sign-off).",
+    inputSchema: z.object({ reconciliationId: UUID, statementLineId: UUID, journalLineIds: z.array(UUID).min(1).max(50), idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
+    execute: async (context, input) => ({ ok: true, ...(await matchStatementLine(context, input)) }),
+  }),
+  definition({
+    name: "match_bank_line_with_journal", title: "Match Bank Line With Journal",
+    description: "Create a categorizing journal from one unmatched bank statement line (bank leg on the line's account, remainder to the offset account) and match it into the session — the Match Bank Data Add-journal action. Use when no posted journal line explains the bank line.",
+    inputSchema: z.object({ reconciliationId: UUID, statementLineId: UUID, offsetAccountId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
+    execute: async (context, input) => ({ ok: true, ...(await matchStatementLineWithJournal(context, input)) }),
+  }),
+  definition({
+    name: "unmatch_bank_line", title: "Unmatch Bank Line",
+    description: "Remove all of a statement line's matches within a reconciliation session, returning it to the unmatched queue. Signed-off sessions refuse.",
+    inputSchema: z.object({ reconciliationId: UUID, statementLineId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
+    execute: async (context, input) => ({ ok: true, ...(await unmatchStatementLineAction(context, input)) }),
+  }),
+  definition({
+    name: "sign_off_reconciliation", title: "Sign Off Reconciliation",
+    description: "Sign off a zero-difference reconciliation session: stamps every matched journal line reconciled and closes the session. Refuses when the difference is not exactly zero or statement evidence is missing. A signed-off session is permanent.",
+    inputSchema: z.object({ reconciliationId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
+    execute: async (context, input) => ({ ok: true, ...(await signOffReconciliation(context, input)) }),
   }),
   definition({
     name: "get_company_settings", title: "Get Company Settings",
