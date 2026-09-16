@@ -111,6 +111,9 @@ export const MCP_SKILLS: readonly McpSkill[] = [
       "3. Match deliberately, one line at a time. match_bank_line pairs one unmatched statement line with the posted journal lines that explain it (inspect candidates with get_journal_entry); the journal total must equal the statement line exactly. When no posted line explains the bank line, match_bank_line_with_journal books a categorizing journal (bank leg on the line's account, remainder to the offset account) and matches it. unmatch_bank_line returns a line to the unmatched queue.",
       "4. Sign off only at zero. sign_off_reconciliation refuses a nonzero difference or missing statement evidence — treat that refusal as the control working, resolve the break with step 3, and retry. A signed-off session is permanent; it stamps every matched journal line reconciled.",
       "5. Every step takes a caller-generated idempotencyKey: fresh per logical operation, reused only when retrying that exact operation. Each mutation returns a confirmation card and makes no change until the user clicks Apply.",
+    ].join("\n"),
+  },
+  {
     slug: "configure-the-organization",
     title: "Configure the organization: setup, settings, features",
     description:
