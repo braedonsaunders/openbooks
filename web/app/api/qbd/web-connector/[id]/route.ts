@@ -8,10 +8,17 @@ import {
   webConnectorLastError,
 } from '@openbooks/engine/src/qbd/bridge.ts'
 import { firstNode, parseXml, xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
+import { readBoundedBodyText } from '../../../../../lib/bounded-body'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+/** Largest SOAP envelope accepted. Response documents carry whole company
+ *  query results, so the cap is generous — but it is enforced on the actual
+ *  streamed bytes, not on the sender-declared content-length (absent on
+ *  chunked uploads), so an unbounded body can never be buffered. */
+export const QBD_MAX_BODY_BYTES = 256 * 1024 * 1024
 
 const NS = 'http://developer.intuit.com/'
 
@@ -42,13 +49,16 @@ export async function GET() {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const contentLength = Number(req.headers.get('content-length') ?? 0)
-  if (Number.isFinite(contentLength) && contentLength > 256 * 1024 * 1024) {
-    return new Response('QuickBooks response exceeds the 256 MiB safety limit', { status: 413 })
+  const bounded = await readBoundedBodyText(req, QBD_MAX_BODY_BYTES)
+  if (!bounded.ok) {
+    if (bounded.reason === 'too_large') {
+      return new Response('QuickBooks response exceeds the 256 MiB safety limit', { status: 413 })
+    }
+    return fault('Malformed SOAP XML')
   }
   let parsed: Record<string, unknown>
   try {
-    parsed = parseXml(await req.text())
+    parsed = parseXml(bounded.text)
   } catch {
     return fault('Malformed SOAP XML')
   }

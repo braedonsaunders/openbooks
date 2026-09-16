@@ -211,6 +211,18 @@ test("a valid webhook containing only unhandled events remains authenticated", (
   assert.deepEqual(verified.events, []);
 });
 
+test("the route refuses an over-cap delivery with 413 before verification", async () => {
+  const response = await POST(
+    new Request("http://localhost/api/payments/webhooks/stripe", {
+      method: "POST",
+      body: " ".repeat(12 * 1024 * 1024),
+    }),
+    { params: Promise.resolve({ provider: "stripe" }) },
+  );
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /size limit/);
+});
+
 test("the route returns 500 after isolating a poison event and committing its later sibling", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
