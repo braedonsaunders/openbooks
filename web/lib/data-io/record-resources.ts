@@ -192,7 +192,9 @@ async function writeRecords(
     return { created: 0, updated: 0, failed: rows.length, errors: [{ row: 0, message: 'record type not found' }] }
   }
   const headerFieldList = sections.filter((s) => !s.repeating).flatMap((s) => s.fields)
-  const repeatingIds = new Set(sections.filter((s) => s.repeating).map((s) => s.id))
+  const repeatingFields = new Map(
+    sections.filter((s) => s.repeating).map((s) => [s.id, s.fields] as const),
+  )
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
@@ -223,14 +225,42 @@ async function writeRecords(
         continue
       }
       // Repeating sections come through as JSON (string or array) for full-fidelity JSON import.
-      for (const sid of repeatingIds) {
+      for (const [sid, rowFields] of repeatingFields) {
         const raw = src[sid]
         if (raw === undefined || raw === null || raw === '') continue
+        let parsed: unknown
         try {
-          data[sid] = typeof raw === 'string' ? JSON.parse(raw) : raw
+          parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
         } catch {
           err = `${sid}: invalid sublist JSON`
+          continue
         }
+        // Row-level pickers resolve through the same org-scoped resolver as
+        // header fields: row JSON carries raw stored values (uuids), and the
+        // shape check below only verifies UUID syntax, never ownership — an
+        // unresolved row reference must fail the row, never persist blind.
+        if (Array.isArray(parsed)) {
+          for (const row of parsed) {
+            if (!row || typeof row !== 'object' || Array.isArray(row)) continue
+            for (const f of rowFields) {
+              if (f.type !== 'gl_account' && f.type !== 'party') continue
+              const cell = (row as FieldValueMap)[f.id]
+              if (cell === undefined || cell === null || cell === '') continue
+              const target: ResourceRefTarget =
+                f.type === 'gl_account'
+                  ? { resource: 'accounts', by: 'number' }
+                  : { resource: 'parties', by: 'short_code' }
+              const id = await resolver.resolveId(target, cell)
+              if (!id) {
+                err = `${f.label}: "${String(cell)}" not found`
+                break
+              }
+              ;(row as FieldValueMap)[f.id] = id
+            }
+            if (err) break
+          }
+        }
+        data[sid] = parsed as FieldValueMap[string]
       }
       if (err) {
         outcome.failed++
