@@ -8,6 +8,7 @@ import type { FieldType, FormField, FormSection } from '@openbooks/forms-core'
 import type { FieldValueMap } from '@openbooks/forms-core'
 import { loadRecordTypeByKey, buildSearchText } from '../records'
 import { lintRecordFields, recordNumberPrefix, stripUnknownData, validateRecordData, withComputedFormulas } from '../record-schema'
+import { auditSetupChange } from '../setup/audit'
 import {
   exportCell,
   MAX_EXPORT_ROWS,
@@ -279,15 +280,16 @@ async function writeRecords(
 
       // Match by record_number when supplied.
       const recNo = String(src.record_number ?? '').trim()
-      let existingId: string | null = null
+      let before: Record<string, unknown> | null = null
       if (recNo) {
         const found = (await db.execute(sql`
-          select id from custom_records
+          select * from custom_records
            where org_id = ${orgId} and type_key = ${typeKey} and record_number = ${recNo} limit 1`)) as {
-          rows: { id: string }[]
+          rows: Record<string, unknown>[]
         }
-        existingId = found.rows[0]?.id ?? null
+        before = (found.rows[0] ?? null) as Record<string, unknown> | null
       }
+      const existingId = before !== null ? String(before.id) : null
       if (existingId && mode === 'insert') {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: `already exists (record_number=${recNo})` })
@@ -300,22 +302,46 @@ async function writeRecords(
           // Bulk rows carry no revision token, so imports cannot join the
           // compare-and-swap; they still advance the revision monotonically,
           // so any concurrent drawer or API tab fails closed (409) on its
-          // next save instead of silently winning or losing.
-          await db.execute(sql`
+          // next save instead of silently winning or losing. The overwrite is
+          // evidenced per row (same source:'import' shape as the setup import
+          // resource) alongside the import_jobs run row.
+          const written = (await db.execute(sql`
             update custom_records
                set data = ${JSON.stringify(computed)}::jsonb, search_text = ${searchText},
                    status = 'active',
                    updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')
-             where id = ${existingId} and org_id = ${orgId}`)
+             where id = ${existingId} and org_id = ${orgId}
+             returning *`)) as { rows: Record<string, unknown>[] }
+          const after = written.rows[0]
+          if (!after) throw new Error('imported record disappeared during update')
+          await auditSetupChange({
+            orgId,
+            table: 'custom_records',
+            rowId: existingId,
+            action: 'update',
+            changes: { source: 'import', before, after },
+            actorId: ctx.actorId,
+          })
         }
         outcome.updated++
       } else {
         if (!ctx.dryRun) {
           const number = recNo || (await allocateRecordNumber(orgId, typeKey))
-          await db.execute(sql`
+          const inserted = (await db.execute(sql`
             insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, status, created_by)
             values (${orgId}, ${type.id}, ${typeKey}, ${number}, ${JSON.stringify(computed)}::jsonb,
-                    ${searchText}, 'active', ${ctx.actorId})`)
+                    ${searchText}, 'active', ${ctx.actorId})
+            returning *`)) as { rows: Record<string, unknown>[] }
+          const after = inserted.rows[0]
+          if (!after) throw new Error('imported record did not return a row')
+          await auditSetupChange({
+            orgId,
+            table: 'custom_records',
+            rowId: String(after.id),
+            action: 'insert',
+            changes: { source: 'import', before: null, after },
+            actorId: ctx.actorId,
+          })
         }
         outcome.created++
       }
