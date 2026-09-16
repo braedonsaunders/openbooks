@@ -131,9 +131,9 @@ const listPeriodLocks: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({
     periodId: uuidInput.optional(),
-    state: z.enum(["open", "soft_closed", "closed"]).optional(),
-    module: z.enum(["ar", "ap", "banking", "assets", "tax", "gl"]).optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    state: z.enum(["open", "soft_closed", "closed"]).optional().describe("Only locks in this state"),
+    module: z.enum(["ar", "ap", "banking", "assets", "tax", "gl"]).optional().describe("Only locks for this module"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum locks to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const denied = closeScopeDenied(authz);
@@ -201,9 +201,9 @@ const listPeriodReopenRequests: AssistantToolDef = {
   // the permission-parity audit).
   gate: { mode: "anyOf", perms: ["close.reopen", "periods.manage"] },
   inputSchema: z.object({
-    status: z.enum(["requested", "approved", "rejected", "expired", "reclosed"]).optional(),
+    status: z.enum(["requested", "approved", "rejected", "expired", "reclosed"]).optional().describe("Only requests in this status"),
     periodId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(100).optional().describe("Maximum requests to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const denied = closeScopeDenied(authz);
