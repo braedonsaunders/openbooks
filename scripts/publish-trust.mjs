@@ -25,15 +25,25 @@
  *     --checkpoint engine/harness-checkpoints \
  *     [--out docs/trust] [--sha <git sha>]
  *
- * Missing inputs are tolerated: a run that could only produce one part still
- * publishes that part and records the others as unavailable. What is NOT
- * tolerated is publishing a stale artifact as if it were current — an absent
- * input becomes an explicit "unavailable", never a carried-forward value.
+ * All three inputs are required and must name the published commit: a run
+ * that could only produce one part must not publish, because conditional
+ * writes preserve the missing parts' stale files under a new label. The
+ * bundle is built in a staging directory and swapped in atomically, so a
+ * previous bundle is either fully replaced or fully kept — never mixed.
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 function flag(name, fallback = null) {
   const index = process.argv.indexOf(`--${name}`);
@@ -168,11 +178,32 @@ if (!conformance && !controls && !checkpoint) {
   process.exit(1);
 }
 
+// A partial bundle is worse than none: conditional writes preserve the
+// missing components' stale files while history claims the new SHA. Every
+// component must be present and same-SHA — the publisher fails closed.
+const missing = [
+  !conformance && "conformance",
+  !controls && "controls",
+  !checkpoint && "checkpoint",
+].filter(Boolean);
+if (missing.length > 0) {
+  console.error(
+    `refusing to publish a partial trust bundle (missing: ${missing.join(", ")}). ` +
+      "Every component must be present and same-SHA before the swap.",
+  );
+  process.exit(1);
+}
+
 // Mixed-source or tampered evidence must never reach the bundle, and a
 // rejection must not create or touch the output directory either.
 validateProvenance({ conformance, controls, checkpoint, sha });
 
-mkdirSync(outDir, { recursive: true });
+// Build the whole bundle in a staging directory next to the destination
+// (same filesystem, so the final rename is atomic). Only a complete,
+// validated bundle is ever swapped in — a crash mid-write leaves the
+// previous bundle untouched, and stale files cannot survive the swap.
+const outAbs = resolve(outDir);
+const stagedDir = mkdtempSync(join(dirname(outAbs), ".trust-stage-"));
 
 // -- badges -----------------------------------------------------------------
 // Gaps are reported in the badge message rather than folded into the colour.
@@ -203,23 +234,26 @@ function invariantBadge() {
   };
 }
 
-writeFileSync(join(outDir, "badge-conformance.json"), `${JSON.stringify(conformanceBadge(), null, 2)}\n`);
-writeFileSync(join(outDir, "badge-invariants.json"), `${JSON.stringify(invariantBadge(), null, 2)}\n`);
+writeFileSync(join(stagedDir, "badge-conformance.json"), `${JSON.stringify(conformanceBadge(), null, 2)}\n`);
+writeFileSync(join(stagedDir, "badge-invariants.json"), `${JSON.stringify(invariantBadge(), null, 2)}\n`);
 
 // -- published artifacts ----------------------------------------------------
 // The controls set is published with its distinct kind intact: nothing here
-// re-labels a control row as a standards citation.
-if (matrixMarkdown) writeFileSync(join(outDir, "conformance-matrix.md"), matrixMarkdown);
-if (conformance) writeFileSync(join(outDir, "conformance.json"), `${JSON.stringify(conformance, null, 2)}\n`);
-if (controlsMarkdown) writeFileSync(join(outDir, "controls-matrix.md"), controlsMarkdown);
-if (controls) writeFileSync(join(outDir, "controls.json"), `${JSON.stringify(controls, null, 2)}\n`);
-if (checkpoint) writeFileSync(join(outDir, "checkpoint.json"), `${JSON.stringify(checkpoint, null, 2)}\n`);
+// re-labels a control row as a standards citation. All three components are
+// guaranteed present by the gate above; only the companion matrices are
+// optional files.
+if (matrixMarkdown) writeFileSync(join(stagedDir, "conformance-matrix.md"), matrixMarkdown);
+writeFileSync(join(stagedDir, "conformance.json"), `${JSON.stringify(conformance, null, 2)}\n`);
+if (controlsMarkdown) writeFileSync(join(stagedDir, "controls-matrix.md"), controlsMarkdown);
+writeFileSync(join(stagedDir, "controls.json"), `${JSON.stringify(controls, null, 2)}\n`);
+writeFileSync(join(stagedDir, "checkpoint.json"), `${JSON.stringify(checkpoint, null, 2)}\n`);
 
 // -- append-only history ----------------------------------------------------
 // One record per published commit, for charting the trend. Append-only by
 // construction: an existing record for the same sha is replaced in place rather
-// than duplicated, and nothing else is ever rewritten.
-const historyPath = join(outDir, "history.json");
+// than duplicated, and nothing else is ever rewritten. The previous bundle's
+// history carries forward; the swap below keeps the trend intact.
+const historyPath = join(outAbs, "history.json");
 const history = readJson(historyPath) ?? [];
 
 const record = {
@@ -227,64 +261,74 @@ const record = {
   gitSha: sha,
   provenance: {
     runIds: {
-      conformance: conformance?.runId ?? null,
-      controls: controls?.runId ?? null,
-      checkpoint: checkpoint?.runId ?? null,
+      conformance: conformance.runId ?? null,
+      controls: controls.runId ?? null,
+      checkpoint: checkpoint.runId ?? null,
     },
     digests: {
-      conformance: conformance ? fileDigest(join(conformanceDir, "conformance.json")) : null,
-      controls: controls ? fileDigest(join(controlsDir, "controls.json")) : null,
-      checkpoint: checkpoint ? fileDigest(latestCheckpointFile(checkpointDir)) : null,
+      conformance: fileDigest(join(conformanceDir, "conformance.json")),
+      controls: fileDigest(join(controlsDir, "controls.json")),
+      checkpoint: fileDigest(latestCheckpointFile(checkpointDir)),
     },
   },
-  conformance: conformance
-    ? {
-        totals: conformance.totals,
-        pass: conformance.pass,
-        gaps: conformance.cases.filter((c) => c.status === "gap").map((c) => c.id),
-        failures: conformance.cases.filter((c) => c.status === "fail").map((c) => c.id),
-      }
-    : null,
-  controls: controls
-    ? {
-        kind: controls.kind ?? "internal-controls",
-        totals: controls.totals,
-        pass: controls.pass,
-        gaps: controls.cases.filter((c) => c.status === "gap").map((c) => c.id),
-        failures: controls.cases.filter((c) => c.status === "fail").map((c) => c.id),
-      }
-    : null,
-  invariants: checkpoint
-    ? {
-        pass: checkpoint.pass,
-        orgName: checkpoint.orgName,
-        cutoff: checkpoint.cutoff,
-        counts: checkpoint.counts,
-        trialBalance: checkpoint.trialBalance,
-        checks: (checkpoint.checks ?? []).map((check) => ({ name: check.name, ok: check.ok })),
-        timings: checkpoint.timings ?? [],
-      }
-    : null,
+  conformance: {
+    totals: conformance.totals,
+    pass: conformance.pass,
+    gaps: conformance.cases.filter((c) => c.status === "gap").map((c) => c.id),
+    failures: conformance.cases.filter((c) => c.status === "fail").map((c) => c.id),
+  },
+  controls: {
+    kind: controls.kind ?? "internal-controls",
+    totals: controls.totals,
+    pass: controls.pass,
+    gaps: controls.cases.filter((c) => c.status === "gap").map((c) => c.id),
+    failures: controls.cases.filter((c) => c.status === "fail").map((c) => c.id),
+  },
+  invariants: {
+    pass: checkpoint.pass,
+    orgName: checkpoint.orgName,
+    cutoff: checkpoint.cutoff,
+    counts: checkpoint.counts,
+    trialBalance: checkpoint.trialBalance,
+    checks: (checkpoint.checks ?? []).map((check) => ({ name: check.name, ok: check.ok })),
+    timings: checkpoint.timings ?? [],
+  },
 };
 
 const existing = history.findIndex((entry) => entry.gitSha === sha);
 if (existing >= 0) history[existing] = record;
 else history.push(record);
 
-writeFileSync(historyPath, `${JSON.stringify(history, null, 2)}\n`);
+writeFileSync(join(stagedDir, "history.json"), `${JSON.stringify(history, null, 2)}\n`);
+
+// -- atomic swap --------------------------------------------------------------
+// The previous bundle (if any) moves aside, the staged bundle takes its
+// place, and only then is the backup removed. Readers of docs/trust either
+// see the complete previous bundle or the complete new one — never a mix —
+// and no stale file can survive, because the new directory contains exactly
+// this run's bundle.
+if (existsSync(outAbs) && !statSync(outAbs).isDirectory()) {
+  console.error(`refusing to publish over non-directory ${outAbs}`);
+  process.exit(1);
+}
+const backupDir = `${outAbs}.prev-${process.pid}`;
+rmSync(backupDir, { recursive: true, force: true });
+if (existsSync(outAbs)) renameSync(outAbs, backupDir);
+try {
+  renameSync(stagedDir, outAbs);
+} catch (error) {
+  if (existsSync(backupDir)) renameSync(backupDir, outAbs);
+  rmSync(stagedDir, { recursive: true, force: true });
+  throw error;
+}
+rmSync(backupDir, { recursive: true, force: true });
 
 // -- summary ----------------------------------------------------------------
 const lines = [
   `trust corpus published to ${outDir}`,
-  conformance
-    ? `  conformance: ${conformance.totals.pass} passing, ${conformance.totals.fail} failing, ${conformance.totals.gap} gaps`
-    : "  conformance: unavailable",
-  controls
-    ? `  controls:    ${controls.totals.pass} passing, ${controls.totals.fail} failing, ${controls.totals.gap} gaps`
-    : "  controls:    unavailable",
-  checkpoint
-    ? `  invariants:  ${(checkpoint.checks ?? []).filter((c) => c.ok).length}/${(checkpoint.checks ?? []).length} passing on ${checkpoint.orgName}`
-    : "  invariants:  unavailable",
+  `  conformance: ${conformance.totals.pass} passing, ${conformance.totals.fail} failing, ${conformance.totals.gap} gaps`,
+  `  controls:    ${controls.totals.pass} passing, ${controls.totals.fail} failing, ${controls.totals.gap} gaps`,
+  `  invariants:  ${(checkpoint.checks ?? []).filter((c) => c.ok).length}/${(checkpoint.checks ?? []).length} passing on ${checkpoint.orgName}`,
   `  history:     ${history.length} published commits`,
 ];
 console.log(lines.join("\n"));

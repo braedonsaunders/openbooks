@@ -123,7 +123,11 @@ test('publication writes evidence and history when inputs are present', () => {
   }
 })
 
-test('controls-only publication records the other inputs as unavailable', () => {
+test('controls-only input is refused instead of published as unavailable', () => {
+  // Reversal of the old partial-tolerance contract (owner-accepted finding
+  // 7.5): publishing one part while recording the others as unavailable is
+  // exactly how a stale component survives under a new SHA. The publisher
+  // now requires every component and fails closed.
   const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
   try {
     const conformance = join(tempDirectory, 'conformance')
@@ -147,13 +151,9 @@ test('controls-only publication records the other inputs as unavailable', () => 
 
     const result = runPublisher({ conformance, controls, checkpoint, out })
 
-    assert.equal(result.status, 0, result.stderr)
-    assert.equal(existsSync(join(out, 'controls.json')), true)
-    assert.equal(existsSync(join(out, 'conformance.json')), false)
-    const history = JSON.parse(readFileSync(join(out, 'history.json'), 'utf8'))
-    assert.equal(history[0].controls.kind, 'internal-controls')
-    assert.equal(history[0].conformance, null)
-    assert.equal(history[0].invariants, null)
+    assert.equal(result.status, 1, result.stderr)
+    assert.match(result.stderr, /partial|every component|all three/i)
+    assert.equal(existsSync(out), false, 'a refused publication must leave no output directory')
   } finally {
     rmSync(tempDirectory, { recursive: true, force: true })
   }
@@ -163,7 +163,7 @@ function digestOf(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
 }
 
-function writeEvidence(dir, { sha, tamper = null, dropSha = false, dropDigest = false }) {
+function writeEvidence(dir, { sha, tamper = null, dropSha = false, dropDigest = false, dropCheckpoint = false }) {
   const conformanceCases = [{ id: 'case-1', status: 'pass' }]
   const controlsCases = [{ id: 'alloc-1', status: 'pass', control: 'A12' }]
   if (tamper === 'cases') conformanceCases.push({ id: 'injected', status: 'pass' })
@@ -184,19 +184,21 @@ function writeEvidence(dir, { sha, tamper = null, dropSha = false, dropDigest = 
   }
   mkdirSync(join(dir, 'conformance'), { recursive: true })
   mkdirSync(join(dir, 'controls'), { recursive: true })
-  mkdirSync(join(dir, 'checkpoint'), { recursive: true })
+  if (!dropCheckpoint) mkdirSync(join(dir, 'checkpoint'), { recursive: true })
   writeFileSync(join(dir, 'conformance', 'conformance.json'), JSON.stringify(conformance))
   writeFileSync(join(dir, 'controls', 'controls.json'), JSON.stringify(controls))
-  writeFileSync(
-    join(dir, 'checkpoint', 'checkpoint.json'),
-    JSON.stringify({
-      orgName: 'Acme',
-      counts: { postedEntries: 1 },
-      checks: [{ name: 'balanced', ok: true }],
-      pass: true,
-      gitSha: sha,
-    }),
-  )
+  if (!dropCheckpoint) {
+    writeFileSync(
+      join(dir, 'checkpoint', 'checkpoint.json'),
+      JSON.stringify({
+        orgName: 'Acme',
+        counts: { postedEntries: 1 },
+        checks: [{ name: 'balanced', ok: true }],
+        pass: true,
+        gitSha: sha,
+      }),
+    )
+  }
 }
 
 test('mixed-source evidence is rejected before anything is published', () => {
@@ -243,6 +245,68 @@ test('evidence without source provenance is rejected', () => {
     assert.equal(result.status, 1, result.stderr)
     assert.match(result.stderr, /provenance|gitSha|source/i)
     assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+  } finally {
+    rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+test('partial publication is refused and leaves the previous bundle intact', () => {
+  // A run that could only produce one part must not publish that part over
+  // the previous bundle: conditional writes leave the other components
+  // stale while history claims the new SHA. Fail closed instead.
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  try {
+    const out = join(tempDirectory, 'trust')
+    mkdirSync(out, { recursive: true })
+    const staleConformance = '{"stale":true}\n'
+    const staleHistory = '[{"gitSha":"previous"}]\n'
+    writeFileSync(join(out, 'conformance.json'), staleConformance)
+    writeFileSync(join(out, 'history.json'), staleHistory)
+    writeEvidence(tempDirectory, { sha: 'commit-a', dropCheckpoint: true })
+
+    const result = runPublisher({
+      conformance: join(tempDirectory, 'conformance'),
+      controls: join(tempDirectory, 'controls'),
+      checkpoint: join(tempDirectory, 'checkpoint'),
+      out,
+      sha: 'commit-a',
+    })
+
+    assert.equal(result.status, 1, result.stderr)
+    assert.match(result.stderr, /partial|every component|all three/i)
+    assert.equal(readFileSync(join(out, 'conformance.json'), 'utf8'), staleConformance)
+    assert.equal(readFileSync(join(out, 'history.json'), 'utf8'), staleHistory)
+  } finally {
+    rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+test('a full publication swaps atomically and drops stale components', () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  try {
+    const out = join(tempDirectory, 'trust')
+    mkdirSync(out, { recursive: true })
+    writeFileSync(join(out, 'conformance.json'), '{"stale":true}\n')
+    writeFileSync(join(out, 'junk-from-a-manual-run.txt'), 'junk\n')
+    writeFileSync(join(out, 'history.json'), '[{"gitSha":"previous"}]\n')
+    writeEvidence(tempDirectory, { sha: 'commit-a' })
+
+    const result = runPublisher({
+      conformance: join(tempDirectory, 'conformance'),
+      controls: join(tempDirectory, 'controls'),
+      checkpoint: join(tempDirectory, 'checkpoint'),
+      out,
+      sha: 'commit-a',
+    })
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(existsSync(join(out, 'junk-from-a-manual-run.txt')), false, 'stale files must not survive the swap')
+    const published = JSON.parse(readFileSync(join(out, 'conformance.json'), 'utf8'))
+    assert.equal(published.gitSha, 'commit-a', 'the bundle must be the new evidence, not the stale file')
+    const history = JSON.parse(readFileSync(join(out, 'history.json'), 'utf8'))
+    assert.equal(history.length, 2, 'the append-only trend must survive the swap')
+    assert.equal(history[0].gitSha, 'previous')
+    assert.equal(history[1].gitSha, 'commit-a')
   } finally {
     rmSync(tempDirectory, { recursive: true, force: true })
   }
