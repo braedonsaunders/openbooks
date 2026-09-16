@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
-import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { overheadPublishBlockers } from '@openbooks/engine/src/overhead-rates.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { trueCostData } from './analytics/true-cost-data'
@@ -24,9 +24,22 @@ export async function computeLiveOverheadRates(orgId: string): Promise<Published
   const [y, m, d] = to.split('-').map(Number)
   const from = `${(y ?? 0) - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   const tc = await trueCostData(orgId, { from, to, label: 'TTM' }, null)
+  // The preview derives these through the shared exact contract; the gate is
+  // re-checked here (same engine module, same categories) so publication
+  // refuses unsupported method combinations explicitly instead of persisting
+  // a silently unit-wrong card.
+  const blockers = overheadPublishBlockers(
+    tc.categories.map((c) => ({ id: c.id, name: c.name, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite })),
+  )
+  if (blockers.length > 0) {
+    throw new Error(`overhead auto-publish blocked: ${blockers.map((b) => b.reason).join('; ')}`)
+  }
   return tc.departments
     .filter((d) => d.composite > 0)
-    .map((d) => ({ departmentId: d.id, ratePerHour: formatMoney(String(d.composite), 2) }))
+    .map((d) => {
+      if (!d.compositeExact) throw new Error(`overhead auto-publish has no exact rate for department ${d.id}`)
+      return { departmentId: d.id, ratePerHour: d.compositeExact }
+    })
 }
 
 export async function publishOverheadRates(
