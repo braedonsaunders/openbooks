@@ -63,6 +63,8 @@
       "projectFinancials": "{projects} proyectos de origen ({projectChanges} cambiados) · {source} registros de tiempo de origen · {exact} exactos · {changed} estados de facturación conciliados",
       "docs": "+{new} docs · {amended} modificados · {unchanged} sin cambios",
       "applied": "{count} aplicados",
+      "partyMerges": "{count} entidades fusionadas",
+      "partyHolds": "{count} entidades retenidas para revisión",
       "tb": "BC {matches}/{accounts}",
       "tbOff": "({count} con diferencia)",
       "openItems": "partidas abiertas {matches}/{checked}",

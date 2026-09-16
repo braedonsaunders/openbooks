@@ -63,6 +63,8 @@
       "projectFinancials": "{projects} Quellprojekte ({projectChanges} geändert) · {source} Quellzeiteinträge · {exact} exakt · {changed} Abrechnungsstatus abgeglichen",
       "docs": "+{new} Dok. · {amended} geändert · {unchanged} unverändert",
       "applied": "{count} angewendet",
+      "partyMerges": "{count} Parteien zusammengeführt",
+      "partyHolds": "{count} Parteien zur Prüfung zurückgehalten",
       "tb": "SB {matches}/{accounts}",
       "tbOff": "({count} abweichend)",
       "openItems": "offene Posten {matches}/{checked}",

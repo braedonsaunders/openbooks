@@ -20,6 +20,7 @@ import {
   syncSourceAccountingPeriods,
   syncSourceTransactionReferenceEntities,
   type EntityLoadStats,
+  type PartyMirrorOutcome,
 } from "./migrate.ts";
 import {
   reconcileApplications,
@@ -82,6 +83,12 @@ export interface SyncResult {
   deletedAtSource: string[];
   /** Source deletions mirrored automatically this run (guarded delete). */
   autoResolvedDeletions: string[];
+  /** Source-asserted party merges applied this run (absorbed → survivor refs).
+   * Optional: runs persisted before this contract lack the key. */
+  partyMerges?: { absorbedRef: string; survivorRef: string }[];
+  /** Source parties that vanished while still referenced, held for review.
+   * Optional: runs persisted before this contract lack the key. */
+  partyHolds?: string[];
   applications: ApplyStats | null;
   trueUp: TrueUpStats | null;
   tb: {
@@ -1380,6 +1387,7 @@ export async function runSync(
       true,
     );
     let entityStats: EntityLoadStats | undefined;
+    const partyOutcome: PartyMirrorOutcome = { merges: [], holds: [] };
     const loadEntitiesFirst = opts.loadEntitiesFirst ?? true;
     if (needsStandalonePeriodRefresh(targetedRefs, loadEntitiesFirst)) {
       await setProgress(
@@ -1442,6 +1450,8 @@ export async function runSync(
             : null,
           sourceName: source.name,
         },
+        undefined,
+        partyOutcome,
       );
     }
 
@@ -2293,6 +2303,8 @@ export async function runSync(
       skipped: skipped.slice(0, 200),
       deletedAtSource: [...deletedAtSource].sort(),
       autoResolvedDeletions: autoResolvedDeletions.sort(),
+      partyMerges: partyOutcome.merges,
+      partyHolds: partyOutcome.holds,
       applications,
       trueUp,
       ...financialVerification,
