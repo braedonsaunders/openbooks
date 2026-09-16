@@ -4,7 +4,7 @@
   "description": "Supervisa continuamente la preparación para el cierre y presenta excepciones contables y financieras respaldadas por evidencia.",
   "search": "Buscar hallazgos…",
   "tabs": { "ariaLabel": "Secciones del cierre continuo", "findings": "Hallazgos", "reports": "Informes" },
-  "agents": { "accounting": "Contabilidad", "finance": "Finanzas", "forensics": "Forense", "tax": "Fiscal", "payroll": "Nómina" },
+  "agents": { "accounting": "Contabilidad", "finance": "Finanzas", "forensics": "Forense", "collections": "Cobros", "payables": "Cuentas por pagar", "reconciliation": "Conciliación bancaria", "hygiene": "Higiene de datos", "tax": "Fiscal", "payroll": "Nómina" },
   "metrics": { "active": "Activos", "critical": "Críticos", "accounting": "Hallazgos contables", "finance": "Hallazgos financieros" },
   "filters": { "agent": "Agente", "severity": "Gravedad" },
   "severity": { "info": "Información", "warning": "Advertencia", "critical": "Crítico" },

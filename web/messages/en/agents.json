@@ -1,0 +1,35 @@
+{
+  "metaTitle": "Agents",
+  "title": "Agents",
+  "description": "Every background-agent finding in one ranked inbox — triage, apply proposals, and start the day informed.",
+  "configure": "Configure agents",
+  "search": "Search findings…",
+  "facets": {
+    "pack": "Pack",
+    "severity": "Severity",
+    "status": "Status",
+    "subsidiary": "Subsidiary",
+    "proposal": "Proposal",
+    "all": "All",
+    "withProposal": "With proposal",
+    "unresolved": "No subsidiary link"
+  },
+  "subsidiaryHelp": "Subsidiary resolves through account-linked findings; every other finding buckets as unresolved.",
+  "lastVisit": "New since {date}",
+  "markSeen": "Mark seen",
+  "triage": {
+    "hint": "j/k move · Enter opens · x selects · a applies · d dismisses · s parks in review",
+    "selected": "{count, plural, one {# selected} other {# selected}}",
+    "review": "Start review",
+    "resolve": "Resolve",
+    "clear": "Clear"
+  },
+  "empty": {
+    "title": "Inbox zero",
+    "description": "No findings match these filters.",
+    "action": "Clear filters"
+  },
+  "proposal": {
+    "badge": "Proposal"
+  }
+}

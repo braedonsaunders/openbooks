@@ -2,7 +2,7 @@
   "modules": {
     "dashboard": "Panel",
     "assistant": "Asistente de IA",
-    "continuous-close": "Monitor de cierre",
+    "continuous-close": "Agentes",
     "approvals": "Aprobaciones",
     "insights": "Paneles",
     "purchase-orders": "Órdenes de compra",

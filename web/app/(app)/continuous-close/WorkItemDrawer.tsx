@@ -9,6 +9,8 @@ import { useState } from 'react'
 import { Check, ExternalLink, RotateCcw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
+import { ApplicationCommandCard } from '@/components/assistant/application-command-card'
+import type { FindingProposalCommand } from '@/lib/agents/proposals'
 type Evidence = {
   id: string
   kind: string
@@ -44,13 +46,17 @@ export function WorkItemDrawer({
   item,
   closeHref,
   canWrite,
+  proposal,
 }: {
   item: ContinuousCloseWorkItem
   closeHref: string
   canWrite: boolean
+  /** Viewer-signed governed command; absent when the finding carries no resolvable proposal. */
+  proposal?: FindingProposalCommand | null
 }) {
   const { money } = useMoney()
   const t = useTranslations('continuousClose')
+  const ta = useTranslations('agents')
   const locale = useLocale()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -146,6 +152,13 @@ export function WorkItemDrawer({
               </div>
             ) : null}
             <p className="text-[11px] text-violet-700/80 dark:text-violet-300/80">{t('analysis.evidenceNotice')}</p>
+          </section>
+        ) : null}
+
+        {canWrite && proposal ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">{ta('proposal.badge')}</h3>
+            <ApplicationCommandCard proposal={proposal} />
           </section>
         ) : null}
 

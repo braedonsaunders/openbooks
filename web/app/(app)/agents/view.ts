@@ -1,0 +1,414 @@
+import 'server-only'
+
+import { getMoneyFormatter } from '@/lib/money-server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  type ContinuousCloseAgentKey,
+} from '@openbooks/engine/src/continuous-close-config.ts'
+import {
+  badge,
+  column,
+  field,
+  grid,
+  money,
+  page,
+  pageHeader,
+  pagination,
+  ref,
+  table,
+  text,
+  widget,
+  widgetBlock,
+  widgetCell,
+  type PageSpec,
+} from '@braedonsaunders/appkit-viewspec'
+import { can, requirePermission } from '../../../lib/authz'
+import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
+import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
+import { loadAgentInbox } from '../../../lib/agents/inbox'
+import { loadWorkItemDetail } from '../../../lib/agents/work-item'
+import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
+import { findingSummaryLine } from '../../../lib/agents/summary'
+import type { ContinuousCloseWorkItem } from '../continuous-close/WorkItemDrawer'
+
+/**
+ * The Agent Workbench home, split into a loader and a spec.
+ *
+ * One ranked inbox across every readable agent pack (the loadAgentInbox
+ * resolver the JSON feed also serves, so the page and the triage client can
+ * never disagree), facet filters in the existing filter-chips vocabulary, the
+ * shared work-item drawer, and a small triage island for keyboard triage,
+ * bulk actions, and the changed-since-last-visit banner. Ranks by
+ * materiality × confidence × age — the order IS the triage.
+ *
+ * /continuous-close redirects here (except its reports tab, which stays until
+ * the briefing moves it); ?item= deep links keep working because the drawer
+ * opens from the same param.
+ */
+
+const SEVERITY_VARIANT = { info: 'secondary', warning: 'warning', critical: 'destructive' } as const
+const STATUS_VARIANT = {
+  open: 'warning',
+  in_review: 'secondary',
+  resolved: 'success',
+  dismissed: 'outline',
+} as const
+
+export interface AgentsInboxRow {
+  id: string
+  title: string
+  href: string
+  summary: string
+  packLabel: string
+  severityLabel: string
+  severityVariant: (typeof SEVERITY_VARIANT)[keyof typeof SEVERITY_VARIANT]
+  materiality: string
+  statusLabel: string
+  statusVariant: (typeof STATUS_VARIANT)[keyof typeof STATUS_VARIANT]
+  proposalBadge: string
+  detected: string
+}
+
+export interface AgentsTriageRow {
+  id: string
+  href: string
+  hasProposal: boolean
+  status: string
+}
+
+export interface AgentsData {
+  title: string
+  description: string
+  configureLabel: string
+  configureHref: string
+  canManage: boolean
+  locale: string
+  metrics: { key: string; label: string; value: number; tone?: string }[]
+  searchPlaceholder: string
+  currentParams: Record<string, string | string[] | undefined>
+  packLabel: string
+  statusLabel: string
+  severityLabel: string
+  subsidiaryLabel: string
+  subsidiaryHelp: string
+  proposalLabel: string
+  packOptions: { value: string; label: string; count: number }[]
+  statusOptions: { value: string; label: string; count: number }[]
+  severityOptions: { value: string; label: string; count: number }[]
+  subsidiaryOptions: { value: string; label: string; count: number }[]
+  proposalOptions: { value: string; label: string; count: number }[]
+  columnFinding: string
+  columnPack: string
+  columnSeverity: string
+  columnMateriality: string
+  columnStatus: string
+  columnDetected: string
+  columnProposal: string
+  rows: AgentsInboxRow[]
+  total: number
+  currentPage: number
+  perPage: number
+  findingsEmpty: boolean
+  findingsPresent: boolean
+  emptyTitle: string
+  emptyDescription: string
+  emptyAction: string
+  triage: { rows: AgentsTriageRow[]; canWrite: boolean; orgId: string }
+  itemDrawerOpen: boolean
+  itemDrawer: {
+    item: ContinuousCloseWorkItem
+    closeHref: string
+    canWrite: boolean
+    proposal: FindingProposalCommand | null
+  } | null
+}
+
+function singleParam(sp: Record<string, string | string[] | undefined>, key: string): string | undefined {
+  const raw = pickString(sp[key])
+  return raw && raw.length > 0 ? raw : undefined
+}
+
+export async function loadAgents(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<AgentsData> {
+  const { money: formatMoney } = await getMoneyFormatter()
+  const authz = await requirePermission('assistant.use')
+  const readable = readableContinuousCloseAgents(authz)
+  const t = await getTranslations('agents')
+  const tc = await getTranslations('continuousClose')
+  const tcc = await getTranslations('common')
+  const locale = await getLocale()
+  const params = parseListParams(sp, {
+    sort: 'detected',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: ['detected'] as const,
+  })
+
+  const requestedPacks = singleParam(sp, 'packs')
+    ?.split(',')
+    .map((s) => s.trim())
+    .filter((s): s is ContinuousCloseAgentKey =>
+      (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(s),
+    )
+  const severity = singleParam(sp, 'severity')
+  const status = singleParam(sp, 'status')
+  const subsidiary = singleParam(sp, 'subsidiary')
+  const proposalsOnly = singleParam(sp, 'proposals') === 'true'
+
+  const inbox = await loadAgentInbox(authz, {
+    ...(requestedPacks && requestedPacks.length > 0 ? { packs: requestedPacks } : {}),
+    ...(severity === 'info' || severity === 'warning' || severity === 'critical'
+      ? { severities: [severity] }
+      : {}),
+    ...(status === 'open' || status === 'in_review' || status === 'resolved' || status === 'dismissed'
+      ? { statuses: [status] }
+      : {}),
+    ...(params.q ? { query: params.q } : {}),
+    ...(proposalsOnly ? { hasProposal: true as const } : {}),
+    ...(subsidiary && isUuid(subsidiary) ? { subsidiaryId: subsidiary } : {}),
+    limit: params.perPage,
+    offset: (params.page - 1) * params.perPage,
+  })
+
+  const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
+  const canWrite = can(authz, 'assistant.write')
+  const activeCount = inbox.facets.statuses
+    .filter((row) => row.key === 'open' || row.key === 'in_review')
+    .reduce((sum, row) => sum + row.count, 0)
+
+  const itemId = singleParam(sp, 'item')
+  let selected: ContinuousCloseWorkItem | null = null
+  if (itemId && isUuid(itemId)) {
+    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable)
+  }
+  const closeHref = mergeHref('/agents', sp, { item: undefined })
+
+  return {
+    title: t('title'),
+    description: t('description'),
+    configureLabel: t('configure'),
+    configureHref: '/admin/setup/agents',
+    canManage: can(authz, 'admin.setup.manage'),
+    locale,
+    metrics: [
+      { key: 'active', label: tc('metrics.active'), value: activeCount },
+      {
+        key: 'critical',
+        label: tc('metrics.critical'),
+        value: inbox.facets.severities.find((row) => row.key === 'critical')?.count ?? 0,
+        ...((inbox.facets.severities.find((row) => row.key === 'critical')?.count ?? 0) > 0
+          ? { tone: 'text-red-600 dark:text-red-400' }
+          : {}),
+      },
+      { key: 'proposals', label: t('facets.proposal'), value: inbox.facets.withProposals },
+    ],
+    searchPlaceholder: t('search'),
+    currentParams: sp,
+    packLabel: t('facets.pack'),
+    statusLabel: tcc('labels.status'),
+    severityLabel: t('facets.severity'),
+    subsidiaryLabel: t('facets.subsidiary'),
+    subsidiaryHelp: t('subsidiaryHelp'),
+    proposalLabel: t('facets.proposal'),
+    packOptions: inbox.facets.packs.map((row) => ({
+      value: row.key,
+      label: tc(`agents.${row.key}`),
+      count: row.count,
+    })),
+    statusOptions: inbox.facets.statuses.map((row) => ({
+      value: row.key,
+      label: tc(`status.${row.key}`),
+      count: row.count,
+    })),
+    severityOptions: inbox.facets.severities.map((row) => ({
+      value: row.key,
+      label: tc(`severity.${row.key}`),
+      count: row.count,
+    })),
+    subsidiaryOptions: inbox.facets.subsidiaries.map((row) => ({
+      value: row.id,
+      label: row.name,
+      count: row.count,
+    })),
+    proposalOptions: [
+      { value: 'true', label: t('facets.withProposal'), count: inbox.facets.withProposals },
+    ],
+    columnFinding: tc('table.finding'),
+    columnPack: t('facets.pack'),
+    columnSeverity: tc('table.severity'),
+    columnMateriality: tc('table.materiality'),
+    columnStatus: tcc('labels.status'),
+    columnDetected: tc('table.detected'),
+    columnProposal: t('proposal.badge'),
+    rows: inbox.rows.map((row) => ({
+      id: row.id,
+      title: tc(`findings.${row.findingType}.title`),
+      href: mergeHref('/agents', sp, { item: row.id }),
+      summary: findingSummaryLine((key, values) => tc(key, values as never), row.summary),
+      packLabel: tc(`agents.${row.pack}`),
+      severityLabel: tc(`severity.${row.severity}`),
+      severityVariant: SEVERITY_VARIANT[row.severity],
+      materiality: formatMoney(row.materiality),
+      statusLabel: tc(`status.${row.status}`),
+      statusVariant: STATUS_VARIANT[row.status],
+      proposalBadge: row.hasProposal ? t('proposal.badge') : '',
+      detected: dateOnly.format(new Date(row.lastDetectedAt)),
+    })),
+    total: inbox.total,
+    currentPage: params.page,
+    perPage: params.perPage,
+    findingsEmpty: inbox.total === 0,
+    findingsPresent: inbox.total > 0,
+    emptyTitle: t('empty.title'),
+    emptyDescription: t('empty.description'),
+    emptyAction: t('empty.action'),
+    triage: {
+      rows: inbox.rows.map((row) => ({
+        id: row.id,
+        href: mergeHref('/agents', sp, { item: row.id }),
+        hasProposal: row.hasProposal,
+        status: row.status,
+      })),
+      canWrite,
+      orgId: authz.user.orgId,
+    },
+    itemDrawerOpen: Boolean(selected),
+    itemDrawer: selected
+      ? {
+          item: selected,
+          closeHref,
+          canWrite,
+          proposal: canWrite ? findingProposalCommand(authz, selected.summary) : null,
+        }
+      : null,
+  }
+}
+
+const f = ref<AgentsData>()
+const item = field
+
+export function agentsSpec(data: AgentsData): PageSpec {
+  return page({
+    route: '/agents',
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actions: [
+          widget(
+            'link-button',
+            { href: '/admin/setup/agents', label: data.configureLabel, variant: 'outline', iconKey: 'settings' },
+            f('canManage'),
+          ),
+        ],
+      }),
+    ],
+    body: [
+      widgetBlock('agents-triage', {
+        rows: data.triage.rows,
+        canWrite: data.triage.canWrite,
+        orgId: data.triage.orgId,
+      }),
+      grid(
+        'grid grid-cols-2 gap-2 sm:grid-cols-3',
+        data.metrics.map((metric) =>
+          widgetBlock('metric-tile', {
+            label: metric.label,
+            value: metric.value,
+            locale: data.locale,
+            ...(metric.tone ? { tone: metric.tone } : {}),
+          }),
+        ),
+      ),
+      grid('flex flex-wrap items-center gap-2', [
+        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'packs',
+          label: data.packLabel,
+          options: data.packOptions,
+        }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'status',
+          label: data.statusLabel,
+          options: data.statusOptions,
+        }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'severity',
+          label: data.severityLabel,
+          options: data.severityOptions,
+        }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'subsidiary',
+          label: data.subsidiaryLabel,
+          options: data.subsidiaryOptions,
+        }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'proposals',
+          label: data.proposalLabel,
+          options: data.proposalOptions,
+        }),
+      ]),
+      {
+        ...widgetBlock('empty-state', {
+          icon: 'activity',
+          title: data.emptyTitle,
+          description: data.emptyDescription,
+        }),
+        when: f('findingsEmpty'),
+      },
+      {
+        ...table({
+          variant: 'app',
+          rows: f('rows'),
+          rowKey: item('id'),
+          columns: [
+            column(
+              f('columnFinding'),
+              widgetCell('finding-cell', {
+                title: item('title'),
+                href: item('href'),
+                summary: item('summary'),
+              }),
+            ),
+            column(f('columnPack'), badge(item('packLabel'), { variant: 'outline' })),
+            column(f('columnSeverity'), badge(item('severityLabel'), { variant: item('severityVariant') })),
+            column(f('columnMateriality'), money(item('materiality')), {
+              align: 'right',
+              className: 'font-medium',
+            }),
+            column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(f('columnProposal'), text(item('proposalBadge'))),
+            column(f('columnDetected'), text(item('detected')), {
+              className: 'text-sm text-slate-500',
+            }),
+          ],
+        }),
+        when: f('findingsPresent'),
+      },
+      {
+        ...pagination({
+          basePath: '/agents',
+          total: f('total'),
+          page: f('currentPage'),
+          perPage: f('perPage'),
+          bare: true,
+        }),
+        when: f('findingsPresent'),
+      },
+      { ...widgetBlock('work-item-drawer', { drawer: data.itemDrawer }), when: f('itemDrawerOpen') },
+    ],
+  })
+}
