@@ -89,6 +89,8 @@ const syncRunConnectionNullableMigrationPath =
   "schema/migrations/generated/0085_sync_run_connection_nullable.sql";
 const payrollOpeningBalanceSecondOrderMigrationPath =
   "schema/migrations/generated/0141_payroll_opening_balance_second_order_ytd.sql";
+const allocationQueryCatalogMigrationPath =
+  "schema/migrations/generated/0161_allocation_query_catalog.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -113,6 +115,70 @@ test("payroll opening-balance migration rebuilds its widened governed view safel
       /drop view if exists openbooks_query\.payroll_opening_balances/i,
     );
   }
+});
+
+test("allocation query catalog widens safe relations and repins the stamped views", () => {
+  const migration = readFileSync(allocationQueryCatalogMigrationPath, "utf8");
+  // The four kernel tables 0160 added join the refresh allowlist; the three
+  // replaced names were already listed (0070) and must stay listed, because
+  // 0160 dropped and recreated those views.
+  const safeRelationsBody = migration.match(
+    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
+  )?.[1];
+  assert.ok(safeRelationsBody, "0161 safe_relations array not found");
+  for (const relation of [
+    "allocation_rule_versions",
+    "allocation_drivers",
+    "allocation_driver_values",
+    "allocation_lineage",
+    "allocation_rules",
+    "allocation_rule_targets",
+    "allocation_runs",
+  ]) {
+    assert.match(safeRelationsBody, new RegExp(`'${relation}'`));
+  }
+  // Every kernel view is (re)created and granted in this migration: a later
+  // full refresh is not required for the catalog to expose the kernel.
+  for (const view of [
+    "allocation_rule_versions",
+    "allocation_drivers",
+    "allocation_driver_values",
+    "allocation_lineage",
+    "allocation_rules",
+    "allocation_rule_targets",
+    "allocation_runs",
+  ]) {
+    assert.match(migration, new RegExp(`CREATE VIEW openbooks_query\\.${view}`, "i"));
+    assert.match(
+      migration,
+      new RegExp(`GRANT SELECT ON (TABLE )?openbooks_query\\.${view} TO openbooks_read`, "i"),
+    );
+  }
+  // Re-create rather than replace: an installation whose governed views were
+  // frozen by an older refresh lists their columns in a different order than
+  // a fresh bootstrap, and CREATE OR REPLACE VIEW refuses to reorder columns
+  // (0158 precedent). Nothing depends on these views; the grant is restored
+  // explicitly below each rebuild.
+  for (const view of ["journal_lines", "document_lines"]) {
+    assert.match(migration, new RegExp(`DROP VIEW IF EXISTS openbooks_query\\.${view}`, "i"));
+    assert.match(migration, new RegExp(`CREATE VIEW openbooks_query\\.${view}`, "i"));
+    assert.doesNotMatch(
+      migration,
+      new RegExp(`CREATE OR REPLACE VIEW openbooks_query\\.${view}`, "i"),
+    );
+    assert.match(
+      migration,
+      new RegExp(`GRANT SELECT ON (TABLE )?openbooks_query\\.${view} TO openbooks_read`, "i"),
+    );
+  }
+  assert.match(migration, /contributor_kind/);
+  assert.match(migration, /contributor_ref/);
+  assert.match(migration, /distribution_group_id/);
+  assert.match(migration, /distribution_rule_id/);
+  assert.match(migration, /distribution_version_id/);
+  assert.match(migration, /distribution_locked/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
 });
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
@@ -254,6 +320,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0158_source_reconciliation_evidence.sql",
     "0159_jl_guard_tenant_coherence.sql",
     "0160_allocation_kernel.sql",
+    "0161_allocation_query_catalog.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
