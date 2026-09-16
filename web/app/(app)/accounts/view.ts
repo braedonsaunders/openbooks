@@ -433,7 +433,7 @@ export function accountsSpec(data: AccountsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
           widget('module-home-tabs', { tabs: data.viewTabs }),
           widget(newAccount.widget, newAccount.props, f('canManageAccounts')),

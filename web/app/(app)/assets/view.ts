@@ -218,7 +218,7 @@ export function assetsSpec(data: AssetsData): PageSpec {
         ...pageHeader({
           title: f('title'),
           description: f('description'),
-          actionsClassName: 'flex items-center gap-2',
+          actionsClassName: 'flex flex-wrap items-center gap-2',
           actions: [
             widget('assets-doc-link', { label: data.docLabel }),
             widget(runDepreciation.widget, runDepreciation.props, f('showActions')),

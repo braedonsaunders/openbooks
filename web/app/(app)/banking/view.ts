@@ -303,7 +303,7 @@ export function bankingSpec(data: BankingData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
           widget('subsidiary-switcher', {
             picker: data.subsidiaryPicker,
