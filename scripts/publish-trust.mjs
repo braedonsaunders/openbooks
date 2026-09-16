@@ -31,12 +31,67 @@
  * input becomes an explicit "unavailable", never a carried-forward value.
  */
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 function flag(name, fallback = null) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? (process.argv[index + 1] ?? fallback) : fallback;
+}
+
+/**
+ * Same-source comparison for evidence SHAs. Producers may record a full or
+ * abbreviated commit hash; either direction of prefix match accepts, anything
+ * else rejects. Empty or missing SHAs never match — unpublished provenance
+ * fails closed rather than publishing under a borrowed label.
+ */
+function sameSource(candidate, expected) {
+  if (typeof candidate !== "string" || !candidate || typeof expected !== "string" || !expected) {
+    return false;
+  }
+  return candidate === expected || candidate.startsWith(expected) || expected.startsWith(candidate);
+}
+
+function sha256Hex(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * Fail closed on mixed-source or tampered evidence, before the output
+ * directory is created or touched. Every present component must name the
+ * published commit, and conformance/controls case payloads must match the
+ * digest their producer embedded.
+ */
+function validateProvenance({ conformance, controls, checkpoint, sha }) {
+  for (const [label, artifact] of [
+    ["conformance.json", conformance],
+    ["controls.json", controls],
+    ["checkpoint.json", checkpoint],
+  ]) {
+    if (!artifact) continue;
+    if (!sameSource(artifact.gitSha, sha)) {
+      console.error(
+        `mixed-source evidence: ${label} describes commit ${JSON.stringify(artifact.gitSha)} ` +
+          `but this corpus is published for ${JSON.stringify(sha)} — refusing to label one commit's evidence with another's SHA.`,
+      );
+      process.exit(1);
+    }
+  }
+  for (const [label, artifact] of [
+    ["conformance.json", conformance],
+    ["controls.json", controls],
+  ]) {
+    if (!artifact) continue;
+    if (!Array.isArray(artifact.cases) || typeof artifact.casesSha256 !== "string") {
+      console.error(`${label} carries no case provenance (cases/casesSha256) — refusing to publish unverifiable evidence.`);
+      process.exit(1);
+    }
+    if (sha256Hex(JSON.stringify(artifact.cases)) !== artifact.casesSha256) {
+      console.error(`${label} case digest mismatch: the payload no longer matches its embedded digest — refusing to publish tampered evidence.`);
+      process.exit(1);
+    }
+  }
 }
 
 const conformanceDir = flag("conformance", ".local/conformance");
@@ -62,6 +117,24 @@ function latestCheckpoint(dir) {
     .map((name) => ({ name, mtime: statSync(join(dir, name)).mtimeMs }))
     .sort((a, b) => b.mtime - a.mtime);
   return candidates[0] ? readJson(join(dir, candidates[0].name)) : null;
+}
+
+/** The most recently modified checkpoint file, for the provenance record. */
+function latestCheckpointFile(dir) {
+  if (!existsSync(dir)) return null;
+  const candidates = readdirSync(dir)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => ({ name, mtime: statSync(join(dir, name)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+  return candidates[0] ? join(dir, candidates[0].name) : null;
+}
+
+function fileDigest(path) {
+  try {
+    return sha256Hex(readFileSync(path));
+  } catch {
+    return null;
+  }
 }
 
 const conformance = readJson(join(conformanceDir, "conformance.json"));
@@ -94,6 +167,10 @@ if (!conformance && !controls && !checkpoint) {
   console.error("no evidence artifacts found — refusing to publish an empty trust page");
   process.exit(1);
 }
+
+// Mixed-source or tampered evidence must never reach the bundle, and a
+// rejection must not create or touch the output directory either.
+validateProvenance({ conformance, controls, checkpoint, sha });
 
 mkdirSync(outDir, { recursive: true });
 
@@ -148,6 +225,18 @@ const history = readJson(historyPath) ?? [];
 const record = {
   at,
   gitSha: sha,
+  provenance: {
+    runIds: {
+      conformance: conformance?.runId ?? null,
+      controls: controls?.runId ?? null,
+      checkpoint: checkpoint?.runId ?? null,
+    },
+    digests: {
+      conformance: conformance ? fileDigest(join(conformanceDir, "conformance.json")) : null,
+      controls: controls ? fileDigest(join(controlsDir, "controls.json")) : null,
+      checkpoint: checkpoint ? fileDigest(latestCheckpointFile(checkpointDir)) : null,
+    },
+  },
   conformance: conformance
     ? {
         totals: conformance.totals,

@@ -34,6 +34,7 @@ import { CONFORMANCE_CORPUS, coveredStandards, validateCorpus } from "./matrix.t
 import { renderConsole, renderJson, renderMarkdown } from "./report.ts";
 import { createConformanceOrg } from "./roles.ts";
 import { runCorpus } from "./runner.ts";
+import { runId, sourceSha } from "../provenance.ts";
 import type { ControlCase } from "./controls.ts";
 import type { CorpusReport } from "./types.ts";
 
@@ -51,7 +52,10 @@ async function execute(filter?: string): Promise<CorpusReport> {
   }
 
   const at = new Date().toISOString();
-  const gitSha = process.env.GITHUB_SHA ?? null;
+  // OPENBOOKS_SOURCE_SHA first: on workflow_run GITHUB_SHA names the trust
+  // workflow's own tip, not the pinned producer checkout (see trust.yml).
+  const gitSha = sourceSha();
+  const producerRunId = runId();
 
   const needsLedger = CONFORMANCE_CORPUS.some(
     (kase) => kase.tier === "ledger" && kase.support !== "not-implemented",
@@ -60,7 +64,7 @@ async function execute(filter?: string): Promise<CorpusReport> {
     if (needsLedger) {
       console.warn("OPENBOOKS_DB_URL is not set — ledger-tier cases will report as not run.\n");
     }
-    return await runCorpus(CONFORMANCE_CORPUS, { at, gitSha, filter });
+    return await runCorpus(CONFORMANCE_CORPUS, { at, gitSha, runId: producerRunId, filter });
   }
 
   // Each ledger case gets a FRESH tenant. Cases post real documents and some
@@ -69,7 +73,7 @@ async function execute(filter?: string): Promise<CorpusReport> {
   const results: CorpusReport["results"] = [];
   for (const kase of CONFORMANCE_CORPUS) {
     if (kase.tier !== "ledger" || kase.support === "not-implemented") {
-      const single = await runCorpus([kase], { at, gitSha, filter });
+      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter });
       results.push(...single.results);
       continue;
     }
@@ -79,6 +83,7 @@ async function execute(filter?: string): Promise<CorpusReport> {
       const single = await runCorpus([kase], {
         at,
         gitSha,
+        runId: producerRunId,
         ledger: { roles: org.roles, ledger: org.ledger },
       });
       results.push(...single.results);
@@ -89,7 +94,7 @@ async function execute(filter?: string): Promise<CorpusReport> {
 
   const totals = { pass: 0, fail: 0, gap: 0, skipped: 0 };
   for (const result of results) totals[result.status]++;
-  return { at, gitSha, results, totals, pass: totals.fail === 0 };
+  return { at, gitSha, runId: producerRunId, results, totals, pass: totals.fail === 0 };
 }
 
 async function executeControls(filter?: string): Promise<CorpusReport<ControlCase>> {
@@ -101,7 +106,8 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
   }
 
   const at = new Date().toISOString();
-  const gitSha = process.env.GITHUB_SHA ?? null;
+  const gitSha = sourceSha();
+  const producerRunId = runId();
 
   const needsLedger = CONTROL_CORPUS.some(
     (kase) => kase.tier === "ledger" && kase.support !== "not-implemented",
@@ -110,7 +116,7 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
     if (needsLedger) {
       console.warn("OPENBOOKS_DB_URL is not set — ledger-tier cases will report as not run.\n");
     }
-    return await runCorpus(CONTROL_CORPUS, { at, gitSha, filter });
+    return await runCorpus(CONTROL_CORPUS, { at, gitSha, runId: producerRunId, filter });
   }
 
   // Each ledger case gets a FRESH tenant, like the standards corpus: runs
@@ -118,7 +124,7 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
   const results: CorpusReport<ControlCase>["results"] = [];
   for (const kase of CONTROL_CORPUS) {
     if (kase.tier !== "ledger" || kase.support === "not-implemented") {
-      const single = await runCorpus([kase], { at, gitSha, filter });
+      const single = await runCorpus([kase], { at, gitSha, runId: producerRunId, filter });
       results.push(...single.results);
       continue;
     }
@@ -128,6 +134,7 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
       const single = await runCorpus([kase], {
         at,
         gitSha,
+        runId: producerRunId,
         ledger: { roles: org.roles, ledger: org.ledger },
       });
       results.push(...single.results);
@@ -138,7 +145,7 @@ async function executeControls(filter?: string): Promise<CorpusReport<ControlCas
 
   const totals = { pass: 0, fail: 0, gap: 0, skipped: 0 };
   for (const result of results) totals[result.status]++;
-  return { at, gitSha, results, totals, pass: totals.fail === 0 };
+  return { at, gitSha, runId: producerRunId, results, totals, pass: totals.fail === 0 };
 }
 
 async function main(): Promise<void> {

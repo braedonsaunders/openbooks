@@ -241,7 +241,7 @@ function citedStandards(c: RunnableCase): string[] {
 
 export async function runCorpus<C extends RunnableCase>(
   cases: readonly C[],
-  options: RunOptions & { at: string; gitSha?: string | null } = { at: "" },
+  options: RunOptions & { at: string; gitSha?: string | null; runId?: string | null } = { at: "" },
 ): Promise<CorpusReport<C>> {
   const selected = options.filter
     ? cases.filter(
@@ -264,6 +264,7 @@ export async function runCorpus<C extends RunnableCase>(
   return {
     at: options.at,
     gitSha: options.gitSha ?? null,
+    runId: options.runId ?? null,
     results,
     totals,
     pass: totals.fail === 0,

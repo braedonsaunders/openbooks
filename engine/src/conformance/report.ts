@@ -9,6 +9,7 @@
  *    badge endpoint reads.
  */
 
+import { caseDigest } from "../provenance.ts";
 import type { CaseResult, CorpusReport } from "./types.ts";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -129,33 +130,36 @@ export function renderMarkdown(report: CorpusReport): string {
 }
 
 export function renderJson(report: CorpusReport): string {
+  const cases = report.results.map((result) => ({
+    id: result.case.id,
+    title: result.case.title,
+    standards: [...new Set(result.case.citations.map((c) => c.standard))],
+    citations: result.case.citations.map((c) => ({
+      standard: c.standard,
+      reference: c.reference,
+      kind: c.kind,
+      requirement: c.requirement,
+    })),
+    support: result.case.support,
+    tier: result.case.tier,
+    status: result.status,
+    assertion: result.case.assertion,
+    facts: result.case.facts,
+    ...(result.case.limitation ? { limitation: result.case.limitation } : {}),
+    ...(result.case.gap ? { gap: result.case.gap } : {}),
+    ...(result.differences.length > 0 ? { differences: result.differences } : {}),
+    ...(result.error ? { error: result.error } : {}),
+    ms: Math.round(result.ms),
+  }));
   return JSON.stringify(
     {
       at: report.at,
       gitSha: report.gitSha,
+      runId: report.runId,
+      casesSha256: caseDigest(cases),
       totals: report.totals,
       pass: report.pass,
-      cases: report.results.map((result) => ({
-        id: result.case.id,
-        title: result.case.title,
-        standards: [...new Set(result.case.citations.map((c) => c.standard))],
-        citations: result.case.citations.map((c) => ({
-          standard: c.standard,
-          reference: c.reference,
-          kind: c.kind,
-          requirement: c.requirement,
-        })),
-        support: result.case.support,
-        tier: result.case.tier,
-        status: result.status,
-        assertion: result.case.assertion,
-        facts: result.case.facts,
-        ...(result.case.limitation ? { limitation: result.case.limitation } : {}),
-        ...(result.case.gap ? { gap: result.case.gap } : {}),
-        ...(result.differences.length > 0 ? { differences: result.differences } : {}),
-        ...(result.error ? { error: result.error } : {}),
-        ms: Math.round(result.ms),
-      })),
+      cases,
     },
     null,
     2,

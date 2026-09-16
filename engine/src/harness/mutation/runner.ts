@@ -33,6 +33,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { MutationTargetConfig } from "./config.ts";
 import { generateMutants, type GeneratedMutant } from "./operators.ts";
+import { caseDigest, runId, sourceSha } from "../../provenance.ts";
 
 export type MutantStatus = "killed" | "survived" | "timed-out" | "skipped" | "error";
 
@@ -78,6 +79,8 @@ export interface TargetResult {
 export interface MutationReport {
   readonly version: 1;
   readonly gitSha: string | null;
+  readonly runId: string | null;
+  readonly casesSha256: string;
   readonly dirtyTargets: string[];
   readonly at: string;
   readonly mode: "unit" | "db";
@@ -431,12 +434,7 @@ async function runTarget(
 export async function runMutationTargets(options: RunMutationOptions): Promise<MutationReport> {
   assertNotProduction(process.env);
   const repoRoot = resolve(options.repoRoot);
-  let gitSha: string | null = null;
-  try {
-    gitSha = git(repoRoot, ["rev-parse", "--short", "HEAD"]).trim() || null;
-  } catch {
-    gitSha = null;
-  }
+  const gitSha = sourceSha(repoRoot);
   const dirtyTargets: string[] = [];
   try {
     const dirty = git(repoRoot, ["status", "--short", ...options.targets.map((t) => t.path)]);
@@ -456,7 +454,8 @@ export async function runMutationTargets(options: RunMutationOptions): Promise<M
       targets.push(await runTarget(scratch, target, options));
     }
     return {
-      version: 1, gitSha, dirtyTargets, at: new Date().toISOString(),
+      version: 1, gitSha, runId: runId(), casesSha256: caseDigest(targets),
+      dirtyTargets, at: new Date().toISOString(),
       mode: options.useDb ? "db" : "unit",
       sample: options.sample, timeoutSecs: options.timeoutSecs, targets,
     };

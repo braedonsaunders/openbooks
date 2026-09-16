@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -62,12 +63,16 @@ test('publication writes evidence and history when inputs are present', () => {
     mkdirSync(controls, { recursive: true })
     mkdirSync(checkpoint, { recursive: true })
 
+    const conformanceCases = [{ id: 'case-1', status: 'pass' }]
+    const controlsCases = [{ id: 'alloc-1', status: 'pass', control: 'A12' }]
     writeFileSync(
       join(conformance, 'conformance.json'),
       JSON.stringify({
         totals: { pass: 1, fail: 0, gap: 0 },
         pass: true,
-        cases: [{ id: 'case-1', status: 'pass' }],
+        cases: conformanceCases,
+        gitSha: 'test-sha',
+        casesSha256: digestOf(conformanceCases),
       }),
     )
     writeFileSync(
@@ -76,7 +81,9 @@ test('publication writes evidence and history when inputs are present', () => {
         kind: 'internal-controls',
         totals: { pass: 1, fail: 0, gap: 0 },
         pass: true,
-        cases: [{ id: 'alloc-1', status: 'pass', control: 'A12' }],
+        cases: controlsCases,
+        gitSha: 'test-sha',
+        casesSha256: digestOf(controlsCases),
       }),
     )
     writeFileSync(
@@ -90,6 +97,7 @@ test('publication writes evidence and history when inputs are present', () => {
         counts: { postedEntries: 1 },
         checks: [{ name: 'balanced', ok: true }],
         pass: true,
+        gitSha: 'test-sha',
       }),
     )
 
@@ -124,13 +132,16 @@ test('controls-only publication records the other inputs as unavailable', () => 
     const out = join(tempDirectory, 'trust')
     mkdirSync(controls, { recursive: true })
 
+    const controlsCases = [{ id: 'alloc-1', status: 'pass', control: 'A12' }]
     writeFileSync(
       join(controls, 'controls.json'),
       JSON.stringify({
         kind: 'internal-controls',
         totals: { pass: 1, fail: 0, gap: 0 },
         pass: true,
-        cases: [{ id: 'alloc-1', status: 'pass', control: 'A12' }],
+        cases: controlsCases,
+        gitSha: 'test-sha',
+        casesSha256: digestOf(controlsCases),
       }),
     )
 
@@ -145,5 +156,118 @@ test('controls-only publication records the other inputs as unavailable', () => 
     assert.equal(history[0].invariants, null)
   } finally {
     rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+function digestOf(value) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+}
+
+function writeEvidence(dir, { sha, tamper = null, dropSha = false, dropDigest = false }) {
+  const conformanceCases = [{ id: 'case-1', status: 'pass' }]
+  const controlsCases = [{ id: 'alloc-1', status: 'pass', control: 'A12' }]
+  if (tamper === 'cases') conformanceCases.push({ id: 'injected', status: 'pass' })
+  const conformance = {
+    totals: { pass: 1, fail: 0, gap: 0 },
+    pass: true,
+    cases: conformanceCases,
+    ...(dropSha ? {} : { gitSha: sha }),
+    ...(dropDigest ? {} : { casesSha256: tamper === 'digest' ? '0'.repeat(64) : digestOf([{ id: 'case-1', status: 'pass' }]) }),
+  }
+  const controls = {
+    kind: 'internal-controls',
+    totals: { pass: 1, fail: 0, gap: 0 },
+    pass: true,
+    cases: controlsCases,
+    gitSha: sha,
+    casesSha256: digestOf(controlsCases),
+  }
+  mkdirSync(join(dir, 'conformance'), { recursive: true })
+  mkdirSync(join(dir, 'controls'), { recursive: true })
+  mkdirSync(join(dir, 'checkpoint'), { recursive: true })
+  writeFileSync(join(dir, 'conformance', 'conformance.json'), JSON.stringify(conformance))
+  writeFileSync(join(dir, 'controls', 'controls.json'), JSON.stringify(controls))
+  writeFileSync(
+    join(dir, 'checkpoint', 'checkpoint.json'),
+    JSON.stringify({
+      orgName: 'Acme',
+      counts: { postedEntries: 1 },
+      checks: [{ name: 'balanced', ok: true }],
+      pass: true,
+      gitSha: sha,
+    }),
+  )
+}
+
+test('mixed-source evidence is rejected before anything is published', () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  try {
+    const out = join(tempDirectory, 'trust')
+    writeEvidence(tempDirectory, { sha: 'commit-a' })
+    // Swap the controls artifact for one produced from another commit.
+    const controlsPath = join(tempDirectory, 'controls', 'controls.json')
+    const controls = JSON.parse(readFileSync(controlsPath, 'utf8'))
+    controls.gitSha = 'commit-b'
+    writeFileSync(controlsPath, JSON.stringify(controls))
+
+    const result = runPublisher({
+      conformance: join(tempDirectory, 'conformance'),
+      controls: join(tempDirectory, 'controls'),
+      checkpoint: join(tempDirectory, 'checkpoint'),
+      out,
+      sha: 'commit-a',
+    })
+
+    assert.equal(result.status, 1, result.stderr)
+    assert.match(result.stderr, /mixed-source|same commit|does not match/)
+    assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+  } finally {
+    rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+test('evidence without source provenance is rejected', () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  try {
+    const out = join(tempDirectory, 'trust')
+    writeEvidence(tempDirectory, { sha: 'commit-a', dropSha: true, dropDigest: true })
+
+    const result = runPublisher({
+      conformance: join(tempDirectory, 'conformance'),
+      controls: join(tempDirectory, 'controls'),
+      checkpoint: join(tempDirectory, 'checkpoint'),
+      out,
+      sha: 'commit-a',
+    })
+
+    assert.equal(result.status, 1, result.stderr)
+    assert.match(result.stderr, /provenance|gitSha|source/i)
+    assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+  } finally {
+    rmSync(tempDirectory, { recursive: true, force: true })
+  }
+})
+
+test('tampered case payloads are rejected by their digest', () => {
+  for (const tamper of ['cases', 'digest']) {
+    const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+    try {
+      const out = join(tempDirectory, 'trust')
+      writeEvidence(tempDirectory, { sha: 'commit-a', tamper })
+
+      const result = runPublisher({
+        conformance: join(tempDirectory, 'conformance'),
+        controls: join(tempDirectory, 'controls'),
+        checkpoint: join(tempDirectory, 'checkpoint'),
+        out,
+        sha: 'commit-a',
+      })
+
+      assert.equal(result.status, 1, `${tamper}: ${result.stderr}`)
+      assert.match(result.stderr, /digest|tamper|integrity/i)
+      assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+    } finally {
+      rmSync(tempDirectory, { recursive: true, force: true })
+    }
   }
 })
