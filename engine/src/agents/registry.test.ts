@@ -135,9 +135,9 @@ test("new-pack detector tuning validates like the original packs", () => {
 });
 
 test("unstubbed wave-2 packs stay quiet until their detectors land", async () => {
-  // Collections and payables landed their detectors (see their test files);
-  // the packs below still return [] with no detectors enabled and no DB touched.
-  for (const agentKey of ["reconciliation", "hygiene"] as const) {
+  // Collections, payables, and reconciliation landed their detectors (see
+  // their test files); hygiene still returns [] with no DB touched.
+  for (const agentKey of ["hygiene"] as const) {
     const findings = await AGENT_PACKS[agentKey]("00000000-0000-0000-0000-000000000000", "1000.0000", []);
     assert.deepEqual(findings, [], `${agentKey} emits nothing before its detectors land`);
   }
