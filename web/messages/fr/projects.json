@@ -314,5 +314,32 @@
     "rateCardLapse": "Lorsque la grille tarifaire a expiré",
     "block": "Bloquer la facturation",
     "carry_forward": "Facturer selon la dernière grille"
+  },
+  "duplicates": {
+      "title": "Projets en double",
+      "description": "Projets partageant une référence source, un nom et un client, ou un numéro d'affaire. Choisissez le survivant par groupe, prévisualisez l'impact, puis fusionnez.",
+      "loading": "Chargement des doublons…",
+      "empty": "Aucun projet en double.",
+      "kind": {
+          "source_ref": "Même référence source ({key})",
+          "name_customer": "Même nom et client ({key})",
+          "job_number": "Même numéro d'affaire ({key})"
+      },
+      "chooseSurvivor": "Sélectionnez le projet survivant. Toutes les références des autres y sont transférées en une transaction.",
+      "survivor": "Survivant",
+      "code": "Code",
+      "name": "Nom",
+      "status": "Statut",
+      "action": "Action",
+      "preview": "Aperçu",
+      "merge": "Fusionner ({count, plural, one {# référence} other {# références}})",
+      "alreadyMerged": "Déjà fusionné.",
+      "moveCount": "{count, plural, one {# référence sera transférée} other {# références seront transférées}}.",
+      "kept": "Conservé",
+      "impactNote": "Les fusions sont refusées en cas de lignes sur documents non brouillons, de numéros d'avenants ou de cellules budgétaires en conflit. Le projet fusionné est désactivé avec un pointeur vers son survivant.",
+      "loadFailed": "Impossible de charger les doublons.",
+      "previewFailed": "Impossible de prévisualiser la fusion.",
+      "mergeFailed": "Impossible de fusionner les projets.",
+      "merged": "Projets fusionnés."
   }
 }

@@ -458,5 +458,32 @@
       "releaseReason": "Release reason",
       "release": "Release"
     }
+  },
+  "duplicates": {
+      "title": "Duplicate projects",
+      "description": "Projects sharing a source reference, name and customer, or job number. Choose the survivor per group, preview the impact, then merge.",
+      "loading": "Loading duplicates…",
+      "empty": "No duplicate projects found.",
+      "kind": {
+          "source_ref": "Same source reference ({key})",
+          "name_customer": "Same name and customer ({key})",
+          "job_number": "Same job number ({key})"
+      },
+      "chooseSurvivor": "Select the surviving project. Every reference on the others moves to it in one transaction.",
+      "survivor": "Survivor",
+      "code": "Code",
+      "name": "Name",
+      "status": "Status",
+      "action": "Action",
+      "preview": "Preview",
+      "merge": "Merge ({count, plural, one {# reference} other {# references}})",
+      "alreadyMerged": "Already merged.",
+      "moveCount": "{count, plural, one {# reference} other {# references}} will move.",
+      "kept": "Kept",
+      "impactNote": "Merges refuse when lines on non-draft documents, change-order numbers, or budget cells collide. The merged project deactivates with a pointer to its survivor.",
+      "loadFailed": "Could not load duplicates.",
+      "previewFailed": "Could not preview the merge.",
+      "mergeFailed": "Could not merge the projects.",
+      "merged": "Projects merged."
   }
 }
