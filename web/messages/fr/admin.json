@@ -82,6 +82,10 @@
       "email": {
         "title": "Envoi des e-mails",
         "description": "Configurez votre fournisseur d’e-mail pour l’envoi des rapports planifiés"
+      },
+      "agentsSetup": {
+        "title": "Agents",
+        "description": "Packs d'agents en arrière-plan : installez, configurez horaires et contrôles, révisez les lancements"
       }
     }
   },
@@ -863,9 +867,12 @@
     "compliance_file": "Finaliser et déposer les déclarations de renseignements"
   },
   "ai": {
-    "metaTitle": "Paramètres d'IA",
-    "title": "Paramètres d'IA",
+    "metaTitle": "Fournisseurs d'IA",
+    "title": "Fournisseurs d'IA",
     "description": "Choisissez le fournisseur d'IA utilisé par l'assistant. La clé API est stockée chiffrée — jamais dans un fichier ni une variable d'environnement.",
+    "manageAgentsTitle": "Agents en arrière-plan",
+    "manageAgentsDescription": "Horaires, contrôles et routage des constats se trouvent dans Configuration → Agents.",
+    "manageAgentsLink": "Ouvrir la configuration des agents",
     "enabledLabel": "Activer les fonctions d'IA",
     "providerLabel": "Fournisseur",
     "baseUrlLabel": "URL de base",
@@ -1435,7 +1442,8 @@
         "featureOffError": "Activez le module de Clôture continue avant d'activer un pack.",
         "toggleFailed": "Impossible d'enregistrer le paramètre du pack.",
         "scanComplete": "{count, plural, one {# constat détecté} other {# constats détectés}}",
-        "scanFailed": "Le lancement de l'analyse a échoué."
+        "scanFailed": "Le lancement de l'analyse a échoué.",
+        "guideLink": "Guide de configuration"
       },
       "library": {
         "title": "Bibliothèque",

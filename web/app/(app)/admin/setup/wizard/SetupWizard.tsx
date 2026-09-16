@@ -928,6 +928,9 @@ function OperationsStep(props: {
       <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
         {t('operations.note')}
       </p>
+      <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+        {t('operations.agentsNote')}
+      </p>
     </div>
   )
 }

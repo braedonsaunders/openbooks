@@ -489,6 +489,44 @@ changes total company profit.
 `,
 }
 
+export const setupAgentsGroup: DocArticle = {
+  slug: 'setup-agents-group',
+  title: 'Setup: Agents',
+  category: 'administration',
+  order: 20,
+  summary: 'Background agent packs: install, schedules and checks, finding routing, runs and findings.',
+  updated: '2026-09-15',
+  keywords: ['agents', 'background agents', 'agent packs', 'continuous close', 'detectors', 'materiality', 'cadence', 'run now', 'findings', 'notification routing'],
+  related: ['setup-company-group', 'roles-and-permissions', 'audit-log'],
+  body: `# Setup: Agents
+
+The **Agents** group configures the background agent packs that watch the books
+and propose reviewable next steps. Packs never post or edit records on their
+own: every finding is a review list with the exact rows behind it.
+
+## The menu items
+
+- **Overview** — every pack with its on/off switch, cadence, last and next
+  run, open findings, run-now, and a link to its policy page.
+- **Library** — the installable catalog: what each pack reads, what it
+  proposes, what it needs (module plus permissions), and its checks. Installing
+  enables a pack with its default checks.
+- **Policy pages** — one page per pack: schedule and materiality, per-check
+  enable switches with materiality overrides and parameter tuning, analysis
+  tier and narrative options, and finding routing (who gets findings and how).
+- **Activity** — runs across packs with status, duration, findings produced,
+  and errors; re-run any pack and follow through into its findings.
+
+## Rules the area enforces
+
+- Packs are fenced on the **Continuous Close** module switch (Company Settings
+  → Features): a pack whose module is off cannot be enabled or run.
+- Every policy change writes an audit row; toggling a pack never deletes data.
+- Provider credentials stay on the **AI providers** page and are never part of
+  agent configuration.
+`,
+}
+
 export const companySetupGroupArticles: DocArticle[] = [
   setupCompanyGroup,
   setupAccountingGroup,
@@ -500,4 +538,5 @@ export const companySetupGroupArticles: DocArticle[] = [
   setupAssetsGroup,
   setupCurrencyGroup,
   setupProjectsGroup,
+  setupAgentsGroup,
 ]

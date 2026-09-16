@@ -161,6 +161,12 @@ export function AgentsOverviewWorkspace({
             >
               <History size={15} /> {t('setup.agents.nav.activity')}
             </Link>
+            <Link
+              href="/docs/setup-agents-group"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <BookOpen size={15} /> {t('setup.agents.overview.guideLink')}
+            </Link>
           </div>
         </div>
       </div>

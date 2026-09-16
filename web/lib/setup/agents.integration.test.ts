@@ -17,6 +17,7 @@ const {
   runSetupAgentNow,
   saveSetupAgentPolicy,
 } = await import('./agents.ts')
+const { saveOrgAiSettings } = await import('../assistant/ai-config.ts')
 
 /**
  * DB proofs for the Agents setup adapters (web/lib/setup/agents.ts): toggling
@@ -250,6 +251,63 @@ test(
         )
       }
       assert.equal(await policyRow(org.orgId, 'accounting'), undefined)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
+  'a provider save without agents leaves pack policies alone',
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg()
+    try {
+      const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+      const roleId = (
+        await withBypassContext(
+          async () =>
+            (
+              await db.execute<{ id: string }>(sql`
+                select id::text as id from app_roles where org_id = ${org.orgId} order by name limit 1
+              `)
+            ).rows[0]?.id,
+        )
+      )!
+      await withBypassContext(() =>
+        saveSetupAgentPolicy(org.orgId, userId, 'accounting', {
+          ...ENABLE_ACCOUNTING,
+          notification: { mode: 'digest', roleIds: [roleId], userIds: [] },
+        }),
+      )
+      // The slimmed provider form sends no `agents` array; the provider save
+      // must not reset, disable, or re-route a single pack.
+      await withBypassContext(() =>
+        saveOrgAiSettings(org.orgId, userId, {
+          enabled: true,
+          provider: 'anthropic',
+          modelFast: 'fast-model',
+          modelSmart: 'smart-model',
+          baseUrl: '',
+          agents: [],
+          documentCapture: {
+            enabled: false,
+            provider: 'azure_document_intelligence',
+            endpoint: '',
+            model: 'prebuilt-invoice',
+            confidenceThreshold: '0.9000',
+            autoCreatePoMatchedDrafts: false,
+          },
+        }),
+      )
+      const row = await policyRow(org.orgId, 'accounting')
+      assert.ok(row, 'policy row must survive a provider save')
+      assert.equal(row.enabled, true)
+      assert.deepEqual(await withBypassContext(() => getSetupAgentNotification(org.orgId, 'accounting')), {
+        mode: 'digest',
+        roleIds: [roleId.toLowerCase()],
+        userIds: [],
+      })
     } finally {
       await dropScratchOrg(org.orgId)
     }

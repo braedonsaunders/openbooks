@@ -187,6 +187,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'setup-assets-group': 'administration-company-setup',
   'setup-currency-group': 'administration-company-setup',
   'setup-projects-group': 'administration-company-setup',
+  'setup-agents-group': 'administration-company-setup',
   'tax-jurisdictions-and-nexus': 'administration-taxes',
   'tax-configuration': 'administration-taxes',
   'tax-returns-and-boxes': 'administration-taxes',

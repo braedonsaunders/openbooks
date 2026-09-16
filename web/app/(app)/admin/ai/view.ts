@@ -5,37 +5,29 @@ import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '
 import { requirePermission } from '../../../../lib/authz'
 import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
 import { getOrgAiSettings, type OrgAiSettings } from '../../../../lib/assistant/ai-config'
-import {
-  CONTINUOUS_CLOSE_DETECTOR_SPECS,
-  isContinuousCloseAgentKey,
-} from '@openbooks/engine/src/continuous-close.ts'
-import type { ContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close-config.ts'
-import type { ProviderSpecLite, DetectorSpecLite } from './AiSettingsForm'
+import type { ProviderSpecLite } from './AiSettingsForm'
 
 /**
- * Admin → AI settings, split into a loader and a spec.
+ * Admin → AI providers, split into a loader and a spec.
  *
  * The whole body is one client island: AiSettingsForm owns per-field useState
- * (provider/model/base-url/key, the agents array, document-capture fields),
- * the auto-load-models effect (fetch → /api/admin/ai/models on mount when a
- * key is on file), and every fetch mutation (save, test connection, clear
- * key, run-agent-now, document-capture test) plus the ?agent= configuration
- * drawer with its own draft state. None of that decomposes into spec blocks —
- * the provider selector driving the base-URL field is client state, the
+ * (provider/model/base-url/key, document-capture fields), the
+ * auto-load-models effect (fetch → /api/admin/ai/models on mount when a key
+ * is on file), and every fetch mutation (save, test connection, clear key,
+ * document-capture test). None of that decomposes into spec blocks — the
+ * provider selector driving the base-URL field is client state and the
  * conditional pairs (link when published, em-dash otherwise; enabled-badge
- * variants) are component logic, and the drawer navigates via router.push.
- * So the spec places one `ai-settings-form` widget and the loader binds every
- * prop verbatim from the native page: the permission gate, the provider-spec
- * slice, the org settings read, and the ?agent= key whitelist.
+ * variants) are component logic. So the spec places one `ai-settings-form`
+ * widget and the loader binds every prop verbatim from the native page: the
+ * permission gate, the provider-spec slice, and the org settings read.
  *
- * Loader work copied verbatim from page.tsx: the `admin.ai.manage` gate, the
+ * Background agent packs live under Setup → Agents (cross-linked from the
+ * island); this surface keeps no agent policy, no detector specs and no
+ * drawer selection. Loader work: the `admin.ai.manage` gate, the
  * `getTranslations('admin')` reads for the chrome strings, the serializable
- * slice of AI_PROVIDER_SPECS (no SDK code in the client bundle), the
- * getOrgAiSettings call, and the isContinuousCloseAgentKey whitelist for the
- * drawer — an unrecognized ?agent= value resolves to null (no drawer), never
- * to a default agent. `initial` crosses the boundary whole (it is already the
- * no-secret UI-facing shape); dates stay raw ISO strings because the island
- * formats lastRunAt/nextRunAt client-side with Intl.DateTimeFormat.
+ * slice of AI_PROVIDER_SPECS (no SDK code in the client bundle), and the
+ * getOrgAiSettings call. `initial` crosses the boundary whole (it is already
+ * the no-secret UI-facing shape).
  */
 
 export interface AdminAiData {
@@ -44,14 +36,10 @@ export interface AdminAiData {
   backHref: string
   backLabel: string
   specs: ProviderSpecLite[]
-  detectorSpecs: DetectorSpecLite[]
-  initial: OrgAiSettings
-  selectedAgentKey: ContinuousCloseAgentKey | null
+  initial: Omit<OrgAiSettings, 'agents'>
 }
 
-export async function loadAdminAi(
-  sp: Record<string, string | string[] | undefined>,
-): Promise<AdminAiData> {
+export async function loadAdminAi(): Promise<AdminAiData> {
   const authz = await requirePermission('admin.ai.manage')
   const t = await getTranslations('admin')
 
@@ -67,9 +55,18 @@ export async function loadAdminAi(
     modelHint: p.modelHint,
   }))
 
-  const initial = await getOrgAiSettings(authz.user.orgId)
-  const requestedAgent = sp.agent
-  const selectedAgentKey = isContinuousCloseAgentKey(requestedAgent) ? requestedAgent : null
+  // Pack policies live under Setup → Agents: allowlist the provider fields
+  // across the client boundary instead of forwarding the whole settings read.
+  const settings = await getOrgAiSettings(authz.user.orgId)
+  const initial: Omit<OrgAiSettings, 'agents'> = {
+    enabled: settings.enabled,
+    provider: settings.provider,
+    modelFast: settings.modelFast,
+    modelSmart: settings.modelSmart,
+    baseUrl: settings.baseUrl,
+    hasKey: settings.hasKey,
+    documentCapture: settings.documentCapture,
+  }
 
   return {
     title: t('ai.title'),
@@ -77,14 +74,7 @@ export async function loadAdminAi(
     backHref: '/admin',
     backLabel: t('hub.title'),
     specs,
-    detectorSpecs: CONTINUOUS_CLOSE_DETECTOR_SPECS.map((spec) => ({
-      ...spec,
-      parameters: spec.parameters.map((parameter) => ({
-        ...parameter,
-      })),
-    })),
     initial,
-    selectedAgentKey,
   }
 }
 
@@ -118,9 +108,7 @@ export function adminAiSpec(data: AdminAiData): PageSpec {
             grid('p-6 pt-6', [
               widgetBlock('ai-settings-form', {
                 specs: f('specs'),
-                detectorSpecs: f('detectorSpecs'),
                 initial: f('initial'),
-                selectedAgentKey: f('selectedAgentKey'),
               }),
             ]),
           ]),
