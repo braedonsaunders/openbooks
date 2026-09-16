@@ -4,11 +4,13 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
 import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
+import { PDF_RECORD_TYPE_BY_KEY } from "../pdf-templates/catalog";
+import { getPdfTemplate, listPdfTemplates } from "../pdf-templates/store";
 import { can } from "../authz";
 import { listResources } from "../data-io/resources";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { capList } from "./tools-shared";
+import { capList, uuidInput } from "./tools-shared";
 
 /**
  * Operations read tools for the agentic assistant: the surfaces the
@@ -254,4 +256,84 @@ const listEnvironments: AssistantToolDef = {
   },
 };
 
-export const OPS_TOOLS: AssistantToolDef[] = [listDataResources, listImportRuns, listSyncConnections, listEnvironments];
+const listPdfTemplatesTool: AssistantToolDef = {
+  name: "list_pdf_templates",
+  description:
+    "PDF templates per record type: name, paper size, orientation, margins, default and active flags. Same rows as the template admin list, without the HTML bodies. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["admin.customization.manage"] },
+  inputSchema: z.object({
+    recordType: z.string().max(60).optional().describe("Only templates for this record type, e.g. customer_invoice"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { recordType?: string };
+    // Same reads as GET /api/pdf-templates: unknown record types are refused,
+    // and the list payload omits the (potentially large) HTML bodies.
+    if (a.recordType && !PDF_RECORD_TYPE_BY_KEY[a.recordType]) {
+      return { ok: false, error: "unknown_record_type" };
+    }
+    const rows = await listPdfTemplates(authz.user.orgId, a.recordType);
+    const { items, truncated } = capList(
+      rows.map((row) => ({
+        id: row.id,
+        recordType: row.recordType,
+        name: row.name,
+        description: row.description,
+        paperSize: row.paperSize,
+        orientation: row.orientation,
+        marginMm: row.marginMm,
+        isDefault: row.isDefault,
+        isActive: row.isActive,
+        updatedAt: row.updatedAt,
+      })),
+    );
+    return {
+      ok: true,
+      data: { total: rows.length, truncated, href: "/admin/pdf-templates", items },
+    };
+  },
+};
+
+const getPdfTemplateTool: AssistantToolDef = {
+  name: "get_pdf_template",
+  description:
+    "One PDF template's render configuration and design source: record type, paper, orientation, margins, default/active flags, and the source HTML truncated to fit. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["admin.customization.manage"] },
+  inputSchema: z.object({ id: uuidInput }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { id: string };
+    const row = await getPdfTemplate(authz.user.orgId, a.id);
+    if (!row) return { ok: false, error: "template_not_found" };
+    return {
+      ok: true,
+      data: {
+        id: row.id,
+        recordType: row.recordType,
+        name: row.name,
+        description: row.description,
+        paperSize: row.paperSize,
+        orientation: row.orientation,
+        marginMm: row.marginMm,
+        isDefault: row.isDefault,
+        isActive: row.isActive,
+        updatedAt: row.updatedAt,
+        href: `/admin/pdf-templates/${row.id}`,
+        sourceHtmlChars: row.sourceHtml.length,
+        headerHtmlChars: row.headerHtml?.length ?? 0,
+        footerHtmlChars: row.footerHtml?.length ?? 0,
+        sourceHtml: truncateText(row.sourceHtml, 6000),
+        sourceTruncated: row.sourceHtml.length > 6000,
+      },
+    };
+  },
+};
+
+export const OPS_TOOLS: AssistantToolDef[] = [
+  listDataResources,
+  listImportRuns,
+  listSyncConnections,
+  listEnvironments,
+  listPdfTemplatesTool,
+  getPdfTemplateTool,
+];

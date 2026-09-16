@@ -135,8 +135,8 @@ const MATRIX: Entry[] = [
   { prefix: "platform/connections", tools: ["list_sync_connections"] },
   { prefix: "platform", uncovered: "operator console: cross-organization pages, no tenant tool" },
   { prefix: "admin/sandboxes", tools: ["list_environments"] },
-  { prefix: "pdf-templates", uncovered: "gap fill pending: list_pdf_templates and get_pdf_template reuse the pdf-templates store" },
-  { prefix: "record-pdf", uncovered: "gap fill pending: get_pdf_template plus get_document; binary render itself has no tool" },
+  { prefix: "pdf-templates", tools: ["list_pdf_templates", "get_pdf_template"] },
+  { prefix: "record-pdf", tools: ["get_pdf_template", "get_document"], note: "binary render itself has no tool; design and source record read via templates and documents" },
   { prefix: "admin/email", tools: ["get_outbox_status"], note: "provider config writes have no application service; delivery reads via the outboxes" },
   // --- setup, apps, platform ------------------------------------------------
   { prefix: "admin/users", tools: ["list_users"], note: "assign/unassign/set-active writes have no application service" },
@@ -148,7 +148,7 @@ const MATRIX: Entry[] = [
   { prefix: "admin/custom-fields", tools: ["list_record_types"], note: "field-definition writes have no application service" },
   { prefix: "admin/customization", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "admin/page-layouts", tools: ["list_page_layouts", "describe_page_layout", "list_page_layout_history"] },
-  { prefix: "admin/pdf-templates", uncovered: "gap fill pending: list_pdf_templates and get_pdf_template reuse the pdf-templates store" },
+  { prefix: "admin/pdf-templates", tools: ["list_pdf_templates", "get_pdf_template"] },
   { prefix: "customization", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "admin/flows", tools: ["list_approvals"], note: "flow authoring writes have no application service" },
   { prefix: "flows", tools: ["list_approvals", "decide_approval"], note: "flow authoring and manual/record-state triggers have no application service" },
@@ -170,7 +170,7 @@ const MATRIX: Entry[] = [
 ];
 
 /** The allowlist must only shrink: lower this as gap-fill commits land. */
-const UNCOVERED_BUDGET = 37;
+const UNCOVERED_BUDGET = 34;
 
 const REASON_VOCABULARY = [
   "no application service:",

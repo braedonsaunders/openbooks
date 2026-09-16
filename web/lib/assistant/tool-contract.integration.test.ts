@@ -95,6 +95,7 @@ const READER_PERMS = [
   "data.export",
   "data.import",
   "admin.sandboxes.manage",
+  "admin.customization.manage",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -107,6 +108,7 @@ const EMPTY_STORE: Record<string, string> = {
   get_pay_run: "pay_run_not_found",
   payroll_entitlements: "employee_not_found",
   get_file: "file_not_found",
+  get_pdf_template: "template_not_found",
   get_continuous_close_finding: "finding_not_found",
   get_opportunity: "opportunity_not_found",
   get_crm_account: "crm_account_not_found",
@@ -262,6 +264,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         payroll_entitlements: { employeePartyId: randomUUID() },
         payroll_remittances: { fromDate: "2026-01-01", toDate: "2026-12-31" },
         get_file: { id: randomUUID() },
+        get_pdf_template: { id: randomUUID() },
         get_continuous_close_finding: { findingId: randomUUID() },
         list_setup_records: { entityKey: "extension-settings" },
         get_opportunity: { opportunityId: randomUUID() },

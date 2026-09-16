@@ -34,7 +34,7 @@ function authzFor(orgId: string, permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null }
 }
 
-const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage', 'admin.sandboxes.manage']
+const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage', 'admin.sandboxes.manage', 'admin.customization.manage']
 
 test('assistant data-io tools list resources and import runs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -119,6 +119,50 @@ test('assistant environments list sandboxes with refresh status, isolated per or
       assert.equal(items[0]!.name, 'Probe Sandbox')
       assert.equal(items[0]!.status, 'ready')
       const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'list_environments', {})
+      assert.deepEqual(bare, { ok: false, error: 'forbidden' })
+    })
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
+  }
+})
+
+test('assistant pdf templates list without bodies and get truncates, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    const tplId = randomUUID()
+    const bigHtml = `<div>${'x'.repeat(9000)}</div>`
+    await withOrgContext(orgA.orgId, async () => {
+      await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
+        values (${tplId}, ${orgA.orgId}, 'customer_invoice', 'Probe Template', ${bigHtml}, ${bigHtml})`)
+    })
+    await withOrgContext(orgB.orgId, async () => {
+      const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_pdf_templates', {})
+      assert.equal(other.ok, true, JSON.stringify(other))
+      assert.ok(other.ok)
+      assert.deepEqual((other.data as { items: unknown[] }).items, [])
+      const missing = await executeAssistantTool(authzFor(orgB.orgId, READER), 'get_pdf_template', { id: tplId })
+      assert.deepEqual(missing, { ok: false, error: 'template_not_found' })
+    })
+    await withOrgContext(orgA.orgId, async () => {
+      const listed = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_pdf_templates', {})
+      assert.equal(listed.ok, true, JSON.stringify(listed))
+      assert.ok(listed.ok)
+      const items = (listed.data as { items: Record<string, unknown>[] }).items
+      assert.equal(items.length, 1)
+      assert.equal(items[0]!['name'], 'Probe Template')
+      assert.ok(!('sourceHtml' in items[0]!), 'list rows must not carry HTML bodies')
+      const one = await executeAssistantTool(authzFor(orgA.orgId, READER), 'get_pdf_template', { id: tplId })
+      assert.equal(one.ok, true, JSON.stringify(one))
+      assert.ok(one.ok)
+      const data = one.data as { sourceHtml: string; sourceTruncated: boolean; sourceHtmlChars: number }
+      assert.equal(data.sourceTruncated, true)
+      assert.ok(data.sourceHtml.length <= 6100, `truncated body is ${data.sourceHtml.length} chars`)
+      assert.equal(data.sourceHtmlChars, bigHtml.length)
+      const badKind = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_pdf_templates', { recordType: 'nope' })
+      assert.deepEqual(badKind, { ok: false, error: 'unknown_record_type' })
+      const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'get_pdf_template', { id: tplId })
       assert.deepEqual(bare, { ok: false, error: 'forbidden' })
     })
   } finally {
