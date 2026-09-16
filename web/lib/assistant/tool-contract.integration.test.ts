@@ -96,6 +96,7 @@ const READER_PERMS = [
   "data.import",
   "admin.sandboxes.manage",
   "admin.customization.manage",
+  "allocations.read",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -136,6 +137,7 @@ const FEATURE_OFF = new Set([
   "feature_disabled",
   "multi_currency_feature_disabled",
   "budgets_feature_disabled",
+  "allocations_feature_disabled",
   "api_access_feature_disabled",
 ]);
 
@@ -285,6 +287,10 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_subcontract: { id: randomUUID() },
         get_wip_prebill: { id: randomUUID() },
         get_close_run_status: { runId: randomUUID() },
+        get_allocation_rule: { ruleId: randomUUID() },
+        preview_driver_vector: { driverId: randomUUID(), period: "this_fiscal_year_to_date" },
+        preview_allocation: { ruleId: randomUUID(), period: "this_fiscal_year_to_date" },
+        explain_allocation: { journalEntryId: randomUUID() },
         list_fx_rates: { fromCurrency: "USD", toCurrency: "CAD" },
         get_consolidation_view: { periodId: randomUUID() },
         get_budget_workspace: { scenarioId: randomUUID() },
