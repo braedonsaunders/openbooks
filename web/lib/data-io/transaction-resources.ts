@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
+import { loadEntryRuleByKey } from '@openbooks/engine/src/allocations/entry.ts'
 import { controlDeps, nextDocumentNumber } from '../documents'
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'
@@ -70,7 +71,12 @@ function transactionFields(cfg: DocKindConfig): ResourceField[] {
   fields.push({ key: 'amount', label: 'amount', kind: 'currency' })
   fields.push({ key: 'description', label: 'description', kind: 'text' })
   if (cfg.hasTax) fields.push({ key: 'taxCode', label: 'taxCode', kind: 'reference', ref: { resource: 'tax-codes', by: 'code' } })
-  // Multi-line: a JSON array of { account, amount, description?, taxCode? }.
+  // Entry-mode distribution: one allocation rule key staged on the line. The
+  // adapter resolves and stores the rule reference; the document save path
+  // explodes it (gated there), so this stays import-only sugar like the
+  // other flat columns and rides `lines` on export.
+  fields.push({ key: 'distributionKey', label: 'distributionKey', kind: 'text' })
+  // Multi-line: a JSON array of { account, amount, description?, taxCode?, distributionKey? }.
   fields.push({ key: 'lines', label: 'lines', kind: 'long_text' })
   return fields
 }
@@ -95,6 +101,8 @@ interface TxnLineInput {
   amount?: unknown
   description?: unknown
   taxCode?: unknown
+  /** Entry-mode allocation rule key staged on the line (resolved on write). */
+  distributionKey?: unknown
   /**
    * Legacy quantity/unitPrice slots exist for spreadsheets that tried to map
    * one convenience column onto quantity × unitPrice. Imports refuse them to
@@ -164,7 +172,7 @@ export function transactionResource(
     return cols
       .filter(
         (f) =>
-          !['account', 'amount', 'description', 'taxCode'].includes(f.key) &&
+          !['account', 'amount', 'description', 'taxCode', 'distributionKey'].includes(f.key) &&
           (f.key !== 'currency' || multiCurrency) &&
           (f.key !== 'subsidiary' || multiSubsidiary),
       )
@@ -219,12 +227,20 @@ export function transactionResource(
       const rows: Record<string, CellValue>[] = []
       for (const d of docs.rows) {
         const lineRows = (await db.execute(sql`
-          select l.amount, l.description, a.number as account, t.code as tax_code
+          select l.amount, l.description, a.number as account, t.code as tax_code,
+                 ar.key as distribution_key
             from document_lines l
             left join accounts a on a.id = l.account_id and a.org_id = l.org_id
             left join tax_codes t on t.id = l.tax_code_id and t.org_id = l.org_id
+            left join allocation_rules ar on ar.id = l.distribution_rule_id and ar.org_id = l.org_id
            where l.document_id = ${d.id} and l.org_id = ${orgId} order by l.line_number`)) as {
-          rows: { amount: string; description: string | null; account: string | null; tax_code: string | null }[]
+          rows: {
+            amount: string
+            description: string | null
+            account: string | null
+            tax_code: string | null
+            distribution_key: string | null
+          }[]
         }
         rows.push({
           documentNumber: d.document_number,
@@ -242,6 +258,7 @@ export function transactionResource(
               amount: l.amount,
               description: l.description,
               taxCode: l.tax_code,
+              distributionKey: l.distribution_key,
             })),
           ),
         })
@@ -354,7 +371,13 @@ async function writeTransactions(
         })
         continue
       }
-      const built: { accountId: string; amount: string; description: string | null; taxCodeId: string | null }[] = []
+      const built: {
+        accountId: string
+        amount: string
+        description: string | null
+        taxCodeId: string | null
+        distributionRuleId: string | null
+      }[] = []
       let lineErr: string | null = null
       for (const l of rawLines) {
         const acctId = await resolver.resolveId({ resource: 'accounts', by: 'number' }, l.account)
@@ -376,7 +399,32 @@ async function writeTransactions(
             break
           }
         }
-        built.push({ accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId })
+        // Entry-mode distribution staging: resolve the rule key against
+        // entry rules in effect on the document date and keep the reference
+        // on the line. The adapter never explodes — the save path does,
+        // behind the allocationsAtEntry gate — but an unknown key fails the
+        // row closed exactly like an unknown account: silently dropping the
+        // attribution would misstate the import.
+        let distributionRuleId: string | null = null
+        const rawKey = l.distributionKey
+        if (rawKey !== undefined && rawKey !== null && String(rawKey).trim() !== '') {
+          const key = String(rawKey).trim()
+          const lookup = await loadEntryRuleByKey(ctx.orgId, key, documentDate)
+          if (lookup.status === 'not_found') {
+            lineErr = `distribution key "${key}" not found`
+            break
+          }
+          if (lookup.status === 'wrong_mode') {
+            lineErr = `distribution key "${key}" is not an entry rule`
+            break
+          }
+          if (lookup.status === 'inactive') {
+            lineErr = `distribution key "${key}" is not in effect on ${documentDate}`
+            break
+          }
+          distributionRuleId = lookup.rule.rule.id
+        }
+        built.push({ accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId, distributionRuleId })
       }
       if (lineErr) {
         outcome.failed++
@@ -444,6 +492,9 @@ async function writeTransactions(
               description: l.description,
               amount: l.amount,
               taxCodeId: l.taxCodeId,
+              // Written only when a distribution key staged a rule: the
+              // insert shape is unchanged otherwise (unit atomicity suite).
+              ...(l.distributionRuleId ? { distributionRuleId: l.distributionRuleId } : {}),
               createdBy: ctx.actorId,
             })),
           )
@@ -523,7 +574,13 @@ function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; erro
       }
     }
     return {
-      lines: [{ account: src.account, amount: src.amount, description: src.description, taxCode: src.taxCode }],
+      lines: [{
+        account: src.account,
+        amount: src.amount,
+        description: src.description,
+        taxCode: src.taxCode,
+        distributionKey: src.distributionKey,
+      }],
       error: null,
     }
   }
