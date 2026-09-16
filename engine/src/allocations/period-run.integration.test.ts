@@ -891,6 +891,54 @@ test(
 );
 
 test(
+  "report-only lineage keeps driver evidence for explicit driver-basis targets",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Dept A");
+      const deptB = await seedDepartment(org.orgId, "Dept B");
+      await seedSourceEntry(org, actorId, "200.0000");
+      const driverId = await seedDriver({ orgId: org.orgId, dimension: "department", sourceKind: "manual" });
+      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptA, value: "3.0000" });
+      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptB, value: "1.0000" });
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        impact: "report_only",
+        basisKind: "driver",
+        driverId,
+        targets: [
+          { departmentId: deptA, fixedPercent: null, label: "Dept A" },
+          { departmentId: deptB, fixedPercent: null, label: "Dept B" },
+        ],
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+      });
+      const posted = await postAllocationRun(preview.id, actorId, "Post statistical attribution");
+      assert.equal(posted.status, "posted");
+      assert.equal(posted.journalEntryId, null);
+      const lineage = (await db.execute<{ driver_value: string | null; amount: string }>(sql`
+        select driver_value::text as driver_value, amount::text as amount from allocation_lineage
+         where org_id = ${org.orgId} and run_id = ${preview.id}`)).rows;
+      assert.equal(lineage.length, 2);
+      assert.deepEqual(
+        lineage.map((row) => row.driver_value).sort(),
+        ["1.0000", "3.0000"],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "listRuns and getRun expose the stored computation",
   { skip: !DB },
   async () => {
