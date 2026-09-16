@@ -1,6 +1,8 @@
 # Allocation Kernel — design and build plan
 
-Status: APPROVED design, in build (fleet coordinator thread `thr_t8dcvesuvd`).
+Status: SHIPPED on main 2026-09-16 (fleet coordinator thread `thr_t8dcvesuvd`; 14 shards, migrations
+0160–0164). Section 6 is the historical build plan; the code under `engine/src/allocations/` and
+`web/app/(app)/admin/setup/allocations/` is the source of truth where they differ.
 Schema contract: `schema/src/allocations.ts` + migration `0160_allocation_kernel.sql`.
 Type contract: `engine/src/allocations/types.ts`.
 
