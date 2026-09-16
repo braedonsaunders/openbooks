@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.8` image digest in
+2. resolves and records the official `0.1.0-alpha.9` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -711,7 +711,7 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.8` is the current community preview. It is the allocations
+`v0.1.0-alpha.9` is the current community preview. It is the allocations
 release: one allocation kernel now serves entry-time distribution keys (a
 line splits across accounts and dimensions by a saved rule, automatically
 for lines matched per account and per department), posting-time GL
