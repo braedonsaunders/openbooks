@@ -50,7 +50,7 @@ export const CONTROL_FLOORS: readonly {
   area: string;
   source: readonly ControlCase[];
   minimum: number;
-}[] = [{ area: "allocation controls", source: ALLOCATION_CONTROL_CASES, minimum: 2 }];
+}[] = [{ area: "allocation controls", source: ALLOCATION_CONTROL_CASES, minimum: 7 }];
 
 /** Every control id the evidence set makes a claim about. */
 export function coveredControls(): string[] {
