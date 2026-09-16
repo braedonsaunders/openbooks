@@ -1,5 +1,5 @@
 export {
-  listRulesInEffect,
+  listEntryRulesInEffect,
   matchLine,
   selectRule,
   type AccountGroupResolver,
@@ -39,8 +39,8 @@ export {
   type PublishedSiblingWindow,
   type RuleVersionValidationContext,
 } from "./validate.ts";
-// A1 rule service. listRulesInEffectByWindow is the window/book-aware listing;
-// match.ts keeps the entry-oriented loader name pending a coordinator rename.
+// A1 rule service. listRulesInEffect is the canonical window/book-aware
+// listing; match.ts listEntryRulesInEffect narrows it to current versions.
 export {
   AllocationRuleError,
   createDraftVersion,
@@ -48,7 +48,7 @@ export {
   getRuleDetail,
   getRuleVersion,
   listRuleHeads,
-  listRulesInEffect as listRulesInEffectByWindow,
+  listRulesInEffect,
   loadRuleInEffectByKey,
   publishVersion,
   replaceTargets,

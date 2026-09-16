@@ -9,7 +9,7 @@ import {
   type EntryPlan,
   type StoredEntryGroup,
 } from '@openbooks/engine/src/allocations/entry.ts'
-import { listRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
+import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
 import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
@@ -759,16 +759,12 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
 
 /**
  * Entry-mode allocation gate. The `allocationsAtEntry` key is owned by the
- * platform slice (A10); an unknown key resolves false, and any registry
- * failure fails closed, so entry rules can never fire before the feature
- * exists. Exported for the data-io import writer, which shares the gate.
+ * platform slice (A10) and registered on main; gate failures propagate
+ * instead of silently disabling the path. Exported for the data-io import
+ * writer, which shares the gate. Feature off saves lines untouched.
  */
 export async function entryAllocationsEnabled(orgId: string): Promise<boolean> {
-  try {
-    return await isFeatureEnabled(orgId, 'allocationsAtEntry')
-  } catch {
-    return false
-  }
+  return isFeatureEnabled(orgId, 'allocationsAtEntry')
 }
 
 /**
@@ -823,7 +819,7 @@ async function planDocumentEntryAllocations(args: {
     explicitRules.set(key, lookup.rule)
   }
 
-  const rules = await listRulesInEffect({ orgId, mode: 'entry', asOf })
+  const rules = await listEntryRulesInEffect({ orgId, mode: 'entry', asOf })
 
   // Account-group scopes resolve through one preloaded membership map per
   // referenced (dimension, groupKey) pair, keeping the matcher itself db-free.

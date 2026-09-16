@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { listRulesInEffect, matchLine, selectRule } from '@openbooks/engine/src/allocations/match.ts'
+import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/src/allocations/match.ts'
 import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { resolveAccountGroups } from '@openbooks/engine/src/account-groups.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -94,7 +94,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return refused()
   }
 
-  const inEffect = await listRulesInEffect({ orgId: user.orgId, mode: 'entry', asOf: documentDate })
+  const inEffect = await listEntryRulesInEffect({ orgId: user.orgId, mode: 'entry', asOf: documentDate })
   const inPolicy = policy === undefined ? inEffect : inEffect.filter((c) => c.version.applyPolicy === policy)
 
   if (ids.accountId === undefined) {
