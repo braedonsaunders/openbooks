@@ -328,6 +328,9 @@ export async function reconciliationFindings(
   detectors: ContinuousCloseDetectorPolicy[],
   loaders: ReconciliationLoaders = productionReconciliationLoaders,
 ): Promise<AgentFinding[]> {
+  if (!detectors.some((detector) => detector.enabled && (RECONCILIATION_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey))) {
+    return [];
+  }
   const today = await loaders.today(orgId);
   const findings: AgentFinding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
