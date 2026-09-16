@@ -28,25 +28,34 @@ confidence times age, so the riskiest stale item is always on top. You only
 ever see packs your role can read; without the assistant permission the
 inbox is empty.
 
+The header keeps four vitals above the work queue: open findings, proposals
+awaiting, overdue assignments, and the last agent run. Below them sit the
+Inbox, Proposals, Briefing, and Activity tabs. Activity opens the run
+history in Setup; everything else stays on this page.
+
 ## Inbox filters
 
 Filter by pack, severity, status, and subsidiary, search by finding type or
-summary text, or narrow to findings that carry a proposal. The assignment
-filter offers three views: assigned to me, unassigned, and overdue. New
-since your last visit is highlighted so you can see what changed while you
-were away.
+summary text, narrow to findings that carry a proposal, or narrow to what
+changed in the last day or week. The assignment filter offers three views:
+assigned to me, unassigned, and overdue. New since your last visit is
+highlighted so you can see what changed while you were away.
+
+The inbox ranks by materiality times confidence times age unless you sort a
+column: severity, materiality, and last detected sort in both directions,
+and a fresh load always returns to the ranked order.
 
 Subsidiary resolves through account-linked findings. Every other finding
 buckets as unresolved rather than guessing a subsidiary, and the filter says
 so plainly.
 
-## Proposals lane
+## Proposals tab
 
-Findings that carry a proposed fix show it as a governed review card: what
-the agent wants to run, with which inputs, and an Apply action. Some
-proposals cannot be resolved into a runnable command; those stay visible
-with an explanation instead of a dead button, and opening the finding shows
-the full evidence.
+The Proposals tab is the same inbox narrowed to findings that carry a
+proposed fix. Opening one shows the governed review card: what the agent
+wants to run, with which inputs, and an Apply action. Some proposals cannot
+be resolved into a runnable command; those stay visible with an explanation
+instead of a dead button, and opening the finding shows the full evidence.
 
 ## Working a finding
 
