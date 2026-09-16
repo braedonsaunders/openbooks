@@ -1,0 +1,115 @@
+import "server-only";
+import { can, type Authz } from "../authz";
+import {
+  accessAtLeast,
+  createFile,
+  folderAccessLevel,
+  getFolder,
+  type AccessLevel,
+  type FileViewer,
+} from "../file-cabinet";
+import { forbidden, invalidInput, notFound } from "./errors";
+
+/**
+ * File Cabinet upload behind the `upload_file` application tool. Same
+ * storage path (`createFile`) and same folder grant gate (Editor+) as
+ * POST /api/file-cabinet/files — the tool is a second transport over that
+ * route's service, never a parallel writer.
+ */
+
+/**
+ * Content types the cabinet stores. Mirror of ALLOWED_CONTENT_TYPES in
+ * web/app/api/file-cabinet/lib.ts (lib code must not import from app/api,
+ * so the list is copied — keep in sync).
+ */
+const ALLOWED_CONTENT_TYPES: Record<string, true> = {
+  "application/pdf": true,
+  "image/png": true,
+  "image/jpeg": true,
+  "image/gif": true,
+  "text/csv": true,
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+  "text/plain": true,
+  "text/markdown": true,
+  "text/javascript": true,
+  "application/json": true,
+  "application/xml": true,
+  "text/xml": true,
+};
+
+export function isUploadContentType(contentType: string): boolean {
+  return ALLOWED_CONTENT_TYPES[contentType.split(";")[0]!.trim().toLowerCase()] === true;
+}
+
+/** Tool payloads stay model-sized: 1 MB of bytes (the route allows 25 MB). */
+export const MAX_UPLOAD_BYTES = 1024 * 1024;
+
+const BASE64 = /^[A-Za-z0-9+/=]+$/;
+
+export type CabinetUpload = { filename: string; contentType: string; bytes: Buffer };
+
+/** Pure input validation: filename, allowlisted content type, base64 size. */
+export function validateCabinetUpload(input: {
+  filename: string;
+  contentType: string;
+  contentBase64: string;
+}): CabinetUpload {
+  const filename = input.filename.trim();
+  if (!filename) throw invalidInput("filename is required");
+  if (filename.length > 255) throw invalidInput("filename exceeds 255 characters");
+  const contentType = input.contentType.split(";")[0]!.trim().toLowerCase();
+  if (!isUploadContentType(contentType)) throw invalidInput(`unsupported file type: ${input.contentType || "unknown"}`);
+  const compact = input.contentBase64.replace(/\s+/g, "");
+  if (!compact) throw invalidInput("file is empty");
+  if (!BASE64.test(compact)) throw invalidInput("contentBase64 is not valid base64");
+  const bytes = Buffer.from(compact, "base64");
+  if (bytes.length === 0) throw invalidInput("file is empty");
+  if (bytes.length > MAX_UPLOAD_BYTES) {
+    throw invalidInput(`file exceeds the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB tool upload limit`);
+  }
+  return { filename, contentType, bytes };
+}
+
+/**
+ * The caller as a FileViewer. Faithful replica of `fileViewer(authz)` in
+ * web/app/api/file-cabinet/lib.ts (same precedent as assistantFileViewer in
+ * web/lib/assistant/tools-files.ts — keep in sync).
+ */
+function uploadViewer(authz: Authz): FileViewer {
+  const baseline: AccessLevel = can(authz, "documents.manage")
+    ? "manager"
+    : can(authz, "documents.read")
+      ? "viewer"
+      : "none";
+  return { userId: authz.user.id, isAdmin: can(authz, "*"), baseline, allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
+}
+
+export async function uploadCabinetFile(
+  authz: Authz,
+  input: { folderId: string; filename: string; contentType: string; contentBase64: string },
+): Promise<{ id: string; name: string; folderId: string; folderName: string | null; contentType: string; sizeBytes: number }> {
+  const { filename, contentType, bytes } = validateCabinetUpload(input);
+  const folder = await getFolder(authz.user.orgId, input.folderId);
+  if (!folder) throw notFound("folder");
+  // Uploading needs Editor+ on the destination folder — the route's gate.
+  const level = await folderAccessLevel(authz.user.orgId, uploadViewer(authz), input.folderId);
+  if (!accessAtLeast(level, "editor")) throw forbidden("documents.manage");
+  const meta = await createFile({
+    orgId: authz.user.orgId,
+    folderId: input.folderId,
+    filename,
+    contentType,
+    bytes,
+    createdBy: authz.user.id,
+    audit: { actorId: authz.user.id },
+  });
+  return {
+    id: meta.id,
+    name: meta.name,
+    folderId: meta.folderId,
+    folderName: meta.folderName,
+    contentType: meta.contentType,
+    sizeBytes: meta.sizeBytes,
+  };
+}

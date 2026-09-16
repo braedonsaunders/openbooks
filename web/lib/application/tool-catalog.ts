@@ -33,6 +33,7 @@ import {
   voidDocument,
 } from "./documents";
 import { createPayment, postPayment, updatePayment } from "./payments";
+import { uploadCabinetFile } from "./files";
 import {
   createApplicationRecord,
   deleteApplicationRecord,
@@ -61,7 +62,7 @@ import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin"
 import { readCompanySettings, updateCompanySettings } from "../company-settings";
 import { createSetupRecord, deleteSetupRecord, updateSetupRecord } from "../setup/write";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
+import { ApplicationError, conflict, forbidden, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 export type ApplicationToolConfirmation = "never" | "always";
@@ -906,6 +907,34 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         execute: async () => settleWrite(await deleteSetupRecord(setupActor(context), input.entityKey, input.id)),
       });
       return { ok: true, replayed: outcome.replayed, entityKey: input.entityKey, ...outcome.value };
+    },
+  }),
+  definition({
+    name: "upload_file", title: "Upload File",
+    description: "Upload a small file (at most 1 MB) to a File Cabinet folder through the same storage and folder grants as the files screen: needs Editor access or better on the destination folder, accepts the cabinet's allowlisted document, image, spreadsheet, and text types, and is audited. Resolve the folder with list_folders first. Returns the created file's metadata.",
+    inputSchema: z.object({
+      folderId: UUID,
+      filename: z.string().trim().min(1).max(255).describe("File name with extension, e.g. statement-jan.pdf"),
+      contentType: z.string().max(120).describe("MIME type, one of the cabinet's allowlisted types, e.g. application/pdf or text/csv"),
+      contentBase64: z.string().max(1400000).describe("File bytes as base64, at most 1 MB decoded"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("documents.manage", "documents.read"),
+    execute: async (context, input) => {
+      // documents.read does not imply from documents.manage (no wildcard),
+      // so either suffices here — the folder grant is the true gate below.
+      if (!can(context.authz, "documents.read") && !can(context.authz, "documents.manage")) {
+        throw forbidden("documents.read");
+      }
+      const outcome = await executeIdempotent({
+        context, operation: "file.upload", idempotencyKey: input.idempotencyKey,
+        request: { folderId: input.folderId, filename: input.filename, contentType: input.contentType },
+        execute: async () => uploadCabinetFile(context.authz, {
+          folderId: input.folderId, filename: input.filename,
+          contentType: input.contentType, contentBase64: input.contentBase64,
+        }),
+      });
+      return { ok: true, replayed: outcome.replayed, ...outcome.value, href: "/documents" };
     },
   }),
 ];

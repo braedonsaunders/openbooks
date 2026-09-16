@@ -129,7 +129,7 @@ const MATRIX: Entry[] = [
   { prefix: "rate-book-assignments", tools: ["list_setup_records"], note: "item-rate-book-assignments is a setup entity" },
   { prefix: "revenue", uncovered: "no application service: recognition run persists inline" },
   // --- files, data, sync, environments, pdf, email ---------------------------
-  { prefix: "file-cabinet", tools: ["list_files", "get_file", "list_folders"], note: "file upload and grant writes have no tool yet (b04 gap fill: upload_file)" },
+  { prefix: "file-cabinet", tools: ["list_files", "get_file", "list_folders", "upload_file"], note: "grant admin writes have no application service" },
   { prefix: "data", tools: ["list_data_resources", "list_import_runs"] },
   { prefix: "sync", tools: ["list_sync_connections"] },
   { prefix: "platform/connections", tools: ["list_sync_connections"] },

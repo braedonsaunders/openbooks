@@ -92,6 +92,19 @@ test("report run and delivery tools reuse the schedules visibility rule", () => 
   assert.match(ops, /return def\.name/);
 });
 
+test("upload_file terminates in cabinet storage behind the route's grant gate", () => {
+  // POST /api/file-cabinet/files stores via createFile and requires Editor+
+  // on the destination folder. The application service and the catalog entry
+  // must reuse both, and the mutation must stay behind user confirmation.
+  const service = read("../application/files.ts");
+  const catalog = read("../application/tool-catalog.ts");
+  assert.match(service, /createFile\(\{/);
+  assert.match(service, /folderAccessLevel\(authz\.user\.orgId/);
+  assert.match(service, /accessAtLeast\(level, "editor"\)/);
+  assert.match(catalog, /name: "upload_file"[\s\S]{0,1200}assistantConfirmation: "always"/);
+  assert.match(catalog, /operation: "file\.upload"/);
+});
+
 test("list_import_runs reuses the history view's query shape and stays org-scoped", () => {
   assert.match(ops, /from import_jobs j/);
   assert.match(ops, /j\.org_id =/);
