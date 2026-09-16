@@ -113,6 +113,25 @@ test("sync is a no-op on an unchanged card and republishes on a new generation",
   }
 });
 
+test("concurrent first-use syncs provision exactly one rule and version", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    const results = await Promise.all([
+      syncOverheadSystemRule(s.orgId, s.actorId),
+      syncOverheadSystemRule(s.orgId, s.actorId),
+    ]);
+    assert.equal(results[0]?.versionId, results[1]?.versionId);
+    const counts = await db.execute<{ heads: string; versions: string }>(sql`
+      select (select count(*) from allocation_rules where org_id = ${s.orgId} and key = 'overhead-net-zero-pair') as heads,
+             (select count(*) from allocation_rule_versions v
+               join allocation_rules r on r.org_id = v.org_id and r.id = v.rule_id
+              where v.org_id = ${s.orgId} and r.key = 'overhead-net-zero-pair' and v.status = 'published') as versions`);
+    assert.deepEqual(counts.rows[0], { heads: "1", versions: "1" });
+  } finally {
+    await dropScratchOrg(s.orgId);
+  }
+});
+
 test("sync retires the open version when the policy leaves net-zero pair", { skip: !DB }, async () => {
   const s = await seed();
   try {
