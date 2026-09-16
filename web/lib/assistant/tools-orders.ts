@@ -52,7 +52,7 @@ function billingStatus(ordered: bigint, billed: bigint): string {
 const searchOrders: AssistantToolDef = {
   name: "search_orders",
   description:
-    "Search quotes, sales orders, and purchase orders by kind, status, party, or date, with per-order fulfilment and billing state (unfulfilled/partial/fulfilled, unbilled/partial/billed) plus backlog totals over ALL matches. For generic document search use find_documents. Read-only.",
+    "Search quotes, sales and purchase orders by kind, status, party, date: fulfilment/billing state per order plus backlog totals. For generic search use find_documents. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   feature: "orders",
@@ -159,7 +159,7 @@ const searchOrders: AssistantToolDef = {
 const getOrder: AssistantToolDef = {
   name: "get_order",
   description:
-    "One quote, sales order, or purchase order by id: header, lines with ordered/fulfilled/billed/remaining quantities, and the links graph (created-from, converted-into, fulfilments, receipts, invoices). Same payload the order drawer renders. Read-only.",
+    "One quote/order by id: header, line quantities (ordered/fulfilled/billed/remaining), links graph. Same payload as the order drawer. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   feature: "orders",

@@ -39,7 +39,7 @@ function setupEntityEnabled(entity: SetupEntity, features: FeatureState): boolea
 const listSetupEntitiesTool: AssistantToolDef = {
   name: "list_setup_entities",
   description:
-    "Enumerate every configuration entity in the Setup registry: key, setup-rail group, backing table, whether it is nested under or re-homed onto another surface, its optional-feature gate, and whether it is currently enabled for this org. Read-only.",
+    "Every Setup-registry entity: key, group, backing table, placement, feature gate, enabled state for this org. Read-only.",
   category: "read",
   // Which modules are on is not sensitive; every assistant user may ask.
   gate: { mode: "public" },
@@ -68,7 +68,7 @@ const listSetupEntitiesTool: AssistantToolDef = {
 const listSetupRecordsTool: AssistantToolDef = {
   name: "list_setup_records",
   description:
-    "List the configuration records of one Setup entity (by its key from list_setup_entities), optionally filtered by a text search across its list columns. Returns each row's id plus the entity's declared list columns; archived rows are excluded when the entity supports archiving. Read-only.",
+    "Records of one Setup entity (key from list_setup_entities), optional text filter: row ids plus declared list columns; archived rows excluded where supported. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
   inputSchema: z.object({
@@ -139,7 +139,7 @@ const listFeaturesTool: AssistantToolDef = {
   name: "list_features",
   tier: "core",
   description:
-    "The Features switchboard: every optional feature's key, category, default, parent/required features, the nav modules it gates, and whether it is currently enabled for this org (resolved state, including data-dependent defaults). Read-only.",
+    "The Features switchboard: each feature's key, category, default, parents, gated modules, and resolved enabled state for this org. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
   inputSchema: z.object({}),

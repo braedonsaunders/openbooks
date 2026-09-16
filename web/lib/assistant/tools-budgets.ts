@@ -22,7 +22,7 @@ const dimInput = uuidInput.nullable().optional()
 const getBudgetWorkspace: AssistantToolDef = {
   name: "get_budget_workspace",
   description:
-    "One budget scenario's planning worksheet slice: scenario header (status, fiscal year, revision — copy revision to expectedRevision for update_budget_cells), the year's periods, one account page with its per-period cell amounts and notes, plus the slice total. Paginate accounts with page/perPage; narrow with q or a dimension. Read-only.",
+    "One scenario's worksheet slice: header (copy revision to expectedRevision for writes), periods, one account page with per-period cells/notes, total. Paginate with page/perPage. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["budgets.read"] },
   feature: "budgets",

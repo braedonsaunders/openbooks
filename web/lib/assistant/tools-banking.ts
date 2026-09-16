@@ -67,7 +67,7 @@ const listBankReconciliations: AssistantToolDef = {
 const getBankReconciliation: AssistantToolDef = {
   name: "get_bank_reconciliation",
   description:
-    "One reconciliation session's detail: account, through-date, status, plus running totals (statement balance, cleared balance, difference, matched/unmatched line counts) — the same numbers the workspace badge and sign-off gate use. Read-only.",
+    "One reconciliation session: account, through-date, status, running totals (statement, cleared, difference, matched/unmatched counts) — the workspace/sign-off numbers. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["banking.read"] },
   feature: "banking",
@@ -116,7 +116,7 @@ const getBankReconciliation: AssistantToolDef = {
 const listUnmatchedBankLines: AssistantToolDef = {
   name: "list_unmatched_bank_lines",
   description:
-    "List imported bank statement lines still awaiting a match (no reconciliation match, not excluded), optionally for one account: date, description, counterparty reference, amount, and the bank account, with the total unmatched count. Read-only.",
+    "Imported bank lines still awaiting a match, optionally one account: date, description, counterparty, amount, account, plus total unmatched count. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["banking.reconcile"] },
   feature: "banking",
@@ -178,7 +178,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
 const listBankFeeds: AssistantToolDef = {
   name: "list_bank_feeds",
   description:
-    "List bank feed connections: provider, name, linked GL account, status, sync cadence, next sync, last success, last attempt timestamps, last result, and whether credentials are configured. Credentials themselves are sealed and never returned. Read-only.",
+    "Bank feed connections: provider, name, GL account, status, cadence, last sync/result. Credentials sealed, never returned. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
   feature: "bankFeeds",

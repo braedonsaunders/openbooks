@@ -134,7 +134,7 @@ const runReport: AssistantToolDef = {
   name: "run_report",
   tier: "core",
   description:
-    "Execute any saved report definition (built-in statement or custom report-studio report) through the same resolver the export route and scheduler use, returning its title, summary figures, and tabular groups (rows capped). A `period` preset (fiscal-calendar-resolved) or custom date range overrides the definition's period. Read-only.",
+    "Execute a saved report (built-in or studio custom) with title, summary figures, capped tabular groups. A `period` preset or dates override the definition's period. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
@@ -207,7 +207,7 @@ const runReport: AssistantToolDef = {
 const generalLedgerTool: AssistantToolDef = {
   name: "general_ledger",
   description:
-    "General ledger for a posting-date range: per-account opening balance, posted lines in date order with running balance, and closing balance. Scope to one account with accountId; unscoped runs return more accounts with fewer lines each. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
+    "General ledger for a posting-date range: per-account opening, posted lines with running balance, closing. Scope with accountId. Relative periods: `period` preset. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read", "gl.read"] },
   inputSchema: z.object({
@@ -291,7 +291,7 @@ const agingDetailTool: AssistantToolDef = {
 const cashFlowIndirectTool: AssistantToolDef = {
   name: "cash_flow_indirect",
   description:
-    "Indirect-method cash flow statement for a posting-date range: net income, non-cash adjustments, per-account working-capital movements, investing and financing sections, FX effect, and net change in cash. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
+    "Indirect-method cash flow for a posting-date range: net income, non-cash adjustments, working-capital movements, investing/financing, FX effect, net change. `period` preset for relative periods. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ ...rangeInputFields }),

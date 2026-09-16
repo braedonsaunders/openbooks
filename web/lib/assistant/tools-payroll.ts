@@ -144,7 +144,7 @@ const getPayRun: AssistantToolDef = {
 const payrollYearEnd: AssistantToolDef = {
   name: "payroll_year_end",
   description:
-    "Payroll filings for a tax year, one section per filing declared by the org's installed payroll packs: label, cadence (annual, quarterly, or separation), population rows (capped), totals, whether a per-employee slip and an electronic file are available, and any named population refusal. Annual/quarterly filings live on /payroll/year-end; separation filings (the ROE) are per-employee-event documents on /payroll/separations. Read-only.",
+    "Payroll filings for a tax year, one section per declared filing: label, cadence, capped population rows, totals, slip/file availability, population refusals. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",
@@ -194,7 +194,7 @@ const payrollYearEnd: AssistantToolDef = {
 const payrollSetupStatus: AssistantToolDef = {
   name: "payroll_setup_status",
   description:
-    "Org-level payroll configuration state: installed payroll country packs and every setup check the run pre-flight verifies (stable code, severity, pass/fail, and where to resolve it), with blocker and warning counts. Read-only.",
+    "Payroll configuration state: installed country packs and run pre-flight checks (code, severity, pass/fail, resolution), with blocker/warning counts. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.manage"] },
   feature: "payroll",
@@ -222,7 +222,7 @@ const payrollSetupStatus: AssistantToolDef = {
 const listPayrollEmployees: AssistantToolDef = {
   name: "list_payroll_employees",
   description:
-    "List employees with a payroll profile, optionally filtered by name: employee, pay schedule, payroll country pack and region, pay basis, active flag, filing account number, stub delivery, and payment method. Withholding elections and government identification numbers are never returned. Read-only.",
+    "Employees with a payroll profile, optional name filter: schedule, pack/region, pay basis, filing account, stub delivery, payment method. Withholding elections and government ids never returned. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["payroll.manage"] },
   feature: "payroll",
@@ -283,7 +283,7 @@ const listPayrollEmployees: AssistantToolDef = {
 const payrollEntitlements: AssistantToolDef = {
   name: "payroll_entitlements",
   description:
-    "One employee's entitlement plan balances as of a date (default today): per-plan balance in the plan's unit plus the money and hours views at the current wage, limits with over/near-limit flags, and the last movement date. Read-only.",
+    "One employee's entitlement balances as of a date (default today): per-plan balance, money/hours views, limits with flags, last movement. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",
@@ -340,7 +340,7 @@ const payrollEntitlements: AssistantToolDef = {
 const payrollRemittances: AssistantToolDef = {
   name: "payroll_remittances",
   description:
-    "Accrued-but-unremitted payroll withholdings and employer contributions by remittance destination for pay dates in a range: per-destination component lines with amounts, filing account, period gross payroll and employee count, and any remittance bills already raised. Read-only.",
+    "Unremitted payroll withholdings and employer costs by destination for a pay-date range: component lines, filing account, gross payroll, headcount, bills raised. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",

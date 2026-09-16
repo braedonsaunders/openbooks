@@ -22,7 +22,7 @@ const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 const retainageBalances: AssistantToolDef = {
   name: "retainage_balances",
   description:
-    "Retainage / holdback balances from the ledger: the org's retainage receivable (held BY customers on our progress invoices) or retainage payable (held FROM subcontractors on their bills) control account as of a date, broken down by party, project, or source document, with the total. Reports whether the control account is configured at all. Read-only.",
+    "Retainage/holdback control balances as of a date (receivable and payable), by party, project, or document, with total. Reports whether the control account is configured. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "projects.read", "gl.read"] },
   feature: "projects",

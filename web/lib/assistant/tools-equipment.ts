@@ -110,7 +110,7 @@ const searchEquipment: AssistantToolDef = {
 const getEquipment: AssistantToolDef = {
   name: "get_equipment",
   description:
-    "One equipment unit by id: header, charge item, rate book, linked fixed asset, and utilization metrics — usage quantity, cost recovery, billable value, billed revenue, direct costs, and depreciation. Same payload the equipment drawer renders. Read-only.",
+    "One equipment unit: header, charge item, rate book, linked asset, utilization metrics (usage, recovery, billable value, revenue, costs, depreciation). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["assets.read"] },
   feature: "equipment",

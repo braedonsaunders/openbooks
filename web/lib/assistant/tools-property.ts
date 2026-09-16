@@ -456,7 +456,7 @@ const propertyDepositsSchema = z.object({
 const propertyDeposits: AssistantToolDef = {
   name: "property_deposits",
   description:
-    "Security-deposit reconciliation for a date: per-property subledger, linked GL, and cash-activity balances with discrepancy and configuration-required counts — the same readout as the deposit reconciliation screen. Read-only.",
+    "Security-deposit reconciliation for a date: per-property subledger, linked GL, cash balances, discrepancy counts. Same readout as the deposit screen. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read"] },
   feature: "propertyManagement",

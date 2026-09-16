@@ -25,7 +25,7 @@ export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD")
   .describe("Calendar date (YYYY-MM-DD)");
 export const uuidInput = z.string().regex(UUID_RE, "uuid")
-  .describe("Stable UUID, copied verbatim from the id a find_ or list_ tool returned; never invent one");
+  .describe("UUID copied from a find_, list_, or get_ tool; never invent one");
 
 /** Named fiscal-aware period, resolved server-side by the same resolver the
  *  report filter bar uses — the org's fiscal start month is applied here, so
@@ -33,7 +33,7 @@ export const uuidInput = z.string().regex(UUID_RE, "uuid")
 export const periodPresetInput = z
   .enum(PERIOD_PRESET_IDS as [string, ...string[]])
   .describe(
-    "Named period resolved against the org's fiscal calendar (e.g. this_fiscal_year_to_date, last_fiscal_quarter, this_calendar_year_to_date). Always prefer this over hand-computed dates for relative period language.",
+    "Fiscal-calendar preset (e.g. this_fiscal_year_to_date, last_fiscal_quarter); prefer over hand-computed dates.",
   );
 
 /** Shared schema fields for every range-taking tool: a preset OR an explicit
@@ -43,7 +43,7 @@ export const rangeInputFields = {
   fromDate: dateInput.optional().describe("Custom range start; only when no `period` preset fits"),
   toDate: dateInput.optional().describe("Custom range end; only when no `period` preset fits"),
   priorYears: z.number().int().min(0).max(10).optional().describe(
-    "Shift the resolved window back this many fiscal years for a comparative (e.g. period=last_fiscal_quarter + priorYears=1 = the same quarter one year earlier). Use this instead of hand-computing prior-year dates.",
+    "Repeat the window N fiscal years earlier for a comparative; never hand-compute prior-year dates.",
   ),
 };
 

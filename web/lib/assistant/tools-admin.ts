@@ -197,7 +197,7 @@ const listApiKeys: AssistantToolDef = {
 const searchAuditLog: AssistantToolDef = {
   name: "search_audit_log",
   description:
-    "Search the company audit log: who changed what, when — actions (insert, update, delete, post, void, approve), record types (transaction kinds for shared tables), actors, dates, and free text over record type, actor, or row id. Rows carry each event's change summary plus its full changes payload. Read-only.",
+    "Search the company audit log: actions, record types, actors, dates, free text. Rows carry each event's change summary plus full changes payload. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["admin.audit.read"] },
   inputSchema: z.object({
@@ -276,7 +276,7 @@ const searchAuditLog: AssistantToolDef = {
 const getOutboxStatus: AssistantToolDef = {
   name: "get_outbox_status",
   description:
-    "Background-work health: the scheduler outbox (flows, reports, dunning jobs) and the report-delivery outbox (email sends) summarized by status, with the oldest pending item's age and recent failures. Payloads stay server-side. Read-only.",
+    "Background-work health: scheduler and report-delivery outboxes by status, oldest pending age, recent failures. Payloads stay server-side. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["admin.audit.read"] },
   inputSchema: z.object({}),

@@ -199,7 +199,7 @@ const getExpenseReport: AssistantToolDef = {
 const expenseOverview: AssistantToolDef = {
   name: "expense_overview",
   description:
-    "Expense hub readout: approval pipeline counts and values, spend summary, top spenders, category movement, monthly trends, and the oldest-unfinished approval queue — the same dashboard the expenses home screen shows. Read-only.",
+    "Expense hub readout: approval pipeline, spend summary, top spenders, category movement, trends, oldest queue. Same dashboard as expenses home. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["expenses.read"] },
   feature: "expenses",
@@ -216,7 +216,7 @@ const expenseOverview: AssistantToolDef = {
 const expenseApprovals: AssistantToolDef = {
   name: "expense_approvals",
   description:
-    "Expense reports awaiting the caller's approval decision: flow gates and submittable documents with amounts and submitters. A caller with no approval doorway sees an empty queue, like the approvals hub. Decisions themselves stay human. Read-only.",
+    "Expense reports awaiting the caller's decision: amounts, submitters, flow gates. No doorway sees an empty queue. Decisions stay human. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["expenses.read"] },
   feature: "expenses",
