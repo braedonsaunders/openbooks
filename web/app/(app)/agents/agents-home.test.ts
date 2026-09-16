@@ -44,9 +44,13 @@ test("inbox table binds the list source sort and shared filters", () => {
   assert.match(view, /sort: 'detected'/);
   assert.match(view, /paramKey: 'since'/);
   assert.match(view, /column\(f\('columnAge'\)/);
-  assert.match(view, /column\(f\('columnDue'\)/);
+  assert.match(view, /column\(\s*f\('columnDue'\)/);
   assert.match(view, /RelativeTimeFormat/);
   assert.match(view, /column\(f\('columnAssignee'\)/);
+  // The due column shows the house-formatted date plus a red pill when
+  // past due — never the bare word alone.
+  assert.match(view, /widgetCell\('agents-due-cell', \{ date: item\('due'\), overdueLabel: item\('dueOverdueLabel'\) \}\)/);
+  assert.match(view, /due: dateTime\(row\.dueAt\)/);
 });
 
 // The header is the shared module-home pill strip (Inbox · Proposals ·
