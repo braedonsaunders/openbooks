@@ -81,14 +81,14 @@ export async function resolveRefreshLines(
   const lineRefs = [...new Set(states.map((s) => s.lineRef))];
   const rows = (await db.execute<{ doc_ref: string; line_ref: string; accountId: string; entry_id: string }>(sql`
     select d.custom->>${refKey} as doc_ref,
-           dl.custom->>'source_line_ref' as line_ref,
+           dl.custom->>'sourceLineRef' as line_ref,
            dl.account_id as "accountId",
            d.posted_entry_id as entry_id
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
      where dl.org_id = ${orgId} and d.posted_entry_id is not null
        and d.custom->>${refKey} = any(${sql.param(docRefs)}::text[])
-       and dl.custom->>'source_line_ref' = any(${sql.param(lineRefs)}::text[])
+       and dl.custom->>'sourceLineRef' = any(${sql.param(lineRefs)}::text[])
   `)).rows;
   for (const row of rows) out.set(`${row.doc_ref}|${row.line_ref}`, { entryId: row.entry_id, accountId: row.accountId });
   return out;
