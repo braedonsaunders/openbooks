@@ -4,6 +4,7 @@ import { canonicalJson } from "./canonical-json.ts";
 import { addCalendarDays, businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
 import { financialClosePeriodScope, revaluationReadiness } from "./fx-revaluation.ts";
+import { SOURCE_EVIDENCE_POLICY_CODE, sourceEvidencePolicyActive } from "./banking.ts";
 
 export class CloseError extends Error {}
 
@@ -752,7 +753,7 @@ export async function ensureCloseDefaults(
     await tx.execute(sql`
       insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
       values
-        (${orgId}, 'source-reconciliation-evidence', 'close.defaultData.policies.sourceReconciliationEvidence.name', 'close.defaultData.policies.sourceReconciliationEvidence.description',
+        (${orgId}, ${SOURCE_EVIDENCE_POLICY_CODE}, 'close.defaultData.policies.sourceReconciliationEvidence.name', 'close.defaultData.policies.sourceReconciliationEvidence.description',
          'evidence', ${JSON.stringify({})}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
       on conflict (org_id, code) do nothing`);
 
@@ -1271,6 +1272,11 @@ async function readinessChecks(
   const documentScope = sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)})`;
   const statementScope = closeBankStatementScope(orgId, subsidiaryIds);
 
+  // Source-evidenced sign-offs satisfy bank readiness exactly like statement
+  // sign-offs while the policy is on; off returns readiness to statements.
+  // Absent on pre-seed orgs reads as on (see sourceEvidencePolicyActive).
+  const sourceEvidenceOn = await sourceEvidencePolicyActive(orgId);
+
   const [drafts, missingPeriod, bank, depreciation, recognition, fx, fxReval, intercompany, variancePolicy] =
     (await Promise.all([
       db.execute(sql`
@@ -1292,36 +1298,64 @@ async function readinessChecks(
          and d.posting_period_id is null
          and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}
          and ${documentScope}`),
+      // Bank-unreconciled returns the open accounts themselves (not just a
+      // count) with per-account source-evidence coverage, so the close
+      // detail names each account with cleared/uncleared line counts.
       db.execute(sql`
-      select count(*) as count
-        from accounts a
-       where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
-         and (
-           exists (
-             select 1 from bank_statement_lines bsl
-              where bsl.org_id=${orgId} and bsl.account_id=a.id and ${statementScope}
-                and bsl.posted_on between ${ctx.starts_on} and ${ctx.ends_on}
+      with open_accounts as (
+        select a.id, a.number, a.name
+          from accounts a
+         where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
+           and (
+             exists (
+               select 1 from bank_statement_lines bsl
+                where bsl.org_id=${orgId} and bsl.account_id=a.id and ${statementScope}
+                  and bsl.posted_on between ${ctx.starts_on} and ${ctx.ends_on}
+             )
+             or exists (
+               select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+                where jl.org_id=${orgId} and jl.account_id=a.id and je.period_id=${ctx.period_id}
+                  and je.book_id=${ctx.book_id} and je.status in ('posted','reversed') and ${inScope(sql`jl.subsidiary_id`)}
+             )
+             or exists (
+               select 1 from journal_lines jl
+               join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+               join accounting_periods jp on jp.id=je.period_id and jp.org_id=je.org_id
+                where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
+                  and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
+                  and ${inScope(sql`jl.subsidiary_id`)}
+                group by jl.subsidiary_id having sum(jl.amount) <> 0
+             )
            )
-           or exists (
-             select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-              where jl.org_id=${orgId} and jl.account_id=a.id and je.period_id=${ctx.period_id}
-                and je.book_id=${ctx.book_id} and je.status in ('posted','reversed') and ${inScope(sql`jl.subsidiary_id`)}
+           and not exists (
+             select 1 from reconciliations r
+              where r.org_id = ${orgId} and r.account_id = a.id and r.status = 'signed_off'
+                and r.through_date >= ${ctx.ends_on}
+                and (${sourceEvidenceOn} or r.evidence_kind = 'statement')
            )
-           or exists (
-             select 1 from journal_lines jl
-             join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-             join accounting_periods jp on jp.id=je.period_id and jp.org_id=je.org_id
-              where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
-                and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
-                and ${inScope(sql`jl.subsidiary_id`)}
-              group by jl.subsidiary_id having sum(jl.amount) <> 0
-           )
-         )
-         and not exists (
-           select 1 from reconciliations r
-            where r.org_id = ${orgId} and r.account_id = a.id and r.status = 'signed_off'
-              and r.through_date >= ${ctx.ends_on}
-         )`),
+      )
+      select o.id as account_id, o.number, o.name,
+             count(jl.id) filter (
+               where (jl.source_cleared_date is not null and jl.source_cleared_date <= ${ctx.ends_on})
+                  or jl.reconciled_at is not null
+             ) as cleared,
+             count(jl.id) filter (
+               where (jl.source_cleared_date is null or jl.source_cleared_date > ${ctx.ends_on})
+                 and jl.reconciled_at is null
+             ) as uncleared,
+             s.connector as source_connector, s.reconciled_through::text as source_through
+        from open_accounts o
+        left join (
+          select jl.id, jl.account_id, jl.source_cleared_date, jl.reconciled_at
+            from journal_lines jl
+            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+           where jl.org_id = ${orgId} and je.book_id = ${ctx.book_id}
+             and je.status in ('posted', 'reversed')
+             and jl.posting_date <= ${ctx.ends_on} and ${inScope(sql`jl.subsidiary_id`)}
+        ) jl on jl.account_id = o.id
+        left join source_reconciliation_state s on s.org_id = ${orgId} and s.account_id = o.id
+       group by o.id, o.number, o.name, s.connector, s.reconciled_through
+       order by o.number nulls last, o.name`),
       db.execute(sql`
       select count(*) as count
         from depreciation_schedule_lines l
@@ -1480,7 +1514,18 @@ async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.bank-unreconciled.title",
       message: "close.diagnostics.bank-unreconciled.message",
-      count: Number(bank.rows[0]?.count ?? 0),
+      count: bank.rows.length,
+      details: bank.rows.length > 0 ? {
+        accounts: bank.rows.map((row: Record<string, unknown>) => ({
+          accountId: row.account_id as string,
+          number: row.number as string | null,
+          name: row.name as string,
+          clearedLines: Number(row.cleared),
+          unclearedLines: Number(row.uncleared),
+          sourceConnector: row.source_connector as string | null,
+          sourceThrough: row.source_through as string | null,
+        })),
+      } : undefined,
     },
     {
       code: "depreciation-unposted",
