@@ -115,6 +115,8 @@ export function AssetDrawer({
   const [salvage, setSalvage] = useState(a.salvage_value != null ? String(a.salvage_value) : '0.0000')
   const [acquiredOn, setAcquiredOn] = useState(a.acquired_on ?? '')
   const [inServiceOn, setInServiceOn] = useState(a.in_service_on ?? '')
+  const [openingAccumulated, setOpeningAccumulated] = useState(a.opening_accumulated_depreciation != null ? String(a.opening_accumulated_depreciation) : '')
+  const [openingAsOf, setOpeningAsOf] = useState(a.opening_accumulated_as_of ?? '')
   const [serialNumber, setSerialNumber] = useState(a.serial_number ?? '')
   const [method, setMethod] = useState(a.depreciation_method ?? payload.category?.default_method ?? 'straight_line')
   const [depreciationMethodId, setDepreciationMethodId] = useState<string>(a.depreciation_method_id ?? payload.category?.default_depreciation_method_id ?? '')
@@ -181,6 +183,8 @@ export function AssetDrawer({
     salvageValue: salvage || '0',
     acquiredOn: acquiredOn || null,
     inServiceOn: inServiceOn || null,
+    openingAccumulated: openingAccumulated || null,
+    openingAsOf: openingAsOf || null,
     serialNumber: serialNumber || null,
     method,
     depreciationMethodId: depreciationMethodId || null,
@@ -193,7 +197,7 @@ export function AssetDrawer({
     depreciationExpenseAccountId: expenseAccountId || null,
     custom: customValues,
     taxDepreciation: taxValues,
-  }), [name, assetNumber, description, categoryId, subsidiaryId, cost, salvage, acquiredOn, inServiceOn, serialNumber, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, convention, assetAccountId, accumAccountId, expenseAccountId, customValues, taxValues])
+  }), [name, assetNumber, description, categoryId, subsidiaryId, cost, salvage, acquiredOn, inServiceOn, openingAccumulated, openingAsOf, serialNumber, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, convention, assetAccountId, accumAccountId, expenseAccountId, customValues, taxValues])
 
   const first = useRef(true)
   useEffect(() => {
@@ -212,6 +216,8 @@ export function AssetDrawer({
     setSalvage(a.salvage_value != null ? String(a.salvage_value) : '0.0000')
     setAcquiredOn(a.acquired_on ?? '')
     setInServiceOn(a.in_service_on ?? '')
+    setOpeningAccumulated(a.opening_accumulated_depreciation != null ? String(a.opening_accumulated_depreciation) : '')
+    setOpeningAsOf(a.opening_accumulated_as_of ?? '')
     setSerialNumber(a.serial_number ?? '')
     setMethod(a.depreciation_method ?? payload.category?.default_method ?? 'straight_line')
     setDepreciationMethodId(a.depreciation_method_id ?? payload.category?.default_depreciation_method_id ?? '')
@@ -345,6 +351,8 @@ export function AssetDrawer({
       case 'salvage_value': return <>{fieldLabel(placement, t('labels.salvage'))}{editable ? <Input id={fieldId(placement)} inputMode="decimal" className="text-right tabular-nums" value={salvage} onChange={(e) => setSalvage(e.target.value)} /> : <p className="text-right text-sm tabular-nums">{money(salvage)}</p>}</>
       case 'acquired_on': return <>{fieldLabel(placement, t('labels.acquiredOn'))}{editable ? <Input id={fieldId(placement)} type="date" value={acquiredOn} onChange={(e) => setAcquiredOn(e.target.value)} /> : <p className="text-sm">{textValue(acquiredOn)}</p>}</>
       case 'in_service_on': return <>{fieldLabel(placement, t('labels.inServiceOn'))}{editable ? <Input id={fieldId(placement)} type="date" value={inServiceOn} onChange={(e) => setInServiceOn(e.target.value)} /> : <p className="text-sm">{textValue(inServiceOn)}</p>}</>
+      case 'opening_accumulated_depreciation': return <>{fieldLabel(placement, t('labels.openingAccumulated'))}{editable ? <Input id={fieldId(placement)} inputMode="decimal" className="text-right tabular-nums" value={openingAccumulated} onChange={(e) => setOpeningAccumulated(e.target.value)} placeholder={t('drawer.openingAccumulatedPlaceholder')} /> : <p className="text-right text-sm tabular-nums">{openingAccumulated === '' ? '—' : money(openingAccumulated)}</p>}</>
+      case 'opening_accumulated_as_of': return <>{fieldLabel(placement, t('labels.openingAsOf'))}{editable ? <Input id={fieldId(placement)} type="date" value={openingAsOf} onChange={(e) => setOpeningAsOf(e.target.value)} /> : <p className="text-sm">{textValue(openingAsOf)}</p>}</>
       case 'depreciation_method': return <>{fieldLabel(placement, t('labels.method'))}{editable ? <Select id={fieldId(placement)} value={selectedMethodValue} onChange={(e) => chooseMethod(e.target.value)}>{METHODS.map((item) => <option key={item} value={`builtin:${item}`}>{t(`methods.${item}`)}</option>)}{depreciationMethods.map((item) => <option key={item.id} value={`formula:${item.id}`}>{t('drawer.formulaMethod', { name: item.name })}</option>)}</Select> : <p className="text-sm">{selectedMethodLabel}</p>}</>
       case 'useful_life_months': return !depreciationMethodId && (method === 'manual' || method === 'units_of_production') ? null : <>{fieldLabel(placement, t('labels.lifeMonths'))}{editable ? <Input id={fieldId(placement)} inputMode="numeric" className="text-right tabular-nums" value={lifeMonths} onChange={(e) => setLifeMonths(e.target.value)} /> : <p className="text-right text-sm tabular-nums">{textValue(lifeMonths)}</p>}</>
       case 'depreciation_rate_percent': return depreciationMethodId || method !== 'declining_balance' ? null : <>{fieldLabel(placement, t('labels.ratePercent'))}{editable ? <Input id={fieldId(placement)} inputMode="decimal" className="text-right tabular-nums" value={ratePercent} onChange={(e) => setRatePercent(e.target.value)} /> : <p className="text-right text-sm tabular-nums">{textValue(ratePercent)}</p>}</>

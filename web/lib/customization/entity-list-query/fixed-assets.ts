@@ -12,7 +12,10 @@ import { dateOrFalse, uuidOrFalse } from "../list-query";
 export const FIXED_ASSET_BASE_JOINS = sql`
   left join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
   left join lateral (
-    select coalesce(sum(l.posted_amount), 0) as accumulated
+    -- Continue-from-accumulated (migration 0156): the register's accumulated
+    -- figure carries the pre-cutover opening balance alongside posted lines,
+    -- so NBV ties to the drawer and the disposal/impairment readers.
+    select coalesce(sum(l.posted_amount), 0) + coalesce(a.opening_accumulated_depreciation, 0) as accumulated
      from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = a.id and s.org_id = a.org_id
@@ -29,6 +32,8 @@ export const FIXED_ASSET_BUILT_IN_EXPR: Record<string, SQL> = {
   acquisition_cost: sql`a.acquisition_cost`,
   accumulated: sql`depr.accumulated`,
   net_book_value: FIXED_ASSET_NBV_EXPR,
+  opening_accumulated_depreciation: sql`a.opening_accumulated_depreciation`,
+  opening_accumulated_as_of: sql`a.opening_accumulated_as_of`,
   serial_number: sql`a.serial_number`,
   status: sql`a.status`,
 }

@@ -22,6 +22,8 @@ export interface AssetDepreciationBasis {
   depreciation_convention: string | null
   depreciation_method: string | null
   depreciation_method_id: string | null
+  opening_accumulated_depreciation: string | null
+  opening_accumulated_as_of: string | null
 }
 
 /**
@@ -39,6 +41,8 @@ export interface RequestedAssetBasis {
   convention?: string | null
   method?: string | null
   depreciationMethodId?: string | null
+  openingAccumulated?: string | null
+  openingAsOf?: string | null
 }
 
 /** The basis after applying the request to the stored row. */
@@ -56,6 +60,8 @@ export function mergedAssetBasis(
     depreciation_convention: requested.convention !== undefined ? requested.convention : existing.depreciation_convention,
     depreciation_method: requested.method !== undefined ? requested.method : existing.depreciation_method,
     depreciation_method_id: requested.depreciationMethodId !== undefined ? requested.depreciationMethodId : existing.depreciation_method_id,
+    opening_accumulated_depreciation: requested.openingAccumulated !== undefined ? requested.openingAccumulated : existing.opening_accumulated_depreciation,
+    opening_accumulated_as_of: requested.openingAsOf !== undefined ? requested.openingAsOf : existing.opening_accumulated_as_of,
   }
 }
 
@@ -85,6 +91,12 @@ export function assetBasisChanges(
   if (next.depreciation_convention !== existing.depreciation_convention) changes.push('depreciation_convention')
   if (next.depreciation_method !== existing.depreciation_method) changes.push('depreciation_method')
   if (next.depreciation_method_id !== existing.depreciation_method_id) changes.push('depreciation_method_id')
+  // The opening carry-in figures select which months schedule at all: editing
+  // them after posting would replan the recognised past, so they are basis.
+  if (exactChanged(next.opening_accumulated_depreciation, existing.opening_accumulated_depreciation)) {
+    changes.push('opening_accumulated_depreciation')
+  }
+  if (next.opening_accumulated_as_of !== existing.opening_accumulated_as_of) changes.push('opening_accumulated_as_of')
   return changes
 }
 

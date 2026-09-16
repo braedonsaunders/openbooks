@@ -33,6 +33,8 @@ interface ExistingAsset extends Record<string, unknown> {
   depreciation_rate_percent: string | null
   depreciation_units_total: string | null
   depreciation_convention: (typeof CONVENTIONS)[number] | null
+  opening_accumulated_depreciation: string | null
+  opening_accumulated_as_of: string | null
 }
 
 /** Raised inside the save transaction when a posting won the basis race. */
@@ -92,6 +94,8 @@ interface PatchBody {
   ratePercent?: number | string | null
   unitsTotal?: number | string | null
   convention?: (typeof CONVENTIONS)[number] | null
+  openingAccumulated?: string | number | null
+  openingAsOf?: string | null
   assetAccountId?: string | null
   accumulatedDepreciationAccountId?: string | null
   depreciationExpenseAccountId?: string | null
@@ -138,7 +142,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existRes = (await db.execute<ExistingAsset>(sql`
     select id, status, custom, acquisition_cost, salvage_value, in_service_on,
            depreciation_method, depreciation_method_id, useful_life_months,
-           depreciation_rate_percent, depreciation_units_total, depreciation_convention
+           depreciation_rate_percent, depreciation_units_total, depreciation_convention,
+           opening_accumulated_depreciation, opening_accumulated_as_of
       from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
   `))
@@ -333,6 +338,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     convention = body.convention
   }
 
+  // -- opening carry-in (migration 0156) --------------------------------------
+  // Mid-life onboarding figures: pre-cutover accumulated depreciation plus
+  // the as-of date it is measured through. Both or neither; the amount must
+  // fit inside the depreciable basis and the date must be a real calendar
+  // date. Once financial history exists the figures join the posted basis
+  // (guarded below) — corrections run through controlled adjustments.
+  let openingAccumulated: string | null | undefined
+  if (body.openingAccumulated !== undefined) {
+    const v = moneyOrNull(body.openingAccumulated)
+    if (v === 'invalid') return bad('Opening accumulated depreciation must be a number')
+    if (v !== null && cmp(v, '0') < 0) return bad('Opening accumulated depreciation must be a non-negative number')
+    openingAccumulated = v
+  }
+  let openingAsOf: string | null | undefined
+  if (body.openingAsOf !== undefined) {
+    const v = strOrNull(body.openingAsOf)
+    if (v !== null && !isIsoCalendarDate(v)) return bad('Opening as-of date must be a real calendar date (YYYY-MM-DD)')
+    openingAsOf = v
+  }
+
   // -- status transition (draft ↔ in_service) -----------------------------
   // Placing an asset in service requires an in-service date and a useful life
   // so a schedule can be built.
@@ -369,6 +394,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const effectiveCost = cost ?? existing.acquisition_cost
   const effectiveSalvage = salvage ?? existing.salvage_value
   if (cmp(effectiveSalvage, effectiveCost) > 0) return bad('Salvage value cannot exceed acquisition cost')
+  const effectiveOpening = openingAccumulated !== undefined ? openingAccumulated : existing.opening_accumulated_depreciation
+  const effectiveOpeningAsOf = openingAsOf !== undefined ? openingAsOf : existing.opening_accumulated_as_of
+  if ((effectiveOpening === null) !== (effectiveOpeningAsOf === null)) {
+    return bad('Opening accumulated depreciation and its as-of date must be set together')
+  }
+  if (effectiveOpening !== null && toUnits(effectiveOpening) > toUnits(effectiveCost) - toUnits(effectiveSalvage)) {
+    return bad('Opening accumulated depreciation cannot exceed cost minus salvage')
+  }
+  if (effectiveOpening !== null && cmp(effectiveOpening, '0') > 0 && effectiveInService && effectiveOpeningAsOf
+      && effectiveOpeningAsOf.slice(0, 7) < effectiveInService.slice(0, 7)) {
+    return bad('Opening as-of date cannot precede the in-service month')
+  }
   if (effectiveStatus === 'in_service') {
     if (!effectiveInService) return bad('Set an in-service date before placing the asset in service')
     if ((effectiveFormula || (effectiveMethod !== 'manual' && effectiveMethod !== 'units_of_production')) && (!effectiveLife || effectiveLife <= 0)) {
@@ -392,6 +429,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     method,
     depreciationMethodId,
     inServiceOn: body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : undefined,
+    openingAccumulated,
+    openingAsOf,
   }
 
   // -- posted-basis immutability --------------------------------------------
@@ -503,6 +542,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       depreciation_rate_percent = ${ratePercent !== undefined ? ratePercent : sql`depreciation_rate_percent`},
       depreciation_units_total = ${unitsTotal !== undefined ? unitsTotal : sql`depreciation_units_total`},
       depreciation_convention = ${convention !== undefined ? convention : sql`depreciation_convention`},
+      opening_accumulated_depreciation = ${openingAccumulated !== undefined ? openingAccumulated : sql`opening_accumulated_depreciation`},
+      opening_accumulated_as_of = ${openingAsOf !== undefined ? openingAsOf : sql`opening_accumulated_as_of`},
       asset_account_id = ${assetAccountId !== undefined ? assetAccountId : sql`asset_account_id`},
       accumulated_depreciation_account_id = ${accumulatedAccountId !== undefined ? accumulatedAccountId : sql`accumulated_depreciation_account_id`},
       depreciation_expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`depreciation_expense_account_id`},

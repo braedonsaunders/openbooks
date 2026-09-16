@@ -18,6 +18,8 @@ const basis = (over: Partial<AssetDepreciationBasis> = {}): AssetDepreciationBas
   depreciation_convention: 'full_month',
   depreciation_method: 'straight_line',
   depreciation_method_id: null,
+  opening_accumulated_depreciation: null,
+  opening_accumulated_as_of: null,
   ...over,
 })
 
@@ -70,10 +72,43 @@ test('Any basis change on a posted asset is refused with the controlled-adjustme
     { ratePercent: '40' },
     { unitsTotal: '50000' },
     { lifeMonths: null }, // clearing a set value is a change
+    { openingAccumulated: '4000.0000', openingAsOf: '2025-12-31' },
+    { openingAsOf: '2025-06-30' },
   ]
   for (const request of cases) {
     assert.equal(postedAssetBasisEditRefusal(true, existing, request), POSTED_BASIS_EDIT_ERROR)
   }
+})
+
+test('Opening carry-in figures are basis: resaves pass, edits on posted assets refuse', () => {
+  const onboarded = basis({
+    opening_accumulated_depreciation: '4000.0000',
+    opening_accumulated_as_of: '2025-12-31',
+  })
+  // Same values in different string forms must not read as a change.
+  assert.deepEqual(
+    assetBasisChanges(onboarded, { openingAccumulated: '4000', openingAsOf: '2025-12-31' }),
+    [],
+  )
+  assert.equal(
+    postedAssetBasisEditRefusal(true, onboarded, { openingAccumulated: '4000', openingAsOf: '2025-12-31' }),
+    null,
+  )
+  assert.deepEqual(assetBasisChanges(onboarded, { openingAccumulated: '4500.0000' }), [
+    'opening_accumulated_depreciation',
+  ])
+  assert.deepEqual(assetBasisChanges(onboarded, { openingAsOf: '2026-01-31' }), [
+    'opening_accumulated_as_of',
+  ])
+  // Clearing a set opening is a change.
+  assert.deepEqual(assetBasisChanges(onboarded, { openingAccumulated: null, openingAsOf: null }), [
+    'opening_accumulated_depreciation',
+    'opening_accumulated_as_of',
+  ])
+  assert.equal(
+    postedAssetBasisEditRefusal(true, onboarded, { openingAccumulated: null, openingAsOf: null }),
+    POSTED_BASIS_EDIT_ERROR,
+  )
 })
 
 test('Non-basis edits pass even on a posted asset', () => {
