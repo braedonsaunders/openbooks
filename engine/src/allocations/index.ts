@@ -162,6 +162,7 @@ export {
   staticDriverResolver,
   type AllocationRunRecord,
   type PeriodRunDeps,
+  type PostAllocationRunOptions,
   type PreviewAllocationRunOptions,
   type RerunAllocationRunOptions,
   type RerunAllocationRunResult,

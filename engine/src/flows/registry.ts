@@ -18,6 +18,11 @@ import {
   closeRunsFlowAdapter,
 } from "./close-runs-adapter.ts";
 import {
+  ALLOCATION_RUN_SUBJECT_KIND,
+  allocationRunSubjectProfile,
+  allocationRunsFlowAdapter,
+} from "./allocation-runs-adapter.ts";
+import {
   FIELD_TICKET_SUBJECT_KIND,
   fieldTicketSubjectProfile,
   fieldTicketsFlowAdapter,
@@ -49,6 +54,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
+  if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
@@ -70,6 +76,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     bankAccountSubjectProfile,
     budgetScenarioSubjectProfile,
     closeRunSubjectProfile,
+    allocationRunSubjectProfile,
     fieldTicketSubjectProfile,
     payRunSubjectProfile,
     timesheetWeekSubjectProfile,
