@@ -823,6 +823,37 @@ test(
 );
 
 test(
+  "preview refuses an empty source pool instead of posting a silent zero run",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Dept A");
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+      });
+      await assert.rejects(
+        previewAllocationRun({
+          orgId: org.orgId,
+          ruleId,
+          periodId: org.periodId,
+          bookId: org.bookId,
+          actorId,
+        }),
+        /no source lines/,
+      );
+      const listed = await listRuns(org.orgId, { ruleId });
+      assert.equal(listed.total, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "listRuns and getRun expose the stored computation",
   { skip: !DB },
   async () => {
