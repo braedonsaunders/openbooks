@@ -3,6 +3,7 @@ import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-sco
 import { sql } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { isDocKindEnabled } from './documents'
 import { isIsoCalendarDate } from './crm-dates'
 
@@ -64,7 +65,8 @@ export async function loadCrmAccount(partyId: string, orgId: string, allowed?: R
 
 export async function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const opportunity = (await db.execute<Record<string, unknown>>(sql`
-    select o.*, p.display_name as party_name, c.name as contact_name,
+    select o.*, ${documentRevisionSql(sql`o.updated_at`)} as "__opportunityRevision",
+           p.display_name as party_name, c.name as contact_name,
            s.name as status_name, s.is_closed, s.is_won,
            u.name as owner_name, st.name as sales_team_name, ls.name as lead_source_name
       from crm_opportunities o
@@ -77,6 +79,18 @@ export async function loadOpportunity(id: string, orgId: string, allowed?: Reado
      where o.id = ${id} and o.org_id = ${orgId}${crmOpportunityScope(allowed)}
   `))
   if (!opportunity.rows[0]) return null
+  // The driver's noncanonical timestamp never leaves this module: updated_at
+  // carries the exact persisted revision token every opportunity save must
+  // send back as expectedUpdatedAt (same wire form as document revisions).
+  {
+    const head = opportunity.rows[0]!
+    const revision = head["__opportunityRevision"]
+    if (!isDocumentRevisionToken(revision)) {
+      throw new Error('opportunity read did not return an exact persisted revision')
+    }
+    delete head["__opportunityRevision"]
+    head.updated_at = revision
+  }
   const [lines, team, documents, activities, history] = await Promise.all([
     db.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${orgId} order by line_number`),
     db.execute(sql`

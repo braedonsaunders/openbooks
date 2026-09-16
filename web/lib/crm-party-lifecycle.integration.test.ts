@@ -27,6 +27,13 @@ type Fixture = Awaited<ReturnType<typeof createScratchOrg>>;
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const patchRequest = (body: unknown) => new Request('http://audit.local', {method:'PATCH',body:JSON.stringify(body)});
+// Opportunity saves speak the revision contract: attach the live token so
+// these assertions exercise the account-lifecycle checks, not the 409 guard.
+async function oppRev(orgId: string, id: string) {
+ return (await db.execute<{revision:string}>(sql`select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from crm_opportunities where org_id=${orgId} and id=${id}`)).rows[0]!.revision;
+}
+const editRequest = async (org: Fixture, id: string, body: Record<string, unknown>) =>
+ patchRequest({ ...body, expectedUpdatedAt: await oppRev(org.orgId, id) });
 async function fixture(action: (org: Fixture, open: string, closed: string) => Promise<void>) {
  const org=await createScratchOrg();
  try {
@@ -80,11 +87,11 @@ test('inactive accounts refuse new and reopened opportunities but allow closing 
  await db.execute(sql`update parties set is_active=false where id=${org.customerId}`);
  const created=await withOrgContext(org.orgId,()=>draft(new NextRequest('http://audit.local',{method:'POST',body:JSON.stringify({partyId:org.customerId})})));
  assert.equal(created.status,422,await created.clone().text());
- const activated=await withOrgContext(org.orgId,()=>edit(patchRequest({isActive:true}),params(id)));
+ const activated=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{isActive:true}),params(id)));
  assert.equal(activated.status,422,await activated.clone().text());
- const finished=await withOrgContext(org.orgId,()=>edit(patchRequest({statusId:closed,winLossReason:'Customer account retired'}),params(id)));
+ const finished=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{statusId:closed,winLossReason:'Customer account retired'}),params(id)));
  assert.equal(finished.status,200,await finished.clone().text());
- const reopened=await withOrgContext(org.orgId,()=>edit(patchRequest({statusId:open,isActive:true}),params(id)));
+ const reopened=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{statusId:open,isActive:true}),params(id)));
  assert.equal(reopened.status,422,await reopened.clone().text());
  assert.equal((await db.execute<{status_id:string}>(sql`select status_id from crm_opportunities where id=${id}`)).rows[0]!.status_id,closed);
 }));
@@ -116,7 +123,7 @@ test('opportunity activation rechecks account retirement after waiting for its l
   await client.query('begin');
   const pid=(await client.query('select pg_backend_pid() as pid')).rows[0].pid as number;
   await client.query('update parties set is_active=false where id=$1',[org.customerId]);
-  pending=withOrgContext(org.orgId,()=>edit(patchRequest({isActive:true}),params(id)));
+  pending=withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{isActive:true}),params(id)));
   await blockedBy(pid);
   await client.query('commit');
   const response=await pending;

@@ -60,7 +60,9 @@ export async function DraftRecordPreview({ sections, typeKey, typeName, title, b
     currentPage: 1, perPage: 25, sort, dir,
     drawerOpen: !!selected || isNew,
     drawerProps: selected || isNew ? { remountKey: selected?.id ?? 'new', typeKey, typeName, sections,
-      record: { id: selected?.id ?? 'new', recordNumber: selected?.number ?? tr('newButton', { typeName }), data: selected?.values ?? {}, status: 'draft' },
+      // Preview-only synthetic record: saves are disabled in preview, so no
+      // revision exists; the empty token can never satisfy the save guard.
+      record: { id: selected?.id ?? 'new', recordNumber: selected?.number ?? tr('newButton', { typeName }), data: selected?.values ?? {}, status: 'draft', updatedAt: '' },
       canEdit: true, preview: true, closeHref } : null,
   }
   const spec = recordModuleSpec(data)

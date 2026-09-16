@@ -23,6 +23,7 @@ interface RouteState {
   txStatusValid: boolean
   txInvalidReference: string | null
   loaded: Record<string, unknown> | null
+  sequence: number
 }
 const routeState: RouteState = {
   calls: [],
@@ -43,6 +44,7 @@ const routeState: RouteState = {
   txStatusValid: true,
   txInvalidReference: null,
   loaded: null,
+  sequence: 0,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -59,6 +61,8 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextOpportunity?: unknown }).openbooksSqlTextOpportunity = sqlText
 
+const REVISION = '2026-09-15T12:00:00.000000Z'
+
 const PARTY_A = '00000000-0000-4000-8000-00000000c001'
 const PARTY_B = '00000000-0000-4000-8000-00000000c002'
 const CONTACT_ID = '00000000-0000-4000-8000-00000000c003'
@@ -72,6 +76,7 @@ const OPPORTUNITY_ID = '00000000-0000-4000-8000-00000000c008'
 
 const staleOpportunity = {
   id: OPPORTUNITY_ID,
+  revision: REVISION,
   party_id: PARTY_A,
   primary_contact_id: CONTACT_ID,
   owner_user_id: OWNER_ID,
@@ -160,8 +165,10 @@ const mockSources = new Map<string, string>([
               const raw = match?.[1]?.trim()
               return !raw || raw === label ? fallback : raw === 'null' ? null : raw
             }
+            state.sequence += 1
             state.opportunity = {
               ...state.opportunity,
+              revision: '2026-09-15T12:00:00.' + String(state.sequence).padStart(6, '0') + 'Z',
               title: value('title', before.title),
               party_id: value('party_id', before.party_id),
               primary_contact_id: value('primary_contact_id', before.primary_contact_id),
@@ -299,6 +306,7 @@ function reset(lockedContactMatches: boolean[] = [true]): void {
   routeState.txStatusValid = true
   routeState.txInvalidReference = null
   routeState.loaded = { id: OPPORTUNITY_ID, party_id: PARTY_B, primary_contact_id: CONTACT_ID }
+  routeState.sequence = 0
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
@@ -315,7 +323,7 @@ function patch(body: Record<string, unknown>): Promise<Response> {
 test('PATCH rejects a contact that fails the account check on the locked opportunity', async () => {
   reset([false])
 
-  const response = await patch({ title: 'Concurrent save', primaryContactId: CONTACT_ID })
+  const response = await patch({ title: 'Concurrent save', primaryContactId: CONTACT_ID, expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 422)
   assert.deepEqual(await response.json(), { error: 'contact does not belong to the account' })
@@ -328,7 +336,7 @@ test('PATCH rejects a contact that fails the account check on the locked opportu
 test('PATCH persists when the contact belongs to the locked account', async () => {
   reset([true])
 
-  const response = await patch({ title: 'Valid concurrent save', primaryContactId: CONTACT_ID })
+  const response = await patch({ title: 'Valid concurrent save', primaryContactId: CONTACT_ID, expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 200)
   assert.equal(routeState.txWrites, 1)
@@ -339,40 +347,59 @@ test('PATCH persists when the contact belongs to the locked account', async () =
   assert.ok(txContactIndex >= 0 && txUpdateIndex > txContactIndex, 'the account check precedes the write')
 })
 
-test('concurrent disjoint PATCHes preserve both changes and audit each locked predecessor', async () => {
+test('a stale concurrent PATCH loses loudly against the locked winner', async () => {
   reset([true, true])
   routeState.concurrentLocks = true
 
+  // Both tabs read the same revision before either saves. The row lock still
+  // serializes the two writes; the loser compares against the winner's
+  // committed revision and refuses loudly instead of silently replacing it.
+  // (Field-disjoint merging still applies when the second tab carries a fresh
+  // token — the merge reads unspecified fields from the locked row.)
   const [first, second] = await Promise.all([
-    patch({ title: 'First save' }),
-    patch({ nextStep: 'Call buyer' }),
+    patch({ title: 'First save', expectedUpdatedAt: REVISION }),
+    patch({ nextStep: 'Call buyer', expectedUpdatedAt: REVISION }),
   ])
 
 
-  assert.deepEqual([first.status, second.status].sort((a, b) => a - b), [200, 200])
+  assert.deepEqual([first.status, second.status], [200, 409])
+  assert.deepEqual(await second.json(), { error: 'This opportunity changed after you opened it; reload the opportunity and reapply your changes' })
   assert.equal(routeState.opportunity?.title, 'First save')
-  assert.equal(routeState.opportunity?.next_step, 'Call buyer')
-  assert.equal(routeState.txWrites, 2)
-  assert.equal(routeState.auditWrites, 2)
+  assert.equal(routeState.opportunity?.next_step, null)
+  assert.equal(routeState.txWrites, 1)
+  assert.equal(routeState.auditWrites, 1)
   assert.equal(routeState.transactionCount, 2)
   assert.equal(routeState.calls.filter((call) => call.kind === 'tx-execute' && call.text.includes('for update of o')).length, 2)
   assert.equal(routeState.auditBefores[0]?.title, staleOpportunity.title)
-  assert.equal(routeState.auditBefores[1]?.title, 'First save')
-  assert.equal(routeState.auditBefores[1]?.next_step, null)
 })
 
-test('a party/contact race fails closed after the lock without writes from the losing request', async () => {
+test('a save without a revision token refuses before touching the row', async () => {
+  reset([true])
+
+  const response = await patch({ title: 'Tokenless save' })
+
+  assert.equal(response.status, 409)
+  assert.deepEqual(await response.json(), { error: 'A current opportunity revision is required; reload the opportunity and try again' })
+  assert.equal(routeState.txWrites, 0)
+  assert.equal(routeState.auditWrites, 0)
+})
+
+test('a party/contact race fails closed on the stale revision without writes from the losing request', async () => {
   reset([true, false])
   routeState.concurrentLocks = true
 
+  // Both tabs read the same revision. The party change wins the lock and
+  // advances the revision; the stale contact save refuses on its revision
+  // before any domain check (the locked-account contact refusal stays pinned
+  // by the sequential tests above).
   const [partyChange, staleContactChange] = await Promise.all([
-    patch({ partyId: PARTY_B, primaryContactId: CONTACT_B_ID }),
-    patch({ title: 'Stale contact save', primaryContactId: CONTACT_ID }),
+    patch({ partyId: PARTY_B, primaryContactId: CONTACT_B_ID, expectedUpdatedAt: REVISION }),
+    patch({ title: 'Stale contact save', primaryContactId: CONTACT_ID, expectedUpdatedAt: REVISION }),
   ])
 
   assert.equal(partyChange.status, 200)
-  assert.equal(staleContactChange.status, 422)
-  assert.deepEqual(await staleContactChange.json(), { error: 'contact does not belong to the account' })
+  assert.equal(staleContactChange.status, 409)
+  assert.deepEqual(await staleContactChange.json(), { error: 'This opportunity changed after you opened it; reload the opportunity and reapply your changes' })
   assert.equal(routeState.opportunity?.party_id, PARTY_B)
   assert.equal(routeState.opportunity?.primary_contact_id, CONTACT_B_ID)
   assert.equal(routeState.txWrites, 1)
@@ -384,25 +411,28 @@ test('stage and audit before evidence use the predecessor read under the opportu
   reset([true, true])
   routeState.concurrentLocks = true
 
+  // The stage change wins the lock; the concurrent title save carries the
+  // same stale revision and refuses, so exactly one predecessor image feeds
+  // the stage event and the audit trail.
   const [stageChange, titleChange] = await Promise.all([
-    patch({ statusId: STATUS_B_ID }),
-    patch({ title: 'After stage change' }),
+    patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION }),
+    patch({ title: 'After stage change', expectedUpdatedAt: REVISION }),
   ])
 
   assert.equal(stageChange.status, 200)
-  assert.equal(titleChange.status, 200)
+  assert.equal(titleChange.status, 409)
   assert.equal(routeState.stageWrites, 1)
   assert.equal(routeState.stageBefores[0]?.before.status_id, STATUS_ID)
   assert.equal(routeState.stageBefores[0]?.after.status_id, STATUS_B_ID)
   assert.equal(routeState.auditBefores[0]?.status_id, STATUS_ID)
-  assert.equal(routeState.auditBefores[1]?.status_id, STATUS_B_ID)
+  assert.equal(routeState.auditBefores.length, 1)
 })
 
 test('disappearance after preflight returns 404 before any transaction write', async () => {
   reset([true])
   routeState.opportunity = null
 
-  const response = await patch({ title: 'Gone opportunity' })
+  const response = await patch({ title: 'Gone opportunity', expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 404)
   assert.deepEqual(await response.json(), { error: 'not found' })
@@ -415,7 +445,7 @@ test('an explicitly submitted deactivated status fails closed after locking', as
   reset([true])
   routeState.txStatusValid = false
 
-  const response = await patch({ statusId: STATUS_B_ID, title: 'Invalidated status' })
+  const response = await patch({ statusId: STATUS_B_ID, title: 'Invalidated status', expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 422)
   assert.deepEqual(await response.json(), { error: 'invalid status' })
@@ -428,7 +458,7 @@ test('a deactivated derived status fails closed after locking', async () => {
   reset([true])
   routeState.txStatusValid = false
 
-  const response = await patch({ title: 'Invalidated derived status' })
+  const response = await patch({ title: 'Invalidated derived status', expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 422)
   assert.deepEqual(await response.json(), { error: 'invalid status' })
@@ -445,7 +475,7 @@ test('deactivated account, team, and source references fail closed on the locked
     reset([true])
     routeState.txInvalidReference = reference
 
-    const response = await patch({ title: `Invalid ${reference}` })
+    const response = await patch({ title: `Invalid ${reference}`, expectedUpdatedAt: REVISION })
 
     assert.equal(response.status, 422)
     assert.deepEqual(await response.json(), { error })

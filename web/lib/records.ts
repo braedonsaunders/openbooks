@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
 import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
 
@@ -38,6 +39,12 @@ export type RecordRow = {
   status: RecordStatus
   created_at: string
   created_by: string | null
+  /**
+   * Opaque optimistic-concurrency token: the record's canonical revision when
+   * read (same six-digit UTC wire form as document revisions — never round it
+   * through JavaScript Date). Data-bearing saves must send it back as
+   * expectedUpdatedAt; a stale token fails closed with a 409.
+   */
   updated_at: string
 }
 
@@ -72,7 +79,8 @@ export async function loadRecord(
   id: string,
 ): Promise<RecordRow | undefined> {
   const r = (await db.execute<RecordRow>(sql`
-    select id, type_id, type_key, record_number, data, status, created_at, created_by, updated_at
+    select id, type_id, type_key, record_number, data, status, created_at, created_by,
+           ${documentRevisionSql(sql`updated_at`)} as updated_at
       from custom_records
      where org_id = ${orgId} and type_key = ${typeKey} and id = ${id}
   `))

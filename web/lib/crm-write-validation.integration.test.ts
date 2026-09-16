@@ -122,6 +122,17 @@ async function header(orgId: string, id: string) {
   ).rows[0]!
 }
 
+// Opportunity saves speak the revision contract: read the live token so the
+// validation assertions below exercise domain checks, not the 409 guard.
+async function edit(orgId: string, id: string, body: Record<string, unknown>) {
+  const revision = (
+    await db.execute<{ revision: string }>(
+      sql`select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from crm_opportunities where org_id=${orgId} and id=${id}`,
+    )
+  ).rows[0]!.revision
+  return opportunityEdit(request({ ...body, expectedUpdatedAt: revision }), params(id))
+}
+
 test(
   'PATCH probability without lines re-weights the stored line detail exactly',
   { skip: !process.env.OPENBOOKS_DB_URL },
@@ -130,7 +141,7 @@ test(
     try {
       await withOrgContext(org.orgId, async () => {
         const { id } = await seedOpportunity(org.orgId, actor, org.date)
-        const edited = await opportunityEdit(request({ probability: 20 }), params(id))
+        const edited = await edit(org.orgId, id, { probability: 20 })
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
         const row = await header(org.orgId, id)
         assert.equal(row.probability, 20)
@@ -143,7 +154,7 @@ test(
           { line_number: 3, probability: null, expected_amount: '100.0000' },
         ])
         // A second header move keeps following: the normalized rows inherit.
-        const again = await opportunityEdit(request({ probability: 50 }), params(id))
+        const again = await edit(org.orgId, id, { probability: 50 })
         assert.equal(again.status, 200)
         assert.equal((await header(org.orgId, id)).weighted_amount, '1750.0000')
         assert.deepEqual(
@@ -172,7 +183,7 @@ test(
           )
         ).rows[0]
         assert.ok(next, 'defaults seed an open status with a different probability')
-        const edited = await opportunityEdit(request({ statusId: next.id }), params(id))
+        const edited = await edit(org.orgId, id, { statusId: next.id })
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
         const row = await header(org.orgId, id)
         assert.equal(row.probability, next.probability)
@@ -198,16 +209,13 @@ test(
     try {
       await withOrgContext(org.orgId, async () => {
         const { id } = await seedOpportunity(org.orgId, actor, org.date)
-        const edited = await opportunityEdit(
-          request({
-            probability: 30,
-            lines: [
-              { itemId: org.items.service, quantity: '2', unitPrice: '100' },
-              { itemId: org.items.service, quantity: '1', unitPrice: '100', probability: 60 },
-            ],
-          }),
-          params(id),
-        )
+        const edited = await edit(org.orgId, id, {
+          probability: 30,
+          lines: [
+            { itemId: org.items.service, quantity: '2', unitPrice: '100' },
+            { itemId: org.items.service, quantity: '1', unitPrice: '100', probability: 60 },
+          ],
+        })
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
         assert.deepEqual(await storedLines(org.orgId, id), [
           { line_number: 1, probability: null, expected_amount: '60.0000' },
@@ -216,7 +224,7 @@ test(
         const row = await header(org.orgId, id)
         assert.equal(row.projected_amount, '300.0000')
         assert.equal(row.weighted_amount, '120.0000')
-        const moved = await opportunityEdit(request({ probability: 40 }), params(id))
+        const moved = await edit(org.orgId, id, { probability: 40 })
         assert.equal(moved.status, 200)
         assert.equal((await header(org.orgId, id)).weighted_amount, '140.0000')
       })
@@ -236,14 +244,14 @@ test(
       await withOrgContext(org.orgId, async () => {
         const { id } = await seedOpportunity(org.orgId, actor, org.date)
         for (const expectedCloseDate of ['soon', '2026-02-30', '20260301', 'tomorrow', 12]) {
-          const response = await opportunityEdit(request({ expectedCloseDate }), params(id))
+          const response = await edit(org.orgId, id, { expectedCloseDate })
           assert.equal(response.status, 422, `expectedCloseDate=${String(expectedCloseDate)}`)
         }
         assert.equal((await header(org.orgId, id)).expected_close_date, org.date)
-        const accepted = await opportunityEdit(request({ expectedCloseDate: '2026-03-01' }), params(id))
+        const accepted = await edit(org.orgId, id, { expectedCloseDate: '2026-03-01' })
         assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()))
         assert.equal((await header(org.orgId, id)).expected_close_date, '2026-03-01')
-        const cleared = await opportunityEdit(request({ expectedCloseDate: null }), params(id))
+        const cleared = await edit(org.orgId, id, { expectedCloseDate: null })
         assert.equal(cleared.status, 200)
         assert.equal((await header(org.orgId, id)).expected_close_date, null)
 

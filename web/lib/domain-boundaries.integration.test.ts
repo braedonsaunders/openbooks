@@ -285,8 +285,16 @@ for (const boundary of [
                 (await opportunityRead(request({}), params)).status,
                 200,
               )
+              // Authorized saves speak the revision contract; the out-of-scope
+              // save above stays tokenless to prove a missing token never
+              // upgrades a scope 404 into information.
+              const revision = (
+                await db.execute<{ revision: string }>(
+                  sql`select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from crm_opportunities where org_id=${org.orgId} and id=${id}`,
+                )
+              ).rows[0]!.revision
               const edited = await opportunityEdit(
-                request({ title: 'Authorized' }),
+                request({ title: 'Authorized', expectedUpdatedAt: revision }),
                 params,
               )
               assert.equal(

@@ -19,7 +19,7 @@ registerHooks({
   },
 })
 
-const { listRecordTypes, listRecords, getRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
+const { listRecordTypes, listRecords, getRecord, createApplicationRecord, updateApplicationRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
 const { ApplicationError } = await import('./errors.ts')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -289,6 +289,94 @@ test(
         assert.equal(types.some((type) => type.key === typeKey), false)
         await assert.rejects(listRecords(context, { typeKey }), notFound)
         await assert.rejects(getRecord(context, { typeKey, id: recordId }), notFound)
+      })
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId))
+    }
+  },
+)
+
+function conflict(error: unknown): boolean {
+  return error instanceof ApplicationError && error.code === 'conflict'
+}
+
+/**
+ * Two API tabs replacing one custom record's data bag through the v1
+ * application writer: the second save carries the revision it read before
+ * the first save committed, so it must conflict instead of silently
+ * overwriting the first tab's data (same contract as the interactive route).
+ */
+test(
+  'a stale custom-record revision conflicts instead of overwriting through the application writer',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const fixture = await withBypass(seed)
+    const typeKey = `v1rev-${randomUUID().replaceAll('-', '').slice(0, 10)}`
+    const typeId = randomUUID()
+    try {
+      await withOrgContext(fixture.orgId, async () => {
+        const context = contextFor(fixture, new Set(fixture.subsidiaries))
+        await db.execute(sql`
+          insert into custom_record_types
+            (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+          values
+            (${typeId}, ${fixture.orgId}, ${typeKey}, 'V1 Revision', 'V1 Revisions',
+             ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'title', type: 'text', label: 'Title' }] }])}::jsonb,
+             'published', ${fixture.actorId}, ${fixture.actorId})
+        `)
+        // Creating with data seeds its own revision evidence: the creator
+        // holds no token yet, so no token is required on create.
+        const created = await createApplicationRecord(context, {
+          typeKey,
+          body: { data: { title: 'v1 original' } },
+          idempotencyKey: randomUUID(),
+        })
+        assert.equal(created.status, 201)
+        const id = (created.result as { record: { id: string } }).record.id
+
+        // Both tabs read the same revision.
+        const read = (await getRecord(context, { typeKey, id })) as unknown as {
+          data: { title: string }
+          updated_at: string
+        }
+        assert.match(read.updated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        const stale = read.updated_at
+
+        // Tab A saves with the fresh token.
+        const tabA = await updateApplicationRecord(context, {
+          typeKey,
+          id,
+          body: { data: { title: 'v1 tab A' }, expectedUpdatedAt: stale },
+          idempotencyKey: randomUUID(),
+        })
+        assert.equal(tabA.status, 200)
+
+        // Tab B still holds the pre-A token: it must lose loudly, and the
+        // live data must stay exactly what tab A wrote.
+        await assert.rejects(
+          updateApplicationRecord(context, {
+            typeKey,
+            id,
+            body: { data: { title: 'v1 tab B' }, expectedUpdatedAt: stale },
+            idempotencyKey: randomUUID(),
+          }),
+          conflict,
+        )
+        const live = (await getRecord(context, { typeKey, id })) as unknown as {
+          data: { title: string }
+        }
+        assert.equal(live.data.title, 'v1 tab A')
+
+        // A data update with no token conflicts before any work happens.
+        await assert.rejects(
+          updateApplicationRecord(context, {
+            typeKey,
+            id,
+            body: { data: { title: 'v1 sneaky' } },
+            idempotencyKey: randomUUID(),
+          }),
+          conflict,
+        )
       })
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId))

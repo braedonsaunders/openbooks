@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { runTriggerScripts } from '@openbooks/engine/src/scripting.ts'
 import type { FieldValueMap } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
@@ -103,17 +104,26 @@ export async function PATCH(
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { data?: unknown; status?: string; reason?: unknown }
+  const body = (parsedBody.data) as { data?: unknown; status?: string; reason?: unknown; expectedUpdatedAt?: unknown }
   const reason = mutationReason(body.reason)
   if (reason instanceof NextResponse) return reason
+  // Mandatory optimistic-concurrency evidence on data-bearing saves (same
+  // contract as document and payment edits): two tabs replacing one data bag
+  // must 409 instead of silently overwriting each other. Checked after the
+  // scope gate so a missing token never leaks record existence to an
+  // unauthorized caller. Lifecycle-only transitions stay on their status
+  // machine (a conditional move the lock re-validates), not on a token.
+  if (body.data !== undefined && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'A current record revision is required; reload the record and try again' }, { status: 409 })
+  }
 
   // The lock, complete before-image, mutation, and immutable audit event all
   // share one tenant-pinned connection. A concurrent editor therefore waits
   // for this transaction and captures the committed row as its own before
   // image, while an audit failure rolls the mutation back with it.
   const outcome = await withOrgTransaction(user.orgId, async () => {
-    const locked = (await db.execute<Record<string, unknown>>(sql`
-      select * from custom_records
+    const locked = (await db.execute<Record<string, unknown> & { revision?: unknown }>(sql`
+      select *, ${documentRevisionSql(sql`updated_at`)} as revision from custom_records
        where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
        for update
     `)).rows[0]
@@ -121,6 +131,18 @@ export async function PATCH(
     const record = locked as typeof scope.record
     if (!recordSubsidiaryScopeAllows(sections, record.data, gate.allowedSubsidiaryIds)) {
       return { kind: 'not_found' as const }
+    }
+    // The token is compared against the row locked by this write transaction,
+    // never against the pre-lock snapshot above (which may have gone stale
+    // while validation-unrelated work ran between the gate and this lock).
+    if (body.data !== undefined && locked.revision !== body.expectedUpdatedAt) {
+      return {
+        kind: 'response' as const,
+        response: NextResponse.json(
+          { error: 'This record changed after you opened it; reload the record and reapply your changes' },
+          { status: 409 },
+        ),
+      }
     }
 
     let nextStatus: RecordStatus | undefined
@@ -222,12 +244,15 @@ export async function PATCH(
 
     const searchText =
       nextData !== undefined ? await buildSearchText(sections, nextData, record.record_number) : undefined
+    // Monotonic revision advance (same idiom as document and prebill-line
+    // writers): every committed update moves the token forward, so equal
+    // strings really do mean "nothing changed since you read it".
     const updated = (await db.execute<Record<string, unknown>>(sql`
       update custom_records set
         data = coalesce(${nextData !== undefined ? JSON.stringify(nextData) : null}::jsonb, data),
         search_text = coalesce(${searchText ?? null}, search_text),
         status = coalesce(${nextStatus ?? null}, status),
-        updated_at = now(), updated_by = ${user.id}
+        updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
       returning *
     `)).rows[0]
