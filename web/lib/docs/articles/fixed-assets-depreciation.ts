@@ -6,8 +6,8 @@ export const fixedAssetsDepreciation: DocArticle = {
   category: 'accounting',
   order: 4,
   summary: 'Configure asset books and record exact, auditable formula, manual, and units-of-production depreciation.',
-  updated: '2026-07-21',
-  keywords: ['fixed assets', 'depreciation', 'manual depreciation', 'units of production', 'usage', 'evidence', 'asset book'],
+  updated: '2026-09-16',
+  keywords: ['fixed assets', 'depreciation', 'manual depreciation', 'units of production', 'usage', 'evidence', 'asset book', 'onboarding', 'mid-life', 'opening accumulated'],
   body: `# Fixed Assets and Depreciation Evidence
 
 The fixed-asset register separates the asset record, each accounting book's
@@ -30,6 +30,26 @@ settings use the corresponding configured fallback. A **posts GL** book creates
 journals; a reporting-only book calculates and retains its schedule without
 leaking entries into the general ledger. The primary book alone controls the
 asset's accumulated-depreciation and net-book-value summary.
+
+## Onboarding a mid-life asset
+
+An asset that arrives with history from a previous system keeps its original
+acquisition cost and in-service date. Record what the old system had already
+depreciated in the drawer's Opening accumulated field with the date it was
+measured through in Opening as of, or fill the Opening accumulated
+depreciation and Opening as-of date columns on fixed-asset import. The two
+figures travel together: entering one without the other is refused, and the
+opening amount can never exceed cost less salvage.
+
+Opening balances are memo figures, not journals. Nothing is posted for the
+pre-cutover months and nothing is caught up: the schedule starts after the
+as-of date and spreads only the remaining amount — cost, less salvage, less
+opening accumulated — over the remaining life. The register's net book value
+always ties out as cost, minus opening accumulated, minus posted
+depreciation.
+
+Once depreciation posts against the asset, the opening figures lock. Correct
+a wrong opening figure before the first posting run.
 
 ## Formula methods
 
