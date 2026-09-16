@@ -18,6 +18,7 @@ import { accounts } from "./coa";
 import { accountingBooks, accountingPeriods, departments, locations, projects } from "./core";
 import { subsidiaries } from "./subsidiaries";
 import { documents } from "./documents";
+import { timeEntries } from "./time";
 import { journalEntries } from "./ledger";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
@@ -403,6 +404,8 @@ export const allocationLineage = pgTable(
     sourceJournalLineId: uuid("source_journal_line_id"),
     sourceDocumentLineId: uuid("source_document_line_id"),
     targetDocumentLineId: uuid("target_document_line_id"),
+    /** Event trigger for event-bound post rules (the overhead net-zero pair): the approved time entry. */
+    sourceTimeEntryId: uuid("source_time_entry_id"),
     driverId: uuid("driver_id"),
     driverValue: numeric("driver_value", { precision: 19, scale: 4 }),
     driverTotal: numeric("driver_total", { precision: 19, scale: 4 }),
@@ -416,6 +419,9 @@ export const allocationLineage = pgTable(
     index("allocation_lineage_run").on(t.orgId, t.runId),
     index("allocation_lineage_rule").on(t.orgId, t.ruleId, t.createdAt),
     index("allocation_lineage_document").on(t.orgId, t.documentId),
+    index("allocation_lineage_time_entry")
+      .on(t.orgId, t.sourceTimeEntryId)
+      .where(sql`${t.sourceTimeEntryId} is not null`),
     foreignKey({
       name: "allocation_lineage_rule_id_fkey",
       columns: [t.orgId, t.ruleId],
@@ -446,9 +452,14 @@ export const allocationLineage = pgTable(
       columns: [t.orgId, t.driverId],
       foreignColumns: [allocationDrivers.orgId, allocationDrivers.id],
     }),
+    foreignKey({
+      name: "allocation_lineage_time_entry_id_fkey",
+      columns: [t.orgId, t.sourceTimeEntryId],
+      foreignColumns: [timeEntries.orgId, timeEntries.id],
+    }),
     check(
       "allocation_lineage_anchor",
-      sql`${t.runId} is not null or ${t.documentId} is not null`,
+      sql`${t.runId} is not null or ${t.documentId} is not null or ${t.sourceTimeEntryId} is not null`,
     ),
   ],
 );
