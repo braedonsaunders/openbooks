@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@openbooks/reports": "*",
     "exceljs": "^4.4.0"
   },
   "devDependencies": {
