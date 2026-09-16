@@ -160,6 +160,7 @@ type VersionRow = {
   offset_account_id: string | null;
   residual_policy: AllocationResidualPolicy;
   residual_target_id: string | null;
+  solve_method: string;
   approval_flow_id: string | null;
   memo_template: string | null;
   line_description_template: string | null;
@@ -215,7 +216,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Pro
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
              basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
              offset_account_id, residual_policy, residual_target_id, approval_flow_id,
-             memo_template, line_description_template, definition_hash
+             memo_template, line_description_template, definition_hash, solve_method
         from allocation_rule_versions
        where id = ${id} and org_id = ${rule.org_id} for share`)).rows[0];
   const inWindow = (version: VersionRow): boolean =>
@@ -230,7 +231,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Pro
            book_scope, book_ids, account_scope, dimension_filters, source_measure,
            basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
            offset_account_id, residual_policy, residual_target_id, approval_flow_id,
-           memo_template, line_description_template, definition_hash
+           memo_template, line_description_template, definition_hash, solve_method
       from allocation_rule_versions
      where org_id = ${rule.org_id} and rule_id = ${rule.id} and status = 'published'
        and effective_from <= ${period.ends_on}
@@ -785,6 +786,14 @@ async function buildComputation(
 ): Promise<BuiltComputation> {
   if (!opts.version.definition_hash) {
     throw new Error(`allocation rule ${opts.rule.key} has a published version with no definition hash`);
+  }
+  // Reciprocal (simultaneous) solving is not implemented — publication
+  // refuses it, and this guard covers versions published before the refusal
+  // so no entry point can silently execute them sequentially instead.
+  if (opts.version.solve_method === "simultaneous") {
+    throw new Error(
+      `allocation rule ${opts.rule.key} uses simultaneous solving, which is not supported; republish it as sequential`,
+    );
   }
   // Book scope: a primary-scoped version only sweeps the primary book.
   if (opts.version.book_scope === "primary") {
@@ -1499,7 +1508,7 @@ export async function postAllocationRun(
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
              basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
              offset_account_id, residual_policy, residual_target_id, approval_flow_id,
-             memo_template, line_description_template, definition_hash
+             memo_template, line_description_template, definition_hash, solve_method
         from allocation_rule_versions
        where id = ${run.version_id} and org_id = ${orgId} for share`)).rows[0];
     if (!version || version.status !== "published") {
