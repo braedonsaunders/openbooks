@@ -750,8 +750,6 @@ export async function runBridgeMethod(opts: {
   const recordsGranted =
     permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.RECORDS_READ) &&
     opts.userCan(APP_CAPABILITIES.RECORDS_READ)
-  const glGranted =
-    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.GL_POST) && opts.userCan(APP_CAPABILITIES.GL_POST)
 
   const platform = createAppPlatformAdapter({
     orgId: opts.orgId,
@@ -855,77 +853,128 @@ export async function runBridgeMethod(opts: {
 
   if (opts.method === 'callBackend') {
     const endpointName = String(opts.payload?.endpoint ?? '')
-    const endpoint = app.manifest.endpoints.find((e) => e.name === endpointName)
-    if (!endpoint) return { ok: false, error: `no such endpoint: ${endpointName}`, status: 404 }
-
-    const src = await rows<{ content: string }>(
-      sql`select content from app_files where org_id = ${opts.orgId} and version_id = ${app.activeVersionId} and path = ${endpoint.file} and kind = 'backend' limit 1`,
-    )
-    if (!src[0]) return { ok: false, error: 'endpoint source missing', status: 500 }
-    const handlerSource = src[0].content
-
-    const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
-    if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
-    if (glGranted) {
-      // The bridge caller's subsidiary scope travels with the write, so an App
-      // backend cannot journal into an entity the signed-in user may not see.
-      adapters.journal = {
-        create: (input, post) =>
-          createScriptJournal(opts.orgId, opts.user.id, input as ScriptJournalInput, {
-            post,
-            allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
-          }),
-      }
-    }
-    adapters.platform = platform
-
-    const request: AppRequest = {
-      method: endpoint.method === 'ANY' ? 'POST' : endpoint.method,
+    return invokeAppEndpointHandler({
+      orgId: opts.orgId,
+      user: opts.user,
+      key: opts.key,
       endpoint: endpointName,
-      query: {},
       body: opts.payload?.payload ?? null,
-      user: {
-        id: opts.user.id,
-        name: opts.user.name,
-        roles: opts.user.roles.map(({ key }) => key),
-      },
-    }
-    // ONE invocation unit: claim an idempotency key, run the handler inside a
-    // savepoint of one tenant transaction, and commit every material effect
-    // (journal posts, platform CRUD, app storage) together with its app_runs
-    // audit row — or roll the whole thing back. A handler failure leaves zero
-    // effects; a lost-response retry replays the stored result without
-    // re-executing; an audit-write failure rolls everything back. The envelope
-    // lives in engine/src/apps-invocations.ts.
-    try {
-      const outcome = await executeAppInvocation({
-        orgId: opts.orgId,
-        actorId: opts.user.id,
-        appId: app.id,
-        versionId: app.activeVersionId,
-        endpoint: endpointName,
-        operation: `apps.call_backend.${endpointName}`,
-        idempotencyKey: deriveAppInvocationKey({
-          versionId: app.activeVersionId,
-          endpoint: endpointName,
-          body: opts.payload?.payload ?? null,
-        }),
-        requestHash: requestHash({ endpoint: endpointName, payload: opts.payload?.payload ?? null }),
-        run: () => runAppEndpoint({ source: handlerSource, request, adapters }),
-        audit: insertAppRun,
-      })
-      const run = outcome.attempt
-      if (run.status !== 'ok') {
-        const status = run.status === 'forbidden' ? 403 : run.status === 'timeout' ? 504 : 400
-        return { ok: false, error: run.error ?? run.status, status }
-      }
-      return { ok: true, result: run.response }
-    } catch (error) {
-      return invocationRefusal(error)
-    }
+      userCan: opts.userCan,
+      allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+      operation: `apps.call_backend.${endpointName}`,
+      auditEndpoint: endpointName,
+    })
   }
 
   return { ok: false, error: `unknown method: ${opts.method}`, status: 400 }
+}
+
+/**
+ * Run one backend endpoint file for an installed App inside the governed
+ * invocation envelope (unit budget + app_runs evidence + idempotency claim).
+ * Shared by the bridge callBackend path and by App-declared assistant tools —
+ * the only difference is who derives the idempotency key: the bridge derives
+ * it from (version, endpoint, body) so byte-identical retries collapse, while
+ * assistant callers pass a fresh key per call (or a confirmation-token
+ * derivative at commit time, so double-Applies replay instead of re-running).
+ */
+export async function invokeAppEndpointHandler(opts: {
+  orgId: string
+  user: SessionUser
+  key: string
+  endpoint: string
+  body: unknown
+  userCan: (perm: string) => boolean
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+  operation: string
+  auditEndpoint: string
+  /** Fresh caller key; when omitted the bridge derivation is used. */
+  idempotencyKey?: string
+}): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
+  const app = await getAppByKey(opts.orgId, opts.key)
+  if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
+  if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
+  const endpoint = app.manifest.endpoints.find((e) => e.name === opts.endpoint)
+  if (!endpoint) return { ok: false, error: `no such endpoint: ${opts.endpoint}`, status: 404 }
+
+  const recordsGranted =
+    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.RECORDS_READ) &&
+    opts.userCan(APP_CAPABILITIES.RECORDS_READ)
+  const glGranted =
+    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.GL_POST) && opts.userCan(APP_CAPABILITIES.GL_POST)
+  const platform = createAppPlatformAdapter({
+    orgId: opts.orgId,
+    user: opts.user,
+    grantedPermissions: app.grantedPermissions,
+    userCan: opts.userCan,
+    allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+  })
+
+  const src = await rows<{ content: string }>(
+    sql`select content from app_files where org_id = ${opts.orgId} and version_id = ${app.activeVersionId} and path = ${endpoint.file} and kind = 'backend' limit 1`,
+  )
+  if (!src[0]) return { ok: false, error: 'endpoint source missing', status: 500 }
+  const handlerSource = src[0].content
+
+  const adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
+  if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
+  if (glGranted) {
+    // The caller's subsidiary scope travels with the write, so an App
+    // backend cannot journal into an entity the signed-in user may not see.
+    adapters.journal = {
+      create: (input, post) =>
+        createScriptJournal(opts.orgId, opts.user.id, input as ScriptJournalInput, {
+          post,
+          allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+        }),
+    }
+  }
+  adapters.platform = platform
+
+  const request: AppRequest = {
+    method: endpoint.method === 'ANY' ? 'POST' : endpoint.method,
+    endpoint: opts.endpoint,
+    query: {},
+    body: opts.body ?? null,
+    user: {
+      id: opts.user.id,
+      name: opts.user.name,
+      roles: opts.user.roles.map(({ key }) => key),
+    },
+  }
+  // ONE invocation unit: claim an idempotency key, run the handler inside a
+  // savepoint of one tenant transaction, and commit every material effect
+  // (journal posts, platform CRUD, app storage) together with its app_runs
+  // audit row — or roll the whole thing back. A handler failure leaves zero
+  // effects; a lost-response retry replays the stored result without
+  // re-executing; an audit-write failure rolls everything back. The envelope
+  // lives in engine/src/apps-invocations.ts.
+  try {
+    const outcome = await executeAppInvocation({
+      orgId: opts.orgId,
+      actorId: opts.user.id,
+      appId: app.id,
+      versionId: app.activeVersionId,
+      endpoint: opts.auditEndpoint,
+      operation: opts.operation,
+      idempotencyKey: opts.idempotencyKey ?? deriveAppInvocationKey({
+        versionId: app.activeVersionId,
+        endpoint: opts.endpoint,
+        body: opts.body ?? null,
+      }),
+      requestHash: requestHash({ endpoint: opts.endpoint, payload: opts.body ?? null }),
+      run: () => runAppEndpoint({ source: handlerSource, request, adapters }),
+      audit: insertAppRun,
+    })
+    const run = outcome.attempt
+    if (run.status !== 'ok') {
+      const status = run.status === 'forbidden' ? 403 : run.status === 'timeout' ? 504 : 400
+      return { ok: false, error: run.error ?? run.status, status }
+    }
+    return { ok: true, result: run.response }
+  } catch (error) {
+    return invocationRefusal(error)
+  }
 }
 
 function platformBridgeUnits(method: string): number {
