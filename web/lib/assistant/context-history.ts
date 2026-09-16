@@ -111,6 +111,28 @@ export function compactAssistantTurn(parts: HistoryPart[]): HistoryPart[] {
 }
 
 /**
+ * Tool names the conversation already called, oldest first, deduped. Feeds
+ * the b01 pre-router so a follow-up keeps the modules it already used (and
+ * the adaptive step budget sees the turn's true shape).
+ */
+export function collectPriorToolNames(messages: HistoryMessage[]): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const part of message.parts) {
+      if (!isToolPart(part)) continue;
+      const name = toolNameOf(part);
+      if (!seen.has(name)) {
+        seen.add(name);
+        names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Apply the history budget to a model-window message list. Returns a new
  * list; the input (the persisted transcript) is never mutated.
  */

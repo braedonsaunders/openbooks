@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  foldPartsIntoPins,
   hasAnaphor,
   renderPinsSection,
   updatePinsFromToolOutput,
@@ -98,6 +99,23 @@ test("renderPinsSection exposes pins as data, empty when none", () => {
   assert.match(section, /Customer A/);
   assert.match(section, /BILL-0871/);
   assert.match(section, /untrusted data|before searching/);
+});
+
+test("foldPartsIntoPins folds a turn and skips non-tool parts", () => {
+  const pins = foldPartsIntoPins({}, [
+    { type: "text", text: "here are your bills" },
+    {
+      type: "tool-find_documents",
+      toolCallId: "c1",
+      state: "output-available",
+      input: {},
+      output: billOutput(1),
+    },
+    { type: "dynamic-tool", toolName: "get_document", output: { ok: false, error: "gone" } },
+    { type: "reasoning", text: "thinking" },
+  ]);
+  assert.deepEqual(pins.document, { id: BILL_ID, label: "bill BILL-0870" });
+  assert.equal(pins.party, undefined);
 });
 
 test("renderPinsSection flags the just-used reference when asked", () => {

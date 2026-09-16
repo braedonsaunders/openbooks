@@ -37,6 +37,21 @@ function cleanSummaryRow(value: unknown): ConversationSummary | null {
   };
 }
 
+/** Owner-only count of assistant turns (drives the refresh cadence). */
+export async function countConversationAssistantTurns(
+  authz: Authz,
+  conversationId: string,
+): Promise<number> {
+  const r = await db.execute<{ count: string }>(sql`
+    select count(*) as count
+      from ai_messages m
+      join ai_conversations c on c.id = m.conversation_id
+     where m.conversation_id = ${conversationId} and m.role = 'assistant'
+       and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
+  `);
+  return Number(r.rows[0]?.count ?? 0);
+}
+
 /** Owner-only read; null when no summary exists yet or it fails validation. */
 export async function readConversationSummary(
   authz: Authz,

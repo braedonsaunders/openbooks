@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { convertToModelMessages, type UIMessage } from "ai";
+import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { can, guardPermission } from "../../../../lib/authz";
@@ -9,8 +9,37 @@ import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { NO_ANSWER_MESSAGE, runAgentTurn } from "../../../../lib/assistant/agent";
 import { buildChatTurn } from "../../../../lib/assistant/registry";
 import { priorToolNames } from "../../../../lib/assistant/tool-router";
+import { ASSISTANT_TOOLS, buildToolRegistryAsync } from "../../../../lib/assistant/registry";
+import { APPLICATION_TOOLS } from "../../../../lib/application/tool-catalog";
 import { withModelCompaction } from "../../../../lib/assistant/result-compaction";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
+import {
+  applyHistoryBudget,
+  collectPriorToolNames,
+  type HistoryMessage,
+  type HistoryPart,
+} from "../../../../lib/assistant/context-history";
+import {
+  foldPartsIntoPins,
+  hasAnaphor,
+  renderPinsSection,
+  type EntityPins,
+} from "../../../../lib/assistant/context-pins";
+import { resolveStepBudget } from "../../../../lib/assistant/context-steps";
+import {
+  buildSummaryPrompt,
+  buildSummarySection,
+  collectPinnedEntities,
+  mergeResolvedEntities,
+  parseSummaryModelOutput,
+  shouldRefreshSummary,
+} from "../../../../lib/assistant/context-summary";
+import {
+  countConversationAssistantTurns,
+  readConversationSummary,
+  writeConversationSummary,
+} from "../../../../lib/assistant/conversation-memory";
+import { moduleOfTool } from "../../../../lib/assistant/tool-router";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { orgFiscalContext } from "../../../../lib/fiscal";
 import { resolvedFeatureState } from "../../../../lib/features";
@@ -110,10 +139,23 @@ export async function POST(req: Request): Promise<Response> {
     canWrite: can(authz, "assistant.write"),
     features,
   });
+  // Model-facing tool outputs are compacted (history conversion and live
+  // steps); the streamed and persisted parts keep the full results.
+  const tools = withModelCompaction(await buildToolRegistryAsync(authz, features));
+  // Static catalog snapshot for the pure b01 module router (payload routing
+  // only — gates stay in the registry above).
+  const moduleByTool = new Map<string, string>([
+    ...ASSISTANT_TOOLS.map((t) => [t.name, moduleOfTool(t.name, t.feature)] as const),
+    ...APPLICATION_TOOLS.map((t) => [t.name, moduleOfTool(t.name, t.featureKey)] as const),
+  ]);
+  const resolveModule = (toolName: string): string => moduleByTool.get(toolName) ?? "core";
 
   if (!conversationId) {
     conversationId = await createConversation(authz, SCOPE, prompt.slice(0, 60));
   }
+  // Rolling memory is per-conversation and owner-scoped; a fresh thread
+  // simply has none yet.
+  const storedSummary = await readConversationSummary(authz, conversationId);
   let userPersisted = false;
   try {
     // Persist first so a dropped connection cannot lose a turn that actually started.
@@ -131,6 +173,36 @@ export async function POST(req: Request): Promise<Response> {
           ? ((message.data as { parts: unknown }).parts as UIMessage["parts"])
           : ([{ type: "text", text: message.content }] as UIMessage["parts"]),
     }));
+    // The persisted parts are plain JSON; view them through the history
+    // helpers (single cast at the boundary — the SDK revalidates on send).
+    const historyView = uiMessages as unknown as HistoryMessage[];
+
+    // Entity pins fold over the FULL window (budgeting below only shrinks
+    // the model copy); the step budget sees the prompt plus prior tools.
+    let windowPins: EntityPins = {};
+    for (const message of historyView) {
+      windowPins = foldPartsIntoPins(windowPins, message.parts);
+    }
+    const priorToolNames = collectPriorToolNames(historyView);
+    const maxSteps = resolveStepBudget(prompt, priorToolNames, resolveModule);
+
+    const system = assistantSystemPrompt({
+      orgName: aiConfig?.org?.name ?? null,
+      baseCurrency: org.rows[0]?.base_currency ?? null,
+      userName: authz.user.name,
+      today,
+      fiscal: await orgFiscalContext(today, authz.user.orgId),
+      canWrite: can(authz, "assistant.write"),
+      features,
+      maxSteps,
+      memorySections: [
+        buildSummarySection(storedSummary),
+        renderPinsSection(windowPins, hasAnaphor(prompt)),
+      ],
+    });
+
+    // Older turns' tool parts ride as compact summaries; the UI keeps full parts.
+    const budgeted = applyHistoryBudget(historyView);
 
     // Two-stage catalog: the full gated catalog stays registered (instant,
     // typed activation) while each step only SENDS core ∪ pre-routed ∪
@@ -141,7 +213,7 @@ export async function POST(req: Request): Promise<Response> {
 
     let modelMessages;
     try {
-      modelMessages = await convertToModelMessages(uiMessages, {
+      modelMessages = await convertToModelMessages(budgeted as unknown as UIMessage[], {
         tools,
         ignoreIncompleteToolCalls: true,
       });
@@ -161,6 +233,7 @@ export async function POST(req: Request): Promise<Response> {
       system,
       tools,
       activeTools: turn.activeTools,
+      maxSteps,
       abortSignal: req.signal,
       onComplete: async ({ parts, aborted, finishReason, usage }) => {
         const text = parts
@@ -193,6 +266,46 @@ export async function POST(req: Request): Promise<Response> {
             parts: persistedParts,
           },
         });
+        // Best-effort rolling summary: refresh every K turns, but never fail
+        // a completed turn for memory.
+        try {
+          const turns = await countConversationAssistantTurns(authz, conversationId!);
+          if (!shouldRefreshSummary(turns, storedSummary)) return;
+          try {
+            const model = getModel(aiConfig, "fast");
+            if (!model) return;
+            const transcript = [
+              ...history.map((message) => `${message.role}: ${message.content}`),
+              `user: ${prompt}`,
+              `assistant: ${content}`,
+            ]
+              .join("\n")
+              .slice(-12_000);
+            const generated = await generateText({
+              model,
+              system: "You summarise accounting-assistant conversations for continuity.",
+              prompt: buildSummaryPrompt(transcript, storedSummary),
+              temperature: 0.2,
+            });
+            const parsed = parseSummaryModelOutput(generated.text);
+            const turnPins = foldPartsIntoPins(
+              windowPins,
+              persistedParts as unknown as HistoryPart[],
+            );
+            await writeConversationSummary(authz, conversationId!, {
+              text: parsed.text || content.slice(0, 1_000),
+              entities: mergeResolvedEntities(storedSummary?.entities ?? [], [
+                ...parsed.entities,
+                ...collectPinnedEntities(turnPins),
+              ]),
+              turnsCovered: turns,
+            });
+          } catch (summaryError) {
+            console.warn("[assistant/chat] summary refresh failed", summaryError);
+          }
+        } catch (countError) {
+          console.warn("[assistant/chat] summary turn count failed", countError);
+        }
       },
     });
 

@@ -33,7 +33,9 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { readConversationSummary, writeConversationSummary } = await import("./conversation-memory");
+const { countConversationAssistantTurns, readConversationSummary, writeConversationSummary } =
+  await import("./conversation-memory");
+const { appendMessage } = await import("../ai-conversations");
 
 const DB_ONLY = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -139,6 +141,25 @@ test("conversation memory round-trips and stays owner-scoped", DB_ONLY, async ()
       select metadata from ai_conversations where id = ${conversationId}
     `);
     assert.equal((raw.rows[0]!.metadata as { pinned_tab: string }).pinned_tab, "inbox");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("conversation memory counts assistant turns owner-scoped", DB_ONLY, async () => {
+  const org = await createScratchOrg();
+  try {
+    const ownerId = randomUUID();
+    await seedUser(org.orgId, ownerId);
+    const conversationId = await seedConversation(org.orgId, ownerId);
+    const owner = userAuthz(org.orgId, ownerId);
+    assert.equal(await countConversationAssistantTurns(owner, conversationId), 0);
+    await appendMessage(owner, { conversationId, role: "user", content: "hi" });
+    await appendMessage(owner, { conversationId, role: "assistant", content: "hello" });
+    await appendMessage(owner, { conversationId, role: "assistant", content: "again" });
+    assert.equal(await countConversationAssistantTurns(owner, conversationId), 2);
+    const stranger = userAuthz(org.orgId, randomUUID());
+    assert.equal(await countConversationAssistantTurns(stranger, conversationId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
