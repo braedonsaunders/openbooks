@@ -68,6 +68,7 @@ export type {
   AllocationApplyPolicy,
   AllocationDriverSourceKind,
   AllocationDimension,
+  AllocationDriver,
   AllocationMode,
   AllocationRuleTarget,
   AllocationRuleVersion,
@@ -112,6 +113,20 @@ export {
   type DriverValueRow,
   type UpdateDriverInput,
 } from "./driver-admin.ts";
+export {
+  DriverNotAvailableError,
+  createDriverResolver,
+  driverResolver,
+  previewDriverVector,
+  type DriverPreview,
+  type DriverPreviewRequest,
+  type DriverResolveOptions,
+  type DriverResolverDeps,
+  type ReportDriverRow,
+  type ReportDriverRunInput,
+  type ReportDriverRunner,
+  type ResolvedWindow,
+} from "./drivers.ts";
 export {
   RunQueryError,
   getRun,
