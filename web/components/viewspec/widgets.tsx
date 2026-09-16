@@ -112,6 +112,7 @@ import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/Features
 import { AgentsOverviewWorkspace } from '../../app/(app)/admin/setup/agents/AgentsOverviewWorkspace'
 import { AgentsLibraryWorkspace } from '../../app/(app)/admin/setup/agents/library/AgentsLibraryWorkspace'
 import { AgentPolicyWorkspace } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyWorkspace'
+import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
@@ -1294,6 +1295,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** Whole props bag — the policy island owns its schedule/detector/analysis/routing form. */
   'agents-policy-workspace': (props) => (
     <AgentPolicyWorkspace {...(props as unknown as ComponentProps<typeof AgentPolicyWorkspace>)} />
+  ),
+  /** Whole props bag — the activity island owns its filterable runs table. */
+  'agents-activity-workspace': (props) => (
+    <AgentsActivityWorkspace {...(props as unknown as ComponentProps<typeof AgentsActivityWorkspace>)} />
   ),
   /** ONE prop. The secret ciphertext never leaves the engine module; only
    *  `hasSecret` crosses into the redacted view the loader reads. */

@@ -1391,6 +1391,31 @@
         "usersTruncatedNote": "Se muestran las primeras 200 personas.",
         "deliveryNote": "El envío por correo aún no está conectado — esto guarda quién debe recibir qué. Mientras tanto, los hallazgos siempre aparecen en Actividad de agentes."
       },
+      "activity": {
+        "title": "Actividad",
+        "description": "Cada análisis de agentes en todos los paquetes: estado, duración, hallazgos y errores. Vuelva a ejecutar cualquier paquete desde aquí.",
+        "allPacks": "Todos los paquetes",
+        "packColumn": "Paquete",
+        "triggerColumn": "Origen",
+        "triggers": {
+          "manual": "Manual",
+          "scheduler": "Programado"
+        },
+        "statusColumn": "Estado",
+        "startedColumn": "Inicio",
+        "durationColumn": "Duración",
+        "detectedColumn": "Detectados",
+        "resolvedColumn": "Resueltos",
+        "actionsColumn": "Acciones",
+        "rerun": "Repetir",
+        "viewFindings": "Hallazgos",
+        "empty": "Sin ejecuciones todavía.",
+        "emptyHint": "Ejecute un paquete desde el resumen para ver su primer análisis aquí.",
+        "truncatedNote": "Se muestran las últimas {shown} de {total} ejecuciones.",
+        "totalNote": "{count, plural, one {# ejecución} other {# ejecuciones}}",
+        "showMore": "Mostrar más",
+        "loadFailed": "No se pudieron cargar las ejecuciones."
+      },
       "packs": {
         "accounting": {
           "title": "Controles contables",
