@@ -1,4 +1,4 @@
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts';
+import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -93,7 +93,7 @@ async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Pr
     allowedSubsidiaryIds: null,
   };
   const revision = (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionSql(sql`updated_at`)} as revision
+    select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
       from documents where id = ${fixture.orderId}`)).rows[0]!.revision;
   return new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
     method: "PATCH",

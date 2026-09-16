@@ -445,7 +445,7 @@ for (const boundary of [
             } else if (boundary === 'read revision race') {
               const exact = (
                 await db.execute<{ revision: string }>(
-                  sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from documents where id=${payment.id} and org_id=${org.orgId}`,
+                  sql`select (revision_seq)::text as revision from documents where id=${payment.id} and org_id=${org.orgId}`,
                 )
               ).rows[0]!.revision
               let interleaved = false
@@ -482,7 +482,7 @@ for (const boundary of [
               )
               assert.equal(original.status, 200)
               const revision = (await original.json()).doc.updated_at
-              assert.match(revision, /\.\d{6}Z$/)
+              assert.match(revision, /^\d+$/)
               const choices = (
                 await (
                   await openItems(
@@ -516,7 +516,7 @@ for (const boundary of [
               const result = await saved.json()
               assert.equal(saved.status, 200, JSON.stringify(result))
               assert.equal(result.doc.total, '100.0000')
-              assert.match(result.doc.updated_at, /\.\d{6}Z$/)
+              assert.match(result.doc.updated_at, /^\d+$/)
               assert.notEqual(result.doc.updated_at, revision)
               const stale = await patchPayment(
                 new Request('http://test.local', {

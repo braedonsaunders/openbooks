@@ -3,7 +3,7 @@ import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-sco
 import { sql } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { isDocKindEnabled } from './documents'
 import { isIsoCalendarDate } from './crm-dates'
 
@@ -65,7 +65,7 @@ export async function loadCrmAccount(partyId: string, orgId: string, allowed?: R
 
 export async function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const opportunity = (await db.execute<Record<string, unknown>>(sql`
-    select o.*, ${documentRevisionSql(sql`o.updated_at`)} as "__opportunityRevision",
+    select o.*, ${documentRevisionCounterSql(sql`o.revision_seq`)} as "__opportunityRevision",
            p.display_name as party_name, c.name as contact_name,
            s.name as status_name, s.is_closed, s.is_won,
            u.name as owner_name, st.name as sales_team_name, ls.name as lead_source_name
@@ -79,7 +79,7 @@ export async function loadOpportunity(id: string, orgId: string, allowed?: Reado
      where o.id = ${id} and o.org_id = ${orgId}${crmOpportunityScope(allowed)}
   `))
   if (!opportunity.rows[0]) return null
-  // The driver's noncanonical timestamp never leaves this module: updated_at
+  // The revision counter never leaves this module in raw form: updated_at
   // carries the exact persisted revision token every opportunity save must
   // send back as expectedUpdatedAt (same wire form as document revisions).
   {

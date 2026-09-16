@@ -12,8 +12,8 @@ import {
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
-export { documentRevisionSql }
+import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+export { documentRevisionCounterSql, documentRevisionSql }
 import { sql, type SQL } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
@@ -87,13 +87,13 @@ export async function disabledDocKinds(orgId: string): Promise<string[]> {
 
 const DOCUMENT_REVISION_ALIAS = '__documentRevision'
 
-/** Tables whose updated_at doubles as the optimistic-concurrency revision. */
+/** Tables whose revision_seq counter is the optimistic-concurrency revision. */
 const REVISION_TABLES = new Set(['documents', 'custom_records'])
 
 /** Add the exact revision sidecar to reads backed by a revisioned table. */
 export function documentRevisionProjection(table: string): SQL {
   return REVISION_TABLES.has(table)
-    ? sql`, ${documentRevisionSql(sql.raw('updated_at'))} as "__documentRevision"`
+    ? sql`, ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "__documentRevision"`
     : sql``
 }
 
@@ -262,7 +262,7 @@ export async function createPostedCorrectionDraft(
       updatedAt: string
     }>(sql`
       select kind, status,
-             ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+             ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
        from documents
        where id = ${sourceId} and org_id = ${ctx.orgId}
        for update
@@ -380,7 +380,7 @@ export async function loadDocument(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
   const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
-           ${documentRevisionSql(sql.raw('d.updated_at'))} as "documentRevision",
+           ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "documentRevision",
            ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
            ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
       from documents d
@@ -459,7 +459,7 @@ export interface DocumentEditInput {
   /** Required evidence for every posted-document amendment. Not persisted on
    * the document; stored only in the immutable before/after audit envelope. */
   amendmentReason?: string
-  /** Optimistic concurrency token from documents.updated_at. Required when
+  /** Optimistic concurrency token from documents.revision_seq. Required when
    * editing any existing document. A newly minted, still-private draft is the
    * sole initialization path that may omit it. */
   expectedUpdatedAt?: string
@@ -509,7 +509,7 @@ export async function loadDocumentEditCurrent(
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
            custom,
-           ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+           ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
       from documents
      where id = ${id} and org_id = ${orgId}
   `)
@@ -633,14 +633,12 @@ export function requireDocumentEditRevision(value: unknown): string {
  * Compare exact PostgreSQL revision text without lossy JavaScript Date parsing.
  *
  * Exact string equality is sound end to end because storage guarantees a
- * document's revision ADVANCES on every update: this module's writers bump
- * with greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
- * and migration 0013_document_revision_monotonic rewrites any other writer's
- * byte-identical repeat forward at the database boundary. Two committed
- * revisions can therefore never serialize to one token, so an equal-string
- * match really does mean "nothing changed since you read it" — and a
- * millisecond-truncated token from a lossy reader fails the six-digit
- * requireDocumentEditRevision format instead of silently comparing equal.
+ * document's revision ADVANCES on every update: migration
+ * 0167_document_revision_counter bumps the revision_seq counter on every
+ * UPDATE at the database boundary — including writes that backdate the
+ * updated_at display timestamp. Two committed revisions can therefore never
+ * serialize to one token, so an equal-string match really does mean "nothing
+ * changed since you read it".
  */
 export function assertDocumentEditRevision(expected: unknown, actual: unknown): void {
   if (typeof expected !== 'string' || typeof actual !== 'string' || expected !== actual) {
@@ -661,12 +659,12 @@ export function assertNoExistingDocumentCorrection(existingDocumentNumber: strin
  * regressions exercise this exact orchestration under competing connections.
  *
  * The locked row's revision must itself carry the exact canonical wire token
- * the documentRevisionSql projection guarantees. String equality between two
- * equally lossy values — a driver-mapped Date coerced back to text,
- * PostgreSQL's default timestamp rendering, a truncated fractional part —
- * would otherwise authorize a write against a revision this system can never
- * have handed out, so a lock without an exact token fails closed before any
- * comparison runs.
+ * the documentRevisionCounterSql projection guarantees. String equality
+ * between two equally lossy values — a driver-mapped Date coerced back to
+ * text, PostgreSQL's default timestamp rendering, a truncated fractional
+ * part — would otherwise authorize a write against a revision this system
+ * can never have handed out, so a lock without an exact token fails closed
+ * before any comparison runs.
  */
 export async function runDocumentVersionedTransaction<
   Transaction,
@@ -1316,7 +1314,7 @@ export async function applyDocumentEdit(
         updatedAt: string
       }>(sql`
         select kind, status,
-               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+               ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
           from documents
          where id = ${id} and org_id = ${orgId}
          for update

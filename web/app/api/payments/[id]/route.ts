@@ -38,7 +38,7 @@ const allocationInput = z.object({
 })
 
 const paymentPatchBody = z.object({
-  /** Optimistic concurrency token from documents.updated_at (exact form). */
+  /** Optimistic concurrency token from documents.revision_seq (exact form). */
   expectedUpdatedAt: z.string().optional(),
   partyId: nullableUuidId.optional(),
   bankAccountId: nullableUuidId.optional(),

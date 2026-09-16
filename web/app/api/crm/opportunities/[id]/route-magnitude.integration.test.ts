@@ -63,7 +63,7 @@ async function fixture() {
 
 async function revision(id: string): Promise<string> {
   const row = (await db.execute<{ revision: string }>(sql`
-    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+    select (revision_seq)::text as revision
       from crm_opportunities where id = ${id}`)).rows[0]!
   return row.revision
 }

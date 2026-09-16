@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
 
 /**
  * One statement gives the drawer one MVCC snapshot of its header, lines and
@@ -10,7 +10,7 @@ import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
  */
 export async function loadExpenseReport(id: string, orgId: string) {
   const result = await db.execute<Record<string, unknown> & { __lines: Record<string, unknown>[] }>(sql`
-    select d.*, ${documentRevisionSql(sql`d.updated_at`)} as updated_at,
+    select d.*, ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at,
            p.display_name as employee_name, e.id as entry_id,
            coalesce((
              select jsonb_agg(to_jsonb(line) order by line.line_number)

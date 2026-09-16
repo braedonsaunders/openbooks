@@ -25,7 +25,7 @@ interface OrderDocument {
   partyId: string
   total: string
   memo: string
-  /** Optimistic-concurrency token (documents.updated_at). */
+  /** Optimistic-concurrency token (documents.revision_seq counter text). */
   updatedAt: string
   voidRequestedAt: string | null
   subsidiaryId?: string | null
@@ -100,7 +100,7 @@ class OrderRouteHarness {
       partyId: PARTY_ID,
       total: '100.00',
       memo: 'original memo',
-      updatedAt: '2026-08-24T12:00:00.000000Z',
+      updatedAt: '7',
       voidRequestedAt: null,
       subsidiaryId: null,
     }
@@ -181,7 +181,7 @@ class OrderRouteHarness {
       }
     }
 
-    if (normalized.startsWith('select status, to_char(')) {
+    if (normalized.startsWith('select status, (revision_seq)::text')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return {
         rows: this.matchesDocument(params)
@@ -655,7 +655,7 @@ function fulfilledResponse(result: PromiseSettledResult<Response>, label: string
   return result.value
 }
 
-const STALE_TOKEN = '2026-08-01T00:00:00.000000Z'
+const STALE_TOKEN = '6'
 
 async function expectRevisionRefusal(
   request: () => Promise<Response>,
@@ -742,7 +742,7 @@ class IssuePoolHarness {
       partyId: PARTY_ID,
       total: '100.00',
       createdBy: USER_ID,
-      updatedAt: '2026-08-24T09:00:00.000000Z',
+      updatedAt: '7',
     }]])
     this.peakConnections = 0
     this.overflowAttempts = 0

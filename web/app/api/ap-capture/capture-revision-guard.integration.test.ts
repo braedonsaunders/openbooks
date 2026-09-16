@@ -44,7 +44,7 @@ test('a stale capture revision refuses instead of reverting a newer correction',
     await db.execute(sql`insert into ap_capture_items(id,org_id,file_id,status,original_filename,content_hash,document_kind,normalized,vendor_candidate_id,created_by,updated_by)
       values (${capture},${org.orgId},${file},'needs_review','occ.pdf',${randomUUID()},'vendor_bill',${JSON.stringify(normalized)}::jsonb,${org.vendorId},${actor},${actor})`)
     const revision = async () => (await db.execute<{ updatedAt: string }>(sql`
-      select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+      select (revision_seq)::text as "updatedAt"
         from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!.updatedAt
     const patch = (body: object) => withOrgContext(org.orgId, () => PATCH(new Request('http://occ.local/api/ap-capture/' + capture, {
       method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, ...body }),

@@ -1,5 +1,5 @@
 import 'server-only'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mul, normalizeDecimal, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
@@ -112,7 +112,7 @@ export async function loadOrder(
   const orderScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)
   const linkScope = subsidiaryVisibleFilter(sql`d2.subsidiary_id`, allowedSubsidiaryIds)
   const doc = (await db.execute<Record<string, unknown>>(sql`
-    select d.*, ${documentRevisionSql(sql`d.updated_at`)} as updated_at, p.display_name as party_name
+    select d.*, ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at, p.display_name as party_name
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${kind}

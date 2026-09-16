@@ -138,7 +138,7 @@ test("REST writers and curated document tools reuse the exact SQL revision proje
   const toolsSource = readFileSync(new URL("../assistant/tools.ts", import.meta.url), "utf8");
 
   assert.match(recordsSource, /select \*\$\{documentRevisionProjection\(scope\.resolved\.table\)\}/);
-  assert.match(writersSource, /documentRevisionSql\(sql\.raw\("updated_at"\)\).*as "updatedAt"/s);
+  assert.match(writersSource, /documentRevisionCounterSql\(sql\.raw\("revision_seq"\)\).*as "updatedAt"/s);
   assert.equal(
     toolsSource.match(/documentRevisionSql\(sql\.raw\("d\.updated_at"\)\)/g)?.length,
     2,

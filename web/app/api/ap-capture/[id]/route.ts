@@ -5,7 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-config.ts'
 import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/ap-capture-service.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -192,7 +192,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const tx = db
       const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null; revision: string }>(sql`
         select normalized, status, document_kind, vendor_candidate_id, purchase_order_id,
-               ${documentRevisionSql(sql`updated_at`)} as revision
+               ${documentRevisionCounterSql(sql`revision_seq`)} as revision
           from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id} for update
       `))
       const live = locked.rows[0]
@@ -285,7 +285,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // Fresh token for the next save: the drawer holds no revision otherwise and
   // every follow-up keystroke would 409 against its own just-committed write.
   const fresh = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionSql(sql`updated_at`)} as "updatedAt"
+    select ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt"
       from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id}
   `)).rows[0]?.updatedAt ?? expectedRevision
   return NextResponse.json({

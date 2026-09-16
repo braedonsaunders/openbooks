@@ -12,7 +12,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
 import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 
 export const runtime = 'nodejs'
@@ -250,7 +250,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // gone stale while validation was running; using it here would let a later
     // save restore fields changed by an earlier concurrent save.
     const lockedResult = (await tx.execute<LockedOpportunityRow>(sql`
-      select o.*, ${documentRevisionSql(sql`o.updated_at`)} as revision,
+      select o.*, ${documentRevisionCounterSql(sql`o.revision_seq`)} as revision,
              s.is_closed, s.is_won, s.probability as status_probability,
              s.default_forecast_category as status_default_forecast_category
         from crm_opportunities o

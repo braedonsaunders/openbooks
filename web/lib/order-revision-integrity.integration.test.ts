@@ -38,7 +38,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
         values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`);
       if (operation.endsWith("void") || operation.includes("conversion")) await db.execute(sql`update documents set status='approved' where id=${id}`);
       await db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`);
-      const token = (await db.execute<{ revision: string }>(sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from documents where id=${id}`)).rows[0]!.revision;
+      const token = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`)).rows[0]!.revision;
       const cfg = { kind, readPerm: "ar.read", createPerm: "ar.create" };
       const params = { params: Promise.resolve({ id }) };
       await withOrgContext(org.orgId, async () => {
@@ -62,7 +62,9 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
           return;
         }
         if (operation === "truncated token") {
-          const response = await makePATCH(cfg)(request("PATCH", { status: "approved", expectedUpdatedAt: token.replace(/(\.\d{3})\d{3}Z$/, "$1Z") }), params);
+          // Counter tokens have no lossy rendering; a non-canonical token
+          // must still fail closed before any write.
+          const response = await makePATCH(cfg)(request("PATCH", { status: "approved", expectedUpdatedAt: `${token}.0` }), params);
           assert.equal(response.status, 409);
           assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${id}`)).rows[0]!.status, "draft");
           return;

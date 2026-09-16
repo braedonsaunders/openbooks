@@ -1,4 +1,4 @@
-import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
@@ -44,7 +44,7 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 const STALE_REVISION = 'this order changed after you opened it; reload and review the latest revision'
 
-/** Compare the opaque, six-digit revision returned by the order reader. */
+/** Compare the opaque counter revision returned by the order reader. */
 function staleRevision(expected: unknown, actual: unknown): boolean {
   return !isDocumentRevisionToken(expected) || expected !== actual
 }
@@ -74,7 +74,7 @@ export function makeGET(cfg: OrderHandlerConfig) {
 }
 
 interface OrderPatchBody {
-  /** Optimistic-concurrency token from documents.updated_at. Required for
+  /** Optimistic-concurrency token from documents.revision_seq. Required for
    * every mutation (autosave, issue, void) so a stale view can never win. */
   expectedUpdatedAt?: string
   partyId?: string | null
@@ -107,7 +107,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
     const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; updated_at: string }>(
-      sql`select status, document_date, subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+      sql`select status, document_date, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
@@ -267,7 +267,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           total: string
           updated_at: string
         }>(sql`
-          select status, party_id, total, ${documentRevisionSql(sql`updated_at`)} as updated_at
+          select status, party_id, total, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
             from documents
            where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
            for update
@@ -447,7 +447,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     try {
       mutation = await db.transaction(async (tx) => {
       const locked = (await tx.execute<{ status: string; updated_at: string }>(sql`
-        select status, ${documentRevisionSql(sql`updated_at`)} as updated_at
+        select status, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
@@ -558,7 +558,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
       // lock used by issue/void before deleteDocument reads draft status, so a
       // delete that waited behind issuance cannot remove the issued order.
       const owned = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(sql`
-        select subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at
+        select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
@@ -600,7 +600,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     // Scope check: the source must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope.
     const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
-      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     const source = owns.rows[0]
     if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })

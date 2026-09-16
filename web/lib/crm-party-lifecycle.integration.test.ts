@@ -30,7 +30,7 @@ const patchRequest = (body: unknown) => new Request('http://audit.local', {metho
 // Opportunity saves speak the revision contract: attach the live token so
 // these assertions exercise the account-lifecycle checks, not the 409 guard.
 async function oppRev(orgId: string, id: string) {
- return (await db.execute<{revision:string}>(sql`select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from crm_opportunities where org_id=${orgId} and id=${id}`)).rows[0]!.revision;
+ return (await db.execute<{revision:string}>(sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`)).rows[0]!.revision;
 }
 const editRequest = async (org: Fixture, id: string, body: Record<string, unknown>) =>
  patchRequest({ ...body, expectedUpdatedAt: await oppRev(org.orgId, id) });
