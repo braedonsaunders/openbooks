@@ -64,7 +64,12 @@ export async function orgToday(orgId: string): Promise<string> {
 
 export function num(v: unknown): number {
   const n = Number(v);
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  if (!Number.isFinite(n)) return 0;
+  const rounded = Math.round(n * 100) / 100;
+  // Normalize -0 (e.g. Math.round of a tiny negative) to 0: they compare
+  // equal everywhere except Object.is, but the wire (JSON "0") cannot tell
+  // them apart, so tool output should not either.
+  return rounded === 0 ? 0 : rounded;
 }
 
 export const MAX_LIST_ROWS = 200;
@@ -109,4 +114,3 @@ export function compactRows<T>(
   const items = rows.slice(0, limit).map((row) => truncateLeaves(row, maxString) as T);
   return { items, total: rows.length, returned: items.length, truncated: rows.length > limit };
 }
-

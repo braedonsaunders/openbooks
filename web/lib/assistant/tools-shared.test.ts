@@ -27,7 +27,14 @@ registerHooks({
   },
 });
 
-const { compactRows, capList, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
+const { compactRows, capList, num, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
+
+test("num rounds to cents and normalizes negative zero", () => {
+  assert.equal(num("12.345"), 12.35);
+  assert.equal(num("abc"), 0);
+  assert.ok(Object.is(num(-0.0001), 0));
+  assert.ok(Object.is(num("-0"), 0));
+});
 
 test("compactRows caps the list and reports total/returned/truncated", () => {
   const rows = [1, 2, 3, 4, 5];

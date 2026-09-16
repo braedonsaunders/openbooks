@@ -18,7 +18,7 @@ import {
 import { openItems } from "../cash/open-items";
 import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
-import { dateInput, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
+import { dateInput, num, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
@@ -31,11 +31,6 @@ import { isFeatureEnabled } from "../features";
  * query layer the UI renders from (web/lib/data.ts, web/lib/reports.ts) so the
  * assistant can never disagree with the screens.
  */
-
-function num(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
-}
 
 /**
  * Carry the caller's role-based subsidiary visibility into report queries.
