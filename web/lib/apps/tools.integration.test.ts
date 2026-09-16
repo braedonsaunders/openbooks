@@ -143,86 +143,93 @@ async function makeFixture(): Promise<Fixture> {
   })
 }
 
-let fxCache: Fixture | null = null
-async function f(): Promise<Fixture> {
-  fxCache ??= await makeFixture()
-  return fxCache
+/**
+ * One fixture per test. The pooled integration runner drains scratch-org
+ * leases at every test boundary, so a fixture memoized across top-level tests
+ * silently disappears under CI; each test creates, uses, and releases its own.
+ */
+async function withFixture(run: (fx: Fixture) => Promise<void>): Promise<void> {
+  const fx = await makeFixture()
+  try {
+    await run(fx)
+  } finally {
+    await withBypass(() => dropScratchOrg(fx.orgId))
+    await withBypass(() => dropScratchOrg(fx.otherOrgId))
+  }
 }
 
-test('read tool executes through executeAssistantTool with the stored schema', { skip: !DB }, async () => {
-  const result = await executeAssistantTool((await f()).adminAuthz, READ_TOOL, { q: 'hello' })
+test('read tool executes through executeAssistantTool with the stored schema', { skip: !DB }, async () => withFixture(async (fx) => {
+  const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q: 'hello' })
   assert.equal(result.ok, true, JSON.stringify(result))
   assert.deepEqual((result as { ok: true; data: unknown }).data, { status: 200, body: { echo: 'hello' } })
-})
+}))
 
-test('registry exposes installed tools only to actors holding the grant intersection', { skip: !DB }, async () => {
-  const adminTools = await buildToolRegistryAsync((await f()).adminAuthz)
+test('registry exposes installed tools only to actors holding the grant intersection', { skip: !DB }, async () => withFixture(async (fx) => {
+  const adminTools = await buildToolRegistryAsync(fx.adminAuthz)
   assert.ok(READ_TOOL in adminTools, 'admin sees the read tool')
   assert.ok(MUTATING_TOOL in adminTools, 'admin sees the mutating tool')
-  const limitedTools = await buildToolRegistryAsync((await f()).limitedAuthz)
+  const limitedTools = await buildToolRegistryAsync(fx.limitedAuthz)
   assert.ok(!(READ_TOOL in limitedTools), 'records.read-gated tool is hidden without the permission')
   assert.ok(MUTATING_TOOL in limitedTools, 'grant-free tool stays visible')
-  const otherTools = await buildToolRegistryAsync((await f()).otherOrgAuthz)
+  const otherTools = await buildToolRegistryAsync(fx.otherOrgAuthz)
   assert.ok(!(READ_TOOL in otherTools) && !(MUTATING_TOOL in otherTools), 'another org sees nothing')
-})
+}))
 
-test('permission refusals and bad input fail closed without executing', { skip: !DB }, async () => {
+test('permission refusals and bad input fail closed without executing', { skip: !DB }, async () => withFixture(async (fx) => {
   assert.deepEqual(
-    await executeAssistantTool((await f()).limitedAuthz, READ_TOOL, { q: 'x' }),
+    await executeAssistantTool(fx.limitedAuthz, READ_TOOL, { q: 'x' }),
     { ok: false, error: 'forbidden' },
   )
-  const invalid = await executeAssistantTool((await f()).adminAuthz, READ_TOOL, {})
+  const invalid = await executeAssistantTool(fx.adminAuthz, READ_TOOL, {})
   assert.equal(invalid.ok, false)
   assert.match((invalid as { ok: false; error: string }).error, /invalid_input/)
   assert.deepEqual(
-    await executeAssistantTool((await f()).adminAuthz, 'app_no_such_app_no_tool', {}),
+    await executeAssistantTool(fx.adminAuthz, 'app_no_such_app_no_tool', {}),
     { ok: false, error: 'forbidden' },
   )
-})
+}))
 
-test('mutating tool proposes, commits, and replays the same outcome', { skip: !DB }, async () => {
-  const proposed = await executeAssistantTool((await f()).adminAuthz, MUTATING_TOOL, { label: 'c7' })
+test('mutating tool proposes, commits, and replays the same outcome', { skip: !DB }, async () => withFixture(async (fx) => {
+  const proposed = await executeAssistantTool(fx.adminAuthz, MUTATING_TOOL, { label: 'c7' })
   assert.equal(proposed.ok, true, JSON.stringify(proposed))
   const card = (proposed as { ok: true; data: { proposedApplicationCommand: { toolName: string; input: unknown; confirmToken: string } } }).data.proposedApplicationCommand
   assert.equal(card.toolName, MUTATING_TOOL)
   assert.ok(typeof card.confirmToken === 'string' && card.confirmToken.length > 0)
 
-  const first = await commitAppToolCommand((await f()).adminAuthz, MUTATING_TOOL, card.input, card.confirmToken)
+  const first = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken)
   assert.equal(first.ok, true, JSON.stringify(first))
   assert.deepEqual((first as { ok: true; result: unknown }).result, { status: 200, body: { bumps: 1 } })
 
   // A retried Apply replays the stored outcome instead of bumping again.
-  const replay = await commitAppToolCommand((await f()).adminAuthz, MUTATING_TOOL, card.input, card.confirmToken)
+  const replay = await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, card.input, card.confirmToken)
   assert.deepEqual(replay, first)
 
   // Tampering with the confirmed input voids the token.
   assert.deepEqual(
-    await commitAppToolCommand((await f()).adminAuthz, MUTATING_TOOL, { label: 'changed' }, card.confirmToken),
+    await commitAppToolCommand(fx.adminAuthz, MUTATING_TOOL, { label: 'changed' }, card.confirmToken),
     { ok: false, error: 'confirmation_expired_or_modified', status: 422 },
   )
-})
+}))
 
-test('proposing and committing require the write permission', { skip: !DB }, async () => {
+test('proposing and committing require the write permission', { skip: !DB }, async () => withFixture(async (fx) => {
   assert.deepEqual(
-    await executeAssistantTool((await f()).noWriteAuthz, MUTATING_TOOL, {}),
+    await executeAssistantTool(fx.noWriteAuthz, MUTATING_TOOL, {}),
     { ok: false, error: 'forbidden' },
   )
   assert.deepEqual(
-    await commitAppToolCommand((await f()).noWriteAuthz, MUTATING_TOOL, {}, 'bogus-token'),
+    await commitAppToolCommand(fx.noWriteAuthz, MUTATING_TOOL, {}, 'bogus-token'),
     { ok: false, error: 'forbidden', status: 403 },
   )
-})
+}))
 
-test('tool invocations leave app_runs evidence', { skip: !DB }, async () => {
-  const orgId = (await f()).orgId
+test('tool invocations leave app_runs evidence', { skip: !DB }, async () => withFixture(async (fx) => {
+  const orgId = fx.orgId
+  for (const q of ['one', 'two', 'three']) {
+    const result = await executeAssistantTool(fx.adminAuthz, READ_TOOL, { q })
+    assert.equal(result.ok, true, JSON.stringify(result))
+  }
   const rows = await withOrgContext(orgId, () =>
     db.execute<{ n: string }>(sql`select count(*) as n from app_runs where org_id = ${orgId}`),
   )
   assert.ok(Number(rows.rows[0]!.n) >= 3, `expected tool invocation evidence, got ${rows.rows[0]!.n}`)
-})
-
-test('scratch orgs are released', { skip: !DB }, async () => {
-  if (!fxCache) return
-  await withBypass(() => dropScratchOrg(fxCache!.orgId))
-  await withBypass(() => dropScratchOrg(fxCache!.otherOrgId))
-})
+}))
