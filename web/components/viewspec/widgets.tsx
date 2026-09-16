@@ -1797,6 +1797,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       canConfigureAi={props.canConfigureAi === true}
       aiEnabled={props.aiEnabled === true}
       initialPrompt={str(props, 'initialPrompt')}
+      initialFindingId={str(props, 'initialFindingId')}
     />
   ),
 
