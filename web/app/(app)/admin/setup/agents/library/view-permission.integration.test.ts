@@ -24,16 +24,24 @@ const mockAuthz = `
   }
 `;
 
+const mockIntl = `
+  export async function getTranslations(namespace) {
+    return (key, _vars) => namespace + ':' + key;
+  }
+`;
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (
-      context.parentURL?.includes("/admin/setup/agents/library/view.ts") &&
-      specifier === "../../../../../../lib/authz"
-    ) {
-      return { url: "mock:agents-library-authz", shortCircuit: true };
+    if (context.parentURL?.includes("/admin/setup/agents/library/view.ts")) {
+      if (specifier === "../../../../../../lib/authz") {
+        return { url: "mock:agents-library-authz", shortCircuit: true };
+      }
+      if (specifier === "next-intl/server") {
+        return { url: "mock:agents-library-intl", shortCircuit: true };
+      }
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
@@ -43,6 +51,9 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:agents-library-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
+    }
+    if (url === "mock:agents-library-intl") {
+      return { format: "module", source: mockIntl, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -69,14 +80,17 @@ test("a setup manager sees every pack with detectors and install state", { skip:
       data.packs.map((pack) => pack.agentKey).sort(),
       [...CONTINUOUS_CLOSE_AGENT_KEYS].sort(),
     );
-    assert.equal(data.featureEnabled, true);
+    assert.equal(data.packs[0]?.featureEnabled, true);
     for (const pack of data.packs) {
+      assert.ok(pack.name.startsWith("admin:setup.agents.packs."));
+      assert.ok(pack.reads.startsWith("admin:setup.agents.packs."));
       assert.ok(pack.detectors.length > 0, `${pack.agentKey} must list its checks`);
-      assert.ok(pack.readPermissions.length > 0, `${pack.agentKey} must name required permissions`);
-      assert.equal(pack.enabled, false, `${pack.agentKey} must default to uninstalled`);
+      assert.ok(pack.permissions.length > 0, `${pack.agentKey} must name required permissions`);
+      assert.equal(pack.installed, false, `${pack.agentKey} must default to uninstalled`);
+      assert.ok(pack.installPolicy.agentKey === pack.agentKey);
       for (const detector of pack.detectors) {
         assert.equal(typeof detector.detectorKey, "string");
-        assert.equal(typeof detector.supportsMateriality, "boolean");
+        assert.ok(detector.title.startsWith("admin:ai.agents.detectors."));
       }
     }
   } finally {
