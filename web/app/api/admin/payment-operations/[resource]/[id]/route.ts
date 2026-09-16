@@ -8,6 +8,7 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../../lib/countries'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { auditConfigChange } from '../../_lib'
 
 export const runtime = 'nodejs'
@@ -157,6 +158,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         !['pending', 'active', 'suspended', 'revoked', 'expired'].includes(body.status)
       ) {
         return NextResponse.json({ error: 'status must be pending, active, suspended, revoked, or expired' }, { status: 400 })
+      }
+      // These cast straight to date: a non-calendar day would otherwise die
+      // in Postgres with a raw driver failure, so require real calendar
+      // dates before any write. Empty clears the date, like the update below.
+      for (const [field, label] of [
+        ['signedOn', 'signed date'],
+        ['validFrom', 'valid-from date'],
+        ['expiresOn', 'expiry date'],
+      ] as const) {
+        const value = body[field]
+        if (value !== undefined && value !== null && value !== '' && !isIsoCalendarDate(value)) {
+          return NextResponse.json({ error: `${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 400 })
+        }
       }
       await db.transaction(async (tx) => {
         const before = (await tx.execute<Record<string, unknown>>(sql`
