@@ -1,11 +1,13 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Bell, ListChecks, Settings2, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, SearchSelect, cn } from '@openbooks/ui'
+import { Switch } from '@/components/switch'
+import { createMoneyFormatter } from '@/lib/money-format'
 
 /** Serializable slices the loader hands over (JSON-safe engine policy JSON). */
 export type AgentPolicyDetectorDraft = {
@@ -53,6 +55,49 @@ function Field({ label, children, hint }: { label: string; children: React.React
       {children}
     </div>
   )
+}
+
+/** Money input: 2-decimal numeric field with the org-currency adornment. */
+function MoneyInput({
+  currency,
+  value,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  currency: string
+  value: string
+  disabled?: boolean
+  onChange: (value: string) => void
+  ariaLabel?: string
+}) {
+  return (
+    <div className="relative">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-slate-400 dark:text-slate-500"
+      >
+        {currency}
+      </span>
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        value={value}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(event.target.value)}
+        className="pl-14 tabular-nums"
+      />
+    </div>
+  )
+}
+
+/** Display thresholds at 2 decimals — the save path canonicalizes scale server-side. */
+function twoDecimals(value: string): string {
+  if (value.trim() === '') return value
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed.toFixed(2) : value
 }
 
 function Check({
@@ -174,6 +219,7 @@ export function AgentPolicyForm({
   statusEnabled,
   description,
   runLine,
+  currency,
   pack,
   specs,
   notification,
@@ -186,6 +232,7 @@ export function AgentPolicyForm({
   statusEnabled: boolean
   description: string
   runLine: string
+  currency: string
   pack: {
     agentKey: string
     policy: AgentPolicyDraft
@@ -203,7 +250,9 @@ export function AgentPolicyForm({
   featureEnabled: boolean
 }) {
   const t = useTranslations('admin')
+  const locale = useLocale()
   const router = useRouter()
+  const formatMoney = useMemo(() => createMoneyFormatter(locale, currency).money, [locale, currency])
   const initial = useRef({ policy: pack.policy, specs, notification })
   const [draft, setDraft] = useState<AgentPolicyDraft>(() => structuredDraft(pack.policy, specs))
   const [routing, setRouting] = useState<AgentPolicyNotificationDraft>(() => notification)
@@ -288,16 +337,24 @@ export function AgentPolicyForm({
       <Section icon={<Settings2 size={17} />} title={t('ai.agents.operationTitle')} description={t('ai.agents.operationDescription')}>
         <Card>
           <CardContent className="space-y-4 p-4">
-            <Check checked={draft.enabled} disabled={!featureEnabled} onChange={(checked) => patch({ enabled: checked })}>
-              {t('ai.agents.enabled')}
-            </Check>
-            <Check
-              checked={draft.automaticRuns}
-              disabled={!draft.enabled}
-              onChange={(checked) => patch({ automaticRuns: checked })}
-            >
-              {t('ai.agents.automaticRuns')}
-            </Check>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-slate-700 dark:text-slate-200">{t('ai.agents.enabled')}</span>
+              <Switch
+                on={draft.enabled}
+                disabled={!featureEnabled}
+                onToggle={() => patch({ enabled: !draft.enabled })}
+                label={t('ai.agents.enabled')}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-slate-700 dark:text-slate-200">{t('ai.agents.automaticRuns')}</span>
+              <Switch
+                on={draft.automaticRuns}
+                disabled={!draft.enabled}
+                onToggle={() => patch({ automaticRuns: !draft.automaticRuns })}
+                label={t('ai.agents.automaticRuns')}
+              />
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('ai.agents.cadence')}>
                 <SearchSelect
@@ -312,11 +369,12 @@ export function AgentPolicyForm({
                 />
               </Field>
               <Field label={t('ai.agents.materiality')} hint={t('ai.agents.materialityHint')}>
-                <Input
-                  inputMode="decimal"
+                <MoneyInput
+                  currency={currency}
                   value={draft.materialityThreshold}
                   disabled={!draft.enabled}
-                  onChange={(event) => patch({ materialityThreshold: event.target.value })}
+                  ariaLabel={t('ai.agents.materiality')}
+                  onChange={(value) => patch({ materialityThreshold: value })}
                 />
               </Field>
             </div>
@@ -348,9 +406,19 @@ export function AgentPolicyForm({
                       {t(`ai.agents.detectors.${spec.detectorKey}.description`)}
                     </p>
                   </div>
-                  <Check checked={detector.enabled} onChange={(checked) => updateDetector(detector.detectorKey, { enabled: checked })}>
-                    {t(detector.enabled ? 'ai.agents.controlOn' : 'ai.agents.controlOff')}
-                  </Check>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {t(detector.enabled ? 'ai.agents.controlOn' : 'ai.agents.controlOff')}
+                    </span>
+                    <Switch
+                      on={detector.enabled}
+                      disabled={false}
+                      onToggle={() =>
+                        updateDetector(detector.detectorKey, { enabled: !detector.enabled })
+                      }
+                      label={t(`ai.agents.detectors.${spec.detectorKey}.title`)}
+                    />
+                  </div>
                 </div>
                 {spec.supportsMateriality ? (
                   <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
@@ -368,19 +436,20 @@ export function AgentPolicyForm({
                     {customMateriality ? (
                       <div className="max-w-xs">
                         <Field label={t('ai.agents.detectorMateriality')}>
-                          <Input
-                            inputMode="decimal"
+                          <MoneyInput
+                            currency={currency}
                             value={detector.materialityThreshold ?? ''}
                             disabled={!detector.enabled}
-                            onChange={(event) =>
-                              updateDetector(detector.detectorKey, { materialityThreshold: event.target.value })
+                            ariaLabel={t('ai.agents.detectorMateriality')}
+                            onChange={(value) =>
+                              updateDetector(detector.detectorKey, { materialityThreshold: value })
                             }
                           />
                         </Field>
                       </div>
                     ) : (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {t('ai.agents.inheritedMateriality', { amount: draft.materialityThreshold })}
+                        {t('ai.agents.inheritedMateriality', { amount: formatMoney(draft.materialityThreshold) })}
                       </p>
                     )}
                   </div>
@@ -562,12 +631,17 @@ export function AgentPolicyForm({
 /** Draft from the stored policy, backfilled against the current spec registry. */
 function structuredDraft(policy: AgentPolicyDraft, specs: AgentPolicySpecView[]): AgentPolicyDraft {
   const byKey = new Map(policy.detectors.map((detector) => [detector.detectorKey, detector]))
+  const detectorThreshold = (detectorKey: string): string | null => {
+    const raw = byKey.get(detectorKey)?.materialityThreshold ?? null
+    return raw === null ? null : twoDecimals(raw)
+  }
   return {
     ...policy,
+    materialityThreshold: twoDecimals(policy.materialityThreshold),
     detectors: specs.map((spec) => ({
       detectorKey: spec.detectorKey,
       enabled: byKey.get(spec.detectorKey)?.enabled ?? true,
-      materialityThreshold: byKey.get(spec.detectorKey)?.materialityThreshold ?? null,
+      materialityThreshold: detectorThreshold(spec.detectorKey),
       parameters: Object.fromEntries(
         spec.parameters.map((parameter) => [
           parameter.key,

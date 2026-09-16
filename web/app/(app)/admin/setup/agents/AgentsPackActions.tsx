@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Loader2, Play } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, cn } from '@openbooks/ui'
+import { Button } from '@openbooks/ui'
+import { Switch } from '@/components/switch'
 
 /**
  * One pack's trailing actions for the Agents overview spec table — switch,
@@ -89,26 +90,12 @@ export function AgentsPackActions({
 
   return (
     <span className="flex items-center justify-end gap-2">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-label={packTitle}
+      <Switch
+        on={on}
         disabled={!featureEnabled || pending || running}
-        onClick={() => void toggle()}
-        className={cn(
-          'relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900',
-          on ? 'bg-teal-600 dark:bg-teal-500' : 'bg-slate-200 dark:bg-slate-700',
-          !featureEnabled || pending || running ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
-        )}
-      >
-        <span
-          className={cn(
-            'inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform',
-            on ? 'translate-x-[18px]' : 'translate-x-0.5',
-          )}
-        />
-      </button>
+        onToggle={() => void toggle()}
+        label={packTitle}
+      />
       <Button
         type="button"
         variant="outline"

@@ -1362,6 +1362,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       statusEnabled={props.statusEnabled === true}
       description={str(props, 'description') ?? ''}
       runLine={str(props, 'runLine') ?? ''}
+      currency={str(props, 'currency') ?? ''}
       pack={props.pack as ComponentProps<typeof AgentPolicyForm>['pack']}
       specs={(props.specs as ComponentProps<typeof AgentPolicyForm>['specs']) ?? []}
       notification={(props.notification as ComponentProps<typeof AgentPolicyForm>['notification']) ?? null}

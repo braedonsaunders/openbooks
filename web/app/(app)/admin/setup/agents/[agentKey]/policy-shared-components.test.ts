@@ -40,3 +40,33 @@ test("the form builds on shared components, never native selects", () => {
 test("the loader resolves the header strings", () => {
   assert.match(view, /getTranslations\('admin'\)/);
 });
+
+test("toggles are the shared Switch, never raw checkboxes", () => {
+  assert.match(form, /from '@\/components\/switch'/);
+  assert.match(form, /on=\{draft\.enabled\}/);
+  assert.match(form, /on=\{draft\.automaticRuns\}/);
+  assert.match(form, /on=\{detector\.enabled\}/);
+  assert.doesNotMatch(form, /<Check checked=\{draft/);
+  assert.doesNotMatch(form, /<Check checked=\{detector/);
+});
+
+test("materiality is a 2-decimal money input with formatted helper copy", () => {
+  assert.match(form, /<MoneyInput/);
+  assert.match(form, /step="0\.01"/);
+  assert.match(form, /twoDecimals\(policy\.materialityThreshold\)/);
+  assert.match(form, /formatMoney\(draft\.materialityThreshold\)/);
+  assert.match(form, /currency=\{currency\}/);
+});
+
+test("the loader hands the island the org currency and a formatted run line", () => {
+  assert.match(view, /getMoneyFormatter\(authz\.user\.orgId\)/);
+  assert.match(view, /currency: data\.currency/);
+  assert.match(view, /dateTime\(row\.lastRun\.startedAt\)/);
+  assert.match(view, /setup\.agents\.runStatuses\./);
+});
+
+test("the overview actions cell shares the same Switch", () => {
+  const actions = read("../AgentsPackActions.tsx");
+  assert.match(actions, /from '@\/components\/switch'/);
+  assert.match(actions, /<Switch/);
+});
