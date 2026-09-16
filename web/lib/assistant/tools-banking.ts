@@ -22,11 +22,13 @@ const listBankReconciliations: AssistantToolDef = {
     "List bank reconciliation sessions (newest first), optionally for one account: through-date, statement balance, status, sign-off timestamp, and the reconciled account. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["banking.read"] },
+  feature: "banking",
   inputSchema: z.object({
     accountId: uuidInput.optional(),
     limit: z.number().int().min(1).max(200).optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { accountId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
     const rows = (await db.execute<Record<string, unknown>>(sql`
@@ -68,8 +70,10 @@ const getBankReconciliation: AssistantToolDef = {
     "One reconciliation session's detail: account, through-date, status, plus running totals (statement balance, cleared balance, difference, matched/unmatched line counts) — the same numbers the workspace badge and sign-off gate use. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["banking.read"] },
+  feature: "banking",
   inputSchema: z.object({ reconciliationId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { reconciliationId: string };
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
@@ -115,11 +119,13 @@ const listUnmatchedBankLines: AssistantToolDef = {
     "List imported bank statement lines still awaiting a match (no reconciliation match, not excluded), optionally for one account: date, description, counterparty reference, amount, and the bank account, with the total unmatched count. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["banking.reconcile"] },
+  feature: "banking",
   inputSchema: z.object({
     accountId: uuidInput.optional(),
     limit: z.number().int().min(1).max(200).optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
     const a = raw as { accountId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
     const where = sql`l.org_id = ${authz.user.orgId} and l.match_status = 'unmatched'

@@ -107,6 +107,7 @@ const financialHealthTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId, authz.allowedSubsidiaryIds));
+    // soft-feature: only drops the budget section when the module is off; the dashboard stays.
     const budgetsOn = await isFeatureEnabled(authz.user.orgId, "budgets");
     const ratios = Object.fromEntries(
       Object.entries(r.ratios).map(([cat, list]) => [
@@ -184,6 +185,7 @@ const customerIntelligenceTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const orgId = authz.user.orgId;
+    // soft-feature: only drops the job-costed section when the module is off; the dashboard stays.
     const projectsOn = await isFeatureEnabled(orgId, "projects");
     const [r, prof] = await withOrg(orgId, () =>
       Promise.all([

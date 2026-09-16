@@ -421,6 +421,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "describe_app_vocabulary", title: "Describe App Capabilities",
+    featureKey: "apps",
     description: "Start here to build an app. Returns the native screen and package contract, governed objects and backend capabilities, an example, and the draft → preview → approve workflow.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -522,6 +523,9 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       destructive: action === "close",
       openWorld: action === "publish",
       assistantConfirmation: "always",
+      // publish is refused without Advanced close controls (advanceCloseRun);
+      // the catalog must omit it there too, as the description already claims.
+      featureKey: action === "publish" ? "advancedClose" : undefined,
       visibleTo: hasPermission(action === "attest" || action === "close" ? "close.approve" : "close.run"),
       execute: async (context, input) => ({ ok: true, ...await advanceCloseRun(context, { ...input, action }) }),
     });
