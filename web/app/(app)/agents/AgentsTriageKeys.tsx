@@ -214,7 +214,7 @@ export function AgentsTriageKeys({
           </Button>
         </div>
       ) : null}
-      {selectedCount > 0 ? (
+      {selectedCount > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
           <span className="font-medium">{t('triage.selected', { count: selectedCount })}</span>
           {canWrite ? (
@@ -231,8 +231,6 @@ export function AgentsTriageKeys({
             <X size={13} />{t('triage.clear')}
           </Button>
         </div>
-      ) : (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t('triage.hint')}</p>
       )}
     </div>
   )

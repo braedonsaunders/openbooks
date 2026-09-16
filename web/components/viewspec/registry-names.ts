@@ -36,6 +36,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'agents-pack-card',
   'agents-policy-form',
   'agents-run-actions',
+  'agents-triage-hint',
   'agents-triage-keys',
   'aging-strip',
   'ai-settings-form',
