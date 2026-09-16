@@ -6,6 +6,37 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10] - 2026-09-16
+
+Integrity fixes on top of the allocations release, and production now
+deploys itself from a version tag.
+
+### Production release
+
+- Pushing a `v*` tag publishes the attested image, then
+  `deploy-production.yml` runs on the LAN runner: it executes
+  `deploy/swarm-release.sh` over a dedicated forced-options ssh key
+  (migrate first, then swap both service pins) and stays red until
+  `/api/v1/health` reports the tag. Manual edge publishes never deploy.
+
+### Integrity
+
+- Period allocation runs refuse to post after the rule is deactivated or
+  its published version is retired.
+- Report-backed allocation drivers resolve features through the canonical
+  feature path.
+- A bank return supersedes a pending manual payment void and keeps its own
+  evidence.
+- Sync identity writes qualify the stored row on party-role conflicts, and
+  evidence refresh matches lines by the stored `sourceLineRef`.
+- Statement-format arithmetic goes through the engine money helpers;
+  boolean custom-field list values extract as real booleans; workspace
+  package edges that were imported undeclared are now declared.
+
+### Operator action
+
+- No migrations. No data changes.
+
 ## [0.1.0-alpha.9] - 2026-09-16
 
 Setup polish for the allocations release, from testing alpha.8 in production.

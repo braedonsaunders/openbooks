@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.9` image digest in
+2. resolves and records the official `0.1.0-alpha.10` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -711,17 +711,15 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.9` is the current community preview. It is the allocations
-release: one allocation kernel now serves entry-time distribution keys (a
-line splits across accounts and dimensions by a saved rule, automatically
-for lines matched per account and per department), posting-time GL
-contributions (rule- or script-authored lines on the transaction's own
-entry, contributor-stamped and book-aware), and period allocation schedules
-(driver-weighted sweeps with preview, post, reverse, re-run, approval flows,
-scheduling, and a close-checklist action), with a driver registry and full
-lineage for every allocated cent. The overhead net-zero writer runs on the
-same kernel. Five forward migrations (0160–0164), all additive. See the
-changelog for the areas touched and the operator notes.
+`v0.1.0-alpha.10` is the current community preview. It keeps the allocations
+release from `v0.1.0-alpha.8`/`v0.1.0-alpha.9` and adds a version-tag
+release path: the tagged commit's attested image is published, then the
+swarm pin is swapped only after migrations from that exact digest succeed
+and the health endpoint reports the tag. It also ships integrity fixes for
+period-run posting after a rule is retired, report-backed allocation
+drivers, payment bank-return evidence, sync identity writes, and a few
+adjacent platform edges. No migrations. See the changelog for the areas
+touched and the operator notes.
 
 Good uses today:
 
