@@ -150,6 +150,7 @@ test("restricted Benford drill applies the subsidiary predicate to detail and to
       document_number: "VB-1",
       date: "2026-02-03",
       amount: "42.50",
+      currency: "USD",
       party_name: "Allowed Vendor",
       entry_id: "entry-1",
     },
@@ -162,6 +163,7 @@ test("restricted Benford drill applies the subsidiary predicate to detail and to
   assert.deepEqual(await response.json(), {
     digit: 4,
     dim: "1d",
+    currency: null,
     count: 1,
     total: "42.5000",
     documents: [
@@ -172,6 +174,7 @@ test("restricted Benford drill applies the subsidiary predicate to detail and to
         docNumber: "VB-1",
         date: "2026-02-03",
         amount: "42.5000",
+        currency: "USD",
         partyName: "Allowed Vendor",
       },
     ],
@@ -230,11 +233,24 @@ test("Benford drill preserves unsafe-size monetary decimals", async () => {
   assert.equal(body.documents[0].amount, "9007199254740993.1234");
 });
 
+test("Benford drill scopes detail and totals to one document currency", async () => {
+  reset();
+  routeState.allowedSubsidiaryIds = null;
+  const response = await GET(new Request(
+    "http://openbooks.test/api/analytics/sentinel/benford?digit=4&from=2026-01-01&to=2026-12-31&currency=USD",
+  ));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).currency, "USD");
+  assert.equal(routeState.calls.length, 2);
+  assert.ok(routeState.calls.every((text) => text.includes("d.currency")));
+});
+
 const invalidFilters: Record<string, string>[] = [
   { digit: "4.5" }, { digit: "0" }, { digit: "10" },
   { dim: "2d", digit: "9" }, { dim: "unknown" },
   { from: "not-a-date" }, { to: "2026-02-30" },
   { from: "2026-12-31", to: "2026-01-01" },
+  { currency: "usd" }, { currency: "USDD" },
 ];
 for (const invalid of invalidFilters) {
   test(`Benford drill refuses malformed filters before querying: ${JSON.stringify(invalid)}`, async () => {

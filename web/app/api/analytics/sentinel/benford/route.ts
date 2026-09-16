@@ -15,6 +15,8 @@ const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", 
  * Returns the spend documents whose leading digit (1D) or leading two digits
  * (2D) equal the clicked digit, so a deviating Benford bar drills straight into
  * the transactions behind it. Capped at 500 detail rows with the true count.
+ * Benford distributions run per document currency, so the flyout accepts an
+ * optional `currency` scope (omitted = all currencies, the legacy behaviour).
  */
 export async function GET(req: Request) {
   const gate = await guardPermission("reports.read");
@@ -25,9 +27,11 @@ export async function GET(req: Request) {
   const dim = url.searchParams.get("dim") ?? "1d";
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
+  const currency = url.searchParams.get("currency");
   if ((dim !== "1d" && dim !== "2d") || !Number.isInteger(digit)
     || digit < (dim === "2d" ? 10 : 1) || digit > (dim === "2d" ? 99 : 9)
-    || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
+    || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to
+    || (currency !== null && !/^[A-Z]{3}$/.test(currency))) {
     return NextResponse.json({ error: "valid digit, dimension and date range required" }, { status: 400 });
   }
 
@@ -45,6 +49,7 @@ export async function GET(req: Request) {
     where d.org_id = ${user.orgId} and d.voided_at is null and d.kind in (${kindsIn})
       ${subsidiaryFilter}
       and abs(d.total) >= 1
+      ${currency ? sql`and d.currency = ${currency}` : sql``}
       and coalesce(d.document_date, d.posting_date) >= ${from}
       and coalesce(d.document_date, d.posting_date) <= ${to}
       and ${leadExpr} = ${digit}
@@ -53,6 +58,7 @@ export async function GET(req: Request) {
     (db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number,
         coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount,
+        d.currency as currency,
         coalesce(p.display_name, '') as party_name,
         (select je.id from journal_entries je where je.source_document_id = d.id limit 1) as entry_id
       ${base}
@@ -65,11 +71,12 @@ export async function GET(req: Request) {
   return NextResponse.json({
     digit,
     dim,
+    currency,
     count: Number(agg.rows[0]?.n ?? 0),
     total: normalizeMoney(String(agg.rows[0]?.total ?? "0")),
     documents: ((detail.rows)).map((r) => ({
       docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "",
-      date: r.date, amount: normalizeMoney(String(r.amount ?? "0")), partyName: r.party_name,
+      date: r.date, amount: normalizeMoney(String(r.amount ?? "0")), currency: r.currency, partyName: r.party_name,
     })),
   });
 }

@@ -6,26 +6,36 @@ const source = readFileSync(
   new URL("./sentinel-data.ts", import.meta.url),
   "utf8",
 );
-const pairCte = source.slice(
-  source.indexOf("), pairs as ("),
-  source.indexOf("), top as ("),
+const groupCte = source.slice(
+  source.indexOf("), grouped as ("),
+  source.indexOf("), qualified as ("),
 );
 
-test("sentinel duplicate pairs include either member when a pair crosses the report boundary", () => {
+test("sentinel duplicate groups key on the natural key including currency and reference", () => {
+  // One finding per group: GROUP BY, not a pair self-join.
   assert.match(
-    pairCte,
-    /where \(d1\.ddate between \$\{from\} and \$\{to\} or d2\.ddate between \$\{from\} and \$\{to\}\)/,
+    groupCte,
+    /group by party_id, kind, currency, amt, refkey/,
   );
+  assert.match(
+    source,
+    /lower\(trim\(coalesce\(reference_number, ''\)\)\) as refkey/,
+  );
+  // A USD 100 bill must never group with a CAD 100 bill.
   assert.doesNotMatch(
-    pairCte,
-    /where d1\.ddate >= \$\{from\} and d1\.ddate <= \$\{to\}/,
+    groupCte,
+    /join cand d2 on/,
   );
 });
 
-test("sentinel duplicate scan keeps deterministic pairing and a bounded date window", () => {
+test("sentinel duplicate scan keeps a bounded date span and the period boundary rule", () => {
   assert.match(
-    pairCte,
-    /and d1\.id < d2\.id and abs\(d2\.ddate - d1\.ddate\) <= \$\{DUPLICATE_THRESHOLD_DAYS\}/,
+    groupCte,
+    /having count\(\*\) >= 2 and \(max\(ddate\) - min\(ddate\)\) <= \$\{DUPLICATE_THRESHOLD_DAYS\}/,
+  );
+  assert.match(
+    source,
+    /where \(first_date between \$\{from\} and \$\{to\} or last_date between \$\{from\} and \$\{to\}\)/,
   );
   assert.match(
     source,
@@ -34,5 +44,16 @@ test("sentinel duplicate scan keeps deterministic pairing and a bounded date win
   assert.match(
     source,
     /coalesce\(document_date, posting_date\) <= \$\{DUPLICATE_SCAN_TO\}/,
+  );
+});
+
+test("sentinel vendor baselines partition by document currency", () => {
+  assert.match(
+    source,
+    /partition by d\.party_id, d\.currency order by abs\(d\.total\) desc/,
+  );
+  assert.match(
+    source,
+    /join stats s on s\.party_id = pd\.party_id and s\.currency = pd\.currency/,
   );
 });
