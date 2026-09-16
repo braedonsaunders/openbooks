@@ -1074,7 +1074,11 @@ const continuousCloseFindings: AssistantToolDef = {
   description:
     "List evidence-backed continuous-close agent findings. Defaults to active findings with exact materiality, detector summary, evidence count, and review links. Read-only.",
   category: "search",
-  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read"] },
+  // Doorway is the union of the packs' read grants (AGENT_READ_PERMS in
+  // ../continuous-close.ts): execute narrows to the caller's readable packs,
+  // so pack readers the workbench admits (payroll/projects/expenses/reconcile)
+  // keep their doorway here too.
+  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read", "banking.reconcile", "expenses.read", "payroll.read", "projects.read"] },
   feature: "continuousClose",
   inputSchema: z.object({
     agent: z.enum(CONTINUOUS_CLOSE_AGENT_KEYS).optional().describe("Only findings from this agent pack"),
@@ -1145,7 +1149,9 @@ const getContinuousCloseFinding: AssistantToolDef = {
   description:
     "Load one continuous-close finding with its exact detector summary and complete evidence packet. Use this before explaining root cause or recommending action. Read-only.",
   category: "read",
-  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read"] },
+  // Same union doorway as continuous_close_findings above: the row's pack is
+  // checked against the caller's readable packs inside execute.
+  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read", "banking.reconcile", "expenses.read", "payroll.read", "projects.read"] },
   feature: "continuousClose",
   inputSchema: z.object({ findingId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
