@@ -60,9 +60,17 @@ test("every registered pack declares read grants", () => {
 // Chat tools accept and enforce the same registry: the agent filter enum is
 // the registry tuple, the doorway gate admits AR/AP readers, and the single-
 // finding read checks the row's key against the caller's readable packs.
+// The doorway must ALSO admit every other grant that makes a pack readable
+// (payroll/projects/expenses/reconcile-only holders see their packs in the
+// workbench); in-execute narrowing via readableContinuousCloseAgents keeps
+// the tools never looser than the workbench.
 test("assistant finding tools follow the same registry", () => {
   assert.match(tools, /z\.enum\(CONTINUOUS_CLOSE_AGENT_KEYS\)/);
   assert.match(tools, /"ap\.read", "ar\.read"/);
+  for (const perm of ["payroll.read", "projects.read", "expenses.read", "banking.reconcile"]) {
+    const hits = tools.split(perm).length - 1;
+    assert.ok(hits >= 2, `finding-tool doorways must admit ${perm} (both list and get tools)`);
+  }
   assert.match(
     tools,
     /!\(readableContinuousCloseAgents\(authz\) as readonly string\[\]\)\.includes\(row\.agent_key\)/,

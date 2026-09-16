@@ -99,3 +99,25 @@ test('agent findings narrow to the caller readable packs', { skip: !process.env.
     await dropScratchOrg(org.orgId);
   }
 });
+
+test('pack readers the workbench admits keep their assistant doorway (payroll)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const findingId = await seedFinding(org.orgId, 'payroll', 'fp-payroll-1');
+    // Payroll clerk: payroll.read makes the payroll pack workbench-readable
+    // (AGENT_READ_PERMS), so the assistant finding tools must admit the
+    // doorway too and narrow to the payroll pack inside execute.
+    await asUser(org.orgId, 'Payroll clerk', 'b06_payroll_clerk', ['assistant.use', 'payroll.read']);
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const list = await executeAssistantTool(authz, 'continuous_close_findings', {});
+      assert.equal(list.ok, true, 'payroll clerk passes the findings doorway');
+      assert.equal((list as { ok: true; data: { items: unknown[] } }).data.items.length, 1);
+      const one = await executeAssistantTool(authz, 'get_continuous_close_finding', { findingId });
+      assert.equal(one.ok, true, 'payroll clerk opens the payroll finding');
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
