@@ -46,6 +46,7 @@ export interface AssistantConversationData {
     role: 'user' | 'assistant' | 'system'
     content: string
     data: { parts?: unknown[] } | null
+    createdAt: string
   }[]
   canWrite: boolean
   canConfigureAi: boolean
@@ -76,6 +77,7 @@ export async function loadAssistantConversation(id: string): Promise<AssistantCo
       role: m.role,
       content: m.content,
       data: (m.data ?? null) as { parts?: unknown[] } | null,
+      createdAt: m.createdAt,
     })),
     canWrite: can(authz, 'assistant.write'),
     canConfigureAi: can(authz, 'admin.ai.manage'),

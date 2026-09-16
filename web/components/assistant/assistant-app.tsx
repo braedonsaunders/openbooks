@@ -4,7 +4,7 @@
 // composer. Streams via the UI-message protocol (readUIMessageStream) so the
 // SAME parts[] renderer serves live tokens and reloaded transcripts.
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -36,15 +36,23 @@ import {
   renameConversationRow,
   upsertProvisionalConversation,
 } from './sidebar-state'
+import {
+  countAssistantTurns,
+  formatMessageTimestamp,
+  reconcileThreadAfterStop,
+  withLastAssistantParts,
+} from './thread-state'
 
 type Role = 'user' | 'assistant' | 'system'
-type ChatMessage = { id: string; role: Role; parts: unknown[] }
+type ChatMessage = { id: string; role: Role; parts: unknown[]; createdAt?: string }
 
 export type StoredMessage = {
   id: string
   role: Role
   content: string
   data: { parts?: unknown[] } | null
+  /** Server timestamp; drives per-message timestamps. Absent on optimistic rows. */
+  createdAt?: string
 }
 
 export type ConversationSummary = { id: string; title: string; updatedAt: string }
@@ -61,19 +69,8 @@ export function toChatMessage(message: StoredMessage): ChatMessage {
       Array.isArray(storedParts) && storedParts.length > 0
         ? storedParts
         : [{ type: 'text', text: message.content }],
+    ...(message.createdAt ? { createdAt: message.createdAt } : {}),
   }
-}
-
-function withLastAssistantParts(list: ChatMessage[], parts: unknown[]): ChatMessage[] {
-  const copy = list.slice()
-  for (let index = copy.length - 1; index >= 0; index -= 1) {
-    const message = copy[index]
-    if (message && message.role === 'assistant') {
-      copy[index] = { ...message, parts }
-      break
-    }
-  }
-  return copy
 }
 
 export function AssistantApp({
@@ -108,7 +105,6 @@ export function AssistantApp({
   // (Link to /assistant) remounts and reads the URL again, so no clearing
   // logic is needed here beyond the dismiss chip.
   const [findingId, setFindingId] = useState<string | null>(initialFindingId ?? null)
-  const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -118,6 +114,10 @@ export function AssistantApp({
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const autoSentPrompt = useRef<string | null>(null)
+  // Assistant turns this mounted panel has already shown. Raised on every
+  // normally completed turn so the stop-reconcile below can tell a persisted
+  // transcript that has caught up from one that is still behind.
+  const completedTurnsRef = useRef(countAssistantTurns(initialMessages.map(toChatMessage)))
   // Threads this client created whose id the server list may not know yet.
   // They stay pinned at the top of the sidebar until a refresh confirms them.
   const provisionalIdsRef = useRef<Set<string>>(new Set())
@@ -158,7 +158,6 @@ export function AssistantApp({
       const ac = new AbortController()
       abortRef.current = ac
       setError(null)
-      setInput('')
       setSidebarOpen(false)
       const stamp = Date.now()
       setMessages((prev) => [
@@ -211,10 +210,17 @@ export function AssistantApp({
           }),
         )
         let lastParts: unknown[] = []
+        let producedParts = false
+        let completedNormally = false
         for await (const message of readUIMessageStream({ stream: chunkStream })) {
           lastParts = message.parts as unknown[]
+          if (lastParts.length > 0) producedParts = true
           setMessages((prev) => withLastAssistantParts(prev, lastParts))
           scrollToBottom()
+        }
+        completedNormally = true
+        if (producedParts && completedNormally && !ac.signal.aborted) {
+          completedTurnsRef.current += 1
         }
         // A turn that ended without producing anything (e.g. the provider
         // rejected the request) would otherwise vanish silently.
@@ -228,13 +234,18 @@ export function AssistantApp({
             prev.filter((message) => message.id !== `u-${stamp}` && message.id !== `a-${stamp}`),
           )
         } else if (ac.signal.aborted) {
-          // Reconcile with what actually got persisted for the stopped turn.
+          // Reconcile with what actually got persisted for the stopped turn —
+          // unless persistence has not caught up yet, in which case the
+          // completed stream stays visible until the host reaches the floor.
           await new Promise((resolve) => window.setTimeout(resolve, 150))
           try {
             const res = await fetch(`/api/assistant/conversations/${resolvedConversationId}`)
             if (res.ok) {
               const body = (await res.json()) as { messages: StoredMessage[] }
-              setMessages(body.messages.map(toChatMessage))
+              const server = body.messages.map(toChatMessage)
+              setMessages((prev) =>
+                reconcileThreadAfterStop(prev, server, completedTurnsRef.current),
+              )
             }
           } catch {
             // keep the streamed state
@@ -259,16 +270,20 @@ export function AssistantApp({
     void send(prompt)
   }, [aiEnabled, initialPrompt, send, streaming])
 
-  function stop() {
+  // Stable identity so the memoed composer is not re-rendered by transcript
+  // updates such as streamed tokens.
+  const stop = useCallback(() => {
     abortRef.current?.abort()
-  }
+  }, [])
 
-  function onComposerKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void send(input)
-    }
-  }
+  // Stable identity so the memoed composer (and its textarea) is not
+  // re-rendered by transcript updates such as streamed tokens.
+  const sendToComposer = useCallback(
+    (text: string) => {
+      void send(text)
+    },
+    [send],
+  )
 
   async function doRename(id: string, title: string) {
     setRenamingId(null)
@@ -459,9 +474,13 @@ export function AssistantApp({
               />
             ) : (
               <div className="space-y-6">
-                {messages.map((m) =>
+                {messages.map((m, i) =>
                   m.role === 'system' ? null : (
-                    <MessageRow key={m.id} message={m} streaming={streaming} />
+                    <MessageRow
+                      key={m.id}
+                      message={m}
+                      pending={streaming && m.role === 'assistant' && i === messages.length - 1}
+                    />
                   ),
                 )}
               </div>
@@ -518,40 +537,14 @@ export function AssistantApp({
                     </button>
                   </div>
                 ) : null}
-              <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={onComposerKey}
-                  maxLength={MAX_PROMPT_CHARS}
-                  rows={1}
-                  placeholder={t('placeholder')}
-                  className="min-h-8 max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base leading-5 text-slate-900 shadow-none outline-none [field-sizing:content] placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
-                />
-                {streaming ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 rounded-xl"
-                    onClick={stop}
-                    aria-label={t('stop')}
-                  >
-                    <Square className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 rounded-xl"
-                    onClick={() => void send(input)}
-                    disabled={!input.trim()}
-                    aria-label={t('send')}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+              <AssistantComposer
+                streaming={streaming}
+                sendLabel={t('send')}
+                stopLabel={t('stop')}
+                placeholder={t('placeholder')}
+                onSend={sendToComposer}
+                onStop={stop}
+              />
               </div>
             )}
             {canWrite && aiEnabled ? (
@@ -566,7 +559,80 @@ export function AssistantApp({
   )
 }
 
-function MessageRow({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
+/**
+ * The composer owns the draft input, so typing only re-renders this subtree.
+ * Before, the input lived in AssistantApp state: every keystroke re-rendered
+ * the whole panel, including every transcript row. On a long thread that meant
+ * re-rendering every markdown/tool-card subtree per keystroke — typing lag
+ * that grew with the conversation.
+ */
+const AssistantComposer = memo(function AssistantComposer({
+  streaming,
+  sendLabel,
+  stopLabel,
+  placeholder,
+  onSend,
+  onStop,
+}: {
+  streaming: boolean
+  sendLabel: string
+  stopLabel: string
+  placeholder: string
+  onSend: (text: string) => void
+  onStop: () => void
+}) {
+  const [draft, setDraft] = useState('')
+  function submitDraft(raw: string) {
+    if (!raw.trim()) return
+    onSend(raw)
+    setDraft('')
+  }
+  function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      submitDraft(draft)
+    }
+  }
+  return (
+    <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKey}
+        maxLength={MAX_PROMPT_CHARS}
+        rows={1}
+        placeholder={placeholder}
+        className="min-h-8 max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base leading-5 text-slate-900 shadow-none outline-none [field-sizing:content] placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
+      />
+      {streaming ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 shrink-0 rounded-xl"
+          onClick={onStop}
+          aria-label={stopLabel}
+        >
+          <Square className="h-4 w-4" />
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          size="icon"
+          className="h-8 w-8 shrink-0 rounded-xl"
+          onClick={() => submitDraft(draft)}
+          disabled={!draft.trim()}
+          aria-label={sendLabel}
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  )
+})
+
+function MessageRow({ message, pending }: { message: ChatMessage; pending: boolean }) {
+  const t = useTranslations('assistant')
   if (message.role === 'user') {
     const text = (
       message.parts.find((p) => (p as { type?: string })?.type === 'text') as
@@ -583,25 +649,86 @@ function MessageRow({ message, streaming }: { message: ChatMessage; streaming: b
   }
   const empty = message.parts.length === 0
   return (
-    <div className="flex gap-3">
+    <div className="assistant-message-row flex gap-3">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-700 text-white shadow-sm">
         <Sparkles className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
-        {empty && streaming ? <ThinkingDots /> : <MessageParts parts={message.parts} />}
+        {empty && pending ? (
+          <TypingIndicator label={t('responding')} />
+        ) : (
+          <MessageParts parts={message.parts} />
+        )}
+        {message.parts.length > 0 && pending ? (
+          <div className="mt-2">
+            <TypingIndicator label={t('responding')} />
+          </div>
+        ) : null}
+        {message.createdAt && !pending ? (
+          <MessageTimestamp value={message.createdAt} />
+        ) : null}
       </div>
     </div>
   )
 }
 
-function ThinkingDots() {
+/**
+ * Quiet chronology for a completed assistant turn. Stays in the
+ * accessibility tree with the exact machine-readable instant, while the
+ * compact label appears on row hover or keyboard focus. Small screens keep it
+ * visible because touch has no dependable hover state.
+ */
+function MessageTimestamp({ value }: { value: string }) {
+  const labels = formatMessageTimestamp(value)
+  if (!labels) return null
   return (
-    <div className="flex items-center gap-1 py-1.5 text-slate-400">
-      {[0, 1, 2].map((i) => (
+    <time
+      dateTime={value}
+      title={labels.full}
+      aria-label={labels.full}
+      tabIndex={0}
+      suppressHydrationWarning
+      className="assistant-message-timestamp mt-1 block w-fit rounded-sm text-[11px] leading-4 tabular-nums text-slate-400 dark:text-slate-500"
+    >
+      {labels.compact}
+    </time>
+  )
+}
+
+/**
+ * A self-contained streaming cue: three dots on the house cadence, still and
+ * readable when the user requests reduced motion.
+ */
+function TypingIndicator({ label }: { label: string }) {
+  return (
+    <div role="status" aria-label={label} className="flex items-center gap-1 py-1.5">
+      <style>{`
+        @keyframes assistant-typing-dot {
+          0%, 36%, 100% { opacity: 0.55; transform: translateY(0); }
+          18% { opacity: 1; transform: translateY(-0.2rem); }
+        }
+        .assistant-typing-dot {
+          animation: assistant-typing-dot 0.9s ease-out infinite;
+          will-change: transform, opacity;
+        }
+        .assistant-message-timestamp { opacity: 1; }
+        @media (min-width: 640px) {
+          .assistant-message-timestamp { opacity: 0; }
+          .assistant-message-row:hover .assistant-message-timestamp,
+          .assistant-message-row:focus-within .assistant-message-timestamp,
+          .assistant-message-timestamp:focus { opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .assistant-typing-dot { animation: none; opacity: 0.7; transform: none; will-change: auto; }
+          .assistant-message-timestamp { transition: none; }
+        }
+      `}</style>
+      {['0ms', '150ms', '300ms'].map((animationDelay) => (
         <span
-          key={i}
-          className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400"
-          style={{ animationDelay: `${i * 0.15}s` }}
+          key={animationDelay}
+          aria-hidden="true"
+          className="assistant-typing-dot h-1.5 w-1.5 rounded-full bg-slate-400"
+          style={{ animationDelay }}
         />
       ))}
     </div>
