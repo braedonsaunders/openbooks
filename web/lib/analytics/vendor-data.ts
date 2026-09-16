@@ -7,6 +7,7 @@ import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
+import { englishVendorStrings, type VendorStrings } from "./vendor-strings";
 
 /**
  * Vendor Performance — data behind /analytics/vendor-performance.
@@ -107,11 +108,6 @@ function priorYear(iso: string): string {
 function daysBetween(a: string, b: string): number {
   return Math.round((new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000);
 }
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1, 1));
-  return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
-}
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
 }
@@ -127,6 +123,7 @@ export async function vendorData(
   period: { from: string; to: string; label: string },
   orgId: string,
   allowed: ReadonlySet<string> | null,
+  strings: VendorStrings = englishVendorStrings,
 ): Promise<VendorData> {
   const { from, to } = period;
   const pFrom = priorYear(from);
@@ -247,7 +244,7 @@ export async function vendorData(
   ]);
   const spendByParty = new Map<string, { name: string; spend: string; priorSpend: string }>();
   for (const r of spendRowsTyped) {
-    const cur = spendByParty.get(String(r.id)) ?? { name: String(r.name), spend: "0", priorSpend: "0" };
+    const cur = spendByParty.get(String(r.id)) ?? { name: strings.displayVendorName(String(r.name)), spend: "0", priorSpend: "0" };
     cur.spend = add(cur.spend, mulDecimal(String(r.spend ?? 0), spendCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
     if (r.prior_spend != null) {
       cur.priorSpend = add(cur.priorSpend, mulDecimal(String(r.prior_spend), spendCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
@@ -347,7 +344,7 @@ export async function vendorData(
   for (let i = 0; i < 12; i++) {
     const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
     const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
-    monthly.push({ month: ym, label: monthLabel(ym), spend: Number(spendByMonth.get(ym) ?? 0) });
+    monthly.push({ month: ym, label: strings.monthLabel(ym), spend: Number(spendByMonth.get(ym) ?? 0) });
   }
 
   const spend = rows.reduce((a, r) => a + r.spend, 0);

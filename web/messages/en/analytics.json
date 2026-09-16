@@ -738,6 +738,9 @@
   "vendor": {
     "title": "Vendor Performance",
     "backToHub": "Analytics",
+    "labels": {
+      "unknownVendor": "Unknown"
+    },
     "tabs": {
       "overview": "Overview",
       "payment": "Payment Behavior",
@@ -851,7 +854,8 @@
   },
   "cashflow": {
     "title": "Cash Flow",
-    "backToHub": "Analytics"
+    "backToHub": "Analytics",
+    "asOf": "as of {date}"
   },
   "trueCost": {
     "title": "True Cost",
@@ -1241,6 +1245,14 @@
   },
   "utilization": {
     "title": "Utilization",
+    "alerts": {
+      "belowTarget": "Billable % below {target}% target",
+      "costSpike": "Non-billable cost spiked by {amount}"
+    },
+    "labels": {
+      "noTitle": "No Title",
+      "unknownName": "Unknown"
+    },
     "metric": {
       "percentBilled": "Billable percentage",
       "nonBillableCost": "Non-billable cost",
