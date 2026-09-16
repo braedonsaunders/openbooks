@@ -86,6 +86,42 @@ test('spend velocity translates every spend functional to presentation', { skip:
   }
 })
 
+/**
+ * Mid-year go-live: the first spend posts inside the current window while the
+ * prior window predates cutover. Change-vs-prior is UNKNOWN (null) there —
+ * a first period of spend must never read as +100% growth against no data.
+ */
+test('period comparison reports unknown change when the prior window has no history', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    await withBypass(async () => {
+      const docId = randomUUID()
+      const entryId = randomUUID()
+      await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
+        values (${docId}, ${org.orgId}, 'vendor_bill', 'BILL-FIRST', ${org.vendorId}, ${org.subsidiaryId}, ${D}, ${D}, 'CAD', 1, 'draft', 100, 0, 100, 100)`)
+      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'BILL-FIRST', ${D}, ${org.periodId}, 'draft', 'manual', ${docId})`)
+      await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, true, '-100', 'CAD', '-100', 1),
+               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${org.vendorId}, false, '100', 'CAD', '100', 1)`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
+      await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
+    })
+    await pinClock('2026-07-15', async () => {
+      const data = await spendVelocityData(org.orgId, P, null)
+      const row = data.periodComparison.accounts.find((a) => a.currentAmount > 0)
+      assert.ok(row, 'expected one spend row in the current window')
+      assert.equal(row.priorAmount, 0)
+      assert.equal(row.isNew, true)
+      assert.equal(row.changePct, null)
+      assert.equal(data.periodComparison.summary.priorTotal, 0)
+      assert.equal(data.periodComparison.summary.changePct, null)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('spend velocity fails closed when a functional has no spot coverage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await seedTwoCurrencySpend()
   try {

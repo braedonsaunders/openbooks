@@ -158,8 +158,8 @@ export interface SpendVelocityData {
   revenue: { hasData: boolean; totalRevenue: number; opexRatio: number };
   insights: SVInsight[];
   periodComparison: {
-    summary: { currentTotal: number; priorTotal: number; twoBackTotal: number; projectedTotal: number; changePct: number; priorLabel: string; twoBackLabel: string };
-    accounts: { accountId: string; accountName: string; currentAmount: number; priorAmount: number; twoBackAmount: number; changePct: number; projectedAmount: number; isNew: boolean; monthlyTrend: number[]; velocity: number; acceleration: number; trend: string }[];
+    summary: { currentTotal: number; priorTotal: number; twoBackTotal: number; projectedTotal: number; changePct: number | null; priorLabel: string; twoBackLabel: string };
+    accounts: { accountId: string; accountName: string; currentAmount: number; priorAmount: number; twoBackAmount: number; changePct: number | null; projectedAmount: number; isNew: boolean; monthlyTrend: number[]; velocity: number; acceleration: number; trend: string }[];
   };
   expenseAnalysis: {
     summary: { expenseReportTotal: number; vendorBillTotal: number; topSpenderCount: number; categoryIncreaseTotal: number };
@@ -861,7 +861,9 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     const current = Number(r.current_amount ?? 0);
     const prior = Number(r.prior_amount ?? 0);
     const twoBack = Number(r.two_back_amount ?? 0);
-    const changePct = prior > 0 ? ((current - prior) / prior) * 100 : current > 0 ? 100 : 0;
+    // No prior-window history (mid-year go-live, new account): change is
+    // UNKNOWN, never a fabricated +100% against a zero base.
+    const changePct: number | null = prior > 0 ? ((current - prior) / prior) * 100 : null;
     let avgChange = 0;
     if (prior > 0 && twoBack > 0) avgChange = (current / prior + prior / twoBack) / 2 - 1;
     else if (prior > 0) avgChange = current / prior - 1;
@@ -872,7 +874,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       currentAmount: current,
       priorAmount: prior,
       twoBackAmount: twoBack,
-      changePct: r1(changePct),
+      changePct: changePct === null ? null : r1(changePct),
       projectedAmount: Math.round(current * (1 + Math.min(Math.max(avgChange, -0.5), 0.5))),
       isNew: prior === 0 && current > 0,
       monthlyTrend: vel?.monthlyAmounts ?? [],
@@ -881,18 +883,18 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       trend: vel?.trend ?? "stable",
     };
   }).filter((a) => a.currentAmount + a.priorAmount + a.twoBackAmount > 0)
-    .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
+    .sort((a, b) => Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0));
   const currentTotal = cmpAccounts.reduce((s, a) => s + a.currentAmount, 0);
   const priorTotal = cmpAccounts.reduce((s, a) => s + a.priorAmount, 0);
   const twoBackTotal = cmpAccounts.reduce((s, a) => s + a.twoBackAmount, 0);
-  const overallChange = priorTotal > 0 ? ((currentTotal - priorTotal) / priorTotal) * 100 : 0;
+  const overallChange: number | null = priorTotal > 0 ? ((currentTotal - priorTotal) / priorTotal) * 100 : null;
   const periodComparison = {
     summary: {
       currentTotal: Math.round(currentTotal),
       priorTotal: Math.round(priorTotal),
       twoBackTotal: Math.round(twoBackTotal),
-      projectedTotal: Math.round(currentTotal * (1 + Math.min(Math.max(overallChange / 100, -0.3), 0.3))),
-      changePct: r1(overallChange),
+      projectedTotal: overallChange === null ? Math.round(currentTotal) : Math.round(currentTotal * (1 + Math.min(Math.max(overallChange / 100, -0.3), 0.3))),
+      changePct: overallChange === null ? null : r1(overallChange),
       priorLabel: `${priorFrom} → ${priorTo}`,
       twoBackLabel: `${twoBackFrom} → ${twoBackTo}`,
     },

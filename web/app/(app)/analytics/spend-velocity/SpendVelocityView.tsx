@@ -502,8 +502,8 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
 
   const rows = useMemo(() => {
     let list = cmp.accounts
-    if (filter === 'increases') list = list.filter((a) => a.changePct > 5)
-    else if (filter === 'decreases') list = list.filter((a) => a.changePct < -5)
+    if (filter === 'increases') list = list.filter((a) => (a.changePct ?? 0) > 5)
+    else if (filter === 'decreases') list = list.filter((a) => (a.changePct ?? 0) < -5)
     else if (filter === 'highvel') list = list.filter((a) => Math.abs(a.velocity) > 10)
     else if (filter === 'new') list = list.filter((a) => a.isNew)
     if (search) list = list.filter((a) => a.accountName.toLowerCase().includes(search.toLowerCase()))
@@ -519,7 +519,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={CalendarRange} accent="sky" label={t('period.current')} value={money(cmp.summary.currentTotal)} sub={data.period.label} />
-        <KpiCard icon={CalendarRange} accent="slate" label={t('period.prior')} value={money(cmp.summary.priorTotal)} sub={`${cmp.summary.changePct > 0 ? '↑' : '↓'} ${Math.abs(cmp.summary.changePct).toFixed(1)}%`} tone={cmp.summary.changePct > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={CalendarRange} accent="slate" label={t('period.prior')} value={money(cmp.summary.priorTotal)} sub={cmp.summary.changePct == null ? '—' : `${cmp.summary.changePct > 0 ? '↑' : '↓'} ${Math.abs(cmp.summary.changePct).toFixed(1)}%`} tone={cmp.summary.changePct != null && cmp.summary.changePct > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={CalendarRange} accent="slate" label={t('period.twoBack')} value={money(cmp.summary.twoBackTotal)} sub={cmp.summary.twoBackLabel} />
         <KpiCard icon={TrendingUp} accent="violet" label={t('period.projectedNext')} value={money(cmp.summary.projectedTotal)} sub={t('period.basedOnTrend')} />
       </div>
@@ -552,7 +552,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         actions={
           <button
             type="button"
-            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, a.currentAmount, a.priorAmount, a.twoBackAmount, a.changePct.toFixed(1), a.projectedAmount, a.velocity.toFixed(1), a.acceleration.toFixed(1), t(`trend.${a.trend}`)]), today)}
+            onClick={() => exportCsv('spend-accounts', [t('table.account'), t('csv.current'), t('csv.prior'), t('csv.twoBack'), t('csv.changePct'), t('csv.projected'), t('csv.velocityPctMo'), t('table.accel'), t('table.trend')], rows.map((a) => [a.accountName, a.currentAmount, a.priorAmount, a.twoBackAmount, a.changePct?.toFixed(1) ?? '', a.projectedAmount, a.velocity.toFixed(1), a.acceleration.toFixed(1), t(`trend.${a.trend}`)]), today)}
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <Download size={11} /> CSV
@@ -581,8 +581,8 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(a.currentAmount)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{money0(a.priorAmount)}</td>
-                  <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', a.changePct > 0 ? 'text-rose-600 dark:text-rose-400' : a.changePct < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
-                    {a.changePct > 0 ? '+' : ''}{pct1(a.changePct)}
+                  <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', (a.changePct ?? 0) > 0 ? 'text-rose-600 dark:text-rose-400' : (a.changePct ?? 0) < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
+                    {a.changePct == null ? '—' : <>{a.changePct > 0 ? '+' : ''}{pct1(a.changePct)}</>}
                   </td>
                   <td className="px-4 py-2 text-right"><VelocityPill v={a.velocity} /></td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money0(a.projectedAmount)}</td>
