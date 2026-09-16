@@ -303,10 +303,14 @@ async function loadUnremeasuredAssetPlan(
       depreciation_rate_percent: string | null;
       depreciation_convention: ScheduleInput["convention"];
       depreciation_units_total: string | null;
+      opening_accumulated_depreciation: string | null;
+      opening_accumulated_as_of: string | null;
     }>(sql`
     select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value,
            depreciation_method, depreciation_method_id, useful_life_months, depreciation_rate_percent,
-           depreciation_convention, depreciation_units_total
+           depreciation_convention, depreciation_units_total,
+           opening_accumulated_depreciation::text as opening_accumulated_depreciation,
+           opening_accumulated_as_of::text as opening_accumulated_as_of
       from fixed_assets where id = ${assetId} and org_id = ${orgId} for update`));
   const asset = assetRes.rows[0];
   if (!asset) throw new Error("asset not found");
@@ -415,7 +419,19 @@ async function loadUnremeasuredAssetPlan(
     });
   }
 
-  return { asset, bookId, calendarId, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, plan };
+  // Continue-from-accumulated onboarding (migration 0156): the storage check
+  // guarantees both-or-neither, so a half-set row can only come from a writer
+  // that bypassed it — fail closed rather than silently full-life scheduling.
+  const openingAmount = asset.opening_accumulated_depreciation;
+  const openingAsOf = asset.opening_accumulated_as_of;
+  if ((openingAmount === null) !== (openingAsOf === null)) {
+    throw new Error("opening accumulated depreciation requires both an amount and an as-of date");
+  }
+  const opening = openingAmount !== null && openingAsOf !== null
+    ? { amount: add(openingAmount, "0"), asOf: openingAsOf }
+    : null;
+
+  return { asset, bookId, calendarId, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, plan, opening };
 }
 
 /**
@@ -492,8 +508,23 @@ export async function buildScheduleWithRunner(
   actorId: string | null,
   forBookId?: string,
 ): Promise<BuildScheduleResult> {
-  const { asset, bookId, calendarId, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, plan } =
+  const { asset, bookId, calendarId, method, depreciationMethodId, lifeMonths, ratePercent, unitsTotal, plan, opening } =
     await loadUnremeasuredAssetPlan(runner, assetId, orgId, forBookId);
+  // Continue-from-accumulated pre-validation (migration 0156). Pre-as-of
+  // native months are covered by the opening figure and must never be
+  // scheduled — but a zero opening covers nothing, so dropping months for it
+  // would silently strand basis. That combination is a writer bug: full-life
+  // catch-up (no opening fields at all) is the way to recognise those months.
+  const openingAmount = opening ? opening.amount : "0";
+  if (opening && cmp(openingAmount, "0") > 0) {
+    if (!asset.in_service_on) throw new Error("asset has no in-service date");
+    if (monthStart(opening.asOf) < monthStart(asset.in_service_on)) {
+      throw new Error(`opening accumulated as-of ${opening.asOf} precedes the in-service month ${monthStart(asset.in_service_on)}`);
+    }
+  }
+  if (opening && cmp(openingAmount, "0") === 0 && plan.some((p) => p.periodMonth <= opening.asOf)) {
+    throw new Error("opening accumulated depreciation is zero but pre-cutover months would be dropped — clear the opening fields for full-life catch-up");
+  }
   return await (async (tx: SqlExecutor) => {
     // find (or create) the primary-book schedule for this asset
     const existing = (await tx.execute<{ id: string; method: DepreciationMethod; depreciation_method_id: string | null }>(sql`
@@ -579,7 +610,14 @@ export async function buildScheduleWithRunner(
     }
     // Legacy posted-over-basis history is still clamped, but unposted amounts
     // must never be left due when the new basis cannot fund them.
-    const remainingBase = add(afterPosted, neg(unpostedReserved));
+    // Continue-from-accumulated (migration 0156): the opening figure is
+    // pre-cutover depreciation recognised in the legacy system. It funds part
+    // of the depreciable basis exactly like posted depreciation, so only the
+    // remainder is apportioned over the remaining periods.
+    const remainingBase = add(add(afterPosted, neg(unpostedReserved)), neg(openingAmount));
+    if (opening && cmp(remainingBase, "0") < 0) {
+      throw new Error("opening accumulated depreciation exceeds the remaining depreciable basis; reconcile the opening figure before rebuilding");
+    }
 
     const skippedMonths: string[] = [];
     const future: { periodId: string | null; plan: ScheduleLinePlan }[] = [];
@@ -596,9 +634,41 @@ export async function buildScheduleWithRunner(
     // depreciation below cost minus salvage with no error and no signal.
     const horizonEnd = periods.reduce<string | undefined>((max, period) =>
       max === undefined || period.ends_on > max ? period.ends_on : max, undefined);
+    // Continue-from-accumulated double-count fences (migration 0156). The
+    // opening figure already recognises every pre-as-of month, so retained
+    // posted history must not overlap it: a posted line in a period ending on
+    // or before the as-of date is that same depreciation posted twice, and a
+    // posted line carrying MORE than its period's native plan is earlier
+    // history caught up into this period (the full-life catch-up path) — also
+    // already inside the opening figure. Either way the rebuild refuses
+    // instead of quietly double-counting.
+    if (opening && cmp(openingAmount, "0") > 0) {
+      const nativeByPeriod = new Map<string, bigint>();
+      for (const p of plan) {
+        const period = periods.find(period => period.starts_on <= p.periodMonth && period.ends_on >= p.periodMonth);
+        if (!period) continue;
+        nativeByPeriod.set(period.id, (nativeByPeriod.get(period.id) ?? 0n) + toUnits(p.planned));
+      }
+      for (const line of retained) {
+        if (line.posted_amount === null) continue;
+        if (line.ends_on <= opening.asOf) {
+          throw new Error(`posted depreciation for period ending ${line.ends_on} overlaps the opening accumulated as-of ${opening.asOf} — clear the opening fields or reverse the overlapping posting before rebuilding`);
+        }
+        const native = nativeByPeriod.get(line.period_id);
+        if (native !== undefined && toUnits(line.planned_amount) > native) {
+          throw new Error(`posted depreciation for period ending ${line.ends_on} carries pre-period catch-up already covered by the opening accumulated as-of ${opening.asOf} — clear the opening fields or reverse the overlapping posting before rebuilding`);
+        }
+      }
+    }
+
     let pendingCatchUp = "0";
     let firstUnplacedMonth: string | null = null;
     for (const p of plan) {
+      // Continue-from-accumulated (migration 0156): pre-as-of months were
+      // recognised in the legacy system and are covered by the opening
+      // figure. They leave the plan here — never caught up, never skipped —
+      // so the first open period carries exactly one month.
+      if (opening && cmp(openingAmount, "0") > 0 && p.periodMonth <= opening.asOf) continue;
       const period = periods.find(period => period.starts_on <= p.periodMonth && period.ends_on >= p.periodMonth);
       if (!period) {
         // A missing earlier month cannot be reconstructed from today's basis.
@@ -642,6 +712,14 @@ export async function buildScheduleWithRunner(
     }
     if (pendingCatchUp !== "0") {
       throw new Error(`historical accounting period missing for depreciation projection (${firstUnplacedMonth}); provision the period or shorten the depreciable life before rebuilding`);
+    }
+    // Continue-from-accumulated (migration 0156): when every native month is
+    // covered by the opening figure, no schedule remains — but a positive
+    // remainder would strand depreciable basis with no period left to bear
+    // it. That is a fully-depreciated asset onboarded with too small an
+    // opening figure (or a life that needs extending), never a silent zero.
+    if (opening && cmp(openingAmount, "0") > 0 && future.length === 0 && cmp(remainingBase, "0") > 0) {
+      throw new Error(`no depreciable months remain after the opening accumulated as-of ${opening.asOf} but ${remainingBase} of basis is unfunded — raise the opening figure or extend the useful life`);
     }
 
     // Allocate across the entire native remaining horizon BEFORE mapping to
