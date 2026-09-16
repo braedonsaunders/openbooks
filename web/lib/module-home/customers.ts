@@ -9,6 +9,7 @@ import { flowRates, lineFunctional, presentationCurrency, presentationRates, tra
 import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'
 import { isFeatureEnabled } from '../features'
+import { paymentStats } from '../cash/core'
 
 /**
  * Customers module home — one light round trip for the relationship-to-cash
@@ -35,8 +36,12 @@ export interface CustomersHome {
   openInvoices: number
   overdueInvoices: number
   activeCustomers: number
-  /** Avg days invoice → applied payment over the trailing year (DSO-lite). */
-  dsoLite: number | null
+  /**
+   * The ONE org DSO — the same settlement-weighted trailing mean the cash
+   * cockpit, cashflow analytics, MCP cashflow tool, get_vitals, and customer
+   * intelligence quote (45-day documented default with no settlements).
+   */
+  dso: number
   pipeline: { total: number; weighted: number; closed: number }
   topExposure: CustomerExposureRow[]
   /** Weekly collections (posted customer payments), oldest → newest. */
@@ -126,7 +131,6 @@ export async function customersHome(
   ])
   const today = await businessToday(orgId)
   const ago7 = addCalendarDays(today, -7)
-  const ago365 = addCalendarDays(today, -365)
   const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
   const trendFrom = weekStarts[0]!
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
@@ -139,10 +143,9 @@ export async function customersHome(
       : subArr
         ? sql` and d.subsidiary_id = any(${subArr})`
         : sql``
-  const dsoScope = subArr ? sql` and bl.subsidiary_id = any(${subArr})` : sql``
   const q = calendarQuarterBounds(today)
 
-  const [arRes, dsoRes, topRes, trendRes, badgeRes, collectedRowsRes, forecast, orgRes] = (await Promise.all([
+  const [arRes, dsoStats, topRes, trendRes, badgeRes, collectedRowsRes, forecast, orgRes] = (await Promise.all([
     // Open receivables aggregate — open customer-invoice items with remaining
     // balance (the same open-item shape the cash engine reads, aggregated).
     // Legs are stamped in their line entity's functional: aggregate per
@@ -172,22 +175,12 @@ export async function customersHome(
              count(*) filter (where remaining > 0 and due_date < ${today}) as overdue_count
         from oi where remaining > 0 group by oi.func
     `),
-    // Days-sales-outstanding is its own query so it runs BESIDE the open-item
-    // aggregate instead of after it — as a scalar subquery the two costs added
-    // up inside one statement. Both dates come off the lines; reaching them
-    // through each line's entry doubled the joins. Trailing 365 days: without
-    // the upper bound a future-dated payment counts toward days-to-pay.
-    db.execute(sql`
-      select round(avg(pl.posting_date - bl.posting_date)) as dso
-        from applications ap
-        join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ${orgId}
-        join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ${orgId}
-        join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
-       where ap.org_id = ${orgId}
-         and ba.type = 'asset_receivable' and ap.unapplied_at is null
-         and pl.posting_date >= ${ago365}
-         and pl.posting_date <= ${today}${dsoScope}
-    `),
+    // Days-sales-outstanding is the ONE org DSO from the cash engine's
+    // maintained settlement rollup — the same reader the cash cockpit,
+    // cashflow analytics, MCP cashflow tool, get_vitals, and customer
+    // intelligence quote — never a second local grain. The rollup scan keeps
+    // this landing cheap; subsidiary scoping rides the engine's own rules.
+    paymentStats("ar", today, subIds, orgId),
     // Hero roster — top relationships by open balance, with open-opp counts.
     // Per (party, functional): the translated ranking happens in JS below.
     db.execute(sql`
@@ -345,7 +338,6 @@ export async function customersHome(
     .sort((x, y) => y.open - x.open)
     .slice(0, 10)
 
-  const dso = dsoRes.rows[0] ?? {}
   const badge = badgeRes.rows[0] ?? {}
   const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (!orgCurrency) throw new Error('organization currency is not configured')
@@ -357,7 +349,7 @@ export async function customersHome(
     openInvoices,
     overdueInvoices,
     activeCustomers: Number(badge.customers ?? 0),
-    dsoLite: dso.dso === null || dso.dso === undefined ? null : Number(dso.dso),
+    dso: dsoStats.globalAvg,
     pipeline,
     topExposure,
     trend: weekStarts.map((weekStart) => ({ weekStart, collected: byWeek.get(weekStart) ?? 0 })),

@@ -196,7 +196,7 @@ export async function loadCustomers(
     arOutstanding: moneyCompact(data.arOutstanding),
     arOverdue: moneyCompact(data.arOverdue),
     arOverdueIsNegative: data.arOverdue > 0,
-    dsoText: data.dsoLite === null ? '—' : t('home.vitals.days', { n: data.dsoLite }),
+    dsoText: t('home.vitals.days', { n: data.dso }),
     arHref: `/ar${subQs}`,
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),

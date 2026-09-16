@@ -39,6 +39,11 @@ registerHooks({
     if (specifier === '../features' && context.parentURL?.endsWith('/web/lib/module-home/customers.ts')) {
       return virtual('export async function isFeatureEnabled() { return true }')
     }
+    if (specifier === '../cash/core' && context.parentURL?.endsWith('/web/lib/module-home/customers.ts')) {
+      // The DSO tile reads the cash engine; this pipeline-only contract stubs
+      // the reader (the handoff itself is pinned in customers.test.ts).
+      return virtual('export async function paymentStats() { return { map: new Map(), globalAvg: 45 } }')
+    }
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
