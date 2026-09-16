@@ -274,6 +274,8 @@ interface PickerOptions {
   parties: PartyOption[]
   items: Option[]
   segments: SegmentOption[]
+  /** Enabled flows over the allocation_run subject (A14 approval picker). */
+  flows: Option[]
 }
 
 /** Edit mode: loads head + versions + pickers once, then one tab body at a time. */
@@ -323,6 +325,7 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
           roles: Array.isArray(party.roles) ? party.roles.filter((role): role is string => typeof role === 'string') : [],
         })),
         items: payload['items'] ?? [],
+        flows: payload['flows'] ?? [],
         segments: rawSegments.map((segment) => ({
           key: typeof segment?.key === 'string' ? segment.key : '',
           label: typeof segment?.label === 'string' ? segment.label : '',
@@ -1061,7 +1064,15 @@ function DefinitionTab({
               </Field>
             </div>
             <Field label={t('rules.definition.approvalFlow')} hint={t('rules.definition.approvalFlowHint')}>
-              <Input value={form.approvalFlowId} disabled={!isDraft} onChange={(e) => set('approvalFlowId', e.target.value)} />
+              <SearchSelect
+                value={form.approvalFlowId}
+                onChange={(value) => set('approvalFlowId', value ?? '')}
+                options={options.flows.map((flow) => ({ value: flow.id, label: flow.label }))}
+                placeholder={t('rules.definition.approvalFlowNone')}
+                disabled={!isDraft}
+                clearable
+                emptyLabel={t('rules.definition.approvalFlowNone')}
+              />
             </Field>
           </section>
           <section className="space-y-3">
