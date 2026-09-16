@@ -38,6 +38,7 @@ import { inflateSync } from "node:zlib";
 import { canonicalJson } from "../../../engine/src/canonical-json.ts";
 
 export const ADMIN_EMAIL = process.env.E2E_EMAIL ?? "e2e@openbooks.test";
+export const ADMIN_NAME = process.env.ADMIN_NAME ?? "E2E Admin";
 export const ADMIN_PASSWORD = process.env.E2E_PASSWORD ?? "e2e-test-password-123";
 export const APPROVER_EMAIL = process.env.E2E_APPROVER_EMAIL ?? "approver@openbooks.test";
 export const APPROVER_PASSWORD = process.env.E2E_APPROVER_PASSWORD ?? "approver-test-password-123";

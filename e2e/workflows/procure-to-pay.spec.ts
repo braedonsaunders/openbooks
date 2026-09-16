@@ -14,22 +14,20 @@ import { authedContext, dismissSetupWizard } from "../auth";
  * cells, and open balances. A suite that could pass while measuring nothing
  * is worse than no suite.
  *
- * Shared-tenant contract (the CI browser job runs every workflow suite
- * against ONE bootstrapped tenant, files alphabetically): this suite never
- * fights siblings over tenant provisioning. The setup wizard call repeats the
- * same general_business/US/USD foundation the close suite establishes (a
- * same-industry re-run is a harmless no-op), features are enabled additively,
- * and every created row is TAG-namespaced. Every document this suite posts
- * carries the explicit root subsidiary (resolved the way the close suite
- * resolves it): the close suite enables multiSubsidiary and adds a second
- * legal entity, after which subsidiary-scoped document reads (AP aging)
- * exclude unscoped NULL-subsidiary rows — an order-converted bill inherits
- * the order's NULL, so without explicit scoping this suite's bills vanish
- * from the report. All money moves in September 2026
- * — payroll posts in January, close in dynamic prior months, quote-to-cash in
- * March/April/May — so September-filtered reports isolate this suite's
- * postings exactly. The goods-receipt path auto-assigns a stock location only
- * when the org has exactly one ACTIVE stock location; this suite is its sole
+ * Tenant contract: every workflow suite runs on its OWN pristine tenant
+ * (the CI browser job snapshots one bootstrapped tenant per suite file — one
+ * tenant cannot host both the close suite's USD base and quote-to-cash's CAD
+ * base, and execute-now postings would otherwise leak across suites' number
+ * sequences). The setup wizard establishes the general_business/US/USD
+ * foundation, features are enabled additively, and every created row is
+ * TAG-namespaced. Every document this suite posts carries the explicit root
+ * subsidiary: with multiSubsidiary on, subsidiary-scoped document reads (AP
+ * aging) exclude unscoped NULL-subsidiary rows — an order-converted bill
+ * inherits the order's NULL, so without explicit scoping this suite's bills
+ * vanish from the report. All money moves in the current UTC month (see the
+ * DAY anchor below), so month-filtered reports isolate this suite's postings
+ * exactly. The goods-receipt path auto-assigns a stock location only when
+ * the org has exactly one ACTIVE stock location; this suite is its sole
  * creator, and local re-runs against a warm DB must re-bootstrap first.
  *
  * Flow (core test): vendor with approved bank account (second-user approval)
@@ -55,10 +53,31 @@ const RUN = process.env.E2E_RUN ?? "";
 const TAG = (RUN || `e${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-z0-9]/gi, "").slice(0, 10) || "e2e";
 const APPROVER_EMAIL = process.env.E2E_APPROVER_EMAIL ?? "approver@openbooks.test";
 const APPROVER_PASSWORD = process.env.E2E_APPROVER_PASSWORD ?? "approver-test-password-123";
-// September 2026: collision-free month (see header).
-const DAY = "2026-09-15";
-const MONTH_FROM = "2026-09-01";
-const MONTH_TO = "2026-09-30";
+// Date anchor: the suite floats on the current UTC month. Execute-now engines
+// (pay-run posting stamps business-today by product design — payments execute
+// now and cannot be backdated) must land inside the suite's own windows, so a
+// fixed-month pin rots: it passes only while the wall clock cooperates. DAY is
+// the real today (never future); CUTOFF reaches one day past it so a UTC
+// midnight rollover between seeding and posting still matches. Business-today
+// is UTC-based here: the suite never sets an org time zone, so the engine
+// falls back to UTC, matching this clock. Each workflow suite runs on its own
+// pristine tenant (one bootstrapped tenant cannot host both the close suite's
+// USD base and quote-to-cash's CAD base), so no cross-suite month isolation
+// is needed — month-filtered reports isolate this suite's postings exactly.
+const __now = new Date();
+const __year = __now.getUTCFullYear();
+const __month = __now.getUTCMonth() + 1;
+const __lastDay = new Date(Date.UTC(__year, __month, 0)).getUTCDate();
+const __pad2 = (n: number): string => String(n).padStart(2, "0");
+const __ym = `${__year}-${__pad2(__month)}`;
+const DAY = `${__ym}-${__pad2(__now.getUTCDate())}`;
+const CUTOFF = `${__ym}-${__pad2(Math.min(__lastDay, __now.getUTCDate() + 1))}`;
+const MONTH_FROM = `${__ym}-01`;
+const MONTH_TO = `${__ym}-${__pad2(__lastDay)}`;
+// The compliance certificate must still be valid at verification time whatever
+// month the suite lands in: same month next year, day clamped to month length.
+const __certLast = new Date(Date.UTC(__year + 1, __month, 0)).getUTCDate();
+const CERT_EXPIRES = `${__year + 1}-${__pad2(__month)}-${__pad2(Math.min(__certLast, __now.getUTCDate()))}`;
 // Fixed ids so account creation is idempotent across retries/restarts.
 const RNB_ID = "22222222-2222-4222-8222-222222222222";
 const INV_ASSET_ID = "33333333-3333-4333-8333-333333333333";
@@ -696,7 +715,7 @@ test.describe("procure-to-pay workflows", () => {
       expect(billLeg("2150"), "receipt clears through RNB").toBe("2500.0000");
       expect(billLeg("2000"), "AP credited $2,500").toBe("-2500.0000");
 
-      // AP aging carries the open $2,500 before payment (September-filtered).
+      // AP aging carries the open $2,500 before payment (month-filtered).
       await page.goto(`/reports/aging?${MONTH}&side=ap`);
       {
         const rows = await reportRows(page);
@@ -747,7 +766,7 @@ test.describe("procure-to-pay workflows", () => {
       // Bank reconciliation in the UI: statement in, match the outflow to the
       // payment journal, sign off with confirmation.
       const rec = await api(page, "POST", "/api/banking/reconciliations", {
-        accountId: acct["1099"], throughDate: DAY, statementBalance: "-2500.00",
+        accountId: acct["1099"], throughDate: CUTOFF, statementBalance: "-2500.00",
       });
       const recId = str(req(rec, "POST reconciliations").id, "reconciliation id");
       const imp = await api(page, "POST", "/api/banking/import", {
@@ -787,7 +806,7 @@ test.describe("procure-to-pay workflows", () => {
       await page.goto("/banking/reconciliations");
       await expect(page.locator("main")).toContainText(/\S/);
 
-      // Trial balance as of September 30. This report carries balances, not
+      // Trial balance as of month-end. This report carries balances, not
       // period movement, so sibling suites' accounts legitimately appear
       // here (close's August bills, payroll's January runs). What this
       // suite owns, asserted exactly: the tie itself (debits == credits)
@@ -1002,7 +1021,7 @@ test.describe("procure-to-pay workflows", () => {
         issuerName: "E2E Mutual",
         policyNumber: `GL-${TAG}`,
         effectiveFrom: DAY,
-        expiresOn: "2027-09-15",
+        expiresOn: CERT_EXPIRES,
       });
       const recordId = str(req(recorded, "POST compliance/records").id, "record id");
       const selfVerify = await api(page, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify" });
