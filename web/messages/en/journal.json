@@ -27,6 +27,13 @@
     "origin": "origin: {origin}",
     "reverses": "reverses {number}",
     "openItemBadge": "open item",
+    "contributors": {
+      "standardLines": "Standard lines",
+      "locked": "locked",
+      "ruleGroup": "Rule: {name}",
+      "scriptGroup": "Script: {name}",
+      "otherGroup": "{kind}: {name}"
+    },
     "totals": "Totals",
     "columns": {
       "debit": "Debit",

@@ -8,6 +8,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { TxnLink } from './TxnLink'
 import { AccountRegisterLink } from '../../../components/account-register-link'
+import { ContributorGroupHeading, groupEntryLinesByContributor } from '../../../components/journal-entry-link'
 import { entryTotals } from './entry-totals'
 import { decimalCmp, decimalNeg } from '../../../lib/statement-format'
 
@@ -30,6 +31,9 @@ type EntryData = {
     amount: string
     memo: string | null
     is_open_item: boolean
+    contributor_kind: string | null
+    contributor_ref: string | null
+    contributor_name: string | null
     account_id: string
     account_number: string | null
     account_name: string
@@ -89,6 +93,59 @@ export function EntryFlyout() {
   const origin = entry?.origin ? (t.has(`origins.${entry.origin}`) ? t(`origins.${entry.origin}`) : entry.origin) : ''
 
   const { debit: totalDebit, credit: totalCredit } = entryTotals(data?.lines ?? [])
+  const groups = groupEntryLinesByContributor(data?.lines ?? [])
+  const grouped = groups.length > 1 || (groups.length === 1 && groups[0]!.kind !== null)
+
+  const groupTitle = (group: (typeof groups)[number]) => {
+    if (group.kind === null) return t('detail.contributors.standardLines')
+    const name = group.name ?? group.ref ?? group.kind
+    if (group.kind === 'rule') return t('detail.contributors.ruleGroup', { name })
+    if (group.kind === 'script') return t('detail.contributors.scriptGroup', { name })
+    return t('detail.contributors.otherGroup', { kind: group.kind, name })
+  }
+
+  const lineRow = (l: NonNullable<EntryData['lines']>[number]) => {
+    const isDebit = decimalCmp(l.amount, '0') > 0
+    const isCredit = decimalCmp(l.amount, '0') < 0
+    return (
+      <TableRow key={l.line_number}>
+        <TableCell className="text-slate-400">{l.line_number}</TableCell>
+        <TableCell>
+          <AccountRegisterLink accountId={l.account_id} className="hover:text-teal-700 dark:hover:text-teal-300">
+            <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{l.account_number}</span>
+            {l.account_name}
+          </AccountRegisterLink>
+          {(l.memo || l.project) && (
+            <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
+              {[l.project, l.memo].filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {l.is_open_item && (
+            <Badge variant="outline" className="ml-0 mt-0.5">
+              {t('detail.openItemBadge')}
+            </Badge>
+          )}
+        </TableCell>
+        <TableCell className="text-slate-500 dark:text-slate-400">{l.party}</TableCell>
+        <TableCell className="text-slate-500 dark:text-slate-400">{l.department}</TableCell>
+        <TableCell className="text-right tabular-nums">{isDebit ? money(l.amount) : ''}</TableCell>
+        <TableCell className="text-right tabular-nums">{isCredit ? money(decimalNeg(l.amount)) : ''}</TableCell>
+      </TableRow>
+    )
+  }
+
+  const tableHead = (
+    <TableHeader>
+      <TableRow>
+        <TableHead className="w-8">#</TableHead>
+        <TableHead>{tc('labels.account')}</TableHead>
+        <TableHead>{tc('labels.party')}</TableHead>
+        <TableHead>{tc('labels.department')}</TableHead>
+        <TableHead className="text-right">{t('detail.columns.debit')}</TableHead>
+        <TableHead className="text-right">{t('detail.columns.credit')}</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
 
   return (
     <Drawer
@@ -136,48 +193,11 @@ export function EntryFlyout() {
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-2/3" />
         </div>
-      ) : (
+      ) : !grouped ? (
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8">#</TableHead>
-              <TableHead>{tc('labels.account')}</TableHead>
-              <TableHead>{tc('labels.party')}</TableHead>
-              <TableHead>{tc('labels.department')}</TableHead>
-              <TableHead className="text-right">{t('detail.columns.debit')}</TableHead>
-              <TableHead className="text-right">{t('detail.columns.credit')}</TableHead>
-            </TableRow>
-          </TableHeader>
+          {tableHead}
           <TableBody>
-            {data.lines.map((l) => {
-              const isDebit = decimalCmp(l.amount, '0') > 0
-              const isCredit = decimalCmp(l.amount, '0') < 0
-              return (
-                <TableRow key={l.line_number}>
-                  <TableCell className="text-slate-400">{l.line_number}</TableCell>
-                  <TableCell>
-                    <AccountRegisterLink accountId={l.account_id} className="hover:text-teal-700 dark:hover:text-teal-300">
-                      <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{l.account_number}</span>
-                      {l.account_name}
-                    </AccountRegisterLink>
-                    {(l.memo || l.project) && (
-                      <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
-                        {[l.project, l.memo].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                    {l.is_open_item && (
-                      <Badge variant="outline" className="ml-0 mt-0.5">
-                        {t('detail.openItemBadge')}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{l.party}</TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{l.department}</TableCell>
-                  <TableCell className="text-right tabular-nums">{isDebit ? money(l.amount) : ''}</TableCell>
-                  <TableCell className="text-right tabular-nums">{isCredit ? money(decimalNeg(l.amount)) : ''}</TableCell>
-                </TableRow>
-              )
-            })}
+            {data.lines.map(lineRow)}
             <TableRow className="border-t border-slate-300 dark:border-slate-600">
               <TableCell colSpan={4} className="font-semibold">
                 {t('detail.totals')}
@@ -187,6 +207,32 @@ export function EntryFlyout() {
             </TableRow>
           </TableBody>
         </Table>
+      ) : (
+        <div>
+          {groups.map((group) => (
+            <section key={group.key}>
+              <ContributorGroupHeading
+                title={groupTitle(group)}
+                lockedLabel={group.kind === null ? t('detail.contributors.locked') : undefined}
+              />
+              <Table>
+                {tableHead}
+                <TableBody>{group.lines.map(lineRow)}</TableBody>
+              </Table>
+            </section>
+          ))}
+          <Table>
+            <TableBody>
+              <TableRow className="border-t border-slate-300 dark:border-slate-600">
+                <TableCell colSpan={4} className="font-semibold">
+                  {t('detail.totals')}
+                </TableCell>
+                <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(totalDebit)}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">{money(totalCredit)}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
       )}
     </Drawer>
   )
