@@ -107,7 +107,15 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:business-date",
-    `export async function businessToday() { return '2026-08-24' }`,
+    `
+      export async function businessToday() { return '2026-08-24' }
+      export function isIsoCalendarDate(value) {
+        if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
+        const [y, m, d] = value.split('-').map(Number)
+        const probe = new Date(Date.UTC(y, m - 1, d))
+        return probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d
+      }
+    `,
   ],
   [
     "mock:psp-settlement",
