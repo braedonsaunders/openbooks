@@ -92,6 +92,7 @@ test("a pre-split GST34 install files the true net tax after the 0147 heal", { s
       insert into tax_report_lines
         (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence, formula)
       values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '101', 'Sales and other revenue', null, null, 1, 10, null),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '103', 'GST/HST collected or collectible', ${codeId}, 'tax_amount', -1, 20, null),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '104', 'Adjustments to be added to net tax', null, null, 1, 30, null),
         (${randomUUID()}, ${org.orgId}, ${formCode}, '105', 'Total GST/HST and adjustments', null, null, 1, 40, '103 + 104'),
@@ -101,9 +102,12 @@ test("a pre-split GST34 install files the true net tax after the 0147 heal", { s
         (${randomUUID()}, ${org.orgId}, ${formCode}, '109', 'Net tax', null, null, 1, 80, '105 - 108')`);
 
     // The stale install doubles net tax: both boxes sum the same net (-5),
-    // so 103 reads 5, 106 reads -5, and 109 reads 10 instead of 5.
+    // so 103 reads 5, 106 reads -5, and 109 reads 10 instead of 5. Line 101
+    // is a manual box in the stale install, so it files 0 instead of the
+    // 200.0000 sales base.
     const stale = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
     const staleValues = new Map(stale.boxes.map((box) => [box.lineCode, box.value]));
+    assert.equal(staleValues.get("101"), "0.0000");
     assert.equal(staleValues.get("109"), "10.0000");
 
     // The heal: re-apply the corrected library bases to the stale rows.
@@ -127,12 +131,82 @@ test("a pre-split GST34 install files the true net tax after the 0147 heal", { s
       { line_code: "106", basis: "tax_paid" },
     ]);
 
-    // Healed: collected and paid separate, net tax is the true 5.0000.
+    // Healed: collected and paid separate, net tax is the true 5.0000, and
+    // line 101 reports the sales-side taxable base (the 200.0000 invoice;
+    // the 150.0000 vendor bill is purchase-side and stays out of 101).
     const healed = await computeTaxReturn(org.orgId, formCode, org.date, org.date);
     const values = new Map(healed.boxes.map((box) => [box.lineCode, box.value]));
+    assert.equal(values.get("101"), "200.0000");
     assert.equal(values.get("103"), "20.0000");
     assert.equal(values.get("106"), "15.0000");
     assert.equal(values.get("109"), "5.0000");
+    const rows101 = await db.execute<{ tax_code_id: string | null; basis: string | null }>(sql`
+      select tax_code_id, basis from tax_report_lines
+       where org_id = ${org.orgId} and report_code = ${formCode} and line_code = '101'
+       order by tax_code_id nulls first`);
+    assert.deepEqual(rows101.rows, [{ tax_code_id: codeId, basis: "taxable_base" }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the 0147 line-101 heal preserves custom boxes and never duplicates", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'GST-STD', 'Standard GST', 'both', 'standard',
+              ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    const formCode = "CA_GST34";
+    await db.execute(sql`
+      insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${formCode}, 'GST/HST Return (GST34)', 'portal_manual', true)`);
+    // A computed 101 is a deliberate customization, not the stale shape: untouched.
+    await db.execute(sql`
+      insert into tax_report_lines
+        (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence, formula)
+      values
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '101', 'Sales (custom)', null, null, 1, 10, '103'),
+        (${randomUUID()}, ${org.orgId}, ${formCode}, '103', 'GST/HST collected or collectible', ${codeId}, 'tax_amount', -1, 20, null)`);
+    // An already-mapped 101 must gain no duplicate rows.
+    const org2 = await createScratchOrg();
+    try {
+      const code2 = randomUUID();
+      await db.execute(sql`
+        insert into tax_codes
+          (id, org_id, code, name, applies_to, calculation_type, collected_account_id, paid_account_id, is_active)
+        values (${code2}, ${org2.orgId}, 'GST-STD', 'Standard GST', 'both', 'standard',
+                ${org2.accounts.taxOutput}, ${org2.accounts.taxInput}, true)`);
+      await db.execute(sql`
+        insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
+        values (${randomUUID()}, ${org2.orgId}, ${formCode}, 'GST/HST Return (GST34)', 'portal_manual', true)`);
+      await db.execute(sql`
+        insert into tax_report_lines
+          (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence, formula)
+        values
+          (${randomUUID()}, ${org2.orgId}, ${formCode}, '101', 'Sales and other revenue', ${code2}, 'taxable_base', 1, 10, null),
+          (${randomUUID()}, ${org2.orgId}, ${formCode}, '103', 'GST/HST collected or collectible', ${code2}, 'tax_collected', -1, 20, null)`);
+      const migration = readFileSync(
+        "schema/migrations/generated/0147_gst34_box_basis_heal.sql", "utf8");
+      const client = await pool.connect();
+      try {
+        await client.query(migration);
+      } finally {
+        client.release();
+      }
+      const custom = await db.execute<{ line_code: string; formula: string | null; basis: string | null }>(sql`
+        select line_code, formula, basis from tax_report_lines
+         where org_id = ${org.orgId} and report_code = ${formCode} and line_code = '101'`);
+      assert.deepEqual(custom.rows, [{ line_code: "101", formula: "103", basis: null }]);
+      const mapped = await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from tax_report_lines
+         where org_id = ${org2.orgId} and report_code = ${formCode} and line_code = '101'`);
+      assert.equal(mapped.rows[0]?.n, "1");
+    } finally {
+      await dropScratchOrg(org2.orgId);
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }
