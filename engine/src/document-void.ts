@@ -724,6 +724,42 @@ export async function completeRequestedDocumentVoid(
         for (const fx of outgoingFx.rows) {
           await reverseEntry(fx.id, "VOID");
         }
+        // Post-mode allocations in secondary books live in their own
+        // origin='allocation' entries on the same document. Voiding the
+        // document must mirror those too, or the secondary books would keep
+        // attributed balances the primary books reversed away.
+        const linkedAllocations = (await tx.execute<{ id: string; book_id: string }>(sql`
+          select id, book_id
+            from journal_entries
+           where org_id = ${orgId} and source_document_id = ${documentId}
+             and origin = 'allocation' and status = 'posted'
+           order by id
+           for update
+        `));
+        for (const linked of linkedAllocations.rows) {
+          const linkedSubs = (await tx.execute<{ subsidiary_id: string }>(sql`
+            select distinct subsidiary_id
+              from journal_lines
+             where entry_id = ${linked.id} and org_id = ${orgId}
+          `));
+          try {
+            await assertPeriodModulesOpen(tx, {
+              orgId,
+              periodId: period.rows[0]!.id,
+              bookId: linked.book_id,
+              subsidiaryIds: linkedSubs.rows.map((row) => row.subsidiary_id),
+              modules: [closeModuleForDocument(String(doc.kind))],
+            });
+          } catch (error) {
+            if (error instanceof CloseError) {
+              throw new DocumentVoidError(
+                `the reversal period for ${reversalDate} is closed: ${error.message}`,
+              );
+            }
+            throw error;
+          }
+          await reverseEntry(linked.id, "VOID");
+        }
       }
 
       if (String(doc.kind) === "customer_invoice" || String(doc.kind) === "customer_credit") {

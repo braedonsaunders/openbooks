@@ -23,7 +23,11 @@ export type ReversalSourceJournalLine = Pick<
   | "quantity"
   | "unit"
   | "custom"
->;
+> & {
+  /** Allocation/script contributor stamps ride the mirror (null = kernel). */
+  contributorKind?: string | null;
+  contributorRef?: string | null;
+};
 
 /** Mirror posted journal lines onto a reversal entry with negated amounts and quantity. */
 export function reversalJournalLines(
@@ -55,5 +59,7 @@ export function reversalJournalLines(
     dueDate: null,
     isOpenItem: false,
     custom: line.custom,
+    contributorKind: line.contributorKind ?? null,
+    contributorRef: line.contributorRef ?? null,
   }));
 }
