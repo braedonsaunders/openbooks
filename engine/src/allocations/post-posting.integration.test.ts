@@ -559,11 +559,12 @@ test("report_definition drivers run saved definitions under the actor", { skip: 
       from: ctx.org.date,
       to: ctx.org.date,
       actorId: ctx.actor,
+      temporalMode: "balance_as_of" as const,
     };
     const summarized = await runDriverReport({ ...base, reportDefinitionId: summarizeId });
-    assert.deepEqual(summarized, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
+    assert.deepEqual(summarized.rows, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
     const detailed = await runDriverReport({ ...base, reportDefinitionId: rowsId });
-    assert.deepEqual(detailed, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
+    assert.deepEqual(detailed.rows, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
     // An actor without reports.read is refused, not given silent zeros.
     const outsider = await createScratchUser(ctx.org.orgId, "Outsider", "viewer");
     await assert.rejects(

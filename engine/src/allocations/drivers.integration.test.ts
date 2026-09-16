@@ -15,6 +15,8 @@ import {
   previewDriverVector,
   type DriverResolveOptions,
 } from "./drivers.ts";
+import { runDriverReport } from "./report-runner.ts";
+import type { ReportDriverTemporal } from "./types.ts";
 import type { AllocationDriver } from "./types.ts";
 import {
   createScratchOrg,
@@ -761,7 +763,10 @@ test("drivers: report_definition injects the period and runs under the actor", a
       reportRunner: {
         async runReport(input) {
           seen.push({ ...input });
-          return [{ dimension: deptA, value: "12.5" }];
+          return {
+            rows: [{ dimension: deptA, value: "12.5" }],
+            temporal: { mode: input.temporalMode, from: input.from, to: input.to, field: null },
+          };
         },
       },
     });
@@ -790,11 +795,93 @@ test("drivers: report_definition injects the period and runs under the actor", a
   }
 });
 
+test("drivers: period_activity refuses a report with no date field instead of weighing history", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Driver owner", "admin");
+    await db.execute(sql`
+      update app_roles set permissions = '["reports.read"]'::jsonb
+       where org_id = ${org.orgId} and key = 'admin'`);
+    // The chart of accounts has no date-kind column: no honest activity
+    // window exists, so a period_activity driver must refuse loudly.
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${definitionId}, ${org.orgId}, 'custom', 'driver-accounts-test', 'Driver accounts test', 'query',
+        ${JSON.stringify({ entity: "accounts", mode: "rows", columns: ["id", "number"] })}::jsonb)`);
+    const driver = await createDriver(org.orgId, actor, {
+      key: `dateless-${randomUUID().slice(0, 8)}`,
+      name: "Dateless driver",
+      dimension: "department",
+      sourceKind: "report_definition",
+      config: {
+        reportDefinitionId: definitionId,
+        dimensionColumn: "id",
+        valueColumn: "number",
+        temporalMode: "period_activity",
+      },
+    });
+    await assert.rejects(
+      previewDriverVector(
+        { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor },
+        { reportRunner: { runReport: runDriverReport } },
+      ),
+      /period_activity/,
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("drivers: preview echoes the report temporal contract the runner enforced", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Driver owner", "admin");
+    const temporal: ReportDriverTemporal = {
+      mode: "period_activity",
+      from: "2026-07-01",
+      to: "2026-07-31",
+      field: "posting_date",
+    };
+    const deps = {
+      reportRunner: {
+        async runReport() {
+          return { rows: [{ dimension: "d1", value: "2" }], temporal };
+        },
+      },
+    };
+    const driver = await createDriver(org.orgId, actor, {
+      key: `echo-${randomUUID().slice(0, 8)}`,
+      name: "Echo driver",
+      dimension: "department",
+      sourceKind: "report_definition",
+      config: { reportDefinitionId: randomUUID(), dimensionColumn: "d", valueColumn: "v" },
+    });
+    const preview = await previewDriverVector(
+      { orgId: org.orgId, driverId: driver.id, asOf: { periodId: org.periodId }, actorId: actor },
+      deps,
+    );
+    assert.deepEqual(
+      (preview as unknown as { temporal?: unknown }).temporal,
+      temporal,
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("drivers: report_definition refuses anonymous runs and missing runners", async () => {
   const org = await createScratchOrg();
   try {
     const withRunner = createDriverResolver({
-      reportRunner: { async runReport() { return []; } },
+      reportRunner: {
+        async runReport() {
+          return {
+            rows: [],
+            temporal: { mode: "balance_as_of", from: null, to: null, field: null },
+          };
+        },
+      },
     });
     await assert.rejects(
       withRunner.resolve({

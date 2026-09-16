@@ -8,6 +8,7 @@ import type {
   AllocationDriver,
   AllocationDriverSourceKind,
   DriverVector,
+  ReportTemporalMode,
 } from "./types.ts";
 
 /**
@@ -45,6 +46,18 @@ export const DRIVER_SOURCE_KINDS: readonly AllocationDriverSourceKind[] = [
   "native_measure",
   "manual",
   "report_definition",
+];
+
+/**
+ * What the requested period means for a `report_definition` driver:
+ * `period_activity` weighs the from..to window, `balance_as_of` weighs the
+ * snapshot at to, `fixed_query` weighs the report's own scope untouched.
+ * The vocabulary lives in `types.ts`; this is its runtime list.
+ */
+export const REPORT_TEMPORAL_MODES: readonly ReportTemporalMode[] = [
+  "period_activity",
+  "balance_as_of",
+  "fixed_query",
 ];
 
 export type DriverAdminCode = "validation" | "not_found" | "conflict" | "referenced" | "stale";
@@ -189,11 +202,21 @@ export function validateDriverConfig(
       if (typeof rec.valueColumn !== "string" || !rec.valueColumn.trim()) {
         fail("validation", "config.valueColumn is required");
       }
+      // The temporal contract declaring what the requested period means for
+      // this driver. Absence keeps the historical as-of behavior, now echoed
+      // instead of silent; anything outside the vocabulary is refused.
+      const temporalMode = rec.temporalMode === undefined || rec.temporalMode === null
+        ? "balance_as_of"
+        : rec.temporalMode;
+      if (!(REPORT_TEMPORAL_MODES as readonly string[]).includes(temporalMode as string)) {
+        fail("validation", `config.temporalMode must be one of: ${REPORT_TEMPORAL_MODES.join(", ")}`);
+      }
       return {
         reportDefinitionId: rec.reportDefinitionId,
         dimensionColumn: (rec.dimensionColumn as string).trim(),
         valueColumn: (rec.valueColumn as string).trim(),
         params: isRecord(rec.params) ? rec.params : {},
+        temporalMode,
       };
     }
   }

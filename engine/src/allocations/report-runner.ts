@@ -25,11 +25,16 @@ import { DriverAdminError } from "./driver-admin.ts";
 import {
   createDriverResolver,
   DriverNotAvailableError,
+  type ReportDriverEvidence,
   type ReportDriverRow,
   type ReportDriverRunInput,
   type ReportDriverRunner,
 } from "./drivers.ts";
-import type { DriverResolver } from "./types.ts";
+import type { DriverResolver, ReportDriverTemporal } from "./types.ts";
+import {
+  applyReportPeriodWindow,
+  resolveReportPeriodField,
+} from "./report-window.ts";
 
 /**
  * Engine-side `ReportDriverRunner` for `report_definition` drivers (A5
@@ -51,7 +56,7 @@ import type { DriverResolver } from "./types.ts";
  * so it refuses with driver_evidence_truncated instead of weighing a silent
  * prefix of the inputs.
  */
-export async function runDriverReport(input: ReportDriverRunInput): Promise<ReportDriverRow[]> {
+export async function runDriverReport(input: ReportDriverRunInput): Promise<ReportDriverEvidence> {
   const { orgId, reportDefinitionId, dimensionColumn, valueColumn, actorId } = input;
   if (!actorId) {
     throw new DriverNotAvailableError("report_definition drivers require an actorId");
@@ -92,12 +97,13 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     throw new DriverNotAvailableError("the report entity's feature is disabled");
   }
   const subsidiaryIds = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-  const compiled = compileCustomQuery(entity, plan, orgId, {
+  const { query, temporal } = applyTemporalContract(entity, plan, input);
+  const compiled = compileCustomQuery(entity, query, orgId, {
     maxRows: MAX_REPORT_ROWS,
     fiscalStartMonth: await fiscalStartMonth(orgId),
     asOf: input.to,
     allowedSubsidiaryIds: subsidiaryIds === null ? null : [...subsidiaryIds],
-    allowedBookIds: await resolveBookScope(orgId, plan),
+    allowedBookIds: await resolveBookScope(orgId, query),
   });
   const { rows } = await pool.query(compiled.text, compiled.values);
   if (rows.length >= compiled.limit) {
@@ -108,7 +114,39 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     );
   }
   assertSingleDenomination(entity, compiled, rows, valueColumn);
-  return projectDriverRows(rows, compiled, dimensionColumn, valueColumn);
+  return { rows: projectDriverRows(rows, compiled, dimensionColumn, valueColumn), temporal };
+}
+
+/**
+ * Enforce the driver's declared temporal contract on the validated plan and
+ * describe what was enforced. `period_activity` binds the from..to window on
+ * the report's date field (refusing when the report has none — an
+ * unwindowed activity weight is exactly the silent mismatch finding 6.2
+ * bans); `balance_as_of` keeps the historical snapshot-at-to behavior;
+ * `fixed_query` runs the author's scope untouched.
+ */
+function applyTemporalContract(
+  entity: (typeof REPORT_ENTITY_MAP)[string],
+  plan: ReportCustomQuery,
+  input: ReportDriverRunInput,
+): { query: ReportCustomQuery; temporal: ReportDriverTemporal } {
+  if (input.temporalMode === "period_activity") {
+    const field = resolveReportPeriodField(entity, plan);
+    if (!field) {
+      throw new DriverNotAvailableError(
+        "cannot bind a period_activity window: the report has no date field (driver_window_unbindeable)",
+        "config.reportDefinitionId",
+      );
+    }
+    return {
+      query: applyReportPeriodWindow(plan, field, { from: input.from, to: input.to }),
+      temporal: { mode: "period_activity", from: input.from, to: input.to, field },
+    };
+  }
+  if (input.temporalMode === "fixed_query") {
+    return { query: plan, temporal: { mode: "fixed_query", from: null, to: null, field: null } };
+  }
+  return { query: plan, temporal: { mode: "balance_as_of", from: null, to: input.to, field: null } };
 }
 
 /**

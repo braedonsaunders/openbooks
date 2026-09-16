@@ -108,6 +108,7 @@ test("report drivers fail closed without an actor", async () => {
         from: "2026-01-01",
         to: "2026-12-31",
         actorId: "",
+        temporalMode: "balance_as_of",
       }),
     (error: unknown) => error instanceof DriverNotAvailableError && /actorId/.test(error.message),
   );

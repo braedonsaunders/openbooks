@@ -334,6 +334,11 @@ item filters. When several rules sweep one close, the close action runs
 them in rule sort order. Simultaneous (reciprocal) solving is not
 implemented: versions that select it are refused at publication and at
 every run, and the setup UI offers sequential only.
-Report-backed drivers need an actor with report rights.
+Report-backed drivers need an actor with report rights. Each one declares
+a temporal contract: period activity weighs the run window on the report's
+date field (refusing reports with no date field), balance as of weighs the
+snapshot at the window end, and fixed query weighs the report's own scope
+untouched. Previews and runs echo the enforced contract, and evidence that
+reaches the report row cap is refused instead of weighed truncated.
 `,
 }

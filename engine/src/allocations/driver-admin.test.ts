@@ -71,7 +71,34 @@ test("manual config is empty; report_definition needs columns", () => {
       dimensionColumn: "department",
       valueColumn: "amount",
     }),
-    { reportDefinitionId: reportId, dimensionColumn: "department", valueColumn: "amount", params: {} },
+    {
+      reportDefinitionId: reportId,
+      dimensionColumn: "department",
+      valueColumn: "amount",
+      params: {},
+      temporalMode: "balance_as_of",
+    },
+  );
+  // The temporal contract is declared per driver: each mode passes through,
+  // anything else is refused, and absence keeps the current as-of behavior.
+  for (const temporalMode of ["period_activity", "balance_as_of", "fixed_query"]) {
+    const out = validateDriverConfig("report_definition", {
+      reportDefinitionId: reportId,
+      dimensionColumn: "department",
+      valueColumn: "amount",
+      temporalMode,
+    });
+    assert.equal(out["temporalMode"], temporalMode);
+  }
+  assert.throws(
+    () =>
+      validateDriverConfig("report_definition", {
+        reportDefinitionId: reportId,
+        dimensionColumn: "department",
+        valueColumn: "amount",
+        temporalMode: "whatever",
+      }),
+    /temporalMode/,
   );
   assert.throws(() => validateDriverConfig("report_definition", {}), /reportDefinitionId/);
   assert.throws(

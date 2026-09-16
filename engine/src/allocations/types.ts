@@ -201,6 +201,29 @@ export interface DriverResolveRequest {
 
 export interface DriverResolver {
   resolve(request: DriverResolveRequest): Promise<DriverVector>;
+  /**
+   * The same resolution plus the temporal contract behind a report-backed
+   * vector (null for every other source kind). Optional so existing test
+   * doubles keep working; production resolvers implement it.
+   */
+  resolveWithTemporal?(request: DriverResolveRequest): Promise<{
+    vector: DriverVector;
+    temporal: ReportDriverTemporal | null;
+  }>;
+}
+
+/** What the requested period means for a `report_definition` driver. */
+export type ReportTemporalMode = "period_activity" | "balance_as_of" | "fixed_query";
+
+/** The temporal contract a report-backed driver actually enforced. */
+export interface ReportDriverTemporal {
+  mode: ReportTemporalMode;
+  /** Window start (period_activity only; the other modes bind no window). */
+  from: string | null;
+  /** Window/snapshot end (null for fixed_query, which binds no period). */
+  to: string | null;
+  /** The report date column the window bound (period_activity only). */
+  field: string | null;
 }
 
 /** One weighted target ready for apportionment. */
@@ -282,7 +305,14 @@ export interface RunComputation {
   sourceMeasure: AllocationSourceMeasure;
   sources: Array<Coordinate & { amount: string; lineCount: number }>;
   sourceTotal: string;
-  driver?: { id: string; key: string; asOf: DriverAsOf; vector: Array<{ key: string; value: string }> } | null;
+  driver?: {
+    id: string;
+    key: string;
+    asOf: DriverAsOf;
+    vector: Array<{ key: string; value: string }>;
+    /** The enforced temporal contract (report drivers only; see allocationFingerprint). */
+    temporal?: ReportDriverTemporal | null;
+  } | null;
   targets: Array<
     ApportionedTarget & {
       coordinate: Coordinate;
