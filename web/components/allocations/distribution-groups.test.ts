@@ -150,6 +150,8 @@ test('hand portions convert to exact children that sum to the line', () => {
   )
   assert.equal(splitPortionsToAmounts([{ kind: 'fixed', value: 'junk' }, { kind: 'remainder' }], '100'), null)
   assert.equal(splitPortionsToAmounts([{ kind: 'percent', value: -5 }, { kind: 'remainder' }], '100'), null)
+  // Manual weights name no amount, so entry splits refuse them outright.
+  assert.equal(splitPortionsToAmounts([{ kind: 'weight', value: '1' }, { kind: 'remainder' }], '100'), null)
 })
 
 test('the row menu offers exactly the actions that apply', () => {
