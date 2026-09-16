@@ -1525,6 +1525,31 @@
         "usersTruncatedNote": "Showing the first 200 people.",
         "deliveryNote": "Email delivery is not wired yet — this stores who should get what. Findings always appear under Agent Activity in the meantime."
       },
+      "activity": {
+        "title": "Activity",
+        "description": "Every agent scan across packs — status, duration, findings and errors. Re-run any pack from here.",
+        "allPacks": "All packs",
+        "packColumn": "Pack",
+        "triggerColumn": "Trigger",
+        "triggers": {
+          "manual": "Manual",
+          "scheduler": "Scheduled"
+        },
+        "statusColumn": "Status",
+        "startedColumn": "Started",
+        "durationColumn": "Duration",
+        "detectedColumn": "Detected",
+        "resolvedColumn": "Resolved",
+        "actionsColumn": "Actions",
+        "rerun": "Re-run",
+        "viewFindings": "Findings",
+        "empty": "No runs yet.",
+        "emptyHint": "Run a pack from the overview to see its first scan here.",
+        "truncatedNote": "Showing the latest {shown} of {total} runs.",
+        "totalNote": "{count, plural, one {# run} other {# runs}}",
+        "showMore": "Show more",
+        "loadFailed": "Couldn't load runs."
+      },
       "packs": {
         "accounting": {
           "title": "Accounting controls",

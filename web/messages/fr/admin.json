@@ -1435,6 +1435,31 @@
         "usersTruncatedNote": "Les 200 premières personnes sont affichées.",
         "deliveryNote": "L'envoi par courriel n'est pas encore branché — ceci enregistre qui doit recevoir quoi. En attendant, les constats paraissent toujours dans Activité des agents."
       },
+      "activity": {
+        "title": "Activité",
+        "description": "Chaque analyse des agents dans tous les packs : état, durée, constats et erreurs. Relancez n'importe quel pack d'ici.",
+        "allPacks": "Tous les packs",
+        "packColumn": "Pack",
+        "triggerColumn": "Origine",
+        "triggers": {
+          "manual": "Manuel",
+          "scheduler": "Planifié"
+        },
+        "statusColumn": "État",
+        "startedColumn": "Début",
+        "durationColumn": "Durée",
+        "detectedColumn": "Détectés",
+        "resolvedColumn": "Résolus",
+        "actionsColumn": "Actions",
+        "rerun": "Relancer",
+        "viewFindings": "Constats",
+        "empty": "Aucun lancement pour l'instant.",
+        "emptyHint": "Lancez un pack depuis l'aperçu pour voir sa première analyse ici.",
+        "truncatedNote": "Les {shown} derniers lancements sur {total} sont affichés.",
+        "totalNote": "{count, plural, one {# lancement} other {# lancements}}",
+        "showMore": "Afficher plus",
+        "loadFailed": "Impossible de charger les lancements."
+      },
       "packs": {
         "accounting": {
           "title": "Contrôles comptables",
