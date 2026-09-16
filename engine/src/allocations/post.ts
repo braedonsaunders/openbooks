@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db.ts";
-import { fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money.ts";
+import { fromUnits, isZero, neg, sum, toUnits } from "../money.ts";
 import { resolveAccountGroups } from "../account-groups.ts";
-import { listRulesInEffect, selectRule, type AccountGroupResolver } from "./match.ts";
+import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
+import { selectRule, type AccountGroupResolver } from "./match.ts";
+import { AllocationRuleError, listRulesInEffect } from "./rules.ts";
 import type {
   AllocationDriver,
   AllocationRuleTarget,
@@ -108,138 +110,6 @@ export async function allocationsAtPostingEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// Exact apportionment (interim local fallback until A1's apportion.ts lands)
-// ---------------------------------------------------------------------------
-
-const SHARE_SCALE = 10n ** 10n;
-
-function formatShare(shareUnits: bigint): string {
-  const negative = shareUnits < 0n;
-  const abs = negative ? -shareUnits : shareUnits;
-  const whole = abs / SHARE_SCALE;
-  const frac = (abs % SHARE_SCALE).toString().padStart(10, "0");
-  return `${negative ? "-" : ""}${whole}.${frac}`;
-}
-
-/**
- * Split `total` across `targets` with exact bigint money: floored shares plus
- * a deterministic residual walk. Σ(amounts) == total always; leftover units
- * land largest-fractional-remainder first, or wholly on the first / last /
- * explicit target. Never a float.
- */
-export function apportionExact(
-  total: string,
-  targets: WeightedTarget[],
-  residualPolicy: string,
-  explicitKey?: string | null,
-): ApportionResult {
-  if (targets.length === 0) throw new PostAllocationError("apportionment needs at least one target");
-  const totalUnits = toUnits(total);
-  const weightUnits = targets.map((t) => {
-    const w = toUnits(t.weight);
-    if (w < 0n) throw new PostAllocationError(`negative apportionment weight on target ${t.key}`);
-    return w;
-  });
-  const weightTotal = weightUnits.reduce((a, b) => a + b, 0n);
-  if (weightTotal <= 0n) throw new PostAllocationError("apportionment weights sum to zero");
-  const weightTotalText = fromUnits(weightTotal);
-
-  const bases = targets.map((_, i) => (totalUnits * weightUnits[i]!) / weightTotal);
-  const remNums = targets.map((_, i) => totalUnits * weightUnits[i]! - bases[i]! * weightTotal);
-  let leftover = totalUnits - bases.reduce((a, b) => a + b, 0n);
-
-  // Presentation shares at 10dp (informational; amounts stay exact).
-  const shares = weightUnits.map((w) => formatShare(roundDiv(w * SHARE_SCALE, weightTotal)));
-
-  const order = residualOrder(targets, weightUnits, remNums, residualPolicy, explicitKey);
-  const extra = new Array<bigint>(targets.length).fill(0n);
-  if (leftover !== 0n) {
-    if (
-      residualPolicy === "first_target" ||
-      residualPolicy === "last_target" ||
-      residualPolicy === "explicit_target"
-    ) {
-      extra[order[0]!] = leftover;
-    } else {
-      for (const idx of order) {
-        if (leftover === 0n) break;
-        const unit = leftover > 0n ? 1n : -1n;
-        extra[idx]! += unit;
-        leftover -= unit;
-      }
-    }
-  }
-  let residualKey: string | null = null;
-  for (const idx of order) {
-    if (extra[idx]! !== 0n && residualKey === null) residualKey = targets[idx]!.key;
-  }
-  return {
-    total,
-    weightTotal: weightTotalText,
-    targets: targets.map((t, i) => ({
-      key: t.key,
-      weight: t.weight,
-      share: shares[i]!,
-      amount: fromUnits(bases[i]! + extra[i]!),
-      residual: fromUnits(extra[i]!),
-    })),
-    residualKey,
-  };
-}
-
-/** Deterministic recipient order for residual units. */
-function residualOrder(
-  targets: WeightedTarget[],
-  weightUnits: bigint[],
-  remNums: bigint[],
-  residualPolicy: string,
-  explicitKey?: string | null,
-): number[] {
-  const idx = targets.map((_, i) => i);
-  if (residualPolicy === "first_target") return idx;
-  if (residualPolicy === "last_target") return [...idx].reverse();
-  if (residualPolicy === "explicit_target") {
-    const at = explicitKey == null ? -1 : targets.findIndex((t) => t.key === explicitKey);
-    if (at < 0) throw new PostAllocationError("explicit residual target is not among the apportioned targets");
-    return [at, ...idx.filter((i) => i !== at)];
-  }
-  // largest_share (default): largest fractional remainder first; ties break
-  // by larger weight, then key, so the walk is stable across runs.
-  return [...idx].sort((a, b) => {
-    const ra = remNums[a]! < 0n ? -remNums[a]! : remNums[a]!;
-    const rb = remNums[b]! < 0n ? -remNums[b]! : remNums[b]!;
-    if (ra !== rb) return ra > rb ? -1 : 1;
-    if (weightUnits[a]! !== weightUnits[b]!) return weightUnits[a]! > weightUnits[b]! ? -1 : 1;
-    return targets[a]!.key < targets[b]!.key ? -1 : targets[a]!.key > targets[b]!.key ? 1 : 0;
-  });
-}
-
-/**
- * fixed_percent basis: target percents with at most one is_remainder target
- * taking 100 minus the rest. Mirrors the validation A1 owns; the service
- * guard remains authoritative.
- */
-export function fixedPercentWeights(targets: AllocationRuleTarget[]): WeightedTarget[] {
-  const remainders = targets.filter((t) => t.isRemainder);
-  if (remainders.length > 1) throw new PostAllocationError("at most one remainder target is allowed");
-  const hundred = toUnits("100");
-  let stated = 0n;
-  for (const t of targets) {
-    if (t.isRemainder) continue;
-    if (t.fixedPercent == null) throw new PostAllocationError("every non-remainder target needs a fixed percent");
-    const p = toUnits(t.fixedPercent);
-    if (p <= 0n || p > hundred) throw new PostAllocationError("fixed percents must be within (0, 100]");
-    stated += p;
-  }
-  if (stated > hundred) throw new PostAllocationError("fixed percents sum above 100");
-  return targets.map((t) => ({
-    key: t.id ?? `seq:${t.sequence}`,
-    weight: t.isRemainder ? fromUnits(hundred - stated) : t.fixedPercent!,
-    isRemainder: t.isRemainder ?? false,
-  }));
-}
-
-// ---------------------------------------------------------------------------
 // Books
 // ---------------------------------------------------------------------------
 
@@ -340,7 +210,7 @@ async function resolveWeights(
   if (rule.version.basisKind === "fixed_percent") {
     return {
       coords: rule.targets,
-      weights: fixedPercentWeights(rule.targets),
+      weights: percentWeightsForRule(rule),
       driverId: null,
       driverVector: null,
       driverDimension: null,
@@ -363,7 +233,7 @@ async function resolveWeights(
       return {
         coords: rule.targets,
         weights: rule.targets.map((t) => ({
-          key: t.id ?? `seq:${t.sequence}`,
+          key: t.id ?? `sequence:${t.sequence}`,
           weight: t.weight!,
           isRemainder: false,
         })),
@@ -467,7 +337,7 @@ function driverWeightsWithDimension(
   return targets.map((t) => {
     const valueId = targetDimensionValue(t, dimension);
     const weight = (valueId != null ? vector.get(valueId) : undefined) ?? "0";
-    return { key: t.id ?? `seq:${t.sequence}`, weight, isRemainder: false };
+    return { key: t.id ?? `sequence:${t.sequence}`, weight, isRemainder: false };
   });
 }
 
@@ -796,8 +666,14 @@ export async function collectPostContributions(
     : await allocationsAtPostingEnabled(runner, doc.orgId);
   if (!gate) return empty;
 
-  const postRules = deps.rulesOverride ??
-    (await listRulesInEffect({ orgId: doc.orgId, mode: "post", asOf: opts.postingDate }));
+  let postRules: RuleInEffect[];
+  try {
+    postRules = deps.rulesOverride ??
+      (await listRulesInEffect({ orgId: doc.orgId, mode: "post", onDate: opts.postingDate }));
+  } catch (error) {
+    if (error instanceof AllocationRuleError) throw new PostAllocationError(error.message);
+    throw error;
+  }
   if (postRules.length === 0) return empty;
   const resolveAccountGroup = deps.resolveAccountGroup ??
     (await makeAccountGroupResolver(doc.orgId, postRules));
@@ -824,12 +700,7 @@ export async function collectPostContributions(
     const winner = selectRule(postRules, coordinate, { resolveAccountGroup });
     if (!winner) continue;
     const resolved = await resolveWeights(winner, deps, doc, opts.postingDate, runner);
-    const apportioned = apportionExact(
-      kernelLine.amount,
-      resolved.weights,
-      winner.version.residualPolicy,
-      winner.version.residualTargetId,
-    );
+    const apportioned = apportionForRule(kernelLine.amount, resolved.weights, winner);
     const ruleBooks = resolveRuleBooks(winner, books);
     const built = buildContributedLines({
       rule: winner,
@@ -881,6 +752,30 @@ async function makeAccountGroupResolver(
   return (dimension, groupKey) => membership.get(dimension)?.get(groupKey) ?? new Set<string>();
 }
 
+/** A1 apportionment errors surface as post errors naming the rule. */
+function apportionForRule(total: string, weights: WeightedTarget[], rule: RuleInEffect): ApportionResult {
+  try {
+    return apportion(total, weights, rule.version.residualPolicy, rule.version.residualTargetId);
+  } catch (error) {
+    if (error instanceof AllocationApportionError) {
+      throw new PostAllocationError(`rule ${rule.rule.key}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+/** A1 fixed-percent weights with post errors naming the rule. */
+function percentWeightsForRule(rule: RuleInEffect): WeightedTarget[] {
+  try {
+    return fixedPercentWeights(rule.targets);
+  } catch (error) {
+    if (error instanceof AllocationApportionError) {
+      throw new PostAllocationError(`rule ${rule.rule.key}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
 /** Test seam: pure per-impact line building without config loading. */
 export function __testBuildContributedLines(args: {
   rule: RuleInEffect;
@@ -891,12 +786,7 @@ export function __testBuildContributedLines(args: {
   weights: WeightedTarget[];
   books: Array<string | undefined>;
 }): { lines: ContributedLineWithSource[]; reportOnly: ReportOnlyDraft[] } {
-  const apportioned = apportionExact(
-    args.kernelLine.amount,
-    args.weights,
-    args.rule.version.residualPolicy,
-    args.rule.version.residualTargetId,
-  );
+  const apportioned = apportionForRule(args.kernelLine.amount, args.weights, args.rule);
   return buildContributedLines({
     rule: args.rule,
     doc: args.doc,
