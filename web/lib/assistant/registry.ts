@@ -23,6 +23,7 @@ import { INVENTORY_TOOLS } from "./tools-inventory";
 import { PAYROLL_TOOLS } from "./tools-payroll";
 import { REPORTING_TOOLS } from "./tools-reports";
 import { SETUP_TOOLS } from "./tools-setup";
+import { META_TOOLS } from "./tools-meta";
 import { WRITE_TOOLS } from "./tools-write";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { safeApplicationToolError } from "./tool-errors";
@@ -47,6 +48,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...FILE_TOOLS,
   ...INVENTORY_TOOLS,
   ...SETUP_TOOLS,
+  ...META_TOOLS,
   ...WRITE_TOOLS,
 ];
 
