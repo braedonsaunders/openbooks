@@ -16,6 +16,7 @@ import {
   pageHeader,
   pagination,
   ref,
+  repeat,
   table,
   text,
   widget,
@@ -77,6 +78,20 @@ export interface AgentsTriageRow {
   status: string
 }
 
+export interface AgentsLaneCard {
+  id: string
+  title: string
+  href: string
+  summary: string
+  packLabel: string
+  severityLabel: string
+  severityVariant: (typeof SEVERITY_VARIANT)[keyof typeof SEVERITY_VARIANT]
+  materiality: string
+  detected: string
+  proposal: FindingProposalCommand | null
+  unavailableLabel: string
+}
+
 export interface AgentsData {
   title: string
   description: string
@@ -109,6 +124,15 @@ export interface AgentsData {
   total: number
   currentPage: number
   perPage: number
+  tabsAriaLabel: string
+  tabs: { key: string; href: string; label: string; active: boolean }[]
+  proposalsOnly: boolean
+  showInbox: boolean
+  showLane: boolean
+  lane: AgentsLaneCard[]
+  laneEmpty: boolean
+  laneEmptyTitle: string
+  laneEmptyDescription: string
   findingsEmpty: boolean
   findingsPresent: boolean
   emptyTitle: string
@@ -185,6 +209,25 @@ export async function loadAgents(
   }
   const closeHref = mergeHref('/agents', sp, { item: undefined })
 
+  // Proposals lane: every carrier row resolves its viewer-signed command up
+  // front, so Apply needs no drawer round-trip. Unresolvable carriers stay
+  // visible with an unavailable note — never a dead Apply.
+  const lane: AgentsLaneCard[] = proposalsOnly
+    ? inbox.rows.map((row) => ({
+        id: row.id,
+        title: tc(`findings.${row.findingType}.title`),
+        href: mergeHref('/agents', sp, { item: row.id }),
+        summary: findingSummaryLine((key, values) => tc(key, values as never), row.summary),
+        packLabel: tc(`agents.${row.pack}`),
+        severityLabel: tc(`severity.${row.severity}`),
+        severityVariant: SEVERITY_VARIANT[row.severity],
+        materiality: formatMoney(row.materiality),
+        detected: dateOnly.format(new Date(row.lastDetectedAt)),
+        proposal: canWrite ? findingProposalCommand(authz, row.summary) : null,
+        unavailableLabel: t('lane.unavailable'),
+      }))
+    : []
+
   return {
     title: t('title'),
     description: t('description'),
@@ -259,8 +302,30 @@ export async function loadAgents(
     total: inbox.total,
     currentPage: params.page,
     perPage: params.perPage,
-    findingsEmpty: inbox.total === 0,
-    findingsPresent: inbox.total > 0,
+    tabsAriaLabel: t('tabs.ariaLabel'),
+    tabs: [
+      {
+        key: 'inbox',
+        href: mergeHref('/agents', sp, { proposals: undefined, item: undefined }),
+        label: t('tabs.inbox'),
+        active: !proposalsOnly,
+      },
+      {
+        key: 'proposals',
+        href: mergeHref('/agents', sp, { proposals: 'true', item: undefined }),
+        label: t('tabs.proposals'),
+        active: proposalsOnly,
+      },
+    ],
+    proposalsOnly,
+    showInbox: !proposalsOnly,
+    showLane: proposalsOnly,
+    lane,
+    laneEmpty: proposalsOnly && inbox.total === 0,
+    laneEmptyTitle: t('lane.emptyTitle'),
+    laneEmptyDescription: t('lane.emptyDescription'),
+    findingsEmpty: !proposalsOnly && inbox.total === 0,
+    findingsPresent: !proposalsOnly && inbox.total > 0,
     emptyTitle: t('empty.title'),
     emptyDescription: t('empty.description'),
     emptyAction: t('empty.action'),
@@ -307,6 +372,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
       }),
     ],
     body: [
+      widgetBlock('tab-nav', { ariaLabel: data.tabsAriaLabel, tabs: data.tabs }),
       widgetBlock('agents-triage', {
         rows: data.triage.rows,
         canWrite: data.triage.canWrite,
@@ -368,6 +434,36 @@ export function agentsSpec(data: AgentsData): PageSpec {
           description: data.emptyDescription,
         }),
         when: f('findingsEmpty'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          icon: 'activity',
+          title: data.laneEmptyTitle,
+          description: data.laneEmptyDescription,
+        }),
+        when: f('laneEmpty'),
+      },
+      {
+        ...repeat({
+          items: f('lane'),
+          itemKey: item('id'),
+          className: 'space-y-3',
+          blocks: [
+            widgetBlock('proposal-lane-card', {
+              title: item('title'),
+              href: item('href'),
+              summary: item('summary'),
+              packLabel: item('packLabel'),
+              severityLabel: item('severityLabel'),
+              severityVariant: item('severityVariant'),
+              materiality: item('materiality'),
+              detected: item('detected'),
+              proposal: item('proposal'),
+              unavailableLabel: item('unavailableLabel'),
+            }),
+          ],
+        }),
+        when: f('showLane'),
       },
       {
         ...table({

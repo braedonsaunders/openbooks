@@ -114,6 +114,7 @@ import { AgentsLibraryWorkspace } from '../../app/(app)/admin/setup/agents/libra
 import { AgentPolicyWorkspace } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyWorkspace'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
 import { AgentsTriage } from '../../app/(app)/agents/AgentsTriage'
+import { ProposalLaneCard } from '../../app/(app)/agents/ProposalLaneCard'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
@@ -1303,6 +1304,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
   'agents-triage': (props) => (
     <AgentsTriage {...(props as unknown as ComponentProps<typeof AgentsTriage>)} />
+  ),
+  'proposal-lane-card': (props) => (
+    <ProposalLaneCard {...(props as unknown as ComponentProps<typeof ProposalLaneCard>)} />
   ),
   /** ONE prop. The secret ciphertext never leaves the engine module; only
    *  `hasSecret` crosses into the redacted view the loader reads. */

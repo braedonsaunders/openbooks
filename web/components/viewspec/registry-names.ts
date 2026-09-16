@@ -293,6 +293,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'project-drawer',
   'project-profitability-table',
   'project-types-workspace',
+  'proposal-lane-card',
   'property-management-workspace',
   'provision-compute-button',
   'provision-differences-section',
