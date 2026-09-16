@@ -46,6 +46,8 @@ export interface OdooMoveLine {
   tax_line_id: unknown;
   /** Line-level partner (customer/vendor) — Odoo carries it per move line. */
   partner_id: unknown;
+  /** Reconciliation match number — set when the line is matched (reconciled). */
+  matching_number?: string | false | null;
 }
 
 /** Stored-amount sign per kind (see posting rules): rule(detail) reproduces GL. */
@@ -101,6 +103,14 @@ export function buildNativeFromOdoo(
   const acctType = (l: OdooMoveLine): string | null =>
     ctx.accountByRef.get(m2oId(l.account_id) ?? "")?.type ?? null;
 
+  // Cleared evidence (0158): a set matching_number means the line is matched
+  // (reconciled). Odoo states no clear date, so the move date stands in —
+  // understated evidence is safe, invented evidence is not.
+  const clearedEvidence = (l: OdooMoveLine): { sourceCleared: boolean; sourceClearedDate: string | null } => {
+    const cleared = typeof l.matching_number === "string" && l.matching_number !== "";
+    return { sourceCleared: cleared, sourceClearedDate: cleared ? move.date : null };
+  };
+
   // ---- payments & plain journals (entry moves) --------------------------------
   const kind = MOVE_KIND[move.move_type];
   if (!kind) {
@@ -125,6 +135,8 @@ export function buildNativeFromOdoo(
           taxAmount: "0", taxOverridden: false, taxCodeId: null,
           departmentId: null, projectId: null,
           description: ctrl.name || null, lineNumber: 1,
+          sourceLineRef: String(counter.id),
+          ...clearedEvidence(counter),
         }],
       };
     }
@@ -140,6 +152,8 @@ export function buildNativeFromOdoo(
         taxAmount: "0", taxOverridden: false, taxCodeId: null,
         partyId: lineParty(l), departmentId: null, projectId: null,
         description: l.name || null, lineNumber: ++n,
+        sourceLineRef: String(l.id),
+        ...clearedEvidence(l),
       });
     }
     if (out.length < 2) return { skip: "journal with fewer than 2 lines" };

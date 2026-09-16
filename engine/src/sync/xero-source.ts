@@ -23,6 +23,15 @@ import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods } from "./pe
  * needed, unlike QBO/ERPNext.
  */
 
+/**
+ * Reconcilability is a bank-reconciliation input: only bank accounts (Xero
+ * carries credit cards as BANK-type accounts) may inherit it, so the import
+ * gates the flag by source type instead of defaulting it on or off.
+ */
+export function xeroReconcilableAccount(type: string): boolean {
+  return type === "BANK";
+}
+
 const XERO_ACCOUNT_TYPE: Record<string, string> = {
   BANK: "asset_bank",
   CURRENT: "asset_current_other",
@@ -154,6 +163,7 @@ export class XeroSource implements MigrationSource {
           type,
           isActive: a.Status !== "ARCHIVED",
           isSummary: false,
+          reconcilable: xeroReconcilableAccount(a.Type),
         },
       });
     }

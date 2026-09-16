@@ -40,6 +40,8 @@ export interface XeroDoc {
   DueDateString?: string;
   InvoiceNumber?: string;
   CreditNoteNumber?: string;
+  /** Bank-transaction reconciliation state (SPEND/RECEIVE carry it per header). */
+  IsReconciled?: boolean;
   Reference?: string;
   Narration?: string;
   LineItems?: XeroLineItem[];
@@ -198,6 +200,16 @@ export function buildNativeFromXero(
       if (t.Type === "SPEND" || t.Type === "RECEIVE") {
         const lines = detail();
         if ("skip" in lines) return lines;
+        // Xero states reconciliation per bank transaction (IsReconciled), not
+        // per line: every leg shares the header state, dated at the bank
+        // transaction date (Xero states no clear date). The engine stamps
+        // only reconcilable accounts, so sharing is exact, not approximate.
+        const cleared = t.IsReconciled === true;
+        const clearedDate = cleared ? (isoDay(t.DateString, t.Date) ?? base.documentDate) : null;
+        for (const line of lines) {
+          line.sourceCleared = cleared;
+          line.sourceClearedDate = clearedDate;
+        }
         if (t.Type === "SPEND") {
           // check rule: DR lines (+ tax via codes), CR bank (control override).
           return { ...base, kind: "check", partyId: party, controlAccountId: bank, lines };
