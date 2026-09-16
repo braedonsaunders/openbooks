@@ -118,6 +118,8 @@ export class DynamicsSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    // Merge signals: the customers/vendors APIs expose `blocked` only and no
+    // merge API. No mergedIntoRef is emitted; disappearances take the held path.
     const [customers, vendors] = await Promise.all([
       this.client.list<BCParty>("customers", this.sinceParams(since)),
       this.client.list<BCParty>("vendors", this.sinceParams(since)),

@@ -8,6 +8,14 @@ import type {
   MigrationSource,
   SourceEntity,
 } from "./source.ts";
+import {
+  applySourcePartyMerge,
+  findPartyReferences,
+  storedMergeSurvivor,
+  type PartyMirrorOutcome,
+} from "./party-merges.ts";
+
+export type { PartyMirrorOutcome };
 
 /**
  * Master-data loader for full migrations AND incremental mirrors. Drives the
@@ -184,6 +192,159 @@ function persistTimeEntryBillRate(value: unknown): string {
   }
 }
 
+/** Bind arbitrary text as ONE pg-array literal — a bare JS array interpolates as a row constructor, not an array. */
+function textArrayLiteral(values: readonly string[]): string {
+  return `{${values.map((v) => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
+/**
+ * Post-load party reconciliation for one parties stream.
+ *
+ * Merge phase (every load — signals also arrive on incremental pulls):
+ * records carrying `mergedIntoRef` resolve their survivor through the same
+ * connector-identity map (never another adapter's ids, names, or keys) and
+ * apply in one transaction; failures land as named row failures and the
+ * absorbed row stays live.
+ *
+ * Hold phase (FULL loads only — on an incremental pull, absence means
+ * "unchanged", not "gone"): a previously-mirrored party that vanished from
+ * the pull while still referenced is held for controller review as a named
+ * row failure. The row stays live; nothing is re-pointed or deleted.
+ * Already-merged rows are never re-held; unreferenced disappearances are
+ * left untouched.
+ */
+async function reconcileSourceParties(
+  ctx: Ctx,
+  records: SourceEntity[],
+  s: ResourceLoadStats,
+  outcome: PartyMirrorOutcome | undefined,
+): Promise<void> {
+  const { orgId, refKey } = ctx;
+  const signals = new Map<string, string>();
+  for (const rec of records) {
+    const target = typeof rec.mergedIntoRef === "string" ? rec.mergedIntoRef.trim() : "";
+    if (target) signals.set(rec.sourceRef, target);
+  }
+  if (signals.size > 0) {
+    const involved = [...new Set([...signals.keys(), ...signals.values()])];
+    const stored = (await db.execute(sql`
+      select id, custom->>${refKey} as ref, custom->'merged_into'->>'survivor' as survivor
+        from parties
+       where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(involved)}::text[])`)) as {
+      rows: { id: string; ref: string; survivor: string | null }[];
+    };
+    const idByRef = new Map(stored.rows.map((r) => [r.ref, r.id]));
+    const markerById = new Map(stored.rows.map((r) => [r.id, r.survivor]));
+    const alreadyFailed = new Set(s.errors.map((e) => e.sourceRef));
+    for (const [absorbedRef, firstTarget] of signals) {
+      if (alreadyFailed.has(absorbedRef)) continue;
+      const fail = (message: string) => {
+        s.failed++;
+        s.errors.push({ sourceRef: absorbedRef, message });
+      };
+      try {
+        // Follow same-pull signal chains (cycle-guarded), then at most one
+        // stored hop for a chain an earlier run already completed.
+        const seen = new Set([absorbedRef]);
+        let cursor = firstTarget;
+        let storedHops = 0;
+        let survivorRef = "";
+        let survivorId = "";
+        while (survivorId === "") {
+          if (seen.has(cursor)) {
+            throw new Error(
+              cursor === absorbedRef
+                ? `source party ${absorbedRef} asserts a merge into itself; held for controller review`
+                : `source party merge chain cycles at ${cursor}; held for controller review`,
+            );
+          }
+          seen.add(cursor);
+          const next = signals.get(cursor);
+          if (next) {
+            cursor = next;
+            continue;
+          }
+          survivorRef = cursor;
+          const mapped = ctx.maps.parties.get(cursor) ?? idByRef.get(cursor) ?? null;
+          if (!mapped) {
+            throw new Error(
+              `source party ${absorbedRef} was merged into ${cursor}, which is not mirrored; held for controller review`,
+            );
+          }
+          const storedSurvivor = markerById.get(mapped) ?? null;
+          if (storedSurvivor) {
+            if (storedHops > 0) {
+              throw new Error(
+                `source party merge survivor ${cursor} is itself merged away; held for controller review`,
+              );
+            }
+            storedHops++;
+            survivorId = storedSurvivor;
+          } else {
+            survivorId = mapped;
+          }
+        }
+        const absorbedId = ctx.maps.parties.get(absorbedRef) ?? idByRef.get(absorbedRef) ?? null;
+        if (!absorbedId) {
+          throw new Error(
+            `source party ${absorbedRef} asserts a merge but was not landed; held for controller review`,
+          );
+        }
+        const absorbedMarker = markerById.get(absorbedId) ?? null;
+        if (absorbedMarker) {
+          if (absorbedMarker === survivorId) continue;
+          throw new Error(
+            `source party ${absorbedRef} already merged into another party; held for controller review`,
+          );
+        }
+        const result = await applySourcePartyMerge({
+          orgId,
+          sourceName: ctx.sourceName,
+          absorbedRef,
+          survivorRef,
+          absorbedId,
+          survivorId,
+          actorId: ctx.audit?.actorId ?? null,
+          runId: ctx.audit?.runId ?? null,
+        });
+        ctx.maps.parties.set(absorbedRef, survivorId);
+        if (!result.alreadyMerged) {
+          outcome?.merges.push({ absorbedRef, survivorRef });
+        }
+      } catch (e) {
+        fail(e instanceof Error && e.message ? e.message : "party merge failed; held for controller review");
+      }
+    }
+  }
+
+  if (!ctx.incremental) {
+    const pulled = new Set(records.map((r) => r.sourceRef));
+    const missing = [...ctx.maps.parties.keys()].filter((k) => !pulled.has(k));
+    if (missing.length > 0) {
+      const rows = (await db.execute(sql`
+        select id, display_name, custom->>${refKey} as ref, custom
+          from parties
+         where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(missing)}::text[])`)) as {
+        rows: { id: string; display_name: string; ref: string; custom: Record<string, unknown> }[];
+      };
+      for (const row of rows.rows) {
+        if (storedMergeSurvivor(row.custom)) continue;
+        const refs = await findPartyReferences(db, orgId, row.id);
+        if (refs.length === 0) continue;
+        const total = refs.reduce((n, r) => n + r.rows, 0);
+        const tables = refs.slice(0, 3).map((r) => r.table).join(", ");
+        const message =
+          `source party "${row.display_name}" (${row.ref}) is no longer reported by the source` +
+          ` but is still referenced by ${total} record${total === 1 ? "" : "s"} (${tables});` +
+          ` held for controller review — resolve the merge or deletion in the source system`;
+        s.failed++;
+        s.errors.push({ sourceRef: row.ref, message });
+        outcome?.holds.push(row.ref);
+      }
+    }
+  }
+}
+
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const rows = (await db.execute(sql`
@@ -238,6 +399,7 @@ export async function loadEntities(
   onProgress?: (message: string, current: number, total: number) => void,
   audit?: Ctx["audit"],
   providedStreams?: EntityStream[],
+  partyOutcome?: PartyMirrorOutcome,
 ): Promise<EntityLoadStats> {
   if (!source.entities && !providedStreams) return {};
   const refKey = source.refKey;
@@ -365,6 +527,9 @@ export async function loadEntities(
         const parent = idByRef.get(rec.parentRef);
         if (child && parent) await db.execute(sql`update accounts set parent_id = ${parent} where id = ${child} and org_id = ${orgId}`);
       }
+    }
+    if (stream.resource === "parties") {
+      await reconcileSourceParties(ctx, stream.records, s, partyOutcome);
     }
     stats[stream.resource] = s;
   }

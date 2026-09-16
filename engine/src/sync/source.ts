@@ -25,6 +25,18 @@ export interface SourceEntity {
   naturalKey?: string | null;
   /** Parent's `sourceRef`, for hierarchical resources (accounts, dimensions). */
   parentRef?: string | null;
+  /**
+   * Merge/successor signal (parties streams only): the `sourceRef` in this
+   * same stream and namespace of the surviving entity this row was merged
+   * into at the source. The mirror re-points the absorbed party's documents,
+   * open items, applications, and references to the survivor in one
+   * transaction, keeps history and audit, and records the merge on the
+   * survivor. Absent/blank means no merge asserted. Each adapter documents at
+   * its parties builder what its vendor API exposes; vendors without a
+   * successor pointer leave this unset and disappeared parties take the held
+   * path (named row failure, never duplicated, never deleted).
+   */
+  mergedIntoRef?: string | null;
   fields: Record<string, unknown>;
 }
 

@@ -174,6 +174,10 @@ export class XeroSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    // Merge signals: the Contacts API exposes ContactStatus only (ARCHIVED
+    // arrives as isActive false above) — there is no survivor pointer on the
+    // wire. No mergedIntoRef is emitted; a merged-away contact takes the
+    // mirror's held path.
     const rows = await this.client.listAll<XeroContact>("Contacts", "Contacts", { includeArchived: "true" }, since);
     return rows.map((c) => ({
       sourceRef: c.ContactID,

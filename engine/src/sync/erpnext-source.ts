@@ -150,6 +150,9 @@ export class ErpNextSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    // Merge signals: Customer/Supplier list rows expose `disabled` only — no
+    // successor pointer. No mergedIntoRef is emitted; disappearances take the
+    // held path.
     const customers = await this.client.listAll<{ name: string; customer_name: string; customer_type: string; disabled: 0 | 1 }>(
       "Customer", ["name", "customer_name", "customer_type", "disabled"], this.sinceFilter(since),
     );
