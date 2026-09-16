@@ -963,6 +963,7 @@
         "staleAfterDays": "Périmé après",
         "lookbackDays": "Période de recherche",
         "duplicateDays": "Fenêtre de doublons",
+        "dueWithinDays": "Échéance sous",
         "minimumVariancePercent": "Écart défavorable minimal",
         "criticalVariancePercent": "Écart défavorable critique",
         "minimumDeclinePercent": "Baisse minimale du chiffre d’affaires",
@@ -1026,6 +1027,22 @@
         "tax_unlocked_period": {
           "title": "Période fiscale non verrouillée",
           "description": "Signale la dernière période terminée sans verrou fiscal fermé."
+        },
+        "payroll_remittance_due": {
+          "title": "Versement à échoir",
+          "description": "Signale les retenues accumulées dont l’échéance entre dans l’horizon qu’aucune facture ne couvre."
+        },
+        "payroll_unknown_accounts": {
+          "title": "Comptes de paie inconnus",
+          "description": "Signale les paies validées dont les attributions n’ont aucun compte destinataire."
+        },
+        "payroll_missing_elections": {
+          "title": "Choix légaux manquants",
+          "description": "Signale les employés actifs sans choix de retenues TD1 ou W-4 au dossier."
+        },
+        "payroll_yearend_gaps": {
+          "title": "Manques de fin d’année",
+          "description": "Signale les NAS manquants et les taux légaux non configurés requis pour les feuillets."
         },
         "missing_approved_budget": {
           "title": "Budget approuvé manquant",
@@ -1143,6 +1160,11 @@
         "title": "Agent fiscal",
         "description": "Contrôles continus de préparation des déclarations.",
         "coverage": "Vérifie les codes fiscaux manquants, les immatriculations, les déclarations calculables et les verrous de période."
+      },
+      "payroll": {
+        "title": "Agent de paie",
+        "description": "Contrôles continus de conformité de la paie.",
+        "coverage": "Vérifie les versements dus, les comptes inconnus, les choix manquants et les manques de fin d’année."
       },
       "lastRun": "Dernière exécution : {date} · {status}",
       "nextRun": "Prochaine exécution planifiée : {date}",
@@ -1508,6 +1530,12 @@
           "description": "Codes fiscaux manquants, formulaires non immatriculés, déclarations incalculables et périodes non verrouillées.",
           "reads": "Documents comptabilisés, formulaires, immatriculations et verrous de période.",
           "proposes": "Liens de révision de la déclaration sur chaque constat — révision uniquement, aucune écriture."
+        },
+        "payroll": {
+          "title": "Paie",
+          "description": "Versements dus, comptes inconnus, choix manquants et manques de fin d’année.",
+          "reads": "Paies validées, groupes de versements, dossiers d’employés et taux légaux.",
+          "proposes": "Liens de révision des versements et des employés — révision uniquement, aucune écriture."
         }
       }
     },

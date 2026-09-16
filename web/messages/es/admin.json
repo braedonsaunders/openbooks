@@ -919,6 +919,7 @@
         "staleAfterDays": "Obsoleto después de",
         "lookbackDays": "Período de búsqueda",
         "duplicateDays": "Ventana de duplicados",
+        "dueWithinDays": "Vence en",
         "minimumVariancePercent": "Desviación desfavorable mínima",
         "criticalVariancePercent": "Desviación desfavorable crítica",
         "minimumDeclinePercent": "Disminución mínima de ingresos",
@@ -982,6 +983,22 @@
         "tax_unlocked_period": {
           "title": "Período fiscal sin bloquear",
           "description": "Marca el último período completado sin bloqueo fiscal cerrado."
+        },
+        "payroll_remittance_due": {
+          "title": "Remesa próxima",
+          "description": "Marca retenciones devengadas con vencimiento dentro del horizonte que ninguna factura cubre."
+        },
+        "payroll_unknown_accounts": {
+          "title": "Cuentas de nómina desconocidas",
+          "description": "Marca liquidaciones confirmadas con asignaciones sin atribuir a ninguna cuenta."
+        },
+        "payroll_missing_elections": {
+          "title": "Elecciones legales faltantes",
+          "description": "Marca empleados activos sin elecciones de reclamación TD1 o W-4 archivadas."
+        },
+        "payroll_yearend_gaps": {
+          "title": "Brechas de cierre anual",
+          "description": "Marca SIN faltantes y tasas legales sin configurar que los comprobantes necesitan."
         },
         "missing_approved_budget": {
           "title": "Falta un presupuesto aprobado",
@@ -1099,6 +1116,11 @@
         "title": "Agente fiscal",
         "description": "Controles continuos de preparación de declaraciones.",
         "coverage": "Comprueba códigos fiscales faltantes, registros, declaraciones calculables y bloqueos de período."
+      },
+      "payroll": {
+        "title": "Agente de nómina",
+        "description": "Controles continuos de cumplimiento de nómina.",
+        "coverage": "Comprueba vencimientos de remesas, cuentas desconocidas, elecciones faltantes y brechas de cierre."
       },
       "lastRun": "Última ejecución: {date} · {status}",
       "nextRun": "Próxima ejecución programada: {date}",
@@ -1464,6 +1486,12 @@
           "description": "Códigos fiscales faltantes, formularios sin registro, declaraciones no calculables y períodos sin bloquear.",
           "reads": "Documentos publicados, formularios, registros y bloqueos de período.",
           "proposes": "Enlaces de revisión de la declaración en cada hallazgo — solo revisión, sin escrituras."
+        },
+        "payroll": {
+          "title": "Nómina",
+          "description": "Vencimientos de remesas, cuentas desconocidas, elecciones faltantes y brechas de cierre.",
+          "reads": "Liquidaciones confirmadas, grupos de remesas, perfiles de empleados y tasas legales.",
+          "proposes": "Enlaces de revisión de remesas y empleados — solo revisión, sin escrituras."
         }
       }
     },

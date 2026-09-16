@@ -8,7 +8,8 @@
     "accounting": "Accounting",
     "finance": "Finance",
     "forensics": "Forensics",
-    "tax": "Tax"
+    "tax": "Tax",
+    "payroll": "Payroll"
   },
   "metrics": {
     "active": "Active",
@@ -82,6 +83,22 @@
     "tax_unlocked_period": {
       "title": "Unlocked tax period",
       "description": "The latest completed period has no closed tax lock."
+    },
+    "payroll_remittance_due": {
+      "title": "Remittance due",
+      "description": "Withholding is due and no bill covers it."
+    },
+    "payroll_unknown_accounts": {
+      "title": "Unknown payroll account",
+      "description": "A committed run has stubs no filing or liability account can take."
+    },
+    "payroll_missing_elections": {
+      "title": "Missing statutory elections",
+      "description": "Employees have no claim elections on file."
+    },
+    "payroll_yearend_gaps": {
+      "title": "Year-end filing gap",
+      "description": "A slip requirement is unmet."
     },
     "missing_approved_budget": {
       "title": "No approved budget",
