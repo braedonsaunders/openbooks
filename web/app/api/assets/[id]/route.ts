@@ -6,6 +6,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { depreciationPeriodCount } from '@openbooks/engine/src/depreciation-limits.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
@@ -47,11 +48,18 @@ function strOrNull(v: unknown): string | null {
   return s === '' ? null : s
 }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 /** Exact numeric(19,4) money string or null. */
 function moneyOrNull(v: unknown): string | null | 'invalid' {
   if (v === null || v === undefined || v === '') return null
   const exact = canonicalDecimal(v, 4)
-  if (exact === null) return 'invalid'
+  // acquisition_cost/salvage_value/units and the tax money fields are
+  // numeric(19,4): refuse whole-digit widths the column cannot hold.
+  if (exact === null || wholeDigits(exact) > 15) return 'invalid'
   try {
     return normalizeMoney(exact)
   } catch {
@@ -181,6 +189,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v === 'invalid') return bad('Salvage value must be a number')
     if (v !== null && cmp(v, '0') < 0) return bad('Salvage value must be a non-negative number')
     salvage = v ?? '0'
+  }
+
+  // -- dates --------------------------------------------------------------
+  // acquired_on/in_service_on write straight to date columns: shape alone
+  // admits impossible days ('2026-09-31') that Postgres then refuses with a
+  // raw driver failure, so require real calendar dates before any write.
+  if (body.acquiredOn !== undefined && body.acquiredOn !== null && !isIsoCalendarDate(body.acquiredOn)) {
+    return bad('Acquired date must be a real calendar date (YYYY-MM-DD)')
+  }
+  if (body.inServiceOn !== undefined && body.inServiceOn !== null && !isIsoCalendarDate(body.inServiceOn)) {
+    return bad('In-service date must be a real calendar date (YYYY-MM-DD)')
   }
 
   // -- native GL account overrides -----------------------------------------
