@@ -1206,6 +1206,72 @@ async function postStoredJournal(
   return entryId;
 }
 
+/**
+ * Driver evidence for one lineage target key. Dynamic targets already key by
+ * dimension value, so the vector answers directly; explicit targets key by
+ * target-row id while the vector keys by dimension value, so those resolve
+ * through their target rows. Without the second step every explicit-target
+ * lineage row records a null driver_value.
+ */
+async function reportDriverValueLookup(
+  tx: Tx,
+  orgId: string,
+  run: RunRow,
+  vectorByKey: Map<string, string>,
+): Promise<(key: string) => string | null> {
+  const direct = (key: string): string | null => vectorByKey.get(key) ?? null;
+  const driverId = run.computation.driver?.id ?? null;
+  if (!driverId) return direct;
+  const driver = (await tx.execute<{ dimension: string }>(sql`
+    select dimension from allocation_drivers where org_id = ${orgId} and id = ${driverId} for share`)).rows[0];
+  if (!driver) return direct;
+  const rows = (await tx.execute<{
+    id: string;
+    department_id: string | null;
+    location_id: string | null;
+    class_id: string | null;
+    project_id: string | null;
+    subsidiary_id: string | null;
+    extra_dims: Record<string, string> | null;
+  }>(sql`
+    select id, department_id, location_id, class_id, project_id, subsidiary_id, extra_dims
+      from allocation_rule_targets
+     where org_id = ${orgId} and version_id = ${run.version_id} for share`)).rows;
+  const dimension = driver.dimension;
+  const valueOf = (row: (typeof rows)[number]): string | null => {
+    switch (dimension) {
+      case "department":
+        return row.department_id;
+      case "location":
+        return row.location_id;
+      case "class":
+        return row.class_id;
+      case "project":
+        return row.project_id;
+      case "subsidiary":
+        return row.subsidiary_id;
+      default: {
+        if (dimension.startsWith("extra:")) {
+          return row.extra_dims?.[dimension.slice("extra:".length)] ?? null;
+        }
+        return null;
+      }
+    }
+  };
+  const dimensionByTargetId = new Map<string, string>();
+  for (const row of rows) {
+    const value = valueOf(row);
+    if (value) dimensionByTargetId.set(row.id, value);
+  }
+  return (key: string): string | null => {
+    const hit = vectorByKey.get(key);
+    if (hit !== undefined) return hit;
+    const dimensionValue = dimensionByTargetId.get(key);
+    if (!dimensionValue) return null;
+    return vectorByKey.get(dimensionValue) ?? null;
+  };
+}
+
 /** Lineage for a report-only post: per-target statistical rows, no journal. */
 async function writeReportLineage(
   tx: Tx,
@@ -1216,6 +1282,7 @@ async function writeReportLineage(
     ? computation.driver.vector.reduce((acc, entry) => add(acc, entry.value), "0")
     : null;
   const vectorByKey = new Map((computation.driver?.vector ?? []).map((entry) => [entry.key, entry.value]));
+  const driverValueFor = await reportDriverValueLookup(tx, opts.orgId, opts.run, vectorByKey);
   for (const target of computation.targets) {
     await tx.execute(sql`
       insert into allocation_lineage
@@ -1223,7 +1290,7 @@ async function writeReportLineage(
          driver_id, driver_value, driver_total, share, amount, residual)
       values (${randomUUID()}, ${opts.orgId}, 'period', ${computation.ruleId}, ${computation.versionId},
               ${computation.definitionHash}, ${opts.run.id},
-              ${computation.driver?.id ?? null}, ${vectorByKey.get(target.key) ?? null},
+              ${computation.driver?.id ?? null}, ${driverValueFor(target.key)},
               ${driverTotal}, ${target.share}, ${target.amount}, ${target.residual})`);
   }
 }
