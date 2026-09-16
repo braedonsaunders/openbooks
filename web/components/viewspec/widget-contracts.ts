@@ -28,6 +28,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'admin-users-table': { props: ['allRoles', 'basePath', 'currentParams', 'dir', 'labels', 'sort', 'users'] },
   'agents-briefing-actions': { props: [], open: true },
   'agents-briefing-body': { props: ['text'] },
+  'agents-due-cell': { props: ['date', 'overdueLabel'] },
   'agents-kpi-strip': { props: ['items'] },
   'agents-pack-actions': { props: ['agentKey', 'configureHref', 'configureLabel', 'enabled', 'featureEnabled', 'packTitle', 'policy'] },
   'agents-pack-card': { props: ['agentKey', 'checksNote', 'checksTitle', 'configureHref', 'configureLabel', 'description', 'detectors', 'featureEnabled', 'installLabel', 'installPolicy', 'installed', 'installedLabel', 'moduleLine', 'name', 'needsLabel', 'permissions', 'proposes', 'proposesLabel', 'reads', 'readsLabel'] },
