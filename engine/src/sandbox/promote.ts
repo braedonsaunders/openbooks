@@ -88,6 +88,29 @@ function requireActor(actorId: string | null | undefined, label: string): string
   return assertUuid(actorId);
 }
 
+/**
+ * Evidence a change-set header transition (review/approve/apply) with the
+ * locked before-image and the committed after-image. The per-row apply audit
+ * records WHAT changed; these rows record WHO authorized each step of the
+ * four-eyes chain. Runs in the caller's maintenance transaction.
+ */
+async function auditChangeSetTransition(
+  id: string,
+  prod: string,
+  actor: string,
+  operation: "review" | "approve" | "apply",
+  before: ChangeSetRow,
+): Promise<void> {
+  const after = (await db.execute<ChangeSetRow>(sql`
+    select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
+      from change_sets where id = ${id}`)).rows[0];
+  if (!after) throw new Error(`change set disappeared during ${operation}: ${id}`);
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${prod}, 'change_sets', ${id}, 'update',
+            ${JSON.stringify({ operation, before, after })}::jsonb, ${actor})`);
+}
+
 async function assertActiveActor(actorId: string, orgId: string): Promise<void> {
   const actor = await db.execute<{ id: string }>(sql`
     select id from users where id = ${actorId} and org_id = ${orgId} and is_active`);
@@ -312,6 +335,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
       update change_sets
          set status = 'reviewed', reviewed_at = now(), reviewed_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'draft'`);
+    await auditChangeSetTransition(id, prod, actor, "review", c);
   });
 }
 
@@ -339,6 +363,7 @@ export async function approveChangeSet(changeSetId: string, approverId?: string 
       update change_sets
          set status = 'approved', approved_at = now(), approved_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'reviewed'`);
+    await auditChangeSetTransition(id, prod, actor, "approve", c);
   });
 }
 
@@ -526,5 +551,6 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
       update change_sets
          set status = 'applied', applied_at = now(), applied_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'approved'`);
+    await auditChangeSetTransition(id, prod, actor, "apply", c);
   });
 }

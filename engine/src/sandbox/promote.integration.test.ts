@@ -275,7 +275,9 @@ test("promotion updates assigned roles in place and rolls back configuration whe
     assert.equal(roleAfter.updated_by, f.actorId);
     assert.deepEqual(roleAfter.created_at, roleBefore.created_at);
     assert.equal(roleAfter.created_by, roleBefore.created_by);
-    assert.equal(after.audit.length, before.audit.length + 1);
+    // The apply leaves the per-row evidence plus the change-set header
+    // transition (who applied it), both inside the same transaction.
+    assert.equal(after.audit.length, before.audit.length + 2);
     assert.equal(after.changeSet[0]!.status, "applied");
   } finally {
     if (installed) await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`));
