@@ -6,6 +6,7 @@ import {
   badge,
   column,
   field,
+  frame,
   grid,
   money,
   page,
@@ -24,7 +25,7 @@ import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { parseAgentFindingsParams } from '../../../lib/list/agent-findings'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { loadAgentInbox } from '../../../lib/agents/inbox'
-import { loadBriefing, type CachedBriefing } from '../../../lib/agents/briefing'
+import { loadBriefing } from '../../../lib/agents/briefing'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import { listWorkItemNotes, loadWorkItemAssignment } from '../../../lib/agents/assignments'
 import { listAgentNotificationTargets, listAgentRuns } from '../../../lib/setup/agents'
@@ -134,7 +135,25 @@ export interface AgentsData {
   showProposals: boolean
   showBriefing: boolean
   showInboxChrome: boolean
-  briefing: { briefing: CachedBriefing | null; aiEnabled: boolean }
+  /** Briefing tab: heading + generated-at line for the section block, the
+   *  cached markdown for the body widget, and the empty/action states. */
+  briefingTitle: string
+  briefingGeneratedAt: string | null
+  briefingText: string | null
+  hasBriefing: boolean
+  briefingEmpty: boolean
+  briefingEmptyTitle: string
+  briefingActions: {
+    aiEnabled: boolean
+    hasBriefing: boolean
+    generateLabel: string
+    generatingLabel: string
+    sendLabel: string
+    sentLabel: string
+    sendFailedLabel: string
+    failedLabel: string
+    errorLabels: Record<string, string>
+  }
   inboxEmpty: boolean
   proposalsEmpty: boolean
   proposalsEmptyTitle: string
@@ -373,7 +392,36 @@ export async function loadAgents(
     showProposals: proposalsOnly && !briefingMode,
     showBriefing: briefingMode,
     showInboxChrome: !briefingMode,
-    briefing: { briefing: briefing.briefing, aiEnabled: briefing.aiEnabled },
+    briefingTitle: t('briefing.title'),
+    briefingGeneratedAt: briefing.briefing
+      ? t('briefing.generatedAt', {
+          date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
+            new Date(briefing.briefing.generatedAt),
+          ),
+        })
+      : null,
+    briefingText: briefing.briefing?.text ?? null,
+    hasBriefing: briefing.briefing !== null,
+    briefingEmpty: briefingMode && briefing.briefing === null,
+    briefingEmptyTitle: briefing.aiEnabled ? t('briefing.empty') : t('briefing.noAi'),
+    briefingActions: {
+      aiEnabled: briefing.aiEnabled,
+      hasBriefing: briefing.briefing !== null,
+      generateLabel: t('briefing.generate'),
+      generatingLabel: t('briefing.generating'),
+      sendLabel: t('briefing.send'),
+      sentLabel: t('briefing.sent'),
+      sendFailedLabel: t('briefing.sendFailed'),
+      failedLabel: t('briefing.errors.failed'),
+      errorLabels: {
+        failed: t('briefing.errors.failed'),
+        ai_not_configured: t('briefing.errors.ai_not_configured'),
+        briefing_empty: t('briefing.errors.briefing_empty'),
+        briefing_failed: t('briefing.errors.briefing_failed'),
+        no_briefing: t('briefing.errors.no_briefing'),
+        invalid_action: t('briefing.errors.invalid_action'),
+      },
+    },
     inboxEmpty: !proposalsOnly && !briefingMode && inbox.total === 0,
     proposalsEmpty: proposalsOnly && !briefingMode && inbox.total === 0,
     proposalsEmptyTitle: t('lane.emptyTitle'),
@@ -438,11 +486,29 @@ export function agentsSpec(data: AgentsData): PageSpec {
         when: f('showInboxChrome'),
       },
       {
-        ...widgetBlock('agents-briefing', {
-          briefing: data.briefing.briefing,
-          aiEnabled: data.briefing.aiEnabled,
+        ...frame('card', [
+          grid('space-y-4 p-6', [
+            widgetBlock('section-heading', {
+              id: 'agents-briefing-heading',
+              title: data.briefingTitle,
+              description: data.briefingGeneratedAt,
+            }),
+            widgetBlock('agents-briefing-body', { text: data.briefingText }),
+            widgetBlock('agents-briefing-actions', { ...data.briefingActions }),
+          ]),
+        ]),
+        when: f('hasBriefing'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          icon: 'send',
+          title: data.briefingEmptyTitle,
         }),
-        when: f('showBriefing'),
+        when: f('briefingEmpty'),
+      },
+      {
+        ...widgetBlock('agents-briefing-actions', { ...data.briefingActions }),
+        when: f('briefingEmpty'),
       },
       {
         ...widgetBlock('agents-kpi-strip', { items: data.kpis }),

@@ -45,6 +45,7 @@
     "activity": "Activité"
   },
   "briefing": {
+    "title": "Briefing du matin",
     "generate": "Générer le briefing",
     "generating": "Génération…",
     "send": "Envoyer par e-mail",

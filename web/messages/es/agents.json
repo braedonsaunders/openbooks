@@ -45,6 +45,7 @@
     "activity": "Actividad"
   },
   "briefing": {
+    "title": "Resumen matutino",
     "generate": "Generar resumen",
     "generating": "Generando…",
     "send": "Enviar por correo",
