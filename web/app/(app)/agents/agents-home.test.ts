@@ -44,11 +44,22 @@ test("inbox table binds the list source sort and shared filters", () => {
   assert.match(view, /column\(f\('columnAssignee'\)/);
 });
 
-// The proposals lane resolves viewer-signed commands up front and renders
-// the chat's review card inline; unresolvable carriers stay visible with a
-// note instead of a dead Apply.
+// The header is the shared module-home pill strip (Inbox · Proposals ·
+// Briefing · Activity→Setup) over the shared KPI strip; the proposals lane
+// resolves viewer-signed commands up front and renders the chat's review
+// card inline; unresolvable carriers stay visible with a note instead of a
+// dead Apply.
+test("header binds module-home tabs and the KPI strip", () => {
+  assert.match(view, /widget\('module-home-tabs', \{ tabs: data\.tabs \}\)/);
+  assert.match(view, /href: '\/admin\/setup\/agents\/activity'/);
+  assert.match(view, /widgetBlock\('agents-kpi-strip', \{ items: data\.kpis \}\)/);
+  assert.match(view, /listAgentRuns\(authz\.user\.orgId, \{ limit: 1 \}\)/);
+  assert.doesNotMatch(view, /widgetBlock\('tab-nav'/);
+  assert.doesNotMatch(view, /metric-tile/);
+});
+
 test("proposals lane renders governed cards", () => {
-  assert.match(view, /widgetBlock\('tab-nav'/);
+  assert.match(view, /widget\('module-home-tabs', \{ tabs: data\.tabs \}\)/);
   assert.match(view, /findingProposalCommand\(authz, row\.summary\)/);
   assert.match(view, /widgetBlock\('proposal-lane-card'/);
   assert.match(view, /when: f\('showLane'\)/);

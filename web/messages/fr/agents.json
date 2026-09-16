@@ -41,7 +41,8 @@
     "ariaLabel": "Sections des agents",
     "inbox": "Boîte",
     "proposals": "Propositions",
-    "briefing": "Briefing"
+    "briefing": "Briefing",
+    "activity": "Activité"
   },
   "briefing": {
     "generate": "Générer le briefing",
@@ -102,5 +103,12 @@
   "columns": {
     "age": "Ancienneté",
     "due": "Échéance"
+  },
+  "kpis": {
+    "open": "Constats ouverts",
+    "proposals": "Propositions en attente",
+    "overdue": "Assignations en retard",
+    "lastRun": "Dernière exécution",
+    "never": "Jamais"
   }
 }
