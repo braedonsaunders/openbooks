@@ -1,5 +1,6 @@
 "use client";
 
+import { nextActionName } from "@/lib/apps/endpoint-names";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -546,7 +547,7 @@ export function AppPackageEditor({
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  const name = `action-${manifest.endpoints.length + 1}`;
+                  const name = nextActionName(manifest.endpoints);
                   const path = `backend/${name}.js`;
                   if (files.some((file) => file.path === path)) {
                     setError(t("invalidPath"));
