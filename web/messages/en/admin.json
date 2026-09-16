@@ -1191,6 +1191,11 @@
         "description": "Continuous bookkeeping and close readiness controls.",
         "coverage": "Checks unmatched bank activity, reconciliation differences, and stale draft or pending accounting documents."
       },
+      "collections": {
+        "title": "Collections agent",
+        "description": "Continuous receivables controls.",
+        "coverage": "Checks overdue customer balances with payment behaviour, broken payment promises, and credit-hold candidates."
+      },
       "finance": {
         "title": "Finance agent",
         "description": "Continuous variance and performance controls.",
@@ -1201,6 +1206,16 @@
         "description": "Continuous spend-anomaly controls.",
         "coverage": "Checks weekend postings, round-dollar spend, just-below-limit amounts, and duplicate bills."
       },
+      "hygiene": {
+        "title": "Data hygiene agent",
+        "description": "Continuous master-data controls.",
+        "coverage": "Checks control-account mismatches, duplicate parties, and records missing the codes, budgets, or mappings they need."
+      },
+      "payables": {
+        "title": "Payables agent",
+        "description": "Continuous payables controls.",
+        "coverage": "Checks duplicate bills, bills due before the next pay run, early-pay discounts, and missing approvals."
+      },
       "tax": {
         "title": "Tax agent",
         "description": "Continuous filing-readiness controls.",
@@ -1210,6 +1225,11 @@
         "title": "Payroll agent",
         "description": "Continuous payroll-compliance controls.",
         "coverage": "Checks remittance dues, unknown accounts, missing elections, and year-end gaps."
+      },
+      "reconciliation": {
+        "title": "Reconciliation agent",
+        "description": "Continuous bank reconciliation controls.",
+        "coverage": "Checks unmatched bank lines with a confident match candidate, stale reconciliations, and accounts never reconciled."
       },
       "lastRun": "Last run: {date} · {status}",
       "nextRun": "Next scheduled run: {date}",

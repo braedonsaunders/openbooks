@@ -19,7 +19,12 @@
     "active": "Active",
     "critical": "Critical",
     "accounting": "Accounting findings",
-    "finance": "Finance findings"
+    "finance": "Finance findings",
+    "collections": "Collections findings",
+    "payables": "Payables findings",
+    "reconciliation": "Reconciliation findings",
+    "hygiene": "Hygiene findings",
+    "forensics": "Forensics findings"
   },
   "filters": {
     "agent": "Agent",
@@ -119,6 +124,70 @@
     "gross_margin_decline": {
       "title": "Gross margin decline",
       "description": "Gross margin fell beyond the configured threshold from the prior completed period."
+    },
+    "overdue_customer_balance": {
+      "title": "Overdue customer",
+      "description": "A customer carries arrears past the configured floor and joins the priority call list."
+    },
+    "broken_payment_promise": {
+      "title": "Broken payment promise",
+      "description": "An invoice passed its expected pay date without payment."
+    },
+    "credit_hold_candidate": {
+      "title": "Credit-hold candidate",
+      "description": "Aged arrears justify requiring prepayment on new orders."
+    },
+    "duplicate_bills": {
+      "title": "Duplicate bills",
+      "description": "Two bills share vendor, kind, and amount within the duplicate window."
+    },
+    "bills_due_before_payrun": {
+      "title": "Bills due before pay run",
+      "description": "Open bills fall due inside the pay-run horizon."
+    },
+    "early_pay_discount_opportunity": {
+      "title": "Early-pay discount",
+      "description": "Open bills sit inside an active discount window."
+    },
+    "bills_missing_approval": {
+      "title": "Bills missing approval",
+      "description": "Bills stall in draft or pending approval past the stale window."
+    },
+    "bank_line_match_candidate": {
+      "title": "Bank line match candidate",
+      "description": "An unmatched statement line has a confident journal-leg match."
+    },
+    "stale_reconciliation": {
+      "title": "Stale reconciliation",
+      "description": "An in-progress session sat untouched past the stale window."
+    },
+    "never_reconciled_account": {
+      "title": "Never-reconciled account",
+      "description": "A reconcilable account shows activity but never had a session."
+    },
+    "control_account_type_mismatch": {
+      "title": "Control-account mismatch",
+      "description": "An account carries open items or a name its type contradicts."
+    },
+    "duplicate_party_identity": {
+      "title": "Duplicate party",
+      "description": "Two parties share a normalized name or tax identity."
+    },
+    "item_missing_tax_code": {
+      "title": "Item missing tax code",
+      "description": "An active item has no tax code assigned."
+    },
+    "project_missing_cost_budget": {
+      "title": "Project missing cost budget",
+      "description": "An active project has no budget lines."
+    },
+    "budget_scenario_without_lines": {
+      "title": "Budget scenario without lines",
+      "description": "An approved or submitted scenario holds no lines."
+    },
+    "unmapped_payroll_component": {
+      "title": "Unmapped payroll component",
+      "description": "A pay component misses posting accounts or its remittance party."
     }
   },
   "summary": {

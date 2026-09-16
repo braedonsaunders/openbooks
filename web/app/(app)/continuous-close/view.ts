@@ -27,6 +27,10 @@ import {
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
+import {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  type ContinuousCloseAgentKey,
+} from '@openbooks/engine/src/continuous-close-config.ts'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
 import { findingSummaryLine } from '../../../lib/agents/summary'
@@ -69,7 +73,7 @@ const STATUS_VARIANT = {
 
 type WorkItemRow = {
   id: string
-  agent_key: 'accounting' | 'finance'
+  agent_key: ContinuousCloseAgentKey
   finding_type: string
   severity: 'info' | 'warning' | 'critical'
   status: 'open' | 'in_review' | 'resolved' | 'dismissed'
@@ -183,10 +187,10 @@ export async function loadContinuousClose(
   })
   const requestedAgent = pickString(sp.agent)
   const agent =
-    requestedAgent === 'accounting' || requestedAgent === 'finance'
-      ? readable.includes(requestedAgent)
-        ? requestedAgent
-        : undefined
+    requestedAgent &&
+    (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(requestedAgent) &&
+    readable.includes(requestedAgent as ContinuousCloseAgentKey)
+      ? (requestedAgent as ContinuousCloseAgentKey)
       : undefined
   const requestedStatus = pickString(sp.status)
   const status = ['open', 'in_review', 'resolved', 'dismissed'].includes(requestedStatus ?? '')
@@ -199,10 +203,10 @@ export async function loadContinuousClose(
   const reportQ = pickString(sp.reportQ)?.trim().slice(0, 200)
   const requestedReportAgent = pickString(sp.reportAgent)
   const reportAgent =
-    requestedReportAgent === 'accounting' || requestedReportAgent === 'finance'
-      ? readable.includes(requestedReportAgent)
-        ? requestedReportAgent
-        : undefined
+    requestedReportAgent &&
+    (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(requestedReportAgent) &&
+    readable.includes(requestedReportAgent as ContinuousCloseAgentKey)
+      ? (requestedReportAgent as ContinuousCloseAgentKey)
       : undefined
   const reportPage = Math.min(
     1_000_000,
@@ -331,16 +335,11 @@ export async function loadContinuousClose(
         value: criticalCount,
         ...(criticalCount > 0 ? { tone: 'text-red-600 dark:text-red-400' } : {}),
       },
-      {
-        key: 'accounting',
-        label: t('metrics.accounting'),
-        value: Number(counts.rows.find((row) => row.agent_key === 'accounting')?.n ?? 0),
-      },
-      {
-        key: 'finance',
-        label: t('metrics.finance'),
-        value: Number(counts.rows.find((row) => row.agent_key === 'finance')?.n ?? 0),
-      },
+      ...readable.map((key) => ({
+        key,
+        label: t(`metrics.${key}`),
+        value: Number(counts.rows.find((row) => row.agent_key === key)?.n ?? 0),
+      })),
     ],
     searchPlaceholder: t('search'),
     currentParams: sp,
