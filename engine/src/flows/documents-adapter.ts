@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { ambientTenantOrgId, db, schema } from "../db.ts";
+import { assertDocumentMutationRefsOwned } from "../document-mutation-refs.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import {
   DOCUMENT_FIELDS,
@@ -272,6 +273,10 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         if (customField.rows.length === 0) {
           throw new Error(`field "${field}" is not writable by flows`);
         }
+        // The value writes around applyDocumentEdit: prove shape and org
+        // ownership, or a foreign reference id persists as a silent
+        // cross-tenant pointer (custom jsonb has no constraint at all).
+        await assertDocumentMutationRefsOwned(ctx.orgId, kind, [{ field, value }]);
         await db.execute(sql`
           update documents
              set custom = jsonb_set(coalesce(custom, '{}'::jsonb), array[${field}]::text[], ${JSON.stringify(value ?? null)}::jsonb),
@@ -280,6 +285,8 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         `);
         return;
       }
+      // Native dims write around applyDocumentEdit too: same ownership fence.
+      await assertDocumentMutationRefsOwned(ctx.orgId, kind, [{ field, value }]);
       await db
         .update(schema.documents)
         .set({ [field]: value, updatedBy: ctx.userId ?? null, updatedAt: new Date() })
