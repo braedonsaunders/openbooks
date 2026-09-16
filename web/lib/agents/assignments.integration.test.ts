@@ -137,6 +137,19 @@ test('assignment accepts org roles and rejects strangers', { skip: !process.env.
         err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: null, dueAt: 'not-a-date' })),
         'invalid_due',
       );
+      // Malformed ids fail closed as invalid_assignee, never a driver throw.
+      assert.deepEqual(
+        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: 'junk' })),
+        'invalid_assignee',
+      );
+      assert.deepEqual(
+        err(await setWorkItemAssignment(authz, itemId, { assigneeRole: 'junk' })),
+        'invalid_assignee',
+      );
+      assert.deepEqual(
+        err(await setWorkItemAssignment(authz, itemId, { assigneeUserId: 12345 as unknown as string })),
+        'invalid_assignee',
+      );
       // Due date without an owner is not an assignment.
       assert.deepEqual(
         err(await setWorkItemAssignment(authz, itemId, { dueAt: new Date().toISOString() })),

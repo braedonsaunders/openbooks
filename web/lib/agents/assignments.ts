@@ -17,6 +17,8 @@ import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../continuous-c
 export const MAX_NOTE_CHARS = 4000;
 export const MAX_NOTES = 50;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type AssignmentError =
   | "forbidden"
   | "not_found"
@@ -54,7 +56,10 @@ async function resolveAssignee(
 ): Promise<{ userId: string | null; roleId: string | null } | null> {
   let userId: string | null = null;
   let roleId: string | null = null;
+  // Shape-check before querying: a non-UUID id would die in the driver with
+  // a 22P02 throw instead of failing closed as invalid_assignee.
   if (assigneeUserId !== undefined && assigneeUserId !== null) {
+    if (typeof assigneeUserId !== "string" || !UUID_RE.test(assigneeUserId)) return null;
     const found = await db.execute<{ id: string }>(sql`
       select id from users where id = ${assigneeUserId} and org_id = ${orgId} and is_active
     `);
@@ -62,6 +67,7 @@ async function resolveAssignee(
     userId = String(found.rows[0]?.id);
   }
   if (assigneeRole !== undefined && assigneeRole !== null) {
+    if (typeof assigneeRole !== "string" || !UUID_RE.test(assigneeRole)) return null;
     const found = await db.execute<{ id: string }>(sql`
       select id from app_roles where id = ${assigneeRole} and org_id = ${orgId}
     `);
