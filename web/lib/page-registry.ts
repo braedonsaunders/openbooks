@@ -352,6 +352,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/setup/agents/[agentKey]': {
+    route: '/admin/setup/agents/[agentKey]',
+    segments: ['agentKey'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/agents/[agentKey]/view')
+      return {
+        load: (input) => m.loadAgentPolicy(segment(input, 'agentKey')),
+        spec: (data) => m.agentPolicySpec(data as never),
+      }
+    },
+  },
   '/admin/setup/agents/library': {
     route: '/admin/setup/agents/library',
     segments: [],

@@ -1013,7 +1013,19 @@
         "minimumDeclinePercent": "Minimum revenue decline",
         "criticalDeclinePercent": "Critical revenue decline",
         "minimumDropPoints": "Minimum margin drop",
-        "criticalDropPoints": "Critical margin drop"
+        "criticalDropPoints": "Critical margin drop",
+        "criticalCustomerCount": "Critical customer count",
+        "breachToleranceDays": "Breach tolerance",
+        "holdOverdueDays": "Hold overdue age",
+        "holdMaterialityMultiple": "Hold exposure multiple",
+        "minOverdueInvoices": "Minimum overdue invoices",
+        "duplicateWindowDays": "Duplicate window",
+        "criticalPairCount": "Critical pair count",
+        "payRunHorizonDays": "Pay-run horizon",
+        "minimumDiscountPercent": "Minimum discount",
+        "matchWindowDays": "Match window",
+        "minimumConfidencePercent": "Minimum confidence",
+        "lookbackDays": "Lookback"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -1488,6 +1500,30 @@
         "registryNote": "Pack {key} · {count} checks · declared in the agent registry",
         "installFailed": "Couldn't install the pack.",
         "installedToast": "{name} installed with default checks."
+      },
+      "policy": {
+        "backLabel": "All agents",
+        "notificationsTitle": "Finding notifications",
+        "notificationsDescription": "Who gets this pack's findings and how. Routing is stored with the policy — findings always appear under Activity.",
+        "modes": {
+          "findings_only": {
+            "title": "Findings only",
+            "description": "No notifications — review findings under Activity."
+          },
+          "digest": {
+            "title": "Daily digest",
+            "description": "One summary of new findings per day."
+          },
+          "immediate": {
+            "title": "Immediate",
+            "description": "A notification for every new finding."
+          }
+        },
+        "rolesLabel": "Roles",
+        "usersLabel": "People",
+        "noTargets": "None",
+        "usersTruncatedNote": "Showing the first 200 people.",
+        "deliveryNote": "Email delivery is not wired yet — this stores who should get what. Findings always appear under Agent Activity in the meantime."
       },
       "packs": {
         "accounting": {

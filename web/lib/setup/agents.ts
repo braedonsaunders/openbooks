@@ -13,7 +13,11 @@ import {
   runContinuousCloseAgent,
   type ContinuousClosePolicy,
 } from '@openbooks/engine/src/continuous-close.ts'
-import { saveOrgAiAgentSettings } from '../assistant/ai-config'
+import {
+  normalizeAgentNotificationSettings,
+  saveOrgAiAgentSettings,
+  type AgentNotificationSettings,
+} from '../assistant/ai-config'
 import { isFeatureEnabled } from '../features'
 
 /**
@@ -238,4 +242,64 @@ export async function saveSetupAgentPolicy(
 export function runSetupAgentNow(orgId: string, userId: string, agentKey: string) {
   if (!isContinuousCloseAgentKey(agentKey)) throw new Error('invalid_agent')
   return runContinuousCloseAgent({ orgId, agentKey, trigger: 'manual', initiatedBy: userId })
+}
+
+export type { AgentNotificationSettings }
+
+/**
+ * Stored finding routing for one pack (`null` = findings-only default).
+ * Never throws on stored data: a corrupt value degrades to the default
+ * rather than 500ing the policy page.
+ */
+export async function getSetupAgentNotification(
+  orgId: string,
+  agentKey: string,
+): Promise<AgentNotificationSettings | null> {
+  if (!isContinuousCloseAgentKey(agentKey)) throw new Error('invalid_agent')
+  const row = (
+    await db.execute<{ notification_settings: unknown }>(sql`
+      select notification_settings from ai_agent_policies
+       where org_id = ${orgId} and agent_key = ${agentKey}
+    `)
+  ).rows[0]
+  try {
+    return normalizeAgentNotificationSettings(row?.notification_settings ?? undefined) ?? null
+  } catch {
+    return null
+  }
+}
+
+export interface AgentNotificationTarget {
+  id: string
+  name: string
+}
+
+/** Roles and active people routable to a pack's findings, org-scoped. */
+export async function listAgentNotificationTargets(orgId: string): Promise<{
+  roles: AgentNotificationTarget[]
+  users: (AgentNotificationTarget & { email: string })[]
+  truncatedUsers: boolean
+}> {
+  const [rolesRes, usersRes] = await Promise.all([
+    db.execute<{ id: string; name: string }>(sql`
+      select id::text as id, name from app_roles
+       where org_id = ${orgId}
+       order by name
+    `),
+    db.execute<{ id: string; name: string; email: string }>(sql`
+      select id::text as id, name, email from users
+       where org_id = ${orgId} and is_active
+       order by name
+       limit 201
+    `),
+  ])
+  return {
+    roles: rolesRes.rows.map((row) => ({ id: String(row.id), name: String(row.name) })),
+    users: usersRes.rows.slice(0, 200).map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      email: String(row.email),
+    })),
+    truncatedUsers: usersRes.rows.length > 200,
+  }
 }
