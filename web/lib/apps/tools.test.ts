@@ -46,6 +46,22 @@ test('read app tools cap the response that reaches the model', () => {
   assert.match(tools, /tool response too large; narrow the request/)
 })
 
+test('mutating app tools commit through the shared confirmation scheme', () => {
+  assert.match(tools, /export async function commitAppToolCommand/)
+  assert.match(tools, /if \(!view \|\| view\.readOnly\) return \{ ok: false, error: 'unsupported_command', status: 400 \}/)
+  assert.match(tools, /if \(!canRunTool\(authz, def, resolved\)\) return \{ ok: false, error: 'forbidden', status: 403 \}/)
+  assert.match(tools, /verifyApplicationCommand\(view\.name, parsed\.value, confirmToken, authz\)/)
+  assert.match(tools, /createHash\('sha256'\)\.update\(confirmToken\)\.digest\('hex'\)/)
+  assert.match(tools, /idempotencyKey: commitKey/)
+})
+
+test('the application-command route delegates app_ tools to the shared committer', () => {
+  const route = readFileSync(new URL('../../app/api/assistant/application-command/route.ts', import.meta.url), 'utf8')
+  assert.match(route, /commitAppToolCommand\(gate, body\.toolName, body\.input, body\.confirmToken\)/)
+  // Static commands keep their exact path: unknown static names still 400.
+  assert.match(route, /return NextResponse\.json\(\{ error: "unsupported_command" \}, \{ status: 400 \}\)/)
+})
+
 test('the bridge callBackend path keeps its exact derivation through the shared invoker', () => {
   const start = store.indexOf('export async function invokeAppEndpointHandler')
   assert.notEqual(start, -1, 'invokeAppEndpointHandler must remain defined')

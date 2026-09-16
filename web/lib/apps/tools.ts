@@ -1,12 +1,13 @@
 import 'server-only'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { featureEnabled, type FeatureState } from '@openbooks/engine/src/feature-registry.ts'
 import type { Authz } from '../authz'
 import { can } from '../authz'
 import type { SessionUser } from '../auth'
 import { resolvedFeatureState } from '../features'
 import { permissionSetCovers } from '../permissions'
-import { signApplicationCommand } from '../assistant/application-proposals'
+import { canRunTool } from '../assistant/gate'
+import { signApplicationCommand, verifyApplicationCommand } from '../assistant/application-proposals'
 import type { AssistantToolDef, ToolResult } from '../assistant/types'
 import { getAppByKey, invokeAppEndpointHandler, listApps } from './store'
 import { appToolAssistantName } from './manifest'
@@ -164,6 +165,47 @@ export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
       return { ok: true, data: outcome.result }
     },
   }
+}
+
+/**
+ * Commit a confirmed mutating app tool — the Apply half of the propose→
+ * confirm→commit path. Uses the SAME HMAC confirmation scheme as application
+ * mutations (sign/verifyApplicationCommand): the token binds actor, tenant,
+ * tool, input, and expiry, and its sha256 becomes the invocation idempotency
+ * key, so a retried Apply replays the stored outcome instead of re-running
+ * the handler. Read tools are rejected (they execute directly, no commit).
+ */
+export async function commitAppToolCommand(
+  authz: Authz,
+  toolName: string,
+  input: unknown,
+  confirmToken: string,
+  features?: FeatureState | null,
+): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
+  const resolved = features ?? await resolvedFeatureState(authz.user.orgId)
+  const views = await listAppToolViews(authz.user.orgId, authz, resolved)
+  const view = views.find((v) => v.name === toolName)
+  if (!view || view.readOnly) return { ok: false, error: 'unsupported_command', status: 400 }
+  const def = toAssistantToolDef(view)
+  if (!canRunTool(authz, def, resolved)) return { ok: false, error: 'forbidden', status: 403 }
+  const parsed = parseToolInput(view.zodSchema, input)
+  if (!parsed.ok) return { ok: false, error: 'invalid_input', status: 422 }
+  if (!verifyApplicationCommand(view.name, parsed.value, confirmToken, authz)) {
+    return { ok: false, error: 'confirmation_expired_or_modified', status: 422 }
+  }
+  // The token is the durable identity of this proposed write; committing
+  // through it makes Apply idempotent across retries and double-clicks.
+  const commitKey = createHash('sha256').update(confirmToken).digest('hex')
+  return runAppTool({
+    orgId: authz.user.orgId,
+    user: authz.user,
+    appKey: view.appKey,
+    toolKey: view.toolKey,
+    input: parsed.value,
+    userCan: (perm) => can(authz, perm),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    idempotencyKey: commitKey,
+  })
 }
 
 export type { AppToolView }

@@ -7,6 +7,7 @@ import {
   executeApplicationTool,
 } from "../../../../lib/application/tool-catalog";
 import { guardPermission } from "../../../../lib/authz";
+import { commitAppToolCommand } from "../../../../lib/apps/tools";
 import { verifyApplicationCommand } from "../../../../lib/assistant/application-proposals";
 
 export const runtime = "nodejs";
@@ -31,7 +32,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   const definition = applicationTool(body.toolName);
-  if (!definition || definition.readOnly || definition.assistantConfirmation !== "always") {
+  if (!definition) {
+    // App-declared mutating tools share this commit path and its HMAC
+    // confirmation scheme; the route stays thin and static commands unchanged.
+    if (body.toolName.startsWith("app_")) {
+      const committed = await commitAppToolCommand(gate, body.toolName, body.input, body.confirmToken);
+      return NextResponse.json(
+        committed.ok ? { ok: true, result: committed.result } : { ok: false, error: committed.error },
+        { status: committed.ok ? 200 : committed.status },
+      );
+    }
+    return NextResponse.json({ error: "unsupported_command" }, { status: 400 });
+  }
+  if (definition.readOnly || definition.assistantConfirmation !== "always") {
     return NextResponse.json({ error: "unsupported_command" }, { status: 400 });
   }
   if (!definition.visibleTo(gate)) {
