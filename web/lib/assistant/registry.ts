@@ -18,6 +18,7 @@ import { CONSTRUCTION_TOOLS } from "./tools-construction";
 import { PROJECT_TOOLS } from "./tools-projects";
 import { TAX_TOOLS } from "./tools-tax";
 import { FILE_TOOLS } from "./tools-files";
+import { INVENTORY_TOOLS } from "./tools-inventory";
 import { PAYROLL_TOOLS } from "./tools-payroll";
 import { REPORTING_TOOLS } from "./tools-reports";
 import { SETUP_TOOLS } from "./tools-setup";
@@ -42,6 +43,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...BANKING_TOOLS,
   ...PAYROLL_TOOLS,
   ...FILE_TOOLS,
+  ...INVENTORY_TOOLS,
   ...SETUP_TOOLS,
   ...WRITE_TOOLS,
 ];
