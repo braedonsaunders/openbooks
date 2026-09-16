@@ -1367,12 +1367,6 @@ async function lockRun(tx: Tx, runId: string): Promise<RunRow> {
   return run;
 }
 
-async function loadRuleKey(tx: Tx, orgId: string, ruleId: string): Promise<string> {
-  const rows = (await tx.execute<{ key: string }>(sql`
-    select key from allocation_rules where id = ${ruleId} and org_id = ${orgId} for share`)).rows;
-  return rows[0]?.key ?? ruleId;
-}
-
 /**
  * Open the version's approval flow for a previewed run: validate the
  * configured flow, dispatch the run's `on_submit` flows, and park the run in
@@ -1486,7 +1480,11 @@ export async function postAllocationRun(
     }
     const orgId = run.org_id;
     const period = await loadPeriod(tx, orgId, run.period_id);
-    const ruleKey = await loadRuleKey(tx, orgId, run.rule_id);
+    // The preview's world may have moved on (rule deactivated, version
+    // retired): re-check the head and the pinned version before money moves,
+    // the same guards preview and rerun already enforce.
+    const rule = await loadRule(tx, orgId, run.rule_id);
+    const ruleKey = rule.key;
     const version = (await tx.execute<VersionRow>(sql`
       select id, org_id, rule_id, status, effective_from::text, effective_to::text,
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
@@ -1495,6 +1493,11 @@ export async function postAllocationRun(
              memo_template, line_description_template, definition_hash
         from allocation_rule_versions
        where id = ${run.version_id} and org_id = ${orgId} for share`)).rows[0];
+    if (!version || version.status !== "published") {
+      throw new Error(
+        `allocation rule ${ruleKey} version ${run.version_id} is ${version?.status ?? "missing"} and cannot take postings`,
+      );
+    }
     const approvalFlowId = version?.approval_flow_id ?? null;
     if (approvalFlowId && !opts.viaApproval) {
       return openRunApproval(tx, {

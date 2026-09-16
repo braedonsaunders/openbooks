@@ -759,6 +759,70 @@ test(
 );
 
 test(
+  "post refuses a run whose rule was deactivated after preview",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Dept A");
+      await seedSourceEntry(org, actorId, "300.0000");
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+      });
+      await db.execute(sql`update allocation_rules set is_active = false where id = ${ruleId}`);
+      await assert.rejects(postAllocationRun(preview.id, actorId, "Post after deactivation"), /not active/);
+      const run = await getRun(org.orgId, preview.id);
+      assert.equal(run.status, "previewed");
+      assert.equal(run.journalEntryId, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "post refuses a run whose version was retired after preview",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Dept A");
+      await seedSourceEntry(org, actorId, "300.0000");
+      const { ruleId, versionId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+      });
+      await db.execute(sql`update allocation_rule_versions set status = 'retired' where id = ${versionId}`);
+      await assert.rejects(postAllocationRun(preview.id, actorId, "Post after retire"), /retired/);
+      const run = await getRun(org.orgId, preview.id);
+      assert.equal(run.status, "previewed");
+      assert.equal(run.journalEntryId, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "listRuns and getRun expose the stored computation",
   { skip: !DB },
   async () => {
