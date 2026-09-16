@@ -2,6 +2,7 @@ import Link from 'next/link'
 import {
   ArrowUpRight,
   Blocks,
+  Bot,
   Boxes,
   Code2,
   Database,
@@ -47,6 +48,7 @@ const ACCENTS = {
 export type AdminHubAccent = keyof typeof ACCENTS
 
 const ICONS: Record<string, LucideIcon> = {
+  bot: Bot,
   users: Users,
   'shield-check': ShieldCheck,
   sparkles: Sparkles,

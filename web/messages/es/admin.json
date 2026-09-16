@@ -82,6 +82,10 @@
       "email": {
         "title": "Envío de correo",
         "description": "Configura tu proveedor de correo para enviar informes programados"
+      },
+      "agentsSetup": {
+        "title": "Agentes",
+        "description": "Paquetes de agentes en segundo plano: instale, configure horarios y controles, revise ejecuciones"
       }
     }
   },
@@ -819,9 +823,12 @@
     "compliance_file": "Finalizar y presentar declaraciones informativas"
   },
   "ai": {
-    "metaTitle": "Configuración de IA",
-    "title": "Configuración de IA",
+    "metaTitle": "Proveedores de IA",
+    "title": "Proveedores de IA",
     "description": "Elija el proveedor de IA que usa el asistente. La clave API se guarda cifrada — nunca en un archivo ni en una variable de entorno.",
+    "manageAgentsTitle": "Agentes en segundo plano",
+    "manageAgentsDescription": "Horarios, controles y enrutamiento de hallazgos están en Configuración → Agentes.",
+    "manageAgentsLink": "Abrir la configuración de agentes",
     "enabledLabel": "Activar las funciones de IA",
     "providerLabel": "Proveedor",
     "baseUrlLabel": "URL base",
@@ -1391,7 +1398,8 @@
         "featureOffError": "Active el módulo de Cierre continuo antes de activar un paquete.",
         "toggleFailed": "No se pudo guardar el ajuste del paquete.",
         "scanComplete": "{count, plural, one {# hallazgo detectado} other {# hallazgos detectados}}",
-        "scanFailed": "No se pudo iniciar el análisis."
+        "scanFailed": "No se pudo iniciar el análisis.",
+        "guideLink": "Guía de configuración"
       },
       "library": {
         "title": "Biblioteca",

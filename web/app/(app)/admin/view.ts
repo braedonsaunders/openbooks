@@ -26,6 +26,7 @@ const GROUPS: { key: string; labelKey: string; accent: Accent; cards: Card[] }[]
     accent: 'amber',
     cards: [
       { href: '/admin/ai', iconKey: 'sparkles', cardKey: 'ai', permission: 'admin.ai.manage' },
+      { href: '/admin/setup/agents', iconKey: 'bot', cardKey: 'agentsSetup', permission: 'admin.setup.manage' },
       {
         href: '/admin/navigation',
         iconKey: 'panel-left',

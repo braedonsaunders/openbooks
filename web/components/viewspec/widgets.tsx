@@ -1324,13 +1324,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'ai-settings-form': (props) => (
     <AiSettingsForm
       specs={props.specs as ComponentProps<typeof AiSettingsForm>['specs']}
-      detectorSpecs={props.detectorSpecs as ComponentProps<typeof AiSettingsForm>['detectorSpecs']}
       initial={props.initial as ComponentProps<typeof AiSettingsForm>['initial']}
-      selectedAgentKey={
-        typeof props.selectedAgentKey === 'string'
-          ? (props.selectedAgentKey as ComponentProps<typeof AiSettingsForm>['selectedAgentKey'])
-          : null
-      }
     />
   ),
   /** SEVEN FLAT props, no wrapper bag. The page is seven conditional PAIRS

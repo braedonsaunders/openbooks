@@ -51,7 +51,10 @@ export async function PUT(req: Request) {
     },
   };
   try {
-    input.agents = normalizeAgentSettingsInput(body.agents);
+    // Pack policies live under Setup → Agents: a provider save that omits the
+    // array must leave every policy untouched — normalizing an absent array
+    // would default-disable all packs (persistAgentPolicy loops input.agents).
+    input.agents = body.agents === undefined ? [] : normalizeAgentSettingsInput(body.agents);
     await saveOrgAiSettings(gate.user.orgId, gate.user.id, input);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 422 });

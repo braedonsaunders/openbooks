@@ -103,11 +103,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/ai': {
     route: '/admin/ai',
     segments: [],
-    searchParams: true,
+    searchParams: false,
     module: async () => {
       const m = await import('../app/(app)/admin/ai/view')
       return {
-        load: (input) => m.loadAdminAi(input.searchParams ?? {}),
+        load: () => m.loadAdminAi(),
         spec: (data) => m.adminAiSpec(data as never),
       }
     },

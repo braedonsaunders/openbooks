@@ -806,6 +806,7 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.nav.manage',
   'admin.audit.read',
   'admin.ai.manage',
+  'admin.setup.manage',
   'admin.sandboxes.manage',
   'admin.backups.manage',
   'admin.customization.manage',

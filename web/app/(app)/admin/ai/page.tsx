@@ -10,13 +10,13 @@ export async function generateMetadata() {
 }
 
 /**
- * Admin → AI settings. The provider,
+ * Admin → AI providers. The provider,
  * model choices, and encrypted API key live in orgs.settings.ai — never in the
  * environment. The client form only ever sees non-secret fields (hasKey, not
- * the key itself).
+ * the key itself). Background agent packs moved to Setup → Agents.
  */
 export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams
-  const data = await loadAdminAi(sp)
+  const data = await loadAdminAi()
   return <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
 }

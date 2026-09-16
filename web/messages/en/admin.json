@@ -95,6 +95,10 @@
       "email": {
         "title": "Email delivery",
         "description": "Configure your email provider so scheduled reports can be sent"
+      },
+      "agentsSetup": {
+        "title": "Agents",
+        "description": "Background agent packs: install, configure schedules and checks, review runs"
       }
     }
   },
@@ -908,9 +912,12 @@
     "compliance_file": "Finalize and file information returns"
   },
   "ai": {
-    "metaTitle": "AI settings",
-    "title": "AI settings",
+    "metaTitle": "AI providers",
+    "title": "AI providers",
     "description": "Choose the AI provider the assistant uses. Your API key is encrypted at rest and never shown again after you save it.",
+    "manageAgentsTitle": "Background agents",
+    "manageAgentsDescription": "Schedules, checks and finding routing live under Setup → Agents.",
+    "manageAgentsLink": "Open Agents setup",
     "enabledLabel": "Enable AI features",
     "providerLabel": "Provider",
     "baseUrlLabel": "Base URL",
@@ -1525,7 +1532,8 @@
         "featureOffError": "Turn on the Continuous Close module before enabling a pack.",
         "toggleFailed": "Couldn't save the pack setting.",
         "scanComplete": "{count, plural, one {# finding} other {# findings}} detected",
-        "scanFailed": "The scan failed to start."
+        "scanFailed": "The scan failed to start.",
+        "guideLink": "Setup guide"
       },
       "library": {
         "title": "Library",
@@ -3415,6 +3423,7 @@
         "structureTitle": "Financial structure",
         "structureDescription": "Answer these directly. OpenBooks never assumes extra legal entities or foreign-currency accounting from headcount or industry.",
         "note": "This is a reviewable starting point. Every switch remains authoritative and adjustable under Company Settings → Features, with data-preserving safety checks.",
+        "agentsNote": "Once the books are running, background agent packs that watch them live under Company Setup → Agents: install packs, tune their checks, and route findings from there.",
         "projects": {
           "title": "Projects & job costing",
           "description": "Track jobs with budgets, costing, billing, and profitability."
@@ -3566,7 +3575,7 @@
       },
       "done": {
         "title": "Your starting workspace is ready",
-        "description": "Next, the go-live guide will verify the remaining company, tax, numbering, banking, and opening-balance decisions before you post live activity."
+        "description": "Next, the go-live guide will verify the remaining company, tax, numbering, banking, and opening-balance decisions before you post live activity. Background agents can be installed any time under Setup → Agents."
       },
       "industries": {
         "general_business": {
