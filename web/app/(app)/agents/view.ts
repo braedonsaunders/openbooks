@@ -22,6 +22,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { dateTime } from '../../../lib/format'
 import { parseAgentFindingsParams } from '../../../lib/list/agent-findings'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { loadAgentInbox } from '../../../lib/agents/inbox'
@@ -77,6 +78,7 @@ export interface AgentsInboxRow {
   age: string
   assigneeLabel: string
   due: string
+  dueOverdueLabel: string
 }
 
 export interface AgentsTriageRow {
@@ -364,11 +366,8 @@ export async function loadAgents(
         'day',
       ),
       assigneeLabel: row.assignee ? row.assignee.name : t('assignment.unassigned'),
-      due: row.dueAt
-        ? row.overdue
-          ? t('facets.overdue')
-          : dateOnly.format(new Date(row.dueAt))
-        : '',
+      due: dateTime(row.dueAt),
+      dueOverdueLabel: row.overdue ? t('facets.overdue') : '',
     })),
     total: inbox.total,
     currentPage: params.page,
@@ -638,9 +637,11 @@ export function agentsSpec(data: AgentsData): PageSpec {
             column(f('columnAssignee'), text(item('assigneeLabel')), {
               className: 'text-sm text-slate-500',
             }),
-            column(f('columnDue'), text(item('due')), {
-              className: 'text-sm text-slate-500',
-            }),
+            column(
+              f('columnDue'),
+              widgetCell('agents-due-cell', { date: item('due'), overdueLabel: item('dueOverdueLabel') }),
+              { className: 'text-sm text-slate-500' },
+            ),
             column(f('columnDetected'), text(item('detected')), {
               className: 'text-sm text-slate-500',
               sort: 'detected',
