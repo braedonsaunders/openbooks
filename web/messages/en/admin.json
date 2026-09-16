@@ -2110,6 +2110,11 @@
         "singular": "accounting book",
         "description": "Manage the primary, tax, statutory, and reporting books that own ledger entries and close controls."
       },
+      "allocations": {
+        "title": "Allocations",
+        "singular": "allocation rule",
+        "description": "Distribute pooled costs to targets on a driver: splits at entry, contributions at posting, and period sweeps."
+      },
       "fx-rates": {
         "title": "Exchange Rates",
         "description": "Your organization's daily rates used to post foreign-currency transactions."
