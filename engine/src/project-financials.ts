@@ -3,7 +3,8 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { db, orgContext, pool } from './db.ts'
 import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups.ts'
-import { add, cmp, fromUnits, mul, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from './money.ts'
+import { flowTranslation, translateFlowAmount } from './fx-translation.ts'
+import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from './money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
 import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
 
@@ -84,22 +85,36 @@ async function rateEngineOverhead(
   cfg: OverheadSource['rateEngine'],
 ): Promise<string> {
   const basis = cfg?.hoursBasis ?? 'total_hours'
-  const r = (await db.execute<{ overhead: string }>(sql`
-    select coalesce(sum(round(
-             case when o.rate_kind = 'percent'
-                  then te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100
-                  else te.hours * o.rate_percent end,
-             4
-           )), 0) as overhead
+  // Percent rows ride on labour cost (the worker's functional); per-hour rows
+  // ride on the published card, which is denominated in presentation. Only
+  // the percent basis translates.
+  const r = (await db.execute<{ func: string | null; late: string | null; percent_basis: string; hourly: string }>(sql`
+    select coalesce(te.cost_rate_currency, crs.base_currency, o_.base_currency) as func,
+           max(te.worked_on)::text as late,
+           coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100, 4))
+             filter (where o.rate_kind = 'percent'), 0) as percent_basis,
+           coalesce(sum(round(te.hours * o.rate_percent, 4))
+             filter (where o.rate_kind <> 'percent'), 0) as hourly
       from time_entries te
       join overhead_rates o on ${overheadRateAppliesToTimeEntry('o', 'te')}
+      left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+      join orgs o_ on o_.id = te.org_id
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        ${basis === 'billed_hours'
          ? sql`and te.is_billable`
          : basis === 'actual_hours'
            ? sql`and te.costing_basis = 'actual'`
-           : sql``}`))
-  return amount(r.rows[0]?.overhead)
+           : sql``}
+     group by 1`))
+  const legs = r.rows.map((leg) => ({ func: leg.func ?? null, date: String(leg.late).slice(0, 10) }))
+  const ctx = await flowTranslation(orgId, legs)
+  let total = '0'
+  for (const leg of r.rows) {
+    const date = String(leg.late).slice(0, 10)
+    total = add(total, translateFlowAmount(String(leg.percent_basis ?? 0), leg.func ?? null, date, ctx.rateAt))
+    total = add(total, amount(leg.hourly))
+  }
+  return amount(total)
 }
 
 async function overheadAdjustments(
@@ -207,41 +222,55 @@ async function resolveProjectFinancialsInSnapshot(
     // invoicedToDate — effective line tagging (line override, then header
     // inheritance), matching the posting kernel's dimension semantics.
     db.execute(sql`
-      select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
-           - coalesce(sum(dl.amount) filter (where d.kind in (${kindList(creditKinds.length ? creditKinds : ['__none__'])})), 0) as invoiced
+      select sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
+             coalesce(sum(round(dl.amount * d.fx_rate, 4)) filter (where d.kind in (${kindList(invoiceKinds)})), 0) as invoiced_pos,
+             coalesce(sum(round(dl.amount * d.fx_rate, 4)) filter (where d.kind in (${kindList(creditKinds.length ? creditKinds : ['__none__'])})), 0) as invoiced_neg
         from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and d.status = 'posted'
-         and d.kind in (${kindList([...invoiceKinds, ...creditKinds])})`),
-    // actualCost + revenuePosted — posted GL tagged to the project.
+         and d.kind in (${kindList([...invoiceKinds, ...creditKinds])})
+       group by 1`),
+    // actualCost + revenuePosted — posted GL tagged to the project. Legs
+    // arrive in their line entity's functional and translate below.
     db.execute(sql`
-      select coalesce(sum(l.amount) filter (where ${costPredicate(profile.actualCost, costIds)}), 0) as cost,
+      select sub.base_currency as func, max(e.posting_date)::text as late,
+             coalesce(sum(l.amount) filter (where ${costPredicate(profile.actualCost, costIds)}), 0) as cost,
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
-         and ${primaryBookSql(orgId)}`),
+         and ${primaryBookSql(orgId)}
+       group by 1`),
     // committedCost — unbilled portion (by line amount) of open (approved)
     // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
     // migrated orders often carry the amount but no per-unit price.
     db.execute(sql`
-      select coalesce(sum(
+      select sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
+             coalesce(sum(
                case when d.kind = 'project_charge'
-                    then coalesce(dl.cost_amount, dl.amount)
+                    then round(coalesce(dl.cost_amount, dl.amount) * d.fx_rate, 4)
                     else round(
-                      (case when d.kind = 'vendor_credit'
-                            then -dl.amount else dl.amount end)
-                      * case when coalesce(dl.quantity,0) > 0
-                        then greatest(0, (dl.quantity - coalesce(dl.quantity_billed,0)) / dl.quantity)
-                        else 1
-                      end,
+                      round(
+                        (case when d.kind = 'vendor_credit'
+                              then -dl.amount else dl.amount end)
+                        * case when coalesce(dl.quantity,0) > 0
+                          then greatest(0, (dl.quantity - coalesce(dl.quantity_billed,0)) / dl.quantity)
+                          else 1
+                        end,
+                        4
+                      ) * d.fx_rate,
                       4
                     )
                end
              ), 0) as committed
         from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and d.status in (${kindList(committedStatuses.length ? committedStatuses : ['__none__'])})
@@ -251,24 +280,35 @@ async function resolveProjectFinancialsInSnapshot(
              d.kind in (${kindList(committedKinds.length ? committedKinds : ['__none__'])})
              and (coalesce(dl.quantity,0) = 0 or dl.quantity_billed is null or dl.quantity_billed < dl.quantity)
            )
-         )`),
+         )
+       group by 1`),
     // Billable time is selling-value evidence independent of invoice amount.
     // Fixed/progress invoices often have no one-to-one time-line relationship,
     // so total price cannot be reconstructed as invoice + unbilled time.
+    // Bill and cost legs carry their own stamped currencies, so each side
+    // groups by its own functional and translates separately below.
     db.execute(sql`
-      select coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as total_bill,
+      select coalesce(te.bill_rate_currency, crs.base_currency, o.base_currency) as bill_func,
+             coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as cost_func,
+             max(te.worked_on)::text as late,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as total_bill,
              coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as total_cost,
              coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4))
                filter (where te.billing_status = 'unbilled'), 0) as unbilled_bill,
              coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4))
                filter (where te.billing_status = 'unbilled'), 0) as unbilled_cost
        from time_entries te
+       left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+       join orgs o on o.id = te.org_id
        where te.org_id = ${orgId} and te.project_id = ${projectId}
-         and te.status = 'approved' and te.is_billable`),
+         and te.status = 'approved' and te.is_billable
+       group by 1, 2`),
     // Billable cost is likewise all eligible work, with its unbilled subset
     // retained separately for invoicing/backlog presentation.
     db.execute(sql`
-      select coalesce(sum(
+      select sub.base_currency as func,
+             max(coalesce(d.document_date, d.posting_date))::text as late,
+             coalesce(sum(round((
                case
                  when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
                  when dl.bill_amount is not null then
@@ -285,12 +325,12 @@ async function resolveProjectFinancialsInSnapshot(
                      4
                    )
                end
-             ), 0) as total_bill,
-             coalesce(sum(
+             ) * d.fx_rate, 4)), 0) as total_bill,
+             coalesce(sum(round(
                case when d.kind = 'vendor_credit'
                     then -dl.amount else dl.amount end
-             ), 0) as total_cost,
-             coalesce(sum(
+             * d.fx_rate, 4)), 0) as total_cost,
+             coalesce(sum(round((
                case
                  when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
                  when dl.bill_amount is not null then
@@ -307,39 +347,57 @@ async function resolveProjectFinancialsInSnapshot(
                      4
                    )
                end
-             ) filter (where dl.billed_by_line_id is null), 0) as unbilled_bill,
-             coalesce(sum(
+             ) * d.fx_rate, 4)) filter (where dl.billed_by_line_id is null), 0) as unbilled_bill,
+             coalesce(sum(round((
                case when d.kind = 'vendor_credit'
                     then -dl.amount else dl.amount end
-             )
+             ) * d.fx_rate, 4))
                filter (where dl.billed_by_line_id is null), 0) as unbilled_cost
         from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and dl.is_billable
          and d.status in (${kindList(billableCostStatuses.length ? billableCostStatuses : ['__none__'])})
          and (d.kind = 'project_charge'
-           or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))`),
+           or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))
+       group by 1`),
     // laborCost — resolved per profile source (payroll JE / time rate / group).
     profile.laborCost.source === 'payroll_je'
-      ? db.execute(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      ? db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
+             coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+             left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
            where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
-             and ${primaryBookSql(orgId)}`)
+             and ${primaryBookSql(orgId)}
+           group by 1`)
       : profile.laborCost.source === 'time_rate'
-        ? db.execute(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
-             where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`)
+        ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+             max(te.worked_on)::text as late,
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+             left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+             join orgs o on o.id = te.org_id
+             where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+           group by 1`)
         : profile.laborCost.source === 'estimated_time_rate'
-          ? db.execute(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+          ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+               max(te.worked_on)::text as late,
+               coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+               left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
+               join orgs o on o.id = te.org_id
                where te.org_id = ${orgId} and te.project_id = ${projectId}
-                 and te.status = 'approved' and te.costing_basis = 'estimated'`)
+                 and te.status = 'approved' and te.costing_basis = 'estimated'
+             group by 1`)
         : db.execute(sql`select 0 as labor`),
     // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
     profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute(sql`select 0 as overhead`)
-      : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
+      : db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
+             coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
            from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
-            and ${primaryBookSql(orgId)}`),
+            and ${primaryBookSql(orgId)}
+          group by 1`),
     // project approved labor hours (base for per-hour / rate-engine overhead).
     db.execute(sql`select coalesce(sum(te.hours), 0) as total,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
@@ -347,16 +405,21 @@ async function resolveProjectFinancialsInSnapshot(
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`),
     // cost by account (for the breakdown subtab) — same cost predicate.
     db.execute<any>(sql`
-      select a.id as account_id, a.number, a.name, a.type, coalesce(sum(l.amount), 0) as amount
+      select a.id as account_id, a.number, a.name, a.type, sub.base_currency as func,
+             max(e.posting_date)::text as late, coalesce(sum(l.amount), 0) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${primaryBookSql(orgId)}
          and ${costPredicate(profile.actualCost, costIds)}
-       group by a.id, a.number, a.name, a.type having coalesce(sum(l.amount),0) <> 0 order by amount desc`),
-    // documents on the project (transactions tab).
+       group by a.id, a.number, a.name, a.type, sub.base_currency having coalesce(sum(l.amount),0) <> 0 order by amount desc`),
+    // documents on the project (transactions tab). Row amounts arrive in
+    // the document's transaction currency with its functional first leg and
+    // translate per row below, so the tab states presentation like the rest.
     db.execute<any>(sql`
       select d.id, d.kind, d.document_number as "documentNumber", d.document_date::text as "documentDate",
-             d.status, pt.display_name as "partyName",
+             d.status, pt.display_name as "partyName", sub.base_currency as func,
+             coalesce(d.document_date, d.posting_date)::text as late, d.fx_rate as "fxRate",
              case when d.kind = 'project_charge'
                   then coalesce(sum(coalesce(dl.bill_amount, dl.amount)), 0)
                   else coalesce(sum(dl.amount), 0)
@@ -364,35 +427,113 @@ async function resolveProjectFinancialsInSnapshot(
         from documents d
         left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
         left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where d.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
-       group by d.id, pt.display_name order by d.document_date desc, d.document_number desc`),
+       group by d.id, pt.display_name, sub.base_currency, d.fx_rate order by d.document_date desc, d.document_number desc`),
   ])
 
   const [adjustments, directSubcontractCommitment] = await Promise.all([
     financialAdjustmentsPromise,
     directSubcontractCommitmentPromise,
   ])
+  // ---- presentation translation -------------------------------------------
+  // Every money scan above arrives per functional (documents carry their
+  // txn→functional first leg; legs and rates carry their stamped currency).
+  // One shared flow context translates each leg at its latest date; the
+  // scalars below are presentation totals. Project adjustments and WBS
+  // estimates are keyed by project with no currency column, so they read as
+  // presentation already and never enter a leg.
+  // Leg dates are non-null whenever a leg row exists (posting/worked/
+  // document dates are mandatory), so no fallback date is needed; a null
+  // would fail closed in rateAt rather than translate silently.
+  interface Leg { func: string | null; late: string }
+  const legRows = (r: { rows: unknown }): Leg[] => r.rows as Leg[]
+  // Billable-time legs carry independent bill/cost functionals, so both
+  // enter the shared context.
+  interface BillTimeLeg {
+    bill_func: string | null; cost_func: string | null; late: string;
+    total_bill: string; total_cost: string; unbilled_bill: string; unbilled_cost: string;
+  }
+  const billTimeLegs = billableTimeRes.rows as unknown as BillTimeLeg[]
+  const ctx = await flowTranslation(orgId, [
+    ...legRows(invRes), ...legRows(costRes), ...legRows(committedRes),
+    ...legRows(billableLineRes), ...legRows(laborRes),
+    ...legRows(overheadRes), ...legRows(byAccountRes),
+  ].map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })).concat(
+    billTimeLegs.flatMap((r) => {
+      const date = String(r.late).slice(0, 10)
+      return [{ func: r.bill_func ?? null, date }, { func: r.cost_func ?? null, date }]
+    }),
+  ))
+  const mergeSum = (rows: Leg[], pick: (r: Leg) => unknown): string => {
+    let total = '0'
+    for (const r of rows) {
+      total = add(total, translateFlowAmount(String(pick(r) ?? 0), r.func ?? null, String(r.late).slice(0, 10), ctx.rateAt))
+    }
+    return total
+  }
   const invoicedToDate = add(
-    amount(invRes.rows[0]?.invoiced),
+    amount(add(
+      mergeSum(legRows(invRes), (r) => (r as unknown as { invoiced_pos: string }).invoiced_pos),
+      neg(mergeSum(legRows(invRes), (r) => (r as unknown as { invoiced_neg: string }).invoiced_neg)),
+    )),
     adjustments.invoiced_to_date,
   )
   const actualCost = add(
-    amount(costRes.rows[0]?.cost),
+    amount(mergeSum(legRows(costRes), (r) => (r as unknown as { cost: string }).cost)),
     adjustments.actual_cost,
   )
-  const revenuePosted = amount(costRes.rows[0]?.revenue)
+  const revenuePosted = amount(mergeSum(legRows(costRes), (r) => (r as unknown as { revenue: string }).revenue))
   const committedCost = add(
-    amount(committedRes.rows[0]?.committed),
+    amount(mergeSum(legRows(committedRes), (r) => (r as unknown as { committed: string }).committed)),
     directSubcontractCommitment,
   )
-  const laborCost = amount(laborRes.rows[0]?.labor)
+  const laborCost = amount(mergeSum(legRows(laborRes), (r) => (r as unknown as { labor: string }).labor))
+  // Billable-time bill and cost sides merge under their own functionals.
+  const mergeBillTime = (pick: (r: BillTimeLeg) => unknown, useBillFunc: boolean): string => {
+    let total = '0'
+    for (const r of billTimeLegs) {
+      const func = useBillFunc ? r.bill_func : r.cost_func
+      total = add(total, translateFlowAmount(String(pick(r) ?? 0), func ?? null, String(r.late).slice(0, 10), ctx.rateAt))
+    }
+    return total
+  }
+  const timeBill = mergeBillTime((r) => r.total_bill, true)
+  const timeCost = mergeBillTime((r) => r.total_cost, false)
+  const timeUnbilledBill = mergeBillTime((r) => r.unbilled_bill, true)
+  const timeUnbilledCost = mergeBillTime((r) => r.unbilled_cost, false)
+  const lineLegs = legRows(billableLineRes)
+  const lineBill = mergeSum(lineLegs, (r) => (r as unknown as { total_bill: string }).total_bill)
+  const lineCost = mergeSum(lineLegs, (r) => (r as unknown as { total_cost: string }).total_cost)
+  const lineUnbilledBill = mergeSum(lineLegs, (r) => (r as unknown as { unbilled_bill: string }).unbilled_bill)
+  const lineUnbilledCost = mergeSum(lineLegs, (r) => (r as unknown as { unbilled_cost: string }).unbilled_cost)
+  const overheadTranslated = amount(mergeSum(legRows(overheadRes), (r) => (r as unknown as { overhead: string }).overhead))
+  interface AccountLeg extends Leg { account_id: string; number: string | null; name: string; type: string; amount: string }
+  const accountLegs = byAccountRes.rows as AccountLeg[]
+  const accountTranslated = new Map<string, { accountId: string; number: string | null; name: string; type: string; amount: string }>()
+  for (const r of accountLegs) {
+    const prev = accountTranslated.get(r.account_id) ?? { accountId: r.account_id, number: r.number, name: r.name, type: r.type, amount: '0' }
+    prev.amount = add(prev.amount, translateFlowAmount(String(r.amount ?? 0), r.func ?? null, String(r.late).slice(0, 10), ctx.rateAt))
+    accountTranslated.set(r.account_id, prev)
+  }
+  interface DocRow {
+    id: string; kind: string; documentNumber: string; documentDate: string; status: string;
+    partyName: string | null; func: string | null; late: string; fxRate: string; amount: string;
+  }
+  const docTranslated = (docRes.rows as DocRow[]).map((r) => {
+    // First leg (txn→functional) is rounded like a posted leg; the second
+    // leg translates at the document date. Zero-amount headers skip lookup.
+    // (mulDecimal, not mul: the rate carries up to 10 places.)
+    const functional = mulDecimal(String(r.amount ?? 0), String(r.fxRate ?? 1))
+    return { ...r, amount: translateFlowAmount(functional, r.func ?? null, String(r.late).slice(0, 10), ctx.rateAt) }
+  })
   const totalHours = amount(hoursRes.rows[0]?.total)
   // Overhead is a STATISTICAL allocation (never a GL posting by default). Each
   // method turns a rate into the job's share of company overhead.
   const oh = profile.overhead
   const calculatedOverhead =
-    oh.method === 'posted_gl_account_group' ? amount(overheadRes.rows[0]?.overhead)
+    oh.method === 'posted_gl_account_group' ? overheadTranslated
     : oh.method === 'percent_of_labor' ? mulPercent(laborCost, String(oh.ratePercent ?? 0))
     : oh.method === 'per_labor_hour' ? mul(totalHours, String(oh.ratePerHour ?? 0))
     : oh.method === 'rate_engine' ? await rateEngineOverhead(orgId, projectId, oh.rateEngine)
@@ -410,20 +551,20 @@ async function resolveProjectFinancialsInSnapshot(
     ? String(profile.totalPrice.defaultMarkupPercent)
     : projectMarkupPercent
   const totalTimeBill = profile.billableValue.timeRate === 'cost_times_markup'
-    ? add(amount(billableTimeRes.rows[0]?.total_cost), mulPercent(amount(billableTimeRes.rows[0]?.total_cost), billableMarkupPercent))
-    : amount(billableTimeRes.rows[0]?.total_bill)
+    ? add(amount(timeCost), mulPercent(amount(timeCost), billableMarkupPercent))
+    : amount(timeBill)
   const totalLineBill = profile.billableValue.timeRate === 'cost_times_markup'
-    ? add(amount(billableLineRes.rows[0]?.total_cost), mulPercent(amount(billableLineRes.rows[0]?.total_cost), billableMarkupPercent))
-    : amount(billableLineRes.rows[0]?.total_bill)
+    ? add(amount(lineCost), mulPercent(amount(lineCost), billableMarkupPercent))
+    : amount(lineBill)
   const unbTimeBill = profile.billableValue.includeUnbilledTime
     ? (profile.billableValue.timeRate === 'cost_times_markup'
-        ? add(amount(billableTimeRes.rows[0]?.unbilled_cost), mulPercent(amount(billableTimeRes.rows[0]?.unbilled_cost), billableMarkupPercent))
-        : amount(billableTimeRes.rows[0]?.unbilled_bill))
+        ? add(amount(timeUnbilledCost), mulPercent(amount(timeUnbilledCost), billableMarkupPercent))
+        : amount(timeUnbilledBill))
     : '0.0000'
   const unbLineBill = profile.billableValue.includeUnbilledCostLines
     ? (profile.billableValue.timeRate === 'cost_times_markup'
-        ? add(amount(billableLineRes.rows[0]?.unbilled_cost), mulPercent(amount(billableLineRes.rows[0]?.unbilled_cost), billableMarkupPercent))
-        : amount(billableLineRes.rows[0]?.unbilled_bill))
+        ? add(amount(lineUnbilledCost), mulPercent(amount(lineUnbilledCost), billableMarkupPercent))
+        : amount(lineUnbilledBill))
     : '0.0000'
   const unbilledBillable = add(unbTimeBill, unbLineBill)
   const billableValue = add(
@@ -500,16 +641,21 @@ async function resolveProjectFinancialsInSnapshot(
   }
 
   const costByCategory = new Map<string, string>()
-  for (const r of byAccountRes.rows) {
+  for (const r of accountTranslated.values()) {
     const cat = r.type === 'cogs' ? 'cogs' : 'operating_expense'
     costByCategory.set(cat, add(costByCategory.get(cat) ?? '0.0000', amount(r.amount)))
   }
+  // The per-account HAVING filter and amount-descending order the SQL used
+  // to provide now apply after translation, on presentation figures.
+  const costByAccountRows = [...accountTranslated.values()]
+    .filter((r) => Number(r.amount) !== 0)
+    .sort((a, b) => Number(b.amount) - Number(a.amount))
 
   return {
     measures,
     costByCategory: [...costByCategory].map(([category, amount]) => ({ category, amount })),
-    costByAccount: byAccountRes.rows.map((r) => ({ accountId: r.account_id, number: r.number, name: r.name, amount: amount(r.amount) })),
-    documents: docRes.rows.map((r) => ({ id: r.id, kind: r.kind, documentNumber: r.documentNumber, documentDate: r.documentDate, status: r.status, partyName: r.partyName, amount: amount(r.amount) })),
+    costByAccount: costByAccountRows.map((r) => ({ accountId: r.accountId, number: r.number, name: r.name, amount: amount(r.amount) })),
+    documents: docTranslated.map((r) => ({ id: r.id, kind: r.kind, documentNumber: r.documentNumber, documentDate: r.documentDate, status: r.status, partyName: r.partyName, amount: amount(r.amount) })),
     projectType: proj.project_type,
     contractValue,
   }
