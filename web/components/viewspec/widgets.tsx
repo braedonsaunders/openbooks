@@ -110,7 +110,7 @@ import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
 import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
-import { AgentsLibraryWorkspace } from '../../app/(app)/admin/setup/agents/library/AgentsLibraryWorkspace'
+import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
 import { AgentPolicyWorkspace } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyWorkspace'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
 import { AgentsTriage } from '../../app/(app)/agents/AgentsTriage'
@@ -1296,9 +1296,30 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       featureEnabled={props.featureEnabled === true}
     />
   ),
-  /** Whole props bag — the catalog island owns its sections and install flow. */
-  'agents-library-workspace': (props) => (
-    <AgentsLibraryWorkspace {...(props as unknown as ComponentProps<typeof AgentsLibraryWorkspace>)} />
+  /** One agent-pack marketplace card: medallion, reads/proposes, checks, install/configure footer. */
+  'agents-pack-card': (props) => (
+    <AgentsPackCard
+      agentKey={str(props, 'agentKey') ?? ''}
+      name={str(props, 'name') ?? ''}
+      description={str(props, 'description') ?? ''}
+      reads={str(props, 'reads') ?? ''}
+      proposes={str(props, 'proposes') ?? ''}
+      installed={props.installed === true}
+      installedLabel={str(props, 'installedLabel') ?? ''}
+      installLabel={str(props, 'installLabel') ?? ''}
+      installPolicy={(props.installPolicy as ComponentProps<typeof AgentsPackCard>['installPolicy']) ?? {}}
+      featureEnabled={props.featureEnabled === true}
+      permissions={(props.permissions as string[]) ?? []}
+      needsLabel={str(props, 'needsLabel') ?? ''}
+      moduleLine={str(props, 'moduleLine') ?? ''}
+      readsLabel={str(props, 'readsLabel') ?? ''}
+      proposesLabel={str(props, 'proposesLabel') ?? ''}
+      checksTitle={str(props, 'checksTitle') ?? ''}
+      checksNote={str(props, 'checksNote') ?? ''}
+      detectors={(props.detectors as ComponentProps<typeof AgentsPackCard>['detectors']) ?? []}
+      configureHref={str(props, 'configureHref') ?? ''}
+      configureLabel={str(props, 'configureLabel') ?? ''}
+    />
   ),
   /** Whole props bag — the policy island owns its schedule/detector/analysis/routing form. */
   'agents-policy-workspace': (props) => (
