@@ -94,6 +94,7 @@ const MATRIX: Entry[] = [
   { prefix: "close", tools: ["list_close_runs", "get_close_run", "get_close_run_status", "start_close_run", "list_period_locks", "list_period_reopen_requests", "request_period_reopen", "decide_period_reopen", "run_revaluation"] },
   { prefix: "admin/close", tools: ["list_period_locks", "list_period_reopen_requests"] },
   { prefix: "continuous-close", tools: ["continuous_close_findings", "get_continuous_close_finding", "list_close_runs", "get_close_run_status"] },
+  { prefix: "agents", tools: ["continuous_close_findings", "get_continuous_close_finding"], note: "Agent Workbench inbox/item feed reuses the finding-tool queries" },
   { prefix: "tax", tools: ["list_tax_return_forms", "tax_return", "documents_missing_tax_code"], note: "provision/filing writes have no application service" },
   { prefix: "compliance", uncovered: "no application service: information returns, lien waivers, and compliance records persist inline" },
   { prefix: "consolidation", tools: ["get_consolidation_view"] },
