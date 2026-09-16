@@ -29,6 +29,11 @@ import {
 } from "./applications.ts";
 import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
 import { mirrorSourceDeletion } from "./source-deletions.ts";
+import { SYSTEM_ACTOR_ID } from "../banking.ts";
+import {
+  applySourceReconciliationEvidence,
+  type SourceEvidenceOutcome,
+} from "./source-evidence.ts";
 import type { MigrationSource, SourceOpenItem } from "./source.ts";
 import {
   verifyAccountMonths,
@@ -89,6 +94,10 @@ export interface SyncResult {
   /** Source parties that vanished while still referenced, held for review.
    * Optional: runs persisted before this contract lack the key. */
   partyHolds?: string[];
+  /** Source cleared-evidence outcome (stamps, refresh, sign-offs, skips).
+   * Null for targeted repairs, which stay side-effect-minimal.
+   * Optional: runs persisted before this contract lack the key. */
+  sourceEvidence?: SourceEvidenceOutcome | null;
   applications: ApplyStats | null;
   trueUp: TrueUpStats | null;
   tb: {
@@ -2239,6 +2248,51 @@ export async function runSync(
     // applied state (only drifted rows are written).
     if (!targetedRefs) await recomputeOpenBalances(org.id);
 
+    // -- 6d. source reconciliation evidence --------------------------------------
+    // Mirror the source system's cleared markers onto the posted lines and
+    // sign fully covered reconcilable accounts off through the source's
+    // reconciled date. Evidence only: no statement lines invented, no
+    // documents amended, and targeted repairs stay side-effect-minimal.
+    let sourceEvidence: SourceEvidenceOutcome | null = null;
+    if (!targetedRefs) {
+      await setProgress(
+        org.id,
+        run!.id,
+        {
+          phase: "source-evidence",
+          message: "Carrying source reconciliation evidence…",
+          docsNew,
+          docsAmended,
+          docsUnchanged,
+          docsFailed,
+          ordersNew,
+        },
+        true,
+      );
+      sourceEvidence = await applySourceReconciliationEvidence({
+        orgId: org.id,
+        connector: source.name,
+        actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy) ? triggeredBy : SYSTEM_ACTOR_ID,
+        refKey,
+        source,
+        documents: changes.documents,
+      });
+      await setProgress(
+        org.id,
+        run!.id,
+        {
+          phase: "source-evidence",
+          message: `Stamped ${sourceEvidence.linesStamped} lines, signed off ${sourceEvidence.signedOff.length} accounts…`,
+          docsNew,
+          docsAmended,
+          docsUnchanged,
+          docsFailed,
+          ordersNew,
+        },
+        true,
+      );
+    }
+
     // -- 7. verify: authoritative source ledger ----------------------------------
     await setProgress(
       org.id,
@@ -2309,6 +2363,7 @@ export async function runSync(
       partyHolds: partyOutcome.holds,
       applications,
       trueUp,
+      sourceEvidence,
       ...financialVerification,
       targetedDocuments,
       syncedThrough: changes.syncedThrough.toISOString(),
