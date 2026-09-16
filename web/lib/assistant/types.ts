@@ -18,6 +18,15 @@ export type PermissionRule =
 
 type ToolCategory = "read" | "search" | "write";
 
+/**
+ * Chat-payload tier for context-efficient tool loading. Core tools ride every
+ * chat step (they must stay small — the budget test pins the total); module
+ * tools are only SENT after the pre-router or find_tools activates their
+ * module. Tier never changes visibility: gates and feature flags still decide
+ * what a caller may use. The MCP surface ignores tiers entirely.
+ */
+export type ToolTier = "core" | "module";
+
 /** Structured, model-readable result. Tools NEVER throw to the loop — a failure
  *  is returned as `{ ok: false }` so one bad call can't crash the turn. */
 export type ToolResult = { ok: true; data: unknown; note?: string } | { ok: false; error: string };
@@ -36,6 +45,8 @@ export type AssistantToolDef = {
    *  appears in the catalog nor executes — so the assistant cannot search for
    *  data a disabled module does not have. */
   feature?: string;
+  /** Chat-payload tier; absent means "module" (only sent when activated). */
+  tier?: ToolTier;
   /** Write tools set this; the loop NEVER auto-commits a tool that requires it. */
   requiresConfirmation?: boolean;
   /** Per-call handler. Receives the (already schema-validated) args + the
