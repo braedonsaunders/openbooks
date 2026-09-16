@@ -19,7 +19,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedOrder(
   orgId: string,
   subsidiaryId: string,
-  kind: "sales_order" | "purchase_order",
+  kind: "sales_order" | "purchase_order" | "vendor_bill" | "customer_invoice",
   date: string,
   status = "approved",
 ): Promise<string> {
@@ -37,8 +37,10 @@ test("assign-posting-period previews, commits with audit, and is idempotent", { 
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const sales = await seedOrder(org.orgId, org.subsidiaryId, "sales_order", org.date);
-    const purchase = await seedOrder(org.orgId, org.subsidiaryId, "purchase_order", org.date);
+    const sales = await seedOrder(org.orgId, org.subsidiaryId, "customer_invoice", org.date);
+    const purchase = await seedOrder(org.orgId, org.subsidiaryId, "vendor_bill", org.date);
+    // Orders never post: they are not candidates for a posting period.
+    await seedOrder(org.orgId, org.subsidiaryId, "sales_order", org.date);
 
     const preview = await previewPostingPeriodAssignment(org.orgId, { bookId: org.bookId });
     assert.equal(preview.rows.length, 2);
@@ -71,9 +73,9 @@ test("assign-posting-period refuses closed periods and dateless calendars per do
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const sales = await seedOrder(org.orgId, org.subsidiaryId, "sales_order", org.date);
-    const purchase = await seedOrder(org.orgId, org.subsidiaryId, "purchase_order", org.date);
-    const dateless = await seedOrder(org.orgId, org.subsidiaryId, "sales_order", "2020-01-01");
+    const sales = await seedOrder(org.orgId, org.subsidiaryId, "customer_invoice", org.date);
+    const purchase = await seedOrder(org.orgId, org.subsidiaryId, "vendor_bill", org.date);
+    const dateless = await seedOrder(org.orgId, org.subsidiaryId, "customer_invoice", "2020-01-01");
     await db.execute(sql`
       insert into period_locks (org_id, period_id, book_id, module, state, locked_by)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, 'ar', 'closed', ${actor})`);

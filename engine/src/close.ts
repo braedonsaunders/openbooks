@@ -72,6 +72,17 @@ const DOCUMENT_CLOSE_MODULES = {
  */
 export const DOCUMENT_KINDS: readonly string[] = Object.keys(DOCUMENT_CLOSE_MODULES);
 
+/**
+ * Kinds that never carry a posted journal entry (quotes, orders). Their
+ * close module still governs whether they may be created or voided in a
+ * locked period, but they have no posting period to assign and cannot be
+ * "unposted" — so close readiness must not count them as drafts or as
+ * documents missing a posting period. A mirror tenant with hundreds of open
+ * orders otherwise sees a permanent critical blocker it can never clear.
+ */
+export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_order", "purchase_order"];
+const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
+
 export function closeModuleForDocument(kind: string): CloseModule {
   const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];
   if (!decided) {
@@ -1260,12 +1271,14 @@ async function readinessChecks(
         +
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.status in ('draft','pending_approval','approved')
+            and d.kind not in (${nonPostingKindList()})
             and d.posting_period_id = ${ctx.period_id} and ${documentScope}) as count`),
       db.execute(sql`
       select count(*) as count
         from documents d
        where d.org_id = ${orgId}
          and d.status in ('draft','pending_approval','approved','posted')
+         and d.kind not in (${nonPostingKindList()})
          and d.posting_period_id is null
          and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}
          and ${documentScope}`),

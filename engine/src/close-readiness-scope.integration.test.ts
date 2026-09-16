@@ -106,6 +106,21 @@ test('posting-period-missing ignores period-less documents dated outside the run
   } finally {await dropScratchOrg(org.orgId);}
 });
 
+test('readiness ignores non-posting order kinds for drafts and missing posting periods', {skip:!enabled}, async () => {
+  const {org,actor}=await setup();
+  try {
+    const so = randomUUID(), po = randomUUID(), bill = randomUUID();
+    await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
+      values (${so},${org.orgId},${org.subsidiaryId},'sales_order','approved',${so},${org.date},'CAD',10,0,10),
+             (${po},${org.orgId},${org.subsidiaryId},'purchase_order','pending_approval',${po},${org.date},'CAD',10,0,10),
+             (${bill},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${bill},${org.date},'CAD',10,0,10)`);
+    const runId=await run(org,actor);
+    const got=await counts(org.orgId,runId);
+    assert.equal(got['posting-period-missing'],1,'only the bill lacks a posting period it could ever use');
+    assert.equal(got['drafts-open']??0,0,'orders are never open drafts of the period');
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
 test('material variances cannot cancel between entities with unlike functional currencies', {skip:!enabled}, async () => {
   const {org,actor,other}=await setup();
   try {
