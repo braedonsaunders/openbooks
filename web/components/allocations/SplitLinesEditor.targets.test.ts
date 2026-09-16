@@ -6,7 +6,7 @@ import {
   allocationPortionFromInput,
   allocationTargetBasisFromLine,
   type AllocationLine,
-} from './SplitLinesEditor.tsx'
+} from './split-lines-model.ts'
 
 const editorSource = readFileSync(fileURLToPath(new URL('./SplitLinesEditor.tsx', import.meta.url)), 'utf8')
 
