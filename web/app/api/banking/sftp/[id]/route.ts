@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
+import { pgErrorCode } from '../../../../../lib/setup/coerce'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -104,19 +105,60 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { response: invalidBody, reason } = await deletionReason(req)
   if (invalidBody) return invalidBody
   let notFound = false
-  await db.transaction(async (tx) => {
-    const before = await currentRow(tx, id, user.orgId)
-    if (!before) { notFound = true; return }
-    await tx.execute(sql`delete from sftp_servers where id = ${id} and org_id = ${user.orgId}`)
-    await auditSetupChange({
-      orgId: user.orgId,
-      table: 'sftp_servers',
-      rowId: id,
-      action: 'delete',
-      changes: reason ? { before: sftpServerAuditSnapshot(before), reason } : { before: sftpServerAuditSnapshot(before) },
-      actorId: user.id,
-    }, tx)
-  })
+  let refused: NextResponse | null = null
+  try {
+    await db.transaction(async (tx) => {
+      const before = await currentRow(tx, id, user.orgId)
+      if (!before) { notFound = true; return }
+      // A server that still delivers payment files or feeds statement
+      // imports cannot vanish: bank profiles hold a RESTRICT foreign key
+      // (a raw 500 without this check) and import schedules hold no key at
+      // all (they would silently stop running and disappear from the
+      // joined schedule list). Refuse with the dependents named, like the
+      // flow and recurring-schedule deletes.
+      const dependents = (await tx.execute<{ profiles: string; schedules: string }>(sql`
+        select
+          (select count(*)::text from payment_bank_profiles where org_id = ${user.orgId} and sftp_server_id = ${id}) as profiles,
+          (select count(*)::text from sftp_import_schedules where org_id = ${user.orgId} and sftp_server_id = ${id}) as schedules
+      `)).rows[0]!
+      if (Number(dependents.profiles) > 0) {
+        refused = NextResponse.json(
+          { error: 'This SFTP server still delivers payment files for a bank profile — point the profile at another server first', code: 'bank_profile_in_use' },
+          { status: 409 },
+        )
+        return
+      }
+      if (Number(dependents.schedules) > 0) {
+        refused = NextResponse.json(
+          { error: 'This SFTP server still feeds statement import schedules — delete or re-point the schedules first', code: 'import_schedules_in_use' },
+          { status: 409 },
+        )
+        return
+      }
+      await tx.execute(sql`delete from sftp_servers where id = ${id} and org_id = ${user.orgId}`)
+      await auditSetupChange({
+        orgId: user.orgId,
+        table: 'sftp_servers',
+        rowId: id,
+        action: 'delete',
+        changes: reason ? { before: sftpServerAuditSnapshot(before), reason } : { before: sftpServerAuditSnapshot(before) },
+        actorId: user.id,
+      }, tx)
+    })
+  } catch (e) {
+    // A reference the checks above cannot see (for example a row outside
+    // this organization pointing at the server through the unscoped
+    // profile key) still refuses the delete at the storage layer — surface
+    // it as the same typed 409 instead of a raw 500.
+    if (pgErrorCode(e) === '23503') {
+      return NextResponse.json(
+        { error: 'This SFTP server is still referenced and cannot be deleted', code: 'in-use' },
+        { status: 409 },
+      )
+    }
+    throw e
+  }
+  if (refused) return refused
   if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
