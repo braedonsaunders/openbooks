@@ -427,6 +427,18 @@ jobs:
       - run: npm ci
       - name: Bootstrap restore-drill database
         run: npx tsx scripts/bootstrap.ts
+      - name: Mark database as the owned ephemeral fixture
+        # Same authorization as every other database job: scratch-org fixtures
+        # fail closed on a database without this nonce, so without this step
+        # the drill below trips the interlock instead of rehearsing anything.
+        shell: bash
+        run: |
+          set -euo pipefail
+          MARKER="openbooks-ci-ephemeral-$(uuidgen)"
+          DB=$(psql "$OPENBOOKS_DB_URL" -Atc 'select current_database()')
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 \
+            -c "comment on database \"$DB\" is '$MARKER'"
+          echo "OPENBOOKS_TEST_DB_MARKER=$MARKER" >> "$GITHUB_ENV"
       - name: Export, destroy, restore, and verify an isolated backup
         env:
           OPENBOOKS_RESTORE_DRILL: "1"
