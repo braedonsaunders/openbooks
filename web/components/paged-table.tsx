@@ -39,6 +39,7 @@ export function PagedTable<T>({
   toolbarAfter,
   onRowClick,
   footer,
+  emptyAsRow = false,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -54,6 +55,10 @@ export function PagedTable<T>({
   /** Extra TableRow(s) rendered after the page's rows (e.g. a totals row).
    *  Computed from ALL rows by the caller, so it holds across pages/search. */
   footer?: ReactNode
+  /** Empty composition: render the toolbar plus the table headers with
+   *  `empty` as a single spanning row — the SetupEntitySection/departments
+   *  composition. Default keeps the bare `empty` slot for existing callers. */
+  emptyAsRow?: boolean
 }) {
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
@@ -73,28 +78,11 @@ export function PagedTable<T>({
   const start = clamped * pageSize
   const view = filtered.slice(start, start + pageSize)
 
-  if (rows.length === 0) return <>{empty}</>
-
-  return (
-    <div className="space-y-3">
-      {searchable ? (
-        toolbarAfter ? (
-          <div className="flex flex-wrap gap-2">
-            <div className="relative min-w-56 flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
-              <Input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value)
-                  setPage(0)
-                }}
-                placeholder={t('actions.search')}
-                className="pl-8"
-              />
-            </div>
-            {toolbarAfter}
-          </div>
-        ) : (
+  const toolbar = searchable ? (
+    toolbarAfter ? (
+      <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-56 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
           <Input
             value={query}
             onChange={(e) => {
@@ -102,10 +90,54 @@ export function PagedTable<T>({
               setPage(0)
             }}
             placeholder={t('actions.search')}
-            className="max-w-xs"
+            className="pl-8"
           />
-        )
-      ) : null}
+        </div>
+        {toolbarAfter}
+      </div>
+    ) : (
+      <Input
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setPage(0)
+        }}
+        placeholder={t('actions.search')}
+        className="max-w-xs"
+      />
+    )
+  ) : null
+
+  if (rows.length === 0) {
+    if (!emptyAsRow) return <>{empty}</>
+    return (
+      <div className="space-y-3">
+        {toolbar}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {columns.map((c) => (
+                <TableHead key={c.key} align={c.align === 'right' ? 'right' : undefined} className={c.align === 'right' ? 'text-right' : undefined}>
+                  {c.header}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow>
+              <TableCell colSpan={columns.length} className="text-slate-500 dark:text-slate-400">
+                {empty}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {toolbar}
       <Table>
         <TableHeader>
           <TableRow>

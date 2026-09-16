@@ -1,13 +1,12 @@
 'use client'
 
-import { Gauge, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Badge,
   Button,
   Drawer,
-  EmptyState,
   Input,
   Label,
   SearchSelect,
@@ -20,6 +19,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
+import { ShowInactivePill } from '../../../../../components/show-inactive-pill'
 import { confirmDialog } from '../../../../../lib/confirm'
 import {
   driverPayloadFromForm,
@@ -565,40 +565,24 @@ export function DriversTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {t('title')}
-        </h2>
+        <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+          {t('description')}
+        </p>
         <Button type="button" onClick={() => setEditing({ form: newDriverForm() })}>
           <Plus size={15} />
           {t('newDriver')}
         </Button>
       </div>
       {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <Check checked={showInactive} onChange={setShowInactive}>
-          {t('showInactive')}
-        </Check>
-      </div>
-      {drivers.length === 0 ? (
-        <EmptyState
-          icon={<Gauge aria-hidden />}
-          title={t('emptyTitle')}
-          description={t('empty')}
-          action={
-            <Button type="button" onClick={() => setEditing({ form: newDriverForm() })}>
-              <Plus size={15} />
-              {t('newDriver')}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto">
-          <PagedTable
-            rows={drivers}
-            rowKey={(row) => row.id}
-            searchable
-            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
-            onRowClick={(row) => setEditing({ form: formFromDriver(row), id: row.id, updatedAt: row.updatedAt })}
+      <div className="overflow-x-auto">
+        <PagedTable
+          rows={drivers}
+          rowKey={(row) => row.id}
+          searchable
+          emptyAsRow
+          toolbarAfter={<ShowInactivePill checked={showInactive} onChange={setShowInactive} />}
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
+          onRowClick={(row) => setEditing({ form: formFromDriver(row), id: row.id, updatedAt: row.updatedAt })}
             columns={[
               { key: 'name', header: t('name'), cell: (row) => <span className="font-medium">{row.name}</span>, search: (row) => `${row.name} ${row.key}` },
               { key: 'key', header: t('key'), cell: (row) => <code className="text-xs">{row.key}</code>, search: (row) => row.key },
@@ -642,7 +626,6 @@ export function DriversTab() {
             ]}
           />
         </div>
-      )}
 
       <Drawer
         open={editing !== null}
@@ -650,20 +633,17 @@ export function DriversTab() {
         title={creating ? t('newDriver') : t('editDriver')}
         description={creating ? undefined : editing?.form.key}
         size="xl"
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setEditing(null)}>
-              {tc('actions.cancel')}
-            </Button>
-            <Button type="button" onClick={() => void save()} disabled={saving}>
-              {saving ? tc('actions.saving') : tc('actions.save')}
-            </Button>
-          </div>
+        headerActions={
+          <Button type="button" onClick={() => void save()} disabled={saving}>
+            {saving ? tc('actions.saving') : creating ? tc('actions.create') : tc('actions.save')}
+          </Button>
         }
       >
         {form ? (
           <div className="space-y-5 p-1">
-            <DrawerSection first title={t('editDriver')}>
+            {/* No body heading: the drawer title already names the record —
+                the SetupDrawer composition. */}
+            <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label={t('key')} hint={t('keyHint')}>
                   <Input
@@ -681,10 +661,10 @@ export function DriversTab() {
                   />
                 </Field>
               </div>
-              <Field label={t('description')}>
+              <Field label={t('fieldDescription')}>
                 <Input
                   value={form.description}
-                  aria-label={t('description')}
+                  aria-label={t('fieldDescription')}
                   onChange={(e) => setEditing((s) => (s ? { ...s, form: { ...s.form, description: e.target.value } } : s))}
                 />
               </Field>
@@ -749,7 +729,7 @@ export function DriversTab() {
                   </Check>
                 </div>
               </div>
-            </DrawerSection>
+            </div>
             {form.sourceKind === 'statistical_journal' ? (
               <DrawerSection title={t(`sourceKinds.${form.sourceKind}`)}>
                 <Field label={t('unit')} hint={t('accountsHint')}>
@@ -874,12 +854,10 @@ export function DriversTab() {
         title={t('previewTitle')}
         description={previewing ? `${previewing.key} · ${previewing.name}` : undefined}
         size="lg"
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPreviewing(null)}>
-              {tc('actions.close')}
-            </Button>
-          </div>
+        headerActions={
+          <Button type="button" onClick={() => void runPreview()} disabled={!previewPeriod && !previewDate}>
+            {t('preview')}
+          </Button>
         }
       >
         {previewing ? (
@@ -912,9 +890,6 @@ export function DriversTab() {
                 />
               </Field>
             </div>
-            <Button type="button" onClick={() => void runPreview()} disabled={!previewPeriod && !previewDate}>
-              {t('preview')}
-            </Button>
             {previewNote ? <p className="text-sm text-slate-500 dark:text-slate-400">{previewNote}</p> : null}
             {previewRows ? (
               previewRows.length === 0 ? (

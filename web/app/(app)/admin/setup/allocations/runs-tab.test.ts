@@ -5,16 +5,17 @@ import { fileURLToPath } from 'node:url'
 
 const tabSource = readFileSync(fileURLToPath(new URL('./runs-tab.tsx', import.meta.url)), 'utf8')
 
-test('runs header carries the preview action and empty tenants get an EmptyState', () => {
-  // Preview run is the primary action in the section header — always
-  // visible — opening a drawer with the rule/period/book/subsidiary
-  // pickers. Empty tenants get the shared EmptyState with the same action.
-  assert.match(tabSource, /<EmptyState/)
-  assert.match(tabSource, /emptyTitle/)
-  assert.match(tabSource, /runs\.length === 0/)
+test('runs list follows the departments composition', () => {
+  // Blurb + Preview-run primary action row, sibling filter bar, then the
+  // table — headers plus one empty row when there are no runs, never an
+  // EmptyState card. Preview opens the drawer with the pickers.
+  assert.ok(!tabSource.includes('<EmptyState'), 'no EmptyState card')
+  assert.match(tabSource, /emptyAsRow/)
+  assert.ok(tabSource.includes(`{t('empty')}`), 'empty row renders the empty copy')
+  // RatesTab depth: blurb + action, no restated h2.
+  assert.ok(!tabSource.includes('<h2'), 'no section h2 above the list')
   assert.match(tabSource, /previewOpen/)
-  const previews = tabSource.match(/setPreview\(null\); setPreviewOpen\(true\)/g) ?? []
-  assert.ok(previews.length >= 2, 'header and empty-state actions must both open preview')
+  assert.ok((tabSource.match(/setPreview\(null\); setPreviewOpen\(true\)/g) ?? []).length >= 1, 'header action opens preview')
 })
 
 test('run detail keeps summary, computation, lineage and house actions', () => {
@@ -39,6 +40,14 @@ test('run detail keeps summary, computation, lineage and house actions', () => {
   // Shared tables only; labelled filters; namespaced common actions.
   assert.match(tabSource, /<Table>/)
   assert.ok(!tabSource.includes('<table'), 'no hand-rolled tables')
-  assert.ok(!tabSource.includes(`tc('close')`), 'close resolves through actions.*')
-  assert.ok(tabSource.includes(`tc('actions.close')`), 'close resolves through actions.*')
+  // No common-namespace action labels remain un-namespaced: every tc() key
+  // resolves under actions.* (a bare key renders the raw key path).
+  assert.ok(!tabSource.includes(`tc('`), 'no bare common-namespace keys')
+  // Sibling filter-bar chrome: inline plain labels, no `?` Fields, no bare count chip.
+  assert.match(tabSource, /inline-flex items-center gap-2 text-sm/)
+  assert.ok(!tabSource.includes(`<Field label={t('filterStatus')}`), 'status filter uses an inline label')
+  assert.ok(!tabSource.includes('{total}'), 'no bare count chip')
+  // Drawers carry their primary in the header (SetupDrawer composition).
+  assert.match(tabSource, /headerActions=/)
+  assert.ok(!tabSource.includes('footer={'), 'no footer button rows')
 })

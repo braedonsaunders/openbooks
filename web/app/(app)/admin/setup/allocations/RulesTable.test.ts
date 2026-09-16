@@ -35,19 +35,22 @@ test('rules table scrolls horizontally on narrow viewports (seven columns)', () 
   assert.match(tableSource, /overflow-x-auto/)
 })
 
-test('empty tenants see the shared empty state with a New-rule action', () => {
-  // Braedon verdict: an empty tenant showed only "no allocation rules yet"
-  // with no way to create one (the toolbar New button vanished with the
-  // table). The header New button lives above the list and the empty slot
-  // is the shared EmptyState carrying the same create action.
-  assert.match(tableSource, /<EmptyState/)
-  assert.match(tableSource, /rules\.list\.emptyTitle/)
-  assert.match(tableSource, /rules\.length === 0/)
-  // Both the header button and the empty-state action drive ?rule=new
-  // through one shared handler.
+test('empty tenants see table chrome with headers and one empty row, never a card', () => {
+  // Departments composition: the header New action lives above the list so
+  // it stays visible on an empty tenant; PagedTable `emptyAsRow` keeps the
+  // search toolbar plus column headers with the empty copy as one row.
+  assert.ok(!tableSource.includes('<EmptyState'), 'no EmptyState card')
+  assert.match(tableSource, /emptyAsRow/)
+  assert.match(tableSource, /toolbarAfter/)
+  assert.match(tableSource, /ShowInactivePill/)
+  assert.match(tableSource, /rules\.list\.blurb/)
+  // Title states the fact, description states the next step — never the echo.
+  assert.ok(!tableSource.includes(`description={t('rules.list.empty')}`), 'empty copy must not repeat the title')
+  // RatesTab depth: the tab body never restates the tab name in an h2.
+  assert.ok(!tableSource.includes('<h2'), 'no section h2 above the list')
+  // The header New action drives ?rule=new through one shared handler.
   assert.ok(tableSource.includes(`openRule('new')`), 'create opens ?rule=new')
-  const createActions = tableSource.match(/onClick=\{newRule\}/g) ?? []
-  assert.ok(createActions.length >= 2, 'header and empty-state actions must both create')
+  assert.ok((tableSource.match(/onClick=\{newRule\}/g) ?? []).length >= 1, 'header action creates')
 })
 
 test('rule status renders house badges, never bare text', () => {

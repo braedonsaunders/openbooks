@@ -1,22 +1,23 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Plus, Split } from 'lucide-react'
-import { Badge, Button, EmptyState } from '@openbooks/ui'
+import { Plus } from 'lucide-react'
+import { Badge, Button } from '@openbooks/ui'
 import type { RuleHeadSummary } from '../../../../../../engine/src/allocations/index.ts'
 import { PagedTable } from '../../../../../components/paged-table'
+import { ShowInactivePill } from '../../../../../components/show-inactive-pill'
 import { mergeHref } from '../../../../../lib/list-params'
 import { formatWindow } from './rule-window'
 
 /**
- * Rules tab list: every head with its current-version summary. The house
- * header row (section title + New button) lives HERE, above the list, so the
- * New action stays visible on an empty tenant — PagedTable renders only its
- * `empty` slot when there are no rows, which is where a toolbar-placed
- * button would vanish. Empty tenants get the shared EmptyState with the
- * same New-rule primary action. Row click opens the rule drawer
- * (`?rule=<id>`) — the drawer host owns that param.
+ * Rules tab list: every head with its current-version summary. The
+ * departments composition: blurb + New action row, then the search toolbar
+ * with the show-inactive pill, then the table — with column headers and a
+ * single empty row when there are no rows (PagedTable `emptyAsRow`), never
+ * a card. Row click opens the rule drawer (`?rule=<id>`) — the drawer host
+ * owns that param.
  */
 export function RulesTable({
   rules,
@@ -27,6 +28,8 @@ export function RulesTable({
 }) {
   const t = useTranslations('allocations')
   const router = useRouter()
+  const [showInactive, setShowInactive] = useState(false)
+  const visible = showInactive ? rules : rules.filter((row) => row.rule.isActive)
   // Static keys keep next-intl's catalog typing (no dynamic lookup).
   const modeLabels = {
     entry: t('rules.modes.entry'),
@@ -42,38 +45,29 @@ export function RulesTable({
     router.push(mergeHref('/admin/setup/allocations', currentParams, { rule: ruleParam }) as never)
   }
   const newRule = () => openRule('new')
+  // RatesTab depth: the workspace header already names this tab, so the tab
+  // body leads with its blurb plus the New action — no restated h2.
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {t('rules.list.heading')}
-        </h2>
+        <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+          {t('rules.list.blurb')}
+        </p>
         <Button onClick={newRule}>
           <Plus size={15} />
           {t('rules.list.new')}
         </Button>
       </div>
-      {rules.length === 0 ? (
-        <EmptyState
-          icon={<Split aria-hidden />}
-          title={t('rules.list.emptyTitle')}
-          description={t('rules.list.empty')}
-          action={
-            <Button onClick={newRule}>
-              <Plus size={15} />
-              {t('rules.list.new')}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto">
-          <PagedTable<RuleHeadSummary>
-            rows={rules}
-            rowKey={(row) => row.rule.id}
-            searchable
-            pageSize={15}
-            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.list.empty')}</p>}
-            onRowClick={(row) => openRule(row.rule.id)}
+      <div className="overflow-x-auto">
+        <PagedTable<RuleHeadSummary>
+          rows={visible}
+          rowKey={(row) => row.rule.id}
+          searchable
+          pageSize={15}
+          emptyAsRow
+          toolbarAfter={<ShowInactivePill checked={showInactive} onChange={setShowInactive} />}
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.list.empty')}</p>}
+          onRowClick={(row) => openRule(row.rule.id)}
             columns={[
               {
                 key: 'name',
@@ -151,7 +145,6 @@ export function RulesTable({
             ]}
           />
         </div>
-      )}
     </div>
   )
 }
