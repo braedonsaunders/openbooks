@@ -4,7 +4,6 @@ import test from 'node:test'
 registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
-const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import('@openbooks/engine/src/continuous-close-config.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/test-fixtures.ts'
 )
