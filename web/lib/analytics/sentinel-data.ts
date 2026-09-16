@@ -5,6 +5,7 @@ import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
 import { presentationCurrency } from "../fx-presentation";
 import { can, ForbiddenError, type Authz } from "../authz";
+import { englishSentinelStrings, type ConformityCode, type SentinelStrings } from "./sentinel-strings";
 
 /**
  * Sentinel — transaction integrity forensics re-engineered for scale.
@@ -222,8 +223,15 @@ export interface SentinelData {
   calendar: { date: string; count: number; amount: number }[];
 }
 
-const conformity1D = (mad: number) => (mad <= 0.006 ? "Excellent" : mad <= 0.012 ? "Acceptable" : mad <= 0.015 ? "Marginal" : "Non-Conforming");
-const conformity2D = (mad: number) => (mad <= 0.0012 ? "Excellent" : mad <= 0.0022 ? "Acceptable" : mad <= 0.0033 ? "Marginal" : "Non-Conforming");
+/**
+ * Benford conformity as a stable code — never translated text, so forensic
+ * payloads (and the client's severity switches) compare against the same
+ * value in every language. The request-scoped dashboard maps codes to words.
+ */
+const conformity1D = (mad: number): ConformityCode =>
+  (mad <= 0.006 ? "excellent" : mad <= 0.012 ? "acceptable" : mad <= 0.015 ? "marginal" : "nonConforming");
+const conformity2D = (mad: number): ConformityCode =>
+  (mad <= 0.0012 ? "excellent" : mad <= 0.0022 ? "acceptable" : mad <= 0.0033 ? "marginal" : "nonConforming");
 
 /** Return the inclusive start of the 36-month vendor-statistics baseline. */
 export function sentinelBaselineFrom(to: string): string {
@@ -232,7 +240,12 @@ export function sentinelBaselineFrom(to: string): string {
 
 // ---- main -------------------------------------------------------------------
 
-export async function sentinelData(orgId: string, period: { from: string; to: string; label: string }, authz: Authz): Promise<SentinelData> {
+export async function sentinelData(
+  orgId: string,
+  period: { from: string; to: string; label: string },
+  authz: Authz,
+  strings: SentinelStrings = englishSentinelStrings,
+): Promise<SentinelData> {
   // Whole-company forensics includes cross-entity baselines, identity matches
   // and retained administrative audit snapshots. Partial access cannot be
   // represented by silently dropping evidence or returning zero-risk counts.
@@ -664,14 +677,14 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       conformity: conformity1D(mad),
       message:
         total < 50
-          ? `Insufficient data (${total} transactions). Need at least 50.`
+          ? strings.benfordInsufficient(total)
           : mad <= 0.006
-            ? "Transaction amounts closely follow Benford's Law — low manipulation risk."
+            ? strings.benfordClose
             : mad <= 0.012
-              ? "Transaction amounts reasonably follow Benford's Law."
+              ? strings.benfordReasonable
               : mad <= 0.015
-                ? "Some deviation detected — warrants review."
-                : "Significant deviation — possible manipulation.",
+                ? strings.benfordSomeDeviation
+                : strings.benfordSignificant,
       anomalies: digits.filter((x) => x.isAnomaly),
     };
   };
@@ -730,7 +743,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     amount: Number(r.amount), currency: r.currency, funcAmount: Number(r.func_amount),
     partyId: r.party_id, partyName: r.party_name ?? "",
     flagType: "trap" as const,
-    reason: `Amount ends in ${r.trap} (potential threshold avoidance)`,
+    reason: strings.trapReason(r.trap as string),
     riskScore: r.trap === "9999" ? 65 : r.trap === "999" ? 55 : 45,
   }));
   const trapByTrap = ((trapAgg.rows)).map((r) => ({ trap: r.trap as string, count: Number(r.count), amount: Number(r.amount) }));
@@ -819,7 +832,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       amount, currency: r.currency, funcAmount: Number(r.func_amount),
       partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "weekend" as const,
-      reason: `Dated on ${isSunday ? "Sunday" : "Saturday"}`,
+      reason: strings.weekendReason(isSunday),
       riskScore: Math.min(100, score),
     };
   });
@@ -843,7 +856,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       amount, currency: r.currency, funcAmount: Number(r.func_amount),
       partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "rsf" as const,
-      reason: `${rsf.toFixed(1)}× larger than ${r.party_name}'s historical 2nd largest (${r.currency})`,
+      reason: strings.rsfReason(rsf.toFixed(1), strings.displayPartyName(r.party_name), String(r.currency)),
       riskScore: Math.min(100, score),
       rsf, secondLargest: Number(r.second_amount), baselineCount: Number(r.baseline_count),
     };
@@ -861,7 +874,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       amount, currency: r.currency, funcAmount: Number(r.func_amount),
       partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "zscore" as const,
-      reason: `Z-score ${Math.abs(z).toFixed(2)} vs ${r.party_name} ${r.currency} average (${r.baseline_count} txns)`,
+      reason: strings.zscoreReason(Math.abs(z).toFixed(2), strings.displayPartyName(r.party_name), String(r.currency), Number(r.baseline_count)),
       riskScore: Math.min(100, score),
       zScore: z, vendorAvg: Number(r.avg_amount), vendorStdDev: Number(r.std_amount), baselineCount: Number(r.baseline_count),
     };
@@ -886,7 +899,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       startRef: Number(r.start_ref), endRef: Number(r.end_ref), dateSpanDays: spanDays,
       firstDate: String(r.first_date), lastDate: String(r.last_date),
       riskLevel: level, riskScore: Math.min(100, score),
-      reason: `${count} gap-free sequential ${r.currency} invoices (${r.start_ref}–${r.end_ref}) over ${spanDays} days${level === "high" ? " — possible shell company / sole customer" : ""}`,
+      reason: strings.sequentialReason(count, String(r.start_ref), String(r.end_ref), spanDays, level === "high", String(r.currency)),
       invoices: invoices.slice(0, 12),
     };
   });
@@ -901,10 +914,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       matchType,
       riskScore: name && addr ? 95 : addr ? 90 : 75,
       reason: name && addr
-        ? `Vendor "${r.vendor_name}" matches employee "${r.employee_name}" by BOTH name and street address`
+        ? strings.ghostBoth(String(r.vendor_name), String(r.employee_name))
         : addr
-          ? `Vendor "${r.vendor_name}" shares a street address with employee "${r.employee_name}"`
-          : `Vendor "${r.vendor_name}" matches employee name "${r.employee_name}"`,
+          ? strings.ghostAddress(String(r.vendor_name), String(r.employee_name))
+          : strings.ghostName(String(r.vendor_name), String(r.employee_name)),
     };
   }).sort((a, b) => b.riskScore - a.riskScore);
 
@@ -939,7 +952,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       partyId: g.partyId,
       partyName: g.partyName,
       flagType: "duplicate",
-      reason: `${g.count} matching documents — same vendor, kind, amount (${g.currency} ${g.amount})${g.sameReference && anchor.reference ? `, shared reference ${anchor.reference}` : ""} (${g.dateSpanDays}d span): ${others}`,
+      reason: strings.duplicateGroupReason({ count: g.count, currency: String(g.currency), amount: String(g.amount), sharedReference: g.sameReference && anchor.reference ? String(anchor.reference) : null, daysSpan: g.dateSpanDays, others }),
       riskScore: g.riskScore,
     });
   }
@@ -958,7 +971,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   for (const f of flagged) {
     const key = f.partyId ?? f.partyName ?? "unknown";
     let v = vendorMap.get(key);
-    if (!v) { v = { partyId: f.partyId, partyName: f.partyName || "Unknown", flagCount: 0, totalAmount: 0, flagTypes: [], maxRiskScore: 0, compositeScore: 0 }; vendorMap.set(key, v); }
+    if (!v) { v = { partyId: f.partyId, partyName: strings.displayPartyName(f.partyName), flagCount: 0, totalAmount: 0, flagTypes: [], maxRiskScore: 0, compositeScore: 0 }; vendorMap.set(key, v); }
     v.flagCount++;
     v.totalAmount += Math.abs(f.funcAmount);
     v.maxRiskScore = Math.max(v.maxRiskScore, f.riskScore);
@@ -978,14 +991,14 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   if (dupAmount > 100_000) risk += 20; else if (dupAmount > 50_000) risk += 15;
   if (ghosts.length > 0) risk += 25;
   if (sequential.length > 0) risk += 15;
-  if (conformity1D(mad1D) === "Non-Conforming") risk += 15;
+  if (conformity1D(mad1D) === "nonConforming") risk += 15;
 
   const topRiskAreas: SentinelData["summary"]["topRiskAreas"] = [];
-  if (ghosts.length) topRiskAreas.push({ area: "Ghost Vendors", severity: "critical", count: ghosts.length, message: `${ghosts.length} vendor(s) match employee names` });
-  if (sequential.length) topRiskAreas.push({ area: "Sequential Invoices", severity: "high", count: sequential.length, message: `${sequential.length} vendor(s) with gap-free invoice runs` });
-  if (dupTotal > 10) topRiskAreas.push({ area: "Duplicate Payments", severity: "high", count: dupTotal, message: `${dupTotal} duplicate groups (one finding per group)` });
-  if (trapTotal > 0) topRiskAreas.push({ area: "Approval Limit Avoidance", severity: "high", count: trapTotal, message: `${trapTotal} amounts ending 99/999/9999` });
-  if (conformity1D(mad1D) === "Non-Conforming") topRiskAreas.push({ area: "Benford Deviation", severity: "medium", count: total1D, message: "First-digit distribution deviates significantly" });
+  if (ghosts.length) topRiskAreas.push({ severity: "critical", count: ghosts.length, ...strings.riskGhosts(ghosts.length) });
+  if (sequential.length) topRiskAreas.push({ severity: "high", count: sequential.length, ...strings.riskSequential(sequential.length) });
+  if (dupTotal > 10) topRiskAreas.push({ severity: "high", count: dupTotal, ...strings.riskDuplicates(dupTotal) });
+  if (trapTotal > 0) topRiskAreas.push({ severity: "high", count: trapTotal, ...strings.riskTraps(trapTotal) });
+  if (conformity1D(mad1D) === "nonConforming") topRiskAreas.push({ severity: "medium", count: total1D, ...strings.riskBenford() });
   topRiskAreas.sort((a, b) => ({ critical: 0, high: 1, medium: 2 }[a.severity] - { critical: 0, high: 1, medium: 2 }[b.severity]));
 
   const meta = metaRows.rows[0] ?? { docs: 0, amount: 0 };
