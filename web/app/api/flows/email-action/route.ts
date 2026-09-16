@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/db.ts'
 import {
   decideGate,
+  EMAIL_TOKEN_TTL_MS,
   verifyEmailActionToken,
   GateError,
   type EmailActionClaims,
@@ -14,9 +15,9 @@ export const runtime = 'nodejs'
 /**
  * One-click email approvals — NO session required (web/middleware.ts excludes
  * this path). The HMAC token (engine/src/flows/email-tokens.ts) is the entire
- * grant: it binds one gate row + one decision + one assignee with a 7-day
- * expiry, and decideGate still authorizes that assignee normally, so the link
- * can never do more than the assignee could in the app.
+ * grant: it binds one gate row + one decision + one assignee with an
+ * EMAIL_TOKEN_TTL_MS expiry, and decideGate still authorizes that assignee
+ * normally, so the link can never do more than the assignee could in the app.
  *
  *   GET  ?token=…   verify → standalone confirmation page (never decides)
  *   POST (form)     verify → decide as the token's assignee → done page
@@ -107,10 +108,20 @@ function documentSummaryHtml(g: GateSummary): string {
     .join('')}</table>`
 }
 
+/** User-facing lifetime of a one-click link, derived from the signing TTL so the copy cannot drift from it. */
+function approvalLinkExpiryLabel(): string {
+  const hours = EMAIL_TOKEN_TTL_MS / 3_600_000
+  if (Number.isInteger(hours) && hours % 24 === 0) {
+    const days = hours / 24
+    return `${days} day${days === 1 ? '' : 's'}`
+  }
+  return `${hours} hour${hours === 1 ? '' : 's'}`
+}
+
 const invalidTokenPage = () =>
   page(
     'This approval link is invalid or has expired',
-    `<p style="color:#52525b">Approval links expire after 7 days. Open <strong>OpenBooks → Approvals</strong> to decide there.</p>`,
+    `<p style="color:#52525b">Approval links expire after ${approvalLinkExpiryLabel()}. Open <strong>OpenBooks → Approvals</strong> to decide there.</p>`,
     400,
   )
 
