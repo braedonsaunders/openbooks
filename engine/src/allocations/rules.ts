@@ -315,7 +315,7 @@ async function auditEvidence(args: {
   orgId: string;
   table: "allocation_rules" | "allocation_rule_versions";
   rowId: string;
-  action: "insert" | "update";
+  action: "insert" | "update" | "delete";
   event: string;
   before: unknown;
   after: unknown;
@@ -566,14 +566,60 @@ export async function createRule(input: CreateRuleInput, audit: AllocationAudit)
   });
 }
 
+/**
+ * Engine-owned rules (is_system, e.g. the overhead net-zero pair) are managed
+ * through their owning policy — overhead settings, rate publishes — never
+ * through the rules API. Every service mutation below refuses them; the
+ * owning engine sync writes its rows directly with its own audit evidence.
+ */
+function refuseSystemRule(head: AllocationRuleHead, what: string): void {
+  if (head.isSystem) {
+    throw new AllocationRuleError(
+      "FROZEN",
+      `engine-owned rule "${head.key}" is managed through its owning policy and cannot be ${what} through the rules API`,
+    );
+  }
+}
+
+export async function deleteRule(
+  ruleId: string,
+  input: AllocationOrgScope,
+  audit: AllocationAudit,
+): Promise<{ ruleId: string }> {
+  const orgId = uuid(input.orgId, "orgId");
+  const id = uuid(ruleId, "ruleId");
+  return withOrgTransaction(orgId, async () => {
+    const before = await loadRuleHead(orgId, id, true);
+    refuseSystemRule(before, "deleted");
+    await requireRevision("allocation_rules", orgId, id, input.expectedRevision);
+    const versions = await db.execute<{ id: string; status: string }>(
+      sql`select id, status from allocation_rule_versions where org_id = ${orgId} and rule_id = ${id}`,
+    );
+    if (versions.rows.some((row) => row.status !== "draft")) {
+      throw new AllocationRuleError(
+        "INVALID",
+        `allocation rule "${before.key}" has published history and cannot be deleted; retire its versions instead`,
+      );
+    }
+    for (const version of versions.rows) {
+      await db.execute(sql`delete from allocation_rule_targets where org_id = ${orgId} and version_id = ${version.id}`);
+      await db.execute(sql`delete from allocation_rule_versions where org_id = ${orgId} and id = ${version.id}`);
+    }
+    await db.execute(sql`delete from allocation_rules where org_id = ${orgId} and id = ${id}`);
+    await auditEvidence({
+      orgId, table: "allocation_rules", rowId: id, action: "delete", event: "rule.deleted",
+      before, after: null, actorId: audit.actorId, reason: audit.reason,
+    });
+    return { ruleId: id };
+  });
+}
+
 export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: AllocationAudit): Promise<RuleMutationResult> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(ruleId, "ruleId");
   return withOrgTransaction(orgId, async () => {
     const before = await loadRuleHead(orgId, id, false);
-    if (before.isSystem && (input.name !== undefined || input.description !== undefined)) {
-      throw new AllocationRuleError("FROZEN", "engine-owned rules accept only activity and ordering edits");
-    }
+    refuseSystemRule(before, "edited");
     await requireRevision("allocation_rules", orgId, id, input.expectedRevision);
     const name = input.name === undefined ? before.name : nonEmpty(input.name, "name");
     const description = input.description === undefined ? (before.description ?? null) : input.description;
@@ -781,7 +827,8 @@ export async function createDraftVersion(
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(ruleId, "ruleId");
   return withOrgTransaction(orgId, async () => {
-    await loadRuleHead(orgId, id, true);
+    const head = await loadRuleHead(orgId, id, true);
+    refuseSystemRule(head, "edited");
     const maxRow = await db.execute<{ n: string }>(
       sql`select coalesce(max(version_no), 0)::text as n from allocation_rule_versions where org_id = ${orgId} and rule_id = ${id}`,
     );
@@ -894,6 +941,7 @@ export async function updateDraftVersion(
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
     const before = mapVersion(await loadVersionRow(orgId, id), "version_");
+    refuseSystemRule(await loadRuleHead(orgId, before.ruleId, true), "edited");
     if (before.status !== "draft") {
       throw new AllocationRuleError("FROZEN", `version ${id} is ${before.status}; only drafts are editable`);
     }
@@ -966,6 +1014,7 @@ export async function replaceTargets(
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
     const version = mapVersion(await loadVersionRow(orgId, id), "version_");
+    refuseSystemRule(await loadRuleHead(orgId, version.ruleId, true), "edited");
     if (version.status !== "draft") {
       throw new AllocationRuleError("FROZEN", `version ${id} is ${version.status}; its targets are immutable`);
     }
@@ -1032,6 +1081,7 @@ export async function publishVersion(
     const version = mapVersion(row, "version_");
     // Lock the rule head so two overlapping publishes cannot both pass validation.
     const head = await loadRuleHead(orgId, version.ruleId, true);
+    refuseSystemRule(head, "published");
     if (version.status === "published") {
       throw new AllocationRuleError("FROZEN", `version ${id} is already published`);
     }
@@ -1080,10 +1130,11 @@ export async function retireVersion(
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
     const version = mapVersion(await loadVersionRow(orgId, id), "version_");
+    const head = await loadRuleHead(orgId, version.ruleId, true);
+    refuseSystemRule(head, "retired");
     if (version.status === "retired") {
       throw new AllocationRuleError("FROZEN", `version ${id} is already retired`);
     }
-    const head = await loadRuleHead(orgId, version.ruleId, true);
     try {
       await db.execute(sql`update allocation_rule_versions
         set status = 'retired', retired_at = now(), retired_by = ${input.actorId},

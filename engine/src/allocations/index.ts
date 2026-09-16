@@ -45,6 +45,7 @@ export {
   AllocationRuleError,
   createDraftVersion,
   createRule,
+  deleteRule,
   getRuleDetail,
   getRuleVersion,
   listRuleHeads,
