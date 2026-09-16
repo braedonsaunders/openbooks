@@ -1,0 +1,219 @@
+import { sql } from "drizzle-orm";
+import {
+  compileCustomQuery,
+  customQueryReferencesBook,
+  isBaseMoneyMeasure,
+  isMoneyBlendingMeasure,
+  isTxnCurrencyMeasure,
+  MAX_REPORT_ROWS,
+  parseDenominationCounts,
+  REPORT_ENTITY_MAP,
+  resolveDenominations,
+  validateCustomQuery,
+  type CompiledReportQuery,
+  type ReportCustomQuery,
+  type ReportMeasure,
+} from "@openbooks/reports";
+import { db, pool } from "../db.ts";
+import { add, normalizeDecimal } from "../money.ts";
+import { actorHasPermission } from "../actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../actor-subsidiaries.ts";
+import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
+import { DriverAdminError } from "./driver-admin.ts";
+import {
+  createDriverResolver,
+  DriverNotAvailableError,
+  type ReportDriverRow,
+  type ReportDriverRunInput,
+  type ReportDriverRunner,
+} from "./drivers.ts";
+import type { DriverResolver } from "./types.ts";
+
+/**
+ * Engine-side `ReportDriverRunner` for `report_definition` drivers (A5
+ * composition over A2's resolver contract).
+ *
+ * It runs a saved entity-query definition exactly the way the report routes
+ * do — same compiler, same org/subsidiary/book scoping, same fiscal bins —
+ * under the calling actor's permissions, and projects two columns out of the
+ * raw rows (display shaping would corrupt the measure). Definitions carry
+ * their own filters, so the run needs no parameter dialect; the window the
+ * driver passes is honoured through the as-of snapshot.
+ *
+ * Boundaries (loud, never silent): statement-kind definitions run through
+ * the statement engine, which has no engine entry point; custom-record
+ * entities resolve through the web catalog; period presets need declared
+ * periods. A driver pointed at any of those refuses instead of measuring.
+ */
+export async function runDriverReport(input: ReportDriverRunInput): Promise<ReportDriverRow[]> {
+  const { orgId, reportDefinitionId, dimensionColumn, valueColumn, actorId } = input;
+  if (!actorId) {
+    throw new DriverNotAvailableError("report_definition drivers require an actorId");
+  }
+  if (!(await actorHasPermission(db, orgId, actorId, "reports.read"))) {
+    throw new DriverNotAvailableError("actor cannot run reports");
+  }
+  await ensureReportDefinitions(orgId);
+  const def = (await db.execute<{
+    report_type: string;
+    query: unknown;
+    statement: unknown;
+  }>(sql`
+    select report_type, query, statement from report_definitions
+     where id = ${reportDefinitionId} and org_id = ${orgId} limit 1`)).rows[0];
+  if (!def) throw new DriverAdminError("not_found", "report definition not found");
+  if (def.report_type !== "query" || !def.query || typeof def.query !== "object") {
+    throw new DriverAdminError(
+      "validation",
+      "report_definition drivers need an entity-query definition",
+    );
+  }
+  let plan: ReportCustomQuery;
+  try {
+    plan = validateCustomQuery(def.query, REPORT_ENTITY_MAP);
+  } catch (error) {
+    throw new DriverAdminError("validation", error instanceof Error ? error.message : String(error));
+  }
+  const entity = REPORT_ENTITY_MAP[plan.entity];
+  if (!entity) throw new DriverAdminError("validation", `unknown report entity ${plan.entity}`);
+  if (entity.key.startsWith("custom:")) {
+    throw new DriverAdminError("validation", "custom report entities are not supported as driver sources");
+  }
+  if (entity.requiredPermission && !(await actorHasPermission(db, orgId, actorId, entity.requiredPermission))) {
+    throw new DriverNotAvailableError("actor cannot run reports on this entity");
+  }
+  if (entity.featureKey && !(await featureEnabled(orgId, entity.featureKey))) {
+    throw new DriverNotAvailableError("the report entity's feature is disabled");
+  }
+  const subsidiaryIds = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+  const compiled = compileCustomQuery(entity, plan, orgId, {
+    maxRows: MAX_REPORT_ROWS,
+    fiscalStartMonth: await fiscalStartMonth(orgId),
+    asOf: input.to,
+    allowedSubsidiaryIds: subsidiaryIds === null ? null : [...subsidiaryIds],
+    allowedBookIds: await resolveBookScope(orgId, plan),
+  });
+  const { rows } = await pool.query(compiled.text, compiled.values);
+  assertSingleDenomination(entity, compiled, rows, valueColumn);
+  return projectDriverRows(rows, compiled, dimensionColumn, valueColumn);
+}
+
+/**
+ * A driver weight must never add foreign money together. Mirrors the report
+ * routes' grand-total guard: a sum over an observably mixed denomination
+ * refuses instead of blending. Counts and non-money measures pass through.
+ */
+function assertSingleDenomination(
+  entity: (typeof REPORT_ENTITY_MAP)[string],
+  compiled: CompiledReportQuery,
+  rows: Record<string, unknown>[],
+  valueColumn: string,
+): void {
+  const measure: ReportMeasure = compiled.mode === "summarize"
+    ? (compiled.measures.find((m) => m.column === valueColumn) ??
+      (compiled.measures.length === 1 ? compiled.measures[0]! : { fn: "sum" as const, column: valueColumn }))
+    : { fn: "sum" as const, column: valueColumn };
+  if (measure.fn !== "sum") return;
+  const singles = resolveDenominations(
+    entity,
+    compiled,
+    compiled.hasDenominationCensus ? parseDenominationCounts(rows[0]) : {},
+  );
+  if (isTxnCurrencyMeasure(entity, measure) && !singles.txn) {
+    throw new DriverAdminError("validation", "driver measure mixes transaction currencies");
+  }
+  if (isBaseMoneyMeasure(entity, measure) && !singles.base) {
+    throw new DriverAdminError("validation", "driver measure mixes functional currencies");
+  }
+  if (isMoneyBlendingMeasure(entity, measure) && entity.bookScope && !singles.book) {
+    throw new DriverAdminError("validation", "driver measure mixes accounting books");
+  }
+}
+
+/** Book clamp mirrors the report routes: book-scoped entities default to the primary book. */
+async function resolveBookScope(
+  orgId: string,
+  plan: ReportCustomQuery,
+): Promise<readonly string[] | null> {
+  const entity = REPORT_ENTITY_MAP[plan.entity];
+  if (!entity?.bookScope) return null;
+  if (customQueryReferencesBook(plan)) return null;
+  const books = (await db.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active`)).rows;
+  if (books.length !== 1 || !books[0]) {
+    throw new DriverAdminError(
+      "validation",
+      "this report needs exactly one active primary accounting book",
+    );
+  }
+  return [books[0].id];
+}
+
+async function fiscalStartMonth(orgId: string): Promise<number> {
+  const r = (await db.execute<{ m: number }>(sql`
+    select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m from orgs where id = ${orgId}`));
+  const m = r.rows[0]?.m ?? 1;
+  return m >= 1 && m <= 12 ? m : 1;
+}
+
+async function featureEnabled(orgId: string, key: string): Promise<boolean> {
+  const r = (await db.execute<{ on: boolean | null }>(sql`
+    select (settings->'features'->>${key})::boolean as on from orgs where id = ${orgId}`));
+  return r.rows[0]?.on === true;
+}
+
+/**
+ * Project raw compiled rows onto [{dimension, value}]. Rows mode reads the
+ * requested column keys; summarize mode reads d{i}/m{i} aliases resolved
+ * through the plan's breakouts/measures (exact match, else the unambiguous
+ * single candidate, else a loud refusal). Duplicate dimensions sum exactly;
+ * null dimensions are meaningless and skipped, null measures count as zero.
+ */
+export function projectDriverRows(
+  rows: Record<string, unknown>[],
+  compiled: { mode: "rows" | "summarize"; columns: string[]; breakouts: { column: string }[]; measures: { column?: string }[] },
+  dimensionColumn: string,
+  valueColumn: string,
+): ReportDriverRow[] {
+  let dimKey: string;
+  let valKey: string;
+  if (compiled.mode === "summarize") {
+    const dimCols = compiled.breakouts.map((b) => b.column);
+    const valCols = compiled.measures.map((m, i) => m.column ?? `measure:${i}`);
+    dimKey = `d${dimCols.indexOf(resolveSummarizeKey(dimCols, dimensionColumn, "dimension"))}`;
+    valKey = `m${valCols.indexOf(resolveSummarizeKey(valCols, valueColumn, "value"))}`;
+  } else {
+    if (!compiled.columns.includes(dimensionColumn)) {
+      throw new DriverAdminError("validation", `report does not select dimension column ${dimensionColumn}`);
+    }
+    if (!compiled.columns.includes(valueColumn)) {
+      throw new DriverAdminError("validation", `report does not select value column ${valueColumn}`);
+    }
+    dimKey = dimensionColumn;
+    valKey = valueColumn;
+  }
+  const totals = new Map<string, string>();
+  for (const row of rows) {
+    const dim = row[dimKey];
+    if (dim === null || dim === undefined || dim === "") continue;
+    const raw = row[valKey];
+    const value = raw === null || raw === undefined ? "0.0000" : canonicalWeight(raw);
+    totals.set(String(dim), totals.has(String(dim)) ? add(totals.get(String(dim))!, value) : value);
+  }
+  return [...totals].map(([dimension, value]) => ({ dimension, value }));
+}
+
+function resolveSummarizeKey(candidates: string[], wanted: string, role: string): string {
+  if (candidates.includes(wanted)) return wanted;
+  if (candidates.length === 1 && candidates[0] !== undefined) return candidates[0];
+  throw new DriverAdminError("validation", `report has no unambiguous ${role} column ${wanted}`);
+}
+
+function canonicalWeight(raw: unknown): string {
+  return normalizeDecimal(String(raw), 4);
+}
+
+/** The posting path's composed resolver: every source kind, report-backed included. */
+export const postDriverResolver: DriverResolver = createDriverResolver({
+  reportRunner: { runReport: runDriverReport } satisfies ReportDriverRunner,
+});
