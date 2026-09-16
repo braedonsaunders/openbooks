@@ -85,6 +85,7 @@ export const userScripts = pgTable(
         "before_post",
         "after_post",
         "before_void",
+        "custom_gl_lines",
         "scheduled",
         "endpoint",
         "bulk",

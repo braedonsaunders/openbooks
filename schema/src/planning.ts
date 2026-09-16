@@ -1,8 +1,6 @@
 import {
-  boolean,
   index,
   integer,
-  jsonb,
   pgTable,
   text,
   timestamp,
@@ -72,56 +70,3 @@ export const budgetLines = pgTable(
   ],
 );
 
-/**
- * Allocation rules: sweep source balances to targets on a basis —
- * fixed percentages, statistical quantities (journal_lines.quantity, e.g.
- * headcount or hours), or proportional to another account's activity.
- * Runs post origin='allocation' journals; reversible like everything else.
- */
-export const allocationRules = pgTable("allocation_rules", {
-  id: id(),
-  orgId: orgRef(),
-  name: text("name").notNull(),
-  /** Source pool filter: accounts + optional dimensions. */
-  source: jsonb("source").notNull().default({}),
-  basis: text("basis", { enum: ["fixed_percent", "statistical_quantity", "proportional_activity"] }).notNull(),
-  /** Basis config: e.g. statistical unit, or the driver account set. */
-  basisConfig: jsonb("basis_config").notNull().default({}),
-  offsetAccountId: uuid("offset_account_id").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  ...auditColumns,
-});
-
-export const allocationRuleTargets = pgTable(
-  "allocation_rule_targets",
-  {
-    id: id(),
-    orgId: orgRef(),
-    ruleId: uuid("rule_id").notNull(),
-    targetAccountId: uuid("target_account_id").notNull(),
-    departmentId: uuid("department_id"),
-    projectId: uuid("project_id"),
-    locationId: uuid("location_id"),
-    classId: uuid("class_id"),
-    fixedPercent: money("fixed_percent"), // for fixed_percent basis
-    ...auditColumns,
-  },
-  (t) => [index("alloc_targets_rule").on(t.ruleId)],
-);
-
-export const allocationRuns = pgTable(
-  "allocation_runs",
-  {
-    id: id(),
-    orgId: orgRef(),
-    ruleId: uuid("rule_id").notNull(),
-    periodId: uuid("period_id").notNull(),
-    status: text("status", { enum: ["computed", "posted", "reversed"] }).notNull(),
-    totalAllocated: money("total_allocated").notNull(),
-    journalEntryId: uuid("journal_entry_id"),
-    /** Snapshot of the computation for auditability. */
-    computation: jsonb("computation").notNull().default({}),
-    ...auditColumns,
-  },
-  (t) => [index("alloc_runs_rule_period").on(t.ruleId, t.periodId)],
-);

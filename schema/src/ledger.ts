@@ -211,6 +211,15 @@ export const journalLines = pgTable(
     sourceClearedDate: date("source_cleared_date"),
     sourceClearedConnector: text("source_cleared_connector"),
 
+    /**
+     * Who contributed this line beyond the posting kernel: null = kernel,
+     * 'rule' (allocation rule version), 'script' (custom_gl_lines user
+     * script), 'app', 'intercompany' (balancing legs). `contributor_ref` is
+     * the version/script/app id. Lets the GL impact view lock standard lines
+     * and show contributed lines separately.
+     */
+    contributorKind: text("contributor_kind"),
+    contributorRef: uuid("contributor_ref"),
     custom: jsonb("custom").notNull().default({}),
   },
   (t) => [

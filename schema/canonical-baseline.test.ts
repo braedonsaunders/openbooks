@@ -253,6 +253,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0157_iso_4217_currency_registry.sql",
     "0158_source_reconciliation_evidence.sql",
     "0159_jl_guard_tenant_coherence.sql",
+    "0160_allocation_kernel.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

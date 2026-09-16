@@ -277,6 +277,17 @@ export const documentLines = pgTable(
     /** Line overrides for custom segment assignments. */
     extraDims: jsonb("extra_dims").notNull().default({}),
 
+    /**
+     * Allocation kernel, entry mode: children of one exploded line share a
+     * group; the rule/version that produced them is stamped for lineage and
+     * re-explosion. `distribution_locked` = hand-edited children, never
+     * regenerated automatically. See docs/design/allocation-kernel.md.
+     */
+    distributionGroupId: uuid("distribution_group_id"),
+    distributionRuleId: uuid("distribution_rule_id"),
+    distributionVersionId: uuid("distribution_version_id"),
+    distributionLocked: boolean("distribution_locked").notNull().default(false),
+
     // Job-costing and billing-lineage columns:
     employeeId: uuid("employee_id"), // labor line: who worked it
     timeEntryId: uuid("time_entry_id"), // provenance from timesheets
