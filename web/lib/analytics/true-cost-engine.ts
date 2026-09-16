@@ -10,6 +10,8 @@
  * use the same calculation pipeline.
  */
 
+import { englishTrueCostStrings, type TrueCostStrings } from "./true-cost-strings";
+
 /* ─────────────────────────────────────────────── constants ── */
 
 export type AllocationBase =
@@ -396,6 +398,7 @@ export function calculateFormulaCategoryData(
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
+  strings: TrueCostStrings = englishTrueCostStrings,
 ): { expense: Record<string, number>; totalExpense: number; error?: string } {
   const expense: Record<string, number> = { Overall: 0 };
   for (const id of deptIds) expense[id] = 0;
@@ -420,7 +423,7 @@ export function calculateFormulaCategoryData(
   evalFormula = evalFormula.replace(/base\.([a-zA-Z0-9_]+)/g, (_m, id) => String(baseVals[id] ?? 0));
 
   const calc = evaluateFormula(evalFormula);
-  if (calc === null || isNaN(calc) || !isFinite(calc)) return { expense, totalExpense: 0, error: "Invalid formula result" };
+  if (calc === null || isNaN(calc) || !isFinite(calc)) return { expense, totalExpense: 0, error: strings.formulaError };
 
   const totalExpense = Math.max(0, calc);
   const totalBase = getAllocationBaseValue(allocationBase, bases, "Overall");
@@ -531,6 +534,7 @@ export function calculateScenario(
   input: ScenarioInput,
   cur: ScenarioCurrent,
   formatCurrency: (value: number) => string = (value) => `${round2(value)} currency units`,
+  strings: TrueCostStrings = englishTrueCostStrings,
 ): ScenarioImpact {
   const { currentRate, currentExpense, currentHours, currentUtilization, fringeRate } = cur;
   let projectedRate = 0;
@@ -547,7 +551,7 @@ export function calculateScenario(
       const fringeCost = (count * salary * fringeRate) / 12;
       const projectedExpense = currentExpense + fringeCost;
       projectedRate = safeDiv(projectedExpense, projectedHours);
-      insight = `Adding ${count} employee(s) at ${(util * 100).toFixed(0)}% utilization adds ${round2(newHours)} monthly billable hours.`;
+      insight = strings.scenarioHire(count, (util * 100).toFixed(0), round2(newHours));
       breakdown = { hoursChange: newHours, expenseChange: fringeCost, projectedHours, projectedExpense };
       break;
     }
@@ -560,7 +564,7 @@ export function calculateScenario(
       const savings = (count * salary * fringeRate) / 12;
       const projectedExpense = currentExpense - savings;
       projectedRate = safeDiv(projectedExpense, projectedHours);
-      insight = `Reducing ${count} employee(s) saves ${formatCurrency(savings)} in overhead but loses ${round2(lostHours)} billable hours.`;
+      insight = strings.scenarioTerminate(count, formatCurrency(savings), round2(lostHours));
       breakdown = { hoursChange: -lostHours, expenseChange: -savings, projectedHours, projectedExpense };
       break;
     }
@@ -568,7 +572,7 @@ export function calculateScenario(
       const contractHours = (input.annualHours || 0) / 12;
       const projectedHours = currentHours + contractHours;
       projectedRate = safeDiv(currentExpense, projectedHours);
-      insight = `Winning contract adds ${round2(contractHours)} monthly hours, spreading overhead across more volume.`;
+      insight = strings.scenarioWinContract(round2(contractHours));
       breakdown = { hoursChange: contractHours, projectedHours };
       break;
     }
@@ -576,7 +580,7 @@ export function calculateScenario(
       const lostHours = (input.annualHours || 0) / 12;
       const projectedHours = Math.max(currentHours - lostHours, 1);
       projectedRate = safeDiv(currentExpense, projectedHours);
-      insight = `Losing contract removes ${round2(lostHours)} monthly hours, concentrating overhead on fewer hours.`;
+      insight = strings.scenarioLoseContract(round2(lostHours));
       breakdown = { hoursChange: -lostHours, projectedHours };
       break;
     }
@@ -584,7 +588,7 @@ export function calculateScenario(
       const delta = input.changeType === "decrease" ? -(input.amount || 0) : input.amount || 0;
       const projectedExpense = currentExpense + delta;
       projectedRate = safeDiv(projectedExpense, currentHours);
-      insight = `${input.changeType === "decrease" ? "Reducing" : "Adding"} ${formatCurrency(Math.abs(delta))} in overhead costs.`;
+      insight = strings.scenarioCostChange(input.changeType === "decrease" ? "decrease" : "increase", formatCurrency(Math.abs(delta)));
       breakdown = { expenseChange: delta, projectedExpense };
       break;
     }
@@ -593,7 +597,7 @@ export function calculateScenario(
       const totalHrs = currentUtilization > 0 ? currentHours / currentUtilization : currentHours;
       const newBilled = totalHrs * newUtil;
       projectedRate = safeDiv(currentExpense, newBilled);
-      insight = `Changing utilization from ${(currentUtilization * 100).toFixed(0)}% to ${(newUtil * 100).toFixed(0)}% ${newUtil > currentUtilization ? "increases" : "decreases"} billable hours.`;
+      insight = strings.scenarioUtilizationChange((currentUtilization * 100).toFixed(0), (newUtil * 100).toFixed(0), newUtil > currentUtilization ? "up" : "down");
       breakdown = { currentUtilization: currentUtilization * 100, newUtilization: newUtil * 100, hoursChange: newBilled - currentHours, totalHrs, newBilledHrs: newBilled };
       break;
     }

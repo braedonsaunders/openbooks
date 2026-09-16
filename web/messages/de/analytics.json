@@ -387,6 +387,20 @@
     "backToHub": "Analytik",
     "configureInSetup": "In den Einstellungen konfigurieren →",
     "openReport": "Bericht öffnen",
+    "scenarios": {
+      "hire": "{count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} mit {util} % Auslastung einzustellen ergibt {hours} zusätzliche abrechenbare Stunden pro Monat.",
+      "terminate": "{count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} abzubauen spart {savings} an Gemeinkosten, kostet aber {hours} abrechenbare Stunden.",
+      "winContract": "Der gewonnene Auftrag bringt {hours} Stunden pro Monat und verteilt die Gemeinkosten auf mehr Volumen.",
+      "loseContract": "Der verlorene Auftrag entzieht {hours} Stunden pro Monat und konzentriert die Gemeinkosten auf weniger Stunden.",
+      "costChange": "{direction, select, decrease {Gemeinkosten senken um} other {Gemeinkosten erhöhen um}} {amount}.",
+      "utilizationChange": "Die Auslastung von {from} % auf {to} % zu ändern {direction, select, up {erhöht} other {senkt}} die abrechenbaren Stunden."
+    },
+    "labels": {
+      "timeCategory": "Nicht abrechenbare Zeit",
+      "unknownEmployee": "Unbekannt",
+      "defaultProfile": "Standard",
+      "formulaError": "Ungültiges Formelergebnis"
+    },
     "formats": {
       "perHour": "{amount}/Std."
     },

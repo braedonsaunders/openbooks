@@ -387,6 +387,20 @@
     "backToHub": "アナリティクス",
     "configureInSetup": "設定で構成 →",
     "openReport": "レポートを開く",
+    "scenarios": {
+      "hire": "稼働率{util}%の従業員を{count, plural, one {#名} other {#名}}追加すると、月間請求可能時間が{hours}時間増加します。",
+      "terminate": "従業員を{count, plural, one {#名} other {#名}}削減すると間接費を{savings}節約できますが、請求可能時間を{hours}時間失います。",
+      "winContract": "契約を獲得すると月間{hours}時間が増加し、間接費がより大きなボリュームに分散されます。",
+      "loseContract": "契約を失うと月間{hours}時間が減少し、間接費がより少ない時間に集中します。",
+      "costChange": "間接費を{direction, select, decrease {削減} other {追加}}します（{amount}）。",
+      "utilizationChange": "稼働率を{from}%から{to}%に変更すると請求可能時間が{direction, select, up {増加} other {減少}}します。"
+    },
+    "labels": {
+      "timeCategory": "非請求可能時間",
+      "unknownEmployee": "不明",
+      "defaultProfile": "デフォルト",
+      "formulaError": "数式の結果が無効です"
+    },
     "formats": {
       "perHour": "{amount}/時間"
     },

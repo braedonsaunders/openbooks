@@ -1,12 +1,13 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../lib/report-filters'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
+import { trueCostStrings } from '../../../../../lib/analytics/true-cost-strings'
 import type { TrueCostView } from '../TrueCostView'
 
 /**
@@ -41,10 +42,15 @@ export async function loadTrueCostPlanner(
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
+  // Insight sentences resolve through the analytics catalog in the request
+  // locale — the same locale the statements use.
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = trueCostStrings((key, values) => tc(key, values), locale)
   const data = await trueCostData(
     authz.user.orgId,
     { from: period.from, to: period.to, label: period.label },
     authz.allowedSubsidiaryIds,
+    strings,
   )
 
   return {

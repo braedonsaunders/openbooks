@@ -387,6 +387,20 @@
     "backToHub": "Analítica",
     "configureInSetup": "Configurar en Configuración →",
     "openReport": "Abrir informe",
+    "scenarios": {
+      "hire": "Incorporar {count, plural, one {# empleado} other {# empleados}} con una utilización del {util} % añade {hours} horas facturables mensuales.",
+      "terminate": "Reducir {count, plural, one {# empleado} other {# empleados}} ahorra {savings} en gastos generales pero pierde {hours} horas facturables.",
+      "winContract": "Ganar el contrato añade {hours} horas mensuales y distribuye los gastos generales en un mayor volumen.",
+      "loseContract": "Perder el contrato elimina {hours} horas mensuales y concentra los gastos generales en menos horas.",
+      "costChange": "{direction, select, decrease {Reducir los gastos generales en} other {Aumentar los gastos generales en}} {amount}.",
+      "utilizationChange": "Cambiar la utilización del {from} % al {to} % {direction, select, up {aumenta} other {reduce}} las horas facturables."
+    },
+    "labels": {
+      "timeCategory": "Tiempo no facturable",
+      "unknownEmployee": "Desconocido",
+      "defaultProfile": "Predeterminado",
+      "formulaError": "Resultado de fórmula no válido"
+    },
     "formats": {
       "perHour": "{amount}/h"
     },
