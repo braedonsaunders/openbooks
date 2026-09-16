@@ -18,6 +18,8 @@ import {
   type TransactionAuditSnapshot,
 } from "./transaction-audit.ts";
 import { releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance } from "./billing-provenance.ts";
+import { projectRetainageHeldSql } from "./construction-billing.ts";
+import { add, cmp, neg } from "./money.ts";
 import { InventoryError, reverseInventoryMovement } from "./inventory.ts";
 
 export class DocumentVoidError extends Error {
@@ -432,6 +434,100 @@ async function reverseOrderShipment(
 }
 
 /**
+ * Retainage lifecycle fence for source reversal. A posted draw invoice/bill
+ * whose holdback supports live retainage releases cannot be voided out from
+ * under them. Capacity semantics mirror release creation on each side:
+ *
+ * - Customer: held retainage is GL money (posted + reversed entries net), so
+ *   posted releases are already sunk in the held balance and must NOT be
+ *   counted again — only pending (not yet posted, not voided) releases can be
+ *   stranded. A void that would drive the held balance itself negative is
+ *   still refused, because a pending count of zero is greater than negative
+ *   availability.
+ * - Vendor: held retainage is subledger money (posted billed applications),
+ *   which never nets posted releases, so every non-voided release bill counts.
+ *
+ * Runs inside the caller's void transaction after the document lock is held,
+ * taking the same project/subcontract row lock release creation takes, so a
+ * concurrent release cannot reserve the support being removed. Draft deletes
+ * need no equivalent: drafts never contribute to held money on either side.
+ */
+async function assertRetainageDrawVoidable(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+  doc: Record<string, unknown>,
+): Promise<void> {
+  const kind = String(doc.kind);
+  if (kind !== "customer_invoice" && kind !== "vendor_bill") return;
+  if (doc.posted_entry_id == null) return;
+  const control = (await tx.execute<{ account: string | null }>(sql`
+    select settings->'controlAccounts'->>${kind === "customer_invoice" ? "retainageReceivable" : "retainagePayable"} as account
+      from orgs where id = ${orgId}
+  `)).rows[0]?.account;
+  if (!control) return;
+  if (kind === "customer_invoice") {
+    // Support removed, per project: the negative retainage-receivable lines
+    // this void reverses. A release invoice carries a positive line, so it
+    // never matches and reverses freely.
+    const removed = (await tx.execute<{ project_id: string; removed: string }>(sql`
+      select project_id, coalesce(sum(-amount), 0)::text as removed
+        from document_lines
+       where org_id = ${orgId} and document_id = ${documentId}
+         and account_id = ${control}::uuid and amount < 0
+       group by project_id
+    `)).rows.filter((row) => cmp(row.removed, "0") > 0);
+    for (const { project_id: projectId, removed: drawSupport } of removed) {
+      await tx.execute(sql`select id from projects where org_id = ${orgId} and id = ${projectId} for update`);
+      const held = String(
+        (await tx.execute<{ held: string | number }>(projectRetainageHeldSql(orgId, projectId, control))).rows[0]?.held ?? "0",
+      );
+      const pending = (await tx.execute<{ reserved: string; release_number: string | null }>(sql`
+        select coalesce(sum(d.total), 0)::text as reserved, min(d.document_number) as release_number
+          from pay_applications pa
+          join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
+         where pa.org_id = ${orgId} and pa.project_id = ${projectId} and pa.kind = 'retainage_release'
+           and pa.status in ('invoiced', 'posted') and d.status not in ('posted', 'voided')
+      `)).rows[0];
+      if (cmp(String(pending?.reserved ?? "0"), add(held, neg(drawSupport))) > 0) {
+        throw new DocumentVoidError(
+          `this application supports retainage release ${pending?.release_number ?? "(pending)"} — reverse the retainage release first`,
+        );
+      }
+    }
+    return;
+  }
+  // Vendor draw bill: support is the billed application's retained amount,
+  // which leaves held money when the void returns the application to approved.
+  const draws = (await tx.execute<{ subcontract_id: string; support: string }>(sql`
+    select vpa.subcontract_id, coalesce(sum(vpa.retainage_this_period), 0)::text as support
+      from vendor_pay_applications vpa
+     where vpa.org_id = ${orgId} and vpa.vendor_bill_document_id = ${documentId} and vpa.status = 'billed'
+     group by vpa.subcontract_id
+  `)).rows.filter((row) => cmp(row.support, "0") > 0);
+  for (const { subcontract_id: subcontractId, support: drawSupport } of draws) {
+    await tx.execute(sql`select id from subcontracts where org_id = ${orgId} and id = ${subcontractId} for update`);
+    const balance = (await tx.execute<{ held: string; released: string; release_number: string | null }>(sql`
+      select coalesce(sum(case when d.status = 'posted' then vpa.retainage_this_period else 0 end), 0)::text as held,
+             coalesce((select sum(vrr.amount) from vendor_retainage_releases vrr
+                        join documents rd on rd.id = vrr.vendor_bill_document_id and rd.org_id = vrr.org_id
+                       where vrr.org_id = ${orgId} and vrr.subcontract_id = ${subcontractId} and rd.status <> 'voided'), 0)::text as released,
+             (select min(rd.document_number) from vendor_retainage_releases vrr
+                join documents rd on rd.id = vrr.vendor_bill_document_id and rd.org_id = vrr.org_id
+               where vrr.org_id = ${orgId} and vrr.subcontract_id = ${subcontractId} and rd.status <> 'voided') as release_number
+        from vendor_pay_applications vpa
+        left join documents d on d.id = vpa.vendor_bill_document_id and d.org_id = vpa.org_id
+       where vpa.org_id = ${orgId} and vpa.subcontract_id = ${subcontractId} and vpa.status = 'billed'
+    `)).rows[0];
+    if (cmp(String(balance?.released ?? "0"), add(String(balance?.held ?? "0"), neg(drawSupport))) > 0) {
+      throw new DocumentVoidError(
+        `this subcontract draw supports retainage release ${balance?.release_number ?? "(pending)"} — reverse the retainage release first`,
+      );
+    }
+  }
+}
+
+/**
  * Complete a previously stored request. Called directly when no gate exists,
  * or by the flow adapter after the final configured approval.
  */
@@ -486,6 +582,12 @@ export async function completeRequestedDocumentVoid(
           `this transaction feeds ${downstream.rows[0].document_number} — reverse the downstream transaction first`,
         );
       }
+
+      // Retainage lifecycle fence. A draw invoice/bill whose holdback supports
+      // live retainage releases cannot be voided out from under them: the void
+      // would erase held funds the releases already consumed or reserved.
+      // Reverse the dependent releases first, then void the draw.
+      await assertRetainageDrawVoidable(tx, orgId, documentId, doc);
 
       if (String(doc.kind) === "sales_fulfillment" || String(doc.kind) === "purchase_receipt") {
         // Voiding a shipment or goods receipt unwinds it completely in this

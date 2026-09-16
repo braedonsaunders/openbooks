@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "./db.ts";
+import { projectRetainageHeldSql } from "./construction-billing.ts";
 import { add, cmp, neg, normalizeDecimal, normalizeMoney, sum } from "./money.ts";
 
 export class BillingSourceIntegrityError extends Error {}
@@ -203,4 +204,74 @@ export async function assertGeneratedBillingPostable(
         canonical(grossLines.map(l => normalizeMoney(decimal(l.amount))).sort()) !==
         canonical(grossAmounts.map(amount => normalizeMoney(amount)).sort())) refuse();
   }
+  if (release) {
+    // Release posting rechecks capacity: creation reserved it, but supporting
+    // draws may have shrunk since (a guarded void refuses exactly this, yet
+    // direct GL paths and legacy over-reservations can still strand a draft).
+    // Posting an unsupported release would overdraw retained funds.
+    await assertRetainageReleasePostable(tx, orgId, id, { source, total, evidence });
+  }
+}
+
+/**
+ * Posting-time capacity recheck for retainage releases, mirroring
+ * release-creation arithmetic on each side. Runs under the posting
+ * transaction's document lock (lock=true) and takes the same
+ * project/subcontract row lock creation takes, so a concurrent release,
+ * posting, or draw void serializes against this check.
+ */
+async function assertRetainageReleasePostable(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+  input: { source: Row; total: string; evidence: Row },
+): Promise<void> {
+  if (!String(input.source.source).startsWith("vendor_")) {
+    const project = input.evidence.project == null ? "" : String(input.evidence.project);
+    if (!project) refuse();
+    await tx.execute(sql`select id from projects where org_id = ${orgId} and id = ${project} for update`);
+    const control = (await tx.execute<{ account: string | null }>(sql`
+      select settings->'controlAccounts'->>'retainageReceivable' as account from orgs where id = ${orgId}
+    `)).rows[0]?.account;
+    if (!control) refuse();
+    const books = (await tx.execute(sql`
+      select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
+    `)).rows;
+    if (books.length !== 1) refuse();
+    const held = String(
+      (await tx.execute<{ held: string | number }>(projectRetainageHeldSql(orgId, project, control!))).rows[0]?.held ?? "0",
+    );
+    // Pending releases other than this one. Posted releases are already sunk
+    // in the GL balance and must not be subtracted again.
+    const others = String((await tx.execute<{ reserved: string }>(sql`
+      select coalesce(sum(d.total), 0)::text as reserved
+        from pay_applications pa
+        join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
+       where pa.org_id = ${orgId} and pa.project_id = ${project} and pa.kind = 'retainage_release'
+         and pa.status in ('invoiced', 'posted') and d.status not in ('posted', 'voided')
+         and d.id <> ${documentId}
+    `)).rows[0]?.reserved ?? "0");
+    if (cmp(input.total, add(held, neg(others))) > 0) refuse();
+    return;
+  }
+  const sub = (await tx.execute<{ id: string }>(sql`
+    select s.id from subcontracts s
+      join vendor_retainage_releases r on r.org_id = s.org_id and r.subcontract_id = s.id
+     where r.org_id = ${orgId} and r.id = ${String(input.source.id)}
+     for update of s
+  `)).rows[0];
+  if (!sub) refuse();
+  const balance = (await tx.execute<{ held: string; released: string }>(sql`
+    select coalesce(sum(case when d.status = 'posted' then vpa.retainage_this_period else 0 end), 0)::text as held,
+           coalesce((select sum(vrr.amount) from vendor_retainage_releases vrr
+                      join documents rd on rd.id = vrr.vendor_bill_document_id and rd.org_id = vrr.org_id
+                     where vrr.org_id = ${orgId} and vrr.subcontract_id = ${sub!.id} and rd.status <> 'voided'), 0)::text as released
+      from vendor_pay_applications vpa
+      left join documents d on d.id = vpa.vendor_bill_document_id and d.org_id = vpa.org_id
+     where vpa.org_id = ${orgId} and vpa.subcontract_id = ${sub!.id} and vpa.status = 'billed'
+  `)).rows[0];
+  // This release's own draft bill is inside `released`; back it out so the
+  // check measures remaining capacity for it, mirroring creation-time funds.
+  const others = add(String(balance?.released ?? "0"), neg(input.total));
+  if (cmp(input.total, add(String(balance?.held ?? "0"), neg(others))) > 0) refuse();
 }
