@@ -89,6 +89,9 @@ const READER_PERMS = [
   "periods.manage",
   "admin.setup.manage",
   "admin.audit.read",
+  "admin.users.manage",
+  "admin.roles.manage",
+  "api.keys.manage",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -113,6 +116,8 @@ const EMPTY_STORE: Record<string, string> = {
   get_field_ticket: "field_ticket_not_found",
   get_expense_report: "expense_report_not_found",
   get_close_run_status: "close_run_not_found",
+  get_consolidation_view: "period_not_found",
+  get_budget_workspace: "budget_not_found",
   get_item: "not found",
   get_order: "not found",
   get_asset: "not found",
@@ -121,7 +126,13 @@ const EMPTY_STORE: Record<string, string> = {
   get_wip_prebill: "not found",
 };
 
-const FEATURE_OFF = new Set(["bank_feeds_feature_disabled", "feature_disabled"]);
+const FEATURE_OFF = new Set([
+  "bank_feeds_feature_disabled",
+  "feature_disabled",
+  "multi_currency_feature_disabled",
+  "budgets_feature_disabled",
+  "api_access_feature_disabled",
+]);
 
 function readerAuthz(orgId: string): Authz {
   const userId = randomUUID();
@@ -190,6 +201,9 @@ const HARNESS_FEATURES = [
   "fieldTickets",
   "projects",
   "expenses",
+  "multiCurrency",
+  "multiSubsidiary",
+  "apiAccess",
 ];
 
 test("assistant read-tool contract harness", DB_ONLY, async (t) => {
@@ -265,6 +279,9 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_subcontract: { id: randomUUID() },
         get_wip_prebill: { id: randomUUID() },
         get_close_run_status: { runId: randomUUID() },
+        list_fx_rates: { fromCurrency: "USD", toCurrency: "CAD" },
+        get_consolidation_view: { periodId: randomUUID() },
+        get_budget_workspace: { scenarioId: randomUUID() },
       };
 
       const readTools = ASSISTANT_TOOLS.filter((tool) => tool.category !== "write");
