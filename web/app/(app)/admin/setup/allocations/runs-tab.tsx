@@ -1,8 +1,24 @@
 'use client'
 
+import Link from 'next/link'
+import { History, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Button, Drawer, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import {
+  Badge,
+  Button,
+  Drawer,
+  EmptyState,
+  Label,
+  SearchSelect,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { promptDialog } from '../../../../../lib/prompt'
@@ -65,19 +81,67 @@ interface Computation {
 
 const STATUSES = ['previewed', 'pending_approval', 'posted', 'reversed', 'failed', 'superseded'] as const
 
+const STATUS_VARIANTS: Record<string, 'secondary' | 'warning' | 'success' | 'outline' | 'destructive'> = {
+  previewed: 'secondary',
+  pending_approval: 'warning',
+  posted: 'success',
+  reversed: 'outline',
+  failed: 'destructive',
+  superseded: 'outline',
+}
+
 function optionLabel(options: Option[], id: string | null): string {
   if (!id) return ''
   return options.find((o) => o.id === id)?.label ?? shortId(id)
 }
 
+/** House drawer section heading — the SetupDrawer sectionKey style verbatim. */
+function DrawerSection({
+  title,
+  first,
+  children,
+}: {
+  title: string
+  first?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-3">
+      <h3
+        className={
+          first
+            ? 'text-sm font-semibold text-slate-800 dark:text-slate-100'
+            : 'border-t border-slate-200 pt-4 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:text-slate-100'
+        }
+      >
+        {title}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+/** House drawer field — the SetupDrawer shape: label with `?` help, control below. */
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label help={hint}>{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function StatusBadge({ status, label }: { status: string; label: string }) {
+  return <Badge variant={STATUS_VARIANTS[status] ?? 'outline'}>{label}</Badge>
+}
+
 function ComputationView({ computation }: { computation: Computation }) {
   const t = useTranslations('allocations.runs')
   return (
-    <div className="space-y-4">
-      <div>
-        <h4 className="text-sm font-medium">{t('sources')}</h4>
+    <div className="space-y-3">
+      <DrawerSection first title={t('sources')}>
         {computation.sources.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('computationEmpty')}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('computationEmpty')}</p>
         ) : (
           <Table>
             <TableHeader>
@@ -96,10 +160,9 @@ function ComputationView({ computation }: { computation: Computation }) {
             </TableBody>
           </Table>
         )}
-      </div>
+      </DrawerSection>
       {computation.driver ? (
-        <div>
-          <h4 className="text-sm font-medium">{t('driverVector')}</h4>
+        <DrawerSection title={t('driverVector')}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -116,12 +179,11 @@ function ComputationView({ computation }: { computation: Computation }) {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DrawerSection>
       ) : null}
-      <div>
-        <h4 className="text-sm font-medium">{t('targets')}</h4>
+      <DrawerSection title={t('targets')}>
         {computation.targets.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('computationEmpty')}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('computationEmpty')}</p>
         ) : (
           <Table>
             <TableHeader>
@@ -146,10 +208,9 @@ function ComputationView({ computation }: { computation: Computation }) {
             </TableBody>
           </Table>
         )}
-      </div>
+      </DrawerSection>
       {computation.lines.length > 0 ? (
-        <div>
-          <h4 className="text-sm font-medium">{t('lines')}</h4>
+        <DrawerSection title={t('lines')}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -168,17 +229,18 @@ function ComputationView({ computation }: { computation: Computation }) {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DrawerSection>
       ) : null}
     </div>
   )
 }
 
 /**
- * Runs tab (A8): filtered run list, run preview (rule + period + book),
- * run detail drawer with the stored RunComputation, lineage drill and the
- * Post / Reverse / Re-run actions (reason prompts; allocations.run +
- * gl.post enforced server-side; 503 until A3's engine lands).
+ * Runs tab: filtered run list with the Preview-run primary action in the
+ * section header, a preview drawer (rule + period + book pickers), and a
+ * run detail drawer (summary, sources, driver vector, targets, lines,
+ * lineage) with the Post / Reverse / Re-run house actions (reason prompts;
+ * allocations.run + gl.post enforced server-side).
  */
 export function RunsTab() {
   const t = useTranslations('allocations.runs')
@@ -191,6 +253,7 @@ export function RunsTab() {
   const [filterRule, setFilterRule] = useState('')
   const [filterPeriod, setFilterPeriod] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [previewForm, setPreviewForm] = useState({ ruleId: '', periodId: '', bookId: '', subsidiaryId: '' })
   const [preview, setPreview] = useState<Computation | null>(null)
   const [detail, setDetail] = useState<(RunRow & { computation?: Computation; fingerprint?: string | null }) | null>(null)
@@ -290,43 +353,49 @@ export function RunsTab() {
     await openDetail(detail.id)
   }
 
-  if (!runs || !options) return <p className="text-sm text-slate-500">{error ?? '…'}</p>
+  if (!runs || !options) return <p className="text-sm text-slate-500 dark:text-slate-400">{error ?? '…'}</p>
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">{t('title')}</h3>
-        <p className="text-sm text-slate-500">{t('description')}</p>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {t('title')}
+        </h2>
+        <Button type="button" onClick={() => { setPreview(null); setPreviewOpen(true) }}>
+          <Plus size={15} />
+          {t('previewRun')}
+        </Button>
       </div>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {notice ? <p className="text-sm text-slate-500">{notice}</p> : null}
+      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {notice ? <p className="text-sm text-slate-500 dark:text-slate-400">{notice}</p> : null}
 
       <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <Label>{t('filterRule')}</Label>
+        <Field label={t('filterRule')}>
           <SearchSelect
             value={filterRule}
             onChange={(v) => setFilterRule(v ?? '')}
             options={options.rules.map((r) => ({ value: r.id, label: r.label }))}
             placeholder={t('all')}
+            sheetTitle={t('filterRule')}
+            ariaLabel={t('filterRule')}
             clearable
             emptyLabel={t('all')}
           />
-        </div>
-        <div>
-          <Label>{t('filterPeriod')}</Label>
+        </Field>
+        <Field label={t('filterPeriod')}>
           <SearchSelect
             value={filterPeriod}
             onChange={(v) => setFilterPeriod(v ?? '')}
             options={options.periods.map((p) => ({ value: p.id, label: p.label }))}
             placeholder={t('all')}
+            sheetTitle={t('filterPeriod')}
+            ariaLabel={t('filterPeriod')}
             clearable
             emptyLabel={t('all')}
           />
-        </div>
-        <div>
-          <Label>{t('filterStatus')}</Label>
-          <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+        </Field>
+        <Field label={t('filterStatus')}>
+          <Select value={filterStatus} aria-label={t('filterStatus')} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">{t('all')}</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -334,157 +403,203 @@ export function RunsTab() {
               </option>
             ))}
           </Select>
-        </div>
-        <span className="text-sm text-slate-500">
+        </Field>
+        <span className="pb-2 text-sm text-slate-500 dark:text-slate-400">
           {total} · {t('title')}
         </span>
       </div>
 
-      <PagedTable
-        rows={runs}
-        rowKey={(row) => row.id}
-        empty={<p className="text-sm text-slate-500">{t('empty')}</p>}
-        onRowClick={(row) => void openDetail(row.id)}
-        columns={[
-          { key: 'rule', header: t('columns.rule'), cell: (row) => row.ruleName ?? row.ruleKey ?? shortId(row.ruleId), search: (row) => row.ruleName ?? row.ruleKey ?? '' },
-          { key: 'period', header: t('columns.period'), cell: (row) => optionLabel(options.periods, row.periodId) },
-          { key: 'book', header: t('columns.book'), cell: (row) => optionLabel(options.books, row.bookId) },
-          {
-            key: 'subsidiary',
-            header: t('columns.subsidiary'),
-            cell: (row) => (row.subsidiaryId ? optionLabel(options.subsidiaries, row.subsidiaryId) : t('allSubsidiaries')),
-          },
-          { key: 'status', header: t('columns.status'), cell: (row) => t(`statuses.${row.status}`) },
-          { key: 'source', header: t('columns.sourceTotal'), align: 'right', cell: (row) => <span className="tabular-nums">{row.sourceTotal}</span> },
-          { key: 'allocated', header: t('columns.allocated'), align: 'right', cell: (row) => <span className="tabular-nums">{row.allocatedTotal}</span> },
-          { key: 'residual', header: t('columns.residual'), align: 'right', cell: (row) => <span className="tabular-nums">{row.residual}</span> },
-          {
-            key: 'journal',
-            header: t('columns.journal'),
-            cell: (row) => (row.journalEntryId ? <span className="tabular-nums">{shortId(row.journalEntryId)}</span> : '—'),
-          },
-          {
-            key: 'requestedBy',
-            header: t('columns.requestedBy'),
-            cell: (row) => (row.requestedBy ? <span className="tabular-nums">{shortId(row.requestedBy)}</span> : '—'),
-          },
-          {
-            key: 'created',
-            header: t('columns.created'),
-            cell: (row) => (row.createdAt ? <span className="tabular-nums">{row.createdAt.slice(0, 10)}</span> : '—'),
-          },
-        ]}
-      />
-
-      <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-        <h4 className="text-sm font-medium">{t('previewRun')}</h4>
-        <div className="flex flex-wrap items-end gap-2">
-          <div>
-            <Label>{t('filterRule')}</Label>
-            <SearchSelect
-              value={previewForm.ruleId}
-              onChange={(v) => setPreviewForm((f) => ({ ...f, ruleId: v ?? '' }))}
-              options={options.rules.map((r) => ({ value: r.id, label: r.label }))}
-              placeholder={t('filterRule')}
-            />
-          </div>
-          <div>
-            <Label>{t('filterPeriod')}</Label>
-            <SearchSelect
-              value={previewForm.periodId}
-              onChange={(v) => setPreviewForm((f) => ({ ...f, periodId: v ?? '' }))}
-              options={options.periods.map((p) => ({ value: p.id, label: p.label }))}
-              placeholder={t('filterPeriod')}
-            />
-          </div>
-          <div>
-            <Label>{t('columns.book')}</Label>
-            <SearchSelect
-              value={previewForm.bookId}
-              onChange={(v) => setPreviewForm((f) => ({ ...f, bookId: v ?? '' }))}
-              options={options.books.map((b) => ({ value: b.id, label: b.label }))}
-              placeholder={t('columns.book')}
-            />
-          </div>
-          <div>
-            <Label>{t('columns.subsidiary')}</Label>
-            <SearchSelect
-              value={previewForm.subsidiaryId}
-              onChange={(v) => setPreviewForm((f) => ({ ...f, subsidiaryId: v ?? '' }))}
-              options={options.subsidiaries.map((s) => ({ value: s.id, label: s.label }))}
-              placeholder={t('allSubsidiaries')}
-              clearable
-              emptyLabel={t('allSubsidiaries')}
-            />
-          </div>
-          <Button
-            type="button"
-            onClick={() => void runPreview()}
-            disabled={!previewForm.ruleId || !previewForm.periodId || !previewForm.bookId}
-          >
-            {t('previewRun')}
-          </Button>
+      {runs.length === 0 && !filterRule && !filterPeriod && !filterStatus ? (
+        <EmptyState
+          icon={<History aria-hidden />}
+          title={t('emptyTitle')}
+          description={t('empty')}
+          action={
+            <Button type="button" onClick={() => { setPreview(null); setPreviewOpen(true) }}>
+              <Plus size={15} />
+              {t('previewRun')}
+            </Button>
+          }
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <PagedTable
+            rows={runs}
+            rowKey={(row) => row.id}
+            searchable
+            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
+            onRowClick={(row) => void openDetail(row.id)}
+            columns={[
+              { key: 'rule', header: t('columns.rule'), cell: (row) => <span className="font-medium">{row.ruleName ?? row.ruleKey ?? shortId(row.ruleId)}</span>, search: (row) => row.ruleName ?? row.ruleKey ?? '' },
+              { key: 'period', header: t('columns.period'), cell: (row) => optionLabel(options.periods, row.periodId) },
+              { key: 'book', header: t('columns.book'), cell: (row) => optionLabel(options.books, row.bookId) },
+              {
+                key: 'subsidiary',
+                header: t('columns.subsidiary'),
+                cell: (row) => (row.subsidiaryId ? optionLabel(options.subsidiaries, row.subsidiaryId) : t('allSubsidiaries')),
+              },
+              { key: 'status', header: t('columns.status'), cell: (row) => <StatusBadge status={row.status} label={t(`statuses.${row.status}`)} /> },
+              { key: 'source', header: t('columns.sourceTotal'), align: 'right', cell: (row) => <span className="tabular-nums">{row.sourceTotal}</span> },
+              { key: 'allocated', header: t('columns.allocated'), align: 'right', cell: (row) => <span className="tabular-nums">{row.allocatedTotal}</span> },
+              { key: 'residual', header: t('columns.residual'), align: 'right', cell: (row) => <span className="tabular-nums">{row.residual}</span> },
+              {
+                key: 'journal',
+                header: t('columns.journal'),
+                cell: (row) => (row.journalEntryId ? <span className="tabular-nums">{shortId(row.journalEntryId)}</span> : '—'),
+              },
+              {
+                key: 'requestedBy',
+                header: t('columns.requestedBy'),
+                cell: (row) => (row.requestedBy ? <span className="tabular-nums">{shortId(row.requestedBy)}</span> : '—'),
+              },
+              {
+                key: 'created',
+                header: t('columns.created'),
+                cell: (row) => (row.createdAt ? <span className="tabular-nums">{row.createdAt.slice(0, 10)}</span> : '—'),
+              },
+            ]}
+          />
         </div>
-        {preview ? <ComputationView computation={preview} /> : null}
-      </div>
+      )}
 
-      <Drawer open={detail !== null} onClose={() => setDetail(null)} title={t('runDetail')} size="xl">
+      <Drawer
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title={t('previewRun')}
+        size="xl"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>
+              {tc('actions.close')}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void runPreview()}
+              disabled={!previewForm.ruleId || !previewForm.periodId || !previewForm.bookId}
+            >
+              {t('previewRun')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 p-1">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('filterRule')}>
+              <SearchSelect
+                value={previewForm.ruleId}
+                onChange={(v) => setPreviewForm((f) => ({ ...f, ruleId: v ?? '' }))}
+                options={options.rules.map((r) => ({ value: r.id, label: r.label }))}
+                placeholder={t('filterRule')}
+                sheetTitle={t('filterRule')}
+                ariaLabel={t('filterRule')}
+              />
+            </Field>
+            <Field label={t('filterPeriod')}>
+              <SearchSelect
+                value={previewForm.periodId}
+                onChange={(v) => setPreviewForm((f) => ({ ...f, periodId: v ?? '' }))}
+                options={options.periods.map((p) => ({ value: p.id, label: p.label }))}
+                placeholder={t('filterPeriod')}
+                sheetTitle={t('filterPeriod')}
+                ariaLabel={t('filterPeriod')}
+              />
+            </Field>
+            <Field label={t('columns.book')}>
+              <SearchSelect
+                value={previewForm.bookId}
+                onChange={(v) => setPreviewForm((f) => ({ ...f, bookId: v ?? '' }))}
+                options={options.books.map((b) => ({ value: b.id, label: b.label }))}
+                placeholder={t('columns.book')}
+                sheetTitle={t('columns.book')}
+                ariaLabel={t('columns.book')}
+              />
+            </Field>
+            <Field label={t('columns.subsidiary')}>
+              <SearchSelect
+                value={previewForm.subsidiaryId}
+                onChange={(v) => setPreviewForm((f) => ({ ...f, subsidiaryId: v ?? '' }))}
+                options={options.subsidiaries.map((s) => ({ value: s.id, label: s.label }))}
+                placeholder={t('allSubsidiaries')}
+                sheetTitle={t('columns.subsidiary')}
+                ariaLabel={t('columns.subsidiary')}
+                clearable
+                emptyLabel={t('allSubsidiaries')}
+              />
+            </Field>
+          </div>
+          {preview ? <ComputationView computation={preview} /> : null}
+        </div>
+      </Drawer>
+
+      <Drawer
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        title={t('runDetail')}
+        description={detail ? (detail.ruleName ?? detail.ruleKey ?? shortId(detail.ruleId)) : undefined}
+        size="xl"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setDetail(null)}>
+              {tc('actions.close')}
+            </Button>
+          </div>
+        }
+      >
         {detail ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-              <span className="text-slate-500">{t('columns.rule')}</span>
-              <span>{detail.ruleName ?? detail.ruleKey ?? shortId(detail.ruleId)}</span>
-              <span className="text-slate-500">{t('columns.status')}</span>
-              <span>{t(`statuses.${detail.status}`)}</span>
-              <span className="text-slate-500">{t('columns.sourceTotal')}</span>
-              <span className="tabular-nums">{detail.sourceTotal}</span>
-              <span className="text-slate-500">{t('columns.allocated')}</span>
-              <span className="tabular-nums">{detail.allocatedTotal}</span>
-              <span className="text-slate-500">{t('columns.residual')}</span>
-              <span className="tabular-nums">{detail.residual}</span>
-              <span className="text-slate-500">{t('journalEntry')}</span>
-              <span className="tabular-nums">{detail.journalEntryId ? shortId(detail.journalEntryId) : '—'}</span>
-              <span className="text-slate-500">{t('reversalEntry')}</span>
-              <span className="tabular-nums">{detail.reversalEntryId ? shortId(detail.reversalEntryId) : '—'}</span>
-              <span className="text-slate-500">{t('definitionHash')}</span>
-              <span className="tabular-nums">{shortId(detail.computation?.definitionHash ?? null)}</span>
-              <span className="text-slate-500">{t('version')}</span>
-              <span className="tabular-nums">{shortId(detail.versionId)}</span>
-              <span className="text-slate-500">{t('trigger')}</span>
-              <span>{detail.triggerKind}</span>
-              <span className="text-slate-500">{t('started')}</span>
-              <span className="tabular-nums">{detail.startedAt ?? '—'}</span>
-              <span className="text-slate-500">{t('completed')}</span>
-              <span className="tabular-nums">{detail.completedAt ?? '—'}</span>
-              {detail.error ? (
-                <>
-                  <span className="text-slate-500">{t('runError')}</span>
-                  <span className="text-red-600">{detail.error}</span>
-                </>
+          <div className="space-y-3 p-1">
+            <DrawerSection first title={t('summary')}>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <span className="text-slate-500 dark:text-slate-400">{t('columns.rule')}</span>
+                <span>{detail.ruleName ?? detail.ruleKey ?? shortId(detail.ruleId)}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('columns.status')}</span>
+                <span><StatusBadge status={detail.status} label={t(`statuses.${detail.status}`)} /></span>
+                <span className="text-slate-500 dark:text-slate-400">{t('columns.sourceTotal')}</span>
+                <span className="tabular-nums">{detail.sourceTotal}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('columns.allocated')}</span>
+                <span className="tabular-nums">{detail.allocatedTotal}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('columns.residual')}</span>
+                <span className="tabular-nums">{detail.residual}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('journalEntry')}</span>
+                <span className="tabular-nums">{detail.journalEntryId ? shortId(detail.journalEntryId) : '—'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('reversalEntry')}</span>
+                <span className="tabular-nums">{detail.reversalEntryId ? shortId(detail.reversalEntryId) : '—'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('definitionHash')}</span>
+                <span className="tabular-nums">{shortId(detail.computation?.definitionHash ?? null)}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('version')}</span>
+                <span className="tabular-nums">{shortId(detail.versionId)}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('trigger')}</span>
+                <span>{detail.triggerKind}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('started')}</span>
+                <span className="tabular-nums">{detail.startedAt ?? '—'}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('completed')}</span>
+                <span className="tabular-nums">{detail.completedAt ?? '—'}</span>
+                {detail.error ? (
+                  <>
+                    <span className="text-slate-500 dark:text-slate-400">{t('runError')}</span>
+                    <span className="text-red-600 dark:text-red-400">{detail.error}</span>
+                  </>
+                ) : null}
+              </div>
+              {detail.status === 'pending_approval' ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t('pendingApprovalNotice')}{' '}
+                  <Link className="font-medium text-teal-700 underline dark:text-teal-300" href="/approvals">
+                    {t('viewApproval')}
+                  </Link>
+                </p>
               ) : null}
-            </div>
-            {detail.status === 'pending_approval' ? (
-              <p className="text-sm text-slate-500">
-                {t('pendingApprovalNotice')}{' '}
-                <a className="underline" href="/approvals">
-                  {t('viewApproval')}
-                </a>
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={() => void act('post')} disabled={detail.status !== 'previewed'}>
-                {t('post')}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => void act('reverse')}>
-                {t('reverse')}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => void act('rerun')}>
-                {t('rerun')}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setDetail(null)}>
-                {tc('close')}
-              </Button>
-            </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={() => void act('post')} disabled={detail.status !== 'previewed'}>
+                  {t('post')}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void act('reverse')}>
+                  {t('reverse')}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void act('rerun')}>
+                  {t('rerun')}
+                </Button>
+              </div>
+            </DrawerSection>
             {detail.computation ? <ComputationView computation={detail.computation} /> : null}
             <LineagePanel anchor={{ runId: detail.id }} />
           </div>
