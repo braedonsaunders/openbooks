@@ -65,7 +65,7 @@ export const aiAgentPolicies = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    agentKey: text("agent_key", { enum: ["accounting", "finance"] }).notNull(),
+    agentKey: text("agent_key", { enum: ["accounting", "finance", "collections", "payables", "reconciliation", "hygiene"] }).notNull(),
     enabled: boolean("enabled").notNull().default(false),
     automaticRuns: boolean("automatic_runs").notNull().default(false),
     cadence: text("cadence", { enum: ["daily", "weekly"] }).notNull().default("daily"),
@@ -90,7 +90,7 @@ export const aiAgentRuns = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    agentKey: text("agent_key", { enum: ["accounting", "finance"] }).notNull(),
+    agentKey: text("agent_key", { enum: ["accounting", "finance", "collections", "payables", "reconciliation", "hygiene"] }).notNull(),
     trigger: text("trigger", { enum: ["manual", "scheduler"] }).notNull(),
     status: text("status", { enum: ["running", "completed", "failed", "skipped"] })
       .notNull()
@@ -116,7 +116,7 @@ export const aiWorkItems = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    agentKey: text("agent_key", { enum: ["accounting", "finance"] }).notNull(),
+    agentKey: text("agent_key", { enum: ["accounting", "finance", "collections", "payables", "reconciliation", "hygiene"] }).notNull(),
     findingType: text("finding_type").notNull(),
     detectorVersion: text("detector_version").notNull(),
     fingerprint: text("fingerprint").notNull(),
