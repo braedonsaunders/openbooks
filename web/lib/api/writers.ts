@@ -54,6 +54,7 @@ import {
 } from "../documents";
 import { isFeatureEnabled } from "../features";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts";
+import { auditSetupChange } from "../setup/audit";
 import { validateEntityBody } from "./validate";
 import { ITEM_EQUIPMENT_KINDS } from "./registry-data";
 import {
@@ -264,14 +265,31 @@ async function applyCustomRecord(
       ? await buildSearchText(sections, nextData, record.record_number)
       : undefined;
 
-  await db.execute(sql`
+  const written = (await db.execute<Record<string, unknown>>(sql`
     update custom_records set
       data = coalesce(${nextData !== undefined ? JSON.stringify(nextData) : null}::jsonb, data),
       search_text = coalesce(${searchText ?? null}, search_text),
       status = coalesce(${nextStatus ?? null}, status),
       updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
-  `);
+    returning *
+  `)).rows[0];
+  if (!written) return err(404, "not found");
+  // The lock, mutation, and immutable audit event share the caller's
+  // transaction (same as the interactive route), so the before-image is the
+  // row this write serialized against.
+  await auditSetupChange({
+    orgId: user.orgId,
+    table: "custom_records",
+    rowId: id,
+    action: "update",
+    changes: {
+      operation: nextStatus === undefined ? "update" : "lifecycle",
+      before: locked,
+      after: written,
+    },
+    actorId: user.id,
+  });
 
   const updated = await loadRecord(user.orgId, typeKey, id);
   return { status: 200, body: { record: updated } };
@@ -421,16 +439,33 @@ async function deleteCustomRecord(
 ): Promise<WriteResult> {
   const scope = await loadCustomScope(user, typeKey);
   if (!scope) return err(404, "not found");
-  const record = await loadRecord(user.orgId, typeKey, id);
-  if (!record) return err(404, "not found");
+  // Lock first (same as the interactive route): the before-image below is
+  // the row this delete serialized against, and a concurrent writer cannot
+  // slip a mutation between the draft check and the erase.
+  const locked = (await db.execute<Record<string, unknown>>(sql`
+    select * from custom_records
+     where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
+     for update`)).rows[0];
+  if (!locked) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
-  if (!recordSubsidiaryScopeAllows(scope.sections, record.data, allowed)) return err(404, "not found");
-  if (record.status !== "draft") {
+  if (!recordSubsidiaryScopeAllows(scope.sections, locked.data as FieldValueMap, allowed)) {
+    return err(404, "not found");
+  }
+  if (locked.status !== "draft") {
     return err(422, "Only draft records can be deleted — deactivate instead");
   }
-  await db.execute(
-    sql`delete from custom_records where id = ${id} and org_id = ${user.orgId}`,
-  );
+  const deleted = (await db.execute<Record<string, unknown>>(sql`
+    delete from custom_records where id = ${id} and org_id = ${user.orgId}
+    returning *`)).rows[0];
+  if (!deleted) return err(404, "not found");
+  await auditSetupChange({
+    orgId: user.orgId,
+    table: "custom_records",
+    rowId: id,
+    action: "delete",
+    changes: { operation: "delete", before: deleted, after: null },
+    actorId: user.id,
+  });
   return { status: 200, body: { ok: true } };
 }
 
@@ -825,7 +860,17 @@ async function createEntity(
     const r = await db.execute(sql`
       insert into ${sql.raw(`"${table}"`)} (${colSql}) values (${valSql})
       returning *`);
-    return { status: 201, body: r.rows[0] };
+    const created = r.rows[0] as Record<string, unknown> | undefined;
+    if (!created) return err(422, `could not create record: no row returned`);
+    await auditSetupChange({
+      orgId: user.orgId,
+      table,
+      rowId: String(created.id),
+      action: "insert",
+      changes: { after: created },
+      actorId: user.id,
+    });
+    return { status: 201, body: created };
   } catch (e) {
     return err(422, `could not create record: ${(e as Error).message}`);
   }
@@ -842,8 +887,10 @@ async function updateEntity(
   const subsidiaryColumn = ENTITY_SUBSIDIARY_TABLES.has(table)
     ? sql`, subsidiary_id as "subsidiaryId"`
     : sql``;
+  // The full locked row is the authoritative before-image for the audit
+  // event below (same contract as the interactive entity routes).
   const existing = await db.execute(sql`
-    select custom${subsidiaryColumn}
+    select *${subsidiaryColumn}
       from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
       for update`);
   if (!existing.rows[0]) return err(404, "not found");
@@ -934,7 +981,17 @@ async function updateEntity(
       update ${sql.raw(`"${table}"`)} set ${sql.join(sets, sql`, `)}
       where id = ${id} and org_id = ${user.orgId}
       returning *`);
-    return { status: 200, body: r.rows[0] };
+    const written = r.rows[0] as Record<string, unknown> | undefined;
+    if (!written) return err(404, "not found");
+    await auditSetupChange({
+      orgId: user.orgId,
+      table,
+      rowId: id,
+      action: "update",
+      changes: { before: existing.rows[0], after: written },
+      actorId: user.id,
+    });
+    return { status: 200, body: written };
   } catch (e) {
     return err(422, `could not update record: ${(e as Error).message}`);
   }
@@ -950,7 +1007,7 @@ async function deleteEntity(
     ? sql`, subsidiary_id as "subsidiaryId"`
     : sql``;
   const owned = await db.execute(sql`
-    select 1${subsidiaryColumn}
+    select *${subsidiaryColumn}
       from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
       for update`);
   if (!owned.rows[0]) return err(404, "not found");
@@ -968,9 +1025,18 @@ async function deleteEntity(
     return err(404, "not found");
   }
   try {
-    await db.execute(
-      sql`delete from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}`,
-    );
+    const erased = (await db.execute(sql`
+      delete from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
+      returning *`)).rows[0] as Record<string, unknown> | undefined;
+    if (!erased) return err(404, "not found");
+    await auditSetupChange({
+      orgId: user.orgId,
+      table,
+      rowId: id,
+      action: "delete",
+      changes: { before: erased, after: null },
+      actorId: user.id,
+    });
     return { status: 200, body: { ok: true } };
   } catch (e) {
     // FK references (a party on posted documents, an item on lines, …) block

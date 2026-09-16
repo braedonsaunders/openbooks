@@ -21,7 +21,7 @@ registerHooks({
 });
 
 const { createApplicationRecord } = await import("../application/records.ts");
-const { createRecord, updateRecord } = await import("./writers.ts");
+const { createRecord, updateRecord, deleteRecord } = await import("./writers.ts");
 const { db, env, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
@@ -271,6 +271,262 @@ test(
         `),
       );
       assert.deepEqual(stored.rows[0]?.custom, { required_code: "R-1", optional_note: "updated" });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "custom-record writes through the shared writer leave audit evidence",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+    const typeKey = `audit-${randomUUID().slice(0, 8)}`;
+    const typeId = randomUUID();
+    const user = {
+      id: actorId,
+      email: "writers-audit@scratch.test",
+      name: "Writers Audit Test",
+      roles: [{ key: "admin", name: "Admin" }],
+      orgId: org.orgId,
+      envKind: "production" as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: actorId,
+      homeOrgId: org.orgId,
+    };
+    const resolved: ResolvedApiType = {
+      key: typeKey,
+      table: "custom_records",
+      searchColumn: "search_text",
+      readPermission: "records.read",
+      writePermission: "records.create",
+      operations: ["list", "get", "create", "update", "delete"],
+      writer: { kind: "custom_record" },
+      dynamic: true,
+      documentKinds: null,
+    };
+    const fields: ApiField[] = [];
+    const auditRows = () =>
+      withBypass(() =>
+        db.execute<{
+          action: string;
+          actor_id: string | null;
+          changes: Record<string, unknown>;
+          row_id: string;
+        }>(sql`
+          select action, actor_id, changes, row_id from audit_log
+           where org_id = ${org.orgId} and table_name = 'custom_records'
+           order by at, id
+        `),
+      );
+
+    try {
+      await withBypass(() =>
+        db.execute(sql`
+          insert into custom_record_types
+            (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+          values
+            (${typeId}, ${org.orgId}, ${typeKey}, 'Audit Record', 'Audit Records',
+             ${JSON.stringify([{ id: "main", fields: [{ id: "name", type: "text", label: "Name" }] }])}::jsonb,
+             'published', ${actorId}, ${actorId})
+        `),
+      );
+
+      // A bare create seeds an inert draft (same as the interactive draft
+      // route) and leaves no evidence yet.
+      const bare = await withOrgContext(org.orgId, () =>
+        createRecord(user, resolved, fields, {}, { allowedSubsidiaryIds: null }),
+      );
+      assert.equal(bare.status, 201);
+      const bareId = (bare.body as { record: { id: string } }).record.id;
+      assert.deepEqual(
+        (await auditRows()).rows.map((row) => row.action),
+        [],
+      );
+
+      // Creating with data is material: one update row with before/after.
+      const created = await withOrgContext(org.orgId, () =>
+        createRecord(
+          user,
+          resolved,
+          fields,
+          { data: { name: "audited" }, expectedUpdatedAt: undefined },
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(created.status, 201);
+      const id = (created.body as { record: { id: string } }).record.id;
+      {
+        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]!.action, "update");
+        assert.equal(rows[0]!.actor_id, actorId);
+        const changes = rows[0]!.changes as {
+          before: { data: { name: string } };
+          after: { data: { name: string } };
+        };
+        assert.equal(changes.after.data.name, "audited");
+        assert.ok(changes.before, "an update carries its before-image");
+      }
+
+      // A data update appends a second update row; the live row is intact.
+      const revision = (
+        await withBypass(() =>
+          db.execute<{ revision: string }>(sql`
+            select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+              from custom_records where id = ${id} and org_id = ${org.orgId}
+          `),
+        )
+      ).rows[0]!.revision;
+      const updated = await withOrgContext(org.orgId, () =>
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          id,
+          { data: { name: "audited twice" }, expectedUpdatedAt: revision },
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(updated.status, 200);
+      {
+        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        assert.equal(rows.length, 2);
+        assert.equal(rows[1]!.action, "update");
+        assert.equal(rows[1]!.actor_id, actorId);
+        const changes = rows[1]!.changes as {
+          before: { data: { name: string } };
+          after: { data: { name: string } };
+        };
+        assert.equal(changes.before.data.name, "audited");
+        assert.equal(changes.after.data.name, "audited twice");
+      }
+
+      // Deleting the draft appends a delete row with the before-image.
+      const deleted = await withOrgContext(org.orgId, () =>
+        deleteRecord(user, resolved, bareId, { allowedSubsidiaryIds: null }),
+      );
+      assert.equal(deleted.status, 200);
+      {
+        const rows = (await auditRows()).rows.filter((row) => row.row_id === bareId);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]!.action, "delete");
+        assert.equal(rows[0]!.actor_id, actorId);
+        assert.ok(
+          (rows[0]!.changes as { before?: unknown }).before,
+          "a delete carries its before-image",
+        );
+      }
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "entity writes through the shared writer leave audit evidence",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+    const user = {
+      id: actorId,
+      email: "writers-entity-audit@scratch.test",
+      name: "Writers Entity Audit Test",
+      roles: [{ key: "admin", name: "Admin" }],
+      orgId: org.orgId,
+      envKind: "production" as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: actorId,
+      homeOrgId: org.orgId,
+    };
+    const resolved: ResolvedApiType = {
+      key: "items",
+      table: "items",
+      searchColumn: "name",
+      readPermission: "items.read",
+      writePermission: "items.manage",
+      operations: ["list", "get", "create", "update", "delete"],
+      writer: { kind: "entity", table: "items" },
+      dynamic: false,
+      documentKinds: null,
+    };
+    const fields: ApiField[] = [
+      { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
+      { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
+    ];
+    const auditRows = () =>
+      withBypass(() =>
+        db.execute<{
+          action: string;
+          actor_id: string | null;
+          changes: Record<string, unknown>;
+          row_id: string;
+        }>(sql`
+          select action, actor_id, changes, row_id from audit_log
+           where org_id = ${org.orgId} and table_name = 'items'
+           order by at, id
+        `),
+      );
+
+    try {
+      // Create leaves one insert row carrying the after-image and actor.
+      const created = await withOrgContext(org.orgId, () =>
+        createRecord(
+          user,
+          resolved,
+          fields,
+          { kind: "service", name: "Audited item" },
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(created.status, 201);
+      const id = (created.body as { id: string }).id;
+      {
+        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]!.action, "insert");
+        assert.equal(rows[0]!.actor_id, actorId);
+        assert.equal(
+          ((rows[0]!.changes as { after: { name: string } }).after.name),
+          "Audited item",
+        );
+      }
+
+      // Update appends an update row with before/after.
+      const updated = await withOrgContext(org.orgId, () =>
+        updateRecord(user, resolved, fields, id, { name: "Audited item v2" }, { allowedSubsidiaryIds: null }),
+      );
+      assert.equal(updated.status, 200);
+      {
+        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        assert.equal(rows.length, 2);
+        assert.equal(rows[1]!.action, "update");
+        assert.equal(rows[1]!.actor_id, actorId);
+        const changes = rows[1]!.changes as { before: { name: string }; after: { name: string } };
+        assert.equal(changes.before.name, "Audited item");
+        assert.equal(changes.after.name, "Audited item v2");
+      }
+
+      // Delete appends a delete row with the before-image.
+      const deleted = await withOrgContext(org.orgId, () =>
+        deleteRecord(user, resolved, id, { allowedSubsidiaryIds: null }),
+      );
+      assert.equal(deleted.status, 200);
+      {
+        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        assert.equal(rows.length, 3);
+        assert.equal(rows[2]!.action, "delete");
+        assert.equal(rows[2]!.actor_id, actorId);
+        assert.equal(
+          ((rows[2]!.changes as { before: { name: string } }).before.name),
+          "Audited item v2",
+        );
+      }
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
