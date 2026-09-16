@@ -44,14 +44,25 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
             await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
             await db.execute(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${document}`);
           }
-          if (status === 'reversed') await db.execute(sql`update journal_entries set status='reversed' where id=${entry}`);
+          if (status === 'reversed') {
+            // Finding 5.2: posted→reversed needs a posted same-book mirror;
+            // the mirror doubles as this scenario's offsetting entry.
+            const mirror = randomUUID();
+            await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id,reverses_entry_id)
+              values (${mirror},${org.orgId},${book},${org.subsidiaryId},${mirror},${org.date},${org.periodId},'draft','manual',
+                (select source_document_id from journal_entries where id=${entry} and org_id=${org.orgId}),${entry})`);
+            await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,project_id,party_id,amount,currency,txn_amount,fx_rate)
+              select ${org.orgId},${mirror},line_number,account_id,subsidiary_id,project_id,party_id,-amount,currency,-txn_amount,fx_rate
+                from journal_lines where entry_id=${entry} and org_id=${org.orgId} order by line_number`);
+            await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${mirror}`);
+            await db.execute(sql`update journal_entries set status='reversed' where id=${entry}`);
+          }
         }
         await ledger(org.bookId, 'posted', '100', '200');
         if (scenario === 'secondary book') await ledger(taxBook, 'posted', '700', '1400');
         if (scenario === 'draft entries') await ledger(org.bookId, 'draft', '900', '1800');
         if (scenario === 'reversed history') {
           await ledger(org.bookId, 'reversed', '300', '600');
-          await ledger(org.bookId, 'posted', '-300', '-600');
         }
         await withOrgContext(org.orgId, async () => {
           const period = { from: '2026-07-01', to: '2026-07-31', label: 'Ledger review' };

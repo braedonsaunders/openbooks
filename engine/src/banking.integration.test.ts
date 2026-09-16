@@ -381,10 +381,25 @@ test(
          where id = ${org.accounts.bank} and org_id = ${org.orgId}
       `);
       const [reversedLineId] = await postBankJournal(org, actor, ["100.0000"], "reversed");
+      const reversedEntryId = (await db.execute<{ id: string }>(sql`
+        select entry_id as id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId}`)).rows[0]!.id;
+      // Finding 5.2: posted→reversed needs a posted same-book mirror.
+      const mirrorId = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
+        values (${mirrorId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`BANK-reversed-mirror-${mirrorId.slice(0, 8)}`},
+                ${org.date}, ${org.periodId}, 'mirror', 'draft', 'manual', ${reversedEntryId}, ${actor}, ${actor})`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
+        select ${org.orgId}, ${mirrorId}, line_number, account_id, subsidiary_id, -amount, currency, -txn_amount, fx_rate, memo
+          from journal_lines where entry_id = ${reversedEntryId} and org_id = ${org.orgId} order by line_number`);
+      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${mirrorId}`);
       await db.execute(sql`
         update journal_entries
            set status = 'reversed'
-         where id = (select entry_id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId})
+         where id = ${reversedEntryId}
            and org_id = ${org.orgId}
       `);
       await importStatement(

@@ -53,6 +53,73 @@ async function statusOf(entry: string): Promise<string> {
   return r.rows[0]!.status;
 }
 
+function negDecimal(value: string): string {
+  return value.startsWith("-") ? value.slice(1) : `-${value}`;
+}
+
+type MirrorLine = {
+  line_number: number;
+  account_id: string;
+  subsidiary_id: string;
+  amount: string;
+  currency: string;
+  txn_amount: string;
+  fx_rate: string;
+  party_id: string | null;
+  department_id: string | null;
+  project_id: string | null;
+  location_id: string | null;
+  class_id: string | null;
+  equipment_unit_id: string | null;
+  payment_card_id: string | null;
+  tax_code_id: string | null;
+  extra_dims: string;
+  quantity: string | null;
+};
+
+/**
+ * Post a reversal entry for `original` the way every engine flow does:
+ * draft entry with reverses_entry_id, mirror-negated lines, then posted.
+ * Options let negative tests build deficient evidence (draft, wrong book,
+ * non-mirroring amounts).
+ */
+async function postMirrorReversal(
+  org: ScratchOrg,
+  original: string,
+  suffix: string,
+  opts: { bookId?: string; post?: boolean; negate?: boolean } = {},
+): Promise<string> {
+  const reversal = randomUUID();
+  const num = `GUARD-REV-${suffix}-${reversal.slice(0, 6)}`;
+  await db.execute(sql`insert into journal_entries
+    (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id)
+    values (${reversal}, ${org.orgId}, ${opts.bookId ?? org.bookId}, ${org.subsidiaryId}, ${num}, ${org.date}, ${org.periodId}, ${num}, 'draft', 'manual', ${original})`);
+  const src = (await db.execute<MirrorLine>(sql`
+    select line_number, account_id, subsidiary_id, amount::text as amount, currency,
+           txn_amount::text as txn_amount, fx_rate::text as fx_rate, party_id, department_id,
+           project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
+           extra_dims::text as extra_dims, quantity::text as quantity
+      from journal_lines where entry_id = ${original} and org_id = ${org.orgId} order by line_number`)).rows;
+  const legs = src.map(
+    (row) => sql`(${org.orgId}, ${reversal}, ${row.line_number}, ${row.account_id}, ${row.subsidiary_id},
+      ${opts.negate === false ? row.amount : negDecimal(row.amount)}, ${row.currency},
+      ${opts.negate === false ? row.txn_amount : negDecimal(row.txn_amount)}, ${row.fx_rate},
+      '', ${row.party_id}, ${row.department_id}, ${row.project_id}, ${row.location_id},
+      ${row.class_id}, ${row.equipment_unit_id}, ${row.payment_card_id}, ${row.tax_code_id},
+      ${row.extra_dims}::jsonb, ${row.quantity == null ? null : negDecimal(row.quantity)}, '{}'::jsonb)`,
+  );
+  await db.execute(sql`
+    insert into journal_lines
+      (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
+       memo, party_id, department_id, project_id, location_id, class_id, equipment_unit_id,
+       payment_card_id, tax_code_id, extra_dims, quantity, custom)
+    values ${sql.join(legs, sql`, `)}`);
+  if (opts.post !== false) {
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${reversal}`);
+  }
+  return reversal;
+}
+
 async function fixture(work: (org: ScratchOrg) => Promise<void>) {
   const org = await createScratchOrg();
   try {
@@ -76,19 +143,111 @@ test("posted entry cannot regress to draft", { skip: !DB }, async () =>
 test("controlled reversal posted→reversed stays allowed", { skip: !DB }, async () =>
   fixture(async (org) => {
     const entry = await postBalanced(org, "B");
+    await postMirrorReversal(org, entry, "B");
     await db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`);
     assert.equal(await statusOf(entry), "reversed");
+  }));
+
+/**
+ * Finding 5.2: the header guard let posted→reversed through with no
+ * supporting reversal evidence and no freeze on accompanying economic
+ * changes, while the shared reversal helper preserves dimensions and
+ * negates amounts. The flip must retire history, never restate it.
+ */
+test("posted→reversed without reversal evidence is refused", { skip: !DB }, async () =>
+  fixture(async (org) => {
+    const entry = await postBalanced(org, "R1");
+    await assert.rejects(
+      db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`),
+      (error: unknown) => errorChainMatches(error, /without a posted mirror reversal|can only be reversed/),
+      "a bare flip with no reversal entry must raise",
+    );
+    assert.equal(await statusOf(entry), "posted");
+  }));
+
+test("posted→reversed with a draft reversal is refused", { skip: !DB }, async () =>
+  fixture(async (org) => {
+    const entry = await postBalanced(org, "R2");
+    await postMirrorReversal(org, entry, "R2", { post: false });
+    await assert.rejects(
+      db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`),
+      (error: unknown) => errorChainMatches(error, /without a posted mirror reversal/),
+      "an unposted reversal entry is not evidence",
+    );
+    assert.equal(await statusOf(entry), "posted");
+  }));
+
+test("posted→reversed with a non-mirroring reversal is refused", { skip: !DB }, async () =>
+  fixture(async (org) => {
+    const entry = await postBalanced(org, "R3");
+    await postMirrorReversal(org, entry, "R3", { negate: false });
+    await assert.rejects(
+      db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`),
+      (error: unknown) => errorChainMatches(error, /without a posted mirror reversal/),
+      "a posted entry that does not negate the original is not a reversal",
+    );
+    assert.equal(await statusOf(entry), "posted");
+  }));
+
+test("posted→reversed with an economic header change is refused", { skip: !DB }, async () =>
+  fixture(async (org) => {
+    const entry = await postBalanced(org, "R4");
+    await postMirrorReversal(org, entry, "R4");
+    await assert.rejects(
+      db.execute(sql`update journal_entries set status = 'reversed', memo = 'restated' where id = ${entry}`),
+      (error: unknown) => errorChainMatches(error, /without other changes/),
+      "no economic header change may accompany the status flip",
+    );
+    assert.equal(await statusOf(entry), "posted");
+  }));
+
+test("posted→reversed evidenced by another book's reversal is refused", { skip: !DB }, async () =>
+  fixture(async (org) => {
+    const entry = await postBalanced(org, "R5");
+    const otherBook = randomUUID();
+    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${otherBook},${org.orgId},'TAX','Tax',false,true,true)`);
+    await postMirrorReversal(org, entry, "R5", { bookId: otherBook });
+    await assert.rejects(
+      db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`),
+      (error: unknown) => errorChainMatches(error, /without a posted mirror reversal/),
+      "the reversal must live in the same book as the original",
+    );
+    assert.equal(await statusOf(entry), "posted");
   }));
 
 test("reversed entry accepts no further transition", { skip: !DB }, async () =>
   fixture(async (org) => {
     const entry = await postBalanced(org, "C");
+    await postMirrorReversal(org, entry, "C");
     await db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`);
     await assert.rejects(
       db.execute(sql`update journal_entries set status = 'draft' where id = ${entry}`),
       (error: unknown) => errorChainMatches(error, /immutable|reversed/),
     );
     assert.equal(await statusOf(entry), "reversed");
+  }));
+
+/**
+ * Source-contract pin: every je_guard() branch is marked by name so no
+ * future rewrite can silently drop one. The draft-post block interior
+ * belongs to f2/0168 (source-module recheck) and is pinned only by its
+ * marker and its period fence, not by contents this shard does not own.
+ */
+test("je_guard source contract pins every branch by name", { skip: !DB }, async () =>
+  fixture(async () => {
+    const r = await db.execute<{ definition: string }>(
+      sql`select pg_get_functiondef('public.je_guard()'::regprocedure) as definition`,
+    );
+    const body = r.rows[0]!.definition;
+    assert.match(body, /Branch: journal-entry-delete/, "delete fence branch");
+    assert.match(body, /Branch: same-status-amend/, "amend branch");
+    assert.match(body, /Branch: posted-immutability/, "posted-immutability branch");
+    assert.match(body, /Branch: reversal-evidence/, "reversal-evidence branch");
+    assert.match(body, /Branch: reversed-immutable/, "reversed-immutability branch");
+    assert.match(body, /Branch: draft-post/, "draft-post branch");
+    assert.match(body, /openbooks_reversal_mirrors/, "mirror predicate");
+    assert.match(body, /without other changes/, "header-freeze rule");
+    assert.match(body, /period_posting_fence/, "period fence");
   }));
 
 test("draft lifecycle still works: header edit then post", { skip: !DB }, async () =>

@@ -349,6 +349,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0163_allocation_lineage_time_entry_anchor.sql",
     "0164_allocation_lineage_time_entry_cascade.sql",
     "0165_jl_guard_original_parent_immutability.sql",
+    "0166_journal_reversal_evidence_guard.sql",
     "0167_document_revision_counter.sql",
   ]);
   assert.deepEqual(
