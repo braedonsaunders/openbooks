@@ -12,7 +12,6 @@ import {
   pageHeader,
   pagination,
   ref,
-  repeat,
   table,
   text,
   widget,
@@ -86,20 +85,6 @@ export interface AgentsTriageRow {
   status: string
 }
 
-export interface AgentsLaneCard {
-  id: string
-  title: string
-  href: string
-  summary: string
-  packLabel: string
-  severityLabel: string
-  severityVariant: (typeof SEVERITY_VARIANT)[keyof typeof SEVERITY_VARIANT]
-  materiality: string
-  detected: string
-  proposal: FindingProposalCommand | null
-  unavailableLabel: string
-}
-
 export interface AgentsData {
   title: string
   description: string
@@ -146,15 +131,14 @@ export interface AgentsData {
   proposalsOnly: boolean
   briefingMode: boolean
   showInbox: boolean
-  showLane: boolean
+  showProposals: boolean
   showBriefing: boolean
   showInboxChrome: boolean
   briefing: { briefing: CachedBriefing | null; aiEnabled: boolean }
-  lane: AgentsLaneCard[]
-  laneEmpty: boolean
-  laneEmptyTitle: string
-  laneEmptyDescription: string
-  findingsEmpty: boolean
+  inboxEmpty: boolean
+  proposalsEmpty: boolean
+  proposalsEmptyTitle: string
+  proposalsEmptyDescription: string
   findingsPresent: boolean
   emptyTitle: string
   emptyDescription: string
@@ -251,25 +235,10 @@ export async function loadAgents(
   const closeHref = mergeHref('/agents', sp, { item: undefined })
   const briefing = briefingMode ? await loadBriefing(authz) : { briefing: null, aiEnabled: false }
 
-  // Proposals lane: every carrier row resolves its viewer-signed command up
-  // front, so Apply needs no drawer round-trip. Unresolvable carriers stay
-  // visible with an unavailable note — never a dead Apply.
-  const lane: AgentsLaneCard[] = proposalsOnly
-    ? inbox.rows.map((row) => ({
-        id: row.id,
-        title: tc(`findings.${row.findingType}.title`),
-        href: mergeHref('/agents', sp, { item: row.id }),
-        summary: findingSummaryLine((key, values) => tc(key, values as never), row.summary),
-        packLabel: tc(`agents.${row.pack}`),
-        severityLabel: tc(`severity.${row.severity}`),
-        severityVariant: SEVERITY_VARIANT[row.severity],
-        materiality: formatMoney(row.materiality),
-        detected: dateOnly.format(new Date(row.lastDetectedAt)),
-        proposal: canWrite ? findingProposalCommand(authz, row.summary) : null,
-        unavailableLabel: t('lane.unavailable'),
-      }))
-    : []
-
+  // The proposals tab is the same list block filtered to carriers — no
+  // second card renderer. Each row's drawer reuses the existing
+  // WorkItemDrawer content, which already renders the governed review card
+  // (or its unavailable note) from the viewer-signed command.
   return {
     title: t('title'),
     description: t('description'),
@@ -401,16 +370,15 @@ export async function loadAgents(
     proposalsOnly,
     briefingMode,
     showInbox: !proposalsOnly && !briefingMode,
-    showLane: proposalsOnly && !briefingMode,
+    showProposals: proposalsOnly && !briefingMode,
     showBriefing: briefingMode,
     showInboxChrome: !briefingMode,
     briefing: { briefing: briefing.briefing, aiEnabled: briefing.aiEnabled },
-    lane,
-    laneEmpty: proposalsOnly && !briefingMode && inbox.total === 0,
-    laneEmptyTitle: t('lane.emptyTitle'),
-    laneEmptyDescription: t('lane.emptyDescription'),
-    findingsEmpty: !proposalsOnly && !briefingMode && inbox.total === 0,
-    findingsPresent: !proposalsOnly && !briefingMode && inbox.total > 0,
+    inboxEmpty: !proposalsOnly && !briefingMode && inbox.total === 0,
+    proposalsEmpty: proposalsOnly && !briefingMode && inbox.total === 0,
+    proposalsEmptyTitle: t('lane.emptyTitle'),
+    proposalsEmptyDescription: t('lane.emptyDescription'),
+    findingsPresent: !briefingMode && inbox.total > 0,
     emptyTitle: t('empty.title'),
     emptyDescription: t('empty.description'),
     emptyAction: t('empty.action'),
@@ -541,37 +509,15 @@ export function agentsSpec(data: AgentsData): PageSpec {
           title: data.emptyTitle,
           description: data.emptyDescription,
         }),
-        when: f('findingsEmpty'),
+        when: f('inboxEmpty'),
       },
       {
         ...widgetBlock('empty-state', {
           icon: 'activity',
-          title: data.laneEmptyTitle,
-          description: data.laneEmptyDescription,
+          title: data.proposalsEmptyTitle,
+          description: data.proposalsEmptyDescription,
         }),
-        when: f('laneEmpty'),
-      },
-      {
-        ...repeat({
-          items: f('lane'),
-          itemKey: item('id'),
-          className: 'space-y-3',
-          blocks: [
-            widgetBlock('proposal-lane-card', {
-              title: item('title'),
-              href: item('href'),
-              summary: item('summary'),
-              packLabel: item('packLabel'),
-              severityLabel: item('severityLabel'),
-              severityVariant: item('severityVariant'),
-              materiality: item('materiality'),
-              detected: item('detected'),
-              proposal: item('proposal'),
-              unavailableLabel: item('unavailableLabel'),
-            }),
-          ],
-        }),
-        when: f('showLane'),
+        when: f('proposalsEmpty'),
       },
       {
         ...table({

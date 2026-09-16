@@ -114,7 +114,6 @@ import { AgentsLibraryWorkspace } from '../../app/(app)/admin/setup/agents/libra
 import { AgentPolicyWorkspace } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyWorkspace'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
 import { AgentsTriage } from '../../app/(app)/agents/AgentsTriage'
-import { ProposalLaneCard } from '../../app/(app)/agents/ProposalLaneCard'
 import { AgentsBriefing } from '../../app/(app)/agents/AgentsBriefing'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
@@ -1316,9 +1315,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
    *  the stat-tile block's (same arrangement as `equipment-kpi-strip`). */
   'agents-kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
-  ),
-  'proposal-lane-card': (props) => (
-    <ProposalLaneCard {...(props as unknown as ComponentProps<typeof ProposalLaneCard>)} />
   ),
   'agents-briefing': (props) => (
     <AgentsBriefing {...(props as unknown as ComponentProps<typeof AgentsBriefing>)} />
