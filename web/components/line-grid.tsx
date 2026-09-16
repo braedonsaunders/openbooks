@@ -17,16 +17,17 @@
  *    (autosave) and computed values (tax, totals) via readonly columns
  */
 
-import { useCallback, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Copy, GripVertical, Lock, LockOpen, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Button, FieldLabel, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
+import { Badge, Button, ContextMenu, FieldLabel, Popover, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
   displayLineDecimal,
   invalidLineDecimal,
   normalizeLineDecimal,
 } from '../lib/line-grid-decimal'
+import type { DistributionMenuKey, GroupHeaderModel, RowDistributionChip } from './allocations/distribution-groups'
 
 export interface LineGridOption {
   value: string
@@ -114,6 +115,31 @@ function DecimalCell({
   )
 }
 
+/**
+ * Entry-mode distribution affordances for one grid (shard A9). The grid owns
+ * pixels only: group headers, the per-row distribution cell (applied-rule /
+ * staged / suggest / Split…), and the Split… ContextMenu. The owning drawer
+ * supplies the data closures, which it builds on
+ * `./allocations/distribution-groups`. Absent (or read-only) means today's
+ * grid exactly — children stay real lines and the read-only view is
+ * untouched.
+ */
+export interface LineGridDistribution<Row extends Record<string, unknown>> {
+  /** Synthetic group headers in grid order (firstIndex points at rows). */
+  groups: GroupHeaderModel[]
+  /** Row indexes whose cells indent under a group header. */
+  groupedIndexes: Set<number>
+  chipOf: (row: Row, index: number) => RowDistributionChip | null
+  menuKeysOf: (row: Row, index: number) => DistributionMenuKey[]
+  /** Group key for a grouped row (null for standalone rows). */
+  groupKeyOf: (row: Row, index: number) => string | null
+  onSplit: (index: number) => void
+  onUnsplit: (groupKey: string) => void
+  onToggleLock: (groupKey: string) => void
+  onApplySuggestion: (index: number) => void
+  onEditGroupTotal: (groupKey: string, total: string) => void
+}
+
 export function LineGrid<Row extends Record<string, unknown>>({
   columns,
   rows,
@@ -124,6 +150,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   footer,
   addLabel,
   formatAmount,
+  distribution,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -138,14 +165,22 @@ export function LineGrid<Row extends Record<string, unknown>>({
    * Editable cells intentionally retain the exact ledger string.
    */
   formatAmount?: (value: string) => React.ReactNode
+  distribution?: LineGridDistribution<Row>
 }) {
   const t = useTranslations('ui.lineGrid')
+  const tEntry = useTranslations('allocations')
   const containerRef = useRef<HTMLDivElement>(null)
   const [menuRow, setMenuRow] = useState<number | null>(null)
+  const distMenu = useContextMenu()
+  const [distTarget, setDistTarget] = useState<number | null>(null)
+
+  // The distribution column and group headers are edit-mode UX only: the
+  // read-only document view and the PDF data shape stay exactly as today.
+  const showDist = distribution !== undefined && !readOnly
 
   const template = readOnly
     ? columns.map((c) => c.width).join(' ')
-    : `34px ${columns.map((c) => c.width).join(' ')}`
+    : `34px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
 
   const setCell = useCallback(
     (i: number, key: string, value: unknown) => {
@@ -232,6 +267,65 @@ export function LineGrid<Row extends Record<string, unknown>>({
     }
   }
 
+  const headersByIndex = useMemo(() => {
+    const map = new Map<number, GroupHeaderModel>()
+    if (showDist) {
+      for (const group of distribution?.groups ?? []) {
+        if (group.firstIndex >= 0 && group.firstIndex < rows.length && !map.has(group.firstIndex)) {
+          map.set(group.firstIndex, group)
+        }
+      }
+    }
+    return map
+  }, [showDist, distribution, rows.length])
+
+  const openDistMenu = useCallback(
+    (e: React.MouseEvent, index: number) => {
+      setDistTarget(index)
+      distMenu.onContextMenu(e)
+    },
+    [distMenu],
+  )
+
+  const distMenuItems: ContextMenuEntry[] = useMemo(() => {
+    if (!showDist || !distribution || distTarget === null) return []
+    const row = rows[distTarget]
+    if (!row) return []
+    const chip = distribution.chipOf(row, distTarget)
+    const suggestName = chip?.kind === 'suggest' ? chip.ruleName : null
+    const groupKey = distribution.groupKeyOf(row, distTarget)
+    return distribution.menuKeysOf(row, distTarget).map((key) => {
+      if (key === 'split') {
+        return { key, label: tEntry('entry.split'), icon: Split, onSelect: () => distribution.onSplit(distTarget) }
+      }
+      if (key === 'unsplit' && groupKey !== null) {
+        return { key, label: tEntry('entry.unSplit'), onSelect: () => distribution.onUnsplit(groupKey) }
+      }
+      if (key === 'lock' && groupKey !== null) {
+        return {
+          key,
+          label: tEntry('entry.lockGroup'),
+          icon: Lock,
+          onSelect: () => distribution.onToggleLock(groupKey),
+        }
+      }
+      if (key === 'unlock' && groupKey !== null) {
+        return {
+          key,
+          label: tEntry('entry.unlockGroup'),
+          icon: LockOpen,
+          onSelect: () => distribution.onToggleLock(groupKey),
+        }
+      }
+      return {
+        key,
+        label: suggestName !== null ? tEntry('entry.suggestSplit', { rule: suggestName }) : tEntry('entry.split'),
+        icon: Split,
+        onSelect: () => distribution.onApplySuggestion(distTarget),
+      }
+    })
+  }, [showDist, distribution, distTarget, rows, tEntry])
+
   const cellBase =
     'flex min-h-[38px] items-center border-b border-slate-100 px-1 dark:border-slate-800'
   const inputBase =
@@ -264,6 +358,11 @@ export function LineGrid<Row extends Record<string, unknown>>({
               </FieldLabel>
             </div>
           ))}
+          {showDist ? (
+            <div className="border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+              {tEntry('entry.distributionColumn')}
+            </div>
+          ) : null}
 
           {/* rows */}
           {rows.map((row, i) => (
@@ -285,10 +384,33 @@ export function LineGrid<Row extends Record<string, unknown>>({
               moveRow={moveRow}
               canRemove={rows.length > minRows}
               formatAmount={formatAmount}
+              groupHeader={showDist ? (headersByIndex.get(i) ?? null) : null}
+              indented={showDist && (distribution?.groupedIndexes.has(i) ?? false)}
+              dist={
+                showDist && distribution
+                  ? {
+                      chip: distribution.chipOf(row, i),
+                      onSplitBelow: (anchor) => {
+                        setDistTarget(i)
+                        distMenu.openBelow(anchor)
+                      },
+                      onApplySuggestion: () => distribution.onApplySuggestion(i),
+                    }
+                  : null
+              }
+              onCellContextMenu={
+                showDist && distribution && distribution.menuKeysOf(row, i).length > 0
+                  ? (e) => openDistMenu(e, i)
+                  : undefined
+              }
+              onEditGroupTotal={showDist && distribution ? distribution.onEditGroupTotal : undefined}
+              onToggleGroupLock={showDist && distribution ? distribution.onToggleLock : undefined}
+              onUnsplitGroup={showDist && distribution ? distribution.onUnsplit : undefined}
             />
           ))}
         </div>
       </div>
+      <ContextMenu open={distMenu.open} position={distMenu.position} items={distMenuItems} onClose={distMenu.close} />
 
       <div className="mt-2 flex items-center justify-between gap-3">
         {!readOnly ? (
@@ -411,6 +533,13 @@ function RowCells<Row extends Record<string, unknown>>({
   moveRow,
   canRemove,
   formatAmount,
+  groupHeader,
+  indented,
+  dist,
+  onCellContextMenu,
+  onEditGroupTotal,
+  onToggleGroupLock,
+  onUnsplitGroup,
 }: {
   row: Row
   index: number
@@ -428,11 +557,30 @@ function RowCells<Row extends Record<string, unknown>>({
   moveRow: (i: number, delta: number) => void
   canRemove: boolean
   formatAmount?: (value: string) => React.ReactNode
+  groupHeader: GroupHeaderModel | null
+  indented: boolean
+  dist: {
+    chip: RowDistributionChip | null
+    onSplitBelow: (anchor: HTMLElement) => void
+    onApplySuggestion: () => void
+  } | null
+  onCellContextMenu?: (e: React.MouseEvent) => void
+  onEditGroupTotal?: (groupKey: string, total: string) => void
+  onToggleGroupLock?: (groupKey: string) => void
+  onUnsplitGroup?: (groupKey: string) => void
 }) {
   const t = useTranslations('ui.lineGrid')
   const tCommon = useTranslations('common')
   return (
     <>
+      {groupHeader ? (
+        <DistributionGroupHeader
+          group={groupHeader}
+          onEditTotal={onEditGroupTotal}
+          onToggleLock={onToggleGroupLock}
+          onUnsplit={onUnsplitGroup}
+        />
+      ) : null}
       {!readOnly ? (
         <div className={cn(cellBase, 'justify-center px-0')}>
           <Popover
@@ -528,8 +676,9 @@ function RowCells<Row extends Record<string, unknown>>({
             key={c.key}
             data-lg-row={i}
             data-lg-col={colIndex}
-            className={cellBase}
+            className={cn(cellBase, indented && colIndex === 0 && 'pl-6')}
             onKeyDown={(e) => handleKeyDown(e, i, colIndex)}
+            onContextMenu={onCellContextMenu}
           >
             {c.type === 'search-select' ? (
               <SearchSelect
@@ -594,6 +743,166 @@ function RowCells<Row extends Record<string, unknown>>({
           </div>
         )
       })}
+      {dist ? (
+        <div className={cn(cellBase, 'px-1.5')} onContextMenu={onCellContextMenu}>
+          <DistributionCell
+            chip={dist.chip}
+            rowNumber={i + 1}
+            onSplitBelow={dist.onSplitBelow}
+            onApplySuggestion={dist.onApplySuggestion}
+          />
+        </div>
+      ) : null}
     </>
+  )
+}
+
+/**
+ * One row's distribution affordance: the applied-rule chip for a group
+ * child, the staged-rule chip for a line carrying a distributionKey the
+ * server has not exploded yet, the "Split by <rule>?" suggest chip, or the
+ * plain Split… entry point.
+ */
+function DistributionCell({
+  chip,
+  rowNumber,
+  onSplitBelow,
+  onApplySuggestion,
+}: {
+  chip: RowDistributionChip | null
+  rowNumber: number
+  onSplitBelow: (anchor: HTMLElement) => void
+  onApplySuggestion: () => void
+}) {
+  const t = useTranslations('allocations')
+  if (chip === null) return <span />
+  if (chip.kind === 'rule') {
+    return (
+      <Badge
+        variant="secondary"
+        className="max-w-full gap-1 px-2 py-0.5 text-[11px] font-medium"
+        title={chip.locked ? t('entry.groupLockedHint') : undefined}
+      >
+        {chip.locked ? <Lock size={11} className="shrink-0" /> : <Split size={11} className="shrink-0" />}
+        <span className="truncate">{chip.ruleName}</span>
+      </Badge>
+    )
+  }
+  if (chip.kind === 'pending') {
+    return (
+      <Badge
+        variant="outline"
+        className="max-w-full gap-1 border-dashed px-2 py-0.5 text-[11px] font-medium"
+        title={t('entry.pendingRule', { rule: chip.ruleName })}
+      >
+        <Split size={11} className="shrink-0" />
+        <span className="truncate">{chip.ruleName}</span>
+      </Badge>
+    )
+  }
+  if (chip.kind === 'suggest') {
+    return (
+      <button
+        type="button"
+        onClick={onApplySuggestion}
+        title={t('entry.suggestSplit', { rule: chip.ruleName })}
+        aria-label={t('entry.groupActionsAria', { number: rowNumber })}
+        className="inline-flex max-w-full items-center gap-1 rounded-full border border-teal-200/70 bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-800 hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-950"
+      >
+        <Split size={11} className="shrink-0" />
+        <span className="truncate">{t('entry.suggestSplit', { rule: chip.ruleName })}</span>
+      </button>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => onSplitBelow(e.currentTarget)}
+      aria-label={t('entry.groupActionsAria', { number: rowNumber })}
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+    >
+      <Split size={12} /> {t('entry.split')}
+    </button>
+  )
+}
+
+/**
+ * The synthetic header row above one distribution group's children: the
+ * applied rule, the editable group total (re-explodes unless locked), the
+ * lock toggle, and Un-split.
+ */
+function DistributionGroupHeader({
+  group,
+  onEditTotal,
+  onToggleLock,
+  onUnsplit,
+}: {
+  group: GroupHeaderModel
+  onEditTotal?: (groupKey: string, total: string) => void
+  onToggleLock?: (groupKey: string) => void
+  onUnsplit?: (groupKey: string) => void
+}) {
+  const t = useTranslations('allocations')
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? group.total
+  const invalid = invalidAmount(shown)
+
+  const commit = () => {
+    const raw = shown.trim()
+    setDraft(null)
+    if (raw === '') return
+    try {
+      const normalized = normalizeMoney(raw)
+      if (cmp(normalized, group.total) !== 0) onEditTotal?.(group.key, normalized)
+    } catch {
+      // Malformed totals stay in the cell until fixed; the save boundary
+      // rejects them exactly like a malformed line amount.
+    }
+  }
+
+  return (
+    <div
+      style={{ gridColumn: '1 / -1' }}
+      className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-800/40"
+    >
+      <Split size={12} className="shrink-0 text-slate-400" />
+      {group.ruleName ? (
+        <span className="truncate text-xs font-semibold text-slate-600 dark:text-slate-300">{group.ruleName}</span>
+      ) : null}
+      <span className="ml-auto shrink-0 text-[11px] text-slate-400">{t('entry.groupTotalLabel')}</span>
+      <input
+        inputMode="decimal"
+        value={shown}
+        disabled={group.locked}
+        aria-label={t('entry.groupTotalAria')}
+        aria-invalid={invalid || undefined}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        }}
+        className={cn(
+          'w-28 rounded-sm border border-slate-200 bg-white px-1.5 py-0.5 text-right text-sm tabular-nums outline-none focus:ring-2 focus:ring-teal-500/60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100',
+          invalid && 'text-red-600 focus:ring-red-500/60 dark:text-red-400',
+          group.locked && 'opacity-60',
+        )}
+      />
+      <button
+        type="button"
+        aria-label={group.locked ? t('entry.unlockGroup') : t('entry.lockGroup')}
+        title={group.locked ? t('entry.unlockGroup') : t('entry.lockGroup')}
+        onClick={() => onToggleLock?.(group.key)}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200/70 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+      >
+        {group.locked ? <LockOpen size={13} /> : <Lock size={13} />}
+      </button>
+      <button
+        type="button"
+        onClick={() => onUnsplit?.(group.key)}
+        className="shrink-0 rounded px-1.5 py-0.5 text-[12px] text-slate-500 hover:bg-slate-200/70 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+      >
+        {t('entry.unSplit')}
+      </button>
+    </div>
   )
 }

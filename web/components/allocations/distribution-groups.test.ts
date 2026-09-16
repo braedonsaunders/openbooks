@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  chipForRow,
+  groupHeaderModels,
   groupIdOf,
   groupIdsInOrder,
   groupMembers,
   groupTotal,
   isGroupLocked,
+  menuKeysForRow,
   moneyDiffers,
   reapportionGroupTotal,
   unsplitGroup,
@@ -73,4 +76,57 @@ test('un-split collapses to the first child carrying the group total', () => {
 test('amount comparison tolerates formatting but catches real edits', () => {
   assert.equal(moneyDiffers('100.10', '100.1000'), false)
   assert.equal(moneyDiffers('100.10', '100.11'), true)
+})
+
+test('group headers model one synthetic row per group, in grid order', () => {
+  const rows = [
+    row('60.10', 'g1', true),
+    row('5'),
+    row('40.00', 'g1'),
+    row('7', 'g2'),
+  ]
+  const models = groupHeaderModels(rows, { ruleNameOf: () => 'Overhead' })
+  assert.equal(models.length, 2)
+  assert.deepEqual(models[0], {
+    key: 'g1',
+    firstIndex: 0,
+    memberCount: 2,
+    total: '100.1000',
+    locked: true,
+    ruleName: 'Overhead',
+  })
+  assert.deepEqual(models[1]?.firstIndex, 3)
+  assert.equal(models[1]?.locked, false)
+  assert.deepEqual(groupHeaderModels([row('5')]), [])
+})
+
+test('each row resolves exactly one distribution affordance', () => {
+  const opts = {
+    ruleNameOf: () => 'Overhead',
+    pendingRuleNameOf: (_row: unknown, index: number) => (index === 1 ? 'Staged' : null),
+    suggestionOf: (_row: unknown, index: number) => (index === 2 ? { ruleName: 'Auto' } : null),
+    splittable: (_row: unknown, index: number) => index !== 4,
+  }
+  // Group child: applied-rule chip, lock state rides along.
+  assert.deepEqual(chipForRow(row('60', 'g', true), 0, opts), { kind: 'rule', ruleName: 'Overhead', locked: true })
+  // Staged key beats suggest and split alike.
+  assert.deepEqual(chipForRow(row('50'), 1, opts), { kind: 'pending', ruleName: 'Staged' })
+  // Suggest beats the plain Split… entry.
+  assert.deepEqual(chipForRow(row('50'), 2, opts), { kind: 'suggest', ruleName: 'Auto' })
+  assert.deepEqual(chipForRow(row('50'), 3, opts), { kind: 'split' })
+  // A blank placeholder row shows nothing at all.
+  assert.equal(chipForRow(row(''), 4, opts), null)
+})
+
+test('the row menu offers exactly the actions that apply', () => {
+  const opts = {
+    pendingRuleNameOf: (_row: unknown, index: number) => (index === 1 ? 'Staged' : null),
+    suggestionOf: (_row: unknown, index: number) => (index === 0 ? { ruleName: 'Auto' } : null),
+    splittable: () => true,
+  }
+  assert.deepEqual(menuKeysForRow(row('60', 'g'), 0, opts), ['lock', 'unsplit'])
+  assert.deepEqual(menuKeysForRow(row('60', 'g', true), 0, opts), ['unlock', 'unsplit'])
+  // Suggest + split compose; a staged key suppresses a second split.
+  assert.deepEqual(menuKeysForRow(row('50'), 0, opts), ['apply-suggest', 'split'])
+  assert.deepEqual(menuKeysForRow(row('50'), 1, opts), [])
 })

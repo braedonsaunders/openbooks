@@ -150,6 +150,100 @@ export function unsplitGroup<Row extends DistributionGroupRow>(
   return { keepIndex: first.index, total: groupTotal(members.map((m) => m.row)) }
 }
 
+/**
+ * Edit-mode view model for one distribution group header: the synthetic row
+ * the grid renders above a group's first child. `ruleName` is null until the
+ * read path starts joining it (A4); the header still renders with the total.
+ */
+export interface GroupHeaderModel {
+  key: string
+  firstIndex: number
+  memberCount: number
+  total: string
+  locked: boolean
+  ruleName: string | null
+}
+
+export function groupHeaderModels<Row extends DistributionGroupRow>(
+  rows: readonly Row[],
+  opts: {
+    totalOf?: (members: Row[]) => string
+    lockedOf?: (members: Row[]) => boolean
+    ruleNameOf?: (member: Row) => string | null
+  } = {},
+): GroupHeaderModel[] {
+  const models: GroupHeaderModel[] = []
+  for (const key of groupIdsInOrder(rows)) {
+    const members = groupMembers(rows, key)
+    const first = members[0]
+    if (!first) continue
+    const memberRows = members.map((m) => m.row)
+    models.push({
+      key,
+      firstIndex: first.index,
+      memberCount: members.length,
+      total: opts.totalOf ? opts.totalOf(memberRows) : groupTotal(memberRows),
+      locked: opts.lockedOf ? opts.lockedOf(memberRows) : isGroupLocked(memberRows),
+      ruleName: opts.ruleNameOf ? (opts.ruleNameOf(first.row) ?? null) : null,
+    })
+  }
+  return models
+}
+
+/**
+ * The distribution affordance one grid row shows: the applied-rule chip for
+ * a group child, the staged-rule chip for a line carrying a distributionKey
+ * the server has not exploded yet, the suggest-policy chip, or the plain
+ * Split… entry point for any other priced line.
+ */
+export type RowDistributionChip =
+  | { kind: 'rule'; ruleName: string; locked: boolean }
+  | { kind: 'pending'; ruleName: string }
+  | { kind: 'suggest'; ruleName: string }
+  | { kind: 'split' }
+
+export function chipForRow<Row extends DistributionGroupRow>(
+  row: Row,
+  index: number,
+  opts: {
+    ruleNameOf: (row: Row, index: number) => string | null
+    pendingRuleNameOf: (row: Row, index: number) => string | null
+    suggestionOf: (row: Row, index: number) => { ruleName: string } | null
+    splittable: (row: Row, index: number) => boolean
+  },
+): RowDistributionChip | null {
+  if (groupIdOf(row) !== null) {
+    return { kind: 'rule', ruleName: opts.ruleNameOf(row, index) ?? '', locked: row.distributionLocked === true }
+  }
+  const pending = opts.pendingRuleNameOf(row, index)
+  if (pending !== null && pending !== '') return { kind: 'pending', ruleName: pending }
+  const suggestion = opts.suggestionOf(row, index)
+  if (suggestion !== null) return { kind: 'suggest', ruleName: suggestion.ruleName }
+  return opts.splittable(row, index) ? { kind: 'split' } : null
+}
+
+/** Row-action menu keys behind the Split… ContextMenu (labels resolve via entry.* in the grid). */
+export type DistributionMenuKey = 'split' | 'unsplit' | 'lock' | 'unlock' | 'apply-suggest'
+
+export function menuKeysForRow<Row extends DistributionGroupRow>(
+  row: Row,
+  index: number,
+  opts: {
+    pendingRuleNameOf: (row: Row, index: number) => string | null
+    suggestionOf: (row: Row, index: number) => { ruleName: string } | null
+    splittable: (row: Row, index: number) => boolean
+  },
+): DistributionMenuKey[] {
+  const groupId = groupIdOf(row)
+  if (groupId !== null) {
+    return row.distributionLocked === true ? ['unlock', 'unsplit'] : ['lock', 'unsplit']
+  }
+  const keys: DistributionMenuKey[] = []
+  if (opts.suggestionOf(row, index) !== null) keys.push('apply-suggest')
+  if (opts.splittable(row, index) && !opts.pendingRuleNameOf(row, index)) keys.push('split')
+  return keys
+}
+
 /** Line-amount delta helper (money.ts exposes add/neg, not sub). */
 export function moneyDelta(before: string, after: string): string {
   return add(after, neg(before))
