@@ -108,13 +108,6 @@ export interface OverheadApplyResult {
 }
 
 /**
- * Apply the overhead pair for a set of approved time entries (the approval
- * hook). Skips silently unless mode is net_zero_pair with an account mapped —
- * callers don't need to pre-check. Only entries that are approved, project-
- * tagged, not yet carried, whose project type doesn't opt out (overhead
- * method 'none'), and whose worked day has a published rate participate.
- */
-/**
  * Resolve the kernel rule for the posting, provisioning it on first use. The
  * policy read here is advisory — the transaction re-checks under lock — so a
  * mid-flight policy change degrades to the long-standing no-post, never to a
@@ -136,6 +129,13 @@ async function ensureOverheadKernelRule(
   return rule;
 }
 
+/**
+ * Apply the overhead pair for a set of approved time entries (the approval
+ * hook). Skips silently unless mode is net_zero_pair with an account mapped —
+ * callers don't need to pre-check. Only entries that are approved, project-
+ * tagged, not yet carried, whose project type doesn't opt out (overhead
+ * method 'none'), and whose worked day has a published rate participate.
+ */
 export async function applyOverheadForTime(orgId: string, actorId: string, timeEntryIds: string[]): Promise<OverheadApplyResult> {
   const none: OverheadApplyResult = { entryId: null, total: "0", entries: 0, projects: 0 };
   if (timeEntryIds.length === 0) return none;
