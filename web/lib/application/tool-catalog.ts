@@ -57,7 +57,6 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
 import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin";
 import { readCompanySettings, updateCompanySettings } from "../company-settings";
-import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState } from "../setup/registry";
 import { createSetupRecord, deleteSetupRecord, updateSetupRecord } from "../setup/write";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
@@ -830,8 +829,10 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
           const result = await applyFeatureChanges(context.authz.user.orgId, context.authz.user.id, normalized.changes);
           if (!result.ok) {
             if (result.error === "not-found") throw notFound("organization");
-            const { ok: _ok, error, ...details } = result;
-            throw conflict(error, details);
+            const details: Record<string, unknown> = { ...result };
+            delete details.ok;
+            delete details.error;
+            throw conflict(result.error, details);
           }
           return { before: result.before, after: result.after };
         },

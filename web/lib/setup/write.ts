@@ -65,7 +65,6 @@ export { resolveEntity as resolveSetupEntity }
  * reference table) and audited to audit_log, mirroring the settings route.
  */
 
-const PERMISSION = 'admin.setup.manage'
 
 class SetupWriteRefusal extends Error {
   constructor(message: string, readonly status: number) { super(message) }
