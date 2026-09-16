@@ -255,6 +255,8 @@ export interface LineageDraft {
   sourceJournalLineId?: string | null;
   sourceDocumentLineId?: string | null;
   targetDocumentLineId?: string | null;
+  /** Event trigger for event-bound post rules (the overhead net-zero pair): the approved time entry. */
+  sourceTimeEntryId?: string | null;
   driverId?: string | null;
   driverValue?: string | null;
   driverTotal?: string | null;
