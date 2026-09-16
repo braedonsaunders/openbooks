@@ -34,5 +34,219 @@
       "none": "—",
       "descriptionPlaceholder": "Line memo"
     }
+  },
+  "rules": {
+    "title": "Allocations",
+    "description": "Distribute pooled costs to targets on a driver: splits at entry, contributions at posting, and period sweeps.",
+    "tabsAria": "Allocation setup sections",
+    "tabs": {
+      "rules": "Rules",
+      "drivers": "Drivers",
+      "runs": "Runs"
+    },
+    "driversPlaceholderTitle": "Drivers",
+    "driversPlaceholderBody": "Driver registry lives here — this tab is owned by the drivers and runs slice and will be replaced without changing the tab strip.",
+    "runsPlaceholderTitle": "Runs",
+    "runsPlaceholderBody": "Period run previews and posting live here — this tab is owned by the drivers and runs slice and will be replaced without changing the tab strip.",
+    "list": {
+      "heading": "Allocation rules",
+      "new": "New rule",
+      "empty": "No allocation rules yet. Create the first rule to start distributing costs.",
+      "columns": {
+        "name": "Name",
+        "key": "Key",
+        "mode": "Mode",
+        "version": "Current version",
+        "window": "Effective window",
+        "order": "Order",
+        "active": "Active"
+      },
+      "noVersion": "No published version",
+      "inactive": "Inactive",
+      "active": "Active",
+      "searchPlaceholder": "Search rules…"
+    },
+    "modes": {
+      "entry": "At entry",
+      "post": "At posting",
+      "period": "Period sweep"
+    },
+    "statuses": {
+      "draft": "Draft",
+      "published": "Published",
+      "retired": "Retired"
+    },
+    "drawer": {
+      "newTitle": "New allocation rule",
+      "editTitle": "Rule {name}",
+      "create": "Create rule",
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "tabs": {
+        "general": "General",
+        "definition": "Definition",
+        "versions": "Versions",
+        "test": "Test"
+      }
+    },
+    "general": {
+      "name": "Name",
+      "key": "Key",
+      "keyHint": "Lowercase slug used by imports and scripts. Cannot change after creation.",
+      "mode": "Fires",
+      "modeHint": "Entry explodes document lines on save; posting contributes journal lines; period sweeps balances on demand.",
+      "description": "Description",
+      "sortOrder": "Sort order",
+      "sortOrderHint": "Lower runs first in period waterfalls and entry precedence.",
+      "isActive": "Active"
+    },
+    "definition": {
+      "windowHeading": "Effective window",
+      "effectiveFrom": "Effective from",
+      "effectiveTo": "Effective to (open-ended when empty)",
+      "booksHeading": "Books",
+      "bookScope": "Book scope",
+      "bookScopes": {
+        "primary": "Primary book",
+        "all_posting": "All posting books",
+        "books": "Selected books"
+      },
+      "applicabilityHeading": "Which lines the rule considers",
+      "documentKinds": "Document kinds (empty means any)",
+      "accountScope": "Account scope",
+      "accountScopes": {
+        "any": "Any account",
+        "accounts": "Selected accounts",
+        "account_group": "Account group"
+      },
+      "accountGroup": "Account group",
+      "untaggedOnly": "Only untagged",
+      "applyPolicy": "Line behavior",
+      "applyPolicies": {
+        "automatic": "Automatic",
+        "suggest": "Suggest",
+        "manual": "Manual"
+      },
+      "sourceMeasure": "Source measure",
+      "sourceMeasures": {
+        "period_activity": "Period activity",
+        "period_end_balance": "Period-end balance",
+        "ytd_activity": "Year-to-date activity"
+      },
+      "basisHeading": "Basis",
+      "basisKind": "Basis",
+      "basisKinds": {
+        "fixed_percent": "Fixed percent",
+        "driver": "Driver",
+        "stepped": "Stepped"
+      },
+      "driver": "Driver",
+      "driverAsOf": "Driver as of",
+      "targetsHeading": "Targets",
+      "targetKind": "Target kind",
+      "targetKinds": {
+        "explicit": "Explicit targets",
+        "dynamic": "Dynamic dimension"
+      },
+      "dynamicDimension": "Target dimension",
+      "impactHeading": "Impact",
+      "impact": "Impact",
+      "impacts": {
+        "reclass": "Reclassify",
+        "net_zero_pair": "Net-zero pair",
+        "report_only": "Report only"
+      },
+      "offsetAccount": "Offset account (reclass credit side; empty keeps the source account)",
+      "residualPolicy": "Residual policy",
+      "residualPolicies": {
+        "largest_share": "Largest share",
+        "first_target": "First target",
+        "last_target": "Last target",
+        "explicit_target": "Explicit target"
+      },
+      "solveMethod": "Waterfall solve",
+      "scheduleHeading": "Scheduling (period sweeps)",
+      "runPolicy": "Run policy",
+      "runPolicies": {
+        "manual": "Manual",
+        "auto_preview": "Auto preview",
+        "auto_post": "Auto post"
+      },
+      "runOffsetDays": "Days after period end",
+      "presentationHeading": "Presentation",
+      "memoTemplate": "Memo template",
+      "lineDescriptionTemplate": "Line description template"
+    },
+    "targets": {
+      "add": "Add target",
+      "remove": "Remove target",
+      "account": "Target account",
+      "sameAccount": "Same account",
+      "label": "Label",
+      "labelPlaceholder": "Target label",
+      "portion": "Share",
+      "save": "Save targets",
+      "saved": "Targets saved."
+    },
+    "versions": {
+      "heading": "Versions",
+      "newVersion": "New version from current",
+      "publish": "Publish",
+      "retire": "Retire",
+      "retireReasonTitle": "Retire version {version}",
+      "retireReasonLabel": "Reason (recorded in the audit log)",
+      "version": "Version {n}",
+      "effective": "{from} – {to}",
+      "openEnded": "open-ended",
+      "hash": "Definition {hash}"
+    },
+    "problems": {
+      "title": "Resolve these problems before publishing",
+      "remainder_count": "At most one target may take the remainder.",
+      "fixed_percent_missing": "Every non-remainder target needs a fixed percent.",
+      "fixed_percent_range": "Fixed percents must be within (0, 100].",
+      "fixed_percent_sum": "Fixed percents must total 100 or name a remainder target.",
+      "effective_window": "The effective window is inverted or missing.",
+      "effective_overlap": "The effective window overlaps another published version.",
+      "book_scope": "The book scope names no usable posting book.",
+      "apply_policy": "Entry rules need a line behavior.",
+      "targets_empty": "At least one target is required.",
+      "source_measure": "Period sweeps need a source measure.",
+      "target_sequence": "Targets must be ordered without gaps.",
+      "dynamic_dimension": "Dynamic targets need a dimension.",
+      "dynamic_min_weight": "The minimum weight must be zero or more.",
+      "dynamic_include_exclude": "The include/exclude lists overlap.",
+      "driver_missing": "A driver basis needs a driver.",
+      "driver_unknown": "The driver does not exist in this organization.",
+      "driver_inactive": "The driver is not active.",
+      "driver_dimension": "The driver measures a different dimension.",
+      "stepped_tiers": "A stepped basis needs at least one tier.",
+      "offset_impact": "An offset account only coheres with reclassify impact.",
+      "residual_target": "The explicit residual target is missing or unknown.",
+      "fallback": "This version cannot be published yet."
+    },
+    "test": {
+      "heading": "Test the rule",
+      "account": "Sample line account",
+      "documentKind": "Document kind",
+      "run": "Run test",
+      "matched": "Matched (specificity {n})",
+      "notMatched": "Did not match this line.",
+      "explodePreview": "Explode preview",
+      "shareColumn": "Share",
+      "targetColumn": "Target",
+      "basisNote": "Shares resolve at run time from the driver vector.",
+      "periodHeading": "Preview a period sweep",
+      "period": "Period",
+      "openRuns": "Open in Runs",
+      "noVersion": "This rule has no version to test yet."
+    },
+    "errors": {
+      "load": "Could not load allocation rules.",
+      "save": "Could not save the allocation rule.",
+      "stale": "The record changed; reload and review the latest revision before saving.",
+      "retireReasonRequired": "A reason is required to retire a version."
+    }
   }
 }
