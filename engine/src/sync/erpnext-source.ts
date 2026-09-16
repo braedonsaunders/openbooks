@@ -22,6 +22,15 @@ import { allModules, monthlySourcePeriods, type SourceFiscalYear } from "./perio
  * separate doctypes whose names can collide.
  */
 
+/**
+ * Reconcilability is a bank-reconciliation input: only bank and cash
+ * accounts may inherit it, so the import gates the flag by source account
+ * type instead of defaulting it on or off.
+ */
+export function erpNextReconcilableAccountType(accountType: string | null): boolean {
+  return accountType === "Bank" || accountType === "Cash";
+}
+
 const ERP_TYPE_BY_ACCOUNT_TYPE: Record<string, string> = {
   Bank: "asset_bank",
   Cash: "asset_bank",
@@ -121,6 +130,7 @@ export class ErpNextSource implements MigrationSource {
           ERP_TYPE_BY_ROOT[a.root_type] ?? "asset_current_other",
         isSummary: a.is_group === 1,
         isActive: a.disabled !== 1,
+        reconcilable: erpNextReconcilableAccountType(a.account_type),
       },
     }));
   }

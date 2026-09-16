@@ -21,6 +21,15 @@ import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods, type Import
  * per-document open-item truth; `write_date` is the incremental watermark.
  */
 
+/**
+ * Reconcilability is a bank-reconciliation input: only cash (bank) and card
+ * accounts may inherit it, so the import gates the flag by source account
+ * type instead of defaulting it on or off.
+ */
+export function odooReconcilableAccountType(accountType: string): boolean {
+  return accountType === "asset_cash" || accountType === "liability_credit_card";
+}
+
 const ODOO_ACCOUNT_TYPE: Record<string, string> = {
   asset_cash: "asset_bank",
   asset_current: "asset_current_other",
@@ -51,7 +60,11 @@ const MOVE_FIELDS = [
   "id", "name", "move_type", "state", "partner_id", "invoice_date", "invoice_date_due",
   "date", "ref", "payment_id", "statement_line_id", "write_date",
 ];
-const LINE_FIELDS = ["id", "move_id", "account_id", "name", "balance", "display_type", "tax_ids", "tax_line_id", "partner_id"];
+// matching_number has ridden account.move.line since the 13.0 series: a set
+// value means the line is matched (reconciled). No fallback read is kept for
+// older servers — an unknown field fails the pull loudly, never silently
+// unstamped.
+const LINE_FIELDS = ["id", "move_id", "account_id", "name", "balance", "display_type", "tax_ids", "tax_line_id", "partner_id", "matching_number"];
 
 /** Odoo datetime "YYYY-MM-DD HH:MM:SS" (UTC) → Date. */
 const odooTs = (s: string): Date => new Date(s.replace(" ", "T") + "Z");
@@ -142,6 +155,7 @@ export class OdooSource implements MigrationSource {
           type,
           isActive: !a.deprecated,
           isSummary: false,
+          reconcilable: odooReconcilableAccountType(a.account_type),
         },
       });
     }

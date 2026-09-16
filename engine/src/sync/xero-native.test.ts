@@ -89,3 +89,66 @@ test("Xero invoices still aggregate repeated lines for one tax type", () => {
     ],
   );
 });
+
+test("Xero bank transactions propagate the header reconciled marker", () => {
+  const codes = new Map([
+    ["4000", "sales"],
+    ["200", "bank"],
+  ]);
+  const built = buildNativeFromXero(
+    {
+      ...context(),
+      accountByRef: new Map([
+        ["sales", { id: "sales-id", number: "4000", name: "Sales", type: "income" }],
+        ["bank", { id: "bank-id", number: "200", name: "Bank", type: "asset_bank" }],
+      ]),
+    },
+    "BankTransaction",
+    {
+      BankTransactionID: "bt-1",
+      Type: "RECEIVE",
+      Status: "AUTHORISED",
+      DateString: "2026-08-27",
+      IsReconciled: true,
+      BankAccount: { AccountID: "bank" },
+      LineItems: [{ AccountCode: "4000", LineAmount: 100 }],
+    },
+    { accountIdByCode: codes },
+  );
+  assert.ok(!("skip" in built));
+  // Xero states reconciliation per bank transaction, not per line: every leg
+  // shares the header state (the engine stamps only reconcilable accounts),
+  // dated at the bank transaction date (Xero states no clear date).
+  for (const line of built.lines) {
+    assert.equal(line.sourceCleared, true);
+    assert.equal(line.sourceClearedDate, "2026-08-27");
+  }
+});
+
+test("Xero unreconciled bank transactions carry negative evidence", () => {
+  const codes = new Map([["200", "bank"]]);
+  const built = buildNativeFromXero(
+    {
+      ...context(),
+      accountByRef: new Map([
+        ["bank", { id: "bank-id", number: "200", name: "Bank", type: "asset_bank" }],
+      ]),
+    },
+    "BankTransaction",
+    {
+      BankTransactionID: "bt-2",
+      Type: "SPEND",
+      Status: "AUTHORISED",
+      DateString: "2026-08-28",
+      IsReconciled: false,
+      BankAccount: { AccountID: "bank" },
+      LineItems: [{ AccountCode: "200", LineAmount: 50 }],
+    },
+    { accountIdByCode: codes },
+  );
+  assert.ok(!("skip" in built));
+  for (const line of built.lines) {
+    assert.equal(line.sourceCleared, false);
+    assert.equal(line.sourceClearedDate, null);
+  }
+});

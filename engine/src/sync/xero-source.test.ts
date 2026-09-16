@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
-import { XeroSource } from "./xero-source.ts";
+import { XeroSource, xeroReconcilableAccount } from "./xero-source.ts";
 import type { XeroClient } from "../xero.ts";
 
 const ctx = { baseCurrency: "NZD" } as NativeContext;
@@ -163,4 +163,11 @@ test("a signed payment amount settles as an unsigned magnitude", async () => {
       rate: "1.5",
     },
   ]);
+});
+
+test("only Xero bank accounts inherit the reconcilable flag", () => {
+  assert.equal(xeroReconcilableAccount("BANK"), true);
+  assert.equal(xeroReconcilableAccount("CURRENT"), false);
+  assert.equal(xeroReconcilableAccount("SALES"), false);
+  assert.equal(xeroReconcilableAccount("OVERPAYMENTS"), false);
 });

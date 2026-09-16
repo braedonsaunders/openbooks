@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
-import { OdooSource } from "./odoo-source.ts";
+import { buildNativeFromOdoo, type OdooMove, type OdooMoveLine } from "./odoo-native.ts";
+import { OdooSource, odooReconcilableAccountType } from "./odoo-source.ts";
 import type { OdooClient } from "../odoo.ts";
 
 /**
@@ -46,4 +47,54 @@ test("partial-reconcile links state the company currency with no producer rate",
   assert.deepEqual(changes.applications, [
     { paymentRef: "202", appliedRef: "201", amount: "250.00", currency: "EUR", rate: null },
   ]);
+});
+
+test("Odoo journal lines propagate match numbers as cleared evidence", () => {
+  const bankCtx = {
+    accountByRef: new Map([
+      ["10", { id: "ob-10", number: "1000", name: "Bank", type: "asset_bank" }],
+      ["20", { id: "ob-20", number: "4000", name: "Sales", type: "income" }],
+    ]),
+    partyByRef: new Map(),
+  } as unknown as NativeContext;
+  const move: OdooMove = {
+    id: 301, name: "BNK/001", move_type: "entry", state: "posted",
+    partner_id: false, invoice_date: false, invoice_date_due: false,
+    date: "2026-08-27", ref: false, payment_id: false,
+    statement_line_id: false, write_date: "2026-08-28 10:00:00",
+  };
+  const lines: OdooMoveLine[] = [
+    {
+      id: 401, move_id: [301, "BNK/001"], account_id: [10, "Bank"],
+      name: "deposit", balance: 100, display_type: "payment_term",
+      tax_ids: [], tax_line_id: false, partner_id: false, matching_number: "P123",
+    },
+    {
+      id: 402, move_id: [301, "BNK/001"], account_id: [20, "Sales"],
+      name: "sales", balance: -100, display_type: "product",
+      tax_ids: [], tax_line_id: false, partner_id: false, matching_number: false,
+    },
+  ];
+  const built = buildNativeFromOdoo(bankCtx, move, lines, {
+    paymentPartnerType: new Map(),
+    taxRateById: new Map(),
+  });
+  assert.ok(!("skip" in built));
+  // Odoo states reconciliation per move line (matching_number, set when the
+  // line is matched); the move date stands in for the unstated clear date.
+  assert.deepEqual(
+    built.lines.map((line) => [line.sourceLineRef, line.sourceCleared, line.sourceClearedDate]),
+    [
+      ["401", true, "2026-08-27"],
+      ["402", false, null],
+    ],
+  );
+});
+
+test("only Odoo cash and card accounts inherit the reconcilable flag", () => {
+  assert.equal(odooReconcilableAccountType("asset_cash"), true);
+  assert.equal(odooReconcilableAccountType("liability_credit_card"), true);
+  assert.equal(odooReconcilableAccountType("asset_receivable"), false);
+  assert.equal(odooReconcilableAccountType("expense"), false);
+  assert.equal(odooReconcilableAccountType("nope"), false);
 });

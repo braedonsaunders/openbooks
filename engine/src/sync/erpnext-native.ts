@@ -45,6 +45,8 @@ export interface ErpPayment {
   base_paid_amount: number;
   base_received_amount: number;
   remarks?: string | null;
+  /** Bank-clearance date (YYYY-MM-DD), set when the entry clears the bank. */
+  clearance_date?: string | null;
 }
 
 export interface ErpJournal {
@@ -157,13 +159,21 @@ export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocume
   const to = ctx.accountByRef.get(p.paid_to)?.id;
   if (!from || !to) return { skip: "unmapped payment account" };
 
+  // ERPNext states clearing per Payment Entry (clearance_date, set by bank
+  // clearance): every leg shares the header state, dated at clearance (the
+  // engine stamps only reconcilable accounts, so sharing is exact).
+  const cleared = (p.clearance_date ?? "").trim() !== "";
+  const evidence = {
+    sourceCleared: cleared,
+    sourceClearedDate: cleared ? p.clearance_date!.trim() : null,
+  };
   if (p.payment_type === "Receive") {
     return {
       ...base,
       kind: "customer_payment",
       partyId: ctx.partyByRef.get(`C:${p.party}`) ?? null,
       controlAccountId: from, // the receivable being credited
-      lines: [line(to, num(p.base_received_amount), 1)],
+      lines: [{ ...line(to, num(p.base_received_amount), 1), ...evidence }],
     };
   }
   if (p.payment_type === "Pay") {
@@ -172,7 +182,7 @@ export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocume
       kind: "vendor_payment",
       partyId: ctx.partyByRef.get(`S:${p.party}`) ?? null,
       controlAccountId: to, // the payable being debited
-      lines: [line(from, num(p.base_paid_amount), 1)],
+      lines: [{ ...line(from, num(p.base_paid_amount), 1), ...evidence }],
     };
   }
   // Internal Transfer: DR paid_to, CR paid_from.
@@ -181,7 +191,10 @@ export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocume
     kind: "transfer",
     partyId: null,
     controlAccountId: null,
-    lines: [line(to, num(p.base_received_amount), 1), line(from, 0n, 2)],
+    lines: [
+      { ...line(to, num(p.base_received_amount), 1), ...evidence },
+      { ...line(from, 0n, 2), ...evidence },
+    ],
   };
 }
 

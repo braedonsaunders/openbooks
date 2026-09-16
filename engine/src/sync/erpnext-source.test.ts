@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
-import { ErpNextSource } from "./erpnext-source.ts";
+import { ErpNextSource, erpNextReconcilableAccountType } from "./erpnext-source.ts";
 import type { ErpNextClient } from "../erpnext.ts";
 
 /**
@@ -186,4 +186,13 @@ test("a misaligned reference currency states no rate", async () => {
   assert.deepEqual(changes.applications, [
     { paymentRef: "PE-X", appliedRef: "SI-X", amount: "1000.00", currency: "USD", rate: null },
   ]);
+});
+
+test("only ERPNext bank and cash accounts inherit the reconcilable flag", () => {
+  assert.equal(erpNextReconcilableAccountType("Bank"), true);
+  assert.equal(erpNextReconcilableAccountType("Cash"), true);
+  assert.equal(erpNextReconcilableAccountType("Receivable"), false);
+  assert.equal(erpNextReconcilableAccountType("Payable"), false);
+  assert.equal(erpNextReconcilableAccountType("Tax"), false);
+  assert.equal(erpNextReconcilableAccountType(null), false);
 });

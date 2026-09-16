@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../money.ts";
 import type { NativeContext } from "./native.ts";
-import { buildErpInvoice, type ErpInvoice } from "./erpnext-native.ts";
+import { buildErpInvoice, buildErpPayment, type ErpInvoice } from "./erpnext-native.ts";
 
 function context(): NativeContext {
   return {
@@ -83,4 +83,54 @@ test("ERPNext invoices fail closed when a non-zero tax account is unmapped", () 
   assert.deepEqual(buildErpInvoice(context(), invoice), {
     skip: "unmapped tax code Unknown Tax Account",
   });
+});
+
+test("ERPNext payments propagate clearance dates as cleared evidence", () => {
+  const ctx = {
+    ...context(),
+    accountByRef: new Map([
+      ["Debtors", { id: "ar-id", number: "1100", name: "Debtors", type: "asset_receivable" }],
+      ["Bank", { id: "bank-id", number: "1000", name: "Bank", type: "asset_bank" }],
+    ]),
+    partyByRef: new Map([["C:Customer", "customer-id"]]),
+  };
+  const cleared = buildErpPayment(ctx, {
+    name: "PE-1",
+    payment_type: "Receive",
+    party_type: "Customer",
+    party: "Customer",
+    posting_date: "2026-08-20",
+    docstatus: 1,
+    paid_from: "Debtors",
+    paid_to: "Bank",
+    base_paid_amount: 500,
+    base_received_amount: 500,
+    clearance_date: "2026-08-27",
+  });
+  assert.ok(!("skip" in cleared));
+  // ERPNext states clearing per Payment Entry (clearance_date, set by bank
+  // clearance): the bank leg carries it; the engine stamps only reconcilable
+  // accounts, so every leg may share the header state.
+  assert.deepEqual(
+    cleared.lines.map((line) => [line.sourceCleared, line.sourceClearedDate]),
+    [[true, "2026-08-27"]],
+  );
+  const open = buildErpPayment(ctx, {
+    name: "PE-2",
+    payment_type: "Receive",
+    party_type: "Customer",
+    party: "Customer",
+    posting_date: "2026-08-20",
+    docstatus: 1,
+    paid_from: "Debtors",
+    paid_to: "Bank",
+    base_paid_amount: 500,
+    base_received_amount: 500,
+    clearance_date: null,
+  });
+  assert.ok(!("skip" in open));
+  assert.deepEqual(
+    open.lines.map((line) => [line.sourceCleared, line.sourceClearedDate]),
+    [[false, null]],
+  );
 });
