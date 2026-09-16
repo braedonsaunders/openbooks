@@ -119,6 +119,13 @@ test("ask-about-this deep-links chat with the finding handoff", () => {
   const app = read("../../../components/assistant/assistant-app.tsx");
   assert.match(app, /findingId \? \{ findingId \} : \{\}/);
   assert.match(app, /t\('context\.attached'\)/);
+  // The viewspec seam must forward the handoff: the spec carries
+  // initialFindingId, so the widget entry and its contract must read it —
+  // otherwise /assistant?finding= renders with no attached context.
+  const widgets = read("../../../components/viewspec/widgets.tsx");
+  assert.match(widgets, /initialFindingId=\{str\(props, 'initialFindingId'\)\}/);
+  const contracts = read("../../../components/viewspec/widget-contracts.ts");
+  assert.match(contracts, /'assistant-app': \{ props: \[[^\]]*'initialFindingId'[^\]]*\] \}/);
 });
 
 test("briefing tab serves the cached narrative", () => {
