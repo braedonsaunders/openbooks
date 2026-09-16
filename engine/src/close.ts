@@ -2554,13 +2554,51 @@ export async function publishCloseRun(
     throw new CloseError("enable Advanced close controls to publish a close package");
   }
   await db.transaction(async (tx) => {
-    const run = (await tx.execute<{ status: string; data_fingerprint: string | null }>(sql`
-      select status, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId} for update`));
+    const run = (await tx.execute<{
+      status: string;
+      data_fingerprint: string | null;
+      binder_snapshot: unknown | null;
+      binder_hash: string | null;
+      published_at: string | null;
+      published_by: string | null;
+      publish_count: string;
+    }>(sql`
+      select status, data_fingerprint, binder_snapshot, binder_hash, published_at::text, published_by::text,
+             (select count(*) from close_events e
+               where e.org_id = ${orgId} and e.run_id = ${runId} and e.event_type = 'run.published') as publish_count
+        from close_runs where id = ${runId} and org_id = ${orgId} for update`));
     if (!run.rows[0]) throw new CloseError("close run not found");
     if (run.rows[0].status !== "closed")
       throw new CloseError(
         "the period must be closed before its package can be published",
       );
+    // A re-publication after a controlled reopen is a restatement, never a
+    // silent overwrite: the previously published binder is retained as run
+    // evidence BEFORE the snapshot is replaced, and the new publication must
+    // carry a restatement note. Without this the original package became
+    // unrecoverable the moment the corrected one froze.
+    const prior = run.rows[0];
+    const version = Number(prior.publish_count) + 1;
+    const restatementNote = comment?.trim() ? comment.trim() : null;
+    if (prior.binder_hash !== null && restatementNote === null) {
+      throw new CloseError(
+        "a restatement note is required to re-publish a corrected package",
+      );
+    }
+    if (prior.binder_hash !== null) {
+      await tx.execute(sql`
+        insert into close_events (org_id, run_id, event_type, actor_id, payload)
+        values (${orgId}, ${runId}, 'package.superseded', ${actorId},
+                ${JSON.stringify({
+                  version: version - 1,
+                  superseded_hash: prior.binder_hash,
+                  superseded_frozen_at: (prior.binder_snapshot as { frozenAt?: string } | null)?.frozenAt ?? null,
+                  published_at: prior.published_at,
+                  published_by: prior.published_by,
+                  restatement_note: restatementNote,
+                  binder_snapshot: prior.binder_snapshot,
+                })}::jsonb)`);
+    }
     await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
              data_fingerprint = ${run.rows[0].data_fingerprint}, updated_at = now(), updated_by = ${actorId}
@@ -2602,6 +2640,14 @@ export async function publishCloseRun(
       ]));
     const snapshot = {
       format: "openbooks.close-binder.v1",
+      // Package versioning: the first publication is version 1; every
+      // re-publication after a controlled reopen increments it, links the
+      // version it replaces, and carries the mandatory restatement note, so
+      // the downloaded binder visibly states that it restates an earlier
+      // package (whose full content survives in the package.superseded event).
+      version,
+      supersedes: prior.binder_hash,
+      restatementNote: version > 1 ? restatementNote : null,
       frozenAt: new Date().toISOString(),
       run: publishedRun.rows[0],
       tasks: tasks.rows,
