@@ -62,6 +62,10 @@ const RECON_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
 const TYPE_KEYS = ['asset_bank', 'liability_card']
 const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
 
+// Connector labels resolve from the tenant's own connections table, never
+// from a hardcoded vendor map: the display name is tenant data, so product
+// copy stays vendor-neutral no matter which systems are supported.
+
 const STMT_SORTS = {
   date: sql`s.statement_date`,
   source: sql`s.source`,
@@ -104,6 +108,8 @@ interface ReconciliationRow extends Record<string, unknown> {
   status: string
   signed_off_at: string | null
   created_at: string
+  evidence_kind: string
+  evidence_connector: string | null
 }
 interface CountRow extends Record<string, unknown> { n: string | number }
 interface SourceCountRow extends CountRow { source: string }
@@ -131,6 +137,8 @@ export interface ReconciliationListRow {
   statementBalance: string
   statusLabel: string
   statusVariant: 'success' | 'secondary' | 'warning'
+  evidenceLabel: string
+  evidenceVariant: 'secondary' | 'outline'
   createdAt: string
   signedOffAt: string
   actionHref: string
@@ -197,6 +205,7 @@ export interface BankingAccountData {
   columnThroughDate: string
   columnStatementBalance: string
   columnStatus: string
+  columnEvidence: string
   columnStarted: string
   columnSignedOff: string
   reconRows: ReconciliationListRow[]
@@ -298,7 +307,8 @@ export async function loadBankingAccount(
     db.execute<CountRow>(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
     db.execute<SourceCountRow>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
     db.execute<ReconciliationRow>(sql`
-      select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at
+      select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at,
+             r.evidence_kind, r.evidence_connector
         from reconciliations r
        where ${reconWhere}
        order by ${RECON_SORTS[reconParams.sort]} ${reconParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
@@ -348,6 +358,28 @@ export async function loadBankingAccount(
       }
     }
   }
+
+  // Connector display names resolve from the tenant's own connections table,
+  // never from a hardcoded vendor map: the display name is tenant data, so
+  // product copy stays vendor-neutral. One query for every distinct
+  // connector on the page keeps the row mapping synchronous below.
+  const evidenceConnectors = [...new Set(
+    recons.rows.map((r) => r.evidence_connector).filter((c): c is string => c !== null),
+  )]
+  const connectorNames = new Map<string, string>()
+  if (evidenceConnectors.length > 0) {
+    const names = await db.execute<{ source: string; display_name: string }>(sql`
+      select distinct on (c.source) c.source, c.display_name
+        from connections c
+       where c.org_id = ${orgId} and c.source in (${sql.join(evidenceConnectors.map((c) => sql`${c}`), sql`, `)})
+       order by c.source, c.mirror_enabled desc, c.created_at
+    `)
+    for (const n of names.rows) connectorNames.set(n.source, n.display_name)
+  }
+  const connectorLabel = (connector: string | null) =>
+    (connector && connectorNames.get(connector)) || t('sourceSystem.other')
+  const evidenceLabel = (kind: string, connector: string | null) =>
+    kind === 'source' ? t('evidenceKind.sourceFrom', { connector: connectorLabel(connector) }) : t('evidenceKind.statement')
 
   const sourceOptions = sourceCounts.rows.map((r) => ({ value: r.source, label: r.source, count: Number(r.n) }))
   const reconStatusOptions = reconStatusCounts.rows.map((r) => ({
@@ -434,6 +466,7 @@ export async function loadBankingAccount(
     columnThroughDate: t('account.columns.throughDate'),
     columnStatementBalance: t('labels.statementBalance'),
     columnStatus: tCommon('labels.status'),
+    columnEvidence: t('account.columns.evidence'),
     columnStarted: t('account.columns.started'),
     columnSignedOff: t('account.columns.signedOff'),
     reconRows: recons.rows.map((r) => ({
@@ -442,6 +475,8 @@ export async function loadBankingAccount(
       statementBalance: money(r.statement_balance),
       statusLabel: reconStatusLabel(r.status),
       statusVariant: RECON_VARIANT[r.status] ?? 'secondary',
+      evidenceLabel: evidenceLabel(r.evidence_kind, r.evidence_connector),
+      evidenceVariant: r.evidence_kind === 'source' ? 'secondary' : 'outline',
       createdAt: formatTimestamp(r.created_at),
       // The native cell renders a bare em-dash, not a styled placeholder.
       signedOffAt: r.signed_off_at ? formatTimestamp(r.signed_off_at) : '—',
@@ -640,6 +675,7 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
                 column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), {
                   sort: 'status',
                 }),
+                column(rootF('columnEvidence'), badge(item('evidenceLabel'), { variant: item('evidenceVariant') })),
                 column(rootF('columnStarted'), text(item('createdAt')), { sort: 'created', className: MUTED }),
                 column(rootF('columnSignedOff'), text(item('signedOffAt')), { className: MUTED }),
                 column(

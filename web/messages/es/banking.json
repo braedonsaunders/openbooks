@@ -18,6 +18,13 @@
     "manual": "manual",
     "rule": "regla"
   },
+  "evidenceKind": {
+    "statement": "Extracto",
+    "sourceFrom": "Conciliado desde {connector}"
+  },
+  "sourceSystem": {
+    "other": "sistema de origen"
+  },
   "labels": {
     "never": "nunca",
     "ref": "Ref.",
@@ -272,7 +279,8 @@
       "imported": "Importado",
       "throughDate": "Fecha de corte",
       "started": "Iniciada",
-      "signedOff": "Aprobada"
+      "signedOff": "Aprobada",
+      "evidence": "Evidencia"
     },
     "reconciliationsTitle": "Conciliaciones",
     "searchReconciliations": "Buscar por fecha o saldo…",
@@ -373,7 +381,9 @@
       "difference": "Diferencia",
       "matched": "Conciliado"
     },
-    "matchedCounts": "{bank, number} banco · {gl, number} mayor"
+    "matchedCounts": "{bank, number} banco · {gl, number} mayor",
+    "sourceSignedOffDescription": "Conciliado desde {connector} hasta {date} — {cleared, number} conciliadas · {uncleared, number} pendientes. No se importó ningún extracto.",
+    "sourceSignedOffByDescription": "Conciliado desde {connector} hasta {date} por {name} — {cleared, number} conciliadas · {uncleared, number} pendientes. No se importó ningún extracto."
   },
   "workspace": {
     "signedOffAlert": "Esta conciliación está aprobada — las líneas de diario conciliadas a continuación quedan marcadas de forma permanente como conciliadas.",

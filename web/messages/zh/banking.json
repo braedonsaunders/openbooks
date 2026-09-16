@@ -18,6 +18,13 @@
     "manual": "手动",
     "rule": "规则"
   },
+  "evidenceKind": {
+    "statement": "对账单",
+    "sourceFrom": "已从{connector}对账"
+  },
+  "sourceSystem": {
+    "other": "源系统"
+  },
   "labels": {
     "never": "从不",
     "ref": "参考号",
@@ -272,7 +279,8 @@
       "imported": "已导入",
       "throughDate": "截至日期",
       "started": "已开始",
-      "signedOff": "已签核"
+      "signedOff": "已签核",
+      "evidence": "依据"
     },
     "reconciliationsTitle": "对账",
     "searchReconciliations": "按日期或余额搜索…",
@@ -373,7 +381,9 @@
       "difference": "差额",
       "matched": "已匹配"
     },
-    "matchedCounts": "{bank, number} 条银行 · {gl, number} 条总账"
+    "matchedCounts": "{bank, number} 条银行 · {gl, number} 条总账",
+    "sourceSignedOffDescription": "已从{connector}对账至{date}——已对账 {cleared, number} 行 · 未对账 {uncleared, number} 行。未导入对账单。",
+    "sourceSignedOffByDescription": "已从{connector}对账至{date}（由{name}签核）——已对账 {cleared, number} 行 · 未对账 {uncleared, number} 行。未导入对账单。"
   },
   "workspace": {
     "signedOffAlert": "此对账已签核 — 下方已匹配的日记账明细被永久标记为已对账。",

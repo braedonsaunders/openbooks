@@ -232,8 +232,8 @@ export const bankingAndReconciliation: DocArticle = {
   category: 'banking-close',
   order: 1,
   summary: 'Import statement activity, match or categorize lines, build rules, and sign off reconciliations.',
-  updated: '2026-07-19',
-  keywords: ['bank feed', 'statement', 'import', 'matching', 'categorize', 'bank rule', 'reconciliation', 'cash'],
+  updated: '2026-09-16',
+  keywords: ['bank feed', 'statement', 'import', 'matching', 'categorize', 'bank rule', 'reconciliation', 'cash', 'source evidence', 'cleared', 'mirror'],
   related: ['payments-and-applications', 'period-close', 'reconciliation-before-cutover'],
   body: `# Banking, Matching, and Reconciliation
 
@@ -275,6 +275,20 @@ A reconciliation proves the statement ending balance against the ledger as of a
 cutoff date, including identified outstanding items. Resolve unexplained
 differences before sign-off. Save supporting evidence and use the signed-off
 reconciliation in the period-close package.
+
+## Sign off from source-system evidence
+
+Mirror tenants never import bank statements: the connected source system
+already holds cleared markers per transaction line and a reconciled-through
+date per account. Each mirror run carries those markers onto the ledger as
+evidence and signs the account off through the source's reconciled date, with
+no statement lines invented.
+
+A source-evidenced sign-off shows as reconciled from the connector with its
+cleared and uncleared line counts, and close readiness accepts it exactly like
+a statement sign-off. Accounts whose source markers are only partially cleared
+for the period stay open, and the readiness detail names them with their
+cleared and uncleared counts.
 `,
 }
 

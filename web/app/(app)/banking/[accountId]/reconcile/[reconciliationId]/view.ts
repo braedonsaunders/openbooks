@@ -56,6 +56,9 @@ const M_SORTS = {
 // underscores spaced out.
 const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
 
+// Connector labels resolve from the tenant's own connections table, never
+// from a hardcoded vendor map (shared with the account page).
+
 interface ReconciliationRow extends Record<string, unknown> {
   id: string
   account_id: string
@@ -67,6 +70,8 @@ interface ReconciliationRow extends Record<string, unknown> {
   signed_off_by_name: string | null
   account_number: string | null
   account_name: string
+  evidence_kind: string
+  evidence_connector: string | null
 }
 
 export interface ReconcileStmtRow extends Record<string, unknown> {
@@ -162,7 +167,8 @@ export async function loadReconciliation(
   const reconRes = (await db.execute<ReconciliationRow>(sql`
     select r.id, r.account_id, r.through_date, r.statement_balance, r.currency, r.status,
            r.signed_off_at, u.name as signed_off_by_name,
-           a.number as account_number, a.name as account_name
+           a.number as account_number, a.name as account_name,
+           r.evidence_kind, r.evidence_connector
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
       left join users u on u.id = r.signed_off_by
@@ -177,6 +183,45 @@ export async function loadReconciliation(
   const totals = await reconciliationTotals(reconciliationId, ctx)
   const bookId = await reconciliationBookId(db, ctx.orgId)
   const signedOff = recon.status === 'signed_off'
+  const sourceEvidence = recon.evidence_kind === 'source'
+  // The connection's own display name is tenant data, so naming the source
+  // system stays vendor-neutral; without a matching connection the generic
+  // fallback names it.
+  const connectorName = recon.evidence_connector
+    ? (await db.execute<{ display_name: string }>(sql`
+        select c.display_name from connections c
+         where c.org_id = ${ctx.orgId} and c.source = ${recon.evidence_connector}
+         order by c.mirror_enabled desc, c.created_at limit 1
+      `)).rows[0]?.display_name ?? t('sourceSystem.other')
+    : t('sourceSystem.other')
+
+  // Source-evidenced sign-offs stand on mirrored cleared stamps, not on
+  // imported statement lines: count the covered lines the same way close
+  // readiness does (cleared stamp or reconciled vs neither, cutoff-bound).
+  let clearedLines = 0
+  let unclearedLines = 0
+  if (sourceEvidence) {
+    const evidenceCounts = await db.execute<Record<string, unknown>>(sql`
+      select count(*) filter (
+               where (jl.source_cleared_date is not null and jl.source_cleared_date <= ${recon.through_date})
+                  or jl.reconciled_at is not null
+             ) as cleared,
+             count(*) filter (
+               where (jl.source_cleared_date is null or jl.source_cleared_date > ${recon.through_date})
+                 and jl.reconciled_at is null
+             ) as uncleared
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where jl.org_id = ${ctx.orgId} and jl.account_id = ${accountId}
+         and je.book_id = ${bookId} and je.status in ('posted', 'reversed')
+         and jl.currency = ${recon.currency} and jl.posting_date <= ${recon.through_date}
+    `)
+    clearedLines = Number(evidenceCounts.rows[0]?.cleared ?? 0)
+    unclearedLines = Number(evidenceCounts.rows[0]?.uncleared ?? 0)
+  }
+  // Resolved eagerly: the description below needs a connector label exactly
+  // when this reconciliation stands on source evidence.
+  const sourceConnector = sourceEvidence ? connectorName : ''
 
   // -- left pane: unmatched statement lines (prefix stmt*) -------------------
   const stmtParams = parsePrefixedListParams(sp, 'stmt', {
@@ -273,16 +318,31 @@ export async function loadReconciliation(
     backHref: `/banking/${accountId}`,
     backLabel: [recon.account_number, recon.account_name].filter(Boolean).join(' · '),
     headerTitle: t('reconcile.title', { date: recon.through_date }),
-    headerDescription: signedOff
+    headerDescription: sourceEvidence
       ? recon.signed_off_by_name
-        ? t('reconcile.signedOffByDescription', {
-            date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
+        ? t('reconcile.sourceSignedOffByDescription', {
+            connector: sourceConnector,
+            date: recon.through_date,
             name: recon.signed_off_by_name,
+            cleared: clearedLines,
+            uncleared: unclearedLines,
           })
-        : t('reconcile.signedOffDescription', {
-            date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
+        : t('reconcile.sourceSignedOffDescription', {
+            connector: sourceConnector,
+            date: recon.through_date,
+            cleared: clearedLines,
+            uncleared: unclearedLines,
           })
-      : t('reconcile.description'),
+      : signedOff
+        ? recon.signed_off_by_name
+          ? t('reconcile.signedOffByDescription', {
+              date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
+              name: recon.signed_off_by_name,
+            })
+          : t('reconcile.signedOffDescription', {
+              date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
+            })
+        : t('reconcile.description'),
     badgeLabel: RECON_STATUS_KEYS.includes(recon.status)
       ? t(`reconStatus.${recon.status}`)
       : String(recon.status).replace(/_/g, ' '),
