@@ -46,6 +46,10 @@ import type { DriverResolver } from "./types.ts";
  * the statement engine, which has no engine entry point; custom-record
  * entities resolve through the web catalog; period presets need declared
  * periods. A driver pointed at any of those refuses instead of measuring.
+ * Display queries are bounded (the saved limit, at most MAX_REPORT_ROWS);
+ * when the evidence reaches that bound the runner cannot prove completeness,
+ * so it refuses with driver_evidence_truncated instead of weighing a silent
+ * prefix of the inputs.
  */
 export async function runDriverReport(input: ReportDriverRunInput): Promise<ReportDriverRow[]> {
   const { orgId, reportDefinitionId, dimensionColumn, valueColumn, actorId } = input;
@@ -96,6 +100,13 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     allowedBookIds: await resolveBookScope(orgId, plan),
   });
   const { rows } = await pool.query(compiled.text, compiled.values);
+  if (rows.length >= compiled.limit) {
+    throw new DriverNotAvailableError(
+      `report evidence reached the ${compiled.limit}-row query limit (driver_evidence_truncated); ` +
+        `narrow the report so driver inputs are complete`,
+      "config.reportDefinitionId",
+    );
+  }
   assertSingleDenomination(entity, compiled, rows, valueColumn);
   return projectDriverRows(rows, compiled, dimensionColumn, valueColumn);
 }
