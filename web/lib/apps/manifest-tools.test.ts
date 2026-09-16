@@ -5,9 +5,11 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   appToolAssistantName,
   parseManifest,
+  validateAppToolsForInstall,
   validateToolInputSchema,
   type AppManifest,
 } from './manifest.ts'
@@ -222,4 +224,51 @@ test('manifests without tools keep working and default to an empty list', () => 
   const r = parseManifest(base)
   assert.equal(r.ok, true)
   assert.deepEqual((r.manifest as AppManifest).tools, [])
+})
+
+const tooledManifest = () =>
+  parseManifest({
+    ...base,
+    tools: [
+      {
+        key: 'lookup',
+        title: 'Look up',
+        description: 'Searches.',
+        inputSchema: readSchema,
+        handler: 'lookup',
+        requiredPermissions: ['records.read'],
+      },
+    ],
+  }).manifest as AppManifest
+
+test('validateAppToolsForInstall accepts granted-subset tools with free names', () => {
+  assert.deepEqual(
+    validateAppToolsForInstall(tooledManifest(), ['records.read', 'custom.invoices.read'], new Set(['whoami'])),
+    [],
+  )
+})
+
+test('validateAppToolsForInstall rejects tools requiring ungranted permissions', () => {
+  const errors = validateAppToolsForInstall(tooledManifest(), ['custom.invoices.read'], new Set())
+  assert.equal(errors.length, 1)
+  assert.match(errors[0]!, /tool "lookup" requires "records\.read" which is not granted/)
+})
+
+test('validateAppToolsForInstall rejects assistant-name collisions with built-in tools', () => {
+  const errors = validateAppToolsForInstall(
+    tooledManifest(),
+    ['records.read'],
+    new Set(['app_helper_app_lookup']),
+  )
+  assert.equal(errors.length, 1)
+  assert.match(errors[0]!, /collides with a built-in tool/)
+})
+
+test('installApp enforces the app-tool contract before writing anything', () => {
+  const source = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
+  const start = source.indexOf('export async function installApp')
+  assert.notEqual(start, -1, 'installApp must remain defined')
+  const body = source.slice(start, source.indexOf('\nexport ', start + 1))
+  assert.match(body, /validateAppToolsForInstall\(manifest, granted, staticNames\)/)
+  assert.match(body, /throw new AppError\(`invalid app tools:/)
 })

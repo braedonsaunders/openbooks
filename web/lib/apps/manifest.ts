@@ -210,6 +210,35 @@ export type AppToolSpec = Omit<z.infer<typeof appToolSpecSchema>, 'confirmation'
   inputSchema: Record<string, unknown>
 }
 
+/**
+ * Install-time app-tool contract beyond parseManifest: every tool's
+ * requiredPermissions must sit inside the ADMIN-GRANTED set (the admin may
+ * narrow the requested permissions at install), and no tool's assistant name
+ * (`app_<appKey>_<toolKey>`) may shadow a built-in assistant/application
+ * tool. Pure — the caller supplies the static catalog names so this stays
+ * import-cycle free. Returns precise error strings (empty when valid).
+ */
+export function validateAppToolsForInstall(
+  manifest: AppManifest,
+  granted: readonly string[],
+  staticNames: ReadonlySet<string>,
+): string[] {
+  const errors: string[] = []
+  const grantedSet = new Set(granted)
+  for (const tool of manifest.tools ?? []) {
+    for (const permission of tool.requiredPermissions) {
+      if (!grantedSet.has(permission)) {
+        errors.push(`tool "${tool.key}" requires "${permission}" which is not granted to this app`)
+      }
+    }
+    const name = appToolAssistantName(manifest.key, tool.key)
+    if (staticNames.has(name)) {
+      errors.push(`tool "${tool.key}" collides with a built-in tool ("${name}"); rename the tool`)
+    }
+  }
+  return errors
+}
+
 export const manifestSchema = z.object({
   key: z.string().regex(SLUG, 'key must be a slug (a-z, 0-9, -)').max(64),
   name: z.string().min(1).max(120),
