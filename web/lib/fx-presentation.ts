@@ -115,6 +115,13 @@ export async function flowRates(
   orgId: string,
   rows: ReadonlyArray<{ func: string | null; date: string }>,
 ): Promise<FlowRates> {
+  if (rows.length === 0) {
+    // No legs, no translation: the identity context without touching the
+    // org/rate tables, so empty scopes stay query-free (and never demand a
+    // base currency for nothing). rateAt is unreachable with no legs; base
+    // is unset because no caller reads it on an empty context.
+    return { base: "", rateAt: () => "1" };
+  }
   const base = await presentationCurrency(orgId);
   const dated = rows.filter((r) => lineFunctional(r.func, base) !== base);
   const timelines = new Map<string, { asOf: string; rate: string }[]>();
