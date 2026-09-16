@@ -828,6 +828,56 @@
     "duplicates": {
       "sharedReference": "referencia compartida {reference}",
       "spanDays": "{days} d"
+    },
+    "benford": {
+      "conforming": "Conforme",
+      "excellent": "Excelente",
+      "acceptable": "Aceptable",
+      "marginal": "Limítrofe",
+      "nonConforming": "No conforme",
+      "firstDigit1D": "Primer dígito (1D)",
+      "firstTwoDigits2D": "Dos primeros dígitos (2D)",
+      "thresholdTrap": "Trampa de umbral"
+    },
+    "forensics": {
+      "unknownParty": "Desconocido",
+      "benfordInsufficient": "Datos insuficientes ({total, plural, one {# transacción} other {# transacciones}}). Mínimo 50.",
+      "benfordClose": "Los importes siguen de cerca la ley de Benford — bajo riesgo de manipulación.",
+      "benfordReasonable": "Los importes siguen razonablemente la ley de Benford.",
+      "benfordSomeDeviation": "Desviación detectada — requiere revisión.",
+      "benfordSignificant": "Desviación significativa — posible manipulación.",
+      "trap": "Importe terminado en {trap} (posible elusión de límite)",
+      "weekendSunday": "Contabilizado en domingo",
+      "weekendSaturday": "Contabilizado en sábado",
+      "rsf": "{multiple}× mayor que el segundo mayor histórico de {vendor} ({currency})",
+      "zscore": "Z-score {z} frente a la media en {currency} de {vendor} ({n, plural, one {# transacción} other {# transacciones}})",
+      "sequential": "{count, plural, one {# factura secuencial en {currency} sin huecos} other {# facturas secuenciales en {currency} sin huecos}} ({first}–{last}) en {days, plural, one {# día} other {# días}}{shell}",
+      "sequentialShell": " — posible empresa fantasma / cliente único",
+      "ghostBoth": "El proveedor «{vendor}» coincide con el empleado «{employee}» por nombre Y dirección",
+      "ghostAddress": "El proveedor «{vendor}» comparte dirección con el empleado «{employee}»",
+      "ghostName": "El proveedor «{vendor}» coincide con el nombre del empleado «{employee}»",
+      "duplicateGroup": "{count, plural, one {# documento coincidente} other {# documentos coincidentes}} — mismo proveedor, tipo e importe ({currency} {amount}){sharedRef} (intervalo de {daysSpan, plural, one {# día} other {# días}}): {others}",
+      "duplicateSharedRef": ", referencia compartida {reference}",
+      "riskGhosts": {
+        "area": "Proveedores fantasma",
+        "message": "{count, plural, one {# proveedor} other {# proveedores}} coinciden con empleados"
+      },
+      "riskSequential": {
+        "area": "Facturas secuenciales",
+        "message": "{count, plural, one {# proveedor} other {# proveedores}} con series sin huecos"
+      },
+      "riskDuplicates": {
+        "area": "Pagos duplicados",
+        "message": "{count, plural, one {# grupo duplicado} other {# grupos duplicados}} (un hallazgo por grupo)"
+      },
+      "riskTraps": {
+        "area": "Elusión de límites",
+        "message": "{count, plural, one {# importe} other {# importes}} terminados en 99/999/9999"
+      },
+      "riskBenford": {
+        "area": "Desviación Benford",
+        "message": "La distribución del primer dígito se desvía significativamente"
+      }
     }
   },
   "common": {

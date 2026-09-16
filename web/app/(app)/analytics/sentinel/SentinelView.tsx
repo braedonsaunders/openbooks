@@ -150,13 +150,26 @@ function SubPills<T extends string>({ value, onChange, options }: { value: T; on
   )
 }
 
+/* ------------------------------------------------- conformity codes to words */
+
+/** Benford conformity travels as a code; every tab maps it the same way. */
+function useConformLabel() {
+  const t = useTranslations('analytics.sentinel')
+  return (v: string) =>
+    v === 'excellent' ? t('benford.excellent')
+    : v === 'acceptable' ? t('benford.acceptable')
+    : v === 'marginal' ? t('benford.marginal')
+    : v === 'nonConforming' ? t('benford.nonConforming')
+    : v
+}
+
 /* ------------------------------------------------------------------- shell */
 
 export function SentinelView({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
-  const conformLabel = (v: string) => v === 'Conforming' ? t('benford.conforming') : v === 'Marginal' ? t('benford.marginal') : v === 'Non-Conforming' ? t('benford.nonConforming') : v
+  const conformLabel = useConformLabel()
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const s = data.summary
@@ -178,7 +191,7 @@ export function SentinelView({ data }: { data: SentinelData }) {
         <RiskGauge score={s.overallRiskScore} />
         <KpiCard icon={Flag} accent={s.flaggedCount > 0 ? 'red' : 'emerald'} label={t('kpi.flagged')} value={num(s.flaggedCount)} sub={t('sub.atRisk', { amount: money(s.totalAtRisk) })} tone={s.flaggedCount > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={Copy} accent="amber" label={t('kpi.duplicatePairs')} value={num(s.duplicateCount)} sub={money(s.totalDuplicateAmount)} tone={s.duplicateCount > 0 ? 'negative' : 'neutral'} />
-        <KpiCard icon={BarChart3} accent={s.benfordConformity === 'Non-Conforming' ? 'red' : s.benfordConformity === 'Marginal' ? 'amber' : 'emerald'} label={t('kpi.benford')} value={conformLabel(s.benfordConformity)} sub={t('sub.twoD', { value: s.benford2DConformity })} />
+        <KpiCard icon={BarChart3} accent={s.benfordConformity === 'nonConforming' ? 'red' : s.benfordConformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.benford')} value={conformLabel(s.benfordConformity)} sub={t('sub.twoD', { value: conformLabel(s.benford2DConformity) })} />
         <KpiCard icon={ShieldAlert} accent={s.ghostCount + s.sequentialGroups > 0 ? 'red' : 'emerald'} label={t('kpi.shellSignals')} value={num(s.ghostCount + s.sequentialGroups)} sub={t('sub.ghostsSequential', { ghosts: s.ghostCount, sequential: s.sequentialGroups })} tone={s.ghostCount + s.sequentialGroups > 0 ? 'negative' : 'positive'} />
       </div>
 
@@ -212,13 +225,14 @@ export function SentinelView({ data }: { data: SentinelData }) {
 
 function OverviewTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const conformLabel = useConformLabel()
   const s = data.summary
   const b = data.benford1D
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Panel title={t('panels.benfordFirstDigit')} icon={BarChart3} hint={t('panels.benfordHint', { amounts: num(b.totalTransactions), mad: b.mad.toFixed(4), conformity: b.conformity })}>
+          <Panel title={t('panels.benfordFirstDigit')} icon={BarChart3} hint={t('panels.benfordHint', { amounts: num(b.totalTransactions), mad: b.mad.toFixed(4), conformity: conformLabel(b.conformity) })}>
             <Chart
               height={230}
               option={{
@@ -288,7 +302,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
-  const conformLabel = (v: string) => v === 'Conforming' ? t('benford.conforming') : v === 'Marginal' ? t('benford.marginal') : v === 'Non-Conforming' ? t('benford.nonConforming') : v
+  const conformLabel = useConformLabel()
   const [sub, setSub] = useState<'1d' | '2d' | 'trap'>('1d')
   const [drill, setDrill] = useState<{ digit: number; dim: '1d' | '2d' } | null>(null)
   // Benford runs one distribution per document currency: the pills pick the
@@ -316,7 +330,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b1.totalTransactions)} sub={t('sub.everyDocument')} />
-            <KpiCard icon={Scale} accent={b1.conformity === 'Non-Conforming' ? 'red' : b1.conformity === 'Marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b1.conformity)} sub={`MAD ${b1.mad.toFixed(4)}`} />
+            <KpiCard icon={Scale} accent={b1.conformity === 'nonConforming' ? 'red' : b1.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b1.conformity)} sub={`MAD ${b1.mad.toFixed(4)}`} />
             <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.deviatingDigits')} value={num(b1.digits.filter((d) => d.isAnomaly).length)} sub={t('sub.offExpected25')} />
             <KpiCard icon={BarChart3} accent="violet" label={t('kpi.digit1Share')} value={`${((b1.digits[0]?.observed ?? 0) * 100).toFixed(1)}%`} sub={t('sub.expected301')} />
           </div>
@@ -369,7 +383,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b2.totalTransactions)} sub={t('sub.twoDigitPairs')} />
-            <KpiCard icon={Scale} accent={b2.conformity === 'Non-Conforming' ? 'red' : b2.conformity === 'Marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b2.conformity)} sub={`MAD ${b2.mad.toFixed(4)}`} />
+            <KpiCard icon={Scale} accent={b2.conformity === 'nonConforming' ? 'red' : b2.conformity === 'marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b2.conformity)} sub={`MAD ${b2.mad.toFixed(4)}`} />
             <KpiCard icon={AlertTriangle} accent={b2.anomalies.length > 0 ? 'amber' : 'emerald'} label={t('kpi.anomalousPairs')} value={num(b2.anomalies.length)} sub={t('sub.offExpected50')} />
             <KpiCard icon={FileWarning} accent={data.summary.approvalLimitRisk ? 'red' : 'emerald'} label={t('kpi.approvalLimitRisk')} value={data.summary.approvalLimitRisk ? t('yes') : t('no')} sub={t('sub.seeThresholdTrap')} />
           </div>

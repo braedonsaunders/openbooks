@@ -828,6 +828,56 @@
     "duplicates": {
       "sharedReference": "gemeinsame Referenz {reference}",
       "spanDays": "{days} T."
+    },
+    "benford": {
+      "conforming": "Konform",
+      "excellent": "Exzellent",
+      "acceptable": "Akzeptabel",
+      "marginal": "Grenzwertig",
+      "nonConforming": "Nicht konform",
+      "firstDigit1D": "Erste Ziffer (1D)",
+      "firstTwoDigits2D": "Erste zwei Ziffern (2D)",
+      "thresholdTrap": "Schwellenfalle"
+    },
+    "forensics": {
+      "unknownParty": "Unbekannt",
+      "benfordInsufficient": "Unzureichende Daten ({total, plural, one {# Transaktion} other {# Transaktionen}}). Mindestens 50 erforderlich.",
+      "benfordClose": "Beträge folgen eng dem Benford-Gesetz — geringes Manipulationsrisiko.",
+      "benfordReasonable": "Beträge folgen dem Benford-Gesetz weitgehend.",
+      "benfordSomeDeviation": "Abweichung erkannt — Prüfung empfohlen.",
+      "benfordSignificant": "Erhebliche Abweichung — mögliche Manipulation.",
+      "trap": "Betrag endet auf {trap} (mögliche Schwellenumgehung)",
+      "weekendSunday": "An einem Sonntag gebucht",
+      "weekendSaturday": "An einem Samstag gebucht",
+      "rsf": "{multiple}× größer als {vendor}s zweitgrößter historischer Betrag ({currency})",
+      "zscore": "Z-Score {z} ggü. {vendor}s {currency}-Mittelwert ({n, plural, one {# Transaktion} other {# Transaktionen}})",
+      "sequential": "{count, plural, one {# lückenlose fortlaufende {currency}-Rechnung} other {# lückenlose fortlaufende {currency}-Rechnungen}} ({first}–{last}) über {days, plural, one {# Tag} other {# Tage}}{shell}",
+      "sequentialShell": " — mögliche Scheinfirma / einziger Kunde",
+      "ghostBoth": "Lieferant „{vendor}“ stimmt mit Mitarbeiter „{employee}“ in Name UND Adresse überein",
+      "ghostAddress": "Lieferant „{vendor}“ teilt eine Adresse mit Mitarbeiter „{employee}“",
+      "ghostName": "Lieferant „{vendor}“ stimmt mit Mitarbeiternamen „{employee}“ überein",
+      "duplicateGroup": "{count, plural, one {# übereinstimmender Beleg} other {# übereinstimmende Belege}} — gleicher Lieferant, Art und Betrag ({currency} {amount}){sharedRef} (Spanne {daysSpan, plural, one {# Tag} other {# Tage}}): {others}",
+      "duplicateSharedRef": ", gemeinsame Referenz {reference}",
+      "riskGhosts": {
+        "area": "Geisterlieferanten",
+        "message": "{count, plural, one {# Lieferant} other {# Lieferanten}} stimmen mit Mitarbeitern überein"
+      },
+      "riskSequential": {
+        "area": "Fortlaufende Rechnungen",
+        "message": "{count, plural, one {# Lieferant} other {# Lieferanten}} mit lückenlosen Rechnungsserien"
+      },
+      "riskDuplicates": {
+        "area": "Doppelzahlungen",
+        "message": "{count, plural, one {# Duplikatgruppe} other {# Duplikatgruppen}} (ein Befund pro Gruppe)"
+      },
+      "riskTraps": {
+        "area": "Schwellenumgehung",
+        "message": "{count, plural, one {# Betrag} other {# Beträge}} mit Endung 99/999/9999"
+      },
+      "riskBenford": {
+        "area": "Benford-Abweichung",
+        "message": "Erste-Ziffer-Verteilung weicht erheblich ab"
+      }
     }
   },
   "common": {

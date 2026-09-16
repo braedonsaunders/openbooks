@@ -828,6 +828,56 @@
     "duplicates": {
       "sharedReference": "référence partagée {reference}",
       "spanDays": "{days} j"
+    },
+    "benford": {
+      "conforming": "Conforme",
+      "excellent": "Excellent",
+      "acceptable": "Acceptable",
+      "marginal": "Limite",
+      "nonConforming": "Non conforme",
+      "firstDigit1D": "Premier chiffre (1D)",
+      "firstTwoDigits2D": "Deux premiers chiffres (2D)",
+      "thresholdTrap": "Seuil piégé"
+    },
+    "forensics": {
+      "unknownParty": "Inconnu",
+      "benfordInsufficient": "Données insuffisantes ({total, plural, one {# transaction} other {# transactions}}). 50 minimum.",
+      "benfordClose": "Les montants suivent de près la loi de Benford — faible risque de manipulation.",
+      "benfordReasonable": "Les montants suivent raisonnablement la loi de Benford.",
+      "benfordSomeDeviation": "Écart détecté — à examiner.",
+      "benfordSignificant": "Écart significatif — manipulation possible.",
+      "trap": "Montant se terminant par {trap} (contournement de seuil possible)",
+      "weekendSunday": "Comptabilisé un dimanche",
+      "weekendSaturday": "Comptabilisé un samedi",
+      "rsf": "{multiple}× plus élevé que le 2e plus gros montant historique de {vendor} ({currency})",
+      "zscore": "Z-score {z} vs moyenne {currency} de {vendor} ({n, plural, one {# transaction} other {# transactions}})",
+      "sequential": "{count, plural, one {# facture séquentielle {currency} sans trou} other {# factures séquentielles {currency} sans trou}} ({first}–{last}) sur {days, plural, one {# jour} other {# jours}}{shell}",
+      "sequentialShell": " — société écran / client unique possible",
+      "ghostBoth": "Le fournisseur « {vendor} » correspond au salarié « {employee} » par le nom ET l'adresse",
+      "ghostAddress": "Le fournisseur « {vendor} » partage une adresse avec le salarié « {employee} »",
+      "ghostName": "Le fournisseur « {vendor} » correspond au nom du salarié « {employee} »",
+      "duplicateGroup": "{count, plural, one {# document correspondant} other {# documents correspondants}} — même fournisseur, nature et montant ({currency} {amount}){sharedRef} (écart de {daysSpan, plural, one {# jour} other {# jours}}) : {others}",
+      "duplicateSharedRef": ", référence partagée {reference}",
+      "riskGhosts": {
+        "area": "Fournisseurs fantômes",
+        "message": "{count, plural, one {# fournisseur} other {# fournisseurs}} correspondent à des salariés"
+      },
+      "riskSequential": {
+        "area": "Factures séquentielles",
+        "message": "{count, plural, one {# fournisseur} other {# fournisseurs}} avec des séries sans trou"
+      },
+      "riskDuplicates": {
+        "area": "Paiements en double",
+        "message": "{count, plural, one {# groupe dupliqué} other {# groupes dupliqués}} (un constat par groupe)"
+      },
+      "riskTraps": {
+        "area": "Contournement des seuils",
+        "message": "{count, plural, one {# montant} other {# montants}} se terminant par 99/999/9999"
+      },
+      "riskBenford": {
+        "area": "Écart Benford",
+        "message": "La distribution du premier chiffre dévie significativement"
+      }
     }
   },
   "common": {

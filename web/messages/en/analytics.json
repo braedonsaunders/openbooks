@@ -2075,11 +2075,53 @@
     },
     "benford": {
       "conforming": "Conforming",
+      "excellent": "Excellent",
+      "acceptable": "Acceptable",
       "marginal": "Marginal",
       "nonConforming": "Non-Conforming",
       "firstDigit1D": "First Digit (1D)",
       "firstTwoDigits2D": "First Two Digits (2D)",
       "thresholdTrap": "Threshold Trap"
+    },
+    "forensics": {
+      "unknownParty": "Unknown",
+      "benfordInsufficient": "Insufficient data ({total, plural, one {# transaction} other {# transactions}}). Need at least 50.",
+      "benfordClose": "Transaction amounts closely follow Benford's Law — low manipulation risk.",
+      "benfordReasonable": "Transaction amounts reasonably follow Benford's Law.",
+      "benfordSomeDeviation": "Some deviation detected — warrants review.",
+      "benfordSignificant": "Significant deviation — possible manipulation.",
+      "trap": "Amount ends in {trap} (potential threshold avoidance)",
+      "weekendSunday": "Dated on Sunday",
+      "weekendSaturday": "Dated on Saturday",
+      "rsf": "{multiple}× larger than {vendor}'s historical 2nd largest ({currency})",
+      "zscore": "Z-score {z} vs {vendor} {currency} average ({n, plural, one {# transaction} other {# transactions}})",
+      "sequential": "{count, plural, one {# gap-free sequential {currency} invoice} other {# gap-free sequential {currency} invoices}} ({first}–{last}) over {days, plural, one {# day} other {# days}}{shell}",
+      "sequentialShell": " — possible shell company / sole customer",
+      "ghostBoth": "Vendor \"{vendor}\" matches employee \"{employee}\" by BOTH name and street address",
+      "ghostAddress": "Vendor \"{vendor}\" shares a street address with employee \"{employee}\"",
+      "ghostName": "Vendor \"{vendor}\" matches employee name \"{employee}\"",
+      "duplicateGroup": "{count, plural, one {# matching document} other {# matching documents}} — same vendor, kind, amount ({currency} {amount}){sharedRef} ({daysSpan, plural, one {# day} other {# days}} span): {others}",
+      "duplicateSharedRef": ", shared reference {reference}",
+      "riskGhosts": {
+        "area": "Ghost Vendors",
+        "message": "{count, plural, one {# vendor} other {# vendors}} match employee names"
+      },
+      "riskSequential": {
+        "area": "Sequential Invoices",
+        "message": "{count, plural, one {# vendor} other {# vendors}} with gap-free invoice runs"
+      },
+      "riskDuplicates": {
+        "area": "Duplicate Payments",
+        "message": "{count, plural, one {# duplicate group} other {# duplicate groups}} (one finding per group)"
+      },
+      "riskTraps": {
+        "area": "Approval Limit Avoidance",
+        "message": "{count, plural, one {# amount} other {# amounts}} ending 99/999/9999"
+      },
+      "riskBenford": {
+        "area": "Benford Deviation",
+        "message": "First-digit distribution deviates significantly"
+      }
     },
     "config": {
       "duplicatesNote": "Same vendor, kind, currency, amount and reference within the window; credits excluded; one finding per group",

@@ -828,6 +828,56 @@
     "duplicates": {
       "sharedReference": "共享参考 {reference}",
       "spanDays": "{days}天"
+    },
+    "benford": {
+      "conforming": "符合",
+      "excellent": "优秀",
+      "acceptable": "可接受",
+      "marginal": "临界",
+      "nonConforming": "不符合",
+      "firstDigit1D": "首位数字（1D）",
+      "firstTwoDigits2D": "前两位数字（2D）",
+      "thresholdTrap": "阈值陷阱"
+    },
+    "forensics": {
+      "unknownParty": "未知",
+      "benfordInsufficient": "数据不足（{total, plural, one {# 笔} other {# 笔}}），至少需要50笔。",
+      "benfordClose": "金额高度符合本福德定律——操纵风险低。",
+      "benfordReasonable": "金额基本符合本福德定律。",
+      "benfordSomeDeviation": "检测到偏离——需要复核。",
+      "benfordSignificant": "显著偏离——可能存在操纵。",
+      "trap": "金额以{trap}结尾（可能规避审批限额）",
+      "weekendSunday": "记账日期为周日",
+      "weekendSaturday": "记账日期为周六",
+      "rsf": "为{vendor}历史第二大金额（{currency}）的{multiple}倍",
+      "zscore": "Z分数 {z}，{vendor}平均（{currency}，{n, plural, one {# 笔} other {# 笔}}）",
+      "sequential": "无断号连续{currency}发票{count, plural, one {# 张} other {# 张}}（{first}–{last}，跨越{days, plural, one {# 天} other {# 天}}）{shell}",
+      "sequentialShell": "——可能是空壳公司/唯一客户",
+      "ghostBoth": "供应商“{vendor}”与员工“{employee}”姓名和地址均一致",
+      "ghostAddress": "供应商“{vendor}”与员工“{employee}”共用地址",
+      "ghostName": "供应商“{vendor}”与员工姓名“{employee}”一致",
+      "duplicateGroup": "{count, plural, one {# 张匹配单据} other {# 张匹配单据}}——同一供应商、类型和金额（{currency} {amount}）{sharedRef}（跨度{daysSpan, plural, one {# 天} other {# 天}}）：{others}",
+      "duplicateSharedRef": "，共享参考号{reference}",
+      "riskGhosts": {
+        "area": "幽灵供应商",
+        "message": "{count, plural, one {# 个供应商} other {# 个供应商}}与员工吻合"
+      },
+      "riskSequential": {
+        "area": "连续发票",
+        "message": "{count, plural, one {# 个供应商} other {# 个供应商}}存在无断号发票序列"
+      },
+      "riskDuplicates": {
+        "area": "重复付款",
+        "message": "{count, plural, one {# 个重复组} other {# 个重复组}}（每组一条）"
+      },
+      "riskTraps": {
+        "area": "规避审批限额",
+        "message": "{count, plural, one {# 笔金额} other {# 笔金额}}以99/999/9999结尾"
+      },
+      "riskBenford": {
+        "area": "本福德偏离",
+        "message": "首位数字分布显著偏离"
+      }
     }
   },
   "common": {

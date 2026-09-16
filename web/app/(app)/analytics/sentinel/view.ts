@@ -1,12 +1,13 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { redirect } from 'next/navigation'
 import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { sentinelData } from '../../../../lib/analytics/sentinel-data'
+import { sentinelStrings } from '../../../../lib/analytics/sentinel-strings'
 import type { SentinelView } from './SentinelView'
 
 /**
@@ -48,7 +49,12 @@ export async function loadSentinel(sp: Record<string, string | undefined>): Prom
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  const data = await sentinelData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz)
+  // Forensic sentences resolve through the analytics catalog in the request
+  // locale — the same locale the statements use. Conformity travels as a
+  // stable code in every language; the client maps codes to words.
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = sentinelStrings((key, values) => tc(key, values), locale)
+  const data = await sentinelData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz, strings)
 
   return {
     title: t('title'),

@@ -828,6 +828,56 @@
     "duplicates": {
       "sharedReference": "共通の参照 {reference}",
       "spanDays": "{days}日"
+    },
+    "benford": {
+      "conforming": "適合",
+      "excellent": "優秀",
+      "acceptable": "許容範囲",
+      "marginal": "境界",
+      "nonConforming": "不適合",
+      "firstDigit1D": "第一位（1D）",
+      "firstTwoDigits2D": "上位二桁（2D）",
+      "thresholdTrap": "しきい値トラップ"
+    },
+    "forensics": {
+      "unknownParty": "不明",
+      "benfordInsufficient": "データ不足（{total, plural, one {# 件} other {# 件}}）。50件以上が必要です。",
+      "benfordClose": "金額はベンフォードの法則に良く従っています — 改ざんリスクは低いです。",
+      "benfordReasonable": "金額はベンフォードの法則におおむね従っています。",
+      "benfordSomeDeviation": "乖離を検出 — 確認が必要です。",
+      "benfordSignificant": "重大な乖離 — 改ざんの可能性があります。",
+      "trap": "金額が{trap}で終了（しきい値回避の可能性）",
+      "weekendSunday": "日曜日に計上",
+      "weekendSaturday": "土曜日に計上",
+      "rsf": "{vendor}の過去2番目の金額（{currency}）の{multiple}倍",
+      "zscore": "Zスコア {z}（{vendor}平均・{currency}、{n, plural, one {# 件} other {# 件}}）",
+      "sequential": "欠番なしの連続{currency}建て請求書{count, plural, one {# 件} other {# 件}}（{first}–{last}、{days, plural, one {# 日間} other {# 日間}}）{shell}",
+      "sequentialShell": " — ペーパーカンパニー／単一顧客の可能性",
+      "ghostBoth": "仕入先「{vendor}」が従業員「{employee}」と氏名・住所の両方で一致",
+      "ghostAddress": "仕入先「{vendor}」が従業員「{employee}」と住所を共有",
+      "ghostName": "仕入先「{vendor}」が従業員名「{employee}」と一致",
+      "duplicateGroup": "一致する伝票{count, plural, one {# 件} other {# 件}} — 同一仕入先・種別・金額（{currency} {amount}）{sharedRef}（期間{daysSpan, plural, one {# 日} other {# 日}}）：{others}",
+      "duplicateSharedRef": "、共通参照番号{reference}",
+      "riskGhosts": {
+        "area": "ゴースト仕入先",
+        "message": "{count, plural, one {# 社} other {# 社}}が従業員と一致"
+      },
+      "riskSequential": {
+        "area": "連続請求書",
+        "message": "{count, plural, one {# 社} other {# 社}}に欠番なしの連続請求あり"
+      },
+      "riskDuplicates": {
+        "area": "重複支払",
+        "message": "{count, plural, one {# 件の重複グループ} other {# 件の重複グループ}}（1グループ1件）"
+      },
+      "riskTraps": {
+        "area": "承認限度回避",
+        "message": "{count, plural, one {# 件} other {# 件}}が99/999/9999で終了"
+      },
+      "riskBenford": {
+        "area": "ベンフォード乖離",
+        "message": "第一位の分布が大きく乖離しています"
+      }
     }
   },
   "common": {
