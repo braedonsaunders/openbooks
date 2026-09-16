@@ -46,7 +46,13 @@ test('definition form reads the version with multi-selects as id arrays', () => 
     bookIds: ['b1'],
     documentKinds: ['journal'],
     accountScope: { kind: 'accounts', accountIds: ['a1'] },
-    dimensionFilters: { departmentIds: ['d1'], requireUntagged: ['project'] },
+    dimensionFilters: {
+      departmentIds: ['d1'],
+      partyIds: ['p1'],
+      itemIds: ['i1'],
+      extraDims: { region: ['r1', 'r2'] },
+      requireUntagged: ['project'],
+    },
     applyPolicy: 'automatic',
     sourceMeasure: 'period_activity',
     basisKind: 'stepped',
@@ -72,6 +78,9 @@ test('definition form reads the version with multi-selects as id arrays', () => 
   assert.equal(form.accountScopeKind, 'accounts')
   assert.deepEqual(form.accountIds, ['a1'])
   assert.deepEqual(form.filterDepartmentIds, ['d1'])
+  assert.deepEqual(form.filterPartyIds, ['p1'])
+  assert.deepEqual(form.filterItemIds, ['i1'])
+  assert.deepEqual(form.filterExtraDims, { region: ['r1', 'r2'] })
   assert.deepEqual(form.requireUntagged, ['project'])
   assert.deepEqual(form.tiers, [
     { upTo: '1000.00', targetKey: 'base' },
@@ -109,6 +118,24 @@ test('definition payload omits empty dimension filters but keeps the untagged fl
     'rev-3',
   ) as Record<string, unknown>
   assert.deepEqual(payload['dimensionFilters'], { requireUntagged: ['class'] })
+})
+
+test('definition payload round-trips party, item and custom-segment filters', () => {
+  const payload = definitionPayload(
+    {
+      ...blankDefinitionForm(),
+      filterPartyIds: ['p1'],
+      filterItemIds: ['i1', 'i2'],
+      filterExtraDims: { region: ['r1'], empty: [] },
+    },
+    'rev-4',
+  ) as Record<string, unknown>
+  assert.deepEqual(payload['dimensionFilters'], {
+    partyIds: ['p1'],
+    itemIds: ['i1', 'i2'],
+    extraDims: { region: ['r1'] },
+    requireUntagged: [],
+  })
 })
 
 test('targets round-trip through editor lines preserving server-only fields', () => {

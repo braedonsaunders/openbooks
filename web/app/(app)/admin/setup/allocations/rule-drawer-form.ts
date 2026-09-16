@@ -78,6 +78,10 @@ export interface DefinitionForm {
   filterClassIds: string[]
   filterProjectIds: string[]
   filterSubsidiaryIds: string[]
+  filterPartyIds: string[]
+  filterItemIds: string[]
+  /** Custom-segment key → selected value ids. */
+  filterExtraDims: Record<string, string[]>
   requireUntagged: UntaggableDimension[]
   applyPolicy: AllocationApplyPolicy
   sourceMeasure: AllocationSourceMeasure
@@ -119,6 +123,9 @@ export function blankDefinitionForm(): DefinitionForm {
     filterClassIds: [],
     filterProjectIds: [],
     filterSubsidiaryIds: [],
+    filterPartyIds: [],
+    filterItemIds: [],
+    filterExtraDims: {},
     requireUntagged: [],
     applyPolicy: 'automatic',
     sourceMeasure: 'period_activity',
@@ -204,6 +211,11 @@ export function definitionFormFromVersion(version: {
     filterClassIds: ids(filters.classIds),
     filterProjectIds: ids(filters.projectIds),
     filterSubsidiaryIds: ids(filters.subsidiaryIds),
+    filterPartyIds: ids(filters.partyIds),
+    filterItemIds: ids(filters.itemIds),
+    filterExtraDims: Object.fromEntries(
+      Object.entries(filters.extraDims ?? {}).map(([segment, values]) => [segment, [...values]]),
+    ),
     requireUntagged: [...(filters.requireUntagged ?? [])],
     applyPolicy: version.applyPolicy,
     sourceMeasure: version.sourceMeasure,
@@ -251,6 +263,13 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
   put('classIds', form.filterClassIds)
   put('projectIds', form.filterProjectIds)
   put('subsidiaryIds', form.filterSubsidiaryIds)
+  put('partyIds', form.filterPartyIds)
+  put('itemIds', form.filterItemIds)
+  const extraDims: Record<string, string[]> = {}
+  for (const [segment, values] of Object.entries(form.filterExtraDims)) {
+    if (values.length > 0) extraDims[segment] = [...values]
+  }
+  if (Object.keys(extraDims).length > 0) filters['extraDims'] = extraDims
   filters['requireUntagged'] = [...form.requireUntagged]
 
   const accountScope: AccountScope =
@@ -401,5 +420,5 @@ export function apiError(status: number, body: unknown, fallback: string): ApiEr
   return { message, stale: status === 409 || record?.['code'] === 'STALE', problems }
 }
 
-/** Which filter dimensions the drawer edits (party/item/extra stay read-only). */
+/** Built-in filter dimensions sharing one picker shape (party/item/extra have their own). */
 export const EDITABLE_FILTER_DIMS: readonly FilterDim[] = FILTER_DIMS

@@ -191,13 +191,20 @@
       "filtersHeading": "Dimension filters",
       "filtersUntagged": "Only untagged lines",
       "filtersUntaggedHint": "Match only lines with no value in the checked dimensions.",
-      "filtersReadonly": "Party, item and custom-segment filters on this version are read-only here.",
       "filters": {
         "department": "Departments",
         "location": "Locations",
         "class": "Classes",
         "project": "Projects",
-        "subsidiary": "Subsidiaries"
+        "subsidiary": "Subsidiaries",
+        "party": "Parties",
+        "item": "Items"
+      },
+      "partyRoles": {
+        "vendor": "Vendors",
+        "customer": "Customers",
+        "employee": "Employees",
+        "other": "Other parties"
       },
       "accountGroupDimension": "Group dimension",
       "dynamicMinWeight": "Minimum driver weight",
