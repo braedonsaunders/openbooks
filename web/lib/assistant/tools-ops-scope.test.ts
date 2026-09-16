@@ -9,6 +9,7 @@ const importRoute = read("../../app/api/data/import/route.ts");
 const historyView = read("../../app/(app)/data/import/history/view.ts");
 const connectionsRoute = read("../../app/api/platform/connections/route.ts");
 const sandboxesView = read("../../app/(app)/admin/sandboxes/view.ts");
+const pdfRoute = read("../../app/api/pdf-templates/route.ts");
 
 test("data-io tools carry the same gates as the routes and views they cover", () => {
   // GET /api/data/resources requires data.export; the import route and the
@@ -49,6 +50,23 @@ test("list_environments carries the admin page's gate and production-org scoping
   assert.match(sandboxesView, /listSandboxes\(authz\.user\.productionOrgId\)/);
   assert.match(ops, /name: "list_environments"[\s\S]{0,800}gate: \{ mode: "anyOf", perms: \["admin\.sandboxes\.manage"\] \}/);
   assert.match(ops, /listSandboxes\(authz\.user\.productionOrgId\)/);
+});
+
+test("pdf template tools carry the admin gate and keep bodies out of lists", () => {
+  // GET /api/pdf-templates requires admin.customization.manage and strips
+  // the HTML bodies from list rows. Both tools must equal that gate; the
+  // list must project bodies away while get_ truncates to budget.
+  assert.match(pdfRoute, /guardPermission\("admin\.customization\.manage"\)/);
+  assert.match(ops, /name: "list_pdf_templates"[\s\S]{0,800}gate: \{ mode: "anyOf", perms: \["admin\.customization\.manage"\] \}/);
+  assert.match(ops, /name: "get_pdf_template"[\s\S]{0,800}gate: \{ mode: "anyOf", perms: \["admin\.customization\.manage"\] \}/);
+  assert.match(ops, /listPdfTemplates\(authz\.user\.orgId/);
+  assert.match(ops, /getPdfTemplate\(authz\.user\.orgId, a\.id\)/);
+  // The list tool projects metadata explicitly — bodies never reach it —
+  // while get_ truncates the source to budget.
+  const listTool = ops.slice(ops.indexOf('name: "list_pdf_templates"'), ops.indexOf('name: "get_pdf_template"'));
+  assert.doesNotMatch(listTool, /sourceHtml/);
+  assert.doesNotMatch(listTool, /compiledHtml/);
+  assert.match(ops, /truncateText\(row\.sourceHtml, 6000\)/);
 });
 
 test("list_import_runs reuses the history view's query shape and stays org-scoped", () => {
