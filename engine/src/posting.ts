@@ -15,9 +15,11 @@ import {
 } from "./money.ts";
 import {
   mergeBeforePostCustomMutation,
+  runCustomGlLineScripts,
   runTriggerScripts,
   type ScriptContext,
 } from "./scripting.ts";
+import type { ContributedLine } from "./allocations/types.ts";
 import { assertDocumentMutationRefsOwned } from "./document-mutation-refs.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
@@ -1912,6 +1914,32 @@ export async function postDocument(
     );
   }
 
+  // -- allocation kernel: custom_gl_lines user scripts (A6) -----------------
+  // Post-mode RULE contributions (A5 contributePostingAllocations) run at this
+  // same seam, first, and their lines join kernelLines; until A5 lands the
+  // kernel lines are the whole script-visible input. Scripts observe the
+  // kernel read-only and return extra balanced lines. A refusal throws before
+  // the posting transaction opens, so a refused script set leaves no partial
+  // write behind. Suppressed for replay/migration like other automation.
+  let customGlLines: ContributedLine[] = [];
+  if (!options.suppressAutomation && !deps.migration) {
+    try {
+      customGlLines = await runCustomGlLineScripts({
+        orgId: doc.orgId,
+        document: effectiveDoc as unknown as Record<string, unknown>,
+        documentLines: postingLines as unknown as Record<string, unknown>[],
+        kernelLines: kernelLines as unknown as Record<string, unknown>[],
+        actorId: options.audit?.actorId ?? null,
+        targetId: doc.id,
+      });
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      throw new PostingError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   // -- open-item lines must carry a subledger party (AR/AP faithfulness) ----
   // Every source system (source platform line "Name", source platform line Entity) puts a
   // customer/vendor on each AR/AP line, and both enforce AR⇒customer, AP⇒vendor.
@@ -1973,7 +2001,49 @@ export async function postDocument(
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
   const subApplied = await applySubsidiaries(db, effectiveDoc, kernelLines);
   assertFinalKernelBalance(subApplied.lines);
-  await validateRequiredDimensions(db, doc.orgId, subApplied.lines);
+  // Script contributions translate through the same subsidiary/FX kernel
+  // (defaults, spot rates, restriction checks). The host proved they balance
+  // per subsidiary among themselves, so this adds no intercompany legs — the
+  // length check below proves the set survived unchanged.
+  let scriptLines: (KernelLine & {
+    subsidiaryId: string;
+    currency: string;
+    txnAmount: string;
+    fxRate: string;
+    contributorKind: "script";
+    contributorRef: string;
+  })[] = [];
+  if (customGlLines.length > 0) {
+    const translated = await applySubsidiaries(db, effectiveDoc, customGlLines);
+    if (translated.lines.length !== customGlLines.length) {
+      throw new PostingError(
+        "custom_gl_lines contributions did not survive subsidiary application unchanged",
+      );
+    }
+    // No open-item legs from scripts: contributed lines carry no party, and a
+    // party-less leg on a receivable/payable account would post GL history
+    // the subledger can never tie to.
+    const openItemAccountIds =
+      deps.openItemAccountIds ?? (await resolveOpenItemAccounts(db, doc.orgId));
+    const openItemLine = translated.lines.find((l) =>
+      openItemAccountIds.has(l.accountId),
+    );
+    if (openItemLine) {
+      throw new PostingError(
+        `custom_gl_lines cannot post to open-item account ${openItemLine.accountId} (contributed lines carry no party)`,
+      );
+    }
+    scriptLines = translated.lines.map((l, i) => ({
+      ...l,
+      contributorKind: "script" as const,
+      contributorRef: customGlLines[i]!.contributorRef,
+    }));
+  }
+  await validateRequiredDimensions(db, doc.orgId, [
+    ...subApplied.lines,
+    ...scriptLines,
+  ]);
+  assertFinalKernelBalance([...subApplied.lines, ...scriptLines]);
 
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
   // -- write entry + lines + flip document, atomically ---------------------
@@ -2004,7 +2074,9 @@ export async function postDocument(
         orgId: doc.orgId,
         periodId: period.id,
         bookId: book.id,
-        subsidiaryIds: subApplied.lines.map((line) => line.subsidiaryId),
+        subsidiaryIds: [...subApplied.lines, ...scriptLines].map(
+          (line) => line.subsidiaryId,
+        ),
         modules: [closeModuleForDocument(doc.kind)],
         allowImportedLocks: deps.migration,
       });
@@ -2074,7 +2146,11 @@ export async function postDocument(
           memo: effectiveDoc.memo,
           status: "draft",
           sourceDocumentId: doc.id,
-          origin: subApplied.multi ? "intercompany" : "document",
+          origin:
+            subApplied.multi ||
+            scriptLines.some((l) => l.subsidiaryId !== subApplied.docSubId)
+              ? "intercompany"
+              : "document",
         })
         .returning({ id: schema.journalEntries.id }))[0]!;
     } catch (error) {
@@ -2112,8 +2188,8 @@ export async function postDocument(
       throw error;
     }
 
-    await tx.insert(schema.journalLines).values(
-      subApplied.lines.map((l, i) => ({
+    await tx.insert(schema.journalLines).values([
+      ...subApplied.lines.map((l, i) => ({
         orgId: doc.orgId,
         entryId: entry.id,
         lineNumber: i + 1,
@@ -2136,7 +2212,35 @@ export async function postDocument(
         dueDate: l.dueDate ?? null,
         isOpenItem: l.isOpenItem ?? false,
       })),
-    );
+      // Allocation-kernel script contributions (A6): same entry, stamped so
+      // the GL impact view can lock standard lines and show these separately.
+      // No lineage rows — lineage is not required for scripts.
+      ...scriptLines.map((l, i) => ({
+        orgId: doc.orgId,
+        entryId: entry.id,
+        lineNumber: subApplied.lines.length + i + 1,
+        accountId: l.accountId,
+        subsidiaryId: l.subsidiaryId,
+        amount: l.amount,
+        currency: l.currency,
+        txnAmount: l.txnAmount,
+        fxRate: l.fxRate,
+        partyId: null,
+        departmentId: l.departmentId ?? null,
+        projectId: l.projectId ?? null,
+        locationId: l.locationId ?? null,
+        classId: l.classId ?? null,
+        equipmentUnitId: null,
+        extraDims: l.extraDims ?? {},
+        paymentCardId: null,
+        taxCodeId: null,
+        memo: l.memo ?? null,
+        dueDate: null,
+        isOpenItem: false,
+        contributorKind: l.contributorKind,
+        contributorRef: l.contributorRef,
+      })),
+    ]);
 
     await tx
       .update(schema.journalEntries)
