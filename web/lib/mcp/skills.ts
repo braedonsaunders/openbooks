@@ -27,6 +27,7 @@ export const MCP_SKILLS: readonly McpSkill[] = [
       "4. Present the returned review and preview links. Use get_app_draft when revising. A revision is a new draft. Preview has no live record access or backend writes; rehearse stateful behavior in an organization sandbox.",
       "5. After the user reviews and approves the exact draft, call activate_app_draft with its draftId and contentHash. Never bypass a stale-base refusal with a direct install. Re-read the installed package and prepare a new draft instead.",
       "6. Report the activated version and openUrl. Native and sandboxed frontends are two renderers of one app, not separate installations.",
+      "7. An app may declare its own assistant tools: each manifest tools entry names a handler endpoint, a bounded object input schema, and the permissions it needs. Installed tools appear as app_<app-key>_<tool-key> beside the built-in tools for actors holding those permissions; read tools run governed, mutating tools propose a review card the user confirms.",
     ].join("\n"),
   },
   {

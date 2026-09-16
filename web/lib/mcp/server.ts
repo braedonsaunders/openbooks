@@ -21,6 +21,8 @@ import {
   executeApplicationTool,
 } from "../application/tool-catalog";
 import { ASSISTANT_TOOLS, applicationToolVisible, executeAssistantTool } from "../assistant/registry";
+import { listAppToolViews, runAppTool, toAssistantToolDef } from "../apps/tools";
+import { can } from "../authz";
 import { resolvedFeatureState } from "../features";
 import type { FeatureState } from "@openbooks/engine/src/feature-registry.ts";
 import { canRunTool } from "../assistant/gate";
@@ -102,6 +104,50 @@ const assistantCatalog = (features: FeatureState): readonly McpCatalogTool<Appli
     },
   }));
 
+/**
+ * Installed apps' declared tools on the same registrar. Visibility equals the
+ * chat registry for the same actor and feature state; like the application
+ * catalog, the API-key surface executes directly (the confirmation card is a
+ * chat concept — chat mutating app tools still propose first).
+ */
+const appCatalog = async (
+  context: ApplicationContext,
+  features: FeatureState,
+): Promise<readonly McpCatalogTool<ApplicationContext>[]> => {
+  const staticNames = new Set([
+    ...ASSISTANT_TOOLS.map((definition) => definition.name),
+    ...APPLICATION_TOOLS.map((definition) => definition.name),
+  ]);
+  const views = await listAppToolViews(context.authz.user.orgId, context.authz, features);
+  return views
+    .filter((view) => !staticNames.has(view.name))
+    .map((view) => {
+      const definition = toAssistantToolDef(view);
+      return {
+        name: definition.name,
+        description: definition.description,
+        inputSchema: definition.inputSchema,
+        readOnly: definition.category !== "write",
+        visible: (candidate) => canRunTool(candidate.authz, definition, features),
+        summarize: (result) =>
+          typeof result.note === "string" ? result.note : undefined,
+        execute: async (candidate, input) => {
+          const outcome = await runAppTool({
+            orgId: candidate.authz.user.orgId,
+            user: candidate.authz.user,
+            appKey: view.appKey,
+            toolKey: view.toolKey,
+            input,
+            userCan: (perm) => can(candidate.authz, perm),
+            allowedSubsidiaryIds: candidate.authz.allowedSubsidiaryIds,
+          });
+          if (!outcome.ok) throw new AssistantToolFailure(outcome.error);
+          return { ok: true, data: outcome.result } as unknown as Record<string, unknown>;
+        },
+      };
+    });
+};
+
 export async function createOpenBooksMcpServer(
   requestContext: OpenBooksMcpRequestContext,
 ): Promise<McpServer> {
@@ -126,6 +172,7 @@ export async function createOpenBooksMcpServer(
   };
   registerToolCatalog(server, assistantCatalog(features), options);
   registerToolCatalog(server, applicationCatalog(features), options);
+  registerToolCatalog(server, await appCatalog(context, features), options);
 
   registerStaticResources(server, [
     {
