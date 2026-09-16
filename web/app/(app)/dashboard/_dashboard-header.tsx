@@ -1,18 +1,21 @@
 import Link from 'next/link'
 import { Settings2 } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
+import { GreetingText } from './_greeting-text'
 
 export async function DashboardHeader({
   greeting,
+  name,
 }: {
   greeting: string
+  name: string | null
 }) {
   const t = await getTranslations('dashboard')
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
         <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          {greeting}
+          <GreetingText name={name} serverGreeting={greeting} />
         </h1>
       </div>
       <Link
