@@ -75,8 +75,16 @@ export interface EntityStream {
  *   the ... amount in your company currency").
  * - ERPNext Payment Entry `allocated_amount` is denominated in the invoice's
  *   account currency (ERPNext docs: "Allocate the invoice in its account
- *   currency"). The per-reference `exchange_rate` direction is unproven, so
- *   no producer rate is stated — foreign links price from the books or refuse.
+ *   currency"). The per-reference `exchange_rate` converts the allocation's
+ *   currency to company currency (frappe/erpnext `payment_entry.py`:
+ *   `get_reference_details()` takes the invoice's own `conversion_rate`,
+ *   fallback `get_exchange_rate(party_account_currency, company_currency)`;
+ *   `calculate_base_allocated_amount_for_reference()` books
+ *   `exchange_gain_loss = allocated × header_rate − allocated ×
+ *   d.exchange_rate`). It is stated only when the invoice's transaction and
+ *   party-account currencies are both known and equal (the documented normal
+ *   case) — otherwise the rate's FROM may not match the allocation's currency
+ *   and nothing is stated; foreign links then price from the books or refuse.
  * - Dynamics states the invoice's `currencyCode` (Microsoft Learn, Business
  *   Central v2.0 `salesInvoice` resource, §Properties: `remainingAmount` "The
  *   amount including VAT" among the document totals, `currencyCode` "The

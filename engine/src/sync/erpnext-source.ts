@@ -248,35 +248,62 @@ export class ErpNextSource implements MigrationSource {
     // (ERPNext docs: "Allocate the invoice in its account currency"), so map
     // every invoice/order to that currency with un-windowed pulls — payment
     // references reach back past the document window. The per-reference
-    // `exchange_rate` direction is unproven against a live tenant, so no
-    // producer rate is stated: foreign links resolve through the books' own
-    // line rates and refuse loudly on any mismatch. References the map cannot
-    // price (Journal Entry advances and the like — no single currency) stay
-    // unstated for the same reason.
-    const refCurrency = new Map<string, string>();
+    // `exchange_rate` converts the ALLOCATION's currency to company currency
+    // (frappe/erpnext `payment_entry.py` `get_reference_details()`: an invoice
+    // reference's rate is the invoice's own `conversion_rate`, fallback
+    // `get_exchange_rate(party_account_currency, company_currency, ...)`; and
+    // `calculate_base_allocated_amount_for_reference()` books
+    // `exchange_gain_loss = allocated × header_rate − allocated ×
+    // d.exchange_rate`, which only balances when the reference rate converts
+    // the allocation's currency). The rate is stated only when the invoice's
+    // transaction and party-account currencies are both known and EQUAL — the
+    // documented normal case ("If the selected account is in a foreign
+    // currency, the invoice currency must normally match it", docs.frappe.io
+    // "Managing Transactions in Multiple Currencies") — so the rate's FROM
+    // matches the allocation's currency; anything else stays unstated and
+    // foreign links resolve through the books' own line rates or refuse
+    // loudly. References the map cannot price (Journal Entry advances and the
+    // like — no single currency) stay unstated for the same reason.
+    const refCurrency = new Map<string, { account: string | null; txn: string | null }>();
     for (const doctype of ["Sales Invoice", "Purchase Invoice", "Sales Order", "Purchase Order"]) {
       const rows = await this.client.listAll<{
         name: string; currency?: string | null; party_account_currency?: string | null;
       }>(doctype, ["name", "currency", "party_account_currency"], []);
       for (const row of rows) {
-        const code = row.party_account_currency ?? row.currency;
-        if (row.name && code) refCurrency.set(`${doctype}:${row.name}`, code);
+        if (!row.name) continue;
+        refCurrency.set(`${doctype}:${row.name}`, {
+          account: row.party_account_currency ?? null,
+          txn: row.currency ?? null,
+        });
       }
     }
     const applications: NativeChanges["applications"] = [];
     const allPays = await this.client.listAll<{ name: string }>("Payment Entry", ["name"], [["docstatus", "=", 1]]);
     for (const p of allPays) {
-      const doc = await this.client.getDoc<ErpPayment & { references?: { reference_doctype?: string | null; reference_name: string; allocated_amount: number }[] }>(
+      const doc = await this.client.getDoc<ErpPayment & { references?: { reference_doctype?: string | null; reference_name: string; allocated_amount: number; exchange_rate?: number | null }[] }>(
         "Payment Entry", p.name,
       );
       for (const r of doc.references ?? []) {
         if (!(r.allocated_amount > 0)) continue;
+        const pair = r.reference_doctype ? refCurrency.get(`${r.reference_doctype}:${r.reference_name}`) : undefined;
+        const currency = pair?.account ?? pair?.txn ?? "";
+        // State the producer rate only when its FROM (the invoice's
+        // transaction currency) provably equals the allocation's currency
+        // (the party-account currency): a positive finite number on an
+        // aligned pair. The reconciler still prefers the books' booked rate
+        // for same-currency links, so this only prices cross-currency links
+        // the books cannot price themselves.
+        const fx = r.exchange_rate;
+        const aligned = !!pair?.account && !!pair?.txn && pair.account === pair.txn;
+        const rate = currency && aligned && typeof fx === "number" && Number.isFinite(fx) && fx > 0
+          ? String(fx)
+          : null;
         applications.push({
           paymentRef: p.name,
           appliedRef: r.reference_name,
           amount: formatMoney(String(r.allocated_amount), 2),
-          currency: (r.reference_doctype && refCurrency.get(`${r.reference_doctype}:${r.reference_name}`)) ?? "",
-          rate: null,
+          currency,
+          rate,
         });
       }
     }
