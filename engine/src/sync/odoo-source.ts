@@ -164,6 +164,9 @@ export class OdooSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    // Merge signals: res.partner exposes `active` only — the merge wizard
+    // leaves no API-visible successor pointer. No mergedIntoRef is emitted;
+    // disappearances take the held path.
     const rows = await this.client.searchReadAll<{
       id: number; name: string; company_type: string; email: string | false;
       phone: string | false; active: boolean;

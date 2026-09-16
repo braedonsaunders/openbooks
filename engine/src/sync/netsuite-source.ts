@@ -988,6 +988,9 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    // Merge signals: entity records expose isinactive only; merge audit lives
+    // in System Notes, which this adapter does not pull. No mergedIntoRef is
+    // emitted; a merged-away entity takes the mirror's held path.
     const shortCode = this.mappings.customerShortCodeField
       ? `${this.mappings.customerShortCodeField} AS shortform`
       : "NULL AS shortform";

@@ -159,6 +159,10 @@ export class QboSource implements MigrationSource {
   }
 
   private async parties(since?: Date | null): Promise<SourceEntity[]> {
+    // Merge signals: Customer/Vendor/Employee query rows expose only Active —
+    // there is no successor pointer, and a merged-away entity simply vanishes
+    // from later pulls (deleted entities are not returned). No mergedIntoRef
+    // is emitted; a vanished-but-referenced party takes the mirror's held path.
     const where = this.sinceWhere(since);
     const [customers, vendors, employees] = [
       await this.client.queryAll<QboParty>("Customer", where),

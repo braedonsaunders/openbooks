@@ -155,6 +155,9 @@ export class QbdSource implements MigrationSource {
         for (const p of nodes(xml, suffix)) {
           const id = text(p.ListID);
           if (!id) continue;
+          // Merge signals: qbXML list rows expose ListID + IsActive only — no
+          // successor pointer. No mergedIntoRef is emitted; disappearances
+          // take the held path.
           parties.push({
             sourceRef: `${prefix}:${id}`,
             fields: { displayName: (text(p.Name) || text(p.FullName) || `${prefix} ${id}`).slice(0, 500), kind, isActive: bool(p.IsActive) },

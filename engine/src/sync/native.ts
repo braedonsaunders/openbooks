@@ -206,13 +206,41 @@ export async function buildNativeContext(
        where org_id = ${orgId} and custom->>${refKey} is not null`));
     return new Map(rows.rows.map((r) => [r.ref, r.id]));
   };
-  const [partyByRef, deptByRef, projectByRef, itemByRef, subsidiaryByRef] = await Promise.all([
-    idMap("parties"),
+  const mergeAwarePartyMap = async (
+    partyOrgId: string,
+    partyRefKey: string,
+  ): Promise<Map<string, string>> => {
+    const rows = (await db.execute<{ id: string; ref: string; survivor: string | null }>(sql`
+      select p.id, p.custom->>${partyRefKey} as ref,
+             (select s.id from parties s
+               where s.org_id = p.org_id and s.id = (p.custom->'merged_into'->>'survivor')::uuid
+               limit 1) as survivor
+        from parties p
+       where p.org_id = ${partyOrgId} and p.custom->>${partyRefKey} is not null`));
+    const byId = new Map(rows.rows.map((r) => [r.id, r]));
+    const resolve = (id: string, seen: Set<string>): string => {
+      if (seen.has(id)) return id;
+      seen.add(id);
+      const row = byId.get(id);
+      if (!row?.survivor || !byId.has(row.survivor)) return id;
+      return resolve(row.survivor, seen);
+    };
+    const map = new Map<string, string>();
+    for (const row of rows.rows) {
+      map.set(row.ref, row.survivor ? resolve(row.survivor, new Set([row.id])) : row.id);
+    }
+    return map;
+  };
+  const [deptByRef, projectByRef, itemByRef, subsidiaryByRef] = await Promise.all([
     idMap("departments"),
     idMap("projects"),
     idMap("items"),
     idMap("subsidiaries"),
   ]);
+  // Parties resolve through source-asserted merges: a ref the source merged
+  // away still carries its connector identity (kept for convergence), but new
+  // source documents for it must land on the survivor.
+  const partyByRef = await mergeAwarePartyMap(orgId, refKey);
 
   const segmentValueByRef = new Map<string, Map<string, string>>();
   const segmentRows = (await db.execute<{ key: string; id: string; ref: string }>(sql`
