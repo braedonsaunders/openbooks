@@ -612,6 +612,7 @@
       "refusedNote": "{count, plural, one {# documento fue} other {# documentos fueron}} rechazado(s) al confirmar.",
       "previewFailed": "No se pudo cargar la vista previa.",
       "commitFailed": "No se pudieron asignar los períodos contables.",
-      "committed": "{count, plural, one {# período contable asignado} other {# períodos contables asignados}}."
+      "committed": "{count, plural, one {# período contable asignado} other {# períodos contables asignados}}.",
+      "needsBook": "Abra esta página desde un cierre para elegir un libro contable y asignar períodos contables."
   }
 }

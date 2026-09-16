@@ -612,6 +612,7 @@
       "refusedNote": "{count, plural, one {# document a été} other {# documents ont été}} refusé(s) à la validation.",
       "previewFailed": "Impossible de charger l'aperçu.",
       "commitFailed": "Impossible d'affecter les périodes comptables.",
-      "committed": "{count, plural, one {# période comptable affectée} other {# périodes comptables affectées}}."
+      "committed": "{count, plural, one {# période comptable affectée} other {# périodes comptables affectées}}.",
+      "needsBook": "Ouvrez cette page depuis une clôture pour choisir un livre comptable et affecter les périodes comptables."
   }
 }
