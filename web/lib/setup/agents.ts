@@ -50,8 +50,6 @@ const AGENT_PACK_READ_PERMISSIONS: Partial<Record<ContinuousCloseAgentKey, strin
   payables: ['ap.read'],
   reconciliation: ['banking.read'],
   hygiene: ['admin.setup.manage'],
-  forensics: ['gl.read', 'close.read'],
-  forensics: ['gl.read', 'ap.read'],
   forensics: ['gl.read', 'ap.read', 'ar.read', 'expenses.read'],
   tax: ['gl.read', 'close.read', 'ap.read', 'ar.read', 'expenses.read'],
 }
