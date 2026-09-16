@@ -98,11 +98,20 @@ export function columnDescriptors(
       const defKey = customFieldDefKey(c.key)
       const def = cfByDefKey.get(defKey)
       if (!def) continue
+      // Boolean customs must extract as real booleans: ->> yields the TEXT
+      // 'false' for a stored false, which is truthy in JS and rendered "Yes".
+      // The CASE is total on purpose — legacy rows can hold anything and a
+      // list-wide cast error would 500 the page; anything but exact
+      // 'true'/'false' stays null.
+      const expr =
+        def.fieldType === "boolean"
+          ? sql`case ${sql.raw(tableAlias)}.custom->>${defKey} when 'true' then true when 'false' then false end`
+          : sql`${sql.raw(tableAlias)}.custom->>${defKey}`
       out.push({
         key: c.key,
         kind: "custom",
         label: c.labelOverride?.trim() ? c.labelOverride.trim() : def.label,
-        expr: sql`${sql.raw(tableAlias)}.custom->>${defKey}`,
+        expr,
         sortable: false,
         defKey,
         defType: def.fieldType,
