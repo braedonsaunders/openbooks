@@ -176,7 +176,10 @@ async function seedDerivedRuleFixture(): Promise<DerivedRuleFixture> {
 }
 
 test("the setup route states the tax-rate domain before every write and maps storage duplicates to 409", () => {
-  const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
+  // The domain checks moved verbatim from this route into the shared setup
+  // command layer — pin the library, not the thin route adapter. (The DB
+  // tests below still exercise the real route end to end.)
+  const source = readFileSync(new URL("../../../../../lib/setup/write.ts", import.meta.url), "utf8");
   assert.match(source, /entity\.key === 'tax-rates'/);
   assert.match(source, /taxRatePercentProblem\(raw\)/);
   // The domain check rides validateEntityIntegrity, which must run before the
