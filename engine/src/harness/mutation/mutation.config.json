@@ -69,7 +69,12 @@
     {
       "path": "engine/src/payroll/canada/compute-statutory.ts",
       "needsDb": true,
-      "tests": ["engine/src/payroll-controls.test.ts"]
+      "tests": [
+        "engine/src/payroll-controls.test.ts",
+        "engine/src/payroll-opening-balances.test.ts",
+        "engine/src/payroll-employer-taxes.integration.test.ts",
+        "engine/src/payroll-quebec.integration.test.ts"
+      ]
     },
     {
       "path": "engine/src/payroll/canada/employer-levies.ts",
@@ -87,7 +92,10 @@
     {
       "path": "engine/src/payroll/us/compute-statutory.ts",
       "needsDb": true,
-      "tests": ["engine/src/payroll-controls.test.ts"]
+      "tests": [
+        "engine/src/payroll-controls.test.ts",
+        "engine/src/payroll-us-state-withholding.integration.test.ts"
+      ]
     },
     {
       "path": "engine/src/tax.ts",
@@ -109,6 +117,7 @@
       "path": "engine/src/consolidation.ts",
       "needsDb": true,
       "tests": [
+        "engine/src/consolidation.test.ts",
         "engine/src/consolidation-proportionate.integration.test.ts",
         "engine/src/consolidation.integration.test.ts",
         "engine/src/consolidation-elimination-fx.integration.test.ts"
