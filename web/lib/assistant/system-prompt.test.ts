@@ -37,6 +37,11 @@ describe("assistantSystemPrompt fiscal context", () => {
     assert.match(prompt, /analytics_\* dashboard tools/);
   });
 
+  it("tells the model to call find_tools before denying a capability", () => {
+    assert.match(prompt, /call find_tools with a few words/);
+    assert.match(prompt, /never say a capability does not exist without calling it/);
+  });
+
   it("renders the current fiscal quarter", () => {
     assert.match(prompt, /fiscal quarter Q2 \(2026-07-01 – 2026-09-30\)/);
   });

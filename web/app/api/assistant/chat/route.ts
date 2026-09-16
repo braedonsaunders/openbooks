@@ -7,7 +7,8 @@ import { can, guardPermission } from "../../../../lib/authz";
 import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { NO_ANSWER_MESSAGE, runAgentTurn } from "../../../../lib/assistant/agent";
-import { buildToolRegistryAsync } from "../../../../lib/assistant/registry";
+import { buildChatTurn } from "../../../../lib/assistant/registry";
+import { priorToolNames } from "../../../../lib/assistant/tool-router";
 import { withModelCompaction } from "../../../../lib/assistant/result-compaction";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -100,9 +101,6 @@ export async function POST(req: Request): Promise<Response> {
 
   const today = await businessToday(authz.user.orgId);
   const features = await resolvedFeatureState(authz.user.orgId);
-  // Model-facing tool outputs are compacted (history conversion and live
-  // steps); the streamed and persisted parts keep the full results.
-  const tools = withModelCompaction(await buildToolRegistryAsync(authz, features));
   const system = assistantSystemPrompt({
     orgName: aiConfig?.org?.name ?? null,
     baseCurrency: org.rows[0]?.base_currency ?? null,
@@ -134,6 +132,13 @@ export async function POST(req: Request): Promise<Response> {
           : ([{ type: "text", text: message.content }] as UIMessage["parts"]),
     }));
 
+    // Two-stage catalog: the full gated catalog stays registered (instant,
+    // typed activation) while each step only SENDS core ∪ pre-routed ∪
+    // activated tools. Model-facing outputs are compacted; the streamed and
+    // persisted parts keep the full results.
+    const turn = await buildChatTurn(authz, features, prompt, priorToolNames(uiMessages));
+    const tools = withModelCompaction(turn.tools);
+
     let modelMessages;
     try {
       modelMessages = await convertToModelMessages(uiMessages, {
@@ -155,6 +160,7 @@ export async function POST(req: Request): Promise<Response> {
       messages: modelMessages,
       system,
       tools,
+      activeTools: turn.activeTools,
       abortSignal: req.signal,
       onComplete: async ({ parts, aborted, finishReason, usage }) => {
         const text = parts

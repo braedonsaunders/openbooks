@@ -12,6 +12,7 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { AIDisabledError, getModel, type AiConfig, type ModelTier } from "./client";
+import { createChatPrepareStep } from "./registry";
 import { withModelCompaction } from "./result-compaction";
 
 /**
@@ -36,6 +37,8 @@ export type RunAgentTurnArgs = {
   system: string;
   /** Permission-bound tools; the model only ever sees what the caller includes. */
   tools: ToolSet;
+  /** Two-stage catalog: per-step subset of `tools` to SEND. Absent = send all. */
+  activeTools?: () => string[];
   tier?: ModelTier;
   /** Hard cap on agent steps (tool round-trips). Default 12; floored at 2. */
   maxSteps?: number;
@@ -55,12 +58,9 @@ export const NO_ANSWER_MESSAGE =
 /**
  * On the final permitted step the model must ANSWER, not call another tool:
  * otherwise a turn that spends its whole budget on lookups ends with tool
- * results and no prose (the user sees a dead turn). `stepNumber` is 0-based.
+ * results and no prose (the user sees a dead turn). Composed with the
+ * two-stage catalog filter in createChatPrepareStep; `stepNumber` is 0-based.
  */
-function finalStepMustAnswer(maxSteps: number) {
-  return ({ stepNumber }: { stepNumber: number }) =>
-    stepNumber >= maxSteps - 1 ? { toolChoice: "none" as const } : undefined;
-}
 
 export type BackgroundAgentResult = {
   text: string;
@@ -96,7 +96,7 @@ export async function runBackgroundAgent(
     // Full outputs still stream to the caller; the model sees compacted copies.
     tools: withModelCompaction(args.tools),
     stopWhen: stepCountIs(maxSteps),
-    prepareStep: finalStepMustAnswer(maxSteps),
+    prepareStep: createChatPrepareStep(maxSteps),
     temperature: args.temperature ?? 0.2,
     abortSignal: args.abortSignal,
   });
@@ -131,7 +131,7 @@ export function runAgentTurn(config: AiConfig | null | undefined, args: RunAgent
     // calls a single tool and stops before ever using the result. THIS is the
     // line that makes the loop genuinely agentic.
     stopWhen: stepCountIs(maxSteps),
-    prepareStep: finalStepMustAnswer(maxSteps),
+    prepareStep: createChatPrepareStep(maxSteps, args.activeTools),
     temperature: args.temperature ?? 0.3,
     abortSignal: args.abortSignal,
   });

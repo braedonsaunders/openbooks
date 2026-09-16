@@ -246,6 +246,32 @@ export function preRouteModules(
   return [...active].sort();
 }
 
+/**
+ * Tool names the assistant already called in this conversation, read off UI
+ * message parts (static `tool-<name>` parts and `dynamic-tool` parts with a
+ * toolName). The pre-router maps them back to modules so a follow-up keeps
+ * the context it already used. Unknown shapes are ignored, never thrown on.
+ */
+export function priorToolNames(messages: readonly { role: string; parts?: unknown }[]): string[] {
+  const names: string[] = [];
+  for (const message of messages) {
+    if (message.role !== "assistant" || !Array.isArray(message.parts)) continue;
+    for (const part of message.parts) {
+      if (typeof part !== "object" || part === null) continue;
+      const type = (part as { type?: unknown }).type;
+      if (type === "dynamic-tool") {
+        const name = (part as { toolName?: unknown }).toolName;
+        if (typeof name === "string" && name) names.push(name);
+      } else if (
+        typeof type === "string" && type.startsWith("tool-") && !type.startsWith("tool-approval")
+      ) {
+        names.push(type.slice("tool-".length));
+      }
+    }
+  }
+  return [...new Set(names)];
+}
+
 /** Per-turn activation scope, threaded through `prepareStep`. */
 export type TurnScope = {
   /** Modules the pre-router activated from the user message. */
