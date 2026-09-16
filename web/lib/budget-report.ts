@@ -1,6 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
+import { flowRates } from './fx-presentation'
 import type { BudgetDimensions } from './budgets'
 import {
   sumSection,
@@ -162,11 +164,19 @@ export async function budgetVsActualView(
   const window = period ?? fy
 
   const subsidiaryList = subsidiaryIds?.length ? sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
-  const actualRows = (await db.execute<{ account_id: string; amt: string }>(sql`
-    select l.account_id, coalesce(sum(l.amount), 0) as amt
+  // Both columns arrive per (account, functional): journal legs are stamped
+  // in their line entity's functional and budget lines read in their
+  // subsidiary's functional (subsidiary-keyed amounts with no currency
+  // column, like gl_month_activity). Each leg translates to the org
+  // presentation currency at its latest date before the caller merges them
+  // per account — the same second leg every consolidated flow reader applies.
+  const actualRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`
+    select l.account_id, sub.base_currency as func, coalesce(sum(l.amount), 0) as amt,
+      max(e.posting_date)::text as late
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}
        ${subsidiaryIds ? sql`and l.subsidiary_id in (${subsidiaryList})` : sql``}
@@ -175,13 +185,15 @@ export async function budgetVsActualView(
        ${dims.projectId ? sql`and l.project_id = ${dims.projectId}` : sql``}
        ${dims.locationId ? sql`and l.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and l.class_id = ${dims.classId}` : sql``}
-     group by l.account_id
+     group by l.account_id, sub.base_currency
   `))
 
-  const budgetRows = (await db.execute<{ account_id: string; amt: string }>(sql`
-    select bl.account_id, coalesce(sum(bl.amount), 0) as amt
+  const budgetRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`
+    select bl.account_id, sub.base_currency as func, coalesce(sum(bl.amount), 0) as amt,
+      max(ap.ends_on)::text as late
       from budget_lines bl
       left join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
+      left join subsidiaries sub on sub.id = bl.subsidiary_id and sub.org_id = bl.org_id
      where bl.org_id = ${orgId} and bl.scenario_id = ${scenarioId}
        and (ap.id is null or (ap.starts_on <= ${window.to} and ap.ends_on >= ${window.from}))
        ${subsidiaryIds ? sql`and bl.subsidiary_id in (${subsidiaryList})` : sql``}
@@ -189,8 +201,31 @@ export async function budgetVsActualView(
        ${dims.projectId ? sql`and bl.project_id = ${dims.projectId}` : sql``}
        ${dims.locationId ? sql`and bl.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and bl.class_id = ${dims.classId}` : sql``}
-     group by bl.account_id
+     group by bl.account_id, sub.base_currency
   `))
+
+  const actualCtx = await flowRates(orgId, actualRows.rows.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? window.to).slice(0, 10),
+  })))
+  const actualByAccount = new Map<string, string>()
+  for (const r of actualRows.rows) {
+    const date = String(r.late ?? window.to).slice(0, 10)
+    actualByAccount.set(
+      r.account_id,
+      add(actualByAccount.get(r.account_id) ?? '0', mulDecimal(String(r.amt ?? 0), actualCtx.rateAt(r.func ?? null, date))),
+    )
+  }
+  const budgetCtx = await flowRates(orgId, budgetRows.rows.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? window.to).slice(0, 10),
+  })))
+  const budgetByAccount = new Map<string, string>()
+  for (const r of budgetRows.rows) {
+    const date = String(r.late ?? window.to).slice(0, 10)
+    budgetByAccount.set(
+      r.account_id,
+      add(budgetByAccount.get(r.account_id) ?? '0', mulDecimal(String(r.amt ?? 0), budgetCtx.rateAt(r.func ?? null, date))),
+    )
+  }
 
   const accounts = (await db.execute<Acct>(sql`
     select id, parent_id, number, name, type, is_summary
@@ -199,11 +234,11 @@ export async function budgetVsActualView(
   `))
 
   const leaf = new Map<string, [ExactDecimal, ExactDecimal]>()
-  for (const r of actualRows.rows) leaf.set(r.account_id, [String(r.amt), '0.0000'])
-  for (const r of budgetRows.rows) {
-    const cur = leaf.get(r.account_id) ?? ['0.0000', '0.0000']
-    cur[1] = String(r.amt)
-    leaf.set(r.account_id, cur as [ExactDecimal, ExactDecimal])
+  for (const [accountId, amt] of actualByAccount) leaf.set(accountId, [amt as ExactDecimal, '0.0000'])
+  for (const [accountId, amt] of budgetByAccount) {
+    const cur = leaf.get(accountId) ?? ['0.0000', '0.0000']
+    cur[1] = amt as ExactDecimal
+    leaf.set(accountId, cur as [ExactDecimal, ExactDecimal])
   }
 
   const treeRows = treeify(accounts.rows, leaf)
