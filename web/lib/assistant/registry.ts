@@ -14,6 +14,7 @@ import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
 import { ANALYTICS_TOOLS } from "./tools-analytics";
 import { BANKING_TOOLS } from "./tools-banking";
+import { CLOSE_TOOLS } from "./tools-close";
 import { CONSTRUCTION_TOOLS } from "./tools-construction";
 import { PROJECT_TOOLS } from "./tools-projects";
 import { TAX_TOOLS } from "./tools-tax";
@@ -41,6 +42,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...ANALYTICS_TOOLS,
   ...REPORTING_TOOLS,
   ...BANKING_TOOLS,
+  ...CLOSE_TOOLS,
   ...PAYROLL_TOOLS,
   ...FILE_TOOLS,
   ...INVENTORY_TOOLS,
