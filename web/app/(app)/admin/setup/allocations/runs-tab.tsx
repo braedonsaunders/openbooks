@@ -362,6 +362,16 @@ export function RunsTab() {
             header: t('columns.journal'),
             cell: (row) => (row.journalEntryId ? <span className="tabular-nums">{shortId(row.journalEntryId)}</span> : '—'),
           },
+          {
+            key: 'requestedBy',
+            header: t('columns.requestedBy'),
+            cell: (row) => (row.requestedBy ? <span className="tabular-nums">{shortId(row.requestedBy)}</span> : '—'),
+          },
+          {
+            key: 'created',
+            header: t('columns.created'),
+            cell: (row) => (row.createdAt ? <span className="tabular-nums">{row.createdAt.slice(0, 10)}</span> : '—'),
+          },
         ]}
       />
 
