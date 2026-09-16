@@ -87,7 +87,8 @@
       },
       "loading": "Loading rule…",
       "retry": "Retry",
-      "notFound": "That rule no longer exists."
+      "notFound": "That rule no longer exists.",
+      "publishConfirm": "Publish this version? It becomes the version in force for its window."
     },
     "general": {
       "name": "Name",
@@ -207,7 +208,10 @@
       "tierTargetKey": "Target key",
       "tierAdd": "Add tier",
       "tierRemove": "Remove tier",
-      "tierOpenEnded": "Empty bound means unbounded — only the last tier may be open."
+      "tierOpenEnded": "Empty bound means unbounded — only the last tier may be open.",
+      "readOnly": "Only drafts can be edited — start a new version from Versions to change the definition.",
+      "residualTarget": "Residual target account",
+      "dynamicDimensionNone": "Select a dimension"
     },
     "targets": {
       "add": "Add target",
