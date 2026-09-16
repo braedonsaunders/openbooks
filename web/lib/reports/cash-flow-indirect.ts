@@ -204,6 +204,12 @@ export async function cashFlowIndirect(
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.id in (select id from flagged)
+         -- Redundant by construction (every flagged entry is in-window), but
+         -- without it the planner cannot bound the outer scan by date: it
+         -- walks every line of these accounts ever and probes the entry pk
+         -- per line (minutes at scale) instead of driving from the entry
+         -- date index. Result-identical, plan-decisive.
+         and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
          and e.origin not in ${CF_REMEASURE_PNL_ORIGINS}
          and a.type in ${PNL_TYPES} and ${dim}
@@ -283,6 +289,10 @@ export async function cashFlowIndirect(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.id in (select id from cash_entries)
        and l.org_id = ${resolvedOrgId}
+       -- Redundant by construction (every cash entry is in-window): lets the
+       -- planner bound the outer scan by the entry date index instead of
+       -- walking all history and probing the entry pk per line.
+       and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
        and (
          a.type in ${IF_TYPES}
