@@ -327,7 +327,11 @@ export const syncRuns = pgTable(
     })
       .notNull()
       .default("incremental"),
-    status: text("status", { enum: ["running", "ok", "failed"] })
+    // ok_with_errors: the run completed and advanced the cursor, but at
+    // least one entity record failed to load (see stats.entities) — the
+    // controller must review the named rows. No DDL change: the column stays
+    // plain text with no database check constraint.
+    status: text("status", { enum: ["running", "ok", "ok_with_errors", "failed"] })
       .notNull()
       .default("running"),
     startedAt: timestamp("started_at", { withTimezone: true })

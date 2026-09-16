@@ -52,6 +52,7 @@
     },
     "status": {
       "ok": "ok",
+      "ok_with_errors": "OK con errores",
       "failed": "fallida",
       "running": "en ejecución"
     },
