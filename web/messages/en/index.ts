@@ -13,6 +13,7 @@ import docs from './docs.json'
 import accounts from './accounts.json'
 import analytics from './analytics.json'
 import admin from './admin.json'
+import allocations from './allocations.json'
 import apiDocs from './apiDocs.json'
 import ap from './ap.json'
 import approvals from './approvals.json'
@@ -73,6 +74,7 @@ export default {
   accounts,
   analytics,
   admin,
+  allocations,
   apiDocs,
   ap,
   approvals,
