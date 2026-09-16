@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -118,6 +119,15 @@ export const reconciliations = pgTable(
       .default("in_progress"),
     signedOffBy: uuid("signed_off_by"),
     signedOffAt: timestamp("signed_off_at", { withTimezone: true }),
+    /**
+     * What the sign-off stands on (0158): `statement` = matched imported
+     * statement lines; `source` = connector-mirrored cleared evidence, with
+     * no statement lines invented. Statement rows carry no connector.
+     */
+    evidenceKind: text("evidence_kind", { enum: ["statement", "source"] })
+      .notNull()
+      .default("statement"),
+    evidenceConnector: text("evidence_connector"),
     ...auditColumns,
   },
   (t) => [
@@ -136,6 +146,32 @@ export const reconciliations = pgTable(
         and ${t.signedOffBy} is null
         and ${t.signedOffAt} is null
       )`,
+    ),
+  ],
+);
+
+/**
+ * Source-system reconciliation state mirrored as evidence (0158): per
+ * reconcilable account, the connector key, the last reconciled-through date
+ * the mirror derived from cleared markers, and the source statement balance
+ * where the source states one. The mirror upserts it; sign-off reads it.
+ */
+export const sourceReconciliationState = pgTable(
+  "source_reconciliation_state",
+  {
+    orgId: orgRef(),
+    accountId: uuid("account_id").notNull(),
+    /** Stable connector key (the connection source key). */
+    connector: text("connector").notNull(),
+    reconciledThrough: date("reconciled_through").notNull(),
+    sourceBalance: money("source_balance"),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.accountId] }),
+    check(
+      "source_reconciliation_state_connector_chk",
+      sql`length(btrim(${t.connector})) > 0`,
     ),
   ],
 );
