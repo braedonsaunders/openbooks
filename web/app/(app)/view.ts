@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '@/lib/authz'
 
+import { businessTimeZone } from '@openbooks/engine/src/business-date.ts'
 import { buildGreeting } from './dashboard/_greeting'
 
 /**
@@ -28,6 +29,7 @@ import { buildGreeting } from './dashboard/_greeting'
 
 export interface RootDashboardData {
   greeting: string
+  name: string | null
 }
 
 export async function loadRootDashboard(
@@ -41,15 +43,16 @@ export async function loadRootDashboard(
   // live in the slot now — they need the session, and re-deriving them there
   // is what keeps them out of the spec.
 
-  // Keep the comment the native page carries: the hour comes from the server
-  // clock and the name is the user's own first name.
+  // The server paint uses the org zone; the header corrects to the browser
+  // zone on mount. The name is the user's own first name.
   const today = new Date()
   return {
     greeting: buildGreeting(today, authz.user.name, {
       morning: t('greeting.morning'),
       afternoon: t('greeting.afternoon'),
       evening: t('greeting.evening'),
-    }),
+    }, await businessTimeZone(authz.user.orgId)),
+    name: authz.user.name,
   }
 }
 
@@ -64,7 +67,7 @@ export function rootDashboardSpec(data: RootDashboardData): PageSpec {
       frame('page-container', [
         // Exact wrapper from page.tsx: <div className="space-y-5">.
         grid('space-y-5', [
-          widgetBlock('dashboard-header', { greeting: data.greeting }),
+          widgetBlock('dashboard-header', { greeting: data.greeting, name: data.name }),
           // No props: the slot re-derives everything from the session.
           widgetBlock('dashboard-grid'),
         ]),

@@ -1577,8 +1577,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
 
   /* --- home dashboard --------------------------------------------------------------- */
   /** The greeting row. The loader resolves the greeting string (locale +
-   *  first name); the Customize link lives inside the component. */
-  'dashboard-header': (props) => <DashboardHeader greeting={str(props, 'greeting') ?? ''} />,
+   *  first name, org zone) and passes the name through so the header can
+   *  re-derive the stem in the browser zone on mount; the Customize link
+   *  lives inside the component. */
+  'dashboard-header': (props) => <DashboardHeader greeting={str(props, 'greeting') ?? ''} name={str(props, 'name') ?? null} />,
   /** A SLOT, not a props widget. `DashboardGrid` needs rendered tile nodes
    *  and a bound `saveQuickActions` server action — component references and
    *  a capability, neither of which a spec may carry. The slot re-derives

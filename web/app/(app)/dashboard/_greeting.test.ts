@@ -18,6 +18,24 @@ test('dashboard greeting picks the stem by hour of day', () => {
   assert.equal(buildGreeting(new Date(2026, 0, 1, 17, 0), 'Ada', copy), 'Good evening, Ada')
 })
 
+/**
+ * The stem follows the VIEWER's clock, never the server's. 8:10 PM EDT is
+ * 00:10 UTC: a UTC server saying "Good morning" at that instant is the
+ * production defect — in America/Toronto it is evening.
+ */
+test('dashboard greeting resolves the hour in the given time zone', () => {
+  // 2026-09-15T00:10:00Z: 8:10 PM EDT the previous day, 2:10 PM in Kiritimati.
+  const instant = new Date('2026-09-15T00:10:00.000Z')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'America/Toronto'), 'Good evening, Ada')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'Pacific/Kiritimati'), 'Good afternoon, Ada')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'UTC'), 'Good morning, Ada')
+})
+
+test('dashboard greeting falls back to UTC for an unknown time zone', () => {
+  const instant = new Date('2026-09-15T00:10:00.000Z')
+  assert.equal(buildGreeting(instant, 'Ada', copy, 'Not/AZone'), 'Good morning, Ada')
+})
+
 test('dashboard greeting uses the first name, or the bare stem without one', () => {
   assert.equal(buildGreeting(new Date(2026, 0, 1, 9, 0), 'Ada Lovelace', copy), 'Good morning, Ada')
   assert.equal(buildGreeting(new Date(2026, 0, 1, 9, 0), '  Ada   Lovelace  ', copy), 'Good morning, Ada')

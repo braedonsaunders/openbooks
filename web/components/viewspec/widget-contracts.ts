@@ -99,7 +99,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'dashboard-customize-header': { props: ['backHref', 'backLabel', 'roleLabel', 'title'] },
   'dashboard-edit': { props: [] },
   'dashboard-grid': { props: [] },
-  'dashboard-header': { props: ['greeting'] },
+  'dashboard-header': { props: ['greeting', 'name'] },
   'dashboard-name-cell': { props: ['description', 'href', 'name'] },
   'data-export': { props: [] },
   'date-range-filter': { props: ['clearLabel', 'clearable', 'defaultFrom', 'defaultTo', 'fromKey', 'fromLabel', 'pageParamKey', 'toKey', 'toLabel'] },
