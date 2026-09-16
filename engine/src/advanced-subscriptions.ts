@@ -177,10 +177,21 @@ function validDate(value: string | null | undefined, label: string, required = f
   return value;
 }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
+}
+
 function exactMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) {
     throw new AdvancedSubscriptionError(`${label} must be an exact decimal`);
+  }
+  // Component quantity/unit_price are numeric(19,4): a wider figure would die
+  // in Postgres as a raw storage failure (HTTP 500 — the route rethrows
+  // unknown errors), so refuse it here with a named 422 and nothing written.
+  if (wholeDigits(exact) > 15) {
+    throw new AdvancedSubscriptionError(`${label} is out of range — at most 15 whole digits fit the ledger`);
   }
   try {
     return normalizeMoney(exact);
