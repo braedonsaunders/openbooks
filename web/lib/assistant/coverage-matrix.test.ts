@@ -134,7 +134,7 @@ const MATRIX: Entry[] = [
   { prefix: "sync", tools: ["list_sync_connections"] },
   { prefix: "platform/connections", tools: ["list_sync_connections"] },
   { prefix: "platform", uncovered: "operator console: cross-organization pages, no tenant tool" },
-  { prefix: "admin/sandboxes", uncovered: "gap fill pending: list_environments reuses listSandboxes" },
+  { prefix: "admin/sandboxes", tools: ["list_environments"] },
   { prefix: "pdf-templates", uncovered: "gap fill pending: list_pdf_templates and get_pdf_template reuse the pdf-templates store" },
   { prefix: "record-pdf", uncovered: "gap fill pending: get_pdf_template plus get_document; binary render itself has no tool" },
   { prefix: "admin/email", tools: ["get_outbox_status"], note: "provider config writes have no application service; delivery reads via the outboxes" },
@@ -170,7 +170,7 @@ const MATRIX: Entry[] = [
 ];
 
 /** The allowlist must only shrink: lower this as gap-fill commits land. */
-const UNCOVERED_BUDGET = 38;
+const UNCOVERED_BUDGET = 37;
 
 const REASON_VOCABULARY = [
   "no application service:",

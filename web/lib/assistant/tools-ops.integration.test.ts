@@ -34,7 +34,7 @@ function authzFor(orgId: string, permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null }
 }
 
-const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage']
+const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage', 'admin.sandboxes.manage']
 
 test('assistant data-io tools list resources and import runs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -88,6 +88,38 @@ test('assistant sync connections list runs with last-run evidence, isolated per 
       assert.ok(lastRun, 'expected last-run evidence')
       assert.equal(lastRun.status, 'failed')
       assert.equal(lastRun.error, 'boom')
+    })
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
+  }
+})
+
+test('assistant environments list sandboxes with refresh status, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    const sbId = randomUUID()
+    await withOrgContext(orgA.orgId, async () => {
+      await db.execute(sql`insert into sandboxes (id, org_id, production_org_id, name, status)
+        values (${sbId}, ${orgA.orgId}, ${orgA.orgId}, 'Probe Sandbox', 'ready')`)
+    })
+    await withOrgContext(orgB.orgId, async () => {
+      const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_environments', {})
+      assert.equal(other.ok, true, JSON.stringify(other))
+      assert.ok(other.ok)
+      assert.deepEqual((other.data as { items: unknown[] }).items, [])
+    })
+    await withOrgContext(orgA.orgId, async () => {
+      const mine = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_environments', {})
+      assert.equal(mine.ok, true, JSON.stringify(mine))
+      assert.ok(mine.ok)
+      const items = (mine.data as { items: { name: string; status: string }[] }).items
+      assert.equal(items.length, 1)
+      assert.equal(items[0]!.name, 'Probe Sandbox')
+      assert.equal(items[0]!.status, 'ready')
+      const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'list_environments', {})
+      assert.deepEqual(bare, { ok: false, error: 'forbidden' })
     })
   } finally {
     await dropScratchOrg(orgA.orgId)

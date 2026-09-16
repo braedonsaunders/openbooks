@@ -8,6 +8,7 @@ const resourcesRoute = read("../../app/api/data/resources/route.ts");
 const importRoute = read("../../app/api/data/import/route.ts");
 const historyView = read("../../app/(app)/data/import/history/view.ts");
 const connectionsRoute = read("../../app/api/platform/connections/route.ts");
+const sandboxesView = read("../../app/(app)/admin/sandboxes/view.ts");
 
 test("data-io tools carry the same gates as the routes and views they cover", () => {
   // GET /api/data/resources requires data.export; the import route and the
@@ -38,6 +39,16 @@ test("list_sync_connections carries the console's gate and never leaks credentia
   assert.match(ops, /from sync_runs where org_id/);
   assert.match(ops, /hasSecrets: c\.secrets !== null/);
   assert.doesNotMatch(ops, /secrets: c\.secrets/);
+});
+
+test("list_environments carries the admin page's gate and production-org scoping", () => {
+  // loadSandboxes requires admin.sandboxes.manage and lists by
+  // productionOrgId. The tool must do the same — no subsidiary fence, no
+  // wider gate.
+  assert.match(sandboxesView, /requirePermission\('admin\.sandboxes\.manage'\)/);
+  assert.match(sandboxesView, /listSandboxes\(authz\.user\.productionOrgId\)/);
+  assert.match(ops, /name: "list_environments"[\s\S]{0,800}gate: \{ mode: "anyOf", perms: \["admin\.sandboxes\.manage"\] \}/);
+  assert.match(ops, /listSandboxes\(authz\.user\.productionOrgId\)/);
 });
 
 test("list_import_runs reuses the history view's query shape and stays org-scoped", () => {
