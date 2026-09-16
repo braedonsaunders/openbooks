@@ -147,12 +147,64 @@ export async function purgeExpiredQbdBridgeData(): Promise<void> {
   }));
 }
 
+/**
+ * Online-guessing ceiling for the user-chosen Web Connector password (typed
+ * once into the desktop client, minimum 16 characters). Sliding window per
+ * connection on the shared auth bucket table — the same upsert idiom as the
+ * deployment login capacity in web/lib/auth.ts, so no new table is needed.
+ * A healthy client authenticates once per 2-hour session, so even a fully
+ * misconfigured client (one failure per 5-minute scheduler cycle) never trips
+ * the ceiling, while password spraying is capped inside every window. The key
+ * is per connection, so one connection's flood can never lock out another.
+ */
+export const QBWC_AUTH_GUESS_WINDOW_S = 900;
+export const QBWC_AUTH_GUESS_LIMIT = 30;
+
+function qbwcGuessBucket(connectionId: string): string {
+  return `qbwc:${connectionId}`;
+}
+
+async function qbwcGuessesTripped(connectionId: string): Promise<boolean> {
+  return withBypassContext(async () => {
+    const result = (await db.execute<{ tripped: boolean }>(sql`
+      select attempt_count > ${QBWC_AUTH_GUESS_LIMIT} as tripped
+        from auth_rate_limit_buckets
+       where bucket_key = ${qbwcGuessBucket(connectionId)}`));
+    return result.rows[0]?.tripped ?? false;
+  });
+}
+
+async function recordQbwcGuessFailure(connectionId: string): Promise<void> {
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into auth_rate_limit_buckets as bucket
+        (bucket_key, window_started_at, attempt_count, updated_at)
+      values (${qbwcGuessBucket(connectionId)}, now(), 1, now())
+      on conflict (bucket_key) do update set
+        window_started_at = case
+          when bucket.window_started_at <= now() - (${QBWC_AUTH_GUESS_WINDOW_S} * interval '1 second')
+            then now()
+          else bucket.window_started_at
+        end,
+        attempt_count = case
+          when bucket.window_started_at <= now() - (${QBWC_AUTH_GUESS_WINDOW_S} * interval '1 second')
+            then 1
+          else least(bucket.attempt_count + 1, ${QBWC_AUTH_GUESS_LIMIT + 1})
+        end,
+        updated_at = now()`);
+  });
+}
+
 export async function authenticateWebConnector(connectionId: string, username: string, password: string): Promise<QbdAuthResult> {
   const conn = await publicConnection(connectionId);
   if (!conn || conn.status === "paused") return { ticket: "", companyFile: "nvu" };
+  // Refuse before comparing once the window is exhausted — the same failure
+  // shape, so tripping is not observable beyond the refusal itself.
+  if (await qbwcGuessesTripped(connectionId)) return { ticket: "", companyFile: "nvu" };
   const secret = unsealJson<QbdSecrets>(conn.secrets);
   const expectedUser = `qbd:${connectionId}`;
   if (!secret?.webConnectorPassword || !secureEqual(username, expectedUser) || !secureEqual(password, secret.webConnectorPassword)) {
+    await recordQbwcGuessFailure(connectionId);
     return { ticket: "", companyFile: "nvu" };
   }
   return withBypassContext(async () => {
