@@ -1013,7 +1013,7 @@
         "criticalItemCount": "Critical item count",
         "criticalMaterialityMultiple": "Critical materiality multiple",
         "staleAfterDays": "Stale after",
-        "lookbackDays": "Look back",
+        "lookbackDays": "Lookback",
         "duplicateDays": "Duplicate window",
         "dueWithinDays": "Due within",
         "minimumVariancePercent": "Minimum unfavorable variance",
@@ -1032,8 +1032,7 @@
         "payRunHorizonDays": "Pay-run horizon",
         "minimumDiscountPercent": "Minimum discount",
         "matchWindowDays": "Match window",
-        "minimumConfidencePercent": "Minimum confidence",
-        "lookbackDays": "Lookback"
+        "minimumConfidencePercent": "Minimum confidence"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -1049,20 +1048,20 @@
           "description": "Finds draft or pending bills, invoices, credits, expenses, and journals that have exceeded the configured age."
         },
         "forensic_weekend_postings": {
-          "title": "Weekend spend postings",
-          "description": "Flags spend documents dated on a weekend within the lookback window, a classic misappropriation signal."
+          "title": "Weekend postings",
+          "description": "Postings dated on weekends inside the lookback window."
         },
         "forensic_round_dollar": {
-          "title": "Round-dollar spend",
-          "description": "Flags spend documents priced at whole thousands above the floor within the lookback window."
+          "title": "Round-dollar postings",
+          "description": "Suspiciously round postings inside the lookback window."
         },
         "forensic_threshold_trap": {
-          "title": "Just-below-limit amounts",
-          "description": "Flags spend documents priced just below a round approval limit (amounts ending in 99)."
+          "title": "Threshold traps",
+          "description": "Amounts parked just below approval thresholds."
         },
         "forensic_duplicate_bills": {
-          "title": "Duplicate bills",
-          "description": "Flags payable documents with the same party, kind, and amount posted within the duplicate window."
+          "title": "Forensic duplicate bills",
+          "description": "Near-duplicate bills the payables checks may have missed."
         },
         "tax_missing_codes": {
           "title": "Documents missing tax codes",
@@ -1175,22 +1174,6 @@
         "unmapped_payroll_component": {
           "title": "Unmapped payroll components",
           "description": "Payroll components with no posting mapping."
-        },
-        "forensic_weekend_postings": {
-          "title": "Weekend postings",
-          "description": "Postings dated on weekends inside the lookback window."
-        },
-        "forensic_round_dollar": {
-          "title": "Round-dollar postings",
-          "description": "Suspiciously round postings inside the lookback window."
-        },
-        "forensic_threshold_trap": {
-          "title": "Threshold traps",
-          "description": "Amounts parked just below approval thresholds."
-        },
-        "forensic_duplicate_bills": {
-          "title": "Forensic duplicate bills",
-          "description": "Near-duplicate bills the payables checks may have missed."
         }
       },
       "accounting": {
@@ -4266,7 +4249,11 @@
       "explore": "Explore the app",
       "exploreHelp": "Open a screen to try its layout and forms with sample data.",
       "reviewReady": "Review before activation",
-      "screenKind": { "records": "Record workspace", "action": "Action form", "page": "Page" },
+      "screenKind": {
+        "records": "Record workspace",
+        "action": "Action form",
+        "page": "Page"
+      },
       "failed": "The app could not be activated.",
       "previewNotice": "Unpublished preview · Sample data only. Try the list and forms; changes are not saved and backend actions do not run.",
       "unpublished": "This proposal is not active. Review its screens, requested access, and changes before activating it.",
