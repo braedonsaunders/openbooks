@@ -96,6 +96,9 @@ export function allocationsSpec(data: AllocationsSetupData): PageSpec {
           ...widgetBlock('allocations-runs-tab', {}),
           when: f('onRuns'),
         },
+        // Rule drawer: mounted on every tab (Rules rows and the Runs period
+        // deep-link both address `?rule=`); the slot renders nothing without it.
+        widgetBlock('allocations-rule-drawer', { sp: data.currentParams }),
       ]),
     ],
   })

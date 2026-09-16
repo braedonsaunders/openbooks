@@ -109,13 +109,14 @@ function widgetNames(spec: unknown): string[] {
 }
 
 for (const tab of ['rules', 'drivers', 'runs'] as const) {
-  test(`spec always mounts the header strip and the ${tab} body widget`, () => {
+  test(`spec always mounts the header strip, the ${tab} body widget and the rule drawer`, () => {
     const names = widgetNames(allocationsSpec(data(tab)))
     assert.deepEqual(names, [
       'allocations-setup-header',
       'allocations-rules-tab',
       'allocations-drivers-tab',
       'allocations-runs-tab',
+      'allocations-rule-drawer',
     ])
   })
 }
