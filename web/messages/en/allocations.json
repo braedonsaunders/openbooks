@@ -44,10 +44,6 @@
       "drivers": "Drivers",
       "runs": "Runs"
     },
-    "driversPlaceholderTitle": "Drivers",
-    "driversPlaceholderBody": "Driver registry lives here — this tab is owned by the drivers and runs slice and will be replaced without changing the tab strip.",
-    "runsPlaceholderTitle": "Runs",
-    "runsPlaceholderBody": "Period run previews and posting live here — this tab is owned by the drivers and runs slice and will be replaced without changing the tab strip.",
     "list": {
       "heading": "Allocation rules",
       "new": "New rule",

@@ -197,6 +197,12 @@ import {
   OverheadModelHeader,
   OverheadRatesTabSlot,
 } from '../../app/(app)/admin/setup/overhead/sections'
+import {
+  AllocationsDriversTabSlot,
+  AllocationsRulesTabSlot,
+  AllocationsRunsTabSlot,
+  AllocationsSetupHeader,
+} from '../../app/(app)/admin/setup/allocations/sections'
 import { SavedViewHeader, SavedViewMeta } from '../../app/(app)/knowledge/views/[id]/sections'
 import {
   SetupReadinessCheckCard,
@@ -2076,6 +2082,16 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ),
   'overhead-lifecycle-tab': () => <OverheadLifecycleTabSlot />,
   'overhead-application-tab': () => <OverheadApplicationTabSlot />,
+
+  /* --- allocations setup ------------------------------------------------------ */
+  'allocations-setup-header': (props) => (
+    <AllocationsSetupHeader {...(props as ComponentProps<typeof AllocationsSetupHeader>)} />
+  ),
+  'allocations-rules-tab': (props) => (
+    <AllocationsRulesTabSlot {...(props as ComponentProps<typeof AllocationsRulesTabSlot>)} />
+  ),
+  'allocations-drivers-tab': () => <AllocationsDriversTabSlot />,
+  'allocations-runs-tab': () => <AllocationsRunsTabSlot />,
 
   /* --- setup readiness -------------------------------------------------------- */
   //
