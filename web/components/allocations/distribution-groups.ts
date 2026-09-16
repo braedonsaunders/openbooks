@@ -13,7 +13,7 @@
  * floats, never `Number(amount)` arithmetic.
  */
 
-import { add, cmp, fromUnits, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, mulPercent, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
 
 /** Minimal row shape the group model reads. LineGrid rows and drawer LineRows both satisfy it. */
 export interface DistributionGroupRow {
@@ -24,10 +24,12 @@ export interface DistributionGroupRow {
 
 /** One entry-mode rule offered for a line, as returned by entry-candidates. */
 export interface EntryDistributionCandidate {
+  ruleId: string
   ruleKey: string
   ruleName: string
   applyPolicy: 'automatic' | 'suggest' | 'manual'
   versionId: string
+  recommended: boolean
 }
 
 /** Stable blank: a row with no (or a blank) group id stands alone. */
@@ -242,6 +244,75 @@ export function menuKeysForRow<Row extends DistributionGroupRow>(
   if (opts.suggestionOf(row, index) !== null) keys.push('apply-suggest')
   if (opts.splittable(row, index) && !opts.pendingRuleNameOf(row, index)) keys.push('split')
   return keys
+}
+
+/**
+ * Convert one hand-edited split (SplitLinesEditor portions) into exact child
+ * amounts for a known line total. Fixed portions ride verbatim; percents are
+ * exact via mulPercent (the editor's number is re-serialized as its shortest
+ * decimal, never IEEE-754 arithmetic); remainder lines share the leftover
+ * equally with the odd units on the earliest lines. Returns null when the
+ * portions cannot make the total: a malformed/negative fixed or percent, an
+ * over-allocated book (fixed + percent past the total), or no remainder line
+ * to absorb the difference. Either way Σ(result) == total exactly.
+ */
+export type SplitPortion =
+  | { kind: 'remainder' }
+  | { kind: 'percent'; value: number }
+  | { kind: 'fixed'; value: string }
+
+export function splitPortionsToAmounts(
+  portions: readonly SplitPortion[],
+  total: string,
+): string[] | null {
+  let totalUnits: bigint
+  try {
+    totalUnits = toUnits(total)
+  } catch {
+    return null
+  }
+  const amounts = new Array<bigint>(portions.length).fill(0n)
+  let placed = 0n
+  for (let i = 0; i < portions.length; i++) {
+    const portion = portions[i]!
+    if (portion.kind === 'fixed') {
+      let units: bigint
+      try {
+        units = toUnits(portion.value)
+      } catch {
+        return null
+      }
+      amounts[i] = units
+      placed += units
+    } else if (portion.kind === 'percent') {
+      if (!Number.isFinite(portion.value) || portion.value < 0) return null
+      let units: bigint
+      try {
+        units = toUnits(mulPercent(total, String(portion.value)))
+      } catch {
+        return null
+      }
+      amounts[i] = units
+      placed += units
+    }
+  }
+  const leftover = totalUnits - placed
+  const remainderIndexes: number[] = []
+  portions.forEach((portion, i) => {
+    if (portion.kind === 'remainder') remainderIndexes.push(i)
+  })
+  if (remainderIndexes.length === 0) {
+    if (leftover !== 0n) return null
+    return amounts.map((units) => fromUnits(units))
+  }
+  if (leftover < 0n) return null
+  const count = BigInt(remainderIndexes.length)
+  const base = leftover / count
+  const extra = leftover % count
+  remainderIndexes.forEach((rowIndex, slot) => {
+    amounts[rowIndex] = base + (BigInt(slot) < extra ? 1n : 0n)
+  })
+  return amounts.map((units) => fromUnits(units))
 }
 
 /** Line-amount delta helper (money.ts exposes add/neg, not sub). */

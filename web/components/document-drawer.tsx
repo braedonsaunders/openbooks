@@ -11,7 +11,19 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { TransactionDrawer } from './transaction-drawer'
-import { LineGrid, type LineGridColumn } from './line-grid'
+import { LineGrid, type LineGridColumn, type LineGridDistribution } from './line-grid'
+import {
+  chipForRow,
+  groupHeaderModels,
+  groupIdOf,
+  groupMembers,
+  isGroupLocked,
+  menuKeysForRow,
+  reapportionGroupTotal,
+  unsplitGroup as collapseDistributionGroup,
+  type EntryDistributionCandidate,
+} from './allocations/distribution-groups'
+import { DistributionDialog, type DistributionDialogChild } from './allocations/DistributionDialog'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
@@ -89,6 +101,52 @@ interface LineRow extends Record<string, unknown> {
   taxInputAmount: string
   taxOverridden: boolean
   taxAmount: string
+  /** Entry-mode distribution staging (shard A9; exploded by A4 on save). */
+  distributionGroupId: string
+  distributionRuleId: string
+  distributionRuleName: string
+  distributionVersionId: string
+  distributionLocked: boolean
+  /** Rule key staged for explosion; blank once the server materializes children. */
+  distributionKey: string
+}
+
+/** The distribution slice of a grid row: server line → row, row → collapse. */
+export interface DistributionLineFields {
+  distributionGroupId: string
+  distributionRuleId: string
+  distributionRuleName: string
+  distributionVersionId: string
+  distributionLocked: boolean
+  distributionKey: string
+}
+
+/**
+ * Distribution columns off a document-line read. Tolerant by design: the
+ * read path gains these columns from A4, so a line without them (older
+ * payloads, other writers) is simply ungrouped — never an error.
+ */
+export function distributionFieldsOf(line: Record<string, unknown>): DistributionLineFields {
+  const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+  return {
+    distributionGroupId: text(line.distribution_group_id),
+    distributionRuleId: text(line.distribution_rule_id),
+    distributionRuleName: text(line.distribution_rule_name),
+    distributionVersionId: text(line.distribution_version_id),
+    distributionLocked: line.distribution_locked === true,
+    distributionKey: '',
+  }
+}
+
+export function clearedDistributionFields(): DistributionLineFields {
+  return {
+    distributionGroupId: '',
+    distributionRuleId: '',
+    distributionRuleName: '',
+    distributionVersionId: '',
+    distributionLocked: false,
+    distributionKey: '',
+  }
 }
 export interface DocPayload {
   doc: Record<string, any>
@@ -342,6 +400,7 @@ const emptyLine = (): LineRow => ({
   taxInputAmount: '',
   taxOverridden: false,
   taxAmount: '',
+  ...clearedDistributionFields(),
 })
 
 function positiveAmount(value: unknown): boolean {
@@ -382,6 +441,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
+    ...distributionFieldsOf(l),
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
@@ -649,6 +709,339 @@ export function DocumentDrawer({
     }
   }
 
+  // -- entry-mode distributions (shard A9) ----------------------------------
+  // The server is the feature truth: every affordance below renders only
+  // while entry-candidates answers. A 404/403 (gate off, out of scope)
+  // hides everything, and the server refuses regardless of UI.
+  const tAlloc = useTranslations('allocations')
+  const distEditable = editable && !isTransfer && config.kind !== 'project_charge'
+  const [distOn, setDistOn] = useState(false)
+  const [distAuto, setDistAuto] = useState<EntryDistributionCandidate[]>([])
+  const [distLineMap, setDistLineMap] = useState<ReadonlyMap<string, EntryDistributionCandidate[]>>(new Map())
+  const [distLineFailed, setDistLineFailed] = useState<ReadonlySet<string>>(new Set())
+  const [distApplying, setDistApplying] = useState(false)
+  const [splitTarget, setSplitTarget] = useState<number | null>(null)
+  const distInflight = useRef(new Set<string>())
+  const distNamesByKey = useRef(new Map<string, string>())
+  const distNamesById = useRef(new Map<string, string>())
+
+  const distCoordKey = (row: LineRow): string =>
+    JSON.stringify([row.accountId, row.departmentId, row.projectId, row.locationId, row.classId])
+
+  const distParams = (extra: Record<string, string> = {}): string => {
+    const params = new URLSearchParams({
+      documentKind: config.kind,
+      documentDate: /^\d{4}-\d{2}-\d{2}$/.test(documentDate) ? documentDate : new Date().toISOString().slice(0, 10),
+      ...extra,
+    })
+    if (subsidiaryId) params.set('subsidiaryId', subsidiaryId)
+    return params.toString()
+  }
+
+  const cacheDistNames = (rules: EntryDistributionCandidate[]): void => {
+    for (const rule of rules) {
+      distNamesByKey.current.set(rule.ruleKey, rule.ruleName)
+      distNamesById.current.set(rule.ruleId, rule.ruleName)
+    }
+  }
+
+  // Header-level presence check: which automatic rules are in effect.
+  useEffect(() => {
+    let cancelled = false
+    const run = async (): Promise<void> => {
+      // The whole block runs async so the gate-off reset below never sets
+      // state synchronously in the effect body (cascading renders).
+      if (!distEditable) {
+        if (!cancelled) {
+          setDistOn(false)
+          setDistAuto([])
+        }
+        return
+      }
+      try {
+        const res = await fetch(`/api/allocations/entry-candidates?${distParams()}`)
+        if (!res.ok) {
+          if (!cancelled) {
+            setDistOn(false)
+            setDistAuto([])
+          }
+          return
+        }
+        const body = (await res.json()) as { rules?: EntryDistributionCandidate[] }
+        const rules = Array.isArray(body.rules) ? body.rules : []
+        if (!cancelled) {
+          cacheDistNames(rules)
+          setDistOn(true)
+          setDistAuto(rules.filter((rule) => rule.applyPolicy === 'automatic'))
+        }
+      } catch {
+        if (!cancelled) {
+          setDistOn(false)
+          setDistAuto([])
+        }
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distEditable, config.kind, documentDate, subsidiaryId])
+
+  // Per-line candidates for priced ungrouped rows, fetched lazily and
+  // cached by coordinate so typing in one row never storms the route.
+  const distLineSignature =
+    distOn && distEditable
+      ? rows
+          .filter((r) => isPricedDrawerLine(r) && groupIdOf(r) === null)
+          .map((r) => `${distCoordKey(r)}@${r.amount}`)
+          .sort()
+          .join('|')
+      : ''
+  useEffect(() => {
+    if (!distLineSignature) return
+    const timer = setTimeout(() => {
+      const missing = new Map<string, LineRow>()
+      for (const row of rows) {
+        if (!isPricedDrawerLine(row) || groupIdOf(row) !== null) continue
+        const key = distCoordKey(row)
+        if (distLineMap.has(key) || distLineFailed.has(key) || distInflight.current.has(key)) continue
+        if (!missing.has(key)) missing.set(key, row)
+      }
+      for (const [key, row] of missing) {
+        distInflight.current.add(key)
+        const params = distParams({
+          accountId: row.accountId,
+          ...(row.departmentId ? { departmentId: row.departmentId } : {}),
+          ...(row.projectId ? { projectId: row.projectId } : {}),
+          ...(row.locationId ? { locationId: row.locationId } : {}),
+          ...(row.classId ? { classId: row.classId } : {}),
+        })
+        void (async () => {
+          try {
+            const res = await fetch(`/api/allocations/entry-candidates?${params}`)
+            if (!res.ok) throw new Error(`candidates ${res.status}`)
+            const body = (await res.json()) as { rules?: EntryDistributionCandidate[] }
+            const rules = Array.isArray(body.rules) ? body.rules : []
+            cacheDistNames(rules)
+            setDistLineMap((prev) => new Map(prev).set(key, rules))
+          } catch {
+            setDistLineFailed((prev) => new Set(prev).add(key))
+          } finally {
+            distInflight.current.delete(key)
+          }
+        })()
+      }
+    }, 250)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distLineSignature, distOn, distEditable])
+
+  const distRuleName = (row: LineRow): string =>
+    row.distributionRuleName || (row.distributionRuleId ? (distNamesById.current.get(row.distributionRuleId) ?? '') : '')
+
+  const distNameByKey = (key: string): string | null => distNamesByKey.current.get(key) ?? null
+
+  const distSuggest = (row: LineRow): EntryDistributionCandidate | null => {
+    const found = distLineMap.get(distCoordKey(row))?.find((rule) => rule.applyPolicy === 'suggest')
+    return found ?? null
+  }
+
+  const stageDistributionKey = (index: number, ruleKey: string): void => {
+    setRows((prev) => prev.map((r, j) => (j === index ? { ...r, distributionKey: ruleKey } : r)))
+  }
+
+  const applyDistSuggestion = (index: number): void => {
+    const row = rows[index]
+    if (!row) return
+    const pick = distSuggest(row)
+    if (pick) stageDistributionKey(index, pick.ruleKey)
+  }
+
+  const applyDistAutomatic = async (): Promise<void> => {
+    setDistApplying(true)
+    try {
+      const staged = new Map<string, string>()
+      const missing = new Map<string, LineRow>()
+      for (const row of rows) {
+        if (!isPricedDrawerLine(row) || groupIdOf(row) !== null || row.distributionKey) continue
+        const key = distCoordKey(row)
+        const cached = distLineMap.get(key)?.filter((rule) => rule.applyPolicy === 'automatic')
+        if (cached && cached.length > 0) {
+          const winner = cached.find((rule) => rule.recommended) ?? cached[0]
+          if (winner) staged.set(key, winner.ruleKey)
+        } else if (!distLineFailed.has(key) && !distInflight.current.has(key)) {
+          if (!missing.has(key)) missing.set(key, row)
+        }
+      }
+      for (const [key, row] of missing) {
+        distInflight.current.add(key)
+        try {
+          const params = distParams({
+            accountId: row.accountId,
+            ...(row.departmentId ? { departmentId: row.departmentId } : {}),
+            ...(row.projectId ? { projectId: row.projectId } : {}),
+            ...(row.locationId ? { locationId: row.locationId } : {}),
+            ...(row.classId ? { classId: row.classId } : {}),
+            policy: 'automatic',
+          })
+          const res = await fetch(`/api/allocations/entry-candidates?${params}`)
+          if (!res.ok) throw new Error(`candidates ${res.status}`)
+          const body = (await res.json()) as { rules?: EntryDistributionCandidate[] }
+          const rules = Array.isArray(body.rules) ? body.rules : []
+          cacheDistNames(rules)
+          setDistLineMap((prev) => new Map(prev).set(key, rules))
+          const winner = rules.find((rule) => rule.recommended) ?? rules[0]
+          if (winner) staged.set(key, winner.ruleKey)
+        } catch {
+          setDistLineFailed((prev) => new Set(prev).add(key))
+        } finally {
+          distInflight.current.delete(key)
+        }
+      }
+      if (staged.size > 0) {
+        setRows((prev) =>
+          prev.map((r) => {
+            if (!isPricedDrawerLine(r) || groupIdOf(r) !== null || r.distributionKey) return r
+            const key = staged.get(distCoordKey(r))
+            return key ? { ...r, distributionKey: key } : r
+          }),
+        )
+      }
+    } finally {
+      setDistApplying(false)
+    }
+  }
+
+  const unsplitDistGroup = (groupKey: string): void => {
+    setRows((prev) => {
+      const collapsed = collapseDistributionGroup(prev, groupKey)
+      if (!collapsed) return prev
+      const members = groupMembers(prev, groupKey)
+      const keep = new Set(members.map((m) => m.index))
+      const first = members[0]!
+      const next: LineRow[] = []
+      prev.forEach((r, j) => {
+        if (!keep.has(j)) next.push(r)
+        else if (j === first.index) next.push({ ...first.row, ...clearedDistributionFields(), amount: collapsed.total })
+      })
+      return next.length > 0 ? next : [emptyLine()]
+    })
+  }
+
+  const toggleDistLock = (groupKey: string): void => {
+    setRows((prev) => {
+      const members = groupMembers(prev, groupKey)
+      if (members.length === 0) return prev
+      const locked = !isGroupLocked(members.map((m) => m.row))
+      const keep = new Set(members.map((m) => m.index))
+      return prev.map((r, j) => (keep.has(j) ? { ...r, distributionLocked: locked } : r))
+    })
+  }
+
+  const editDistGroupTotal = (groupKey: string, total: string): void => {
+    setRows((prev) => {
+      const members = groupMembers(prev, groupKey)
+      if (members.length === 0 || isGroupLocked(members.map((m) => m.row))) return prev
+      const amounts = reapportionGroupTotal(
+        members.map((m) => String(m.row.amount ?? '')),
+        total,
+      )
+      const byIndex = new Map(members.map((m, k) => [m.index, amounts[k]!]))
+      return prev.map((r, j) => (byIndex.has(j) ? { ...r, amount: byIndex.get(j)! } : r))
+    })
+  }
+
+  const applyDialogRule = (ruleKey: string): void => {
+    if (splitTarget !== null) stageDistributionKey(splitTarget, ruleKey)
+    setSplitTarget(null)
+  }
+
+  const applyDialogChildren = (children: DistributionDialogChild[]): void => {
+    if (splitTarget === null) return
+    const parent = rows[splitTarget]
+    if (!parent) {
+      setSplitTarget(null)
+      return
+    }
+    const groupKey = crypto.randomUUID()
+    const built: LineRow[] = children.map((child) => {
+      const base: LineRow = { ...emptyLine(), ...clearedDistributionFields() }
+      for (const key of Object.keys(parent)) {
+        if (key.startsWith('cf_') || key.startsWith('seg_')) base[key] = parent[key]
+      }
+      return {
+        ...base,
+        accountId: child.accountId,
+        itemId: parent.itemId,
+        description: child.description ?? parent.description,
+        quantity: parent.quantity,
+        unit: parent.unit,
+        unitPrice: parent.unitPrice,
+        costRate: parent.costRate,
+        billRate: parent.billRate,
+        billAmount: parent.billAmount,
+        isBillable: parent.isBillable,
+        departmentId: child.departmentId ?? parent.departmentId,
+        projectId: child.projectId ?? parent.projectId,
+        locationId: child.locationId ?? parent.locationId,
+        classId: child.classId ?? parent.classId,
+        taxProfileId: parent.taxProfileId,
+        amount: child.amount,
+        distributionGroupId: groupKey,
+        // Hand-entered children are locked from birth: the operator tuned
+        // them, so no later amount change re-explodes the group.
+        distributionLocked: true,
+      }
+    })
+    const at = splitTarget
+    setRows((prev) => [...prev.slice(0, at), ...built, ...prev.slice(at + 1)])
+    setSplitTarget(null)
+  }
+
+  const distCodings = useMemo(() => {
+    const opts = (list: Opt[] | undefined): { value: string; label: string }[] =>
+      (list ?? []).map((o) => ({ value: o.id, label: o.display_name ?? o.name ?? o.id }))
+    return [
+      { key: 'department' as const, label: tCommon('labels.department'), options: opts(departments) },
+      { key: 'project' as const, label: tCommon('labels.project'), options: opts(projects) },
+      { key: 'location' as const, label: tCommon('labels.location'), options: opts(locations) },
+      { key: 'class' as const, label: tCommon('labels.class'), options: opts(classes) },
+    ]
+  }, [departments, projects, locations, classes, tCommon])
+
+  const distribution = useMemo<LineGridDistribution<LineRow> | undefined>(() => {
+    if (!distOn || !distEditable) return undefined
+    const groups = groupHeaderModels(rows, { ruleNameOf: (member) => distRuleName(member) || null })
+    const groupedIndexes = new Set<number>()
+    for (const group of groups) {
+      for (const member of groupMembers(rows, group.key)) groupedIndexes.add(member.index)
+    }
+    const lookup = {
+      ruleNameOf: (row: LineRow) => distRuleName(row),
+      pendingRuleNameOf: (row: LineRow) =>
+        row.distributionKey ? (distNameByKey(row.distributionKey) ?? row.distributionKey) : null,
+      suggestionOf: (row: LineRow) => {
+        const found = distSuggest(row)
+        return found ? { ruleName: found.ruleName } : null
+      },
+      splittable: (row: LineRow) => isPricedDrawerLine(row) && groupIdOf(row) === null,
+    }
+    return {
+      groups,
+      groupedIndexes,
+      groupKeyOf: (row) => groupIdOf(row),
+      chipOf: (row, index) => chipForRow(row, index, lookup),
+      menuKeysOf: (row, index) => menuKeysForRow(row, index, lookup),
+      onSplit: (index) => setSplitTarget(index),
+      onUnsplit: (groupKey) => unsplitDistGroup(groupKey),
+      onToggleLock: (groupKey) => toggleDistLock(groupKey),
+      onApplySuggestion: (index) => applyDistSuggestion(index),
+      onEditGroupTotal: (groupKey, total) => editDistGroupTotal(groupKey, total),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distOn, distEditable, rows, distLineMap])
+
   const calculatedTotals = useMemo<DocumentDrawerTotals | null>(() => {
     if (!editable) return null
     if (isTransfer) {
@@ -758,6 +1151,11 @@ export function DocumentDrawer({
                 projectId: r.projectId || null,
                 locationId: r.locationId || null,
                 classId: r.classId || null,
+                // Entry-mode distribution staging for A4's save path: a
+                // blank key is skipped server-side; the lock rides as the
+                // tri-state's explicit edge (absent would mean "stored").
+                distributionKey: r.distributionKey || null,
+                distributionLocked: r.distributionLocked,
                 extraDims: Object.fromEntries(
                   segments
                     .map((segment) => [segment.key, r[`seg_${segment.key}`]])
@@ -1791,7 +2189,20 @@ export function DocumentDrawer({
 
         {!isTransfer ? (
           <div className="space-y-2">
-            <FieldLabel fieldName={tCommon('labels.lines')}>{tCommon('labels.lines')}</FieldLabel>
+            <div className="flex items-center gap-2">
+              <FieldLabel fieldName={tCommon('labels.lines')}>{tCommon('labels.lines')}</FieldLabel>
+              {distOn && distEditable && distAuto.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={distApplying}
+                  onClick={() => void applyDistAutomatic()}
+                >
+                  {tAlloc('entry.applyAutomatic')}
+                </Button>
+              ) : null}
+            </div>
             <LineGrid<LineRow>
               columns={useLayout ? columnsFromLayout : columns}
               rows={rows}
@@ -1799,8 +2210,24 @@ export function DocumentDrawer({
               emptyRow={emptyLine}
               readOnly={!editable || config.kind === 'project_charge'}
               formatAmount={(value) => money(value, { currency: doc.currency })}
+              distribution={distribution}
             />
           </div>
+        ) : null}
+        {splitTarget !== null && rows[splitTarget] ? (
+          <DistributionDialog
+            key={`${splitTarget}:${rows[splitTarget]!.amount}:${rows[splitTarget]!.distributionKey}`}
+            open
+            lineAmount={rows[splitTarget]!.amount || '0'}
+            candidates={distLineMap.get(distCoordKey(rows[splitTarget]!)) ?? []}
+            candidatesFailed={distLineFailed.has(distCoordKey(rows[splitTarget]!))}
+            accountOptions={accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
+            codings={distCodings}
+            initialRuleKey={rows[splitTarget]!.distributionKey || null}
+            onClose={() => setSplitTarget(null)}
+            onApplyRule={applyDialogRule}
+            onApplyChildren={applyDialogChildren}
+          />
         ) : null}
 
         {mode === 'view' ? (

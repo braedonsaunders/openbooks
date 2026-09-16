@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { computeDocumentDrawerTotals, isPricedDrawerLine } from './document-drawer'
+import {
+  clearedDistributionFields,
+  computeDocumentDrawerTotals,
+  distributionFieldsOf,
+  isPricedDrawerLine,
+} from './document-drawer'
 
 const row = (accountId: string, amount: string) => ({
   accountId,
@@ -22,6 +27,38 @@ test('priced-line detection keeps signed amounts and drops only blank placeholde
   assert.equal(isPricedDrawerLine(row('a', '')), false)
   assert.equal(isPricedDrawerLine(row('a', '   ')), false)
   assert.equal(isPricedDrawerLine(row('', '100')), false)
+})
+
+test('distribution columns map tolerantly: a line without them is simply ungrouped', () => {
+  assert.deepEqual(distributionFieldsOf({}), {
+    distributionGroupId: '',
+    distributionRuleId: '',
+    distributionRuleName: '',
+    distributionVersionId: '',
+    distributionLocked: false,
+    distributionKey: '',
+  })
+  assert.deepEqual(
+    distributionFieldsOf({
+      distribution_group_id: 'g1',
+      distribution_rule_id: 'r1',
+      distribution_rule_name: 'Overhead',
+      distribution_version_id: 'v1',
+      distribution_locked: true,
+    }),
+    {
+      distributionGroupId: 'g1',
+      distributionRuleId: 'r1',
+      distributionRuleName: 'Overhead',
+      distributionVersionId: 'v1',
+      distributionLocked: true,
+      distributionKey: '',
+    },
+  )
+  // Only an explicit true locks: absent (or any other shape) stays unlocked
+  // so a partial read can never freeze a group the operator did not lock.
+  assert.equal(distributionFieldsOf({ distribution_locked: 1 }).distributionLocked, false)
+  assert.deepEqual(clearedDistributionFields(), distributionFieldsOf({}))
 })
 
 test('the reviewed footer total is the booked total: save keeps every row the footer prices', () => {

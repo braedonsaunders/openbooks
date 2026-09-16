@@ -21,6 +21,18 @@
     "dialogCancel": "Cancel",
     "noCandidates": "No entry rules match this line.",
     "candidatesFailed": "Could not load distribution rules.",
-    "groupActionsAria": "Distribution actions for line {number}"
+    "groupActionsAria": "Distribution actions for line {number}",
+    "editor": {
+      "account": "Account",
+      "accountPlaceholder": "Select an account",
+      "portion": "Portion",
+      "remainder": "Remainder",
+      "percent": "Percent",
+      "fixed": "Fixed",
+      "addLine": "Add line",
+      "removeLine": "Remove line",
+      "none": "—",
+      "descriptionPlaceholder": "Line memo"
+    }
   }
 }

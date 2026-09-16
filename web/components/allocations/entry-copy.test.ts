@@ -9,7 +9,7 @@ import test from 'node:test'
  */
 const catalog = JSON.parse(
   readFileSync(new URL('../../messages/en/allocations.json', import.meta.url), 'utf8'),
-) as { entry?: Record<string, string> }
+) as { entry?: Record<string, unknown> }
 
 const REQUIRED_ENTRY_KEYS = [
   'distributionColumn',
@@ -36,6 +36,19 @@ const REQUIRED_ENTRY_KEYS = [
   'groupActionsAria',
 ] as const
 
+const REQUIRED_EDITOR_KEYS = [
+  'account',
+  'accountPlaceholder',
+  'portion',
+  'remainder',
+  'percent',
+  'fixed',
+  'addLine',
+  'removeLine',
+  'none',
+  'descriptionPlaceholder',
+] as const
+
 test('every entry-mode distribution key exists and is non-empty', () => {
   const entry: Record<string, unknown> = catalog.entry ?? {}
   assert.ok(catalog.entry, 'allocations.json must carry an entry namespace')
@@ -46,10 +59,24 @@ test('every entry-mode distribution key exists and is non-empty', () => {
   }
 })
 
+test('the hand-split editor labels exist for SplitLinesEditor', () => {
+  const editor = (catalog.entry?.['editor'] ?? {}) as Record<string, unknown>
+  for (const key of REQUIRED_EDITOR_KEYS) {
+    assert.equal(typeof editor[key], 'string', `allocations.entry.editor.${key} must exist`)
+  }
+})
+
 test('entry copy carries no interpolation other than named {args}', () => {
-  for (const [key, value] of Object.entries(catalog.entry ?? {}) as [string, string][]) {
-    for (const match of value.match(/\{[^}]*\}/g) ?? []) {
-      assert.match(match, /^\{[a-zA-Z][a-zA-Z0-9]*\}$/, `allocations.entry.${key} has a malformed placeholder ${match}`)
+  const walk = (node: unknown, path: string): void => {
+    if (typeof node === 'string') {
+      for (const match of node.match(/\{[^}]*\}/g) ?? []) {
+        assert.match(match, /^\{[a-zA-Z][a-zA-Z0-9]*\}$/, `${path} has a malformed placeholder ${match}`)
+      }
+      return
+    }
+    if (node !== null && typeof node === 'object' && !Array.isArray(node)) {
+      for (const [key, value] of Object.entries(node as Record<string, unknown>)) walk(value, `${path}.${key}`)
     }
   }
+  walk(catalog.entry ?? {}, 'allocations.entry')
 })

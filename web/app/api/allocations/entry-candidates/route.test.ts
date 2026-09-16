@@ -251,13 +251,21 @@ test("line context returns matched candidates most-specific-first with a recomme
   const res = await get(`?documentKind=bill&accountId=${ACCOUNT_ID}&documentDate=2026-09-01`);
   assert.equal(res.status, 200);
   const body = (await res.json()) as {
-    rules: { ruleKey: string; ruleName: string; applyPolicy: string; versionId: string; recommended: boolean }[];
+    rules: {
+      ruleId: string
+      ruleKey: string
+      ruleName: string
+      applyPolicy: string
+      versionId: string
+      recommended: boolean
+    }[];
   };
   assert.deepEqual(
     body.rules.map((r) => r.ruleKey),
     ["overhead", "general"],
   );
   assert.equal(body.rules[0]!.applyPolicy, "suggest");
+  assert.ok(body.rules[0]!.ruleId.length > 0);
   assert.equal(body.rules[0]!.recommended, true);
   assert.equal(body.rules[1]!.recommended, false);
   assert.ok(body.rules[0]!.versionId.length > 0);
