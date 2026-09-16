@@ -90,8 +90,8 @@ test('inbox ranks stale material findings first and reports facets', { skip: !pr
       assert.equal(inbox.facets.severities.find((f) => f.key === 'critical')?.count, 1);
       assert.equal(inbox.facets.subsidiaries.find((f) => f.id === org.subsidiaryId)?.count, 1);
       assert.equal(inbox.facets.unresolvedSubsidiary, 2);
-      // gl.read opens accounting + hygiene; reports.read/budgets.read open finance.
-      assert.deepEqual(inbox.readablePacks, ['accounting', 'finance', 'hygiene']);
+      // gl.read opens accounting + hygiene + forensics; reports.read/budgets.read open finance.
+      assert.deepEqual(inbox.readablePacks, ['accounting', 'finance', 'hygiene', 'forensics']);
       // Proposal filter narrows to the carrier row.
       const proposed = await loadAgentInbox(authz, { hasProposal: true });
       assert.equal(proposed.total, 1);
