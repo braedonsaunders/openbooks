@@ -23,43 +23,48 @@
       "mode": "unit"
     },
     "engine/src/payments.ts": {
-      "ratio": 0.08333333333333333,
+      "ratio": 0.041666666666666664,
       "measured": 24,
       "mode": "unit"
     },
     "engine/src/payroll-run.ts": {
-      "ratio": 0.16,
+      "ratio": 0.32,
       "measured": 25,
       "mode": "unit"
     },
     "engine/src/payroll/canada/t4127.ts": {
-      "ratio": 0.375,
+      "ratio": 0.5416666666666666,
       "measured": 24,
       "mode": "unit"
     },
     "engine/src/payroll/us/pub15t.ts": {
-      "ratio": 0.76,
+      "ratio": 0.96,
       "measured": 25,
       "mode": "unit"
     },
     "engine/src/payroll/us/withholding.ts": {
-      "ratio": 0.08333333333333333,
+      "ratio": 0.625,
       "measured": 24,
       "mode": "unit"
     },
     "engine/src/tax.ts": {
-      "ratio": 0.48,
+      "ratio": 0.56,
       "measured": 25,
       "mode": "unit"
     },
     "engine/src/tax-return.ts": {
-      "ratio": 0.43478260869565216,
-      "measured": 23,
+      "ratio": 0.36363636363636365,
+      "measured": 22,
       "mode": "unit"
     },
     "engine/src/depreciation.ts": {
-      "ratio": 0.17391304347826086,
+      "ratio": 0.21739130434782608,
       "measured": 23,
+      "mode": "unit"
+    },
+    "engine/src/consolidation.ts": {
+      "ratio": 0.09523809523809523,
+      "measured": 21,
       "mode": "unit"
     }
   }
