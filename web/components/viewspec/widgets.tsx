@@ -690,6 +690,15 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'insights-tabs': (props) => (
     <InsightsTabs active={(str(props, 'active') ?? '') as ComponentProps<typeof InsightsTabs>['active']} />
   ),
+  /** A pill that renders nothing when the label is empty. The table's
+   *  `badge` cell always emits its wrapper, so optional flags bind through
+   *  here instead of leaving an empty pill behind. */
+  'optional-badge': (props) => {
+    const label = str(props, 'label')
+    if (!label) return null
+    const variant = str(props, 'variant') as ComponentProps<typeof Badge>['variant']
+    return <Badge variant={variant}>{label}</Badge>
+  },
   'new-dashboard': () => <NewDashboardButton />,
   'new-card': () => <NewCardButton />,
   'new-record-type': () => <NewTypeButton />,

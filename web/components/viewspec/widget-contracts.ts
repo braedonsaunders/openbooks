@@ -242,6 +242,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'no-grants-body': { props: [] },
   'opening-balances-grid': { props: ['canManage', 'components', 'currentYear', 'fields', 'initial', 'year'] },
   'opportunity-drawer': { props: ['drawer'] },
+  'optional-badge': { props: ['label', 'variant'] },
   'order-drawer': { props: ['drawer'] },
   'org-environment-cell': { props: ['envKind', 'parentNote', 'variant'] },
   'org-locale-cell': { props: ['country', 'currency'] },

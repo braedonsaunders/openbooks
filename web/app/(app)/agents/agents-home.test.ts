@@ -64,6 +64,9 @@ test("header binds module-home tabs and the KPI strip", () => {
 });
 
 test("proposals tab reuses the shared table and drawer card", () => {
+  // The carrier flag is a shared pill — and an empty cell when none, never
+  // an empty pill.
+  assert.match(view, /widgetCell\('optional-badge', \{ label: item\('proposalBadge'\), variant: 'outline' \}\)/);
   assert.match(view, /when: f\('proposalsEmpty'\)/);
   assert.match(view, /when: f\('inboxEmpty'\)/);
   assert.match(view, /findingProposalCommand\(authz, selected\.summary\)/);
