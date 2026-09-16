@@ -352,6 +352,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/setup/agents/library': {
+    route: '/admin/setup/agents/library',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/agents/library/view')
+      return {
+        load: () => m.loadAgentsLibrary(),
+        spec: (data) => m.agentsLibrarySpec(data as never),
+      }
+    },
+  },
   '/admin/setup/bank-feeds': {
     route: '/admin/setup/bank-feeds',
     segments: [],

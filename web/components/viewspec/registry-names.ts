@@ -30,6 +30,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'admin-roles-table',
   'admin-users-table',
   'agents-overview-workspace',
+  'agents-library-workspace',
   'aging-strip',
   'ai-settings-form',
   'analytics-hub',
