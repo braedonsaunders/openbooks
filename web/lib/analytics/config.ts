@@ -80,8 +80,8 @@ export const ANALYTICS_CONFIG: Record<string, { fields: ConfigField[]; defaults:
   sentinel: {
     defaults: { duplicateDays: 14, duplicateMinAmount: 100, sequentialMinCount: 3, sequentialMinDays: 7 },
     fields: [
-      { key: "duplicateDays", label: "Duplicate window (days)", help: "Same vendor, kind and amount within this many days flags a pair", min: 1, max: 90, step: 1 },
-      { key: "duplicateMinAmount", label: "Duplicate minimum ($)", help: "Pairs below this amount are ignored", min: 0, max: 100_000, step: 50 },
+      { key: "duplicateDays", label: "Duplicate window (days)", help: "Same vendor, kind, currency, amount and reference with a date span inside this many days flags a group", min: 1, max: 90, step: 1 },
+      { key: "duplicateMinAmount", label: "Duplicate minimum ($)", help: "Groups below this amount are ignored", min: 0, max: 100_000, step: 50 },
       { key: "sequentialMinCount", label: "Sequential run minimum", help: "Gap-free invoice-number runs need at least this many documents", min: 2, max: 50, step: 1 },
       { key: "sequentialMinDays", label: "Sequential span (days)", help: "Runs spread over fewer days than this are treated as batch entry, not a flag", min: 1, max: 365, step: 1 },
     ],

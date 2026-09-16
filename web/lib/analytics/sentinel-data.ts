@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
+import { presentationCurrency } from "../fx-presentation";
 import { can, ForbiddenError, type Authz } from "../authz";
 
 /**
@@ -15,17 +16,33 @@ import { can, ForbiddenError, type Authz } from "../authz";
  * only the top-N detail rows per detector shipped to the client.
  *
  * Tests and default thresholds:
- *  - Duplicates: same vendor + same doc kind + same amount within 14 days
- *    (≥$100, credits excluded); confidence by memo/date proximity.
+ *  - Duplicates: natural-key groups — same vendor + doc kind + document
+ *    currency + amount + vendor reference, with the date span inside the
+ *    duplicate window (≥$100, credits excluded); ONE finding per group with
+ *    every member document listed. Confidence by reference/date proximity.
  *  - Benford first-digit + first-two-digit distributions with Mean Absolute
- *    Deviation conformity bands (Nigrini), over EVERY spend document.
+ *    Deviation conformity bands (Nigrini), computed PER DOCUMENT CURRENCY —
+ *    never on translated or blended amounts.
  *  - Threshold trap: amounts ending 99 / 999 / 9999 (approval-limit gaming).
+ *    Stays transaction-denominated by design: 99-endings are
+ *    currency-specific commercial psychology, so detection reads the
+ *    document amount, never a translation.
  *  - Weekend documents: spend documents dated Saturday or Sunday, using the
  *    accounting date rather than an import timestamp.
- *  - RSF: amount ÷ vendor's historical 2nd-largest (36-month baseline) ≥ 10.
- *  - Z-score: |amount − vendor mean| / vendor σ ≥ 3 (baseline ≥ 5 txns, σ>10).
- *  - Sequential invoices: gap-free vendor reference-number runs spread over
- *    7+ days — the shell-company / sole-customer indicator.
+ *  - RSF: amount ÷ vendor's historical 2nd-largest (36-month baseline,
+ *    same document currency) ≥ 10.
+ *  - Z-score: |amount − vendor mean| / vendor σ ≥ 3 (same-currency baseline
+ *    ≥ 5 txns, σ>10).
+ *  - Sequential invoices: gap-free vendor reference-number runs per
+ *    (vendor, currency) spread over 7+ days — the shell-company /
+ *    sole-customer indicator.
+ *
+ * Currency basis (owner decision): every statistical test runs per document
+ * currency. Consolidated MONEY columns (meta, summary, calendar, vendor
+ * roll-up, trap/weekend/sequential totals, duplicate value at risk) translate
+ * each document at its own document FX (round(|total| × fx_rate, 4) — ledger
+ * precision) into the org base. Multi-functional orgs therefore read an
+ * approximation: the UI labels the basis wherever a translated figure shows.
  *  - Ghost vendors: the two-phase detector — employee names matched
  *    against vendor names AND normalized street addresses (line1 + postal)
  *    shared between a paid vendor and an employee (name 75 / addr 90 / both 95).
@@ -55,6 +72,10 @@ export interface FlaggedDoc {
   kind: string;
   date: string;
   amount: number;
+  /** Document (transaction) currency — detection evidence stays denominated. */
+  currency: string;
+  /** Translated at the document's own FX for consolidated display. */
+  funcAmount: number;
   partyId: string | null;
   partyName: string;
   flagType: "duplicate" | "weekend" | "rsf" | "zscore" | "trap" | "sequential";
@@ -62,10 +83,26 @@ export interface FlaggedDoc {
   riskScore: number;
 }
 
+export interface DuplicateMember {
+  docId: string; docNumber: string; reference: string; date: string;
+  amount: number; currency: string; funcAmount: number; memo: string | null;
+}
+
+/** ONE finding per natural-key group: (party, kind, currency, amount, reference). */
+export interface DuplicateGroup {
+  groupId: string;
+  partyId: string | null; partyName: string;
+  kind: string; currency: string;
+  amount: number; funcTotal: number;
+  count: number; dateSpanDays: number; firstDate: string; lastDate: string;
+  sameReference: boolean; confidence: number; riskScore: number;
+  members: DuplicateMember[];
+}
+
 export interface DuplicatePair {
   docId1: string; docId2: string; docNumber1: string; docNumber2: string;
   kind: string; date1: string; date2: string; daysBetween: number;
-  amount: number; partyId: string | null; partyName: string;
+  amount: number; currency: string; partyId: string | null; partyName: string;
   sameMemo: boolean; confidence: number; riskScore: number;
 }
 
@@ -81,10 +118,22 @@ export interface BenfordDigit {
 
 export interface SequentialGroup {
   partyId: string; partyName: string; count: number; totalAmount: number;
+  currency: string;
   startRef: number; endRef: number; dateSpanDays: number;
   firstDate: string; lastDate: string;
   riskLevel: "high" | "medium"; riskScore: number; reason: string;
-  invoices: { docId: string; docNumber: string; reference: string; date: string; amount: number }[];
+  invoices: { docId: string; docNumber: string; reference: string; date: string; amount: number; currency: string; funcAmount: number }[];
+}
+
+/** One Benford distribution for a single document currency. */
+export interface BenfordCurrencySlice {
+  currency: string;
+  totalTransactions: number;
+  digits: BenfordDigit[];
+  mad: number;
+  conformity: string;
+  message: string;
+  anomalies: BenfordDigit[];
 }
 
 export interface GhostVendor {
@@ -102,12 +151,19 @@ interface AggregateRow extends Record<string, string | number | null> {
 }
 interface FlaggedDocumentRow extends Record<string, unknown> {
   id: string; document_number: string | null; kind: string; date: string; amount: string | number;
+  currency: string; func_amount: string | number;
   party_id: string | null; party_name: string | null; trap?: string; dow?: string | number;
 }
-interface DuplicateRow extends Record<string, unknown> {
-  id1: string; id2: string; num1: string | null; num2: string | null; kind: string;
-  date1: string; date2: string; days_between: string | number; amount: string | number;
-  party_id: string | null; party_name: string; same_memo: boolean;
+/** One natural-key group row with its member documents as JSON. */
+interface DuplicateGroupRow extends Record<string, unknown> {
+  party_id: string | null; party_name: string; kind: string; currency: string;
+  amt: string | number; refkey: string; cnt: string | number;
+  first_date: string; last_date: string; span_days: string | number;
+  func_total: string | number; value_at_risk: string | number;
+  members: Array<{
+    docId: string; docNumber: string | null; reference: string; date: string;
+    amount: string | number; currency: string; funcAmount: string | number; memo: string | null;
+  }>;
 }
 interface VendorStatisticRow extends FlaggedDocumentRow {
   rsf?: string | number; z?: string | number; second_amount: string | number;
@@ -115,9 +171,10 @@ interface VendorStatisticRow extends FlaggedDocumentRow {
 }
 interface SequentialRow extends Record<string, unknown> {
   party_id: string; party_name: string; span_days: string | number; cnt: string | number;
-  total_amount: string | number; start_ref: string | number; end_ref: string | number;
+  total_amount: string | number; currency: string;
+  start_ref: string | number; end_ref: string | number;
   first_date: string; last_date: string;
-  invoices: Array<{ docId: string; docNumber: string; reference: string; date: string; amount: number }>;
+  invoices: Array<{ docId: string; docNumber: string; reference: string; date: string; amount: number; currency: string; funcAmount: number }>;
 }
 interface GhostRow extends Record<string, unknown> {
   vendor_id: string; vendor_name: string; employee_id: string; employee_name: string;
@@ -130,7 +187,7 @@ interface AuditRow extends Record<string, unknown> {
 
 export interface SentinelData {
   period: { from: string; to: string; label: string };
-  meta: { totalDocs: number; totalAmount: number; days: number; queryMs: number };
+  meta: { totalDocs: number; totalAmount: number; presentationCurrency: string; days: number; queryMs: number };
   config: Record<string, number>;
   summary: {
     flaggedCount: number;
@@ -150,9 +207,9 @@ export interface SentinelData {
     approvalLimitRisk: boolean;
     topRiskAreas: { area: string; severity: "critical" | "high" | "medium"; count: number; message: string }[];
   };
-  duplicates: { total: number; pairs: DuplicatePair[] };
-  benford1D: { totalTransactions: number; digits: BenfordDigit[]; mad: number; conformity: string; message: string };
-  benford2D: { totalTransactions: number; digits: BenfordDigit[]; anomalies: BenfordDigit[]; mad: number; conformity: string };
+  duplicates: { total: number; pairs: DuplicatePair[]; groups: DuplicateGroup[] };
+  benford1D: { totalTransactions: number; digits: BenfordDigit[]; mad: number; conformity: string; message: string; byCurrency: BenfordCurrencySlice[] };
+  benford2D: { totalTransactions: number; digits: BenfordDigit[]; anomalies: BenfordDigit[]; mad: number; conformity: string; byCurrency: BenfordCurrencySlice[] };
   thresholdTrap: { total: number; totalAmount: number; byTrap: { trap: string; count: number; amount: number }[]; items: FlaggedDoc[] };
   weekend: { total: number; totalAmount: number; saturday: number; sunday: number; items: FlaggedDoc[] };
   rsf: { total: number; items: (FlaggedDoc & { rsf: number; secondLargest: number; baselineCount: number })[] };
@@ -208,6 +265,8 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   // Baseline window for vendor statistics: 36 months before period end.
   const end = new Date(to + "T00:00:00Z");
   const baselineFrom = sentinelBaselineFrom(to);
+  // Consolidated money label: the org base the document-FX translations land in.
+  const presentationCcy = await presentationCurrency(orgId);
 
   // Shared filter: non-voided spend documents in the period, |total| ≥ 1.
   const periodDocs = sql`
@@ -221,16 +280,22 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     aggRows, trapRows, dupAll, weekendRows,
     vendorStatRows, seqRows, ghostRows, auditRows, auditAgg,
   ] = await Promise.all([
-    // Six aggregates — dataset meta, Benford 1D, Benford 2D, the threshold-trap
-    // buckets, the weekend split and the calendar heatmap — are the SAME row
-    // set grouped six ways. GROUPING SETS computes all six in ONE scan; run as
-    // six queries they each re-scanned every spend document in the period and
-    // contended for the same buffers. Trap/weekend qualify a subset, so their
-    // key is NULL for non-qualifying rows and that null group is dropped below
-    // — which reproduces the filter exactly.
+    // Six aggregates — dataset meta, per-currency Benford 1D, per-currency
+    // Benford 2D, the threshold-trap buckets, the weekend split and the
+    // calendar heatmap — are the SAME row set grouped six ways. GROUPING SETS
+    // computes all six in ONE scan; run as six queries they each re-scanned
+    // every spend document in the period and contended for the same buffers.
+    // Trap/weekend qualify a subset, so their key is NULL for non-qualifying
+    // rows and that null group is dropped below — which reproduces the filter
+    // exactly. Benford sets carry the document currency (one distribution per
+    // currency, never blended); every money sum is the document-FX
+    // translation (ledger precision), while digit/trap detection reads the
+    // transaction amount.
     (db.execute(sql`
       with base as (
-        select abs(d.total) as amt,
+        select d.currency as cur,
+               abs(d.total) as txn_amt,
+               round(abs(d.total) * d.fx_rate, 4) as func_amt,
                coalesce(d.document_date, d.posting_date) as ddate,
                left(trunc(abs(d.total))::bigint::text, 1) as digit1,
                case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
@@ -244,18 +309,22 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
                     then extract(dow from coalesce(d.document_date, d.posting_date))::int end as dow
         ${periodDocs}
       )
-      select grouping(digit1) as g_digit1, grouping(digit2) as g_digit2,
+      select grouping(cur) as g_cur,
+             grouping(digit1) as g_digit1, grouping(digit2) as g_digit2,
              grouping(trap) as g_trap, grouping(dow) as g_dow, grouping(ddate) as g_date,
-             digit1, digit2, trap, dow, ddate::text as date,
-             count(*) as count, coalesce(sum(amt), 0) as amount
+             cur, digit1, digit2, trap, dow, ddate::text as date,
+             count(*) as count, coalesce(sum(func_amt), 0) as amount
         from base
-       group by grouping sets ((), (digit1), (digit2), (trap), (dow), (ddate))
+       group by grouping sets ((), (cur, digit1), (cur, digit2), (trap), (dow), (ddate))
     `)),
 
     // Threshold trap rows (top by amount) — SQL modular arithmetic, full scan.
+    // Detection reads the transaction amount (currency-specific psychology);
+    // the row also carries its document-FX translation for consolidated sums.
     (db.execute(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
-        abs(d.total) as amount, d.party_id, coalesce(p.display_name, '') as party_name,
+        abs(d.total) as amount, d.currency as currency, round(abs(d.total) * d.fx_rate, 4) as func_amount,
+        d.party_id, coalesce(p.display_name, '') as party_name,
         case when trunc(abs(d.total))::bigint % 10000 = 9999 then '9999'
              when trunc(abs(d.total))::bigint % 1000 = 999 then '999'
              else '99' end as trap
@@ -272,19 +341,22 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     `)),
 
     // Duplicates. The candidate set (payable documents above the floor)
-    // materializes ONCE, then self hash-joins on the plain CTE columns
-    // (party, kind, abs-amount) — equality on materialized columns guarantees
-    // a hash plan. The naive documents×documents self-join probed every
-    // document's party neighbourhood row-at-a-time (tens of millions of
-    // buffer hits on large tenants).
-    //
-    // The full pair count and the top-200 detail come from ONE statement: the
-    // pair set is referenced twice, so Postgres materializes it and the
-    // expensive self-join runs once instead of once per result set. The name
-    // lookup hangs off the top-200 only, never the whole pair set.
+    // materializes ONCE, then groups by the natural key — party, kind,
+    // document currency, abs-amount and normalized vendor reference — keeping
+    // only groups of 2+ whose date span fits the duplicate window. Currency
+    // in the key kills the cross-currency false positive (a USD 100 bill is
+    // not a copy of a CAD 100 bill); the reference in the key keeps recurring
+    // same-amount invoices with distinct references out. Each group reports
+    // ONE finding with every member listed; the value at risk is every copy
+    // beyond the largest presumed-legitimate original, translated at
+    // document FX. The group count and the value at risk come from ONE
+    // statement: the qualified set is referenced twice, so Postgres
+    // materializes it and the grouping runs once. The name lookup hangs off
+    // the top groups only, never the whole set.
     (db.execute(sql`
       with cand as materialized (
-        select id, document_number, kind, party_id, memo, abs(total) as amt,
+        select id, document_number, kind, party_id, memo, reference_number, currency, fx_rate,
+               abs(total) as amt, round(abs(total) * fx_rate, 4) as func_amt,
                coalesce(document_date, posting_date) as ddate
           from documents
          where org_id = ${orgId} and voided_at is null
@@ -293,35 +365,45 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
            and abs(coalesce(total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
            and coalesce(document_date, posting_date) >= ${DUPLICATE_SCAN_FROM}
            and coalesce(document_date, posting_date) <= ${DUPLICATE_SCAN_TO}
-      ), pairs as (
-        select d1.id as id1, d2.id as id2, d1.document_number as num1, d2.document_number as num2,
-          d1.kind, d1.ddate as ddate1, d2.ddate as ddate2,
-          abs(d2.ddate - d1.ddate) as days_between, d1.amt as amount, d1.party_id,
-          (d1.memo is not null and d1.memo = d2.memo) as same_memo
-        from cand d1
-        join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
-          and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
-        where (d1.ddate between ${from} and ${to} or d2.ddate between ${from} and ${to})
+      ), keyed as (
+        select *, lower(trim(coalesce(reference_number, ''))) as refkey from cand
+      ), grouped as (
+        select party_id, kind, currency, amt, refkey,
+          count(*) as cnt, min(ddate) as first_date, max(ddate) as last_date,
+          (max(ddate) - min(ddate)) as span_days,
+          coalesce(sum(func_amt), 0) as func_total,
+          coalesce(sum(func_amt), 0) - max(func_amt) as value_at_risk,
+          jsonb_agg(jsonb_build_object('docId', id, 'docNumber', document_number,
+            'reference', coalesce(reference_number, ''), 'date', ddate::text,
+            'amount', amt, 'currency', currency, 'funcAmount', func_amt,
+            'memo', memo) order by ddate, id) as members
+        from keyed
+        group by party_id, kind, currency, amt, refkey
+        having count(*) >= 2 and (max(ddate) - min(ddate)) <= ${DUPLICATE_THRESHOLD_DAYS}
+      ), qualified as (
+        select * from grouped
+        where (first_date between ${from} and ${to} or last_date between ${from} and ${to})
       ), top as (
-        select * from pairs order by amount desc, days_between asc, id1, id2 limit 200
+        select * from qualified order by func_total desc, span_days asc, party_id, kind, currency, amt, refkey limit 50
       )
-      select 'pair' as src, t.id1, t.id2, t.num1, t.num2, t.kind,
-        t.ddate1::text as date1, t.ddate2::text as date2, t.days_between, t.amount,
-        t.party_id, coalesce(p.display_name, 'Unknown') as party_name, t.same_memo,
-        null::bigint as pair_count
+      select 'group' as src, t.party_id, coalesce(p.display_name, 'Unknown') as party_name,
+        t.kind, t.currency, t.amt, t.refkey, t.cnt, t.first_date::text as first_date,
+        t.last_date::text as last_date, t.span_days, t.func_total, t.value_at_risk, t.members,
+        null::bigint as group_count
       from top t
       left join parties p on p.id = t.party_id and p.org_id = ${orgId}
       union all
-      select 'agg', null::uuid, null::uuid, null::text, null::text, null::text,
-        null::text, null::text, null::int, coalesce(sum(amount), 0), null::uuid,
-        null::text, null::boolean, count(*)
-      from pairs
+      select 'agg', null::uuid, null::text, null::text, null::text, null::numeric, null::text,
+        null::int, null::text, null::text, null::int, null::numeric, coalesce(sum(value_at_risk), 0),
+        null::jsonb, count(*)
+      from qualified
     `)),
 
     // Weekend-dated documents (top rows + full aggregate).
     (db.execute(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
-        abs(d.total) as amount, d.party_id, coalesce(p.display_name, '') as party_name,
+        abs(d.total) as amount, d.currency as currency, round(abs(d.total) * d.fx_rate, 4) as func_amount,
+        d.party_id, coalesce(p.display_name, '') as party_name,
         extract(dow from coalesce(d.document_date, d.posting_date))::int as dow
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -334,17 +416,20 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       limit 200
     `)),
 
-    // RSF and z-score share ONE per-vendor baseline. Both derive their vendor
-    // statistics from the identical 36-month row set, so computing them
+    // RSF and z-score share ONE per-(vendor, currency) baseline. Both derive
+    // their statistics from the identical 36-month row set, so computing them
     // separately scanned three years of spend documents twice. A single
     // window pass — ordered by amount for the rank, with an explicit full
     // frame so the aggregates still see the whole partition — yields the
     // 2nd-largest, the count, the mean and σ together; the period documents
-    // then materialize once and each detector filters them. The two result
-    // sets come back unioned with a `src` discriminator and are split below.
+    // then materialize once and each detector filters them. Partitioning by
+    // currency keeps a foreign-currency bill out of the baseline: it can
+    // neither false-flag against another currency's history nor inflate σ
+    // and mask a genuine same-currency outlier. The two result sets come back
+    // unioned with a `src` discriminator and are split below.
     (db.execute(sql`
       with baseline as (
-        select d.party_id, abs(d.total) as amount,
+        select d.party_id, d.currency, abs(d.total) as amount,
           row_number() over w as rn,
           count(*) over w as cnt,
           avg(abs(d.total)) over w as avg_amount,
@@ -354,17 +439,19 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
           and d.party_id is not null and abs(coalesce(d.total, 0)) > 0
           and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
           and coalesce(d.document_date, d.posting_date) <= ${to}
-        window w as (partition by d.party_id order by abs(d.total) desc
+        window w as (partition by d.party_id, d.currency order by abs(d.total) desc
                      rows between unbounded preceding and unbounded following)
       ), stats as (
-        select party_id,
+        select party_id, currency,
           max(amount) filter (where rn = 2) as second_amount,
           max(cnt) as cnt, max(avg_amount) as avg_amount, max(std_amount) as std_amount
-        from baseline group by party_id
+        from baseline group by party_id, currency
       ), period as materialized (
         select d.id, d.document_number, d.kind,
           coalesce(d.document_date, d.posting_date)::text as date,
-          abs(d.total) as amount, d.party_id, coalesce(p.display_name, 'Unknown') as party_name
+          abs(d.total) as amount, d.currency as currency,
+          round(abs(d.total) * d.fx_rate, 4) as func_amount,
+          d.party_id, coalesce(p.display_name, 'Unknown') as party_name
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
@@ -377,7 +464,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
           null::numeric as avg_amount, null::numeric as std_amount,
           pd.amount / s.second_amount as metric
         from period pd
-        join stats s on s.party_id = pd.party_id and s.second_amount >= 100
+        join stats s on s.party_id = pd.party_id and s.currency = pd.currency and s.second_amount >= 100
         where pd.amount / s.second_amount >= ${RSF_THRESHOLD}
         order by metric desc
         limit 100
@@ -386,7 +473,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
           s.avg_amount, s.std_amount,
           (pd.amount - s.avg_amount) / s.std_amount as metric
         from period pd
-        join stats s on s.party_id = pd.party_id and s.cnt >= 5 and s.std_amount > 10
+        join stats s on s.party_id = pd.party_id and s.currency = pd.currency and s.cnt >= 5 and s.std_amount > 10
         where abs((pd.amount - s.avg_amount) / s.std_amount) >= ${Z_SCORE_THRESHOLD}
           and abs((pd.amount - s.avg_amount) / s.std_amount) < 50
         order by abs((pd.amount - s.avg_amount) / s.std_amount) desc
@@ -397,11 +484,14 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       select 'z' as src, * from zs
     `)),
 
-    // Sequential invoice runs — gaps-and-islands over vendor reference numbers.
+    // Sequential invoice runs — gaps-and-islands over vendor reference numbers,
+    // one island space per (vendor, document currency): a run is only a run
+    // in a single currency. Money totals translate at document FX.
     (db.execute(sql`
       with refs as (
-        select d.id, d.document_number, d.reference_number, d.party_id,
+        select d.id, d.document_number, d.reference_number, d.party_id, d.currency,
           coalesce(d.document_date, d.posting_date) as doc_date, abs(d.total) as amount,
+          round(abs(d.total) * d.fx_rate, 4) as func_amount,
           (regexp_match(d.reference_number, '([0-9]+)[^0-9]*$'))[1]::numeric as ref_num
         from documents d
         where d.org_id = ${orgId} and d.voided_at is null and d.kind = 'vendor_bill'
@@ -409,18 +499,18 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
           and coalesce(d.document_date, d.posting_date) >= ${from}
           and coalesce(d.document_date, d.posting_date) <= ${to}
       ), numbered as (
-        select *, ref_num - row_number() over (partition by party_id order by ref_num) as island
+        select *, ref_num - row_number() over (partition by party_id, currency order by ref_num) as island
         from refs
         where ref_num is not null and ref_num <= 9999999
       ), islands as (
-        select party_id, island, count(*) as cnt, sum(amount) as total_amount,
+        select party_id, currency, island, count(*) as cnt, coalesce(sum(func_amount), 0) as total_amount,
           min(ref_num) as start_ref, max(ref_num) as end_ref,
           min(doc_date) as first_date, max(doc_date) as last_date,
           (max(doc_date) - min(doc_date)) as span_days,
           jsonb_agg(jsonb_build_object('docId', id, 'docNumber', document_number, 'reference', reference_number,
-            'date', doc_date::text, 'amount', amount) order by ref_num) as invoices
+            'date', doc_date::text, 'amount', amount, 'currency', currency, 'funcAmount', func_amount) order by ref_num) as invoices
         from numbered
-        group by party_id, island
+        group by party_id, currency, island
         having count(*) >= ${SEQUENTIAL_MIN} and count(*) = count(distinct ref_num)
       )
       select i.*, coalesce(p.display_name, 'Unknown') as party_name
@@ -507,10 +597,11 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   // Split the one grouping-sets result back into the six aggregate shapes.
   // grouping(col) is 0 exactly when that column is a real key for the row, so
   // each set is picked out by its own flag; the null key in the trap/weekend
-  // sets is the non-qualifying remainder and is dropped.
+  // sets is the non-qualifying remainder and is dropped. Benford sets are keyed
+  // (currency, digit): one distribution per document currency.
   const dupAllRows = (dupAll.rows);
-  const dupRows = { rows: dupAllRows.filter((r) => r.src === "pair") };
-  const dupAgg = { rows: dupAllRows.filter((r) => r.src === "agg").map((r) => ({ total: r.pair_count, amount: r.amount })) };
+  const dupGroupRows = { rows: dupAllRows.filter((r) => r.src === "group") };
+  const dupAgg = { rows: dupAllRows.filter((r) => r.src === "agg").map((r) => ({ total: r.group_count, amount: r.value_at_risk })) };
 
   const vendorStats = (vendorStatRows.rows);
   const rsfRows = { rows: vendorStats.filter((r) => r.src === "rsf").map((r) => ({ ...r, rsf: r.metric })) };
@@ -522,71 +613,122 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const metaRows = {
     // The grand-total set: every flag 1, i.e. nothing is a group key.
     rows: aggAll
-      .filter((r) => ["g_digit1", "g_digit2", "g_trap", "g_dow", "g_date"].every((f) => Number(r[f]) === 1))
+      .filter((r) => ["g_cur", "g_digit1", "g_digit2", "g_trap", "g_dow", "g_date"].every((f) => Number(r[f]) === 1))
       .map((r) => ({ docs: r.count, amount: r.amount })),
   };
-  const b1Rows = { rows: gset("g_digit1", "digit1").map((r) => ({ digit: r.digit1, count: r.count, amount: r.amount })) };
-  const b2Rows = { rows: gset("g_digit2", "digit2").map((r) => ({ digits: r.digit2, count: r.count, amount: r.amount })) };
+  const b1Rows = {
+    rows: aggAll
+      .filter((r) => Number(r.g_digit1) === 0 && Number(r.g_cur) === 0 && r.digit1 !== null)
+      .map((r) => ({ currency: String(r.cur), digit: r.digit1, count: r.count, amount: r.amount })),
+  };
+  const b2Rows = {
+    rows: aggAll
+      .filter((r) => Number(r.g_digit2) === 0 && Number(r.g_cur) === 0 && r.digit2 !== null)
+      .map((r) => ({ currency: String(r.cur), digits: r.digit2, count: r.count, amount: r.amount })),
+  };
   const trapAgg = { rows: gset("g_trap", "trap") };
   const weekendAgg = { rows: gset("g_dow", "dow") };
   const calRows = {
     rows: gset("g_date", "date").sort((a, b) => String(a.date).localeCompare(String(b.date))),
   };
 
-  // ---- Benford 1D --------------------------------------------------------------
-  const b1Map = new Map<string, { count: number; amount: number }>(
-    ((b1Rows.rows)).map((r) => [String(r.digit), { count: Number(r.count), amount: Number(r.amount) }]),
-  );
-  const total1D = [...b1Map.values()].reduce((s, v) => s + v.count, 0);
-  let sumAbsDev1 = 0;
-  const digits1D: BenfordDigit[] = [];
-  for (let d = 1; d <= 9; d++) {
-    const row = b1Map.get(String(d));
-    const observed = row && total1D > 0 ? row.count / total1D : 0;
-    const expected = BENFORD_1D[d]!;
-    const deviation = observed - expected;
-    sumAbsDev1 += Math.abs(deviation);
-    digits1D.push({
-      digit: d, count: row?.count ?? 0, amount: row?.amount ?? 0,
-      observed, expected, deviationPct: expected > 0 ? (deviation / expected) * 100 : 0,
-      isAnomaly: Math.abs(expected > 0 ? (deviation / expected) * 100 : 0) > 25,
-    });
-  }
-  const mad1D = sumAbsDev1 / 9;
-  const benfordMessage =
-    total1D < 50
-      ? `Insufficient data (${total1D} transactions). Need at least 50.`
-      : mad1D <= 0.006
-        ? "Transaction amounts closely follow Benford's Law — low manipulation risk."
-        : mad1D <= 0.012
-          ? "Transaction amounts reasonably follow Benford's Law."
-          : mad1D <= 0.015
-            ? "Some deviation detected — warrants review."
-            : "Significant deviation — possible manipulation.";
-
-  // ---- Benford 2D --------------------------------------------------------------
-  const b2Map = new Map<string, { count: number; amount: number }>(
-    ((b2Rows.rows)).map((r) => [String(r.digits), { count: Number(r.count), amount: Number(r.amount) }]),
-  );
-  const total2D = [...b2Map.values()].reduce((s, v) => s + v.count, 0);
-  let sumAbsDev2 = 0;
-  const digits2D: BenfordDigit[] = [];
-  for (let d = 10; d <= 99; d++) {
-    const row = b2Map.get(String(d));
-    const observed = row && total2D > 0 ? row.count / total2D : 0;
-    const expected = Math.log10(1 + 1 / d);
-    const deviation = observed - expected;
-    sumAbsDev2 += Math.abs(deviation);
-    const deviationPct = expected > 0 ? (deviation / expected) * 100 : 0;
-    digits2D.push({ digit: d, count: row?.count ?? 0, amount: row?.amount ?? 0, observed, expected, deviationPct, isAnomaly: Math.abs(deviationPct) > 50 });
-  }
-  const mad2D = sumAbsDev2 / 90;
-  const anomalies2D = digits2D.filter((x) => x.isAnomaly && x.count >= 5).sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct));
+  // ---- Benford 1D + 2D, one distribution per document currency --------------
+  // Digit rows arrive keyed (currency, digit). Each currency gets its own
+  // conformity computation over its own transaction amounts — a blended
+  // distribution would compare economically different magnitudes. The legacy
+  // top-level shape carries the largest slice so single-currency datasets
+  // (and existing consumers) read byte-identical figures.
+  const slice1D = (currency: string, rows: { digit: unknown; count: unknown; amount: unknown }[]): BenfordCurrencySlice => {
+    const map = new Map<string, { count: number; amount: number }>(
+      rows.map((r) => [String(r.digit), { count: Number(r.count), amount: Number(r.amount) }]),
+    );
+    const total = [...map.values()].reduce((s, v) => s + v.count, 0);
+    let sumAbsDev = 0;
+    const digits: BenfordDigit[] = [];
+    for (let d = 1; d <= 9; d++) {
+      const row = map.get(String(d));
+      const observed = row && total > 0 ? row.count / total : 0;
+      const expected = BENFORD_1D[d]!;
+      const deviation = observed - expected;
+      sumAbsDev += Math.abs(deviation);
+      const deviationPct = expected > 0 ? (deviation / expected) * 100 : 0;
+      digits.push({
+        digit: d, count: row?.count ?? 0, amount: row?.amount ?? 0,
+        observed, expected, deviationPct,
+        isAnomaly: Math.abs(deviationPct) > 25,
+      });
+    }
+    const mad = sumAbsDev / 9;
+    return {
+      currency, totalTransactions: total, digits, mad,
+      conformity: conformity1D(mad),
+      message:
+        total < 50
+          ? `Insufficient data (${total} transactions). Need at least 50.`
+          : mad <= 0.006
+            ? "Transaction amounts closely follow Benford's Law — low manipulation risk."
+            : mad <= 0.012
+              ? "Transaction amounts reasonably follow Benford's Law."
+              : mad <= 0.015
+                ? "Some deviation detected — warrants review."
+                : "Significant deviation — possible manipulation.",
+      anomalies: digits.filter((x) => x.isAnomaly),
+    };
+  };
+  const slice2D = (currency: string, rows: { digits: unknown; count: unknown; amount: unknown }[]): BenfordCurrencySlice => {
+    const map = new Map<string, { count: number; amount: number }>(
+      rows.map((r) => [String(r.digits), { count: Number(r.count), amount: Number(r.amount) }]),
+    );
+    const total = [...map.values()].reduce((s, v) => s + v.count, 0);
+    let sumAbsDev = 0;
+    const digits: BenfordDigit[] = [];
+    for (let d = 10; d <= 99; d++) {
+      const row = map.get(String(d));
+      const observed = row && total > 0 ? row.count / total : 0;
+      const expected = Math.log10(1 + 1 / d);
+      const deviation = observed - expected;
+      sumAbsDev += Math.abs(deviation);
+      const deviationPct = expected > 0 ? (deviation / expected) * 100 : 0;
+      digits.push({ digit: d, count: row?.count ?? 0, amount: row?.amount ?? 0, observed, expected, deviationPct, isAnomaly: Math.abs(deviationPct) > 50 });
+    }
+    const mad = sumAbsDev / 90;
+    return {
+      currency, totalTransactions: total, digits, mad,
+      conformity: conformity2D(mad), message: "",
+      anomalies: digits.filter((x) => x.isAnomaly && x.count >= 5).sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct)),
+    };
+  };
+  const byCurrency = <T extends { currency: string }>(rows: T[]): Map<string, T[]> => {
+    const out = new Map<string, T[]>();
+    for (const r of rows) {
+      const list = out.get(r.currency);
+      if (list) list.push(r);
+      else out.set(r.currency, [r]);
+    }
+    return out;
+  };
+  const b1Slices = [...byCurrency(b1Rows.rows).entries()]
+    .map(([currency, rows]) => slice1D(currency, rows))
+    .sort((a, b) => b.totalTransactions - a.totalTransactions || (a.currency < b.currency ? -1 : 1));
+  const b2Slices = [...byCurrency(b2Rows.rows).entries()]
+    .map(([currency, rows]) => slice2D(currency, rows))
+    .sort((a, b) => b.totalTransactions - a.totalTransactions || (a.currency < b.currency ? -1 : 1));
+  const b1Top = b1Slices[0] ?? slice1D("", []);
+  const b2Top = b2Slices[0] ?? slice2D("", []);
+  const digits1D = b1Top.digits;
+  const total1D = b1Top.totalTransactions;
+  const mad1D = b1Top.mad;
+  const benfordMessage = b1Top.message;
+  const digits2D = b2Top.digits;
+  const total2D = b2Top.totalTransactions;
+  const mad2D = b2Top.mad;
+  const anomalies2D = b2Top.anomalies;
 
   // ---- Threshold trap ------------------------------------------------------------
   const trapItems: FlaggedDoc[] = (trapRows.rows as FlaggedDocumentRow[]).map((r) => ({
     docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-    amount: Number(r.amount), partyId: r.party_id, partyName: r.party_name ?? "",
+    amount: Number(r.amount), currency: r.currency, funcAmount: Number(r.func_amount),
+    partyId: r.party_id, partyName: r.party_name ?? "",
     flagType: "trap" as const,
     reason: `Amount ends in ${r.trap} (potential threshold avoidance)`,
     riskScore: r.trap === "9999" ? 65 : r.trap === "999" ? 55 : 45,
@@ -594,30 +736,75 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const trapByTrap = ((trapAgg.rows)).map((r) => ({ trap: r.trap as string, count: Number(r.count), amount: Number(r.amount) }));
   const trapTotal = trapByTrap.reduce((s, t) => s + t.count, 0);
 
-  // ---- Duplicates ------------------------------------------------------------------
-  const dupPairs: DuplicatePair[] = (dupRows.rows as DuplicateRow[]).map((r) => {
-    const amount = Number(r.amount);
-    const days = Number(r.days_between);
-    const sameMemo = Boolean(r.same_memo);
+  // ---- Duplicates: one finding per natural-key group ---------------------------------
+  const dupGroups: DuplicateGroup[] = (dupGroupRows.rows as DuplicateGroupRow[]).map((r) => {
+    const amount = Number(r.amt);
+    const count = Number(r.cnt);
+    const spanDays = Number(r.span_days);
+    const sameReference = r.refkey !== "";
+    const members: DuplicateMember[] = (r.members ?? []).map((m) => ({
+      docId: m.docId, docNumber: m.docNumber ?? "", reference: m.reference ?? "",
+      date: m.date, amount: Number(m.amount), currency: m.currency,
+      funcAmount: Number(m.funcAmount), memo: m.memo,
+    }));
     let score = 50;
     if (amount >= CRITICAL_RISK_AMOUNT) score += 25;
     else if (amount >= HIGH_RISK_AMOUNT) score += 15;
     else if (amount >= 1000) score += 5;
-    if (days <= 1) score += 20;
-    else if (days <= 3) score += 15;
-    else if (days <= 7) score += 10;
-    if (sameMemo) score += 10;
+    if (spanDays <= 1) score += 20;
+    else if (spanDays <= 3) score += 15;
+    else if (spanDays <= 7) score += 10;
+    if (sameReference) score += 10;
     return {
-      docId1: r.id1, docId2: r.id2, docNumber1: r.num1 ?? "", docNumber2: r.num2 ?? "",
-      kind: r.kind, date1: r.date1, date2: r.date2, daysBetween: days, amount,
+      groupId: [r.party_id ?? "", r.kind, r.currency, String(amount), r.refkey].join("|"),
       partyId: r.party_id, partyName: r.party_name,
-      sameMemo,
-      confidence: sameMemo ? 0.95 : days <= 3 ? 0.9 : days <= 7 ? 0.85 : 0.75,
+      kind: r.kind, currency: r.currency, amount, funcTotal: Number(r.func_total),
+      count, dateSpanDays: spanDays, firstDate: r.first_date, lastDate: r.last_date,
+      sameReference,
+      confidence: sameReference ? 0.95 : spanDays <= 3 ? 0.9 : spanDays <= 7 ? 0.85 : 0.75,
       riskScore: Math.min(100, score),
+      members,
     };
   });
   const dupTotal = Number(dupAgg.rows[0]?.total ?? 0);
   const dupAmount = Number(dupAgg.rows[0]?.amount ?? 0);
+
+  // Compatibility projection for the assistant/MCP passthrough (owned by
+  // another fleet): every within-group ordered pair, so pair-shaped readers
+  // keep working. Same-currency and same-reference by construction — the
+  // cross-currency false positive cannot appear here either.
+  const dayDiff = (a: string, b: string) =>
+    Math.abs(Math.round((new Date(a + "T00:00:00Z").getTime() - new Date(b + "T00:00:00Z").getTime()) / 86_400_000));
+  const dupPairs: DuplicatePair[] = [];
+  for (const g of dupGroups) {
+    const ms = g.members;
+    for (let i = 0; i < ms.length; i++) {
+      for (let j = i + 1; j < ms.length; j++) {
+        const a = ms[i]!, b = ms[j]!;
+        const days = dayDiff(a.date, b.date);
+        const sameMemo = a.memo !== null && a.memo === b.memo;
+        let score = 50;
+        if (g.amount >= CRITICAL_RISK_AMOUNT) score += 25;
+        else if (g.amount >= HIGH_RISK_AMOUNT) score += 15;
+        else if (g.amount >= 1000) score += 5;
+        if (days <= 1) score += 20;
+        else if (days <= 3) score += 15;
+        else if (days <= 7) score += 10;
+        if (sameMemo || g.sameReference) score += 10;
+        dupPairs.push({
+          docId1: a.docId, docId2: b.docId, docNumber1: a.docNumber, docNumber2: b.docNumber,
+          kind: g.kind, date1: a.date, date2: b.date, daysBetween: days, amount: g.amount,
+          currency: g.currency, partyId: g.partyId, partyName: g.partyName,
+          sameMemo,
+          confidence: sameMemo || g.sameReference ? 0.95 : days <= 3 ? 0.9 : days <= 7 ? 0.85 : 0.75,
+          riskScore: Math.min(100, score),
+        });
+      }
+    }
+  }
+  dupPairs.sort((x, y) => y.amount - x.amount || x.daysBetween - y.daysBetween
+    || (x.docId1 < y.docId1 ? -1 : 1) || (x.docId2 < y.docId2 ? -1 : 1));
+  const dupPairsCapped = dupPairs.slice(0, 200);
 
   // ---- Weekend ------------------------------------------------------------------------
   const weekendItems: FlaggedDoc[] = (weekendRows.rows as FlaggedDocumentRow[]).map((r) => {
@@ -629,7 +816,8 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     if (isSunday) score += 10;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount, partyId: r.party_id, partyName: r.party_name ?? "",
+      amount, currency: r.currency, funcAmount: Number(r.func_amount),
+      partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "weekend" as const,
       reason: `Dated on ${isSunday ? "Sunday" : "Saturday"}`,
       riskScore: Math.min(100, score),
@@ -652,9 +840,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     if (amount >= CRITICAL_RISK_AMOUNT) score += 15; else if (amount >= HIGH_RISK_AMOUNT) score += 10;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount, partyId: r.party_id, partyName: r.party_name ?? "",
+      amount, currency: r.currency, funcAmount: Number(r.func_amount),
+      partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "rsf" as const,
-      reason: `${rsf.toFixed(1)}× larger than ${r.party_name}'s historical 2nd largest`,
+      reason: `${rsf.toFixed(1)}× larger than ${r.party_name}'s historical 2nd largest (${r.currency})`,
       riskScore: Math.min(100, score),
       rsf, secondLargest: Number(r.second_amount), baselineCount: Number(r.baseline_count),
     };
@@ -669,9 +858,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     if (amount >= CRITICAL_RISK_AMOUNT) score += 15;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount, partyId: r.party_id, partyName: r.party_name ?? "",
+      amount, currency: r.currency, funcAmount: Number(r.func_amount),
+      partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "zscore" as const,
-      reason: `Z-score ${Math.abs(z).toFixed(2)} vs ${r.party_name} average (${r.baseline_count} txns)`,
+      reason: `Z-score ${Math.abs(z).toFixed(2)} vs ${r.party_name} ${r.currency} average (${r.baseline_count} txns)`,
       riskScore: Math.min(100, score),
       zScore: z, vendorAvg: Number(r.avg_amount), vendorStdDev: Number(r.std_amount), baselineCount: Number(r.baseline_count),
     };
@@ -686,13 +876,18 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     score += Math.min(count * 4, 20);
     if (totalAmount > 100_000) score += 10; else if (totalAmount > 50_000) score += 7; else if (totalAmount > 25_000) score += 5;
     const level: "high" | "medium" = spanDays >= SEQUENTIAL_HIGH_RISK_DAYS ? "high" : "medium";
+    const invoices = ((r.invoices)).map((inv) => ({
+      docId: inv.docId, docNumber: inv.docNumber, reference: inv.reference, date: inv.date,
+      amount: Number(inv.amount), currency: inv.currency, funcAmount: Number(inv.funcAmount),
+    }));
     return {
       partyId: r.party_id, partyName: r.party_name, count, totalAmount,
+      currency: r.currency,
       startRef: Number(r.start_ref), endRef: Number(r.end_ref), dateSpanDays: spanDays,
       firstDate: String(r.first_date), lastDate: String(r.last_date),
       riskLevel: level, riskScore: Math.min(100, score),
-      reason: `${count} gap-free sequential invoices (${r.start_ref}–${r.end_ref}) over ${spanDays} days${level === "high" ? " — possible shell company / sole customer" : ""}`,
-      invoices: ((r.invoices)).slice(0, 12),
+      reason: `${count} gap-free sequential ${r.currency} invoices (${r.start_ref}–${r.end_ref}) over ${spanDays} days${level === "high" ? " — possible shell company / sole customer" : ""}`,
+      invoices: invoices.slice(0, 12),
     };
   });
 
@@ -726,22 +921,26 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const flagged: FlaggedDoc[] = [];
   const seen = new Set<string>();
   const push = (f: FlaggedDoc) => { if (!seen.has(f.docId)) { seen.add(f.docId); flagged.push(f); } };
-  for (const d of dupPairs) {
-    // The pair scan includes the threshold-sized boundary on both sides of
-    // the report period. Keep the flagged aggregate anchored to whichever
-    // member is actually in-period when the older/lower-ID member is outside.
-    const firstInPeriod = d.date1 >= from && d.date1 <= to;
+  for (const g of dupGroups) {
+    // The group scan includes the threshold-sized boundary on both sides of
+    // the report period. Anchor the single group finding to its earliest
+    // in-period member; the reason lists the whole group.
+    const inPeriod = g.members.filter((m) => m.date >= from && m.date <= to);
+    const anchor = inPeriod[0] ?? g.members[0]!;
+    const others = g.members.filter((m) => m.docId !== anchor.docId).map((m) => m.docNumber || m.docId).join(", ");
     push({
-      docId: firstInPeriod ? d.docId1 : d.docId2,
-      docNumber: firstInPeriod ? d.docNumber1 : d.docNumber2,
-      kind: d.kind,
-      date: firstInPeriod ? d.date1 : d.date2,
-      amount: d.amount,
-      partyId: d.partyId,
-      partyName: d.partyName,
+      docId: anchor.docId,
+      docNumber: anchor.docNumber,
+      kind: g.kind,
+      date: anchor.date,
+      amount: g.amount,
+      currency: g.currency,
+      funcAmount: anchor.funcAmount,
+      partyId: g.partyId,
+      partyName: g.partyName,
       flagType: "duplicate",
-      reason: `Same vendor, kind & amount as ${(firstInPeriod ? d.docNumber2 : d.docNumber1) || "pair"} (${d.daysBetween}d apart)`,
-      riskScore: d.riskScore,
+      reason: `${g.count} matching documents — same vendor, kind, amount (${g.currency} ${g.amount})${g.sameReference && anchor.reference ? `, shared reference ${anchor.reference}` : ""} (${g.dateSpanDays}d span): ${others}`,
+      riskScore: g.riskScore,
     });
   }
   for (const w of weekendItems) push(w);
@@ -751,7 +950,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   // invoices (threshold-trap docs stay in their own tab, NOT in the aggregate).
   for (const s of sequential)
     for (const inv of s.invoices)
-      push({ docId: inv.docId, docNumber: inv.docNumber, kind: "vendor_bill", date: inv.date, amount: inv.amount, partyId: s.partyId, partyName: s.partyName, flagType: "sequential", reason: s.reason, riskScore: s.riskScore });
+      push({ docId: inv.docId, docNumber: inv.docNumber, kind: "vendor_bill", date: inv.date, amount: inv.amount, currency: inv.currency, funcAmount: inv.funcAmount, partyId: s.partyId, partyName: s.partyName, flagType: "sequential", reason: s.reason, riskScore: s.riskScore });
   flagged.sort((a, b) => b.riskScore - a.riskScore);
 
   // ---- Vendor risk roll-up ---------------------------------------------------------------------------
@@ -761,7 +960,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     let v = vendorMap.get(key);
     if (!v) { v = { partyId: f.partyId, partyName: f.partyName || "Unknown", flagCount: 0, totalAmount: 0, flagTypes: [], maxRiskScore: 0, compositeScore: 0 }; vendorMap.set(key, v); }
     v.flagCount++;
-    v.totalAmount += Math.abs(f.amount);
+    v.totalAmount += Math.abs(f.funcAmount);
     v.maxRiskScore = Math.max(v.maxRiskScore, f.riskScore);
     if (!v.flagTypes.includes(f.flagType)) v.flagTypes.push(f.flagType);
   }
@@ -784,7 +983,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const topRiskAreas: SentinelData["summary"]["topRiskAreas"] = [];
   if (ghosts.length) topRiskAreas.push({ area: "Ghost Vendors", severity: "critical", count: ghosts.length, message: `${ghosts.length} vendor(s) match employee names` });
   if (sequential.length) topRiskAreas.push({ area: "Sequential Invoices", severity: "high", count: sequential.length, message: `${sequential.length} vendor(s) with gap-free invoice runs` });
-  if (dupTotal > 10) topRiskAreas.push({ area: "Duplicate Payments", severity: "high", count: dupTotal, message: `${dupTotal} potential duplicate pairs` });
+  if (dupTotal > 10) topRiskAreas.push({ area: "Duplicate Payments", severity: "high", count: dupTotal, message: `${dupTotal} duplicate groups (one finding per group)` });
   if (trapTotal > 0) topRiskAreas.push({ area: "Approval Limit Avoidance", severity: "high", count: trapTotal, message: `${trapTotal} amounts ending 99/999/9999` });
   if (conformity1D(mad1D) === "Non-Conforming") topRiskAreas.push({ area: "Benford Deviation", severity: "medium", count: total1D, message: "First-digit distribution deviates significantly" });
   topRiskAreas.sort((a, b) => ({ critical: 0, high: 1, medium: 2 }[a.severity] - { critical: 0, high: 1, medium: 2 }[b.severity]));
@@ -794,7 +993,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
 
   return {
     period,
-    meta: { totalDocs: Number(meta.docs ?? 0), totalAmount: Number(meta.amount ?? 0), days, queryMs: Date.now() - t0 },
+    meta: { totalDocs: Number(meta.docs ?? 0), totalAmount: Number(meta.amount ?? 0), presentationCurrency: presentationCcy, days, queryMs: Date.now() - t0 },
     config: cfg,
     summary: {
       flaggedCount: flagged.length,
@@ -807,16 +1006,16 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       sequentialGroups: sequential.length,
       ghostCount: ghosts.length,
       trapCount: trapTotal,
-      totalAtRisk: flagged.reduce((s, f) => s + Math.abs(f.amount), 0),
+      totalAtRisk: flagged.reduce((s, f) => s + Math.abs(f.funcAmount), 0),
       overallRiskScore: Math.min(100, risk),
       benfordConformity: conformity1D(mad1D),
       benford2DConformity: conformity2D(mad2D),
       approvalLimitRisk: trapTotal > 0,
       topRiskAreas,
     },
-    duplicates: { total: dupTotal, pairs: dupPairs },
-    benford1D: { totalTransactions: total1D, digits: digits1D, mad: mad1D, conformity: conformity1D(mad1D), message: benfordMessage },
-    benford2D: { totalTransactions: total2D, digits: digits2D, anomalies: anomalies2D, mad: mad2D, conformity: conformity2D(mad2D) },
+    duplicates: { total: dupTotal, pairs: dupPairsCapped, groups: dupGroups },
+    benford1D: { totalTransactions: total1D, digits: digits1D, mad: mad1D, conformity: conformity1D(mad1D), message: benfordMessage, byCurrency: b1Slices },
+    benford2D: { totalTransactions: total2D, digits: digits2D, anomalies: anomalies2D, mad: mad2D, conformity: conformity2D(mad2D), byCurrency: b2Slices },
     thresholdTrap: { total: trapTotal, totalAmount: trapByTrap.reduce((s, t) => s + t.amount, 0), byTrap: trapByTrap, items: trapItems },
     weekend: { total: weekendTotal, totalAmount: weekendAmount, saturday: satCount, sunday: sunCount, items: weekendItems },
     rsf: { total: rsfItems.length, items: rsfItems },
