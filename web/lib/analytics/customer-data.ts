@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
@@ -487,7 +488,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const hhiCritical = cfg.hhiCritical!;
   const clvYears = cfg.clvYears!;
 
-  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, profitData] = await Promise.all([
+  const [baseRows, frictionRows, paymentRows, growthRows, growthCounts, cohortRows, profitData, dsoStats] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer count / revenue / avg / first / last / recency / tenure.
     // Prior-year revenue added for YoY context (openbooks extension).
@@ -643,6 +644,10 @@ export async function customerData(period: { from: string; to: string; label: st
       group by party_id, sub.base_currency
     `)),
     customerProfitability(period, orgId, allowed),
+    // The header "Avg DSO" is the ONE org DSO — the same settlement-weighted
+    // trailing mean the cash cockpit, cashflow analytics, MCP cashflow tool,
+    // and get_vitals read — never a second per-customer grain computed here.
+    paymentStats("ar", ref, allowed ? [...allowed] : undefined, orgId),
   ]);
 
   /* ---- base metrics ---- */
@@ -805,8 +810,9 @@ export async function customerData(period: { from: string; to: string; label: st
     paymentMap.set(r.id, { score, rating, avgDays: avgDays === null ? null : Math.round(d), overdue, rate: invoices > 0 ? Math.round((paid / invoices) * 100) : 0 });
   }
   const paymentRate = totInvoices > 0 ? Math.round((totPaid / totInvoices) * 100) : 0;
-  const payersWithDays = [...paymentMap.values()].filter((p) => p.avgDays !== null);
-  const avgDaysToPay = payersWithDays.length ? Math.round(payersWithDays.reduce((a, p) => a + (p.avgDays ?? 0), 0) / payersWithDays.length) : 0;
+  // Per-customer rows keep their own days-to-pay (drill detail); the header
+  // KPI is the engine DSO so every surface quotes one number.
+  const avgDaysToPay = dsoStats.globalAvg;
 
   const profitMap = new Map(profitData.customers.map((c) => [c.customerId, c]));
 
