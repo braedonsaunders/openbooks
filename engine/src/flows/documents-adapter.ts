@@ -1,6 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
 import { ambientTenantOrgId, db, schema } from "../db.ts";
 import { assertDocumentMutationRefsOwned } from "../document-mutation-refs.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../transaction-audit.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import {
   DOCUMENT_FIELDS,
@@ -75,6 +79,33 @@ async function loadDoc(subjectId: string, orgId?: string): Promise<DocRow | null
         : eq(schema.documents.id, subjectId),
     );
   return doc ?? null;
+}
+
+/**
+ * Evidence a flow-driven document mutation with the same transaction-audit
+ * envelope every other document writer leaves (mode record_update, source
+ * flows). The flow run's effect checkpoint records THAT an action ran; this
+ * row records WHAT it changed and who it ran as (null for timer firings).
+ * Runs in the caller's ambient unit, so evidence commits with the mutation.
+ */
+async function auditFlowDocumentUpdate(
+  subjectId: string,
+  ctx: FlowExecCtx,
+  before: Awaited<ReturnType<typeof captureTransactionAuditSnapshot>>,
+): Promise<void> {
+  const after = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
+  if (!before || !after) {
+    throw new Error(`flow document audit snapshot unavailable for ${subjectId}`);
+  }
+  await recordTransactionAudit(db, {
+    orgId: ctx.orgId,
+    documentId: subjectId,
+    action: "update",
+    actorId: ctx.userId ?? null,
+    source: "flows",
+    before,
+    after,
+  });
 }
 
 /**
@@ -214,10 +245,12 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       if (!legalFrom.includes(doc.status)) {
         throw new Error(`illegal status transition ${doc.status} → ${to} for ${doc.documentNumber}`);
       }
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
       await db
         .update(schema.documents)
         .set({ status: to as DocRow["status"], updatedBy: ctx.userId ?? null, updatedAt: new Date() })
         .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
+      await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
     async releaseApproval(
@@ -250,6 +283,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       }
       if (!doc || doc.status !== "pending_approval") return;
       const to = outcome === "approved" ? "approved" : "draft";
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
       await db
         .update(schema.documents)
         .set({
@@ -259,10 +293,12 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           updatedAt: new Date(),
         })
         .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
+      await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
-      if (!WRITABLE_DOCUMENT_FIELDS.has(field)) {
+      const headerField = WRITABLE_DOCUMENT_FIELDS.has(field);
+      if (!headerField) {
         const customField = (await db.execute(sql`
           select 1 from custom_field_defs
            where org_id = ${ctx.orgId} and target_table = 'documents'
@@ -277,12 +313,16 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         // ownership, or a foreign reference id persists as a silent
         // cross-tenant pointer (custom jsonb has no constraint at all).
         await assertDocumentMutationRefsOwned(ctx.orgId, kind, [{ field, value }]);
+      }
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
+      if (!headerField) {
         await db.execute(sql`
           update documents
              set custom = jsonb_set(coalesce(custom, '{}'::jsonb), array[${field}]::text[], ${JSON.stringify(value ?? null)}::jsonb),
                  updated_by = ${ctx.userId ?? null}, updated_at = now()
            where id = ${subjectId} and org_id = ${ctx.orgId}
         `);
+        await auditFlowDocumentUpdate(subjectId, ctx, before);
         return;
       }
       // Native dims write around applyDocumentEdit too: same ownership fence.
@@ -291,6 +331,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         .update(schema.documents)
         .set({ [field]: value, updatedBy: ctx.userId ?? null, updatedAt: new Date() })
         .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
+      await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
     async findCandidateIds(limit: number): Promise<string[]> {
