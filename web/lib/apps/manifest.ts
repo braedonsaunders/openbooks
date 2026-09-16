@@ -59,6 +59,157 @@ export const endpointSchema = z.object({
   method: z.enum(HTTP_METHODS).default('ANY'),
 })
 
+/**
+ * App-declared assistant/MCP tools. An App may expose its own governed
+ * capabilities to the assistant and to MCP clients by declaring them here;
+ * each tool invokes one of the App's backend `endpoints` through the same
+ * sandbox runtime, governance budget, and app_runs evidence as callBackend.
+ * The assistant name is `app_<appKey>_<toolKey>` (snake-cased); mutating
+ * tools always go through the confirmation-card path.
+ */
+
+/** Assistant-facing name for an installed App tool (always snake_case). */
+export function appToolAssistantName(appKey: string, toolKey: string): string {
+  const snake = (s: string) => s.toLowerCase().replace(/-/g, '_')
+  return `app_${snake(appKey)}_${snake(toolKey)}`
+}
+
+const MAX_TOOL_INPUT_PROPS = 50
+const MAX_TOOL_ENUM_VALUES = 64
+const MAX_TOOL_STRING_LENGTH = 10_000
+const MAX_TOOL_ARRAY_ITEMS = 200
+const MAX_TOOL_SCHEMA_DEPTH = 3
+
+const KNOWN_INPUT_TYPES = new Set(['string', 'number', 'integer', 'boolean', 'array', 'object'])
+/** Composition keywords have no bounded runtime meaning here — reject them. */
+const UNSUPPORTED_SCHEMA_KEYWORDS = ['$ref', 'allOf', 'anyOf', 'oneOf', 'not', 'if', 'then', 'else', 'patternProperties', 'additionalItems']
+
+/** RE2-style pattern lint: no lookarounds (incl. named groups), no backreferences. */
+function re2PatternError(pattern: string): string | null {
+  try {
+    void new RegExp(pattern)
+  } catch {
+    return 'must be a valid regular expression'
+  }
+  if (/\(\?[<>=!]/.test(pattern)) return 'must not use lookarounds or named groups (unsupported by RE2-style validators)'
+  if (/\\[1-9]/.test(pattern)) return 'must not use backreferences (unsupported by RE2-style validators)'
+  if (/\\k</.test(pattern)) return 'must not use named backreferences (unsupported by RE2-style validators)'
+  if (/\[\]/.test(pattern)) return 'must not contain an empty character class (invalid under RE2 semantics)'
+  return null
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Validate an App tool `inputSchema`: a plain JSON-Schema object with
+ * `properties`, bounded strings/arrays/enums, and RE2-safe patterns. Returns
+ * precise error strings (empty when valid). Exported so install paths and
+ * tests share the exact check the manifest applies.
+ */
+export function validateToolInputSchema(schema: unknown, path = 'inputSchema', depth = 0): string[] {
+  const errors: string[] = []
+  if (!isPlainObject(schema)) return [`${path}: must be an object schema`]
+  if (schema.type !== 'object') return [`${path}: type must be "object"`]
+  if (!isPlainObject(schema.properties)) return [`${path}: properties is required and must be an object`]
+  const properties: Record<string, unknown> = schema.properties
+  for (const keyword of UNSUPPORTED_SCHEMA_KEYWORDS) {
+    if (keyword in schema) errors.push(`${path}: unsupported keyword "${keyword}"`)
+  }
+  const entries = Object.entries(properties)
+  if (entries.length > MAX_TOOL_INPUT_PROPS) {
+    errors.push(`${path}: at most ${MAX_TOOL_INPUT_PROPS} properties`)
+  }
+  if (schema.required !== undefined) {
+    if (!Array.isArray(schema.required) || schema.required.some((r: unknown) => typeof r !== 'string' || !(r in properties))) {
+      errors.push(`${path}: required must list declared property names`)
+    }
+  }
+  if (schema.additionalProperties !== undefined && typeof schema.additionalProperties !== 'boolean') {
+    errors.push(`${path}: additionalProperties must be a boolean when present`)
+  }
+  if (depth >= MAX_TOOL_SCHEMA_DEPTH) {
+    errors.push(`${path}: nesting exceeds ${MAX_TOOL_SCHEMA_DEPTH} levels`)
+    return errors
+  }
+  for (const [name, raw] of entries) {
+    const at = `${path}.properties.${name}`
+    if (!isPlainObject(raw)) {
+      errors.push(`${at}: must be an object schema`)
+      continue
+    }
+    const type = raw.type as unknown
+    if (typeof type !== 'string' || !KNOWN_INPUT_TYPES.has(type)) {
+      errors.push(`${at}: type must be one of ${[...KNOWN_INPUT_TYPES].join(', ')}`)
+      continue
+    }
+    if (raw.enum !== undefined) {
+      const values: unknown = raw.enum
+      if (!Array.isArray(values) || values.length === 0 || values.length > MAX_TOOL_ENUM_VALUES) {
+        errors.push(`${at}: enum must list 1–${MAX_TOOL_ENUM_VALUES} values`)
+      } else if ((values as unknown[]).some((v: unknown) => v !== null && !['string', 'number', 'boolean'].includes(typeof v))) {
+        errors.push(`${at}: enum values must be strings, numbers, booleans, or null`)
+      }
+    }
+    if (type === 'string') {
+      if (typeof raw.maxLength !== 'number' || !Number.isInteger(raw.maxLength) || raw.maxLength < 1 || raw.maxLength > MAX_TOOL_STRING_LENGTH) {
+        errors.push(`${at}: maxLength is required (1–${MAX_TOOL_STRING_LENGTH}) so tool input stays bounded`)
+      }
+      if (raw.pattern !== undefined) {
+        if (typeof raw.pattern !== 'string') errors.push(`${at}: pattern must be a string`)
+        else {
+          const bad = re2PatternError(raw.pattern)
+          if (bad) errors.push(`${at}.pattern: ${bad}`)
+        }
+      }
+    }
+    if (type === 'array') {
+      if (typeof raw.maxItems !== 'number' || !Number.isInteger(raw.maxItems) || raw.maxItems < 1 || raw.maxItems > MAX_TOOL_ARRAY_ITEMS) {
+        errors.push(`${at}: maxItems is required (1–${MAX_TOOL_ARRAY_ITEMS}) so tool input stays bounded`)
+      }
+      if (raw.items !== undefined) {
+        if (!isPlainObject(raw.items)) errors.push(`${at}.items: must be an object schema`)
+        else {
+          const itemType = (raw.items as Record<string, unknown>).type
+          if (typeof itemType !== 'string' || !KNOWN_INPUT_TYPES.has(itemType) || itemType === 'object' || itemType === 'array') {
+            errors.push(`${at}.items: type must be a scalar (string, number, integer, or boolean)`)
+          }
+        }
+      }
+    }
+    if (type === 'object') {
+      errors.push(...validateToolInputSchema(raw, at, depth + 1))
+    }
+  }
+  return errors
+}
+
+export const appToolConfirmationSchema = z.enum(['always', 'never'])
+
+export const appToolSpecSchema = z.object({
+  /** Tool key — slug; the assistant name is `app_<appKey>_<toolKey>` snake-cased. */
+  key: z.string().regex(SLUG, 'tool key must be a slug (a-z, 0-9, -)').max(64),
+  title: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+  /** Plain-object JSON Schema (validated on install: bounded, RE2-safe patterns). */
+  inputSchema: z.unknown(),
+  /** Backend endpoint (already declared in `endpoints`) that serves this tool. */
+  handler: z.string().regex(SLUG, 'handler must name a declared endpoint'),
+  readOnly: z.boolean().default(true),
+  destructive: z.boolean().default(false),
+  /** Mutating tools are forced to "always" at parse time. */
+  confirmation: appToolConfirmationSchema.optional(),
+  /** Permissions the tool needs: subset of the manifest's requested permissions. */
+  requiredPermissions: z.array(z.string().min(1).max(80)).max(20).default([]),
+})
+
+export type AppToolConfirmation = z.infer<typeof appToolConfirmationSchema>
+export type AppToolSpec = Omit<z.infer<typeof appToolSpecSchema>, 'confirmation' | 'inputSchema'> & {
+  confirmation: AppToolConfirmation
+  inputSchema: Record<string, unknown>
+}
+
 export const manifestSchema = z.object({
   key: z.string().regex(SLUG, 'key must be a slug (a-z, 0-9, -)').max(64),
   name: z.string().min(1).max(120),
@@ -75,6 +226,8 @@ export const manifestSchema = z.object({
     renderer: z.enum(['native', 'sandbox']).default('sandbox'),
   }),
   endpoints: z.array(endpointSchema).max(50).default([]),
+  /** Assistant/MCP tools served by the declared backend endpoints. */
+  tools: z.array(appToolSpecSchema).max(20).default([]),
   contributions: extensionContributionsSchema.optional(),
   nav: z
     .object({
@@ -114,6 +267,38 @@ export function parseManifest(raw: unknown): ManifestResult {
     if (seen.has(e.name)) errors.push(`duplicate endpoint name: ${e.name}`)
     seen.add(e.name)
   }
+  const endpointNames = new Set(manifest.endpoints.map((e) => e.name))
+  const requested = new Set(manifest.permissions)
+  // Tool cross-checks: unique keys, a real handler endpoint, confirmation for
+  // mutations, and permissions within the requested set. The tool input
+  // schemas are validated here so every install path shares one gate.
+  const toolKeys = new Set<string>()
+  manifest.tools.forEach((tool, index) => {
+    const at = `tools.${index}`
+    if (toolKeys.has(tool.key)) errors.push(`duplicate tool key: ${tool.key}`)
+    toolKeys.add(tool.key)
+    if (!endpointNames.has(tool.handler)) {
+      errors.push(`${at}: handler "${tool.handler}" is not a declared endpoint`)
+    }
+    if (!tool.readOnly && tool.confirmation === 'never') {
+      errors.push(`${at}: mutating tools require confirmation "always"`)
+    }
+    if (tool.readOnly && tool.destructive) {
+      errors.push(`${at}: read-only tools cannot be destructive`)
+    }
+    for (const permission of tool.requiredPermissions) {
+      if (!requested.has(permission)) {
+        errors.push(`${at}: requiredPermissions "${permission}" is not requested in manifest permissions`)
+      }
+    }
+    for (const schemaError of validateToolInputSchema(tool.inputSchema, `${at}.inputSchema`)) {
+      errors.push(schemaError)
+    }
+    // Normalize the effective confirmation so runtime readers see one value.
+    if (tool.confirmation === undefined) {
+      tool.confirmation = tool.readOnly ? 'never' : 'always'
+    }
+  })
   return { ok: errors.length === 0, manifest: errors.length ? undefined : manifest, errors }
 }
 
