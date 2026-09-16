@@ -238,7 +238,10 @@
     "confirm": "Publish and freeze this close package and its immutable audit binder?",
     "complete": "Package published by {name}",
     "lockFirst": "Apply the approved period locks before publishing.",
-    "awaitingApproval": "Complete the close review and approval flow before publishing."
+    "awaitingApproval": "Complete the close review and approval flow before publishing.",
+    "noteLabel": "Publication note",
+    "notePlaceholder": "Add a note about this publication…",
+    "noteRequired": "Re-publishing a corrected package is a restatement: describe what changed."
   },
   "timeline": {
     "title": "Immutable close timeline",
