@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import pg from "pg";
 import type { Authz } from "./authz";
 
 const state: { gate: Authz | null } = { gate: null };
@@ -15,13 +16,13 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool } = await import("@openbooks/engine/src/db.ts");
+const { db, env } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { PUT } = await import("../app/api/projects/[id]/percent-complete/route");
 
 test("project percent-complete refuses a Projects disable committed while its write waits", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
-  const writer = await pool.connect();
+  const writer = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
   let pending: Promise<Response> | undefined;
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -32,9 +33,11 @@ test("project percent-complete refuses a Projects disable committed while its wr
       values(${projectId},${org.orgId},${org.subsidiaryId},'PERCENT-FENCE','Percentage fence','active',true,'{}'::jsonb)`);
     const snapshot = async () => (await db.execute(sql`select custom,updated_at,updated_by from projects where org_id=${org.orgId} and id=${projectId}`)).rows[0]!;
     const before = await snapshot();
+    // The override starts unset, so the mandatory compare-and-swap evidence is null.
     const send = () => PUT(new Request("https://openbooks.test/api/projects/fixture/percent-complete", {
-      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ percentComplete: 75 }),
+      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ percentComplete: 75, expectedPercentComplete: null }),
     }), { params: Promise.resolve({ id: projectId }) });
+    await writer.connect();
     await writer.query("begin");
     await writer.query("select set_config('app.bypass_rls','on',true)");
     await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [org.orgId]);
@@ -42,10 +45,12 @@ test("project percent-complete refuses a Projects disable committed while its wr
     pending = send();
     void pending.catch(() => {});
     let blocked = false;
-    for (let attempt = 0; attempt < 400; attempt++) {
-      const row = (await pool.query<{ blocked: boolean }>("select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid])).rows[0]!;
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      await writer.query("select pg_stat_clear_snapshot()");
+      const row = (await writer.query<{ blocked: boolean }>("select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid])).rows[0]!;
       if (row.blocked) { blocked = true; break; }
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.ok(blocked, "request must reach the write fence after reading the old enabled feature");
     await writer.query("commit");
@@ -56,8 +61,8 @@ test("project percent-complete refuses a Projects disable committed while its wr
     assert.equal((await send()).status, 200);
     assert.equal(((await snapshot()).custom as { percentCompleteOverride: number }).percentCompleteOverride, 75);
   } finally {
-    await writer.query("rollback");
-    writer.release();
+    await writer.query("rollback").catch(() => {});
+    await writer.end();
     await pending?.catch(() => {});
     state.gate = null;
     await dropScratchOrg(org.orgId);
