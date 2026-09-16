@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { buildAllSchedules, recordDepreciationInput } from '@openbooks/engine/src/depreciation.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -38,6 +39,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const bookId = typeof body.bookId === 'string' ? body.bookId : undefined
   if (!kind || !effectiveDate || !isUuid(evidenceFileId)) {
     return NextResponse.json({ error: 'method, effective date, value, and attached evidence file are required' }, { status: 422 })
+  }
+  // Shape alone admits impossible dates ('2026-09-31') that Postgres then
+  // refuses inside the period lookup with a raw driver failure.
+  if (!isIsoCalendarDate(effectiveDate)) {
+    return NextResponse.json({ error: 'effective date must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
   }
   if (valueRaw === null) {
     return NextResponse.json({ error: 'value must be an exact amount with no more than four decimal places' }, { status: 422 })
