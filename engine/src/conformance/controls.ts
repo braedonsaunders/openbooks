@@ -5,7 +5,8 @@
  * accounting the standard requires". This register answers the companion
  * question a controller asks next: "do this system's own financial controls
  * hold". Cases pin invariants of OpenBooks' design (today: the allocation
- * kernel) as executable fixtures and map each row to its AUDIT-CONTROLS.md
+ * kernel and the posted-history correction model) as executable fixtures
+ * and map each row to its AUDIT-CONTROLS.md
  * control id — never to a published standard paragraph, which would be a
  * checkable lie (see engine/src/conformance/README.md on citations).
  *
@@ -20,6 +21,7 @@
 import { toUnits } from "../money.ts";
 import type { CaseResult, CorpusReport, RunnableCase } from "./types.ts";
 import { ALLOCATION_CONTROL_CASES } from "./cases/allocations.ts";
+import { CORRECTION_CONTROL_CASES } from "./cases/corrections.ts";
 
 export interface ControlCase extends RunnableCase {
   title: string;
@@ -38,7 +40,10 @@ export interface ControlCase extends RunnableCase {
   gap?: string;
 }
 
-export const CONTROL_CORPUS: readonly ControlCase[] = [...ALLOCATION_CONTROL_CASES];
+export const CONTROL_CORPUS: readonly ControlCase[] = [
+  ...ALLOCATION_CONTROL_CASES,
+  ...CORRECTION_CONTROL_CASES,
+];
 
 /**
  * The published floor for each control area, frozen at publication. Same
@@ -50,7 +55,10 @@ export const CONTROL_FLOORS: readonly {
   area: string;
   source: readonly ControlCase[];
   minimum: number;
-}[] = [{ area: "allocation controls", source: ALLOCATION_CONTROL_CASES, minimum: 7 }];
+}[] = [
+  { area: "allocation controls", source: ALLOCATION_CONTROL_CASES, minimum: 7 },
+  { area: "correction controls", source: CORRECTION_CONTROL_CASES, minimum: 1 },
+];
 
 /** Every control id the evidence set makes a claim about. */
 export function coveredControls(): string[] {

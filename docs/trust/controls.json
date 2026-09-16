@@ -1,9 +1,9 @@
 {
   "kind": "internal-controls",
-  "at": "2026-09-16T15:55:03.569Z",
+  "at": "2026-09-16T23:45:33.151Z",
   "gitSha": null,
   "totals": {
-    "pass": 7,
+    "pass": 8,
     "fail": 0,
     "gap": 0,
     "skipped": 0
@@ -22,7 +22,7 @@
         "Total 100.00 over three equal weights of 1 with the largest-share residual policy.",
         "A hundredth of a cent of difference is a failure."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "alloc-entry-group-sum",
@@ -36,7 +36,7 @@
         "Entry rule with explicit fixed-percent targets Engineering 60, Sales 30, Support 10.",
         "Entered line amount 1000.01 with no quantity."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "alloc-reversal-restores",
@@ -51,7 +51,7 @@
         "Period rule with explicit fixed-percent targets 60 and 40 on two target accounts, reclass impact.",
         "Posting reason and reversal reason recorded; reversal dated inside the open period."
       ],
-      "ms": 118
+      "ms": 51
     },
     {
       "id": "alloc-rerun-idempotent",
@@ -94,7 +94,7 @@
         "Source balance 1000.00 in the pool account in period 2026-07.",
         "Period rule with explicit fixed-percent targets 60, 30, and 10 on the source account with three departments, net-zero-pair impact."
       ],
-      "ms": 16
+      "ms": 26
     },
     {
       "id": "alloc-published-version-frozen",
@@ -108,7 +108,22 @@
         "Period rule created, drafted, and published through the real rule service.",
         "An edit, a target replacement, and a second publish are each attempted against the published version."
       ],
-      "ms": 36
+      "ms": 12
+    },
+    {
+      "id": "correction-reversal-restores",
+      "title": "Reversing a posted entry restores every balance",
+      "control": "E9",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Posting a 1,000.00 project cost moves 1,000.00 onto the cost account, reversing mirrors every leg through a posted reversal entry, and the ledger afterwards equals the pre-cost ledger on every account.",
+      "facts": [
+        "Project cost 1000.00 on the cost account against bank in the open period.",
+        "Reversal through the project GL reversal service with a recorded reason, dated inside the open period.",
+        "The original entry ends reversed; the reversal entry ends posted and references the original."
+      ],
+      "ms": 9
     }
   ]
 }

@@ -514,14 +514,30 @@ The database control layer enforces:
 - document/application amount caps;
 - tenant ownership and foreign-key integrity;
 - immutable signed-off reconciliations;
-- exactly-once source posting; and
-- controlled amendment, reversal, and migration scopes.
+- exactly-once source posting;
+- immutable posted history with evidenced reversal; and
+- narrowly scoped replay, sandbox, and migration exceptions.
 
-Authorized open-period corrections may re-materialize a source document's
-journal projection only while dependency and period controls pass. The change
-records before/after document and GL evidence. Closed-period corrections use a
-controlled reopen or a reversing/adjusting entry according to the applicable
-workflow.
+Posted history is immutable. Once a journal entry leaves draft, neither its
+header nor its lines can be edited in place: a correction reverses the entry
+through a posted mirror reversal in the same book and posts a replacement,
+so the original, the reversal, and the replacement all stay in the ledger.
+Reversing an entry requires that mirror — same organization and book,
+referencing the original, with lines that negate every leg — and no other
+header change may accompany the flip. The posting service refuses in-place
+regeneration of a posted projection for the same reason: a changed source
+document is corrected by reversal and replacement, never by rewriting.
+
+Three narrowly scoped, audited exceptions exist for machinery, not for
+editing economics: authenticated connector historical replay (authorized by
+the active sync run and connection policy, still recorded as reversal and
+replacement), sandbox wipe and whole-organization copy (sandbox
+organizations and operator-invoked restore or clone only), and
+attribution-only maintenance such as party merges (paired transaction-local
+authority, one audit row per merge). Reconciliation sign-off and
+source-cleared evidence are append-only once stamped. Closed-period
+corrections use a controlled reopen or a reversing/adjusting entry according
+to the applicable workflow.
 
 Financial calculations use decimal strings and BigInt-scaled units. Currency
 amounts are stored at four decimal places; exchange rates retain additional
