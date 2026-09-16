@@ -140,6 +140,7 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
     "/api/internal",
     "/api/pay",
     "/api/payments/webhooks",
+    "/api/qbd",
     "/api/sign",
     "/api/v1/records",
     "/pay",

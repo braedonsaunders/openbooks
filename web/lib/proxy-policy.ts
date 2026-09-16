@@ -29,6 +29,11 @@ const PUBLIC_SEGMENT_ROOTS = [
   // have no account, so the session gate would 302 every signer to /login.
   "/sign",
   "/api/sign",
+  // Desktop-connector SOAP bridge (/api/qbd): the desktop client holds no
+  // session cookie — the route authenticates every call itself (the
+  // connection's user-chosen password, then unguessable session tickets).
+  // Same credential-authenticated non-browser model as /api/pay and /api/sign.
+  "/api/qbd",
   // Worker-to-web seam: every /api/internal route authenticates itself with
   // the shared OPENBOOKS_INTERNAL_TOKEN header and fails closed without it.
   "/api/internal",
