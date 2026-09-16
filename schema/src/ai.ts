@@ -74,6 +74,8 @@ export const aiAgentPolicies = pgTable(
     detectorSettings: jsonb("detector_settings").$type<Record<string, unknown>>().notNull().default({}),
     /** Tenant controls for tool-using analysis, recommendations, and narratives. */
     analysisSettings: jsonb("analysis_settings").$type<Record<string, unknown>>().notNull().default({}),
+    /** Per-pack finding routing (mode + role/user ids); null = findings only. */
+    notificationSettings: jsonb("notification_settings").$type<Record<string, unknown>>(),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     ...auditColumns,

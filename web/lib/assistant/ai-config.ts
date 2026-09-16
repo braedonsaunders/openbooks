@@ -76,7 +76,51 @@ export type AgentSettingsInput = {
   materialityThreshold: string;
   detectors: ContinuousCloseDetectorPolicy[];
   analysis: ContinuousCloseAnalysisSettings;
+  /**
+   * Per-pack finding routing. `undefined` leaves the stored routing untouched
+   * (callers without a notification section, e.g. the provider drawer, must
+   * not wipe it); `null` clears it back to findings-only.
+   */
+  notification?: AgentNotificationSettings | null;
 };
+
+export type AgentNotificationMode = 'findings_only' | 'digest' | 'immediate';
+
+export interface AgentNotificationSettings {
+  mode: AgentNotificationMode;
+  roleIds: string[];
+  userIds: string[];
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Canonicalize untrusted notification routing. Returns `undefined` when the
+ * caller sent no routing (leave stored), `null` on explicit clear, and throws
+ * on anything else. No sender reads this yet — findings always surface under
+ * Agent Activity — so validation stays structural (mode + id lists).
+ */
+export function normalizeAgentNotificationSettings(raw: unknown): AgentNotificationSettings | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('invalid agent notification settings');
+  const row = raw as Record<string, unknown>;
+  const mode = row.mode === undefined || row.mode === null || row.mode === '' ? 'findings_only' : row.mode;
+  if (mode !== 'findings_only' && mode !== 'digest' && mode !== 'immediate') {
+    throw new Error('invalid agent notification mode');
+  }
+  const ids = (value: unknown, field: string): string[] => {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value) || value.length > 100) throw new Error(`invalid agent notification ${field}`);
+    const seen = new Set<string>();
+    for (const entry of value) {
+      if (typeof entry !== 'string' || !UUID_RE.test(entry)) throw new Error(`invalid agent notification ${field}`);
+      seen.add(entry.toLowerCase());
+    }
+    return [...seen];
+  };
+  return { mode, roleIds: ids(row.roleIds, 'roleIds'), userIds: ids(row.userIds, 'userIds') };
+}
 
 /** The mutable, non-secret fields the settings form collects. */
 export type AiSettingsInput = {
@@ -179,6 +223,7 @@ export function normalizeAgentSettingInput(
     materialityThreshold: threshold,
     detectors: normalizeContinuousCloseDetectors(agentKey, row.detectors),
     analysis: normalizeContinuousCloseAnalysisSettings(row.analysis),
+    notification: normalizeAgentNotificationSettings(row.notification),
   };
 }
 
@@ -284,14 +329,21 @@ async function persistAgentPolicy(
       : previous.next_run_at
     : null;
   const detectorSettings = serializeContinuousCloseDetectors(agent.detectors);
+  // Tri-state routing write: a caller that sent no notification section leaves
+  // the stored routing untouched; an explicit null clears it to findings-only.
+  const touchesNotification = agent.notification !== undefined;
+  const notificationJson = agent.notification === undefined || agent.notification === null
+    ? null
+    : JSON.stringify(agent.notification);
   const saved = (await tx.execute<{ id: string }>(sql`
     insert into ai_agent_policies (
       org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
-      detector_settings, analysis_settings, next_run_at, created_by, updated_by
+      detector_settings, analysis_settings, notification_settings, next_run_at, created_by, updated_by
     ) values (
       ${orgId}, ${agent.agentKey}, ${agent.enabled}, ${agent.automaticRuns},
       ${agent.cadence}, ${agent.materialityThreshold}, ${JSON.stringify(detectorSettings)}::jsonb,
-      ${JSON.stringify(agent.analysis)}::jsonb, ${nextRunAt}, ${userId}, ${userId}
+      ${JSON.stringify(agent.analysis)}::jsonb, ${notificationJson}::jsonb,
+      ${nextRunAt}, ${userId}, ${userId}
     )
     on conflict (org_id, agent_key) do update set
       enabled = excluded.enabled,
@@ -300,6 +352,10 @@ async function persistAgentPolicy(
       materiality_threshold = excluded.materiality_threshold,
       detector_settings = excluded.detector_settings,
       analysis_settings = excluded.analysis_settings,
+      notification_settings = case
+        when ${touchesNotification} then excluded.notification_settings
+        else ai_agent_policies.notification_settings
+      end,
       next_run_at = excluded.next_run_at,
       updated_at = now(),
       updated_by = excluded.updated_by
@@ -316,6 +372,7 @@ async function persistAgentPolicy(
       materialityThreshold: agent.materialityThreshold,
       detectors: detectorSettings,
       analysis: agent.analysis,
+      ...(touchesNotification ? { notification: agent.notification } : {}),
     })}::jsonb, ${userId})
   `);
 }

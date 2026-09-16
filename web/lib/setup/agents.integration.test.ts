@@ -12,6 +12,7 @@ const { applyFeatureChanges } = await import('../features-admin.ts')
 const {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   getAgentsOverview,
+  getSetupAgentNotification,
   listAgentRuns,
   runSetupAgentNow,
   saveSetupAgentPolicy,
@@ -180,6 +181,78 @@ test(
       'a pack whose module is off cannot be enabled',
     )
     assert.equal(await policyRow(org.orgId, 'accounting'), undefined)
+  },
+)
+
+test(
+  'notification routing persists, is left alone when absent, and clears on null',
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg()
+    try {
+      const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+      const roleId = (
+        await withBypassContext(
+          async () =>
+            (
+              await db.execute<{ id: string }>(sql`
+                select id::text as id from app_roles where org_id = ${org.orgId} order by name limit 1
+              `)
+            ).rows[0]?.id,
+        )
+      )!
+      assert.ok(roleId, 'scratch org must have a role to route to')
+      const routing = { mode: 'digest', roleIds: [roleId], userIds: [userId] }
+
+      await withBypassContext(() =>
+        saveSetupAgentPolicy(org.orgId, userId, 'accounting', { ...ENABLE_ACCOUNTING, notification: routing }),
+      )
+      const stored = await withBypassContext(() => getSetupAgentNotification(org.orgId, 'accounting'))
+      assert.deepEqual(stored, { mode: 'digest', roleIds: [roleId.toLowerCase()], userIds: [userId.toLowerCase()] })
+      const audits = await auditRows(org.orgId, 'accounting')
+      assert.deepEqual((audits[0]!.changes as { notification: unknown }).notification, stored)
+
+      // A save without a notification section must not wipe stored routing
+      // (the provider drawer saves agents without one).
+      await withBypassContext(() => saveSetupAgentPolicy(org.orgId, userId, 'accounting', ENABLE_ACCOUNTING))
+      assert.deepEqual(await withBypassContext(() => getSetupAgentNotification(org.orgId, 'accounting')), stored)
+      const auditsAfter = await auditRows(org.orgId, 'accounting')
+      assert.ok(!('notification' in (auditsAfter[0]!.changes as Record<string, unknown>)))
+
+      // Explicit null clears back to findings-only.
+      await withBypassContext(() =>
+        saveSetupAgentPolicy(org.orgId, userId, 'accounting', { ...ENABLE_ACCOUNTING, notification: null }),
+      )
+      assert.equal(await withBypassContext(() => getSetupAgentNotification(org.orgId, 'accounting')), null)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
+  'invalid notification routing is rejected before any write',
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg()
+    try {
+      const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+      for (const notification of [
+        { mode: 'smoke_signals' },
+        { mode: 'digest', roleIds: ['not-a-uuid'] },
+        { mode: 'immediate', userIds: ['00000000-0000-0000-0000-000000000000', 'x'.repeat(101)] },
+      ]) {
+        await assert.rejects(
+          withBypassContext(() =>
+            saveSetupAgentPolicy(org.orgId, userId, 'accounting', { ...ENABLE_ACCOUNTING, notification }),
+          ),
+          /invalid agent notification/,
+        )
+      }
+      assert.equal(await policyRow(org.orgId, 'accounting'), undefined)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
   },
 )
 

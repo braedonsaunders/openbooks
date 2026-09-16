@@ -968,7 +968,19 @@
         "minimumDeclinePercent": "Baisse minimale du chiffre d’affaires",
         "criticalDeclinePercent": "Baisse critique du chiffre d’affaires",
         "minimumDropPoints": "Baisse minimale de la marge",
-        "criticalDropPoints": "Baisse critique de la marge"
+        "criticalDropPoints": "Baisse critique de la marge",
+        "criticalCustomerCount": "Nombre critique de clients",
+        "breachToleranceDays": "Tolérance de rupture",
+        "holdOverdueDays": "Ancienneté de blocage",
+        "holdMaterialityMultiple": "Multiple d'exposition de blocage",
+        "minOverdueInvoices": "Factures échues minimales",
+        "duplicateWindowDays": "Fenêtre de doublons",
+        "criticalPairCount": "Nombre critique de paires",
+        "payRunHorizonDays": "Horizon de règlement",
+        "minimumDiscountPercent": "Remise minimale",
+        "matchWindowDays": "Fenêtre de rapprochement",
+        "minimumConfidencePercent": "Confiance minimale",
+        "lookbackDays": "Fenêtre de révision"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -1398,6 +1410,30 @@
         "registryNote": "Pack {key} · {count} contrôles · déclaré dans le registre des agents",
         "installFailed": "Impossible d'installer le pack.",
         "installedToast": "{name} installé avec les contrôles par défaut."
+      },
+      "policy": {
+        "backLabel": "Tous les agents",
+        "notificationsTitle": "Notifications des constats",
+        "notificationsDescription": "Qui reçoit les constats de ce pack et comment. Le routage est enregistré avec la politique — les constats paraissent toujours dans Activité.",
+        "modes": {
+          "findings_only": {
+            "title": "Constats uniquement",
+            "description": "Aucune notification — révisez les constats dans Activité."
+          },
+          "digest": {
+            "title": "Résumé quotidien",
+            "description": "Un résumé des nouveaux constats par jour."
+          },
+          "immediate": {
+            "title": "Immédiate",
+            "description": "Une notification pour chaque nouveau constat."
+          }
+        },
+        "rolesLabel": "Rôles",
+        "usersLabel": "Personnes",
+        "noTargets": "Aucun",
+        "usersTruncatedNote": "Les 200 premières personnes sont affichées.",
+        "deliveryNote": "L'envoi par courriel n'est pas encore branché — ceci enregistre qui doit recevoir quoi. En attendant, les constats paraissent toujours dans Activité des agents."
       },
       "packs": {
         "accounting": {

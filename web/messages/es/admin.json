@@ -924,7 +924,19 @@
         "minimumDeclinePercent": "Disminución mínima de ingresos",
         "criticalDeclinePercent": "Disminución crítica de ingresos",
         "minimumDropPoints": "Caída mínima del margen",
-        "criticalDropPoints": "Caída crítica del margen"
+        "criticalDropPoints": "Caída crítica del margen",
+        "criticalCustomerCount": "Cantidad crítica de clientes",
+        "breachToleranceDays": "Tolerancia de incumplimiento",
+        "holdOverdueDays": "Antigüedad de retención",
+        "holdMaterialityMultiple": "Múltiplo de exposición de retención",
+        "minOverdueInvoices": "Facturas vencidas mínimas",
+        "duplicateWindowDays": "Ventana de duplicados",
+        "criticalPairCount": "Cantidad crítica de pares",
+        "payRunHorizonDays": "Horizonte de pagos",
+        "minimumDiscountPercent": "Descuento mínimo",
+        "matchWindowDays": "Ventana de coincidencia",
+        "minimumConfidencePercent": "Confianza mínima",
+        "lookbackDays": "Ventana de revisión"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -1354,6 +1366,30 @@
         "registryNote": "Paquete {key} · {count} controles · declarado en el registro de agentes",
         "installFailed": "No se pudo instalar el paquete.",
         "installedToast": "{name} instalado con los controles predeterminados."
+      },
+      "policy": {
+        "backLabel": "Todos los agentes",
+        "notificationsTitle": "Notificaciones de hallazgos",
+        "notificationsDescription": "Quién recibe los hallazgos de este paquete y cómo. El enrutamiento se guarda con la política — los hallazgos siempre aparecen en Actividad.",
+        "modes": {
+          "findings_only": {
+            "title": "Solo hallazgos",
+            "description": "Sin notificaciones — revise los hallazgos en Actividad."
+          },
+          "digest": {
+            "title": "Resumen diario",
+            "description": "Un resumen de hallazgos nuevos por día."
+          },
+          "immediate": {
+            "title": "Inmediata",
+            "description": "Una notificación por cada hallazgo nuevo."
+          }
+        },
+        "rolesLabel": "Roles",
+        "usersLabel": "Personas",
+        "noTargets": "Ninguno",
+        "usersTruncatedNote": "Se muestran las primeras 200 personas.",
+        "deliveryNote": "El envío por correo aún no está conectado — esto guarda quién debe recibir qué. Mientras tanto, los hallazgos siempre aparecen en Actividad de agentes."
       },
       "packs": {
         "accounting": {
