@@ -28,7 +28,8 @@ function assertStrings(ns: string, keys: readonly string[], path = ''): void {
 
 const DRIVER_KEYS = [
   'title', 'description', 'newDriver', 'editDriver', 'key', 'keyHint', 'name',
-  'dimension', 'sourceKind', 'unit', 'active', 'showInactive', 'empty',
+  'dimension', 'sourceKind', 'unit', 'active', 'inactive', 'showInactive', 'empty',
+  'emptyTitle', 'manualCreateHint', 'valuesAfterSave',
   'deleteConfirm', 'unitPlaceholder', 'accountsHint', 'anyAccountScope',
   'measureLabel', 'reportLabel', 'dimensionColumn', 'valueColumn', 'valuesTitle',
   'valuesHint', 'dimensionValue', 'effectiveFrom', 'effectiveTo', 'openEnded',
@@ -39,7 +40,7 @@ const DRIVER_KEYS = [
 
 const RUN_KEYS = [
   'title', 'description', 'filterRule', 'filterPeriod', 'filterStatus', 'all',
-  'empty', 'allSubsidiaries', 'previewRun', 'runDetail', 'sources',
+  'empty', 'emptyTitle', 'allSubsidiaries', 'previewRun', 'runDetail', 'summary', 'sources',
   'driverVector', 'targets', 'target', 'weight', 'share', 'amount', 'residual',
   'lines', 'account', 'memo', 'computationEmpty', 'version', 'definitionHash',
   'trigger', 'started', 'completed', 'runError', 'post', 'reverse', 'rerun',
