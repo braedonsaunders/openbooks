@@ -124,7 +124,64 @@
   },
   "customer": {
     "title": "客户智能",
-    "backToHub": "分析"
+    "backToHub": "分析",
+    "insights": {
+      "churnInactive": "{days, plural, one {# 天} other {# 天}}无交易",
+      "churnDeclining": "互动下降",
+      "churnBelowPattern": "低于常规购买模式",
+      "churnSingle": "单次交易客户",
+      "churnLowFrequency": "交易频率低",
+      "recMaintain": "继续当前的客户互动策略",
+      "recFriction": "{count, plural, one {摩擦较高：# 笔贷项——请立即处理} other {摩擦较高：# 笔贷项——请立即处理}}",
+      "recOverdue": "订单逾期{overdue, plural, one {# 天} other {# 天}}（平均周期：{cycle, plural, one {# 天} other {# 天}}）",
+      "recWinBack": "存在流失风险——需要立即跟进",
+      "recNurture": "高价值客户——优先维护关系",
+      "recOnboard": "新客户——聚焦成功上手",
+      "recReprice": "营收高但利润率低（{pct}%）——请复核定价",
+      "recReview": "互动度低——请评估账户策略",
+      "scoreExcellent": "优秀",
+      "scoreVeryGood": "很好",
+      "scoreGood": "良好",
+      "scoreFair": "一般",
+      "scoreNeedsAttention": "需要关注",
+      "projectedClv": {
+        "title": "预测客户价值",
+        "message": "来自{count, plural, one {# 个客户} other {# 个客户}}未来{years, plural, one {# 年} other {# 年}}的预测CLV {amount}"
+      },
+      "churnRisk": {
+        "title": "流失风险预警",
+        "message": "{count, plural, one {# 个客户} other {# 个客户}}处于高/严重流失风险，涉及营收 {amount}",
+        "action": "对风险客户发起挽回活动"
+      },
+      "champions": {
+        "title": "冠军客户",
+        "message": "{count, plural, one {# 个冠军客户带来} other {# 个冠军客户带来}} {amount}",
+        "action": "保持VIP待遇和推荐计划"
+      },
+      "concentration": {
+        "title": "营收集中风险",
+        "message": "最大客户占营收的{share}%。HHI：{hhi}",
+        "action": "多元化客户基础以降低依赖"
+      },
+      "declining": {
+        "title": "营收下降趋势",
+        "message": "月均增长率 {growth}%",
+        "action": "复核客户获取与留存策略"
+      },
+      "growing": {
+        "title": "强劲增长势头",
+        "message": "月均增长{growth}%，新增客户{count, plural, one {# 个} other {# 个}}"
+      },
+      "overdue": {
+        "title": "逾期发票",
+        "message": "{count, plural, one {# 张逾期发票需要} other {# 张逾期发票需要}}处理",
+        "action": "复核催收流程和付款条件"
+      }
+    },
+    "labels": {
+      "unknownCustomer": "未知",
+      "untitledProject": "未命名项目"
+    }
   },
   "vendor": {
     "title": "供应商绩效",

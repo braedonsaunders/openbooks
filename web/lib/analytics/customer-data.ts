@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { englishCustomerStrings, type CustomerStrings } from "./customer-strings";
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
@@ -331,7 +332,12 @@ function emptyProfitability(): Profitability {
   };
 }
 
-export async function customerProfitability(period: { from: string; to: string }, orgId: string, allowed: ReadonlySet<string> | null): Promise<Profitability> {
+export async function customerProfitability(
+  period: { from: string; to: string },
+  orgId: string,
+  allowed: ReadonlySet<string> | null,
+  strings: CustomerStrings = englishCustomerStrings,
+): Promise<Profitability> {
   // Job-costed margins join `projects`. When Projects is off that register is
   // not a live module — an empty result is not "no jobs this period".
   if (!orgId || !(await isFeatureEnabled(orgId, "projects"))) return emptyProfitability();
@@ -400,7 +406,7 @@ export async function customerProfitability(period: { from: string; to: string }
     if (revenue === 0 && costs === 0) continue;
     const job: ProfitJob = {
       jobId: merged.job_id,
-      jobName: merged.job_name,
+      jobName: strings.displayJobName(merged.job_name),
       revenue,
       costs,
       profit,
@@ -409,7 +415,7 @@ export async function customerProfitability(period: { from: string; to: string }
     };
     let c = byCustomer.get(merged.customer_id);
     if (!c) {
-      c = { customerId: merged.customer_id, customerName: merged.customer_name, totalRevenue: 0, totalCost: 0, grossProfit: 0, marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
+      c = { customerId: merged.customer_id, customerName: strings.displayCustomerName(merged.customer_name), totalRevenue: 0, totalCost: 0, grossProfit: 0, marginPct: 0, profitTier: "marginal", isFakeChampion: false, jobs: [] };
       byCustomer.set(merged.customer_id, c);
     }
     c.jobs.push(job);
@@ -459,17 +465,17 @@ function percentile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
 }
 
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
-}
-
 function priorYearIso(iso: string): string {
   return addMonthsIso(iso, -12);
 }
 
 /* ------------------------------------------------------------------- main */
-export async function customerData(period: { from: string; to: string; label: string }, orgId: string, allowed: ReadonlySet<string> | null): Promise<CustomerData> {
+export async function customerData(
+  period: { from: string; to: string; label: string },
+  orgId: string,
+  allowed: ReadonlySet<string> | null,
+  strings: CustomerStrings = englishCustomerStrings,
+): Promise<CustomerData> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const pFrom = priorYearIso(from);
@@ -737,14 +743,14 @@ export async function customerData(period: { from: string; to: string; label: st
   const churnOf = (c: Base) => {
     let score = 0;
     const factors: string[] = [];
-    if (c.recency > CHURN_HIGH_DAYS) { score += 40; factors.push(`No activity in ${c.recency} days`); }
-    else if (c.recency > CHURN_MEDIUM_DAYS) { score += 25; factors.push("Declining engagement"); }
+    if (c.recency > CHURN_HIGH_DAYS) { score += 40; factors.push(strings.churnInactive(c.recency)); }
+    else if (c.recency > CHURN_MEDIUM_DAYS) { score += 25; factors.push(strings.churnDeclining); }
     else if (c.recency > 30) score += 10;
     const avgDaysBetween = c.tenure / Math.max(1, c.txns);
-    if (c.recency > avgDaysBetween * 2) { score += 30; factors.push("Below typical purchase pattern"); }
+    if (c.recency > avgDaysBetween * 2) { score += 30; factors.push(strings.churnBelowPattern); }
     else if (c.recency > avgDaysBetween * 1.5) score += 15;
-    if (c.txns <= 1) { score += 30; factors.push("Single transaction customer"); }
-    else if (c.txns <= 3) { score += 15; factors.push("Low transaction frequency"); }
+    if (c.txns <= 1) { score += 30; factors.push(strings.churnSingle); }
+    else if (c.txns <= 3) { score += 15; factors.push(strings.churnLowFrequency); }
     score = Math.min(100, score);
     const level: RiskLevel = score >= churnCritical ? "critical" : score >= churnHigh ? "high" : score >= churnMedium ? "medium" : "low";
     return { score, level, factors, retentionProbability: Math.max(0, 100 - score), avgDaysBetween: Math.round(avgDaysBetween) };
@@ -881,34 +887,34 @@ export async function customerData(period: { from: string; to: string; label: st
 
     // 7-priority recommendation ladder, verbatim.
     let recommendation: Recommendation = "maintain";
-    let detail = "Continue current engagement strategy";
+    let detail = strings.recMaintain;
     const velOverdue = vel.hasPattern ? vel.overdue : 0;
     if (friction && (friction.level === "critical" || friction.level === "high")) {
       recommendation = "resolve-issues";
-      detail = `High friction: ${friction.credits} credits — address issues immediately`;
+      detail = strings.recFriction(friction.credits);
     } else if (vel.hasPattern && vel.urgency === "critical") {
       recommendation = "reactivate";
-      detail = `${vel.overdue} days overdue for order (avg cycle: ${vel.cycle} days)`;
+      detail = strings.recOverdue(vel.overdue, vel.cycle);
     } else if (churn.level === "critical" || churn.level === "high") {
       recommendation = "win-back";
-      detail = "At risk of churn — immediate outreach needed";
+      detail = strings.recWinBack;
     } else if (healthScore >= 85 && clv.clv > 10_000) {
       recommendation = "nurture";
-      detail = "High-value customer — prioritize relationship";
+      detail = strings.recNurture;
     } else if (rfm.segment === "new") {
       recommendation = "onboard";
-      detail = "New customer — focus on successful onboarding";
+      detail = strings.recOnboard;
     } else if (profit?.isFakeChampion) {
       recommendation = "reprice";
-      detail = `High revenue but low margin (${profit.marginPct.toFixed(1)}%) — review pricing`;
+      detail = strings.recReprice(profit.marginPct.toFixed(1));
     } else if (healthScore < 50) {
       recommendation = "review";
-      detail = "Low engagement — evaluate account strategy";
+      detail = strings.recReview;
     }
 
     return {
       id: c.id,
-      name: c.name,
+      name: strings.displayCustomerName(c.name),
       revenue: c.revenue,
       priorRevenue: c.priorRevenue,
       yoyPct: c.priorRevenue > 0 ? (c.revenue - c.priorRevenue) / c.priorRevenue : null,
@@ -1013,7 +1019,7 @@ export async function customerData(period: { from: string; to: string; label: st
     prevRevenue = revenue;
     return {
       month: r.month,
-      label: monthLabel(r.month),
+      label: strings.monthLabel(r.month),
       revenue: Math.round(revenue),
       uniqueCustomers: Number(r.counts?.unique_customers ?? 0),
       transactionCount: Number(r.counts?.txn_count ?? 0),
@@ -1098,11 +1104,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const avgRetentionProbability = rows.length ? Math.round(rows.reduce((a, r) => a + r.retentionProbability, 0) / rows.length) : 50;
   const concentrationHealth = hhiLevel === "high" ? 30 : hhiLevel === "moderate" ? 60 : 90;
   const intelligenceScore = Math.round(championsScore * 0.3 + avgRetentionProbability * 0.3 + concentrationHealth * 0.2 + paymentRate * 0.2);
-  let scoreLabel = "Excellent", scoreGrade = "A";
-  if (intelligenceScore < 40) { scoreLabel = "Needs Attention"; scoreGrade = "D"; }
-  else if (intelligenceScore < 55) { scoreLabel = "Fair"; scoreGrade = "C"; }
-  else if (intelligenceScore < 70) { scoreLabel = "Good"; scoreGrade = "B"; }
-  else if (intelligenceScore < 85) { scoreLabel = "Very Good"; scoreGrade = "B+"; }
+  const { label: scoreLabel, grade: scoreGrade } = strings.intelligenceScore(intelligenceScore);
 
   /* ---- aggregates + insights ---- */
   const atRisk = rows.filter((r) => r.churnLevel === "critical" || r.churnLevel === "high");
@@ -1114,19 +1116,19 @@ export async function customerData(period: { from: string; to: string; label: st
   const insights: Insight[] = [];
   const fmtM = (n: number) => moneyCompact(n);
   if (totalProjectedClv > 0)
-    insights.push({ type: "info", category: "lifetime-value", title: "Projected Customer Value", message: `${fmtM(totalProjectedClv)} projected CLV over ${clvYears} years from ${rows.length} customers`, impact: "high" });
+    insights.push({ type: "info", category: "lifetime-value", ...strings.projectedClv(fmtM(totalProjectedClv), clvYears, rows.length), impact: "high" });
   if (atRisk.length > 0)
-    insights.push({ type: "warning", category: "churn", title: "Churn Risk Alert", message: `${atRisk.length} customers at high/critical churn risk representing ${fmtM(atRiskRevenue)} revenue`, impact: "high", action: "Initiate win-back campaigns for at-risk customers" });
+    insights.push({ type: "warning", category: "churn", ...strings.churnRisk(atRisk.length, fmtM(atRiskRevenue)), impact: "high" });
   if (championsStat.count > 0)
-    insights.push({ type: "success", category: "segmentation", title: "Champion Customers", message: `${championsStat.count} champion customers generating ${fmtM(championsStat.totalRevenue)}`, impact: "high", action: "Maintain VIP treatment and referral programs" });
+    insights.push({ type: "success", category: "segmentation", ...strings.champions(championsStat.count, fmtM(championsStat.totalRevenue)), impact: "high" });
   if (hhiLevel === "high")
-    insights.push({ type: "alert", category: "concentration", title: "Revenue Concentration Risk", message: `Top customer accounts for ${topCustomerShare.toFixed(1)}% of revenue. HHI: ${hhiScaled}`, impact: "high", action: "Diversify customer base to reduce dependency" });
+    insights.push({ type: "alert", category: "concentration", ...strings.concentration(topCustomerShare.toFixed(1), hhiScaled), impact: "high" });
   if (trend === "declining")
-    insights.push({ type: "warning", category: "growth", title: "Declining Revenue Trend", message: `Average monthly growth of ${avgMonthlyGrowth}%`, impact: "high", action: "Review customer acquisition and retention strategies" });
+    insights.push({ type: "warning", category: "growth", ...strings.declining(avgMonthlyGrowth), impact: "high" });
   else if (trend === "growing")
-    insights.push({ type: "success", category: "growth", title: "Strong Growth Trajectory", message: `${avgMonthlyGrowth}% average monthly growth with ${totalNewCustomers} new customers`, impact: "medium" });
+    insights.push({ type: "success", category: "growth", ...strings.growing(avgMonthlyGrowth, totalNewCustomers), impact: "medium" });
   if (totOverdue > 5)
-    insights.push({ type: "warning", category: "payments", title: "Overdue Invoices", message: `${totOverdue} overdue invoices require attention`, impact: "medium", action: "Review collections process and payment terms" });
+    insights.push({ type: "warning", category: "payments", ...strings.overdue(totOverdue), impact: "medium" });
 
   const TIERS: Tier[] = ["platinum", "gold", "silver", "bronze"];
   return {

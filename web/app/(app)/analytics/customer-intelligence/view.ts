@@ -1,12 +1,13 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { customerData, customerProfitability } from '../../../../lib/analytics/customer-data'
+import { customerStrings } from '../../../../lib/analytics/customer-strings'
 import type { CustomerView } from './CustomerView'
 
 /**
@@ -42,9 +43,13 @@ export async function loadCustomerIntelligence(sp: Record<string, string | undef
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
+  // Insight sentences resolve through the analytics catalog in the request
+  // locale — the same locale the statements use.
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = customerStrings((key, values) => tc(key, values), locale)
   const [data, profitability, projectsEnabled] = await Promise.all([
-    customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds),
-    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds),
+    customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
+    customerProfitability({ from: period.from, to: period.to }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     isFeatureEnabled(authz.user.orgId, 'projects'),
   ])
 

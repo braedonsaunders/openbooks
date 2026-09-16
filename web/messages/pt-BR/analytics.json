@@ -124,7 +124,64 @@
   },
   "customer": {
     "title": "Inteligência de clientes",
-    "backToHub": "Análises"
+    "backToHub": "Análises",
+    "insights": {
+      "churnInactive": "Sem atividade há {days, plural, one {# dia} other {# dias}}",
+      "churnDeclining": "Engajamento em queda",
+      "churnBelowPattern": "Abaixo do padrão de compra habitual",
+      "churnSingle": "Cliente de transação única",
+      "churnLowFrequency": "Baixa frequência de transações",
+      "recMaintain": "Manter a estratégia de engajamento atual",
+      "recFriction": "{count, plural, one {Atrito alto: # crédito — resolver os problemas imediatamente} other {Atrito alto: # créditos — resolver os problemas imediatamente}}",
+      "recOverdue": "{overdue, plural, one {# dia} other {# dias}} de atraso para o pedido (ciclo médio: {cycle, plural, one {# dia} other {# dias}})",
+      "recWinBack": "Em risco de churn — contato imediato necessário",
+      "recNurture": "Cliente de alto valor — priorizar o relacionamento",
+      "recOnboard": "Cliente novo — focar em onboarding bem-sucedido",
+      "recReprice": "Receita alta com margem baixa ({pct} %) — revisar preços",
+      "recReview": "Baixo engajamento — avaliar a estratégia da conta",
+      "scoreExcellent": "Excelente",
+      "scoreVeryGood": "Muito bom",
+      "scoreGood": "Bom",
+      "scoreFair": "Razoável",
+      "scoreNeedsAttention": "Precisa de atenção",
+      "projectedClv": {
+        "title": "Valor de cliente projetado",
+        "message": "{amount} de CLV projetado em {years, plural, one {# ano} other {# anos}} de {count, plural, one {# cliente} other {# clientes}}"
+      },
+      "churnRisk": {
+        "title": "Alerta de risco de churn",
+        "message": "{count, plural, one {# cliente} other {# clientes}} em risco de churn alto/crítico representando {amount} de receita",
+        "action": "Iniciar campanhas de reconquista para clientes em risco"
+      },
+      "champions": {
+        "title": "Clientes campeões",
+        "message": "{count, plural, one {# cliente campeão gerando} other {# clientes campeões gerando}} {amount}",
+        "action": "Manter tratamento VIP e programas de indicação"
+      },
+      "concentration": {
+        "title": "Risco de concentração de receita",
+        "message": "O principal cliente representa {share} % da receita. HHI: {hhi}",
+        "action": "Diversificar a base de clientes para reduzir a dependência"
+      },
+      "declining": {
+        "title": "Tendência de receita em queda",
+        "message": "Crescimento mensal médio de {growth} %",
+        "action": "Revisar estratégias de aquisição e retenção"
+      },
+      "growing": {
+        "title": "Forte trajetória de crescimento",
+        "message": "{growth} % de crescimento mensal médio com {count, plural, one {# cliente novo} other {# clientes novos}}"
+      },
+      "overdue": {
+        "title": "Faturas em atraso",
+        "message": "{count, plural, one {# fatura em atraso requer} other {# faturas em atraso requerem}} atenção",
+        "action": "Revisar o processo de cobrança e as condições de pagamento"
+      }
+    },
+    "labels": {
+      "unknownCustomer": "Desconhecido",
+      "untitledProject": "Projeto sem título"
+    }
   },
   "vendor": {
     "title": "Desempenho de fornecedores",

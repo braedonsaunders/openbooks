@@ -124,7 +124,64 @@
   },
   "customer": {
     "title": "Intelligence client",
-    "backToHub": "Analyses"
+    "backToHub": "Analyses",
+    "insights": {
+      "churnInactive": "Aucune activité depuis {days, plural, one {# jour} other {# jours}}",
+      "churnDeclining": "Engagement en baisse",
+      "churnBelowPattern": "Sous le rythme d'achat habituel",
+      "churnSingle": "Client à transaction unique",
+      "churnLowFrequency": "Faible fréquence de transactions",
+      "recMaintain": "Poursuivre la stratégie d'engagement actuelle",
+      "recFriction": "{count, plural, one {Friction élevée : # crédit — résoudre les problèmes immédiatement} other {Friction élevée : # crédits — résoudre les problèmes immédiatement}}",
+      "recOverdue": "{overdue, plural, one {# jour} other {# jours}} de retard pour la commande (cycle moyen : {cycle, plural, one {# jour} other {# jours}})",
+      "recWinBack": "Risque d'attrition — sensibilisation immédiate requise",
+      "recNurture": "Client à haute valeur — prioriser la relation",
+      "recOnboard": "Nouveau client — miser sur un onboarding réussi",
+      "recReprice": "Chiffre d'affaires élevé mais marge faible ({pct} %) — revoir la tarification",
+      "recReview": "Faible engagement — réévaluer la stratégie du compte",
+      "scoreExcellent": "Excellent",
+      "scoreVeryGood": "Très bien",
+      "scoreGood": "Bien",
+      "scoreFair": "Passable",
+      "scoreNeedsAttention": "Nécessite de l'attention",
+      "projectedClv": {
+        "title": "Valeur client projetée",
+        "message": "{amount} de CLV projetée sur {years, plural, one {# an} other {# ans}} pour {count, plural, one {# client} other {# clients}}"
+      },
+      "churnRisk": {
+        "title": "Alerte risque d'attrition",
+        "message": "{count, plural, one {# client} other {# clients}} à risque d'attrition élevé/critique représentant {amount} de chiffre d'affaires",
+        "action": "Lancer des campagnes de reconquête pour les clients à risque"
+      },
+      "champions": {
+        "title": "Clients champions",
+        "message": "{count, plural, one {# client champion générant} other {# clients champions générant}} {amount}",
+        "action": "Maintenir le traitement VIP et les programmes de parrainage"
+      },
+      "concentration": {
+        "title": "Risque de concentration du chiffre d'affaires",
+        "message": "Le principal client représente {share} % du chiffre d'affaires. HHI : {hhi}",
+        "action": "Diversifier la base clients pour réduire la dépendance"
+      },
+      "declining": {
+        "title": "Tendance de chiffre d'affaires en baisse",
+        "message": "Croissance mensuelle moyenne de {growth} %",
+        "action": "Revoir les stratégies d'acquisition et de fidélisation"
+      },
+      "growing": {
+        "title": "Forte trajectoire de croissance",
+        "message": "Croissance mensuelle moyenne de {growth} % avec {count, plural, one {# nouveau client} other {# nouveaux clients}}"
+      },
+      "overdue": {
+        "title": "Factures en retard",
+        "message": "{count, plural, one {# facture en retard nécessite} other {# factures en retard nécessitent}} une attention",
+        "action": "Revoir le processus de recouvrement et les conditions de paiement"
+      }
+    },
+    "labels": {
+      "unknownCustomer": "Inconnu",
+      "untitledProject": "Projet sans titre"
+    }
   },
   "vendor": {
     "title": "Performance fournisseurs",

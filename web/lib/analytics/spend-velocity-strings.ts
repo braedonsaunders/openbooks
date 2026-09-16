@@ -16,10 +16,9 @@
  * `Intl.ListFormat` in the request locale.
  */
 
-export type CatalogMessageFn = (
-  key: string,
-  values?: Record<string, string | number>,
-) => string;
+export type { CatalogMessageFn } from "./catalog-strings";
+import type { CatalogMessageFn } from "./catalog-strings";
+import { MONTH_KEYS } from "./catalog-strings";
 
 export interface SpendVelocityInsightText {
   title: string;
@@ -108,8 +107,6 @@ export const englishSpendVelocityStrings: SpendVelocityStrings = {
   seasonalHigh: (monthNames) => `Higher spending typically occurs in ${monthNames.join(", ")}`,
   seasonalLow: (monthNames) => `Lower spending typically occurs in ${monthNames.join(", ")}`,
 };
-
-const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function spendVelocityStrings(t: CatalogMessageFn, locale: string): SpendVelocityStrings {

@@ -485,6 +485,63 @@
       "profitabilityTail": " project-tagged GL lines rolled job → customer; customers without project-tagged activity show no margin (never estimated).",
       "intelligenceBold": "Intelligence score:",
       "intelligenceTail": " 30% champions share (20% of customers = max) + 30% avg retention probability + 20% concentration health + 20% payment rate — score {score} ({grade})."
+    },
+    "insights": {
+      "churnInactive": "No activity in {days, plural, one {# day} other {# days}}",
+      "churnDeclining": "Declining engagement",
+      "churnBelowPattern": "Below typical purchase pattern",
+      "churnSingle": "Single transaction customer",
+      "churnLowFrequency": "Low transaction frequency",
+      "recMaintain": "Continue current engagement strategy",
+      "recFriction": "{count, plural, one {High friction: # credit — address issues immediately} other {High friction: # credits — address issues immediately}}",
+      "recOverdue": "{overdue, plural, one {# day} other {# days}} overdue for order (avg cycle: {cycle, plural, one {# day} other {# days}})",
+      "recWinBack": "At risk of churn — immediate outreach needed",
+      "recNurture": "High-value customer — prioritize relationship",
+      "recOnboard": "New customer — focus on successful onboarding",
+      "recReprice": "High revenue but low margin ({pct}%) — review pricing",
+      "recReview": "Low engagement — evaluate account strategy",
+      "scoreExcellent": "Excellent",
+      "scoreVeryGood": "Very Good",
+      "scoreGood": "Good",
+      "scoreFair": "Fair",
+      "scoreNeedsAttention": "Needs Attention",
+      "projectedClv": {
+        "title": "Projected Customer Value",
+        "message": "{amount} projected CLV over {years, plural, one {# year} other {# years}} from {count, plural, one {# customer} other {# customers}}"
+      },
+      "churnRisk": {
+        "title": "Churn Risk Alert",
+        "message": "{count, plural, one {# customer} other {# customers}} at high/critical churn risk representing {amount} revenue",
+        "action": "Initiate win-back campaigns for at-risk customers"
+      },
+      "champions": {
+        "title": "Champion Customers",
+        "message": "{count, plural, one {# champion customer} other {# champion customers}} generating {amount}",
+        "action": "Maintain VIP treatment and referral programs"
+      },
+      "concentration": {
+        "title": "Revenue Concentration Risk",
+        "message": "Top customer accounts for {share}% of revenue. HHI: {hhi}",
+        "action": "Diversify customer base to reduce dependency"
+      },
+      "declining": {
+        "title": "Declining Revenue Trend",
+        "message": "Average monthly growth of {growth}%",
+        "action": "Review customer acquisition and retention strategies"
+      },
+      "growing": {
+        "title": "Strong Growth Trajectory",
+        "message": "{growth}% average monthly growth with {count, plural, one {# new customer} other {# new customers}}"
+      },
+      "overdue": {
+        "title": "Overdue Invoices",
+        "message": "{count, plural, one {# overdue invoice requires} other {# overdue invoices require}} attention",
+        "action": "Review collections process and payment terms"
+      }
+    },
+    "labels": {
+      "unknownCustomer": "Unknown",
+      "untitledProject": "Untitled project"
     }
   },
   "vendor": {
