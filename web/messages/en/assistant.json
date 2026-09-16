@@ -15,6 +15,7 @@
   "context": { "attached": "Finding context attached", "remove": "Remove finding context" },
   "send": "Send",
   "stop": "Stop",
+  "responding": "Assistant is responding",
   "writeHint": "The assistant can draft journal entries, but nothing is saved until you click Apply — and drafts still need to be posted by you.",
   "suggestions": {
     "s1": "How did we do last month? Summarize the P&L.",

@@ -14,6 +14,7 @@
   "context": { "attached": "Contexto del hallazgo adjunto", "remove": "Quitar el contexto" },
   "send": "Enviar",
   "stop": "Detener",
+  "responding": "El asistente está respondiendo",
   "writeHint": "El asistente puede redactar asientos de diario, pero nada se guarda hasta que haga clic en Aplicar — y los borradores aún deben ser contabilizados por usted.",
   "suggestions": {
     "s1": "¿Cómo nos fue el mes pasado? Resume el estado de resultados.",
