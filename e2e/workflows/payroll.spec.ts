@@ -28,11 +28,11 @@ import {
   TAG,
   api,
   asStubs,
-  ensureSecondApprover,
   field,
   loginApiContext,
   neg,
   ok,
+  seededApprover,
   sumExact,
   type Stub,
 } from "./payroll-helpers";
@@ -95,6 +95,7 @@ interface Ctx {
   baseURL: string;
   rootSub: string;
   subUS: string;
+  caSub: string;
   schedCA: string;
   schedUS: string;
   alice: string;
@@ -105,7 +106,7 @@ interface Ctx {
   runCAno: string;
   runUSno: string;
   retroRun: string;
-  approver: { id: string; email: string; password: string };
+  approver: { email: string; password: string };
   approverApi: APIRequestContext | null;
   acct: Record<string, string>;
   vendor: Record<string, string>;
@@ -369,14 +370,16 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       ctx.approverApi = null;
       const rq = page.request;
       // The second approver first: bank-detail and pay-run flows name them.
-      // No product API creates users, so this is direct (loudly failing)
-      // test infrastructure — see payroll-helpers.
-      ctx.approver = await ensureSecondApprover(TAG);
+      // The browser job seeds this user before the specs run; provisioning
+      // here is impossible (no product API creates users, and the runtime
+      // role's RLS posture hides the org row direct SQL would need).
+      ctx.approver = seededApprover();
       // Features the flow needs: payroll itself, projects (wage rates),
-      // multi-subsidiary (US legal entity), flows (approvals).
+      // multi-subsidiary (US legal entity), flows (approvals), multi-currency
+      // (CA staff are paid in CAD on a USD-base org).
       ok(
         await api(rq, ctx.baseURL, "PUT", "/api/admin/setup/features", {
-          features: { payroll: true, projects: true, multiSubsidiary: true, flows: true },
+          features: { payroll: true, projects: true, multiSubsidiary: true, flows: true, multiCurrency: true },
         }),
         "features",
       );
@@ -489,31 +492,30 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           ),
           "id",
         );
-      // The org-wide CA schedule first: minting its run resolves the root
-      // subsidiary id (no list API exposes it), which parents the US entity.
-      ctx.schedCA = field(
+      // Root discovery first: no list API exposes the root subsidiary id,
+      // which parents both legal entities. Mint one run from a throwaway
+      // org-wide schedule and read it back. The empty draft is abandoned —
+      // numbering is never pinned exactly, only /^PAY-/.
+      const schedDiscovery = field(
         ok(
           await api(rq, ctx.baseURL, "POST", "/api/admin/setup/pay-schedules", {
-            name: `${TAG} Biweekly CA`,
+            name: `${TAG} Biweekly Discovery`,
             frequency: "biweekly",
             periodsPerYear: 26,
             anchorPeriodEnd: "2026-01-02",
             payDateOffsetDays: 3,
             isActive: true,
           }),
-          "CA schedule",
+          "discovery schedule",
         ),
         "id",
       );
-      ctx.runCA = field(
-        ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: ctx.schedCA }), "mint CA run"),
+      const discoveryId = field(
+        ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: schedDiscovery }), "mint discovery run"),
         "documentId",
       );
-      const runCA = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runCA}`), "read CA run");
-      const header = runCA["run"] as Record<string, unknown>;
-      ctx.runCAno = String(header["document_number"]);
-      ctx.rootSub = String(header["subsidiaryId"]);
-      expect(ctx.runCAno).toMatch(/^PAY-/);
+      const discovery = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${discoveryId}`), "read discovery run");
+      ctx.rootSub = String((discovery["run"] as Record<string, unknown>)["subsidiaryId"]);
       // US legal entity + schedule under it.
       ctx.subUS = field(
         ok(
@@ -528,6 +530,49 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         ),
         "id",
       );
+      // Canadian entity: CA staff are paid in CAD (wage-rate currencies must
+      // be configured on some active subsidiary), and — decisive here — the
+      // CA run must pay from a Canadian legal entity. A root-paying run is a
+      // US entity paying CA-packed employees, which the engine refuses.
+      ctx.caSub = field(
+        ok(
+          await api(rq, ctx.baseURL, "POST", "/api/admin/setup/subsidiaries", {
+            name: `${TAG} CA Employer`,
+            baseCurrency: "CAD",
+            country: "CA",
+            parentId: ctx.rootSub,
+            isActive: true,
+          }),
+          "CA subsidiary",
+        ),
+        "id",
+      );
+      // The CA schedule lives under the Canadian entity so runs minted from
+      // it pay Canadian statutory withholdings.
+      ctx.schedCA = field(
+        ok(
+          await api(rq, ctx.baseURL, "POST", "/api/admin/setup/pay-schedules", {
+            name: `${TAG} Biweekly CA`,
+            frequency: "biweekly",
+            periodsPerYear: 26,
+            anchorPeriodEnd: "2026-01-02",
+            payDateOffsetDays: 3,
+            subsidiaryId: ctx.caSub,
+            isActive: true,
+          }),
+          "CA schedule",
+        ),
+        "id",
+      );
+      ctx.runCA = field(
+        ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: ctx.schedCA }), "mint CA run"),
+        "documentId",
+      );
+      const runCA = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runCA}`), "read CA run");
+      const header = runCA["run"] as Record<string, unknown>;
+      ctx.runCAno = String(header["document_number"]);
+      expect(ctx.runCAno).toMatch(/^PAY-/);
+      expect(String(header["subsidiaryId"])).toBe(ctx.caSub);
       ctx.schedUS = field(
         ok(
           await api(rq, ctx.baseURL, "POST", "/api/admin/setup/pay-schedules", {
@@ -646,6 +691,23 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         }),
         "move Sam to the US subsidiary",
       );
+      // Alice and Jean are employed by the Canadian entity and paid on its
+      // schedule — profiles refuse cross-subsidiary schedule membership.
+      for (const [partyId, who] of [
+        [ctx.alice, "Alice"],
+        [ctx.jean, "Jean"],
+      ] as [string, string][]) {
+        const current = (await rq.get(`/api/parties/${partyId}`).then((r) => r.json())) as {
+          party: { updated_at: string };
+        };
+        ok(
+          await api(rq, ctx.baseURL, "PATCH", `/api/parties/${partyId}`, {
+            subsidiaryId: ctx.caSub,
+            expectedUpdatedAt: current.party.updated_at,
+          }),
+          `move ${who} to the CA subsidiary`,
+        );
+      }
       // Wage rates (hourly CA staff, salaried US staff).
       const rates: [string, string, string, string][] = [
         [ctx.alice, "CAD", "45.00", "hour"],

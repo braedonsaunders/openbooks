@@ -1,6 +1,7 @@
 import { test } from "@playwright/test";
 import { authedContext, dismissSetupWizard } from "../auth";
 import {
+  ADMIN_NAME,
   AMT,
   APPROVER_EMAIL,
   APPROVER_PASSWORD,
@@ -984,14 +985,14 @@ test.describe.serial("close to reporting", () => {
       await page.goto(`/close?run=${SEED.runId}&stage=publish`);
       const timeline = page.locator("main");
       await expect(timeline.getByText("E2E Approver").first()).toBeVisible();
-      await expect(timeline.getByText("E2E Local").first()).toBeVisible();
+      await expect(timeline.getByText(ADMIN_NAME).first()).toBeVisible();
 
       // Reopen request drawer: reason, requester, and decided status.
       await page.goto(
         `/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}&reopen=${SEED.requestId}`,
       );
       await expect(page.getByText("Freight received after close MIB-2291")).toBeVisible();
-      await expect(page.getByText("Requested by E2E Local")).toBeVisible();
+      await expect(page.getByText(`Requested by ${ADMIN_NAME}`)).toBeVisible();
       // Reopen request drawer: reason, requester, and the decided status.
       // By assertion time the window has re-closed, so the lifecycle reads
       // requested -> approved -> reclosed.
