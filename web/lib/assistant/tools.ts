@@ -18,7 +18,7 @@ import {
 import { openItems } from "../cash/open-items";
 import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
-import { orgToday, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
+import { dateInput, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
@@ -31,12 +31,6 @@ import { isFeatureEnabled } from "../features";
  * query layer the UI renders from (web/lib/data.ts, web/lib/reports.ts) so the
  * assistant can never disagree with the screens.
  */
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD");
-const uuidInput = z.string().regex(UUID_RE, "uuid");
 
 function num(v: unknown): number {
   const n = Number(v);
@@ -105,9 +99,9 @@ const findAccounts: AssistantToolDef = {
   inputSchema: z.object({
     query: z.string().max(100).optional().describe("Match against account number or name"),
     type: z.string().max(40).optional().describe("Account type, e.g. asset_bank, expense, income"),
-    asOf: dateInput.optional(),
-    includeInactive: z.boolean().optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    asOf: dateInput.optional().describe("Statement date; defaults to today"),
+    includeInactive: z.boolean().optional().describe("Include archived accounts; default active only"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum accounts to return (default 25)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -155,7 +149,7 @@ const accountRegisterTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["gl.read"] },
   inputSchema: z.object({
     accountId: uuidInput,
-    limit: z.number().int().min(1).max(50).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum register lines to return (default 25)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { accountId: string; limit?: number };
@@ -194,12 +188,12 @@ const findJournalEntries: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["gl.read"] },
   inputSchema: z.object({
-    query: z.string().max(100).optional(),
-    status: z.enum(["draft", "posted", "reversed"]).optional(),
-    origin: z.string().max(40).optional(),
+    query: z.string().max(100).optional().describe("Match entry number or memo"),
+    status: z.enum(["draft", "posted", "reversed"]).optional().describe("Filter by entry status"),
+    origin: z.string().max(40).optional().describe("Filter by the entry's origin code"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum entries to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -361,12 +355,12 @@ const findDocuments: AssistantToolDef = {
   inputSchema: z.object({
     kind: z.string().max(40).optional()
       .describe("e.g. vendor_bill, customer_invoice, expense_report, vendor_payment, journal"),
-    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional(),
+    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional().describe("Filter by document status"),
     query: z.string().max(100).optional().describe("Match document number, reference, or memo"),
     partyQuery: z.string().max(100).optional().describe("Match the party (vendor/customer) name"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum documents to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -534,9 +528,9 @@ const findParties: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["parties.read"] },
   inputSchema: z.object({
-    query: z.string().max(100).optional(),
-    includeInactive: z.boolean().optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    query: z.string().max(100).optional().describe("Match party name, short code, or email"),
+    includeInactive: z.boolean().optional().describe("Include archived parties; default active only"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum parties to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { query?: string; includeInactive?: boolean; limit?: number };
@@ -718,11 +712,11 @@ const agingTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
-    side: z.enum(["ar", "ap"]),
-    asOf: dateInput.optional(),
+    side: z.enum(["ar", "ap"]).describe("Which ledger side: ar ranks customers, ap ranks vendors"),
+    asOf: dateInput.optional().describe("Aging date; defaults to today"),
     bucket: z.enum(["current", "days1to30", "days31to60", "days61to90", "over90", "over30", "over60", "overdue"]).optional()
       .describe("Rank by this slice instead of total: over30 = 31+ days, over60 = 61+ days, overdue = all past due"),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(100).optional().describe("Maximum parties to return (default 30)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { side: "ar" | "ap"; asOf?: string; bucket?: string; limit?: number };
@@ -826,8 +820,8 @@ const financialPeriods: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read", "close.read"] },
   inputSchema: z.object({
-    completedOnly: z.boolean().optional(),
-    limit: z.number().int().min(1).max(24).optional(),
+    completedOnly: z.boolean().optional().describe("Only periods that already ended; default true"),
+    limit: z.number().int().min(1).max(24).optional().describe("Maximum periods to return (default 15)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { completedOnly?: boolean; limit?: number };
@@ -878,7 +872,9 @@ const financialTrends: AssistantToolDef = {
     "Return up to 15 completed fiscal periods of exact revenue, COGS, gross profit, operating expense, net income, gross-margin percentage, and period-end cash. Use for trend and anomaly analysis without making many report calls. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  inputSchema: z.object({ limit: z.number().int().min(2).max(15).optional() }),
+  inputSchema: z.object({
+    limit: z.number().int().min(2).max(15).optional().describe("How many completed periods to return (default 15)"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const denied = reportScopeDenied(authz);
     if (denied) return denied;
@@ -968,9 +964,9 @@ const partyConcentration: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "reports.read"] },
   inputSchema: z.object({
-    side: z.enum(["customer", "vendor"]),
+    side: z.enum(["customer", "vendor"]).describe("Rank customers by revenue or vendors by spend"),
     ...rangeInputFields,
-    limit: z.number().int().min(1).max(50).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum parties to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as RangeArgs & { side: "customer" | "vendor"; limit?: number };
@@ -1016,8 +1012,8 @@ const projectProfitability: AssistantToolDef = {
   feature: "projects",
   inputSchema: z.object({
     projectId: uuidInput.optional(),
-    query: z.string().max(100).optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    query: z.string().max(100).optional().describe("Match project or customer name (name-search mode only)"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum projects to return in name-search mode (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };
@@ -1072,11 +1068,11 @@ const continuousCloseFindings: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
   feature: "continuousClose",
   inputSchema: z.object({
-    agent: z.enum(["accounting", "finance"]).optional(),
-    status: z.enum(["open", "in_review", "resolved", "dismissed"]).optional(),
-    severity: z.enum(["info", "warning", "critical"]).optional(),
-    query: z.string().max(100).optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    agent: z.enum(["accounting", "finance"]).optional().describe("Only findings from this close agent"),
+    status: z.enum(["open", "in_review", "resolved", "dismissed"]).optional().describe("Only findings in this status (default open and in_review)"),
+    severity: z.enum(["info", "warning", "critical"]).optional().describe("Only findings at this severity"),
+    query: z.string().max(100).optional().describe("Match finding type or summary"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum findings to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "continuousClose"))) {
@@ -1190,10 +1186,10 @@ const listOpenItems: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
-    side: z.enum(["ar", "ap"]),
-    asOf: dateInput.optional(),
+    side: z.enum(["ar", "ap"]).describe("Which open items: ar = customer receivables, ap = vendor payables"),
+    asOf: dateInput.optional().describe("Open-item date; defaults to today"),
     partyId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum items to return (default 100)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { side: "ar" | "ap"; asOf?: string; partyId?: string; limit?: number };

@@ -25,7 +25,7 @@ const listBankReconciliations: AssistantToolDef = {
   feature: "banking",
   inputSchema: z.object({
     accountId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
@@ -122,7 +122,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
   feature: "banking",
   inputSchema: z.object({
     accountId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };

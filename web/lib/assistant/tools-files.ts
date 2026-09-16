@@ -43,9 +43,9 @@ const listFilesTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["documents.read"] },
   inputSchema: z.object({
     folderId: uuidInput.optional(),
-    query: z.string().max(200).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
-    offset: z.number().int().min(0).optional(),
+    query: z.string().max(200).optional().describe("Match file name"),
+    limit: z.number().int().min(1).max(100).optional().describe("Maximum files to return (default 25)"),
+    offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { folderId?: string; query?: string; limit?: number; offset?: number };

@@ -325,8 +325,9 @@ const cashflowTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    horizonWeeks: z.union([z.literal(4), z.literal(8), z.literal(12)]).optional(),
-    asOfDate: dateInput.optional(),
+    horizonWeeks: z.union([z.literal(4), z.literal(8), z.literal(12)]).optional()
+      .describe("Forecast horizon in weeks: 4, 8, or 12 (default 4)"),
+    asOfDate: dateInput.optional().describe("Forecast start date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { horizonWeeks?: 4 | 8 | 12; asOfDate?: string };
@@ -691,7 +692,7 @@ const apPositionTool: AssistantToolDef = {
     "Accounts Payable operational position (the AP cockpit): open payables outstanding and overdue, aging buckets, the 4-week predicted payment schedule, payables grouped by vendor, the pay-priority worklist, and the capacity-scheduled pay-run recommendation using the org's configured weekly AP cap. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ap.read"] },
-  inputSchema: z.object({ asOfDate: dateInput.optional() }),
+  inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOfDate?: string };
     const orgId = authz.user.orgId;
@@ -759,7 +760,7 @@ const arPositionTool: AssistantToolDef = {
     "Accounts Receivable operational position (the AR cockpit): open receivables outstanding and overdue, aging buckets, the 4-week predicted collection schedule, receivables grouped by customer, and the collections worklist ordered most-overdue first. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read"] },
-  inputSchema: z.object({ asOfDate: dateInput.optional() }),
+  inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { asOfDate?: string };
     const orgId = authz.user.orgId;
@@ -819,7 +820,7 @@ const cashPositionTool: AssistantToolDef = {
   feature: "banking",
   inputSchema: z.object({
     horizonWeeks: z.number().int().min(1).max(26).optional().describe("Forecast horizon in weeks, 1–26 (default 8; 13 = standard 13-week forecast)"),
-    asOfDate: dateInput.optional(),
+    asOfDate: dateInput.optional().describe("Forecast start date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) return { ok: false, error: "banking_feature_disabled" };
