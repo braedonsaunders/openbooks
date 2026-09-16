@@ -3336,7 +3336,9 @@
         "blockingCompliancePolicies": "{count, plural, one {# policy that blocks payment} other {# policies that block payment}}",
         "openLienWaivers": "{count, plural, one {# lien waiver awaiting signature} other {# lien waivers awaiting signature}}",
         "draftInformationReturns": "{count, plural, one {# information return in progress} other {# information returns in progress}}",
-        "unfiledInformationReturns": "{count, plural, one {# finalized information return that has not been filed} other {# finalized information returns that have not been filed}}"
+        "unfiledInformationReturns": "{count, plural, one {# finalized information return that has not been filed} other {# finalized information returns that have not been filed}}",
+        "activeAllocationRules": "{count, plural, one {# active allocation rule} other {# active allocation rules}}",
+        "previewedAllocationRuns": "{count, plural, one {# previewed allocation run} other {# previewed allocation runs}}"
       },
       "errors": {
         "blocked": "This feature can't be turned off — its data is load-bearing for the ledger.",
@@ -4092,6 +4094,18 @@
     "subcontractorCompliance": {
       "title": "Subcontractor compliance",
       "description": "Certificates of insurance, lien waivers, and 1099-NEC/MISC and T4A information returns, with payment holds when a subcontractor's coverage lapses."
+    },
+    "allocations": {
+      "title": "Allocations",
+      "description": "One versioned rule model that distributes pooled cost to targets on a driver: distribution keys at transaction entry, extra GL lines at posting, and scheduled period-end sweeps, with full lineage."
+    },
+    "allocationsAtEntry": {
+      "title": "Allocations at entry",
+      "description": "Let allocation rules explode a saved document line into a group of child lines across accounts and dimensions."
+    },
+    "allocationsAtPosting": {
+      "title": "Allocations at posting",
+      "description": "Let allocation rules and authorized scripts contribute extra GL lines to a transaction's own journal entry at posting."
     }
   },
   "backupsManager": {

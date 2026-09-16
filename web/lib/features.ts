@@ -352,6 +352,20 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
          and status in ('draft', 'pending_approval')`)
     return { blocked: n > 0, impacts: n ? [{ labelKey: 'openFieldTickets', count: n }] : [] }
   },
+  allocations: async (orgId) => {
+    // Turning allocations off hides every binding moment (entry, posting,
+    // period, scheduler) but keeps rules, versions, runs, and lineage — so
+    // nothing is stranded and the switch is never blocked. Counts tell the
+    // operator what goes dark.
+    const [rules, runs] = await sequential([
+      () => countRows(sql`select count(*)::int as n from allocation_rules where org_id = ${orgId} and is_active`),
+      () => countRows(sql`select count(*)::int as n from allocation_runs where org_id = ${orgId} and status = 'previewed'`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (rules) impacts.push({ labelKey: 'activeAllocationRules', count: rules })
+    if (runs) impacts.push({ labelKey: 'previewedAllocationRuns', count: runs })
+    return { blocked: false, impacts }
+  },
   revenueRecognition: async (orgId) => {
     // Real usage = obligations on a NON-immediate rule (point_in_time recognizes
     // at invoice, so it isn't "using" deferral). A raw revenue_contracts count is
