@@ -1,22 +1,16 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { guardPermission, type Authz } from "./authz";
-import { orgFeatureState } from "./features";
+import { isFeatureEnabled } from "./features";
 import { permissionSetCovers } from "./permissions";
 
 /**
- * Allocations feature gate (A8).
- *
- * Reads the explicit `allocations` flag from the org's feature state
- * directly instead of `isFeatureEnabled`: the governed `allocations`
- * registry entry lands with A10 (platform slice), and `featureEnabled`
- * fails closed for unknown keys. Once A10's entry (default OFF) lands,
- * this returns exactly what `isFeatureEnabled(orgId, 'allocations')`
- * returns, so routes need no rewiring.
+ * Allocations feature gate (A8): the governed `allocations` switch
+ * (accounting category, default OFF). Sub-gates `allocationsAtEntry` /
+ * `allocationsAtPosting` live with the entry/post surfaces (A9/A5).
  */
 export async function isAllocationsEnabled(orgId: string): Promise<boolean> {
-  const state = await orgFeatureState(orgId);
-  return state?.["allocations"] === true;
+  return isFeatureEnabled(orgId, "allocations");
 }
 
 /** Feature-off looks like a missing route (the Setup precedent). */
