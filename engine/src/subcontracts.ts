@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
+import { settleCumulativeRetainage } from "./currencies.ts";
 import { businessToday } from "./business-date.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
@@ -250,14 +251,30 @@ export interface ComputedVendorApplication {
 }
 
 /**
+ * Currency-aware retainage settlement for one vendor application. `minorUnits`
+ * is the subcontract currency's ISO minor units (default 4 preserves exact
+ * ledger precision); `priorExactRetainage` replays already-settled draws,
+ * oldest first, so the residual carries across draws. Omit both for exact
+ * four-decimal math.
+ */
+export interface VendorRetainageSettlement {
+  minorUnits?: number;
+  priorExactRetainage?: readonly string[];
+}
+
+/**
  * Exact cumulative vendor-application math. Current stored material is a
  * balance, not a new charge: a decrease is offset by work incorporated during
  * the period. This prevents paying twice when stored material becomes installed.
+ * Retainage is settled to whole currency minor units with the residual carried
+ * forward, so releases sum to total retained exactly.
  */
 export function computeVendorApplication(
   inputs: VendorApplicationLineInput[],
+  settlement: VendorRetainageSettlement = {},
 ): ComputedVendorApplication {
-  const lines = inputs.map((input) => {
+  const { minorUnits = 4, priorExactRetainage = [] } = settlement;
+  const exacts = inputs.map((input) => {
     const scheduled = persistSubcontractSovScheduledValue(input.scheduledValue);
     const previousEarned = persistVendorPayApplicationPreviousEarned(input.previousEarned);
     const previousStored = persistVendorPayApplicationPreviousMaterialsStored(input.previousMaterialsStored);
@@ -284,13 +301,22 @@ export function computeVendorApplication(
     return {
       sovLineId: input.sovLineId,
       grossThisPeriod: gross,
-      retainageThisPeriod: retained,
-      netDue: add(gross, neg(retained)),
+      exactRetainage: retained,
       earnedToDate: earned,
       materialsStoredCurrent: currentStored,
       remainingCommitment: add(scheduled, neg(earned)),
     };
   });
+  const settled = settleCumulativeRetainage(priorExactRetainage, exacts.map((e) => e.exactRetainage), minorUnits);
+  const lines: ComputedVendorApplicationLine[] = exacts.map((e, index) => ({
+    sovLineId: e.sovLineId,
+    grossThisPeriod: e.grossThisPeriod,
+    retainageThisPeriod: settled[index]!,
+    netDue: add(e.grossThisPeriod, neg(settled[index]!)),
+    earnedToDate: e.earnedToDate,
+    materialsStoredCurrent: e.materialsStoredCurrent,
+    remainingCommitment: e.remainingCommitment,
+  }));
   const grossThisPeriod = lines.length ? sum(lines.map((line) => line.grossThisPeriod)) : "0.0000";
   const retainageThisPeriod = lines.length ? sum(lines.map((line) => line.retainageThisPeriod)) : "0.0000";
   return {

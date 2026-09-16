@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
+import { settleCumulativeRetainage } from "./currencies.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
@@ -192,16 +193,30 @@ export function revisedScheduleValue(
 }
 
 /**
+ * Currency-aware retainage settlement for one application. `minorUnits` is
+ * the transaction currency's ISO minor units (default 4 preserves exact
+ * ledger precision); `priorExactRetainage` replays already-settled draws,
+ * oldest first, so the residual carries across draws. Omit both for exact
+ * four-decimal math.
+ */
+export interface RetainageSettlement {
+  minorUnits?: number;
+  priorExactRetainage?: readonly string[];
+}
+
+/**
  * Pure G702/G703 math for one application. Materials stored is a cumulative
  * balance, not a fresh charge: the draw bills only its increase over the
  * balance prior applications already billed (mirroring the vendor-application
  * model), and a decrease is refused — billed materials left the site, which is
  * a credit/adjustment, not a negative draw. Gross this period = work completed
- * + the stored increment; retainage is withheld on that gross; the net is the
+ * + the stored increment; retainage is withheld on that gross and settled to
+ * whole currency minor units with the residual carried forward; the net is the
  * current payment due. Exact money throughout — unit-tested.
  */
-export function computeApplication(lines: AppLineInput[]): ComputedApplication {
-  const computed: ComputedAppLine[] = lines.map((l) => {
+export function computeApplication(lines: AppLineInput[], settlement: RetainageSettlement = {}): ComputedApplication {
+  const { minorUnits = 4, priorExactRetainage = [] } = settlement;
+  const exacts: { sovLineId: string; grossThisPeriod: string; exactRetainage: string; completedToDate: string; percentComplete: string }[] = lines.map((l) => {
     const scheduled = persistRevisedScheduleValueInput(l.scheduledValue || "0");
     const previous = persistPreviousCompleted(l.previousCompleted || "0");
     const previousStored = persistPreviousMaterialsStored(l.previousMaterialsStored || "0");
@@ -221,7 +236,6 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
     }
     const gross = add(thisPeriod, add(stored, neg(previousStored)));
     const retainage = cmp(l.retainagePercent, "0") > 0 ? mulPercent(gross, l.retainagePercent) : "0.0000";
-    const net = add(gross, neg(retainage));
     const completedToDate = add(previous, gross);
     if (cmp(completedToDate, scheduled) > 0) {
       throw new ConstructionBillingError("Application amount exceeds the scheduled value");
@@ -232,12 +246,23 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
     return {
       sovLineId: l.sovLineId,
       grossThisPeriod: gross,
-      retainageThisPeriod: retainage,
-      netThisPeriod: net,
+      exactRetainage: retainage,
       completedToDate,
       percentComplete: percent,
     };
   });
+  // Settle the exact line retainage into whole minor units, carrying the
+  // residual across lines (and across draws via the replay) so the settled
+  // total is the rounded cumulative amount exactly.
+  const settled = settleCumulativeRetainage(priorExactRetainage, exacts.map((e) => e.exactRetainage), minorUnits);
+  const computed: ComputedAppLine[] = exacts.map((e, index) => ({
+    sovLineId: e.sovLineId,
+    grossThisPeriod: e.grossThisPeriod,
+    retainageThisPeriod: settled[index]!,
+    netThisPeriod: add(e.grossThisPeriod, neg(settled[index]!)),
+    completedToDate: e.completedToDate,
+    percentComplete: e.percentComplete,
+  }));
   const grossThisPeriod = computed.length ? sum(computed.map((c) => c.grossThisPeriod)) : "0";
   const retainageThisPeriod = computed.length ? sum(computed.map((c) => c.retainageThisPeriod)) : "0";
   return {

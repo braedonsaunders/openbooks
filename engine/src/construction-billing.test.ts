@@ -106,6 +106,69 @@ test("totals sum exactly across mixed lines (no drift)", () => {
   assert.equal(r.currentDue, "9500.0005");
 });
 
+test("two-decimal settlement rounds the cumulative retained amount and carries the residual", () => {
+  const r = computeApplication([
+    line({ sovLineId: "a", thisPeriodCompleted: "3333.33", retainagePercent: "10" }),
+    line({ sovLineId: "b", thisPeriodCompleted: "3333.33", retainagePercent: "5" }),
+    line({ sovLineId: "c", thisPeriodCompleted: "3333.34", retainagePercent: "0" }),
+  ], { minorUnits: 2 });
+  // Exact line retainage 333.333 + 166.6665: line a settles 333.33, line b
+  // absorbs the residual (166.67), line c settles nothing. The settled total
+  // is the rounded cumulative amount exactly — no fractional cents.
+  assert.equal(r.lines[0]!.retainageThisPeriod, "333.3300");
+  assert.equal(r.lines[1]!.retainageThisPeriod, "166.6700");
+  assert.equal(r.lines[2]!.retainageThisPeriod, "0.0000");
+  assert.equal(r.grossThisPeriod, "10000.0000");
+  assert.equal(r.retainageThisPeriod, "500.0000");
+  assert.equal(r.currentDue, "9500.0000");
+});
+
+test("zero-decimal settlement keeps whole yen with the residual carried", () => {
+  const r = computeApplication([
+    line({ sovLineId: "a", thisPeriodCompleted: "333.33", retainagePercent: "10" }),
+    line({ sovLineId: "b", thisPeriodCompleted: "333.33", retainagePercent: "10" }),
+  ], { minorUnits: 0 });
+  // Exact 33.333 + 33.333: cumulative 66.666 rounds to 67 whole yen.
+  assert.equal(r.lines[0]!.retainageThisPeriod, "33.0000");
+  assert.equal(r.lines[1]!.retainageThisPeriod, "34.0000");
+  assert.equal(r.retainageThisPeriod, "67.0000");
+  assert.equal(r.currentDue, "599.6600");
+});
+
+test("three-decimal settlement settles to fils with the residual carried", () => {
+  const r = computeApplication([
+    line({ sovLineId: "a", thisPeriodCompleted: "100.5555", retainagePercent: "10" }),
+    line({ sovLineId: "b", thisPeriodCompleted: "100.5555", retainagePercent: "10" }),
+  ], { minorUnits: 3 });
+  // Exact 10.05555 + 10.05555: cumulative 20.1111 rounds to 20.111.
+  assert.equal(r.lines[0]!.retainageThisPeriod, "10.0560");
+  assert.equal(r.lines[1]!.retainageThisPeriod, "10.0550");
+  assert.equal(r.retainageThisPeriod, "20.1110");
+});
+
+test("prior-draw replay carries the residual across draws", () => {
+  const first = computeApplication(
+    [line({ sovLineId: "a", thisPeriodCompleted: "333.33", retainagePercent: "10" })],
+    { minorUnits: 2 },
+  );
+  assert.equal(first.retainageThisPeriod, "33.3300");
+  const second = computeApplication(
+    [line({ sovLineId: "a", previousCompleted: "333.33", thisPeriodCompleted: "333.33", retainagePercent: "10" })],
+    { minorUnits: 2, priorExactRetainage: ["33.3333"] },
+  );
+  // Cumulative exact 66.6666 rounds to 66.67; 33.33 already settled, so this
+  // draw withholds 33.34. Releases across both draws sum to 66.67 exactly.
+  assert.equal(second.retainageThisPeriod, "33.3400");
+  assert.equal(second.lines[0]!.completedToDate, "666.6600");
+});
+
+test("four minor units preserve exact ledger precision", () => {
+  const r = computeApplication([
+    line({ sovLineId: "a", thisPeriodCompleted: "3333.33", retainagePercent: "10" }),
+  ], { minorUnits: 4 });
+  assert.equal(r.retainageThisPeriod, "333.3330");
+});
+
 test("rejects overbilling beyond the schedule of values", () => {
   assert.throws(
     () => computeApplication([line({ scheduledValue: "10000", previousCompleted: "9000", thisPeriodCompleted: "1001" })]),

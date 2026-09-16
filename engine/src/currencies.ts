@@ -1,5 +1,5 @@
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { normalizeDecimal, fromUnits, roundDiv, toUnits } from "./money.ts";
+import { add, neg, normalizeDecimal, fromUnits, roundDiv, toUnits } from "./money.ts";
 
 /**
  * Supported ISO 4217 currencies for a self-hosted OpenBooks installation.
@@ -17,6 +17,43 @@ import { normalizeDecimal, fromUnits, roundDiv, toUnits } from "./money.ts";
 
 export class CurrencyError extends Error {
   readonly name = "CurrencyError";
+}
+
+/**
+ * Settle a sequence of exact (ledger-precision) amounts into whole minor units
+ * of a currency, carrying the rounding residual forward so the settled total
+ * is the rounded cumulative amount exactly. Each returned amount is the
+ * rounded running total minus what prior entries already settled; the last
+ * entry of a batch absorbs the batch's residual, so the batch sums exactly.
+ * `priorExact` replays already-settled history (same policy, oldest first)
+ * and only seeds the running totals — nothing is returned for it. With 4
+ * minor units the settler is the identity. Retainage uses this per draw (and
+ * across draws via replay) so the sum of releases equals total retained
+ * exactly in zero-, two- and three-decimal currencies.
+ *
+ * Precondition: inputs are non-negative exact amounts. Rounding is half away
+ * from zero on the running total; gross inputs already in whole minor units
+ * keep every settled amount non-negative.
+ */
+export function settleCumulativeRetainage(
+  priorExact: readonly string[],
+  currentExact: readonly string[],
+  minorUnits: number,
+): string[] {
+  if (!Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
+    throw new CurrencyError("Currency minor units must be an integer between zero and four");
+  }
+  let exactRunning = "0.0000";
+  let roundedRunning = "0.0000";
+  const settleOne = (exact: string): string => {
+    exactRunning = add(exactRunning, exact);
+    const target = roundCurrencyMoney(exactRunning, minorUnits);
+    const settled = add(target, neg(roundedRunning));
+    roundedRunning = target;
+    return settled;
+  };
+  for (const exact of priorExact) settleOne(exact);
+  return currentExact.map(settleOne);
 }
 
 /** Round a payable amount to its registered currency exponent, half away from zero. */
