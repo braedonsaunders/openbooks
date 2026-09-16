@@ -915,7 +915,8 @@
         "actionMonitor": "Monitorar a velocidade de compras e alinhá-la ao pipeline de vendas."
       },
       "seasonalHigh": "Gastos elevados costumam se concentrar em {months}",
-      "seasonalLow": "Gastos reduzidos costumam se concentrar em {months}"
+      "seasonalLow": "Gastos reduzidos costumam se concentrar em {months}",
+      "shadowItReason": "As linhas de relatórios de despesas não trazem estabelecimento nem fornecedor — apenas a conta de despesas e uma descrição livre — portanto a adoção viral de software entre funcionários não pode ser rastreada."
     }
   },
   "sentinel": {

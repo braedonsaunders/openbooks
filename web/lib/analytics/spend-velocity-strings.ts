@@ -46,6 +46,8 @@ export interface SpendVelocityStrings {
   cliffAction(monthsToCliff: number | null): string;
   seasonalHigh(monthNames: string[]): string;
   seasonalLow(monthNames: string[]): string;
+  /** Honest-gap note for the unavailable shadow-IT detector. */
+  shadowItReason: string;
 }
 
 const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -106,6 +108,8 @@ export const englishSpendVelocityStrings: SpendVelocityStrings = {
       : "Monitor purchase velocity and align with sales pipeline.",
   seasonalHigh: (monthNames) => `Higher spending typically occurs in ${monthNames.join(", ")}`,
   seasonalLow: (monthNames) => `Lower spending typically occurs in ${monthNames.join(", ")}`,
+  shadowItReason:
+    "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
 };
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
@@ -175,5 +179,6 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
         : t("spendVelocity.insights.cliff.actionMonitor"),
     seasonalHigh: (monthNames) => t("spendVelocity.insights.seasonalHigh", { months: list(monthNames) }),
     seasonalLow: (monthNames) => t("spendVelocity.insights.seasonalLow", { months: list(monthNames) }),
+    shadowItReason: t("spendVelocity.insights.shadowItReason"),
   };
 }
