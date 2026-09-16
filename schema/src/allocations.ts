@@ -456,7 +456,8 @@ export const allocationLineage = pgTable(
       name: "allocation_lineage_time_entry_id_fkey",
       columns: [t.orgId, t.sourceTimeEntryId],
       foreignColumns: [timeEntries.orgId, timeEntries.id],
-    }),
+      // Evidence follows its anchor, like the run/document lineage anchors.
+    }).onDelete("cascade"),
     check(
       "allocation_lineage_anchor",
       sql`${t.runId} is not null or ${t.documentId} is not null or ${t.sourceTimeEntryId} is not null`,
