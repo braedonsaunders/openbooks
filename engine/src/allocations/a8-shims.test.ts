@@ -16,7 +16,7 @@ import {
 test("pending period-run engine reports engine_pending", async () => {
   for (const call of [
     () => pendingPeriodRunEngine.preview({ orgId: "o", actorId: "u", ruleId: "r", periodId: "p", bookId: "b" }),
-    () => pendingPeriodRunEngine.post({ orgId: "o", actorId: "u", ruleId: "r", periodId: "p", bookId: "b", reason: "close" }),
+    () => pendingPeriodRunEngine.post({ orgId: "o", actorId: "u", runId: "r", reason: "close" }),
     () => pendingPeriodRunEngine.reverse({ orgId: "o", actorId: "u", runId: "r", reason: "fix" }),
     () => pendingPeriodRunEngine.rerun({ orgId: "o", actorId: "u", runId: "r" }),
   ]) {
