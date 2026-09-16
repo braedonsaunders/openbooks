@@ -189,6 +189,55 @@ test(
         { created: bom.created, failed: bom.failed, errors: bom.errors },
         { created: 1, failed: 0, errors: [] },
       )
+      // Mid-life fixed-asset onboarding: a whole register row carried in from
+      // the outgoing system, opening accumulated figures included.
+      const faAcct = await writeAll(orgA, actorId, 'accounts', [
+        { number: '1500', name: 'Equipment at Cost', type: 'asset_fixed' },
+        { number: '1510', name: 'Accumulated Depreciation', type: 'asset_fixed' },
+        { number: '6200', name: 'Depreciation Expense', type: 'expense' },
+      ], 'insert', false)
+      assert.deepEqual(
+        { created: faAcct.created, failed: faAcct.failed, errors: faAcct.errors },
+        { created: 3, failed: 0, errors: [] },
+      )
+      const faCat = await writeAll(orgA, actorId, 'asset-categories', [
+        {
+          name: 'Matrix Equipment',
+          assetAccountId: '1500',
+          accumulatedDepreciationAccountId: '1510',
+          depreciationExpenseAccountId: '6200',
+          defaultMethod: 'straight_line',
+          defaultLifeMonths: 120,
+        },
+      ], 'insert', false)
+      assert.deepEqual(
+        { created: faCat.created, failed: faCat.failed, errors: faCat.errors },
+        { created: 1, failed: 0, errors: [] },
+      )
+      const fa = await writeAll(orgA, actorId, 'fixed-assets', [
+        {
+          assetNumber: 'FA-1001',
+          name: 'Matrix Press',
+          category: 'Matrix Equipment',
+          subsidiary: 'Main Co',
+          acquisitionCost: '120000',
+          salvageValue: '0',
+          inServiceOn: '2021-06-15',
+          status: 'in_service',
+          method: 'straight_line',
+          lifeMonths: 120,
+          convention: 'full_month',
+          assetAccount: '1500',
+          accumAccount: '1510',
+          expenseAccount: '6200',
+          openingAccumulated: '55000',
+          openingAsOf: '2025-12-31',
+        },
+      ], 'insert', false)
+      assert.deepEqual(
+        { created: fa.created, failed: fa.failed, errors: fa.errors },
+        { created: 1, failed: 0, errors: [] },
+      )
       const revenueNo = (
         await db.execute<{ number: string }>(sql`
           select number from accounts where org_id = ${orgA} and number like '4%' order by number limit 1`)
