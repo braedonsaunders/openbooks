@@ -10,6 +10,7 @@ import {
   executeApplicationTool,
 } from "../application/tool-catalog";
 import { canRunTool } from "./gate";
+import { listAppToolViews, toAssistantToolDef } from "../apps/tools";
 import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
 import { ANALYTICS_TOOLS } from "./tools-analytics";
@@ -79,13 +80,57 @@ export async function executeAssistantTool(
   features?: FeatureState | null,
 ): Promise<ToolResult> {
   const definition = ASSISTANT_TOOLS.find((candidate) => candidate.name === name);
-  if (!definition || !canRunTool(authz, definition, features)) return { ok: false, error: "forbidden" };
-  try {
-    return await definition.execute(args, authz);
-  } catch (error) {
-    console.warn(`[assistant] tool ${name} failed`, error);
-    return { ok: false, error: safeErrorMessage(error) };
+  if (definition) {
+    if (!canRunTool(authz, definition, features)) return { ok: false, error: "forbidden" };
+    try {
+      return await definition.execute(args, authz);
+    } catch (error) {
+      console.warn(`[assistant] tool ${name} failed`, error);
+      return { ok: false, error: safeErrorMessage(error) };
+    }
   }
+  // App-declared tools (app_<appKey>_<toolKey>) resolve per request against
+  // the installed manifests and run through the same gated path as the
+  // registry entries the chat turn was built with.
+  if (name.startsWith("app_")) {
+    const views = await listAppToolViews(authz.user.orgId, authz, features);
+    const view = views.find((v) => v.name === name);
+    if (!view) return { ok: false, error: "forbidden" };
+    const appDefinition = toAssistantToolDef(view);
+    if (!canRunTool(authz, appDefinition, features)) return { ok: false, error: "forbidden" };
+    try {
+      return await appDefinition.execute(args, authz);
+    } catch (error) {
+      console.warn(`[assistant] tool ${name} failed`, error);
+      return { ok: false, error: safeErrorMessage(error) };
+    }
+  }
+  return { ok: false, error: "forbidden" };
+}
+
+/** Async turn registry: the static catalog plus the installed apps' declared
+ *  tools for this actor, appended after the static entries. A colliding app
+ *  tool name is skipped — installs reject collisions, so a skip only fires
+ *  for an app installed before a built-in tool took its name, and the
+ *  built-in keeps the slot. */
+export async function buildToolRegistryAsync(authz: Authz, features?: FeatureState | null): Promise<ToolSet> {
+  const base = buildToolRegistry(authz, features);
+  if (features && !featureEnabled(features, "apps")) return base;
+  const taken = new Set(Object.keys(base));
+  const views = await listAppToolViews(authz.user.orgId, authz, features);
+  for (const view of views) {
+    if (taken.has(view.name)) continue;
+    const def = toAssistantToolDef(view);
+    if (!canRunTool(authz, def, features)) continue;
+    const execute = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, def.name, args, features);
+    taken.add(def.name);
+    (base as Record<string, ToolSet[string]>)[def.name] = tool({
+      description: def.description,
+      inputSchema: def.inputSchema,
+      execute,
+    });
+  }
+  return base;
 }
 
 /** Construct the permission- and feature-bound tool set the model may use this
