@@ -7,13 +7,21 @@ import { getAuthz, can } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
 
 function optionalCoverageMoney(value: unknown): string | null | 'invalid' {
   if (value == null || value === '') return null
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) return 'invalid'
+  // coverage_amount/aggregate_amount are numeric(19,4): refuse whole-digit
+  // widths the column cannot hold before any write.
+  if (exact === null || wholeDigits(exact) > 15) return 'invalid'
   return normalizeMoney(exact)
 }
 
@@ -107,6 +115,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (aggregateAmount === 'invalid') {
       return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+    }
+    // The update casts these straight to date: shape alone admits impossible
+    // days ('2026-09-31') that Postgres then refuses with a raw driver
+    // failure, so require real calendar dates before any write.
+    if (action === 'update' && body.effectiveFrom !== undefined && body.effectiveFrom !== null && !isIsoCalendarDate(body.effectiveFrom)) {
+      return NextResponse.json({ error: 'effective date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
+    }
+    if (action === 'update' && body.expiresOn !== undefined && body.expiresOn !== null && !isIsoCalendarDate(body.expiresOn)) {
+      return NextResponse.json({ error: 'expiry date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
     }
 
     // Keep the certificate mutation and its immutable audit evidence in one
