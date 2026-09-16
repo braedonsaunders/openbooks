@@ -314,5 +314,32 @@
     "rateCardLapse": "Cuando la tarifa ha caducado",
     "block": "Bloquear la facturación",
     "carry_forward": "Facturar con la última tarifa"
+  },
+  "duplicates": {
+      "title": "Proyectos duplicados",
+      "description": "Proyectos que comparten referencia de origen, nombre y cliente, o número de trabajo. Elija el superviviente por grupo, revise el impacto y fusione.",
+      "loading": "Cargando duplicados…",
+      "empty": "No se encontraron proyectos duplicados.",
+      "kind": {
+          "source_ref": "Misma referencia de origen ({key})",
+          "name_customer": "Mismo nombre y cliente ({key})",
+          "job_number": "Mismo número de trabajo ({key})"
+      },
+      "chooseSurvivor": "Seleccione el proyecto superviviente. Todas las referencias de los demás se trasladan en una transacción.",
+      "survivor": "Superviviente",
+      "code": "Código",
+      "name": "Nombre",
+      "status": "Estado",
+      "action": "Acción",
+      "preview": "Vista previa",
+      "merge": "Fusionar ({count, plural, one {# referencia} other {# referencias}})",
+      "alreadyMerged": "Ya fusionado.",
+      "moveCount": "{count, plural, one {# referencia se trasladará} other {# referencias se trasladarán}}.",
+      "kept": "Conservado",
+      "impactNote": "Las fusiones se rechazan si hay líneas en documentos no borradores, números de órdenes de cambio o celdas presupuestarias en conflicto. El proyecto fusionado se desactiva con un puntero a su superviviente.",
+      "loadFailed": "No se pudieron cargar los duplicados.",
+      "previewFailed": "No se pudo previsualizar la fusión.",
+      "mergeFailed": "No se pudieron fusionar los proyectos.",
+      "merged": "Proyectos fusionados."
   }
 }
