@@ -2,30 +2,25 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
 import { featureEnabled } from "../feature-registry.ts";
 import {
-  getPeriodRunEngine,
-  type PeriodRunEngine,
-  type PostRunInput,
-  type PreviewRunInput,
-} from "./a8-shims.ts";
+  postAllocationRun,
+  previewAllocationRun,
+  type PreviewAllocationRunOptions,
+} from "./period-run.ts";
 
 /**
  * Allocation scheduling (fleet A10): the scheduler-outbox kind
  * `allocation_run` and the close-automation `run_allocation` action.
  *
- * Both paths converge on the fleet period-run seam (`getPeriodRunEngine`,
- * shaped exactly like the design §3 `period-run.ts` contract): preview the
+ * Both paths call the real period-run engine directly: preview the
  * occurrence, then post it when the version's run_policy is auto_post.
- * Until A3 lands, the default engine throws EnginePendingError and every
- * test below runs against an injected fake; production callers pass no
- * runner and resolve the active engine at fire time.
  *
  * Preview is compute-only; posting addresses the persisted previewed run.
  * The post step therefore resolves the latest previewed run for the
  * (rule, period, book) occurrence — grounded in the kernel invariant that
  * at most one previewed run exists per occurrence — and fails loudly when
- * there is none (period-run has not landed yet). When the post opens an
- * approval flow (approval_flow_id set) the run waits there instead of
- * posting — that decision lives in period-run.
+ * there is none. When the post opens an approval flow (approval_flow_id
+ * set) the run waits there instead of posting — that decision lives in
+ * period-run.
  *
  * Invariants enforced here, not by callers:
  * - feature off ⇒ no rule fires (enqueue skips the org; processing and the
@@ -80,8 +75,11 @@ export function parseRunAllocationConfig(config: unknown): RunAllocationConfig {
 
 /**
  * Preview input for a fire-and-forget scheduler or close-automation firing.
- * The scheduler has no human actor; the empty actorId marks system
- * attribution, which period-run owns (fleet A3 confirms on landing).
+ * Unattended firings run as the published version's publisher
+ * (`published_by`), never a borrowed human or a faceless system actor —
+ * report-backed drivers resolve under that identity, so the report
+ * engine's permission checks stay authoritative. Manual runs pass the
+ * requesting actor instead (see the runs API routes).
  */
 export function previewInputFor(args: {
   orgId: string;
@@ -89,16 +87,19 @@ export function previewInputFor(args: {
   periodId: string;
   bookId: string;
   triggerKind: "scheduled" | "close_automation";
-  actorId?: string | null;
-}): PreviewRunInput {
+  publishedBy: string;
+}): PreviewAllocationRunOptions {
+  if (!args.publishedBy.trim()) {
+    throw new Error(`allocation rule ${args.ruleId} has no publisher to attribute the unattended run to`);
+  }
   return {
     orgId: args.orgId,
-    actorId: args.actorId ?? "",
     ruleId: args.ruleId,
     periodId: args.periodId,
     bookId: args.bookId,
     subsidiaryId: null,
-    triggerKind: args.triggerKind,
+    actorId: args.publishedBy,
+    trigger: args.triggerKind,
   };
 }
 
@@ -179,6 +180,7 @@ type CurrentVersion = {
   run_policy: string;
   mode: string;
   is_active: boolean;
+  published_by: string | null;
 };
 
 /**
@@ -190,7 +192,6 @@ type CurrentVersion = {
  */
 export async function processAllocationRunOutboxRow(
   row: { id: string; org_id: string | null; payload: unknown },
-  runner?: PeriodRunEngine,
 ): Promise<{ outcome: "ran" | "skipped"; note: string }> {
   if (!row.org_id) return { outcome: "skipped", note: "allocation occurrence has no org" };
   const payload = (row.payload ?? {}) as {
@@ -215,7 +216,7 @@ export async function processAllocationRunOutboxRow(
   }
   const current = (
     await db.execute<CurrentVersion>(sql`
-      select v.id as version_id, v.run_policy, r.mode, r.is_active
+      select v.id as version_id, v.run_policy, v.published_by, r.mode, r.is_active
         from allocation_rules r
         left join allocation_rule_versions v
           on v.id = r.current_version_id and v.org_id = r.org_id and v.status = 'published'
@@ -225,15 +226,18 @@ export async function processAllocationRunOutboxRow(
   if (!current?.version_id || current.mode !== "period" || !current.is_active) {
     return { outcome: "skipped", note: "rule is gone, retired, or no longer period-mode" };
   }
-  const active = runner ?? getPeriodRunEngine();
-  const preview: PreviewRunInput = previewInputFor({
+  if (!current.published_by) {
+    throw new Error(`allocation rule ${payload.ruleId} has no publisher to attribute the unattended run to`);
+  }
+  const preview = previewInputFor({
     orgId: row.org_id,
     ruleId: payload.ruleId,
     periodId: payload.periodId,
     bookId: payload.bookId,
     triggerKind: "scheduled",
+    publishedBy: current.published_by,
   });
-  const computed = await active.preview(preview);
+  const computed = await previewAllocationRun(preview);
   if (current.run_policy === "auto_post") {
     await postPreviewedOccurrence({
       orgId: row.org_id,
@@ -242,7 +246,6 @@ export async function processAllocationRunOutboxRow(
       periodId: payload.periodId,
       bookId: payload.bookId,
       reason: "scheduled auto_post policy",
-      engine: active,
     });
   }
   return {
@@ -265,7 +268,6 @@ async function postPreviewedOccurrence(args: {
   periodId: string;
   bookId: string;
   reason: string;
-  engine: PeriodRunEngine;
 }): Promise<void> {
   const run = (
     await db.execute<{ id: string }>(sql`
@@ -278,22 +280,51 @@ async function postPreviewedOccurrence(args: {
   ).rows[0];
   if (!run) {
     throw new Error(
-      "auto_post found no persisted previewed run for the occurrence (period-run has not landed)",
+      "auto_post found no persisted previewed run for the occurrence",
     );
   }
-  const post: PostRunInput = {
-    orgId: args.orgId,
-    actorId: args.actorId,
-    runId: run.id,
-    reason: args.reason,
-  };
-  await args.engine.post(post);
+  await postAllocationRun(run.id, args.actorId, args.reason);
 }
 
 type CloseAllocationRule = {
   id: string;
   sort_order: number;
 };
+
+/**
+ * The publisher an unattended close-automation firing runs as: the
+ * published version the engine would run (its current published version
+ * when it covers the period, else the latest covering published version —
+ * the same preference as the period-run engine's version resolution).
+ * Loud when no published version exists or it records no publisher.
+ */
+async function resolveRulePublisher(
+  orgId: string,
+  ruleId: string,
+  periodId: string,
+): Promise<string> {
+  const rows = (
+    await db.execute<{ published_by: string | null }>(sql`
+      select v.published_by
+        from allocation_rule_versions v
+        join allocation_rules r on r.id = v.rule_id and r.org_id = v.org_id
+        join accounting_periods p on p.id = ${periodId} and p.org_id = v.org_id
+       where v.org_id = ${orgId} and v.rule_id = ${ruleId} and v.status = 'published'
+         and v.effective_from <= p.ends_on
+         and (v.effective_to is null or v.effective_to >= p.starts_on)
+       order by (v.id = r.current_version_id) desc, v.version_no desc
+       limit 1
+    `)
+  ).rows;
+  if (rows.length === 0) {
+    throw new Error(`run_allocation rule has no published version: ${ruleId}`);
+  }
+  const publisher = rows[0]?.published_by;
+  if (!publisher) {
+    throw new Error(`allocation rule ${ruleId} has no publisher to attribute the unattended run to`);
+  }
+  return publisher;
+}
 
 /**
  * Close-automation `run_allocation`: preview every selected rule for the
@@ -308,13 +339,11 @@ type CloseAllocationRule = {
 export async function runAllocationCloseAction(args: {
   orgId: string;
   runId: string;
-  actorId?: string | null;
   config: unknown;
   commitStage: (
     stageKey: string,
     effect: (tx: SqlExecutor) => Promise<void>,
   ) => Promise<boolean>;
-  runner?: PeriodRunEngine;
 }): Promise<{ previewed: number; posted: number }> {
   const { ruleIds, post } = parseRunAllocationConfig(args.config);
   const org = (
@@ -369,22 +398,21 @@ export async function runAllocationCloseAction(args: {
       throw new Error(`run_allocation rule is not an active period rule: ${missing}`);
     }
   }
-  const active = args.runner ?? getPeriodRunEngine();
   let previewed = 0;
   let posted = 0;
   for (const rule of rules) {
     // A resumed attempt adopts the previously committed stage instead of
     // re-firing; the counts below reflect effects fired by this call.
     await args.commitStage(`allocation:${rule.id}:${run.period_id}:${run.book_id}`, async () => {
-      const preview: PreviewRunInput = previewInputFor({
+      const preview = previewInputFor({
         orgId: args.orgId,
         ruleId: rule.id,
         periodId: run.period_id,
         bookId: run.book_id,
         triggerKind: "close_automation",
-        actorId: args.actorId,
+        publishedBy: await resolveRulePublisher(args.orgId, rule.id, run.period_id),
       });
-      await active.preview(preview);
+      await previewAllocationRun(preview);
       previewed++;
       if (post) {
         await postPreviewedOccurrence({
@@ -394,7 +422,6 @@ export async function runAllocationCloseAction(args: {
           periodId: run.period_id,
           bookId: run.book_id,
           reason: "close automation requested posting",
-          engine: active,
         });
         posted++;
       }

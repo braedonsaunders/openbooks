@@ -58,10 +58,46 @@ test("reversalJournalLines negates amounts and quantity and preserves unit and c
     memo: "source memo",
     quantity: "-10.0000",
     unit: "hours",
+    contributorKind: null,
+    contributorRef: null,
     dueDate: null,
     isOpenItem: false,
     custom: { lot: "A" },
   });
+});
+
+test("reversalJournalLines preserves contributor stamps", () => {
+  const [reversal] = reversalJournalLines(
+    [
+      {
+        lineNumber: 1,
+        accountId: ACCOUNT_ID,
+        subsidiaryId: SUBSIDIARY_ID,
+        amount: "125.0000",
+        currency: "CAD",
+        txnAmount: "125.0000",
+        fxRate: "1",
+        partyId: null,
+        departmentId: null,
+        projectId: null,
+        locationId: null,
+        classId: null,
+        equipmentUnitId: null,
+        extraDims: {},
+        paymentCardId: null,
+        taxCodeId: null,
+        memo: "allocation line",
+        quantity: null,
+        unit: null,
+        contributorKind: "rule",
+        contributorRef: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        custom: {},
+      },
+    ],
+    { entryId: ENTRY_ID, orgId: ORG_ID },
+  );
+  assert.equal(reversal?.contributorKind, "rule");
+  assert.equal(reversal?.contributorRef, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
 });
 
 test("reversalJournalLines keeps null quantity", () => {

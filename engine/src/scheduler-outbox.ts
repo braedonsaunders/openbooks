@@ -455,8 +455,8 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   }
   if (row.kind === ALLOCATION_RUN_OUTBOX_KIND) {
     // Occurrences always preview; auto_post versions post (or wait on their
-    // approval flow inside period-run). Until A3 lands, the default engine
-    // throws EnginePendingError and the row fails visibly with backoff.
+    // approval flow inside period-run). Engine failures fail the row
+    // visibly with backoff.
     await processAllocationRunOutboxRow(row);
     return;
   }

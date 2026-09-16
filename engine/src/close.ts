@@ -3688,10 +3688,10 @@ export async function runCloseAutomations(
         // under a per-rule stage checkpoint, so a crash mid-fan-out resumes
         // with finished rules skipped instead of re-fired.
         const { runAllocationCloseAction } = await import("./allocations/scheduling.ts");
+        // Unattended: each rule fires as its published version's publisher.
         await runAllocationCloseAction({
           orgId: context.orgId,
           runId: context.runId,
-          actorId: context.actorId,
           config,
           commitStage: (stageKey, effect) =>
             commitCloseEffectStage({

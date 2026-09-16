@@ -110,13 +110,28 @@ async function seedDriver(opts: {
   orgId: string;
   key?: string;
   dimension?: string;
+  sourceKind?: string;
 }): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into allocation_drivers (id, org_id, key, name, dimension, source_kind, config, is_active, custom)
     values (${id}, ${opts.orgId}, ${opts.key ?? `drv-${id.slice(0, 8)}`}, 'Test driver',
-            ${opts.dimension ?? "department"}, 'manual', '{}'::jsonb, true, '{}'::jsonb)`);
+            ${opts.dimension ?? "department"}, ${opts.sourceKind ?? "manual"}, '{}'::jsonb, true, '{}'::jsonb)`);
   return id;
+}
+
+async function seedDriverValue(opts: {
+  orgId: string;
+  driverId: string;
+  dimensionValueId: string;
+  value: string;
+  effectiveFrom?: string;
+}): Promise<void> {
+  await db.execute(sql`
+    insert into allocation_driver_values
+      (id, org_id, driver_id, dimension_value_id, effective_from, effective_to, value)
+    values (${randomUUID()}, ${opts.orgId}, ${opts.driverId}, ${opts.dimensionValueId},
+            ${opts.effectiveFrom ?? "2026-01-01"}, null, ${opts.value})`);
 }
 
 /** One balanced source entry: DR pool account / CR bank, optionally tagged. */
@@ -693,6 +708,50 @@ test(
       const coords = await coordinateTotals(org.orgId);
       assert.equal(coords.get(`${org.accounts.adjustment}|${deptA}`), "750.0000");
       assert.equal(coords.get(`${org.accounts.adjustment}|${deptB}`), "250.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "driver basis resolves through A2's dispatcher with no injected double",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Dept A");
+      const deptB = await seedDepartment(org.orgId, "Dept B");
+      await seedSourceEntry(org, actorId, "1000.0000");
+      const driverId = await seedDriver({ orgId: org.orgId, dimension: "department", sourceKind: "manual" });
+      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptA, value: "3.0000" });
+      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptB, value: "1.0000" });
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        impact: "reclass",
+        basisKind: "driver",
+        driverId,
+        targetKind: "dynamic",
+        dynamicTarget: { dimension: "department", minWeight: "0" },
+      });
+      // No injected resolver: the engine falls back to A2's dispatcher.
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+      });
+      assert.equal(preview.sourceTotal, "1000.0000");
+      const amounts = new Map(preview.computation.targets.map((target) => [target.key, target.amount]));
+      assert.equal(amounts.get(deptA), "750.0000");
+      assert.equal(amounts.get(deptB), "250.0000");
+      const posted = await postAllocationRun(preview.id, actorId, "A2 dispatcher post check");
+      assert.ok(posted.journalEntryId);
+      const run = await getRun(org.orgId, preview.id);
+      assert.equal(run.status, "posted");
     } finally {
       await dropScratchOrg(org.orgId);
     }
