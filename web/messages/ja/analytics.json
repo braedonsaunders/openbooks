@@ -93,6 +93,7 @@
       "cogs": "売上原価",
       "grossProfit": "売上総利益",
       "opex": "営業費用",
+      "excludeOtherIncome": "営業外収益を除く",
       "operatingIncome": "営業利益",
       "otherIncome": "営業外収益",
       "otherExpense": "営業外費用",
@@ -120,6 +121,91 @@
       "noBudgetTitle": "この期間の正式な予算がありません",
       "noBudgetDescription": "予算シナリオを作成して承認すると、実際の勘定単位の差異が表示されます。このダッシュボードは合成のベンチマーク目標で代用することはありません。",
       "createBudget": "予算を作成"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "営業赤字",
+        "detail": "営業利益は{amount} — その他項目控除前で赤字です。"
+      },
+      "gmCritical": {
+        "title": "売上総利益率が極めて低い",
+        "detail": "売上総利益率は{actual}% — 目標{target}%の半分未満です。"
+      },
+      "gmWellBelow": {
+        "title": "売上総利益率が目標を大きく下回る",
+        "detail": "売上総利益率は{actual}%（目標{target}%）。"
+      },
+      "gmBelow": {
+        "title": "売上総利益率が目標を下回る",
+        "detail": "売上総利益率は{actual}%（ベンチマーク{target}%）。"
+      },
+      "opmCritical": {
+        "title": "営業利益率が極めて低い",
+        "detail": "営業利益率は{actual}% — 目標{target}%の半分未満です。"
+      },
+      "opmBelow": {
+        "title": "営業利益率が目標を下回る",
+        "detail": "営業利益率は{actual}%（ベンチマーク{target}%）。"
+      },
+      "netLoss": {
+        "title": "期間純損失",
+        "detail": "純利益は{amount}。"
+      },
+      "revFalling": {
+        "title": "売上が前年比で急減",
+        "detail": "売上は前年比{pct}%減です。"
+      },
+      "revDeclined": {
+        "title": "売上が前年比で減少",
+        "detail": "売上は前年比{pct}%減です。"
+      },
+      "revTrendingDown": {
+        "title": "売上減少トレンド",
+        "detail": "直近3か月の売上が{pct}%減少しました。"
+      },
+      "marginCompression": {
+        "title": "利益率の圧縮",
+        "detail": "直近3か月で売上総利益率が{pp}pp低下しました。"
+      },
+      "belowBreakeven": {
+        "title": "損益分岐点割れ",
+        "detail": "月平均売上は損益分岐点（約{amount}）を下回っています。"
+      },
+      "thinMargin": {
+        "title": "安全余裕が薄い",
+        "detail": "損益分岐点までの余裕は月売上の{pct}%しかありません。"
+      },
+      "heavyOverhead": {
+        "title": "間接費が重い",
+        "detail": "販管費は売上の{pct}%です（40%超）。"
+      },
+      "healthyGM": {
+        "title": "健全な売上総利益率",
+        "detail": "直接費の管理は順調 — 価格を維持してください。"
+      },
+      "trimOpex": {
+        "title": "販管費の見直し",
+        "detail": "売上総利益は良好。営業利益との差は間接費です —販管費を見直してください。"
+      },
+      "posLeverage": {
+        "title": "プラスの営業レバレッジ",
+        "detail": "営業利益は売上の{x}倍で拡大 — 成長に注力してください。"
+      },
+      "rule40": {
+        "title": "ルール・オブ・40をクリア",
+        "detail": "成長率＋利益率＝{n}。"
+      },
+      "marginOutlier": {
+        "title": "{month}の利益率異常",
+        "detail": "売上総利益率{actual}%（平均{avg}%）。"
+      },
+      "revenueSpike": {
+        "title": "{month}の売上急増・急減",
+        "detail": "売上{amount}（平均{avg}）。"
+      }
+    },
+    "labels": {
+      "unassignedSegment": "未割当"
     }
   },
   "customer": {

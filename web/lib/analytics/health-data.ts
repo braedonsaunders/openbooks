@@ -7,6 +7,7 @@ import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
+import { englishHealthStrings, type HealthStrings } from "./health-strings";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
@@ -206,14 +207,14 @@ function priorYear(iso: string): string {
   return addMonthsIso(iso, -12);
 }
 
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1, 1));
-  return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
-}
-
 /** 12-month P&L series ending at the period end (fills gaps with zero). */
-async function monthlySeries(orgId: string, to: string, allowed: ReadonlySet<string> | null, months = 12): Promise<MonthPoint[]> {
+async function monthlySeries(
+  orgId: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+  months = 12,
+  strings: HealthStrings = englishHealthStrings,
+): Promise<MonthPoint[]> {
   const end = new Date(to + "T00:00:00Z");
   const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1));
   const startIso = start.toISOString().slice(0, 10);
@@ -301,7 +302,7 @@ async function monthlySeries(orgId: string, to: string, allowed: ReadonlySet<str
     const netIncome = Number(sum([String(row?.revenue ?? 0), neg(String(row?.cogs ?? 0)), neg(String(row?.opex ?? 0)), neg(String(row?.other_exp ?? 0))]));
     out.push({
       month: ym,
-      label: monthLabel(ym),
+      label: strings.monthLabel(ym),
       revenue,
       cogs,
       grossProfit,
@@ -323,6 +324,7 @@ async function segmentsBy(
   from: string,
   to: string,
   allowed: ReadonlySet<string> | null,
+  strings: HealthStrings = englishHealthStrings,
 ): Promise<SegmentRow[]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
@@ -403,7 +405,7 @@ async function segmentsBy(
       const health: SegmentRow["health"] = opPct >= 0.1 ? "good" : opPct >= 0 ? "warn" : "bad";
       return {
         id: x.id,
-        name: x.name,
+        name: strings.displaySegmentName(x.id, x.name),
         revenue,
         sharePct: revenue / totalRev,
         grossProfit,
@@ -560,10 +562,14 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
   };
 }
 
-function buildPnlSummary(f: FinancialHealth["figures"], prior: FinancialHealth["figures"]): PnlLine[] {
-  const line = (key: string, label: string, current: number, priorV: number, strong?: boolean): PnlLine => ({
+function buildPnlSummary(
+  f: FinancialHealth["figures"],
+  prior: FinancialHealth["figures"],
+  strings: HealthStrings = englishHealthStrings,
+): PnlLine[] {
+  const line = (key: Parameters<HealthStrings["pnlLine"]>[0], current: number, priorV: number, strong?: boolean): PnlLine => ({
     key,
-    label,
+    label: strings.pnlLine(key),
     current,
     prior: priorV,
     change: current - priorV,
@@ -571,36 +577,44 @@ function buildPnlSummary(f: FinancialHealth["figures"], prior: FinancialHealth["
     strong,
   });
   return [
-    line("revenue", "Revenue", f.revenue, prior.revenue, true),
-    line("cogs", "Cost of Goods Sold", f.cogs, prior.cogs),
-    line("grossProfit", "Gross Profit", f.grossProfit, prior.grossProfit, true),
-    line("opex", "Operating Expenses", f.opex, prior.opex),
-    line("operatingIncome", "Operating Income", f.operatingIncome, prior.operatingIncome, true),
-    line("otherExpense", "Other Expense", f.otherExpense, prior.otherExpense),
-    line("netIncome", "Net Income", f.netIncome, prior.netIncome, true),
+    line("revenue", f.revenue, prior.revenue, true),
+    line("cogs", f.cogs, prior.cogs),
+    line("grossProfit", f.grossProfit, prior.grossProfit, true),
+    line("opex", f.opex, prior.opex),
+    line("operatingIncome", f.operatingIncome, prior.operatingIncome, true),
+    line("otherExpense", f.otherExpense, prior.otherExpense),
+    line("netIncome", f.netIncome, prior.netIncome, true),
   ];
 }
 
-function buildMarginFlow(f: FinancialHealth["figures"]): MarginStage[] {
+function buildMarginFlow(f: FinancialHealth["figures"], strings: HealthStrings = englishHealthStrings): MarginStage[] {
   const rev = f.revenue || 1;
   const pct = (n: number) => n / rev;
+  const stage = (key: Parameters<HealthStrings["marginStage"]>[0], amount: number, pctOfRevenue: number, kind: MarginStage["kind"]): MarginStage =>
+    ({ key, label: strings.marginStage(key), amount, pctOfRevenue, kind });
   return [
-    { key: "revenue", label: "Revenue", amount: f.revenue, pctOfRevenue: 1, kind: "start" },
-    { key: "cogs", label: "COGS", amount: -f.cogs, pctOfRevenue: pct(-f.cogs), kind: "deduct" },
-    { key: "grossProfit", label: "Gross Profit", amount: f.grossProfit, pctOfRevenue: pct(f.grossProfit), kind: "subtotal" },
-    { key: "opex", label: "Operating Expenses", amount: -f.opex, pctOfRevenue: pct(-f.opex), kind: "deduct" },
+    stage("revenue", f.revenue, 1, "start"),
+    stage("cogs", -f.cogs, pct(-f.cogs), "deduct"),
+    stage("grossProfit", f.grossProfit, pct(f.grossProfit), "subtotal"),
+    stage("opex", -f.opex, pct(-f.opex), "deduct"),
     // Revenue and gross profit include other income, but operating income
     // excludes it. Show both adjustments so each subtotal reconciles.
-    { key: "excludeOtherIncome", label: "Exclude Other Income", amount: -f.otherIncome, pctOfRevenue: pct(-f.otherIncome), kind: "deduct" },
-    { key: "operatingIncome", label: "Operating Income", amount: f.operatingIncome, pctOfRevenue: pct(f.operatingIncome), kind: "subtotal" },
-    { key: "otherIncome", label: "Other Income", amount: f.otherIncome, pctOfRevenue: pct(f.otherIncome), kind: "deduct" },
-    { key: "otherExpense", label: "Other Expense", amount: -f.otherExpense, pctOfRevenue: pct(-f.otherExpense), kind: "deduct" },
-    { key: "netIncome", label: "Net Income", amount: f.netIncome, pctOfRevenue: pct(f.netIncome), kind: "total" },
+    stage("excludeOtherIncome", -f.otherIncome, pct(-f.otherIncome), "deduct"),
+    stage("operatingIncome", f.operatingIncome, pct(f.operatingIncome), "subtotal"),
+    stage("otherIncome", f.otherIncome, pct(f.otherIncome), "deduct"),
+    stage("otherExpense", -f.otherExpense, pct(-f.otherExpense), "deduct"),
+    stage("netIncome", f.netIncome, pct(f.netIncome), "total"),
   ];
 }
 
 /** Derive Issues / Recommendations / Anomalies from ratios + trend. */
-function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks: HealthBenchmarks, money: (value: number) => string): Insight[] {
+function buildInsights(
+  base: FinancialHealth,
+  monthly: MonthPoint[],
+  benchmarks: HealthBenchmarks,
+  money: (value: number) => string,
+  strings: HealthStrings = englishHealthStrings,
+): Insight[] {
   const out: Insight[] = [];
   const f = base.figures;
   const gm = f.revenue > 0 ? f.grossProfit / f.revenue : 0;
@@ -610,38 +624,39 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
   // benchmarks: critical at 50% of target, warning at 75%.
   const GM_TARGET = benchmarks.grossMargin;
   const OP_TARGET = benchmarks.operatingMargin;
-  if (f.operatingIncome < 0) out.push({ severity: "issue", title: "Operating loss", detail: `Operating income is ${money(f.operatingIncome)} — the business loses money before other items.` });
-  if (gm < GM_TARGET * 0.5) out.push({ severity: "issue", title: "Gross margin critically low", detail: `Gross margin is ${(gm * 100).toFixed(1)}% — less than half the ${Math.round(GM_TARGET * 100)}% target.` });
-  else if (gm < GM_TARGET * 0.75) out.push({ severity: "issue", title: "Gross margin well below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs the ${Math.round(GM_TARGET * 100)}% target.` });
-  else if (gm < GM_TARGET) out.push({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs a ${Math.round(GM_TARGET * 100)}% benchmark.` });
-  if (opm >= 0 && opm < OP_TARGET * 0.5) out.push({ severity: "issue", title: "Operating margin critically low", detail: `Operating margin is ${(opm * 100).toFixed(1)}% — less than half the ${Math.round(OP_TARGET * 100)}% target.` });
-  else if (opm >= 0 && opm < OP_TARGET) out.push({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${(opm * 100).toFixed(1)}% vs a ${Math.round(OP_TARGET * 100)}% benchmark.` });
-  if (f.netIncome < 0) out.push({ severity: "issue", title: "Net loss for the period", detail: `Net income is ${money(f.netIncome)}.` });
-  if (f.revenueGrowth < -0.15) out.push({ severity: "issue", title: "Revenue falling sharply year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
-  else if (f.revenueGrowth < 0) out.push({ severity: "issue", title: "Revenue declined year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
+  const pct1 = (n: number): string => (n * 100).toFixed(1);
+  if (f.operatingIncome < 0) out.push(strings.operatingLoss(money(f.operatingIncome)));
+  if (gm < GM_TARGET * 0.5) out.push(strings.gmCritical(pct1(gm), String(Math.round(GM_TARGET * 100))));
+  else if (gm < GM_TARGET * 0.75) out.push(strings.gmWellBelow(pct1(gm), String(Math.round(GM_TARGET * 100))));
+  else if (gm < GM_TARGET) out.push(strings.gmBelow(pct1(gm), String(Math.round(GM_TARGET * 100))));
+  if (opm >= 0 && opm < OP_TARGET * 0.5) out.push(strings.opmCritical(pct1(opm), String(Math.round(OP_TARGET * 100))));
+  else if (opm >= 0 && opm < OP_TARGET) out.push(strings.opmBelow(pct1(opm), String(Math.round(OP_TARGET * 100))));
+  if (f.netIncome < 0) out.push(strings.netLoss(money(f.netIncome)));
+  if (f.revenueGrowth < -0.15) out.push(strings.revFalling(pct1(Math.abs(f.revenueGrowth))));
+  else if (f.revenueGrowth < 0) out.push(strings.revDeclined(pct1(Math.abs(f.revenueGrowth))));
   // Trend rules over the trailing months: revenue slope and margin compression.
   const recent = monthly.filter((m) => m.revenue > 0).slice(-3);
   if (recent.length === 3) {
     const [a, b, c] = recent;
     if (a!.revenue > 0 && c!.revenue < a!.revenue * 0.9)
-      out.push({ severity: "issue", title: "Revenue trending down", detail: `Revenue fell ${(((a!.revenue - c!.revenue) / a!.revenue) * 100).toFixed(0)}% across the last three active months.` });
+      out.push(strings.revTrendingDown((((a!.revenue - c!.revenue) / a!.revenue) * 100).toFixed(0)));
     if (a!.grossMarginPct - c!.grossMarginPct > 0.03 && b!.grossMarginPct <= a!.grossMarginPct)
-      out.push({ severity: "issue", title: "Margin compression", detail: `Gross margin slid ${((a!.grossMarginPct - c!.grossMarginPct) * 100).toFixed(1)}pp over the last three active months.` });
+      out.push(strings.marginCompression(((a!.grossMarginPct - c!.grossMarginPct) * 100).toFixed(1)));
   }
   // Safety margin via breakeven.
   if (f.breakevenMonthly !== null && monthly.length > 0) {
     const avgMonthlyRev = f.revenue / Math.max(1, monthly.filter((m) => m.revenue > 0).length);
     const safety = avgMonthlyRev > 0 ? (avgMonthlyRev - f.breakevenMonthly) / avgMonthlyRev : 0;
-    if (safety < 0) out.push({ severity: "issue", title: "Below breakeven", detail: `Average monthly revenue is under the approximately ${money(f.breakevenMonthly)} breakeven.` });
-    else if (safety < 0.1) out.push({ severity: "issue", title: "Thin safety margin", detail: `Only ${(safety * 100).toFixed(0)}% of monthly revenue separates you from breakeven.` });
+    if (safety < 0) out.push(strings.belowBreakeven(money(f.breakevenMonthly)));
+    else if (safety < 0.1) out.push(strings.thinMargin((safety * 100).toFixed(0)));
   }
   if (f.revenue > 0 && f.opex / f.revenue > 0.4)
-    out.push({ severity: "issue", title: "Heavy overhead", detail: `Operating expenses are ${((f.opex / f.revenue) * 100).toFixed(0)}% of revenue (>40%).` });
+    out.push(strings.heavyOverhead(((f.opex / f.revenue) * 100).toFixed(0)));
 
-  if (gm >= GM_TARGET) out.push({ severity: "rec", title: "Healthy gross margin", detail: "Direct-cost discipline is on track — protect pricing." });
-  if (opm < OP_TARGET && gm >= GM_TARGET * 0.75) out.push({ severity: "rec", title: "Trim operating expense", detail: "Gross margin is fine; the gap to operating margin is overhead — review OpEx." });
-  if (f.operatingLeverage > 1) out.push({ severity: "rec", title: "Positive operating leverage", detail: `Operating income scales ${f.operatingLeverage.toFixed(1)}× revenue — lean into growth.` });
-  if (f.rule40 >= 40) out.push({ severity: "rec", title: "Passing the Rule of 40", detail: `Growth + margin = ${f.rule40.toFixed(0)}.` });
+  if (gm >= GM_TARGET) out.push(strings.healthyGM);
+  if (opm < OP_TARGET && gm >= GM_TARGET * 0.75) out.push(strings.trimOpex);
+  if (f.operatingLeverage > 1) out.push(strings.posLeverage(f.operatingLeverage.toFixed(1)));
+  if (f.rule40 >= 40) out.push(strings.rule40(f.rule40.toFixed(0)));
 
   // Anomalies: months whose margin deviates > 2σ from the mean.
   const withRev = monthly.filter((m) => m.revenue > 0);
@@ -651,7 +666,7 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
     const sd = Math.sqrt(margins.reduce((a, x) => a + (x - mean) ** 2, 0) / margins.length);
     for (const m of withRev) {
       if (sd > 0 && Math.abs(m.grossMarginPct - mean) > 2 * sd) {
-        out.push({ severity: "anomaly", title: `Margin outlier in ${m.label}`, detail: `Gross margin ${(m.grossMarginPct * 100).toFixed(1)}% vs ${(mean * 100).toFixed(1)}% average.` });
+        out.push(strings.marginOutlier(m.label, pct1(m.grossMarginPct), pct1(mean)));
       }
     }
     const revs = withRev.map((m) => m.revenue);
@@ -659,14 +674,19 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
     const rSd = Math.sqrt(revs.reduce((a, x) => a + (x - rMean) ** 2, 0) / revs.length);
     for (const m of withRev) {
       if (rSd > 0 && Math.abs(m.revenue - rMean) > 2 * rSd) {
-        out.push({ severity: "anomaly", title: `Revenue spike/dip in ${m.label}`, detail: `Revenue ${money(m.revenue)} vs ${money(rMean)} average.` });
+        out.push(strings.revenueSpike(m.label, money(m.revenue), money(rMean)));
       }
     }
   }
   return out;
 }
 
-export async function healthData(period: { from: string; to: string; label: string }, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<HealthData> {
+export async function healthData(
+  period: { from: string; to: string; label: string },
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  strings: HealthStrings = englishHealthStrings,
+): Promise<HealthData> {
   const { money: formatMoney } = await getMoneyFormatter(orgId)
   const money = (value: number) => formatMoney(value, { maximumFractionDigits: 0 })
   const { from, to } = period;
@@ -694,10 +714,10 @@ export async function healthData(period: { from: string; to: string; label: stri
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
     financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds),
     financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId, allowedSubsidiaryIds),
-    monthlySeries(orgId, to, allowedSubsidiaryIds),
-    segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds),
-    segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds),
-    segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds),
+    monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
+    segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, strings),
+    segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, strings),
+    segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, strings),
     drivers(orgId, from, to, allowedSubsidiaryIds),
     itemAnalysis(orgId, from, to, allowedSubsidiaryIds),
     budgetsOn
@@ -708,13 +728,13 @@ export async function healthData(period: { from: string; to: string; label: stri
   return {
     ...base,
     monthly,
-    pnlSummary: buildPnlSummary(base.figures, priorBase.figures),
-    marginFlow: buildMarginFlow(base.figures),
+    pnlSummary: buildPnlSummary(base.figures, priorBase.figures, strings),
+    marginFlow: buildMarginFlow(base.figures, strings),
     segments: { department: dept, class: cls, location: loc },
     drivers: drv,
     items,
     budget,
-    insights: buildInsights(base, monthly, benchmarks, money),
+    insights: buildInsights(base, monthly, benchmarks, money, strings),
     benchmarks,
   };
 }

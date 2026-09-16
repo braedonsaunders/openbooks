@@ -93,6 +93,7 @@
       "cogs": "Coût des ventes",
       "grossProfit": "Marge brute",
       "opex": "Charges d'exploitation",
+      "excludeOtherIncome": "Exclure les autres produits",
       "operatingIncome": "Résultat d'exploitation",
       "otherIncome": "Autres produits",
       "otherExpense": "Autres charges",
@@ -120,6 +121,91 @@
       "noBudgetTitle": "Aucun budget officiel pour cette période",
       "noBudgetDescription": "Créez et approuvez un scénario budgétaire pour afficher les écarts réels par compte. Ce tableau de bord ne remplace pas les données par des cibles synthétiques.",
       "createBudget": "Créer un budget"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "Perte d'exploitation",
+        "detail": "Le résultat d'exploitation est de {amount} — l'entreprise perd de l'argent avant les autres postes."
+      },
+      "gmCritical": {
+        "title": "Marge brute critique",
+        "detail": "La marge brute est de {actual} % — moins de la moitié de l'objectif de {target} %."
+      },
+      "gmWellBelow": {
+        "title": "Marge brute très inférieure à l'objectif",
+        "detail": "La marge brute est de {actual} % contre un objectif de {target} %."
+      },
+      "gmBelow": {
+        "title": "Marge brute inférieure à l'objectif",
+        "detail": "La marge brute est de {actual} % contre un benchmark de {target} %."
+      },
+      "opmCritical": {
+        "title": "Marge d'exploitation critique",
+        "detail": "La marge d'exploitation est de {actual} % — moins de la moitié de l'objectif de {target} %."
+      },
+      "opmBelow": {
+        "title": "Marge d'exploitation inférieure à l'objectif",
+        "detail": "La marge d'exploitation est de {actual} % contre un benchmark de {target} %."
+      },
+      "netLoss": {
+        "title": "Perte nette sur la période",
+        "detail": "Le résultat net est de {amount}."
+      },
+      "revFalling": {
+        "title": "Chiffre d'affaires en forte baisse sur un an",
+        "detail": "Le chiffre d'affaires est en baisse de {pct} % par rapport à l'année précédente."
+      },
+      "revDeclined": {
+        "title": "Chiffre d'affaires en baisse sur un an",
+        "detail": "Le chiffre d'affaires est en baisse de {pct} % par rapport à l'année précédente."
+      },
+      "revTrendingDown": {
+        "title": "Chiffre d'affaires orienté à la baisse",
+        "detail": "Le chiffre d'affaires a reculé de {pct} % sur les trois derniers mois actifs."
+      },
+      "marginCompression": {
+        "title": "Compression des marges",
+        "detail": "La marge brute a glissé de {pp}pp sur les trois derniers mois actifs."
+      },
+      "belowBreakeven": {
+        "title": "Sous le seuil de rentabilité",
+        "detail": "Le chiffre d'affaires mensuel moyen est inférieur au seuil de rentabilité d'environ {amount}."
+      },
+      "thinMargin": {
+        "title": "Marge de sécurité mince",
+        "detail": "Seuls {pct} % du chiffre d'affaires mensuel vous séparent du seuil de rentabilité."
+      },
+      "heavyOverhead": {
+        "title": "Charges fixes lourdes",
+        "detail": "Les charges d'exploitation représentent {pct} % du chiffre d'affaires (>40 %)."
+      },
+      "healthyGM": {
+        "title": "Marge brute saine",
+        "detail": "La discipline des coûts directs est au rendez-vous — protégez les prix."
+      },
+      "trimOpex": {
+        "title": "Réduire les charges d'exploitation",
+        "detail": "La marge brute est bonne ; l'écart avec la marge d'exploitation vient des frais généraux — revoir l'OpEx."
+      },
+      "posLeverage": {
+        "title": "Levier opérationnel positif",
+        "detail": "Le résultat d'exploitation croît {x}× plus vite que le chiffre d'affaires — misez sur la croissance."
+      },
+      "rule40": {
+        "title": "Règle des 40 respectée",
+        "detail": "Croissance + marge = {n}."
+      },
+      "marginOutlier": {
+        "title": "Marge atypique en {month}",
+        "detail": "Marge brute de {actual} % contre {avg} % en moyenne."
+      },
+      "revenueSpike": {
+        "title": "Pic/creux de chiffre d'affaires en {month}",
+        "detail": "Chiffre d'affaires de {amount} contre {avg} en moyenne."
+      }
+    },
+    "labels": {
+      "unassignedSegment": "Non affecté"
     }
   },
   "customer": {
@@ -654,6 +740,6 @@
       "nov": "nov.",
       "dec": "déc."
     },
-    "monthYear": "{month} '{yy}"
+    "monthYear": "{month} ''{yy}"
   }
 }

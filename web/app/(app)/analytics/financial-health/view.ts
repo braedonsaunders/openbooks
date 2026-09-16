@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -8,6 +8,7 @@ import { RATIO_DEFS } from '../../../../lib/analytics/financial-health'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { healthData } from '../../../../lib/analytics/health-data'
+import { healthStrings } from '../../../../lib/analytics/health-strings'
 import type { FinancialHealthView } from './FinancialHealthView'
 
 /**
@@ -45,8 +46,14 @@ export async function loadFinancialHealth(sp: Record<string, string | undefined>
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
+  // Finding sentences resolve through the analytics catalog in the request
+  // locale — the same locale the statements use. (RATIO_DEFS stays the
+  // static English table until the ratio-defs catalog lands; defs travel as
+  // plain data through the widget exactly as before.)
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = healthStrings((key, values) => tc(key, values), locale)
   const [data, budgetsEnabled] = await Promise.all([
-    healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds),
+    healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings),
     isFeatureEnabled(authz.user.orgId, 'budgets'),
   ])
 

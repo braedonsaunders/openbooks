@@ -93,6 +93,7 @@
       "cogs": "Custo dos produtos vendidos",
       "grossProfit": "Lucro bruto",
       "opex": "Despesas operacionais",
+      "excludeOtherIncome": "Excluir outras receitas",
       "operatingIncome": "Resultado operacional",
       "otherIncome": "Outras receitas",
       "otherExpense": "Outras despesas",
@@ -120,6 +121,91 @@
       "noBudgetTitle": "Nenhum orçamento formal para este período",
       "noBudgetDescription": "Crie e aprove um cenário de orçamento para ver a variação real no nível da conta. Este painel não substitui por metas de benchmark sintéticas.",
       "createBudget": "Criar um orçamento"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "Prejuízo operacional",
+        "detail": "O resultado operacional é {amount} — o negócio perde dinheiro antes de outros itens."
+      },
+      "gmCritical": {
+        "title": "Margem bruta criticamente baixa",
+        "detail": "A margem bruta é {actual} % — menos da metade da meta de {target} %."
+      },
+      "gmWellBelow": {
+        "title": "Margem bruta bem abaixo da meta",
+        "detail": "A margem bruta é {actual} % contra a meta de {target} %."
+      },
+      "gmBelow": {
+        "title": "Margem bruta abaixo da meta",
+        "detail": "A margem bruta é {actual} % contra um benchmark de {target} %."
+      },
+      "opmCritical": {
+        "title": "Margem operacional criticamente baixa",
+        "detail": "A margem operacional é {actual} % — menos da metade da meta de {target} %."
+      },
+      "opmBelow": {
+        "title": "Margem operacional abaixo da meta",
+        "detail": "A margem operacional é {actual} % contra um benchmark de {target} %."
+      },
+      "netLoss": {
+        "title": "Prejuízo líquido no período",
+        "detail": "O lucro líquido é {amount}."
+      },
+      "revFalling": {
+        "title": "Receita caindo fortemente ano a ano",
+        "detail": "A receita caiu {pct} % em relação ao ano anterior."
+      },
+      "revDeclined": {
+        "title": "Receita em queda ano a ano",
+        "detail": "A receita caiu {pct} % em relação ao ano anterior."
+      },
+      "revTrendingDown": {
+        "title": "Tendência de receita em queda",
+        "detail": "A receita caiu {pct} % nos últimos três meses ativos."
+      },
+      "marginCompression": {
+        "title": "Compressão de margem",
+        "detail": "A margem bruta cedeu {pp}pp nos últimos três meses ativos."
+      },
+      "belowBreakeven": {
+        "title": "Abaixo do ponto de equilíbrio",
+        "detail": "A receita mensal média está abaixo do ponto de equilíbrio de aproximadamente {amount}."
+      },
+      "thinMargin": {
+        "title": "Margem de segurança estreita",
+        "detail": "Apenas {pct} % da receita mensal o separa do ponto de equilíbrio."
+      },
+      "heavyOverhead": {
+        "title": "Estrutura pesada",
+        "detail": "As despesas operacionais são {pct} % da receita (>40 %)."
+      },
+      "healthyGM": {
+        "title": "Margem bruta saudável",
+        "detail": "A disciplina de custos diretos está em dia — proteja os preços."
+      },
+      "trimOpex": {
+        "title": "Enxugar despesas operacionais",
+        "detail": "A margem bruta está bem; a distância até a margem operacional é estrutura — revise o OpEx."
+      },
+      "posLeverage": {
+        "title": "Alavancagem operacional positiva",
+        "detail": "O resultado operacional escala {x}× a receita — aposte no crescimento."
+      },
+      "rule40": {
+        "title": "Dentro da Regra dos 40",
+        "detail": "Crescimento + margem = {n}."
+      },
+      "marginOutlier": {
+        "title": "Margem atípica em {month}",
+        "detail": "Margem bruta de {actual} % contra {avg} % na média."
+      },
+      "revenueSpike": {
+        "title": "Pico/queda de receita em {month}",
+        "detail": "Receita de {amount} contra {avg} na média."
+      }
+    },
+    "labels": {
+      "unassignedSegment": "Não atribuído"
     }
   },
   "customer": {
@@ -654,6 +740,6 @@
       "nov": "nov",
       "dec": "dez"
     },
-    "monthYear": "{month} '{yy}"
+    "monthYear": "{month} ''{yy}"
   }
 }

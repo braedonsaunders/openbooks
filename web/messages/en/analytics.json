@@ -93,6 +93,7 @@
       "cogs": "Cost of Goods Sold",
       "grossProfit": "Gross Profit",
       "opex": "Operating Expenses",
+      "excludeOtherIncome": "Exclude Other Income",
       "operatingIncome": "Operating Income",
       "otherIncome": "Other Income",
       "otherExpense": "Other Expense",
@@ -134,6 +135,91 @@
       "noBudgetTitle": "No formal budget for this period",
       "noBudgetDescription": "Create and approve a budget scenario to see real account-level variance. This dashboard does not substitute synthetic benchmark targets.",
       "createBudget": "Create a budget"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "Operating loss",
+        "detail": "Operating income is {amount} — the business loses money before other items."
+      },
+      "gmCritical": {
+        "title": "Gross margin critically low",
+        "detail": "Gross margin is {actual}% — less than half the {target}% target."
+      },
+      "gmWellBelow": {
+        "title": "Gross margin well below target",
+        "detail": "Gross margin is {actual}% vs the {target}% target."
+      },
+      "gmBelow": {
+        "title": "Gross margin below target",
+        "detail": "Gross margin is {actual}% vs a {target}% benchmark."
+      },
+      "opmCritical": {
+        "title": "Operating margin critically low",
+        "detail": "Operating margin is {actual}% — less than half the {target}% target."
+      },
+      "opmBelow": {
+        "title": "Operating margin below target",
+        "detail": "Operating margin is {actual}% vs a {target}% benchmark."
+      },
+      "netLoss": {
+        "title": "Net loss for the period",
+        "detail": "Net income is {amount}."
+      },
+      "revFalling": {
+        "title": "Revenue falling sharply year-over-year",
+        "detail": "Revenue is down {pct}% vs the prior year."
+      },
+      "revDeclined": {
+        "title": "Revenue declined year-over-year",
+        "detail": "Revenue is down {pct}% vs the prior year."
+      },
+      "revTrendingDown": {
+        "title": "Revenue trending down",
+        "detail": "Revenue fell {pct}% across the last three active months."
+      },
+      "marginCompression": {
+        "title": "Margin compression",
+        "detail": "Gross margin slid {pp}pp over the last three active months."
+      },
+      "belowBreakeven": {
+        "title": "Below breakeven",
+        "detail": "Average monthly revenue is under the approximately {amount} breakeven."
+      },
+      "thinMargin": {
+        "title": "Thin safety margin",
+        "detail": "Only {pct}% of monthly revenue separates you from breakeven."
+      },
+      "heavyOverhead": {
+        "title": "Heavy overhead",
+        "detail": "Operating expenses are {pct}% of revenue (>40%)."
+      },
+      "healthyGM": {
+        "title": "Healthy gross margin",
+        "detail": "Direct-cost discipline is on track — protect pricing."
+      },
+      "trimOpex": {
+        "title": "Trim operating expense",
+        "detail": "Gross margin is fine; the gap to operating margin is overhead — review OpEx."
+      },
+      "posLeverage": {
+        "title": "Positive operating leverage",
+        "detail": "Operating income scales {x}× revenue — lean into growth."
+      },
+      "rule40": {
+        "title": "Passing the Rule of 40",
+        "detail": "Growth + margin = {n}."
+      },
+      "marginOutlier": {
+        "title": "Margin outlier in {month}",
+        "detail": "Gross margin {actual}% vs {avg}% average."
+      },
+      "revenueSpike": {
+        "title": "Revenue spike/dip in {month}",
+        "detail": "Revenue {amount} vs {avg} average."
+      }
+    },
+    "labels": {
+      "unassignedSegment": "Unassigned"
     }
   },
   "customer": {
@@ -2178,6 +2264,6 @@
       "nov": "Nov",
       "dec": "Dec"
     },
-    "monthYear": "{month} '{yy}"
+    "monthYear": "{month} ''{yy}"
   }
 }

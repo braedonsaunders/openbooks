@@ -93,6 +93,7 @@
       "cogs": "Costo de ventas",
       "grossProfit": "Margen bruto",
       "opex": "Gastos operativos",
+      "excludeOtherIncome": "Excluir otros ingresos",
       "operatingIncome": "Resultado operativo",
       "otherIncome": "Otros ingresos",
       "otherExpense": "Otros gastos",
@@ -120,6 +121,91 @@
       "noBudgetTitle": "No hay presupuesto formal para este período",
       "noBudgetDescription": "Cree y apruebe un escenario presupuestario para ver variaciones reales por cuenta. Este panel no sustituye datos con objetivos sintéticos.",
       "createBudget": "Crear un presupuesto"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "Pérdida operativa",
+        "detail": "El resultado operativo es {amount} — el negocio pierde dinero antes de otras partidas."
+      },
+      "gmCritical": {
+        "title": "Margen bruto críticamente bajo",
+        "detail": "El margen bruto es {actual} % — menos de la mitad del objetivo de {target} %."
+      },
+      "gmWellBelow": {
+        "title": "Margen bruto muy por debajo del objetivo",
+        "detail": "El margen bruto es {actual} % frente al objetivo de {target} %."
+      },
+      "gmBelow": {
+        "title": "Margen bruto por debajo del objetivo",
+        "detail": "El margen bruto es {actual} % frente a un referente de {target} %."
+      },
+      "opmCritical": {
+        "title": "Margen operativo críticamente bajo",
+        "detail": "El margen operativo es {actual} % — menos de la mitad del objetivo de {target} %."
+      },
+      "opmBelow": {
+        "title": "Margen operativo por debajo del objetivo",
+        "detail": "El margen operativo es {actual} % frente a un referente de {target} %."
+      },
+      "netLoss": {
+        "title": "Pérdida neta del período",
+        "detail": "El resultado neto es {amount}."
+      },
+      "revFalling": {
+        "title": "Ingresos cayendo con fuerza interanual",
+        "detail": "Los ingresos bajan un {pct} % frente al año anterior."
+      },
+      "revDeclined": {
+        "title": "Ingresos a la baja interanual",
+        "detail": "Los ingresos bajan un {pct} % frente al año anterior."
+      },
+      "revTrendingDown": {
+        "title": "Tendencia de ingresos a la baja",
+        "detail": "Los ingresos cayeron un {pct} % en los últimos tres meses activos."
+      },
+      "marginCompression": {
+        "title": "Compresión de márgenes",
+        "detail": "El margen bruto cedió {pp}pp en los últimos tres meses activos."
+      },
+      "belowBreakeven": {
+        "title": "Por debajo del punto de equilibrio",
+        "detail": "El ingreso mensual medio está por debajo del punto de equilibrio de aproximadamente {amount}."
+      },
+      "thinMargin": {
+        "title": "Margen de seguridad estrecho",
+        "detail": "Solo el {pct} % del ingreso mensual lo separa del punto de equilibrio."
+      },
+      "heavyOverhead": {
+        "title": "Estructura pesada",
+        "detail": "Los gastos operativos son el {pct} % de los ingresos (>40 %)."
+      },
+      "healthyGM": {
+        "title": "Margen bruto saludable",
+        "detail": "La disciplina de costos directos va bien — proteja los precios."
+      },
+      "trimOpex": {
+        "title": "Recortar gastos operativos",
+        "detail": "El margen bruto está bien; la brecha con el margen operativo es estructura — revise el OpEx."
+      },
+      "posLeverage": {
+        "title": "Apalancamiento operativo positivo",
+        "detail": "El resultado operativo escala {x}× los ingresos — apueste por el crecimiento."
+      },
+      "rule40": {
+        "title": "Cumple la regla del 40",
+        "detail": "Crecimiento + margen = {n}."
+      },
+      "marginOutlier": {
+        "title": "Margen atípico en {month}",
+        "detail": "Margen bruto de {actual} % frente a {avg} % de media."
+      },
+      "revenueSpike": {
+        "title": "Pico/caída de ingresos en {month}",
+        "detail": "Ingresos de {amount} frente a {avg} de media."
+      }
+    },
+    "labels": {
+      "unassignedSegment": "Sin asignar"
     }
   },
   "customer": {
@@ -654,6 +740,6 @@
       "nov": "nov",
       "dec": "dic"
     },
-    "monthYear": "{month} '{yy}"
+    "monthYear": "{month} ''{yy}"
   }
 }
