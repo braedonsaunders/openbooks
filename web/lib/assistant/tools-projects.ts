@@ -30,7 +30,7 @@ const rankProjectsTool: AssistantToolDef = {
     withActivityOnly: z.boolean().optional().describe("Default true: drop projects with no posted cost or revenue"),
     sort: z.enum(PROJECT_RANK_SORTS).optional().describe("Default margin_asc (worst margin first)"),
     limit: z.number().int().min(1).max(100).optional().describe("Default 25"),
-    offset: z.number().int().min(0).max(5000).optional(),
+    offset: z.number().int().min(0).max(5000).optional().describe("Rows to skip for paging (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };

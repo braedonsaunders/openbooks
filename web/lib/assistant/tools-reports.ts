@@ -66,9 +66,9 @@ const listReportDefinitions: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    query: z.string().max(100).optional(),
-    reportType: z.enum(["statement", "query"]).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    query: z.string().max(100).optional().describe("Match definition name"),
+    reportType: z.enum(["statement", "query"]).optional().describe("Only built-in statements or only custom report-studio queries"),
+    limit: z.number().int().min(1).max(100).optional().describe("Maximum definitions to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { query?: string; reportType?: "statement" | "query"; limit?: number };
@@ -138,8 +138,8 @@ const runReport: AssistantToolDef = {
   inputSchema: z.object({
     definitionId: uuidInput,
     period: periodPresetInput.optional(),
-    fromDate: dateInput.optional(),
-    toDate: dateInput.optional(),
+    fromDate: dateInput.optional().describe("Custom range start; overrides the saved definition's period (pass with toDate)"),
+    toDate: dateInput.optional().describe("Custom range end; overrides the saved definition's period (pass with fromDate)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     // The generic saved-report resolver has no authorization-scope parameter;
@@ -257,9 +257,9 @@ const agingDetailTool: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
-    side: z.enum(["ar", "ap"]),
-    asOf: dateInput.optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    side: z.enum(["ar", "ap"]).describe("Detail rows for customers (ar) or vendors (ap)"),
+    asOf: dateInput.optional().describe("Aging date; defaults to today"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum detail rows to return (default 100)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { side: "ar" | "ap"; asOf?: string; limit?: number };
@@ -324,7 +324,7 @@ const partnerStatementTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
     partyId: uuidInput,
-    side: z.enum(["ar", "ap"]),
+    side: z.enum(["ar", "ap"]).describe("Statement side: ar for a customer, ap for a vendor"),
     ...rangeInputFields,
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -357,7 +357,9 @@ const listReportSchedules: AssistantToolDef = {
     "List scheduled report deliveries: definition, cadence, run time, timezone, recipients, next run, and active flag. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  inputSchema: z.object({ definitionId: uuidInput.optional() }),
+  inputSchema: z.object({
+    definitionId: uuidInput.optional().describe("Only schedules for this report definition; omit for all"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { definitionId?: string };
     const rows = (await db.execute<{

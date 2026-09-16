@@ -66,7 +66,9 @@ const listPayRuns: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",
-  inputSchema: z.object({ limit: z.number().int().min(1).max(200).optional() }),
+  inputSchema: z.object({
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum pay runs to return (default 50)"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
       return { ok: false, error: "payroll_feature_disabled" };
@@ -146,7 +148,9 @@ const payrollYearEnd: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",
-  inputSchema: z.object({ taxYear: z.number().int().min(2000).max(2100) }),
+  inputSchema: z.object({
+    taxYear: z.number().int().min(2000).max(2100).describe("Four-digit tax year to report on"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
       return { ok: false, error: "payroll_feature_disabled" };
@@ -223,8 +227,8 @@ const listPayrollEmployees: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["payroll.manage"] },
   feature: "payroll",
   inputSchema: z.object({
-    query: z.string().max(100).optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    query: z.string().max(100).optional().describe("Match employee name"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum employees to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -285,7 +289,7 @@ const payrollEntitlements: AssistantToolDef = {
   feature: "payroll",
   inputSchema: z.object({
     employeePartyId: uuidInput,
-    asOfDate: dateInput.optional(),
+    asOfDate: dateInput.optional().describe("Entitlement balances as of this date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {

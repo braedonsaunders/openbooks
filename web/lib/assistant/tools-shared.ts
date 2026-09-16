@@ -12,11 +12,20 @@ import { resolveRangeArgs, type RangeArgs } from "./period-range";
  * 2-dp money, ISO dates.
  */
 
-export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Canonical tool-input UUID pattern. Written WITHOUT a case-insensitive flag
+ * on purpose: JSON Schema patterns carry no flags, so a flag-dependent regex
+ * would validate one set of values in zod and a narrower set provider-side.
+ * The explicit A-F class keeps both sides identical (see
+ * tool-schema-lint.test.ts, which pins the emitted pattern).
+ */
+export const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD");
-export const uuidInput = z.string().regex(UUID_RE, "uuid");
+export const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD")
+  .describe("Calendar date (YYYY-MM-DD)");
+export const uuidInput = z.string().regex(UUID_RE, "uuid")
+  .describe("Stable UUID, copied verbatim from the id a find_ or list_ tool returned; never invent one");
 
 /** Named fiscal-aware period, resolved server-side by the same resolver the
  *  report filter bar uses — the org's fiscal start month is applied here, so
@@ -64,3 +73,4 @@ export const MAX_LIST_ROWS = 200;
 export function capList<T>(items: T[], max = MAX_LIST_ROWS): { items: T[]; truncated: boolean } {
   return { items: items.slice(0, max), truncated: items.length > max };
 }
+

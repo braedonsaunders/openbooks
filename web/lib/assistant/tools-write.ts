@@ -22,7 +22,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const journalDraftSchema = z.object({
   documentDate: z.string().regex(ISO_DATE, "YYYY-MM-DD").optional()
     .describe("Defaults to today"),
-  memo: z.string().max(500).optional(),
+  memo: z.string().max(500).optional()
+    .describe("Memo posted on the draft document"),
   lines: z
     .array(
       z.object({
@@ -34,7 +35,8 @@ const journalDraftSchema = z.object({
       }),
     )
     .min(2)
-    .max(30),
+    .max(30)
+    .describe("Balanced journal lines (debits positive, credits negative) that must sum to zero"),
 });
 
 const draftJournalEntry: AssistantToolDef = {

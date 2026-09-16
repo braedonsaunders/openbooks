@@ -78,9 +78,19 @@ export interface ApplicationToolDefinition {
   execute: (context: ApplicationContext, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
-const UUID = z.string().uuid();
-const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const TYPE_KEY = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100);
+/**
+ * Stable-UUID tool input. A plain regex (not `.uuid()`) on purpose: `.uuid()`
+ * emits `format: uuid` into the provider JSON Schema, which strict providers
+ * reject, while the equivalent `pattern` is accepted. The class is written
+ * without a case-insensitive flag because JSON Schema patterns carry no
+ * flags (same rule as web/lib/assistant/tools-shared.ts UUID_RE).
+ */
+const UUID = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)
+  .describe("Stable UUID, copied verbatim from the id a list_, find_, or get_ tool returned; never invent one.");
+const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+  .describe("Calendar date (YYYY-MM-DD).");
+const TYPE_KEY = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100)
+  .describe("Record type key from list_record_types.");
 const MONEY = z.string().regex(/^\d+(?:\.\d{1,4})?$/)
   .describe("Positive exact decimal string with at most four decimal places.");
 const SIGNED_MONEY = z.string().regex(/^-?\d+(?:\.\d{1,4})?$/)
@@ -95,13 +105,15 @@ const LAYOUT_SPEC = z.unknown()
   .describe("A ViewSpec PageSpec document. Call validate_page_layout first; errors name the offending widget or path.");
 const EXTENSION_KEY = z.string().regex(/^[a-z][a-z0-9-]*$/).max(64)
   .describe("App package key, e.g. equipment-checks.");
-const CUSTOM = z.record(z.string(), z.unknown());
+const CUSTOM = z.record(z.string(), z.unknown())
+  .describe("Field values keyed by the record type's field keys (camelCase, as list_record_types describes them).");
 const DOCUMENT_REVISION = z.string()
   .regex(new RegExp(DOCUMENT_REVISION_PATTERN), "must be the exact persisted document updated_at token")
   .describe(DOCUMENT_REVISION_DESCRIPTION);
 const RECORD_UPDATE_BODY = z.object({
   expectedUpdatedAt: DOCUMENT_REVISION.optional(),
-}).catchall(z.unknown());
+}).catchall(z.unknown())
+  .describe("Updated field values (partial update); document updates must include expectedUpdatedAt copied verbatim from a read.");
 const DIMENSIONS = z.record(z.string(), UUID.nullable());
 const CLOSE_MODULE = z.enum(["ar", "ap", "banking", "assets", "tax", "gl"]);
 
@@ -303,7 +315,13 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "list_records", title: "List Records",
     description: "List one authorized record type with tenant, search, pagination, and subsidiary restrictions enforced. Document and custom-record updated_at values retain their exact persisted revision.",
-    inputSchema: z.object({ typeKey: TYPE_KEY, query: z.string().max(200).optional(), page: z.number().int().min(1).max(10_000).optional(), perPage: z.number().int().min(5).max(100).optional(), subsidiaryId: UUID.optional() }),
+    inputSchema: z.object({
+      typeKey: TYPE_KEY,
+      query: z.string().max(200).optional().describe("Free-text match against the record's searchable fields"),
+      page: z.number().int().min(1).max(10_000).optional().describe("Page number (default 1)"),
+      perPage: z.number().int().min(5).max(100).optional().describe("Rows per page (default 25)"),
+      subsidiaryId: UUID.optional(),
+    }),
     readOnly: true, destructive: false, openWorld: false, assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await listRecords(context, input) }),
   }),
@@ -387,7 +405,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "set_page_layout", title: "Set Page Layout",
     description: "Replace what a route renders — for everyone in this org, or for you alone with scope: \"user\". The layout binds fields the page's loader already resolved; it cannot reach data the reader could not already see. A rejected layout is returned with its errors rather than stored.",
-    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional(), scope: z.enum(["org", "user"]).optional()
+    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional()
+        .describe("Human-readable reason for this layout change, stored in history"), scope: z.enum(["org", "user"]).optional()
         .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
@@ -438,7 +457,10 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     name: "draft_app", title: "Prepare App Draft",
     featureKey: "apps",
     description: "Save an immutable unpublished app package for this author. No installation, object creation, backend execution or activation occurs. Returns the human review URL, preview URL and exact content hash. A revision is a new draft; keep all intended files and definitions.",
-    inputSchema: z.object({ bundle: z.unknown(), reason: z.string().trim().min(1).max(2000) }),
+    inputSchema: z.object({
+      bundle: z.unknown().describe("Complete app package bundle: owned definitions and files the draft installs."),
+      reason: z.string().trim().min(1).max(2000).describe("Honest human-readable reason for this draft"),
+    }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await draftExtension(context, input as never) }),
@@ -463,7 +485,10 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     name: "discard_app_draft", title: "Discard App Draft",
     featureKey: "apps",
     description: "Discard this author's unpublished draft while preserving its source and audit evidence. Activated versions cannot be discarded.",
-    inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    inputSchema: z.object({
+      draftId: UUID,
+      contentHash: z.string().regex(/^[a-f0-9]{64}$/).describe("Exact content hash the draft call returned; guards against stale-base activation"),
+    }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await discardExtensionDraft(context, input as never) }),
@@ -472,7 +497,10 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     name: "activate_app_draft", title: "Activate Reviewed Extension",
     featureKey: "apps",
     description: "Activate only the exact author-owned draft the human reviewed and explicitly approved. Bind draftId and contentHash. Refuses stale base versions or unavailable permissions. Provisioning, version activation and audit commit atomically.",
-    inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    inputSchema: z.object({
+      draftId: UUID,
+      contentHash: z.string().regex(/^[a-f0-9]{64}$/).describe("Exact content hash the draft call returned; guards against stale-base activation"),
+    }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await activateExtensionDraft(context, input as never) }),
@@ -487,14 +515,24 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "decide_approval", title: "Decide Approval",
     description: "Approve or reject one visible pending gate with assignment, quorum, segregation-of-duties, and signature controls.",
-    inputSchema: z.object({ gateId: UUID, decision: z.enum(["approved", "rejected"]), comment: z.string().trim().max(2000).optional(), signature: z.string().trim().min(1).max(200).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      gateId: UUID,
+      decision: z.enum(["approved", "rejected"]).describe("The approval decision"),
+      comment: z.string().trim().max(2000).optional().describe("Decision rationale recorded on the gate"),
+      signature: z.string().trim().min(1).max(200).optional().describe("Signature text where the gate requires one"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: true, assistantConfirmation: "always", visibleTo: hasPermission("flows.approve"),
     execute: async (context, input) => ({ ok: true, ...await decideApproval(context, input) }),
   }),
   definition({
     name: "list_close_runs", title: "List Close Runs",
     description: "List period-close runs visible within the actor's subsidiary scope.",
-    inputSchema: z.object({ status: z.enum(["in_progress", "pending_approval", "approved", "closed", "published", "cancelled"]).optional(), limit: z.number().int().min(1).max(100).optional() }),
+    inputSchema: z.object({
+      status: z.enum(["in_progress", "pending_approval", "approved", "closed", "published", "cancelled"]).optional()
+        .describe("Only runs in this lifecycle status"),
+      limit: z.number().int().min(1).max(100).optional().describe("Maximum runs to return (default 50)"),
+    }),
     readOnly: true, destructive: false, openWorld: false, assistantConfirmation: "never", visibleTo: hasPermission("close.run"),
     execute: async (context, input) => ({ ok: true, runs: await listCloseRuns(context, input) }),
   }),
@@ -508,7 +546,12 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "start_close_run", title: "Start Close Run",
     description: "Start or resume the authoritative period-close checklist for an explicit period, book, and subsidiary scope.",
-    inputSchema: z.object({ periodId: UUID, bookId: UUID, blueprintId: UUID.optional(), reportingPackageId: UUID.optional(), targetCloseDate: DATE.optional(), subsidiaryIds: z.array(UUID).max(500).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      periodId: UUID, bookId: UUID, blueprintId: UUID.optional(), reportingPackageId: UUID.optional(),
+      targetCloseDate: DATE.optional(),
+      subsidiaryIds: z.array(UUID).max(500).optional().describe("Close scope: omit for the whole org"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.run"),
     execute: async (context, input) => ({ ok: true, ...await startApplicationCloseRun(context, input) }),
   }),
@@ -525,7 +568,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       description: action === "publish"
         ? "Freeze and publish the approved close binder; configured package delivery may be queued after commit. Requires Advanced close controls — omitted when that Features switch is off."
         : `${names[action][1]} through the controlled close lifecycle.`,
-      inputSchema: z.object({ runId: UUID, comment: z.string().trim().max(2000).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+      inputSchema: z.object({
+        runId: UUID,
+        comment: z.string().trim().max(2000).optional().describe("Note recorded on the close run"),
+        idempotencyKey: IDEMPOTENCY_KEY,
+      }),
       readOnly: false,
       destructive: action === "close",
       openWorld: action === "publish",
@@ -540,14 +587,24 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "request_period_reopen", title: "Request Period Reopen",
     description: "Create an independently approved, time-bounded request to reopen explicit period modules.",
-    inputSchema: z.object({ periodId: UUID, bookId: UUID, subsidiaryId: UUID.optional(), modules: z.array(CLOSE_MODULE).min(1).max(6), reason: z.string().trim().min(5).max(2000), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      periodId: UUID, bookId: UUID, subsidiaryId: UUID.optional(),
+      modules: z.array(CLOSE_MODULE).min(1).max(6).describe("Period modules to reopen (ar, ap, banking, assets, tax, gl)"),
+      reason: z.string().trim().min(5).max(2000).describe("Business reason for the reopen request"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.reopen"),
     execute: async (context, input) => ({ ok: true, ...await createReopenRequest(context, input) }),
   }),
   definition({
     name: "decide_period_reopen", title: "Decide Period Reopen",
     description: "Independently approve or reject a period-reopen request; approved access is bounded by policy and expiry.",
-    inputSchema: z.object({ requestId: UUID, approve: z.boolean(), hours: z.number().int().min(1).max(168).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      requestId: UUID,
+      approve: z.boolean().describe("True approves the reopen; false rejects it"),
+      hours: z.number().int().min(1).max(168).optional().describe("Approved access window in hours"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.reopen"),
     execute: async (context, input) => ({ ok: true, ...await decideReopenRequest(context, input) }),
   }),
@@ -561,35 +618,60 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "void_document", title: "Void Document",
     description: "Request a controlled void; posted documents reverse through the kernel and retained evidence is preserved.",
-    inputSchema: z.object({ documentId: UUID, reason: z.string().trim().min(5).max(500), reversalDate: DATE.nullable().optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      documentId: UUID,
+      reason: z.string().trim().min(5).max(500).describe("Reason recorded for the void"),
+      reversalDate: DATE.nullable().optional(),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
     execute: async (context, input) => ({ ok: true, ...await voidDocument(context, input) }),
   }),
   definition({
     name: "correct_document", title: "Correct Posted Document",
     description: "Create a correcting replacement draft and request a controlled void of the posted source in one exactly-once transaction. The correction requires expectedUpdatedAt copied verbatim from the persisted source revision.",
-    inputSchema: z.object({ documentId: UUID, correction: correctionSchema, idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      documentId: UUID,
+      correction: correctionSchema.describe("Replacement header and lines for the correcting draft"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
     execute: async (context, input) => ({ ok: true, ...await correctPostedDocument(context, input) }),
   }),
   definition({
     name: "create_payment", title: "Create Payment",
     description: "Create a governed vendor-payment or customer-receipt draft with exact currency and subsidiary context.",
-    inputSchema: z.object({ kind: z.enum(["vendor_payment", "customer_payment"]), partyId: UUID.nullable().optional(), bankAccountId: UUID.nullable().optional(), documentDate: DATE.optional(), memo: z.string().max(2000).nullable().optional(), subsidiaryId: UUID.nullable().optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), fxRate: RATE.optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      kind: z.enum(["vendor_payment", "customer_payment"]).describe("Draft kind: vendor_payment pays a vendor, customer_payment records a receipt"),
+      partyId: UUID.nullable().optional(), bankAccountId: UUID.nullable().optional(), documentDate: DATE.optional(),
+      memo: z.string().max(2000).nullable().optional().describe("Memo on the payment draft"),
+      subsidiaryId: UUID.nullable().optional(),
+      currency: z.string().regex(/^[A-Z]{3}$/).optional().describe("Three-letter currency code, e.g. CAD"),
+      fxRate: RATE.optional(), idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
     execute: async (context, input) => ({ ok: true, ...await createPayment(context, input) }),
   }),
   definition({
     name: "update_payment", title: "Update Payment",
     description: "Update a draft payment or receipt and its exact open-item allocations.",
-    inputSchema: z.object({ documentId: UUID, patch: paymentPatchSchema, idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      documentId: UUID,
+      patch: paymentPatchSchema.describe("Draft changes: header fields and exact open-item allocations"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
     execute: async (context, input) => ({ ok: true, ...await updatePayment(context, input) }),
   }),
   definition({
     name: "post_payment", title: "Post Payment",
     description: "Submit and post a payment or receipt with open-item applications atomically; may return pending approval.",
-    inputSchema: z.object({ documentId: UUID, allocations: z.array(allocationSchema).min(1).max(1000).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      documentId: UUID,
+      allocations: z.array(allocationSchema).min(1).max(1000).optional()
+        .describe("Open-item applications built from list_open_items rows; omit when nothing is applied"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
     execute: async (context, input) => ({ ok: true, ...await postPayment(context, input) }),
   }),
@@ -675,7 +757,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "update_company_settings", title: "Update Company Settings",
     description: "Change Company & Accounting settings through the same command the settings screen uses: name, legalName, country, baseCurrency, fiscalYearStartMonth, reportingFramework (us_gaap|ifrs), taxFramework (asc740|ias12), defaultLocale, reportPdfStyle (formal|modern), controlAccounts ({ role: accountId | null }), fairValueRangePolicy. Only the keys you pass change. Refuses fiscal-calendar or base-currency changes once postings exist, and invalid control accounts. Audited.",
-    inputSchema: z.object({ changes: z.record(z.string(), z.unknown()), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      changes: z.record(z.string(), z.unknown())
+        .describe("Settings to change, keyed by setting name (only the keys passed change)"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
     execute: async (context, input) => {
       assertApplicationPermission(context, "admin.setup.manage");
@@ -691,7 +777,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "update_features", title: "Update Features",
     description: "Turn optional modules on or off ({ featureKey: boolean }, keys from list_features) through the same fenced command as Setup → Features: dependency rules are enforced, a module whose data is structurally load-bearing cannot be disabled, enabling installs the module's baseline configuration, and the change is audited. Returns the before/after switchboard.",
-    inputSchema: z.object({ features: z.record(z.string(), z.boolean()), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      features: z.record(z.string(), z.boolean())
+        .describe("Feature switches to set, keyed by feature key from list_features"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
     execute: async (context, input) => {
       assertApplicationPermission(context, "admin.setup.manage");
@@ -730,7 +820,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "update_setup_record", title: "Update Setup Record",
     description: "Update one configuration record in a Setup entity by id through the same validated, audited command as the Setup screens. Pass only the fields to change; get ids from list_setup_records. Some entities version instead of overwrite (e.g. effective-dated payroll rules) and some values lock once used by postings — the command reports which.",
-    inputSchema: z.object({ entityKey: SETUP_ENTITY_KEY, id: z.string().min(1).max(120), body: SETUP_BODY, idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      entityKey: SETUP_ENTITY_KEY,
+      id: z.string().min(1).max(120).describe("Id of the setup record, from list_setup_records"),
+      body: SETUP_BODY, idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
     execute: async (context, input) => {
       assertApplicationPermission(context, "admin.setup.manage");
@@ -746,7 +840,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "delete_setup_record", title: "Delete Setup Record",
     description: "Delete (or archive, where the entity keeps history) one configuration record by id. Refuses records referenced by postings or other configuration (reported as in-use) and shared reference data. Audited.",
-    inputSchema: z.object({ entityKey: SETUP_ENTITY_KEY, id: z.string().min(1).max(120), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      entityKey: SETUP_ENTITY_KEY,
+      id: z.string().min(1).max(120).describe("Id of the setup record, from list_setup_records"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
     execute: async (context, input) => {
       assertApplicationPermission(context, "admin.setup.manage");

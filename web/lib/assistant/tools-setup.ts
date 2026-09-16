@@ -72,9 +72,9 @@ const listSetupRecordsTool: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
   inputSchema: z.object({
-    entityKey: z.string().max(80),
-    query: z.string().max(200).optional(),
-    limit: z.number().int().min(1).max(200).optional(),
+    entityKey: z.string().max(80).describe("Setup entity key from list_setup_entities, e.g. subsidiaries"),
+    query: z.string().max(200).optional().describe("Match across the entity's list columns"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum records to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { entityKey: string; query?: string; limit?: number };
