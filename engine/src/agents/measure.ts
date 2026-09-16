@@ -85,3 +85,14 @@ export function classifyPeriodPerformance(args: { currentRevenue: string; priorR
     grossMarginDropBps,
   };
 }
+
+/**
+ * Per-item forensic severity: exposure is absolute (credits escalate exactly
+ * like debits) and the detector materiality is the inclusion floor, so the
+ * only question is the critical multiple.
+ */
+export function classifyForensicItem(args: { materiality: string; threshold: string; criticalMaterialityMultiple?: number }): WorkItemSeverity {
+  const material = absoluteUnits(args.materiality);
+  const threshold = absoluteUnits(args.threshold);
+  return material >= threshold * BigInt(args.criticalMaterialityMultiple ?? 5) ? "critical" : "warning";
+}

@@ -961,6 +961,8 @@
         "criticalItemCount": "Nombre critique d’éléments",
         "criticalMaterialityMultiple": "Multiple critique d’importance relative",
         "staleAfterDays": "Périmé après",
+        "lookbackDays": "Période de recherche",
+        "duplicateDays": "Fenêtre de doublons",
         "minimumVariancePercent": "Écart défavorable minimal",
         "criticalVariancePercent": "Écart défavorable critique",
         "minimumDeclinePercent": "Baisse minimale du chiffre d’affaires",
@@ -980,6 +982,22 @@
         "stale_accounting_documents": {
           "title": "Documents comptables périmés",
           "description": "Repère les factures, crédits, dépenses et écritures brouillons ou en attente qui dépassent l’âge configuré."
+        },
+        "forensic_weekend_postings": {
+          "title": "Dépenses comptabilisées le week-end",
+          "description": "Repère les documents de dépenses datés d’un week-end dans la période de recherche, un signal classique de détournement."
+        },
+        "forensic_round_dollar": {
+          "title": "Dépenses en chiffres ronds",
+          "description": "Repère les documents de dépenses en milliers ronds au-dessus du seuil dans la période de recherche."
+        },
+        "forensic_threshold_trap": {
+          "title": "Montants juste sous le seuil",
+          "description": "Repère les documents de dépenses tarifés juste sous un seuil d’approbation rond (montants se terminant par 99)."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Factures en double",
+          "description": "Repère les documents fournisseurs avec le même tiers, la même nature et le même montant comptabilisés dans la fenêtre de doublons."
         },
         "missing_approved_budget": {
           "title": "Budget approuvé manquant",
@@ -1007,6 +1025,11 @@
         "title": "Agent financier",
         "description": "Contrôles continus des écarts et du rendement.",
         "coverage": "Vérifie les écarts au budget approuvé, les baisses du chiffre d’affaires et de la marge brute ainsi que l’absence de budget."
+      },
+      "forensics": {
+        "title": "Agent forensique",
+        "description": "Contrôles continus des anomalies de dépenses.",
+        "coverage": "Vérifie les comptabilisations du week-end, les chiffres ronds, les montants juste sous les seuils et les factures en double."
       },
       "lastRun": "Dernière exécution : {date} · {status}",
       "nextRun": "Prochaine exécution planifiée : {date}",

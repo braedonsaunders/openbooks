@@ -1006,6 +1006,8 @@
         "criticalItemCount": "Critical item count",
         "criticalMaterialityMultiple": "Critical materiality multiple",
         "staleAfterDays": "Stale after",
+        "lookbackDays": "Look back",
+        "duplicateDays": "Duplicate window",
         "minimumVariancePercent": "Minimum unfavorable variance",
         "criticalVariancePercent": "Critical unfavorable variance",
         "minimumDeclinePercent": "Minimum revenue decline",
@@ -1025,6 +1027,22 @@
         "stale_accounting_documents": {
           "title": "Stale accounting documents",
           "description": "Finds draft or pending bills, invoices, credits, expenses, and journals that have exceeded the configured age."
+        },
+        "forensic_weekend_postings": {
+          "title": "Weekend spend postings",
+          "description": "Flags spend documents dated on a weekend within the lookback window, a classic misappropriation signal."
+        },
+        "forensic_round_dollar": {
+          "title": "Round-dollar spend",
+          "description": "Flags spend documents priced at whole thousands above the floor within the lookback window."
+        },
+        "forensic_threshold_trap": {
+          "title": "Just-below-limit amounts",
+          "description": "Flags spend documents priced just below a round approval limit (amounts ending in 99)."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Duplicate bills",
+          "description": "Flags payable documents with the same party, kind, and amount posted within the duplicate window."
         },
         "missing_approved_budget": {
           "title": "Missing approved budget",
@@ -1052,6 +1070,11 @@
         "title": "Finance agent",
         "description": "Continuous variance and performance controls.",
         "coverage": "Checks approved-budget variances, revenue decline, gross-margin decline, and missing budget coverage."
+      },
+      "forensics": {
+        "title": "Forensics agent",
+        "description": "Continuous spend-anomaly controls.",
+        "coverage": "Checks weekend postings, round-dollar spend, just-below-limit amounts, and duplicate bills."
       },
       "lastRun": "Last run: {date} · {status}",
       "nextRun": "Next scheduled run: {date}",

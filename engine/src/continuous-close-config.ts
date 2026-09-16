@@ -7,6 +7,7 @@ export const CONTINUOUS_CLOSE_AGENT_KEYS = [
   "payables",
   "reconciliation",
   "hygiene",
+  "forensics",
 ] as const;
 export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 
@@ -423,6 +424,106 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
     agentKey: "hygiene",
     supportsMateriality: false,
     parameters: [],
+  },
+  {
+    detectorKey: "forensic_weekend_postings",
+    agentKey: "forensics",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 30,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "forensic_round_dollar",
+    agentKey: "forensics",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 30,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "forensic_threshold_trap",
+    agentKey: "forensics",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 30,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "forensic_duplicate_bills",
+    agentKey: "forensics",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 30,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "duplicateDays",
+        defaultValue: 7,
+        min: 1,
+        max: 60,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
   },
   {
     detectorKey: "missing_approved_budget",

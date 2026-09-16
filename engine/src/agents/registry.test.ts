@@ -83,6 +83,36 @@ test("the four wave-2 packs register their detectors and default on", () => {
   }
 });
 
+test("the forensics pack registers its detectors and defaults on", () => {
+  assert.deepEqual(
+    detectorSpecsForAgent("forensics").map((spec) => spec.detectorKey),
+    [
+      "forensic_weekend_postings",
+      "forensic_round_dollar",
+      "forensic_threshold_trap",
+      "forensic_duplicate_bills",
+    ],
+  );
+  const defaults = defaultContinuousCloseDetectors("forensics");
+  assert.deepEqual(
+    enabledDetectorKeys(defaults),
+    defaults.map((detector) => detector.detectorKey),
+    "forensics controls all default on",
+  );
+  assert.throws(
+    () => normalizeContinuousCloseDetectors("forensics", {
+      forensic_weekend_postings: { parameters: { lookbackDays: 0 } },
+    }),
+    /invalid detector parameter/,
+  );
+  assert.throws(
+    () => normalizeContinuousCloseDetectors("forensics", {
+      forensic_duplicate_bills: { parameters: { duplicateDays: 61 } },
+    }),
+    /invalid detector parameter/,
+  );
+});
+
 test("new-pack detector tuning validates like the original packs", () => {
   const configured = normalizeContinuousCloseDetectors("collections", {
     overdue_customer_balance: {
