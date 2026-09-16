@@ -54,6 +54,8 @@ export interface RunSummary {
   journalEntryId: string | null;
   reversalEntryId: string | null;
   requestedBy: string | null;
+  /** The approval flow run this run is waiting on (pending_approval only). */
+  flowRunId: string | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string | null;
@@ -149,6 +151,7 @@ function mapRun(row: Record<string, unknown>): RunSummary {
     journalEntryId: (row.journal_entry_id as string | null) ?? null,
     reversalEntryId: (row.reversal_entry_id as string | null) ?? null,
     requestedBy: (row.requested_by as string | null) ?? null,
+    flowRunId: (row.flow_run_id as string | null) ?? null,
     startedAt: row.started_at == null ? null : new Date(String(row.started_at)).toISOString(),
     completedAt: row.completed_at == null ? null : new Date(String(row.completed_at)).toISOString(),
     createdAt: row.created_at == null ? null : new Date(String(row.created_at)).toISOString(),

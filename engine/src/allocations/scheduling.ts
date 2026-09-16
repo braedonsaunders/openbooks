@@ -4,6 +4,7 @@ import { featureEnabled } from "../feature-registry.ts";
 import {
   postAllocationRun,
   previewAllocationRun,
+  type AllocationRunRecord,
   type PreviewAllocationRunOptions,
 } from "./period-run.ts";
 
@@ -18,9 +19,8 @@ import {
  * The post step therefore resolves the latest previewed run for the
  * (rule, period, book) occurrence — grounded in the kernel invariant that
  * at most one previewed run exists per occurrence — and fails loudly when
- * there is none. When the post opens an approval flow (approval_flow_id
- * set) the run waits there instead of posting — that decision lives in
- * period-run.
+ * there is none. Posting goes through postAllocationRun, so a version with
+ * an approval_flow_id waits in pending_approval instead of posting.
  *
  * Invariants enforced here, not by callers:
  * - feature off ⇒ no rule fires (enqueue skips the org; processing and the
@@ -239,27 +239,34 @@ export async function processAllocationRunOutboxRow(
   });
   const computed = await previewAllocationRun(preview);
   if (current.run_policy === "auto_post") {
-    await postPreviewedOccurrence({
+    const posted = await postPreviewedOccurrence({
       orgId: row.org_id,
       actorId: preview.actorId,
       ruleId: payload.ruleId,
       periodId: payload.periodId,
       bookId: payload.bookId,
       reason: "scheduled auto_post policy",
+      eventSource: "schedule",
     });
+    return {
+      outcome: "ran",
+      note:
+        posted.status === "pending_approval"
+          ? `previewed, awaiting approval (source ${computed.sourceTotal})`
+          : `previewed and posted (source ${computed.sourceTotal})`,
+    };
   }
   return {
     outcome: "ran",
-    note:
-      current.run_policy === "auto_post"
-        ? `previewed and posted (source ${computed.sourceTotal})`
-        : `previewed (source ${computed.sourceTotal})`,
+    note: `previewed (source ${computed.sourceTotal})`,
   };
 }
 
 /**
  * Post the latest previewed run for an occurrence. Preview computes; the
- * persisted previewed row is what posting addresses.
+ * persisted previewed row is what posting addresses. Returns the run as
+ * postAllocationRun left it — `posted`, or `pending_approval` when the
+ * version's approval flow opened.
  */
 async function postPreviewedOccurrence(args: {
   orgId: string;
@@ -268,7 +275,8 @@ async function postPreviewedOccurrence(args: {
   periodId: string;
   bookId: string;
   reason: string;
-}): Promise<void> {
+  eventSource: "api" | "schedule" | "close_automation";
+}): Promise<AllocationRunRecord> {
   const run = (
     await db.execute<{ id: string }>(sql`
       select id from allocation_runs
@@ -283,7 +291,9 @@ async function postPreviewedOccurrence(args: {
       "auto_post found no persisted previewed run for the occurrence",
     );
   }
-  await postAllocationRun(run.id, args.actorId, args.reason);
+  return postAllocationRun(run.id, args.actorId, args.reason, {
+    eventSource: args.eventSource,
+  });
 }
 
 type CloseAllocationRule = {
@@ -333,8 +343,10 @@ async function resolveRulePublisher(
  * version, in rule order. Each rule's effects commit under a per-rule stage
  * checkpoint (via the caller's commitStage, which wraps the existing
  * idempotent execution-claim machinery), so a crash mid-fan-out resumes
- * with finished rules skipped instead of re-fired. Throws plain Errors —
- * the executor records the message as the automation failure.
+ * with finished rules skipped instead of re-fired. A rule whose version
+ * names an approval flow waits in pending_approval instead of posting.
+ * Throws plain Errors — the executor records the message as the automation
+ * failure.
  */
 export async function runAllocationCloseAction(args: {
   orgId: string;
@@ -415,15 +427,18 @@ export async function runAllocationCloseAction(args: {
       await previewAllocationRun(preview);
       previewed++;
       if (post) {
-        await postPreviewedOccurrence({
+        // A flow-governed version waits in pending_approval here instead of
+        // posting — counted as previewed, never as posted.
+        const result = await postPreviewedOccurrence({
           orgId: args.orgId,
           actorId: preview.actorId,
           ruleId: rule.id,
           periodId: run.period_id,
           bookId: run.book_id,
           reason: "close automation requested posting",
+          eventSource: "close_automation",
         });
-        posted++;
+        if (result.status !== "pending_approval") posted++;
       }
     });
   }

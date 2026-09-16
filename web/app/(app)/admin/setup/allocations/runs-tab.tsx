@@ -31,6 +31,7 @@ interface RunRow {
   periodId: string
   bookId: string
   subsidiaryId: string | null
+  flowRunId: string | null
   status: string
   triggerKind: string
   startedAt: string | null
@@ -462,8 +463,16 @@ export function RunsTab() {
                 </>
               ) : null}
             </div>
+            {detail.status === 'pending_approval' ? (
+              <p className="text-sm text-slate-500">
+                {t('pendingApprovalNotice')}{' '}
+                <a className="underline" href="/approvals">
+                  {t('viewApproval')}
+                </a>
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={() => void act('post')}>
+              <Button type="button" size="sm" onClick={() => void act('post')} disabled={detail.status !== 'previewed'}>
                 {t('post')}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => void act('reverse')}>

@@ -178,7 +178,8 @@
       "memoTemplate": "Memo template",
       "lineDescriptionTemplate": "Line description template",
       "approvalFlow": "Approval flow",
-      "approvalFlowHint": "Optional workflow UUID required before a run posts.",
+      "approvalFlowHint": "Optional approval workflow — a run posts only after the flow approves.",
+      "approvalFlowNone": "No approval flow",
       "driverAsOfs": {
         "period": "Period",
         "document_date": "Document date",
@@ -450,7 +451,9 @@
     "journalEntry": "Journal entry",
     "reversalEntry": "Reversal entry",
     "loadFailed": "Could not load runs.",
-    "detailFailed": "Could not load the run."
+    "detailFailed": "Could not load the run.",
+    "pendingApprovalNotice": "This run is waiting for approval and cannot be posted from here.",
+    "viewApproval": "Open the approval"
   },
   "lineage": {
     "title": "Allocation lineage",
