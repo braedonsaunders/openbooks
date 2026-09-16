@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -17,6 +18,20 @@ export interface ApplicationRow {
   projects: number
 }
 
+export interface SystemRuleEvidence {
+  ruleId: string | null
+  ruleKey: string
+  ruleName: string
+  isActive: boolean
+  currentVersion: {
+    id: string
+    versionNo: number
+    effectiveFrom: string
+    definitionHash: string | null
+    accountId: string | null
+  } | null
+}
+
 /**
  * How overhead reaches the ledger. report_only keeps it purely statistical;
  * net_zero_pair posts DR overhead account [project] / CR the SAME account
@@ -29,6 +44,7 @@ export function OverheadApplication(props: {
   accounts: { id: string; label: string }[]
   applications: ApplicationRow[]
   unapplied: { entries: number; hours: string }
+  systemRule?: SystemRuleEvidence | null
 }) {
   const { money } = useMoney()
   const t = useTranslations('admin.setup.entities.overhead-model.application')
@@ -110,6 +126,30 @@ export function OverheadApplication(props: {
         )}
         <Button size="sm" onClick={saveMode} disabled={busy}>{t('save')}</Button>
       </div>
+
+      {mode === 'net_zero_pair' && props.systemRule && (
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-950">
+          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{t('systemRule.title')}</p>
+          {props.systemRule.currentVersion ? (
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              {t('systemRule.body', {
+                key: props.systemRule.ruleKey,
+                version: props.systemRule.currentVersion.versionNo,
+                date: props.systemRule.currentVersion.effectiveFrom,
+                hash: (props.systemRule.currentVersion.definitionHash ?? '').slice(0, 8),
+              })}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{t('systemRule.noVersion')}</p>
+          )}
+          <Link
+            href="/admin/setup/allocations"
+            className="mt-1 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t('systemRule.viewRule')} →
+          </Link>
+        </div>
+      )}
 
       {mode === 'net_zero_pair' && (
         <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">

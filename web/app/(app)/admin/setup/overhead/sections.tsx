@@ -18,6 +18,10 @@ import {
   listOverheadApplications,
   overheadApplicationSettings,
 } from '@openbooks/engine/src/overhead-apply.ts'
+import {
+  getOverheadSystemRuleEvidence,
+  type OverheadSystemRuleEvidence,
+} from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sql } from 'drizzle-orm'
 import type { OverheadPolicy, OverheadStep } from './view'
@@ -218,12 +222,14 @@ export async function OverheadApplicationTabSlot() {
   const authz = await getAuthz()
   if (!authz) return null
   const orgId = authz.user.orgId
-  const [application, applications, unapplied, accountsRes] = await Promise.all([
+  const [application, applications, unapplied, accountsRes, systemRule] = await Promise.all([
     overheadApplicationSettings(orgId),
     listOverheadApplications(orgId),
     countUnappliedOverheadTime(orgId),
     db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active order by number nulls last, name`),
+    getOverheadSystemRuleEvidence(orgId),
   ])
+  const systemRuleEvidence: OverheadSystemRuleEvidence | null = systemRule.ruleId ? systemRule : null
   return (
     <OverheadApplication
       mode={application.mode}
@@ -234,6 +240,7 @@ export async function OverheadApplicationTabSlot() {
       }))}
       applications={applications as ApplicationRow[]}
       unapplied={unapplied}
+      systemRule={systemRuleEvidence}
     />
   )
 }
