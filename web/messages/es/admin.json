@@ -1182,6 +1182,44 @@
         "overview": "Resumen",
         "library": "Biblioteca",
         "activity": "Actividad"
+      },
+      "packs": {
+        "accounting": {
+          "title": "Controles contables",
+          "description": "Actividad bancaria sin conciliar, conciliaciones descuadradas y borradores estancados que impiden el cierre.",
+          "reads": "Extractos bancarios y conciliaciones, documentos contables abiertos.",
+          "proposes": "Una lista de revisión de condiciones pendientes — nunca contabiliza ni modifica registros."
+        },
+        "finance": {
+          "title": "Controles financieros",
+          "description": "Presupuestos aprobados faltantes, variaciones desfavorables y caídas del rendimiento del período.",
+          "reads": "Escenarios de presupuesto aprobados, cifras reales e ingresos del período.",
+          "proposes": "Avisos de variaciones con las cuentas exactas — solo revisión, sin escrituras."
+        },
+        "collections": {
+          "title": "Cobros",
+          "description": "Saldos vencidos de clientes con comportamiento de pago, promesas incumplidas y candidatos a retención de crédito.",
+          "reads": "Cuentas por cobrar abiertas, promesas e historial de pagos.",
+          "proposes": "Borradores de recordatorios y una lista prioritaria de llamadas para revisión."
+        },
+        "payables": {
+          "title": "Cuentas por pagar",
+          "description": "Facturas duplicadas, facturas que vencen antes del próximo pago, descuentos por pronto pago y aprobaciones faltantes.",
+          "reads": "Facturas de proveedores, aprobaciones y el calendario de pagos.",
+          "proposes": "Un lote de pagos como tarjeta de revisión — nada se paga automáticamente."
+        },
+        "reconciliation": {
+          "title": "Conciliación bancaria",
+          "description": "Movimientos sin conciliar con un candidato de coincidencia fiable, conciliaciones estancadas y cuentas nunca conciliadas.",
+          "reads": "Movimientos de extractos y estado de conciliaciones.",
+          "proposes": "Comandos de coincidencia para confirmar uno por uno."
+        },
+        "hygiene": {
+          "title": "Higiene de datos",
+          "description": "Descuadres de cuentas de control, terceros duplicados y registros sin los códigos, presupuestos o asignaciones que necesitan.",
+          "reads": "Plan contable, terceros, artículos, proyectos, presupuestos y componentes de nómina.",
+          "proposes": "Tarjetas de corrección donde el remedio es un ajuste de configuración."
+        }
       }
     },
     "fxProvider": {
