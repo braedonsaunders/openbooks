@@ -29,6 +29,13 @@ import {
 import { Button, EmptyState, cn } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { MessageParts } from './message-parts'
+import {
+  provisionalTitle,
+  reconcileConversations,
+  removeConversationRow,
+  renameConversationRow,
+  upsertProvisionalConversation,
+} from './sidebar-state'
 
 type Role = 'user' | 'assistant' | 'system'
 type ChatMessage = { id: string; role: Role; parts: unknown[] }
@@ -111,6 +118,9 @@ export function AssistantApp({
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const autoSentPrompt = useRef<string | null>(null)
+  // Threads this client created whose id the server list may not know yet.
+  // They stay pinned at the top of the sidebar until a refresh confirms them.
+  const provisionalIdsRef = useRef<Set<string>>(new Set())
 
   const scrollToBottom = useCallback(() => {
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }))
@@ -121,7 +131,18 @@ export function AssistantApp({
       const res = await fetch('/api/assistant/conversations')
       if (!res.ok) return
       const body = (await res.json()) as { items: ConversationSummary[] }
-      setConvos(body.items)
+      // The server list is authoritative, except threads this client created
+      // that the server does not know yet — a rename or delete issued
+      // mid-stream must not drop the streaming row.
+      setConvos((prev) => {
+        const { items, provisionalIds } = reconcileConversations(
+          prev,
+          body.items,
+          provisionalIdsRef.current,
+        )
+        provisionalIdsRef.current = provisionalIds
+        return items
+      })
     } catch {
       // best-effort — the sidebar simply stays stale
     }
@@ -161,6 +182,16 @@ export function AssistantApp({
           if (!conversationId) {
             // Reflect the new thread in the URL without unmounting the stream.
             window.history.replaceState(null, '', `/assistant/${responseConversationId}`)
+            // Instant sidebar: pin the new thread at the top with the same
+            // provisional title the server stored; the end-of-turn refresh
+            // reconciles it against the server list.
+            provisionalIdsRef.current.add(responseConversationId)
+            const entry = {
+              id: responseConversationId,
+              title: provisionalTitle(text),
+              updatedAt: new Date().toISOString(),
+            }
+            setConvos((prev) => upsertProvisionalConversation(prev, entry))
           }
         }
         if (!res.ok || !res.body) {
@@ -250,7 +281,7 @@ export function AssistantApp({
         body: JSON.stringify({ title: clean }),
       })
       if (!res.ok) throw new Error()
-      setConvos((items) => items.map((c) => (c.id === id ? { ...c, title: clean } : c)))
+      setConvos((items) => renameConversationRow(items, id, clean))
     } catch {
       setError(t('errors.renameFailed'))
     }
@@ -262,7 +293,10 @@ export function AssistantApp({
     try {
       const res = await fetch(`/api/assistant/conversations/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
-      setConvos((items) => items.filter((c) => c.id !== id))
+      // Drop the provisional pin too, so the end-of-turn reconcile cannot
+      // resurrect a thread the user just deleted.
+      provisionalIdsRef.current.delete(id)
+      setConvos((items) => removeConversationRow(items, id))
       if (id === currentId) {
         router.push('/assistant')
       } else {
