@@ -247,6 +247,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'no-grants-body',
   'opening-balances-grid',
   'opportunity-drawer',
+  'optional-badge',
   'order-drawer',
   'org-environment-cell',
   'org-locale-cell',

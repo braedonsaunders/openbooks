@@ -628,7 +628,10 @@ export function agentsSpec(data: AgentsData): PageSpec {
               sort: 'materiality',
             }),
             column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-            column(f('columnProposal'), text(item('proposalBadge'))),
+            column(
+              f('columnProposal'),
+              widgetCell('optional-badge', { label: item('proposalBadge'), variant: 'outline' }),
+            ),
             column(f('columnAge'), text(item('age')), {
               className: 'text-sm text-slate-500',
             }),
