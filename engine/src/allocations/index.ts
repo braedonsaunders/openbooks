@@ -6,6 +6,24 @@ export {
   type RulesInEffectRequest,
   type SelectRuleOptions,
 } from "./match.ts";
+export {
+  EntryAllocationError,
+  type EntryAllocationErrorCode,
+  explodeDocumentLine,
+  loadEntryRuleByKey,
+  planEntryDistributions,
+  renderAllocationTemplate,
+  type EntryDocumentContext,
+  type EntryLineInput,
+  type EntryPlan,
+  type ExplodeOptions,
+  type ExplodeResult,
+  type KeyedEntryRuleLookup,
+  type PlannedEntryLine,
+  type PlannedEntryLineage,
+  type PlanOptions,
+  type StoredEntryGroup,
+} from "./entry.ts";
 export type {
   AccountScope,
   AllocationApplyPolicy,
