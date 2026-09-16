@@ -16,7 +16,8 @@
     "assignment": "Assignment",
     "assignedToMe": "Assigned to me",
     "unassigned": "Unassigned",
-    "overdue": "Overdue"
+    "overdue": "Overdue",
+    "since": "Since"
   },
   "subsidiaryHelp": "Subsidiary resolves through account-linked findings; every other finding buckets as unresolved.",
   "lastVisit": "New since {date}",
@@ -93,5 +94,13 @@
   },
   "assignment": {
     "unassigned": "Unassigned"
+  },
+  "since": {
+    "day": "Last 24 hours",
+    "week": "Last 7 days"
+  },
+  "columns": {
+    "age": "Age",
+    "due": "Due"
   }
 }

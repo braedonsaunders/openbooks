@@ -7,15 +7,19 @@ const view = read("./view.ts");
 const page = read("./page.tsx");
 const layout = read("./layout.tsx");
 const island = read("./AgentsTriage.tsx");
+const listSource = read("../../../lib/list/agent-findings.ts");
 const ccPage = read("../continuous-close/page.tsx");
 const nav = read("../../../../engine/src/modules/nav-registry.ts");
 
 // The workbench home is one ranked inbox across every readable pack — the
 // loadAgentInbox resolver the JSON feed also serves, never a second query.
+// Every list param parses through the findings list source (c01).
 test("agents home loads through the shared inbox resolver", () => {
   assert.match(view, /route: '\/agents'/);
   assert.match(view, /requirePermission\('assistant\.use'\)/);
-  assert.match(view, /loadAgentInbox\(authz,/);
+  assert.match(view, /parseAgentFindingsParams\(sp\)/);
+  assert.match(view, /loadAgentInbox\(authz, \{/);
+  assert.match(view, /\.\.\.findings\.filters,/);
   assert.match(view, /widgetBlock\('agents-triage'/);
   assert.match(view, /widgetBlock\('work-item-drawer'/);
   assert.match(view, /findingProposalCommand\(authz, selected\.summary\)/);
@@ -23,6 +27,21 @@ test("agents home loads through the shared inbox resolver", () => {
   assert.match(layout, /requireFeatureEnabled\(authz\.user\.orgId, 'continuousClose'\)/);
   assert.match(page, /loadAgents\(sp\)/);
   assert.match(page, /agentsSpec\(data\)/);
+});
+
+// The inbox table is the shared spec table: sortable severity/materiality/
+// detected columns over the rank default, age + split assignee/due columns,
+// and the since window beside the existing facet chips.
+test("inbox table binds the list source sort and shared filters", () => {
+  assert.match(view, /sorting: \{ basePath: '\/agents', sort: f\('sort'\), dir: f\('dir'\) \}/);
+  assert.match(view, /sort: 'severity'/);
+  assert.match(view, /sort: 'materiality'/);
+  assert.match(view, /sort: 'detected'/);
+  assert.match(view, /paramKey: 'since'/);
+  assert.match(view, /column\(f\('columnAge'\)/);
+  assert.match(view, /column\(f\('columnDue'\)/);
+  assert.match(view, /RelativeTimeFormat/);
+  assert.match(view, /column\(f\('columnAssignee'\)/);
 });
 
 // The proposals lane resolves viewer-signed commands up front and renders
@@ -44,7 +63,9 @@ test("drawer carries assignment and notes", () => {
   assert.match(view, /listWorkItemNotes\(authz, itemId\)/);
   assert.match(view, /listAgentNotificationTargets\(authz\.user\.orgId\)/);
   assert.match(view, /paramKey: 'assigned'/);
-  assert.match(view, /assignedToMe: true as const/);
+  assert.match(listSource, /assigned === "mine"\) filters\.assignedToMe = true as const/);
+  assert.match(listSource, /assigned === "unassigned"\) filters\.unassignedOnly = true as const/);
+  assert.match(listSource, /assigned === "overdue"\) filters\.overdueOnly = true as const/);
   assert.match(view, /column\(f\('columnAssignee'\)/);
   const drawer = read("../continuous-close/WorkItemDrawer.tsx");
   assert.match(drawer, /action: 'assign'/);

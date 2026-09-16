@@ -3,10 +3,6 @@ import 'server-only'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { getLocale, getTranslations } from 'next-intl/server'
 import {
-  CONTINUOUS_CLOSE_AGENT_KEYS,
-  type ContinuousCloseAgentKey,
-} from '@openbooks/engine/src/continuous-close-config.ts'
-import {
   badge,
   column,
   field,
@@ -25,7 +21,8 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
+import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { parseAgentFindingsParams } from '../../../lib/list/agent-findings'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { loadAgentInbox } from '../../../lib/agents/inbox'
 import { loadBriefing, type CachedBriefing } from '../../../lib/agents/briefing'
@@ -77,7 +74,9 @@ export interface AgentsInboxRow {
   statusVariant: (typeof STATUS_VARIANT)[keyof typeof STATUS_VARIANT]
   proposalBadge: string
   detected: string
+  age: string
   assigneeLabel: string
+  due: string
 }
 
 export interface AgentsTriageRow {
@@ -118,6 +117,8 @@ export interface AgentsData {
   subsidiaryHelp: string
   proposalLabel: string
   assignmentLabel: string
+  sinceLabel: string
+  sinceOptions: { value: string; label: string }[]
   packOptions: { value: string; label: string; count: number }[]
   statusOptions: { value: string; label: string; count: number }[]
   severityOptions: { value: string; label: string; count: number }[]
@@ -131,11 +132,15 @@ export interface AgentsData {
   columnStatus: string
   columnDetected: string
   columnProposal: string
+  columnAge: string
   columnAssignee: string
+  columnDue: string
   rows: AgentsInboxRow[]
   total: number
   currentPage: number
   perPage: number
+  sort: string
+  dir: 'asc' | 'desc'
   tabsAriaLabel: string
   tabs: { key: string; href: string; label: string; active: boolean }[]
   proposalsOnly: boolean
@@ -182,45 +187,23 @@ export async function loadAgents(
   const tc = await getTranslations('continuousClose')
   const tcc = await getTranslations('common')
   const locale = await getLocale()
-  const params = parseListParams(sp, {
-    sort: 'detected',
-    dir: 'desc',
-    perPage: 25,
-    allowedSorts: ['detected'] as const,
-  })
+  // The list source owns every list param: filters, rank/column sort, and
+  // paging. Tab params (proposals/briefing/item) stay here — they switch
+  // sections, not the list itself.
+  const findings = parseAgentFindingsParams(sp)
+  const params = { page: findings.page, perPage: findings.perPage }
 
-  const requestedPacks = singleParam(sp, 'packs')
-    ?.split(',')
-    .map((s) => s.trim())
-    .filter((s): s is ContinuousCloseAgentKey =>
-      (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(s),
-    )
-  const severity = singleParam(sp, 'severity')
-  const status = singleParam(sp, 'status')
-  const subsidiary = singleParam(sp, 'subsidiary')
   const proposalsOnly = singleParam(sp, 'proposals') === 'true'
   const briefingMode = singleParam(sp, 'briefing') === 'true'
-  const assignedFilter = singleParam(sp, 'assigned')
 
   const inbox = await loadAgentInbox(authz, {
-    limit: briefingMode ? 1 : params.perPage,
-    offset: briefingMode ? 0 : (params.page - 1) * params.perPage,
-    ...(requestedPacks && requestedPacks.length > 0 ? { packs: requestedPacks } : {}),
-    ...(severity === 'info' || severity === 'warning' || severity === 'critical'
-      ? { severities: [severity] }
-      : {}),
-    ...(status === 'open' || status === 'in_review' || status === 'resolved' || status === 'dismissed'
-      ? { statuses: [status] }
-      : {}),
-    ...(params.q ? { query: params.q } : {}),
+    ...findings.filters,
+    ...(briefingMode ? { limit: 1, offset: 0 } : {}),
     ...(proposalsOnly ? { hasProposal: true as const } : {}),
-    ...(subsidiary && isUuid(subsidiary) ? { subsidiaryId: subsidiary } : {}),
-    ...(assignedFilter === 'mine' ? { assignedToMe: true as const } : {}),
-    ...(assignedFilter === 'unassigned' ? { unassignedOnly: true as const } : {}),
-    ...(assignedFilter === 'overdue' ? { overdueOnly: true as const } : {}),
   })
 
   const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
+  const ageFormat = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
   const canWrite = can(authz, 'assistant.write')
   const activeCount = inbox.facets.statuses
     .filter((row) => row.key === 'open' || row.key === 'in_review')
@@ -298,6 +281,11 @@ export async function loadAgents(
     subsidiaryHelp: t('subsidiaryHelp'),
     proposalLabel: t('facets.proposal'),
     assignmentLabel: t('facets.assignment'),
+    sinceLabel: t('facets.since'),
+    sinceOptions: [
+      { value: 'day', label: t('since.day') },
+      { value: 'week', label: t('since.week') },
+    ],
     packOptions: inbox.facets.packs.map((row) => ({
       value: row.key,
       label: tc(`agents.${row.key}`),
@@ -333,7 +321,9 @@ export async function loadAgents(
     columnStatus: tcc('labels.status'),
     columnDetected: tc('table.detected'),
     columnProposal: t('proposal.badge'),
+    columnAge: t('columns.age'),
     columnAssignee: t('facets.assignment'),
+    columnDue: t('columns.due'),
     rows: inbox.rows.map((row) => ({
       id: row.id,
       title: tc(`findings.${row.findingType}.title`),
@@ -347,15 +337,22 @@ export async function loadAgents(
       statusVariant: STATUS_VARIANT[row.status],
       proposalBadge: row.hasProposal ? t('proposal.badge') : '',
       detected: dateOnly.format(new Date(row.lastDetectedAt)),
-      assigneeLabel: row.assignee
-        ? row.dueAt
-          ? `${row.assignee.name} · ${row.overdue ? t('facets.overdue') : dateOnly.format(new Date(row.dueAt))}`
-          : row.assignee.name
-        : t('assignment.unassigned'),
+      age: ageFormat.format(
+        -Math.max(0, Math.round((Date.now() - new Date(row.lastDetectedAt).getTime()) / 86_400_000)),
+        'day',
+      ),
+      assigneeLabel: row.assignee ? row.assignee.name : t('assignment.unassigned'),
+      due: row.dueAt
+        ? row.overdue
+          ? t('facets.overdue')
+          : dateOnly.format(new Date(row.dueAt))
+        : '',
     })),
     total: inbox.total,
     currentPage: params.page,
     perPage: params.perPage,
+    sort: findings.sort,
+    dir: findings.dir,
     tabsAriaLabel: t('tabs.ariaLabel'),
     tabs: [
       {
@@ -514,6 +511,13 @@ export function agentsSpec(data: AgentsData): PageSpec {
           label: data.assignmentLabel,
           options: data.assignmentOptions,
         }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'since',
+          label: data.sinceLabel,
+          options: data.sinceOptions,
+        }),
         ]),
         when: f('showInboxChrome'),
       },
@@ -560,6 +564,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
           variant: 'app',
           rows: f('rows'),
           rowKey: item('id'),
+          sorting: { basePath: '/agents', sort: f('sort'), dir: f('dir') },
           columns: [
             column(
               f('columnFinding'),
@@ -570,18 +575,28 @@ export function agentsSpec(data: AgentsData): PageSpec {
               }),
             ),
             column(f('columnPack'), badge(item('packLabel'), { variant: 'outline' })),
-            column(f('columnSeverity'), badge(item('severityLabel'), { variant: item('severityVariant') })),
+            column(f('columnSeverity'), badge(item('severityLabel'), { variant: item('severityVariant') }), {
+              sort: 'severity',
+            }),
             column(f('columnMateriality'), money(item('materiality')), {
               align: 'right',
               className: 'font-medium',
+              sort: 'materiality',
             }),
             column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
             column(f('columnProposal'), text(item('proposalBadge'))),
+            column(f('columnAge'), text(item('age')), {
+              className: 'text-sm text-slate-500',
+            }),
             column(f('columnAssignee'), text(item('assigneeLabel')), {
+              className: 'text-sm text-slate-500',
+            }),
+            column(f('columnDue'), text(item('due')), {
               className: 'text-sm text-slate-500',
             }),
             column(f('columnDetected'), text(item('detected')), {
               className: 'text-sm text-slate-500',
+              sort: 'detected',
             }),
           ],
         }),
