@@ -410,3 +410,27 @@ test("open-item verification sums duplicate target refs instead of hiding a doub
     { checked: 1, matches: 1, mismatches: [] },
   );
 });
+
+test("change detection ignores source cleared evidence on native lines", () => {
+  // Cleared/reconciled markers are evidence about the source's books, not
+  // commercial content: a clear-flip must never amend or re-post the
+  // document. The mirror stamps it onto the posted journal lines out of
+  // band, so the canonical key must be blind to it.
+  const baseline = canonicalDocument();
+  const baselineKey = canonicalNativeDocumentKey(baseline);
+  const line = baseline.lines[0]!;
+  assert.equal(
+    baselineKey,
+    canonicalNativeDocumentKey({
+      ...baseline,
+      lines: [{ ...line, sourceCleared: true, sourceClearedDate: "2026-08-31" }],
+    }),
+  );
+  assert.equal(
+    baselineKey,
+    canonicalNativeDocumentKey({
+      ...baseline,
+      lines: [{ ...line, sourceCleared: false, sourceClearedDate: null }],
+    }),
+  );
+});

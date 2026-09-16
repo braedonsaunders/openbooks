@@ -611,6 +611,8 @@ export function requiresControlledPostingReversal(
 
 /** Canonical content key of a native document (change detection). */
 export function canonicalNativeDocumentKey(d: NativeDocument): string {
+  // Line-level source-cleared evidence is deliberately absent: a clear-flip
+  // must never amend or re-post the document (see NativeDocLine).
   return JSON.stringify([
     d.kind,
     d.posting,
