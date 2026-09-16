@@ -27,7 +27,8 @@ type SegmentOptions = {
 /**
  * One picker payload for the Drivers + Runs tabs (A8): postable accounts,
  * active dimension values, recent periods, posting books, period-mode rules,
- * report definitions, parties (with canonical roles), items, and custom
+ * report definitions, approval flows for the allocation_run subject (A14),
+ * parties (with canonical roles), items, and custom
  * segment values. `allocations.read`. The Rules tab (A7) owns the rule
  * definitions; this only lists them for run filters and previews. Parties
  * and segment values follow the same subsidiary scope as the other
@@ -46,7 +47,7 @@ export async function GET() {
     return rows.rows;
   };
 
-  const [accounts, departments, locations, classes, projects, books, periods, rules, reports] = await Promise.all([
+  const [accounts, departments, locations, classes, projects, books, periods, rules, reports, flows] = await Promise.all([
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select id::text as id, number || ' · ' || name as label, number as extra
         from accounts
@@ -76,6 +77,14 @@ export async function GET() {
       select id::text as id, name as label, slug as extra
         from report_definitions
        where org_id = ${orgId}
+       order by name`),
+    // Approval-flow picker (A14): only enabled flows authored over the
+    // allocation_run subject can gate a run — every other kind would fail
+    // closed at post time, so the picker never offers them.
+    db.execute<{ id: string; label: string }>(sql`
+      select id::text as id, name as label
+        from flows
+       where org_id = ${orgId} and enabled and subject_kind = 'allocation_run'
        order by name`),
   ]);
 
@@ -149,6 +158,7 @@ export async function GET() {
     periods: periods.rows,
     rules: rules.rows,
     reports: reports.rows,
+    flows: flows.rows,
     measures: NATIVE_MEASURES.map((measure) => ({ id: measure, label: measure })),
     parties,
     items,
