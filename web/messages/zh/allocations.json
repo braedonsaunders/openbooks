@@ -191,13 +191,20 @@
       "filtersHeading": "维度筛选",
       "filtersUntagged": "仅未标对象明细",
       "filtersUntaggedHint": "仅匹配所勾维度均无值的明细。",
-      "filtersReadonly": "此版本的往来、物料与自定义维度筛选在此为只读。",
       "filters": {
         "department": "部门",
         "location": "地点",
         "class": "类别",
         "project": "项目",
-        "subsidiary": "子公司"
+        "subsidiary": "子公司",
+        "party": "往来单位",
+        "item": "物料"
+      },
+      "partyRoles": {
+        "vendor": "供应商",
+        "customer": "客户",
+        "employee": "员工",
+        "other": "其他往来单位"
       },
       "accountGroupDimension": "分组维度",
       "dynamicMinWeight": "动因最小权重",

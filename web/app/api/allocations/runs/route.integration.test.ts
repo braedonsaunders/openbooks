@@ -280,7 +280,9 @@ test("post/reverse/rerun need gl.post + reason and run the real engine", { skip:
     // Nothing changed since the reversal: the re-run is idempotent and posts
     // nothing new — same run id back.
     const reran = await rerunRoute.POST(
-      jsonRequest(`/api/allocations/runs/${previewId}/rerun`, "POST"),
+      // The Runs tab posts `{}` for a one-click re-run; the shared JSON
+      // boundary requires an object body even when every field is optional.
+      jsonRequest(`/api/allocations/runs/${previewId}/rerun`, "POST", {}),
       { params: Promise.resolve({ id: previewId }) },
     );
     assert.equal(reran.status, 200);
