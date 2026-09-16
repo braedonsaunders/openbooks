@@ -13,6 +13,11 @@ import {
   startCloseRun,
   type CloseModule,
 } from "@openbooks/engine/src/close.ts";
+import {
+  RevaluationError,
+  RevaluationFeatureDisabledError,
+  runRevaluation,
+} from "@openbooks/engine/src/fx-revaluation.ts";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, notFound } from "./errors";
@@ -158,6 +163,45 @@ export async function advanceCloseRun(context: ApplicationContext, input: {
         return { action: input.action, run: await closeRun(context, input.runId) };
       } catch (error) {
         mapCloseError(error);
+      }
+    },
+  });
+  return { replayed: outcome.replayed, result: outcome.value };
+}
+
+export async function runPeriodRevaluation(context: ApplicationContext, input: {
+  periodId: string;
+  bookId?: string;
+  idempotencyKey: string;
+}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+  assertApplicationPermission(context, "close.run");
+  const allowed = context.authz.allowedSubsidiaryIds;
+  const outcome = await executeIdempotent({
+    context,
+    operation: "close.revaluation.run",
+    idempotencyKey: input.idempotencyKey,
+    request: {
+      periodId: input.periodId,
+      bookId: input.bookId ?? null,
+      subsidiaryIds: allowed === null ? null : [...allowed].sort(),
+    },
+    execute: async (): Promise<Record<string, unknown>> => {
+      try {
+        const run = await runRevaluation(
+          context.authz.user.orgId,
+          input.periodId,
+          context.authz.user.id,
+          allowed === null ? undefined : [...allowed],
+          input.bookId,
+        );
+        return { ...run };
+      } catch (error) {
+        // The route 404s a disabled FX module and 422s request state.
+        if (error instanceof RevaluationFeatureDisabledError) throw notFound("revaluation");
+        if (error instanceof RevaluationError) {
+          throw new ApplicationError("invalid_input", error.message, 422);
+        }
+        throw error;
       }
     },
   });
