@@ -1417,9 +1417,6 @@
         },
         "forensics": {
           "title": "Forensique",
-          "description": "Analyses programmées d'anomalies — écritures de fin de semaine et en chiffres ronds, pièges de seuils et factures en double — ne montrant que les nouveaux constats.",
-          "reads": "Écritures et factures fournisseurs sous l'angle des anomalies.",
-          "proposes": "Des constats étayés avec les lignes exactes — révision uniquement, aucune écriture."
           "description": "Comptabilisations du week-end, chiffres ronds, montants juste sous les seuils et factures en double.",
           "reads": "Documents de dépenses et tableau de bord sentinelle.",
           "proposes": "Liens de révision vers le tableau sentinelle sur chaque constat — révision uniquement, aucune écriture."
