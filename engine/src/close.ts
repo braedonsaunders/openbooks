@@ -746,6 +746,16 @@ export async function ensureCloseDefaults(
          'lock', ${JSON.stringify({ approvalRequired: true, defaultHours: 24 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
       on conflict (org_id, code) do nothing`);
 
+    // Source-evidenced bank sign-offs (0158): the mirror may sign reconcilable
+    // accounts off through the source system's reconciled date. Deactivating
+    // the policy returns close readiness to statement-only evidence.
+    await tx.execute(sql`
+      insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
+      values
+        (${orgId}, 'source-reconciliation-evidence', 'close.defaultData.policies.sourceReconciliationEvidence.name', 'close.defaultData.policies.sourceReconciliationEvidence.description',
+         'evidence', ${JSON.stringify({})}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+      on conflict (org_id, code) do nothing`);
+
     if (closeFeatures.advancedClose) {
       await tx.execute(sql`
         insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
