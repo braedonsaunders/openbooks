@@ -64,7 +64,7 @@ async function linkDocument(
     await db.execute(sql`
       insert into document_lines (org_id, document_id, line_number, account_id, amount, custom)
       values (${org.orgId}, ${docId}, ${n}, ${line.accountId}, 0,
-              ${JSON.stringify({ source_line_ref: line.lineRef })}::jsonb)
+              ${JSON.stringify({ sourceLineRef: line.lineRef })}::jsonb)
     `);
   }
   await db.execute(sql`
