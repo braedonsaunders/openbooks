@@ -412,12 +412,14 @@ export async function disposeAsset(
         department_id: string | null; project_id: string | null;
         location_id: string | null; base_currency: string; asset_account_id: string;
         accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
+        opening_accumulated_depreciation: string | null;
       }>(sql`
       select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost,
              a.department_id, a.project_id, a.location_id, sub.base_currency,
              a.asset_account_id as native_asset_account_id,
              a.accumulated_depreciation_account_id as native_accumulated_account_id,
              a.depreciation_expense_account_id as native_expense_account_id,
+             a.opening_accumulated_depreciation::text as opening_accumulated_depreciation,
              c.asset_account_id, c.accumulated_depreciation_account_id,
              c.depreciation_expense_account_id, c.gain_loss_account_id,
              coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
@@ -477,8 +479,15 @@ export async function disposeAsset(
     // Impairments and revaluations sit on the accumulated-depreciation account
     // without schedule lines; fold them in so derecognition clears the account
     // exactly (an impaired asset must not strand its impairment credit).
+    // Continue-from-accumulated (migration 0156): the opening figure is
+    // pre-cutover depreciation on that same account — without it a mid-life
+    // disposal would under-clear accumulated depreciation and misstate the
+    // gain or loss by exactly the opening amount.
     const remeasureDelta = await netRemeasurementDelta(orgId, assetId, bookId, tx);
-    const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
+    const effectiveAccumulated = sub(
+      add(asset.accumulated, asset.opening_accumulated_depreciation ?? "0"),
+      remeasureDelta,
+    );
     const { nbv, gainLoss, lines } = computeDisposal({
       cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
     });
@@ -773,8 +782,14 @@ export async function reverseAssetLifecycleEvent(
 
     let restoredStatus: "in_service" | "fully_depreciated" | null = null;
     if (source.kind === "disposed" || source.kind === "written_off") {
-      const depreciation = (await tx.execute<{ accumulated: string }>(sql`
-        select coalesce(sum(line.posted_amount), 0)::text as accumulated
+      // Continue-from-accumulated (migration 0156): the restore threshold
+      // compares TOTAL recognised depreciation — posted plus the pre-cutover
+      // opening figure — against the depreciable basis.
+      const depreciation = (await tx.execute<{ accumulated: string; opening: string }>(sql`
+        select coalesce(sum(line.posted_amount), 0)::text as accumulated,
+               coalesce((select asset.opening_accumulated_depreciation
+                           from fixed_assets asset
+                          where asset.id = ${source.asset_id} and asset.org_id = ${orgId}), 0)::text as opening
           from depreciation_schedule_lines line
           join depreciation_schedules schedule
             on schedule.id = line.schedule_id and schedule.org_id = line.org_id
@@ -783,7 +798,7 @@ export async function reverseAssetLifecycleEvent(
            and schedule.book_id = ${source.book_id}
       `));
       restoredStatus =
-        toUnits(depreciation.rows[0]?.accumulated ?? "0") >=
+        toUnits(depreciation.rows[0]?.accumulated ?? "0") + toUnits(depreciation.rows[0]?.opening ?? "0") >=
         toUnits(source.acquisition_cost) - toUnits(source.salvage_value)
           ? "fully_depreciated"
           : "in_service";
@@ -873,12 +888,14 @@ export async function remeasureAsset(
         department_id: string | null; project_id: string | null;
         location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
         gain_loss_account_id: string | null; accumulated: string;
+        opening_accumulated_depreciation: string | null;
       }>(sql`
       select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value,
              a.department_id, a.project_id, a.location_id, sub.base_currency,
              a.asset_account_id as native_asset_account_id,
              a.accumulated_depreciation_account_id as native_accumulated_account_id,
              a.depreciation_expense_account_id as native_expense_account_id,
+             a.opening_accumulated_depreciation::text as opening_accumulated_depreciation,
              c.asset_account_id, c.accumulated_depreciation_account_id,
              c.depreciation_expense_account_id, c.gain_loss_account_id,
              coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
@@ -900,8 +917,13 @@ export async function remeasureAsset(
     // Fold prior remeasurement events into the carrying amount: they credit
     // accumulated depreciation without schedule lines, so the schedule sum alone
     // overstates NBV the moment an asset has been impaired.
+    // Continue-from-accumulated (migration 0156): same treatment for the
+    // opening figure — an impairment must measure off the continued NBV.
     const remeasureDelta = await netRemeasurementDelta(orgId, assetId, bookId, tx);
-    const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
+    const effectiveAccumulated = sub(
+      add(asset.accumulated, asset.opening_accumulated_depreciation ?? "0"),
+      remeasureDelta,
+    );
     const { delta, lines } = computeRemeasurement({
       cost: asset.acquisition_cost,
       accumulated: effectiveAccumulated,
