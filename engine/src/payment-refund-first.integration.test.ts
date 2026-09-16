@@ -142,3 +142,145 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
     await dropScratchOrg(org.orgId);
   }
 });
+
+/**
+ * A refund redelivery that lands in the park branch AFTER its marker was
+ * consumed must only refresh last_seen_at/payload — it must never re-arm
+ * consumed_at/consumed_attempt_id. Otherwise the next duplicate succeeded
+ * event consumes the marker a second time and writes a second clawback note
+ * for one return.
+ *
+ * The park branch is reachable post-consumption when the settling event never
+ * merged the intent (e.g. a link-token settlement with no payment_intent):
+ * later refunds carrying the intent still cannot resolve, while duplicate
+ * successes carrying it still consume.
+ */
+test("a post-consumption refund redelivery never re-arms its marker", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Clawback Rearm Tester", "admin");
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"onlinePayments":true}}'::jsonb where id = ${org.orgId}`);
+    const today = new Date().toISOString().slice(0, 10);
+    if (today < "2026-07-01" || today > "2026-07-31") {
+      const [year, month] = today.split("-").map(Number) as [number, number, number];
+      const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
+      const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+      await db.execute(sql`
+        insert into accounting_periods
+          (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+           starts_on, ends_on, is_adjustment)
+        select ${org.orgId}, fiscal_calendar_id, ${year}, ${month}, ${today.slice(0, 7)},
+               ${startsOn}, ${endsOn}, false
+          from accounting_periods
+         where id = ${org.periodId}
+        on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing
+      `);
+    }
+    const invoiceId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-REARM',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+              '100', '0', '100', ${userId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+      values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
+    await db.execute(sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`);
+    await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+
+    const secret = `whsec_clawback_rearm_${randomUUID()}`;
+    await db.execute(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled,
+         default_bank_account_id, secrets, created_by, updated_by)
+      values (${org.orgId}, 'stripe', 'Stripe', true, true,
+              ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_rearm", webhookSecret: secret })}, ${userId}, ${userId})`);
+    const linkId = randomUUID(), linkToken = `clawback-rearm-link-${randomUUID()}`;
+    const sessionId = `cs_test_rearm_${randomUUID().slice(0, 8)}`;
+    const intentId = `pi_rearm_${randomUUID().slice(0, 8)}`;
+    await db.execute(sql`
+      insert into payment_links
+        (id, org_id, token, document_id, party_id, subsidiary_id, provider,
+         bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
+      values (${linkId}, ${org.orgId}, ${linkToken}, ${invoiceId}, ${org.customerId},
+              ${org.subsidiaryId}, 'stripe', ${org.accounts.bank}, '100', '0', 'CAD',
+              ${userId}, ${userId})`);
+    await db.execute(sql`
+      insert into payment_attempts (org_id, link_id, provider, external_ref, status, amount, surcharge_amount)
+      values (${org.orgId}, ${linkId}, 'stripe', ${sessionId}, 'initiated', '100', '0')`);
+    const fire = (event: unknown) => {
+      const signed = signedStripeBody(secret, event);
+      return handleProviderWebhook("stripe", signed.headers, signed.body);
+    };
+    const marker = async () => (await db.execute<{
+      consumed_at: string | null;
+      consumed_attempt_id: string | null;
+    }>(sql`
+      select consumed_at, consumed_attempt_id from payment_pending_clawbacks
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`)).rows[0];
+    const notes = async () => (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'payment_attempts'
+         and changes->'after'->>'note' like '%before its settlement event%'`)).rows[0]!.n;
+
+    // The refund beats settlement and parks (the intent is unresolvable).
+    const parked = await fire({
+      id: `evt_rearm_refund_${randomUUID().slice(0, 8)}`,
+      type: "charge.refunded",
+      data: { object: { id: "ch_rearm", payment_intent: intentId } },
+    });
+    assert.equal(parked?.status, "pending_clawback");
+    assert.equal((await marker())?.consumed_at, null);
+
+    // Settlement WITHOUT the intent resolves (external ref) and books, but
+    // merges no intent — the parked marker stays open and unconsumed.
+    const settled = await fire({
+      id: `evt_rearm_succeeded_${randomUUID().slice(0, 8)}`,
+      type: "checkout.session.completed",
+      data: { object: { id: sessionId, client_reference_id: linkToken, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
+    });
+    assert.equal(settled?.status, "settled");
+    assert.equal((await marker())?.consumed_at, null);
+    assert.equal(await notes(), 0);
+
+    // A duplicate success carrying the intent dedupes on the booked receipt
+    // but still consumes the open marker: exactly one note.
+    const duplicate = await fire({
+      id: `evt_rearm_dup_${randomUUID().slice(0, 8)}`,
+      type: "checkout.session.completed",
+      data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
+    });
+    assert.equal(duplicate?.status, "duplicate");
+    assert.equal(await notes(), 1);
+    const consumedOnce = await marker();
+    assert.ok(consumedOnce?.consumed_at, "marker consumed by the duplicate success");
+
+    // The refund redelivery still cannot resolve (no intent was ever merged),
+    // so it re-parks — but must NOT re-arm the consumed marker.
+    const redelivered = await fire({
+      id: `evt_rearm_refund2_${randomUUID().slice(0, 8)}`,
+      type: "charge.refunded",
+      data: { object: { id: "ch_rearm", payment_intent: intentId } },
+    });
+    assert.equal(redelivered?.status, "pending_clawback");
+    const afterRedelivery = await marker();
+    assert.equal(afterRedelivery?.consumed_at, consumedOnce?.consumed_at, "redelivery refreshes tracking, never re-arms");
+    assert.equal(afterRedelivery?.consumed_attempt_id, consumedOnce?.consumed_attempt_id);
+
+    // A further duplicate success must find the marker closed: no second note.
+    const late = await fire({
+      id: `evt_rearm_late_${randomUUID().slice(0, 8)}`,
+      type: "checkout.session.completed",
+      data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
+    });
+    assert.equal(late?.status, "duplicate");
+    assert.equal(await notes(), 1, "one return fires exactly one clawback note");
+    assert.equal((await marker())?.consumed_at, consumedOnce?.consumed_at);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
