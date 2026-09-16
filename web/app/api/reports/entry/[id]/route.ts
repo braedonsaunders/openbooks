@@ -48,6 +48,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
+           l.contributor_kind, l.contributor_ref,
+           coalesce(ar.name, us.name) as contributor_name,
            a.id as account_id, a.number as account_number, a.name as account_name,
            p.display_name as party, d.name as department, pr.name as project
       from journal_lines l
@@ -55,6 +57,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join departments d on d.id = l.department_id and d.org_id = l.org_id
       left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+      left join allocation_rule_versions arv on arv.id = l.contributor_ref and arv.org_id = l.org_id
+      left join allocation_rules ar on ar.id = arv.rule_id and ar.org_id = arv.org_id
+      left join user_scripts us on us.id = l.contributor_ref and us.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
        ${lineSubsidiaryFilter}
      order by l.line_number
