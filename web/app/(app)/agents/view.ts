@@ -28,7 +28,7 @@ import { loadAgentInbox } from '../../../lib/agents/inbox'
 import { loadBriefing, type CachedBriefing } from '../../../lib/agents/briefing'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import { listWorkItemNotes, loadWorkItemAssignment } from '../../../lib/agents/assignments'
-import { listAgentNotificationTargets } from '../../../lib/setup/agents'
+import { listAgentNotificationTargets, listAgentRuns } from '../../../lib/setup/agents'
 import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
 import { findingSummaryLine } from '../../../lib/agents/summary'
 import type {
@@ -106,8 +106,9 @@ export interface AgentsData {
   configureLabel: string
   configureHref: string
   canManage: boolean
-  locale: string
-  metrics: { key: string; label: string; value: number; tone?: string }[]
+  /** Loader-formatted `Kpi[]` for the shared strip — counts in locale digits,
+   *  last run as a relative instant. */
+  kpis: { label: string; value: string; tone?: 'good' | 'bad' }[]
   searchPlaceholder: string
   currentParams: Record<string, string | string[] | undefined>
   packLabel: string
@@ -141,7 +142,6 @@ export interface AgentsData {
   perPage: number
   sort: string
   dir: 'asc' | 'desc'
-  tabsAriaLabel: string
   tabs: { key: string; href: string; label: string; active: boolean }[]
   proposalsOnly: boolean
   briefingMode: boolean
@@ -177,6 +177,15 @@ function singleParam(sp: Record<string, string | string[] | undefined>, key: str
   return raw && raw.length > 0 ? raw : undefined
 }
 
+/** Largest fitting unit, always in the past ("3 hours ago", never "in …"). */
+function lastRunAgo(format: Intl.RelativeTimeFormat, startedAt: string): string {
+  const minutes = Math.min(-1, Math.round((Date.parse(startedAt) - Date.now()) / 60_000))
+  if (minutes > -60) return format.format(minutes, 'minute')
+  const hours = Math.ceil(minutes / 60)
+  if (hours > -48) return format.format(hours, 'hour')
+  return format.format(Math.ceil(hours / 24), 'day')
+}
+
 export async function loadAgents(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AgentsData> {
@@ -196,18 +205,26 @@ export async function loadAgents(
   const proposalsOnly = singleParam(sp, 'proposals') === 'true'
   const briefingMode = singleParam(sp, 'briefing') === 'true'
 
-  const inbox = await loadAgentInbox(authz, {
-    ...findings.filters,
-    ...(briefingMode ? { limit: 1, offset: 0 } : {}),
-    ...(proposalsOnly ? { hasProposal: true as const } : {}),
-  })
+  const [inbox, { runs }] = await Promise.all([
+    loadAgentInbox(authz, {
+      ...findings.filters,
+      ...(briefingMode ? { limit: 1, offset: 0 } : {}),
+      ...(proposalsOnly ? { hasProposal: true as const } : {}),
+    }),
+    // Freshness signal for the KPI strip — the Activity read model, reused
+    // read-only. Never interpreted: only its start instant renders.
+    listAgentRuns(authz.user.orgId, { limit: 1 }),
+  ])
 
   const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
   const ageFormat = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  const countFormat = new Intl.NumberFormat(locale)
   const canWrite = can(authz, 'assistant.write')
   const activeCount = inbox.facets.statuses
     .filter((row) => row.key === 'open' || row.key === 'in_review')
     .reduce((sum, row) => sum + row.count, 0)
+  const overdueCount = inbox.facets.overdue
+  const lastRun = runs[0] ?? null
 
   const itemId = singleParam(sp, 'item')
   let selected: ContinuousCloseWorkItem | null = null
@@ -259,18 +276,18 @@ export async function loadAgents(
     configureLabel: t('configure'),
     configureHref: '/admin/setup/agents',
     canManage: can(authz, 'admin.setup.manage'),
-    locale,
-    metrics: [
-      { key: 'active', label: tc('metrics.active'), value: activeCount },
+    kpis: [
+      { label: t('kpis.open'), value: countFormat.format(activeCount) },
+      { label: t('kpis.proposals'), value: countFormat.format(inbox.facets.withProposals) },
       {
-        key: 'critical',
-        label: tc('metrics.critical'),
-        value: inbox.facets.severities.find((row) => row.key === 'critical')?.count ?? 0,
-        ...((inbox.facets.severities.find((row) => row.key === 'critical')?.count ?? 0) > 0
-          ? { tone: 'text-red-600 dark:text-red-400' }
-          : {}),
+        label: t('kpis.overdue'),
+        value: countFormat.format(overdueCount),
+        ...(overdueCount > 0 ? { tone: 'bad' as const } : {}),
       },
-      { key: 'proposals', label: t('facets.proposal'), value: inbox.facets.withProposals },
+      {
+        label: t('kpis.lastRun'),
+        value: lastRun ? lastRunAgo(ageFormat, lastRun.startedAt) : t('kpis.never'),
+      },
     ],
     searchPlaceholder: t('search'),
     currentParams: sp,
@@ -353,7 +370,6 @@ export async function loadAgents(
     perPage: params.perPage,
     sort: findings.sort,
     dir: findings.dir,
-    tabsAriaLabel: t('tabs.ariaLabel'),
     tabs: [
       {
         key: 'inbox',
@@ -372,6 +388,14 @@ export async function loadAgents(
         href: mergeHref('/agents', sp, { proposals: undefined, briefing: 'true', item: undefined }),
         label: t('tabs.briefing'),
         active: briefingMode,
+      },
+      // Runs live in Setup → Agents (c02); the tab links out, same as the
+      // configure action. Never active here — the workbench owns no run UI.
+      {
+        key: 'activity',
+        href: '/admin/setup/agents/activity',
+        label: t('tabs.activity'),
+        active: false,
       },
     ],
     proposalsOnly,
@@ -427,6 +451,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
         title: f('title'),
         description: f('description'),
         actions: [
+          widget('module-home-tabs', { tabs: data.tabs }),
           widget(
             'link-button',
             { href: '/admin/setup/agents', label: data.configureLabel, variant: 'outline', iconKey: 'settings' },
@@ -436,7 +461,6 @@ export function agentsSpec(data: AgentsData): PageSpec {
       }),
     ],
     body: [
-      widgetBlock('tab-nav', { ariaLabel: data.tabsAriaLabel, tabs: data.tabs }),
       {
         ...widgetBlock('agents-triage', {
           rows: data.triage.rows,
@@ -453,17 +477,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
         when: f('showBriefing'),
       },
       {
-        ...grid(
-          'grid grid-cols-2 gap-2 sm:grid-cols-3',
-          data.metrics.map((metric) =>
-            widgetBlock('metric-tile', {
-              label: metric.label,
-              value: metric.value,
-              locale: data.locale,
-              ...(metric.tone ? { tone: metric.tone } : {}),
-            }),
-          ),
-        ),
+        ...widgetBlock('agents-kpi-strip', { items: data.kpis }),
         when: f('showInboxChrome'),
       },
       {

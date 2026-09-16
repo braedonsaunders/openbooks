@@ -1312,6 +1312,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'agents-triage': (props) => (
     <AgentsTriage {...(props as unknown as ComponentProps<typeof AgentsTriage>)} />
   ),
+  /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
+   *  the stat-tile block's (same arrangement as `equipment-kpi-strip`). */
+  'agents-kpi-strip': (props) => (
+    <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
+  ),
   'proposal-lane-card': (props) => (
     <ProposalLaneCard {...(props as unknown as ComponentProps<typeof ProposalLaneCard>)} />
   ),

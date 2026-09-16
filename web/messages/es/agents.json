@@ -41,7 +41,8 @@
     "ariaLabel": "Secciones de agentes",
     "inbox": "Bandeja",
     "proposals": "Propuestas",
-    "briefing": "Resumen"
+    "briefing": "Resumen",
+    "activity": "Actividad"
   },
   "briefing": {
     "generate": "Generar resumen",
@@ -102,5 +103,12 @@
   "columns": {
     "age": "Antigüedad",
     "due": "Vencimiento"
+  },
+  "kpis": {
+    "open": "Hallazgos abiertos",
+    "proposals": "Propuestas pendientes",
+    "overdue": "Asignaciones vencidas",
+    "lastRun": "Última ejecución",
+    "never": "Nunca"
   }
 }

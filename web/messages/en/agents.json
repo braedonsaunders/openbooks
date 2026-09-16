@@ -41,7 +41,8 @@
     "ariaLabel": "Agent workbench sections",
     "inbox": "Inbox",
     "proposals": "Proposals",
-    "briefing": "Briefing"
+    "briefing": "Briefing",
+    "activity": "Activity"
   },
   "briefing": {
     "generate": "Generate briefing",
@@ -102,5 +103,12 @@
   "columns": {
     "age": "Age",
     "due": "Due"
+  },
+  "kpis": {
+    "open": "Open findings",
+    "proposals": "Proposals awaiting",
+    "overdue": "Overdue assignments",
+    "lastRun": "Last run",
+    "never": "Never"
   }
 }
