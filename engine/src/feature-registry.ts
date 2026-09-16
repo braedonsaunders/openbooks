@@ -115,6 +115,16 @@ export const FEATURES: FeatureDef[] = [
   // and governed close-package publication. It depends on Flows because the
   // independent approval must be real at the service boundary, not a UI flag.
   { key: 'advancedClose', defaultEnabled: false, category: 'accounting', parentKey: 'flows' },
+  // Allocation kernel (docs/design/allocation-kernel.md): one versioned rule
+  // model bound at three moments — entry distributions, posting
+  // contributions, period sweeps. Off by default: switching it on is a
+  // deliberate adoption decision (rules, drivers, and run policies must be
+  // configured first). The two binding-moment gates are subordinate to this
+  // parent — neither moment can resolve enabled while it is off — and exist
+  // so one moment can be switched off without losing the other.
+  { key: 'allocations', defaultEnabled: false, category: 'accounting' },
+  { key: 'allocationsAtEntry', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
+  { key: 'allocationsAtPosting', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   // Platform
   { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows', 'approvals'] },
   { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps'] },
