@@ -1349,3 +1349,77 @@ test("NetSuite link mapping states stated terms and never converts", () => {
     /conflicting application link 7:0:8:0/,
   );
 });
+
+test("NetSuite posting lines propagate cleared markers with a date fallback", () => {
+  const lines: NsLine[] = [
+    {
+      transaction: "123",
+      id: "1",
+      mainline: "T",
+      taxline: "F",
+      account: "10",
+      netamount: "-100",
+      subsidiary: "1",
+      cleared: "T",
+      cleareddate: "08/31/2026",
+    },
+    {
+      transaction: "123",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "100",
+      subsidiary: "1",
+      cleared: "T",
+      cleareddate: null,
+    },
+  ];
+  const built = buildNativeFromNetSuite(context, header, lines);
+  assert.ok(!("skip" in built));
+  // The bank leg carries the source's clear date; the expense leg cleared
+  // without a date falls back to the transaction date (2026-07-15).
+  assert.deepEqual(
+    built.doc.lines.map((line) => [line.sourceLineRef, line.sourceCleared, line.sourceClearedDate]),
+    [
+      ["1", true, "2026-08-31"],
+      ["2", true, "2026-07-15"],
+    ],
+  );
+});
+
+test("NetSuite uncleared lines carry explicit negative evidence", () => {
+  const lines: NsLine[] = [
+    {
+      transaction: "123",
+      id: "1",
+      mainline: "T",
+      taxline: "F",
+      account: "10",
+      netamount: "-100",
+      subsidiary: "1",
+      cleared: "F",
+      cleareddate: null,
+    },
+    {
+      transaction: "123",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "100",
+      subsidiary: "1",
+      cleared: null,
+      cleareddate: null,
+    },
+  ];
+  const built = buildNativeFromNetSuite(context, header, lines);
+  assert.ok(!("skip" in built));
+  assert.deepEqual(
+    built.doc.lines.map((line) => [line.sourceLineRef, line.sourceCleared, line.sourceClearedDate]),
+    [
+      ["1", false, null],
+      ["2", false, null],
+    ],
+  );
+});

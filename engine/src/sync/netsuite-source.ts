@@ -9,6 +9,7 @@ import type {
   NativeChanges,
   SourceApplicationLink,
   SourceAccountMonthRow,
+  SourceClearedLineState,
   SourceEntity,
   SourceOpenItem,
   SourceProjectAccountMonthRow,
@@ -61,6 +62,41 @@ export function netSuiteReconcilableAccount(accttype: string, reconcile: unknown
   const type = NS_ACCOUNT_TYPE[accttype];
   if (type !== "asset_bank" && type !== "liability_card") return false;
   return reconcile === "T" || reconcile === true;
+}
+
+/** One SuiteQL transactionline cleared state, normalized for the mirror. */
+export interface NetSuiteClearedLineState {
+  docRef: string;
+  lineRef: string;
+  cleared: boolean;
+  /** ISO date when cleared; the transaction date when the source states none. */
+  clearedDate: string | null;
+}
+
+/**
+ * Normalize SuiteQL `transactionline.cleared/cleareddate` rows. A line the
+ * source marks cleared without a clear date falls back to its transaction
+ * date — evidence understated (an earlier through-date) is safe, evidence
+ * invented is not.
+ */
+export function normalizeNetSuiteClearedStates(
+  rows: {
+    transaction: string;
+    id: string;
+    cleared?: string | boolean | null;
+    cleareddate?: string | null;
+    trandate?: string | null;
+  }[],
+): NetSuiteClearedLineState[] {
+  return rows.map((row) => {
+    const cleared = row.cleared === "T" || row.cleared === true;
+    return {
+      docRef: String(row.transaction),
+      lineRef: String(row.id),
+      cleared,
+      clearedDate: cleared ? (isoDate(row.cleareddate) ?? isoDate(row.trandate)) : null,
+    };
+  });
 }
 
 const NS_ITEM_KIND: Record<string, string> = {
@@ -400,7 +436,8 @@ const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.a
   tl.expenseaccount, tl.netamount, tl.foreignamount, tl.quantity, tl.rate,
   BUILTIN.DF(tl.units) AS units,
   tl.department, tl.entity, tl.subsidiary,
-  tl.memo, tl.taxrate1, tl.taxcode, tl.settlementamount`;
+  tl.memo, tl.taxrate1, tl.taxcode, tl.settlementamount,
+  tl.cleared, TO_CHAR(tl.cleareddate, 'MM/DD/YYYY') AS cleareddate`;
 
 /** Line columns plus whatever optional fields this account has mapped. */
 export function netSuiteLineColumns(
@@ -1476,6 +1513,38 @@ export class NetSuiteSource implements MigrationSource {
         month: r.m,
         amount: fromUnits(toUnits(r.d ?? "0") - toUnits(r.c ?? "0")),
       }));
+  }
+
+  /**
+   * Current cleared states for bank/card-account lines. Clearing a line does
+   * not reliably bump the transaction modification clock the incremental
+   * pull keys on, so without this refresh a line cleared after its mirror
+   * pull would stay unstamped until the transaction otherwise changed. One
+   * indexed SuiteQL per mirror run, bounded to reconcilable account types
+   * and the caller's posting window.
+   */
+  async clearedLineStates(opts: { sincePostingDate: string }): Promise<SourceClearedLineState[]> {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.sincePostingDate)) {
+      throw new Error("clearedLineStates requires sincePostingDate as YYYY-MM-DD");
+    }
+    const rows = await this.q<{
+      transaction: string;
+      id: string;
+      cleared?: string | null;
+      cleareddate?: string | null;
+      trandate?: string | null;
+    }>(`
+      SELECT tl.transaction, tl.id, tl.cleared,
+             TO_CHAR(tl.cleareddate, 'MM/DD/YYYY') AS cleareddate,
+             TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate
+        FROM transactionline tl
+        JOIN transaction t ON t.id = tl.transaction
+        JOIN account a ON a.id = COALESCE(tl.expenseaccount, tl.account)
+       WHERE a.accttype IN ('Bank', 'CredCard')
+         AND t.posting = 'T'
+         AND tl.taxline = 'F'
+         AND t.trandate >= TO_DATE('${opts.sincePostingDate}', 'YYYY-MM-DD')`);
+    return normalizeNetSuiteClearedStates(rows);
   }
 
   async projectMonthlyActivity(): Promise<SourceProjectAccountMonthRow[]> {

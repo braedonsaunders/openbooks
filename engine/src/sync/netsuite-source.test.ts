@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { netSuiteReconcilableAccount } from "./netsuite-source.ts";
+import {
+  netSuiteLineColumns,
+  netSuiteReconcilableAccount,
+  normalizeNetSuiteClearedStates,
+} from "./netsuite-source.ts";
 
 /**
  * The reconcilable flag is a bank-reconciliation input: only bank and card
@@ -22,4 +26,26 @@ test("only bank and card accounts inherit the source reconcilable flag", () => {
   assert.equal(netSuiteReconcilableAccount("Bank", null), false);
   // Unknown source types never inherit.
   assert.equal(netSuiteReconcilableAccount("NoSuchType", "T"), false);
+});
+
+test("NetSuite line pulls carry cleared markers", () => {
+  assert.match(netSuiteLineColumns({}), /tl\.cleared/);
+  assert.match(netSuiteLineColumns({}), /cleareddate/);
+});
+
+test("NetSuite cleared states normalize with a transaction-date fallback", () => {
+  assert.deepEqual(
+    normalizeNetSuiteClearedStates([
+      { transaction: "7001", id: "11", cleared: "T", cleareddate: "08/31/2026", trandate: "08/28/2026" },
+      { transaction: "7001", id: "12", cleared: "T", cleareddate: null, trandate: "08/28/2026" },
+      { transaction: "7002", id: "21", cleared: "F", cleareddate: null, trandate: "08/29/2026" },
+    ]),
+    [
+      { docRef: "7001", lineRef: "11", cleared: true, clearedDate: "2026-08-31" },
+      // Cleared without a clear date falls back to the transaction date —
+      // evidence understated is safe, evidence invented is not.
+      { docRef: "7001", lineRef: "12", cleared: true, clearedDate: "2026-08-28" },
+      { docRef: "7002", lineRef: "21", cleared: false, clearedDate: null },
+    ],
+  );
 });

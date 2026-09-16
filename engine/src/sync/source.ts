@@ -146,6 +146,22 @@ export interface NativeChanges {
   nonLedgerRefs?: string[];
 }
 
+/**
+ * Current cleared state of one source transaction line on a reconcilable
+ * account, keyed by the same refs the native pull emits (`sourceRef` /
+ * `sourceLineRef`). The mirror stamps it onto the posted journal lines and
+ * signs reconcilable accounts off from it; it never enters change detection.
+ */
+export interface SourceClearedLineState {
+  /** Stable source id of the transaction (matches NativeDocument.sourceRef). */
+  docRef: string;
+  /** Stable source id of the line (matches NativeDocLine.sourceLineRef). */
+  lineRef: string;
+  cleared: boolean;
+  /** ISO date when cleared; null when the source states no date or the line is open. */
+  clearedDate: string | null;
+}
+
 // --- Verification ---------------------------------------------------------------
 
 export interface SourceTrialBalanceRow {
@@ -295,6 +311,17 @@ export interface MigrationSource {
    * include high-volume operational streams such as parties or time entries.
    */
   transactionReferenceEntities?(): Promise<EntityStream[]>;
+
+  /**
+   * Current cleared states for the connector's reconcilable-account lines
+   * posted on/after `sincePostingDate` (ISO YYYY-MM-DD), keyed by the same
+   * doc/line refs the native pull emits. Only connectors whose source tracks
+   * clearing OUTSIDE the transaction modification clock implement it (their
+   * incremental pulls would otherwise never resurface a clear-flip); the
+   * rest surface markers through the native documents they already pull and
+   * leave this undefined.
+   */
+  clearedLineStates?(opts: { sincePostingDate: string }): Promise<SourceClearedLineState[]>;
 
   /**
    * Native transactions created/modified after `since` (null = everything),
