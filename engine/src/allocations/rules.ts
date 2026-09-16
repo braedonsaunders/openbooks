@@ -55,8 +55,61 @@ export interface AllocationAudit {
 
 export interface AllocationOrgScope {
   orgId: string;
-  /** Optimistic-concurrency token (updated_at revision); null skips the check. */
-  expectedUpdatedAt?: string | null;
+  /**
+   * Optimistic-concurrency token: the `revision` a read API returned for this
+   * row. When present the write is refused as STALE unless the row still
+   * carries it (the drawer maps that to a 409); null skips the check.
+   */
+  expectedRevision?: string | null;
+}
+
+/** A rule head with its update revision and current-version summary. */
+export interface CurrentVersionSummary {
+  id: string;
+  versionNo: number;
+  status: AllocationRuleVersion["status"];
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  definitionHash: string | null;
+}
+
+export interface RuleHeadSummary {
+  rule: AllocationRuleHead;
+  revision: string;
+  currentVersion: CurrentVersionSummary | null;
+}
+
+export interface RuleVersionTimelineEntry {
+  version: AllocationRuleVersion;
+  revision: string;
+  targetCount: number;
+}
+
+export interface RuleDetail {
+  rule: AllocationRuleHead;
+  revision: string;
+  versions: RuleVersionTimelineEntry[];
+}
+
+export interface RuleVersionWithTargets {
+  version: AllocationRuleVersion;
+  targets: AllocationRuleTarget[];
+  revision: string;
+}
+
+export interface RuleMutationResult {
+  rule: AllocationRuleHead;
+  revision: string;
+}
+
+export interface VersionMutationResult {
+  version: AllocationRuleVersion;
+  revision: string;
+}
+
+export interface TargetsMutationResult {
+  targets: AllocationRuleTarget[];
+  revision: string;
 }
 
 export interface CreateRuleInput extends AllocationOrgScope {
@@ -292,6 +345,21 @@ async function requireRevision(
   }
 }
 
+/** The current update revision of a rule or version row (opaque to callers). */
+async function readRevision(
+  table: "allocation_rules" | "allocation_rule_versions",
+  orgId: string,
+  id: string,
+): Promise<string> {
+  const column = table === "allocation_rules" ? sql.raw("allocation_rules.updated_at") : sql.raw("allocation_rule_versions.updated_at");
+  const rows = await db.execute<{ revision: string }>(
+    sql`select ${documentRevisionSql(sql`${column}`)} as revision from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`,
+  );
+  const row = rows.rows[0];
+  if (row === undefined) throw new AllocationRuleError("NOT_FOUND", `${table} row not found: ${id}`);
+  return row.revision;
+}
+
 type Prefixed = Record<string, unknown>;
 const get = (row: Prefixed, prefix: string, name: string): unknown => row[`${prefix}${name}`];
 
@@ -465,7 +533,7 @@ async function insertTargets(orgId: string, versionId: string, targets: Allocati
   }
 }
 
-export async function createRule(input: CreateRuleInput, audit: AllocationAudit): Promise<AllocationRuleHead> {
+export async function createRule(input: CreateRuleInput, audit: AllocationAudit): Promise<RuleMutationResult> {
   const orgId = uuid(input.orgId, "orgId");
   const key = slug(input.key, "key");
   const name = nonEmpty(input.name, "name");
@@ -494,11 +562,11 @@ export async function createRule(input: CreateRuleInput, audit: AllocationAudit)
       orgId, table: "allocation_rules", rowId: id, action: "insert", event: "rule.created",
       before: null, after: head, actorId: audit.actorId, reason: audit.reason,
     });
-    return head;
+    return { rule: head, revision: await readRevision("allocation_rules", orgId, id) };
   });
 }
 
-export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: AllocationAudit): Promise<AllocationRuleHead> {
+export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: AllocationAudit): Promise<RuleMutationResult> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(ruleId, "ruleId");
   return withOrgTransaction(orgId, async () => {
@@ -506,7 +574,7 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: 
     if (before.isSystem && (input.name !== undefined || input.description !== undefined)) {
       throw new AllocationRuleError("FROZEN", "engine-owned rules accept only activity and ordering edits");
     }
-    await requireRevision("allocation_rules", orgId, id, input.expectedUpdatedAt);
+    await requireRevision("allocation_rules", orgId, id, input.expectedRevision);
     const name = input.name === undefined ? before.name : nonEmpty(input.name, "name");
     const description = input.description === undefined ? (before.description ?? null) : input.description;
     const sortOrder = input.sortOrder === undefined ? before.sortOrder : intIn(input.sortOrder, "sortOrder", -2147483648);
@@ -520,7 +588,7 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: 
       orgId, table: "allocation_rules", rowId: id, action: "update", event: "rule.updated",
       before, after, actorId: audit.actorId, reason: audit.reason,
     });
-    return after;
+    return { rule: after, revision: await readRevision("allocation_rules", orgId, id) };
   });
 }
 
@@ -709,7 +777,7 @@ export async function createDraftVersion(
   ruleId: string,
   input: DraftVersionInput,
   audit: AllocationAudit,
-): Promise<{ version: AllocationRuleVersion; targets: AllocationRuleTarget[] }> {
+): Promise<RuleVersionWithTargets> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(ruleId, "ruleId");
   return withOrgTransaction(orgId, async () => {
@@ -813,7 +881,7 @@ export async function createDraftVersion(
       orgId, table: "allocation_rule_versions", rowId: versionId, action: "insert", event: "version.created",
       before: null, after: { version, targets: stored }, actorId: audit.actorId, reason: audit.reason,
     });
-    return { version, targets: stored };
+    return { version, targets: stored, revision: await readRevision("allocation_rule_versions", orgId, versionId) };
   });
 }
 
@@ -821,7 +889,7 @@ export async function updateDraftVersion(
   versionId: string,
   input: UpdateDraftInput,
   audit: AllocationAudit,
-): Promise<AllocationRuleVersion> {
+): Promise<VersionMutationResult> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
@@ -829,7 +897,7 @@ export async function updateDraftVersion(
     if (before.status !== "draft") {
       throw new AllocationRuleError("FROZEN", `version ${id} is ${before.status}; only drafts are editable`);
     }
-    await requireRevision("allocation_rule_versions", orgId, id, input.expectedUpdatedAt);
+    await requireRevision("allocation_rule_versions", orgId, id, input.expectedRevision);
     const patch = resolveDefinition(input, "update");
     const next: ResolvedDefinition = {
       ...defaultDefinition(),
@@ -885,7 +953,7 @@ export async function updateDraftVersion(
       orgId, table: "allocation_rule_versions", rowId: id, action: "update", event: "version.updated",
       before, after, actorId: audit.actorId, reason: audit.reason,
     });
-    return after;
+    return { version: after, revision: await readRevision("allocation_rule_versions", orgId, id) };
   });
 }
 
@@ -893,7 +961,7 @@ export async function replaceTargets(
   versionId: string,
   input: ReplaceTargetsInput,
   audit: AllocationAudit,
-): Promise<AllocationRuleTarget[]> {
+): Promise<TargetsMutationResult> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
@@ -901,7 +969,7 @@ export async function replaceTargets(
     if (version.status !== "draft") {
       throw new AllocationRuleError("FROZEN", `version ${id} is ${version.status}; its targets are immutable`);
     }
-    await requireRevision("allocation_rule_versions", orgId, id, input.expectedUpdatedAt);
+    await requireRevision("allocation_rule_versions", orgId, id, input.expectedRevision);
     const before = await loadTargets(orgId, id);
     checkedTargets(input.targets, "allocation version");
     try {
@@ -917,7 +985,7 @@ export async function replaceTargets(
       orgId, table: "allocation_rule_versions", rowId: id, action: "update", event: "version.targets_replaced",
       before: { targets: before }, after: { targets: after }, actorId: audit.actorId, reason: audit.reason,
     });
-    return after;
+    return { targets: after, revision: await readRevision("allocation_rule_versions", orgId, id) };
   });
 }
 
@@ -956,7 +1024,7 @@ async function validationContext(
 export async function publishVersion(
   versionId: string,
   input: VersionTransitionInput,
-): Promise<{ version: AllocationRuleVersion; targets: AllocationRuleTarget[] }> {
+): Promise<RuleVersionWithTargets> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
@@ -1000,14 +1068,14 @@ export async function publishVersion(
       orgId, table: "allocation_rule_versions", rowId: id, action: "update", event: "version.published",
       before: { status: "draft" as const }, after, actorId: input.actorId, reason: input.reason,
     });
-    return { version: after, targets };
+    return { version: after, targets, revision: await readRevision("allocation_rule_versions", orgId, id) };
   });
 }
 
 export async function retireVersion(
   versionId: string,
   input: VersionTransitionInput,
-): Promise<AllocationRuleVersion> {
+): Promise<VersionMutationResult> {
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
@@ -1034,7 +1102,7 @@ export async function retireVersion(
       orgId, table: "allocation_rule_versions", rowId: id, action: "update", event: "version.retired",
       before: { status: version.status }, after, actorId: input.actorId, reason: input.reason,
     });
-    return after;
+    return { version: after, revision: await readRevision("allocation_rule_versions", orgId, id) };
   });
 }
 
@@ -1099,5 +1167,83 @@ export async function loadRuleInEffectByKey(
   return withOrgTransaction(orgId, async () => {
     const found = await queryRulesInEffect({ orgId, key, onDate, bookId });
     return found[0] ?? null;
+  });
+}
+
+/**
+ * Rule heads for the setup drawer list, each with its update revision and a
+ * current-version summary (null while nothing is published). One query,
+ * ordered by sort_order then key.
+ */
+export async function listRuleHeads(
+  orgId: string,
+  opts: { mode?: AllocationMode; activeOnly?: boolean } = {},
+): Promise<RuleHeadSummary[]> {
+  const id = uuid(orgId, "orgId");
+  return withOrgTransaction(id, async () => {
+    const modeFilter = opts.mode === undefined ? sql`` : sql`and r.mode = ${oneOf(opts.mode, MODES, "mode")}`;
+    const activeFilter = opts.activeOnly === true ? sql`and r.is_active` : sql``;
+    const rows = await db.execute<Prefixed>(sql`select ${RULE_COLS},
+      ${documentRevisionSql(sql`r.updated_at`)} as rule_revision,
+      v.id as current_id, v.version_no as current_version_no, v.status as current_status,
+      v.effective_from as current_effective_from, v.effective_to as current_effective_to,
+      v.definition_hash as current_definition_hash
+      from allocation_rules r
+      left join allocation_rule_versions v on v.org_id = r.org_id and v.id = r.current_version_id
+      where r.org_id = ${id} ${modeFilter} ${activeFilter}
+      order by r.sort_order, r.key`);
+    return rows.rows.map((row) => ({
+      rule: mapRule(row, "rule_"),
+      revision: String(row["rule_revision"]),
+      currentVersion:
+        row["current_id"] === null || row["current_id"] === undefined
+          ? null
+          : {
+              id: String(row["current_id"]),
+              versionNo: Number(row["current_version_no"]),
+              status: row["current_status"] as CurrentVersionSummary["status"],
+              effectiveFrom: asDate(row["current_effective_from"]),
+              effectiveTo: row["current_effective_to"] === null ? null : asDate(row["current_effective_to"]),
+              definitionHash: (row["current_definition_hash"] as string | null) ?? null,
+            },
+    }));
+  });
+}
+
+/** A rule head with its full version timeline (each with revision and target count). */
+export async function getRuleDetail(orgId: string, ruleId: string): Promise<RuleDetail> {
+  const oid = uuid(orgId, "orgId");
+  const rid = uuid(ruleId, "ruleId");
+  return withOrgTransaction(oid, async () => {
+    const rule = await loadRuleHead(oid, rid, false);
+    const revision = await readRevision("allocation_rules", oid, rid);
+    const versionRows = await db.execute<Prefixed>(sql`select ${VERSION_COLS},
+      ${documentRevisionSql(sql`v.updated_at`)} as version_revision,
+      (select count(*)::text from allocation_rule_targets t
+        where t.org_id = v.org_id and t.version_id = v.id) as target_count
+      from allocation_rule_versions v
+      where v.org_id = ${oid} and v.rule_id = ${rid}
+      order by v.version_no`);
+    return {
+      rule,
+      revision,
+      versions: versionRows.rows.map((row) => ({
+        version: mapVersion(row, "version_"),
+        revision: String(row["version_revision"]),
+        targetCount: Number(row["target_count"]),
+      })),
+    };
+  });
+}
+
+/** One version with its targets and revision — the drawer's edit payload. */
+export async function getRuleVersion(orgId: string, versionId: string): Promise<RuleVersionWithTargets> {
+  const oid = uuid(orgId, "orgId");
+  const vid = uuid(versionId, "versionId");
+  return withOrgTransaction(oid, async () => {
+    const version = mapVersion(await loadVersionRow(oid, vid), "version_");
+    const targets = await loadTargets(oid, vid);
+    const revision = await readRevision("allocation_rule_versions", oid, vid);
+    return { version, targets, revision };
   });
 }
