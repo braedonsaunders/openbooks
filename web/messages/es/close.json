@@ -592,5 +592,26 @@
       "actionFailed": "No se pudo guardar el cambio",
       "invalidConfiguration": "La configuración debe ser válida y completa"
     }
+  },
+  "postingPeriods": {
+      "title": "Asignar períodos contables",
+      "description": "Documentos aprobados sin período contable, derivado de la fecha efectiva de cada documento. Revise la vista previa y asigne.",
+      "backToClose": "Volver al cierre",
+      "previewTitle": "{count, plural, one {# documento} other {# documentos}}",
+      "previewDescription": "Solo se confirman los documentos asignables. Los bloqueados conservan su motivo y nunca se fuerzan.",
+      "loading": "Cargando vista previa…",
+      "empty": "Ningún documento aprobado carece de período contable.",
+      "document": "Documento",
+      "kind": "Tipo",
+      "effectiveDate": "Fecha efectiva",
+      "period": "Período",
+      "status": "Estado",
+      "assignable": "Asignable",
+      "assign": "Asignar {count, plural, one {# período} other {# períodos}}",
+      "blockedNote": "{count, plural, one {# documento está} other {# documentos están}} bloqueado(s) y se omitirá(n).",
+      "refusedNote": "{count, plural, one {# documento fue} other {# documentos fueron}} rechazado(s) al confirmar.",
+      "previewFailed": "No se pudo cargar la vista previa.",
+      "commitFailed": "No se pudieron asignar los períodos contables.",
+      "committed": "{count, plural, one {# período contable asignado} other {# períodos contables asignados}}."
   }
 }

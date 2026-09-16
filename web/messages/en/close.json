@@ -769,5 +769,26 @@
       "definedMeasures": "Measures",
       "noDefined": "This report takes its date range and filters at delivery time."
     }
+  },
+  "postingPeriods": {
+    "title": "Assign posting periods",
+    "description": "Approved documents without a posting period, derived from each document's effective date. Review the preview, then assign.",
+    "backToClose": "Back to period close",
+    "previewTitle": "{count, plural, one {# document} other {# documents}}",
+    "previewDescription": "Only assignable documents are committed. Blocked documents keep their reason and are never force-assigned.",
+    "loading": "Loading preview…",
+    "empty": "No approved documents are missing a posting period.",
+    "document": "Document",
+    "kind": "Kind",
+    "effectiveDate": "Effective date",
+    "period": "Period",
+    "status": "Status",
+    "assignable": "Assignable",
+    "assign": "Assign {count, plural, one {# period} other {# periods}}",
+    "blockedNote": "{count, plural, one {# document is} other {# documents are}} blocked and will be skipped.",
+    "refusedNote": "{count, plural, one {# document was} other {# documents were}} refused at commit.",
+    "previewFailed": "Could not load the preview.",
+    "commitFailed": "Could not assign posting periods.",
+    "committed": "Assigned {count, plural, one {# posting period} other {# posting periods}}."
   }
 }
