@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { isFeatureEnabled } from "../features";
+import { subsidiaryScopeAllows } from "../authz";
 import { projectUnbilled } from "../project-costing";
 import {
   loadProjectTimeEntryPage,
@@ -451,9 +452,19 @@ const getFieldTicket: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await ticketFeatureOff(authz.user.orgId)) return { ok: false, error: TICKET_FEATURE_ERROR };
     const a = raw as { ticketId: string };
+    // The route's scope guard first: a missing ticket, or one whose document
+    // sits outside the caller's subsidiary scope (an unassigned subsidiary
+    // fails closed for restricted callers), reads as not-found.
+    const owned = await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from documents
+       where id = ${a.ticketId} and org_id = ${authz.user.orgId} and kind = 'field_ticket'
+    `);
+    const subsidiaryId = owned.rows[0]?.subsidiaryId ?? null;
+    if (!owned.rows[0] || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId)) {
+      return { ok: false, error: "field_ticket_not_found" };
+    }
     // loadFieldTicket is the route's loader: it re-checks the feature flag
-    // and throws a not-found indistinguishable from missing when the ticket
-    // sits outside the caller's subsidiary scope.
+    // and its own subsidiary boundary as defense in depth.
     let loaded: Awaited<ReturnType<typeof loadFieldTicket>>;
     try {
       loaded = await loadFieldTicket(authz.user.orgId, a.ticketId, {
