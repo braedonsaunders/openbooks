@@ -12,6 +12,12 @@ import {
 } from "../../../../../lib/continuous-close";
 import { loadWorkItemDetail } from "../../../../../lib/agents/work-item";
 import { findingProposalCommand } from "../../../../../lib/agents/proposals";
+import {
+  addWorkItemNote,
+  listWorkItemNotes,
+  loadWorkItemAssignment,
+  setWorkItemAssignment,
+} from "../../../../../lib/agents/assignments";
 
 const ACTION_STATUS = {
   review: "in_review",
@@ -41,11 +47,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   );
   if (!item) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const canWrite = can(authz, "assistant.write");
+  const [assignment, notes] = await Promise.all([
+    loadWorkItemAssignment(authz, id),
+    listWorkItemNotes(authz, id),
+  ]);
   return NextResponse.json({
     ok: true,
     item,
     canWrite,
     proposal: canWrite ? findingProposalCommand(authz, item.summary) : null,
+    assignment,
+    notes,
   });
 }
 
@@ -69,6 +81,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   const action = typeof body.action === "string" ? body.action : "";
+  if (action === "assign" || action === "note") {
+    const result =
+      action === "assign"
+        ? await setWorkItemAssignment(authz, id, {
+            assigneeUserId: "assigneeUserId" in body ? (body.assigneeUserId as string | null) : undefined,
+            assigneeRole: "assigneeRole" in body ? (body.assigneeRole as string | null) : undefined,
+            dueAt: "dueAt" in body ? (body.dueAt as string | null) : undefined,
+          })
+        : await addWorkItemNote(authz, id, body.body);
+    if (!result.ok) {
+      const status =
+        result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 422;
+      return NextResponse.json({ error: result.error }, { status });
+    }
+    if (action === "note" && "id" in result) return NextResponse.json({ ok: true, id: result.id });
+    return NextResponse.json({ ok: true });
+  }
   if (!(action in ACTION_STATUS)) return NextResponse.json({ error: "invalid_action" }, { status: 422 });
   if (!(ALLOWED_ACTIONS[access.status] as readonly string[]).includes(action)) {
     return NextResponse.json({ error: "invalid_transition" }, { status: 409 });

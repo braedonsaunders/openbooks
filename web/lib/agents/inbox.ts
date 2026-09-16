@@ -36,6 +36,12 @@ export interface AgentInboxFilters {
   subsidiaryId?: string;
   /** "What changed since I last looked": only findings detected after this ISO instant. */
   since?: string;
+  /** Only findings assigned to the calling user. */
+  assignedToMe?: boolean;
+  /** Only unassigned findings. */
+  unassignedOnly?: boolean;
+  /** Only findings past their due date (open work only — resolved rows never go overdue). */
+  overdueOnly?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -53,6 +59,9 @@ export interface AgentInboxRow {
   subsidiary: { id: string; name: string } | null;
   hasProposal: boolean;
   evidenceCount: number;
+  assignee: { kind: "user" | "role"; id: string; name: string } | null;
+  dueAt: string | null;
+  overdue: boolean;
   firstDetectedAt: string;
   lastDetectedAt: string;
 }
@@ -64,6 +73,9 @@ export interface AgentInboxFacets {
   subsidiaries: { id: string; name: string; count: number }[];
   unresolvedSubsidiary: number;
   withProposals: number;
+  assignedToMe: number;
+  unassigned: number;
+  overdue: number;
 }
 
 export interface AgentInbox {
@@ -88,6 +100,11 @@ type InboxRowRaw = {
   subsidiary_name: string | null;
   has_proposal: boolean;
   evidence_count: string | number;
+  assignee_user_id: string | null;
+  assignee_user_name: string | null;
+  assignee_role: string | null;
+  assignee_role_name: string | null;
+  due_at: string | Date | null;
   first_detected_at: string | Date;
   last_detected_at: string | Date;
 };
@@ -120,7 +137,7 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     rows: [],
     total: 0,
     truncated: false,
-    facets: { packs: [], severities: [], statuses: [], subsidiaries: [], unresolvedSubsidiary: 0, withProposals: 0 },
+    facets: { packs: [], severities: [], statuses: [], subsidiaries: [], unresolvedSubsidiary: 0, withProposals: 0, assignedToMe: 0, unassigned: 0, overdue: 0 },
     readablePacks: [],
   };
   // Doorway mirrors the finding tools: without assistant.use nothing is
@@ -149,13 +166,21 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     ${filters.hasProposal === true ? sql`and (w.summary ? 'proposedCommand')` : sql``}
     ${filters.hasProposal === false ? sql`and not (w.summary ? 'proposedCommand')` : sql``}
     ${filters.subsidiaryId ? sql`and subj_acct.subsidiary_id = ${filters.subsidiaryId}` : sql``}
-    ${sinceValid ? sql`and w.last_detected_at > ${sinceValid.toISOString()}` : sql``}`;
+    ${sinceValid ? sql`and w.last_detected_at > ${sinceValid.toISOString()}` : sql``}
+    ${filters.assignedToMe ? sql`and w.assignee_user_id = ${authz.user.id}` : sql``}
+    ${filters.unassignedOnly ? sql`and w.assignee_user_id is null and w.assignee_role is null` : sql``}
+    ${filters.overdueOnly ? sql`and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')` : sql``}`;
+
+  const assigneeJoin = sql`left join users assignee_u
+      on assignee_u.id = w.assignee_user_id and assignee_u.org_id = w.org_id
+    left join app_roles assignee_r
+      on assignee_r.id::text = w.assignee_role and assignee_r.org_id = w.org_id`;
 
   const subjectJoin = sql`left join accounts subj_acct
       on subj_acct.id = w.subject_id and w.subject_type = 'account' and subj_acct.org_id = w.org_id
     left join subsidiaries subj_sub on subj_sub.id = subj_acct.subsidiary_id and subj_sub.org_id = w.org_id`;
 
-  const [rows, totalResult, packCounts, severityCounts, statusCounts, subsidiaryCounts, proposalCount] =
+  const [rows, totalResult, packCounts, severityCounts, statusCounts, subsidiaryCounts, proposalCount, mineCount, unassignedCount, overdueCount] =
     await Promise.all([
       db.execute<InboxRowRaw>(sql`
         select w.id, w.agent_key, w.finding_type, w.severity, w.status,
@@ -166,9 +191,12 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
                (w.summary ? 'proposedCommand') as has_proposal,
                (select count(*)::int from ai_work_item_evidence e
                  where e.org_id = w.org_id and e.work_item_id = w.id) as evidence_count,
+               w.assignee_user_id, assignee_u.name as assignee_user_name,
+               w.assignee_role, assignee_r.name as assignee_role_name, w.due_at,
                w.first_detected_at, w.last_detected_at
           from ai_work_items w
           ${subjectJoin}
+          ${assigneeJoin}
          where ${where}
          order by score desc, w.last_detected_at desc, w.id
          limit ${limit + 1} offset ${offset}
@@ -197,27 +225,52 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
         select count(*) as n from ai_work_items w ${subjectJoin}
          where ${where} and (w.summary ? 'proposedCommand')
       `),
+      db.execute<{ n: string | number }>(sql`
+        select count(*) as n from ai_work_items w ${subjectJoin}
+         where ${where} and w.assignee_user_id = ${authz.user.id}
+      `),
+      db.execute<{ n: string | number }>(sql`
+        select count(*) as n from ai_work_items w ${subjectJoin}
+         where ${where} and w.assignee_user_id is null and w.assignee_role is null
+      `),
+      db.execute<{ n: string | number }>(sql`
+        select count(*) as n from ai_work_items w ${subjectJoin}
+         where ${where} and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')
+      `),
     ]);
 
   const total = Number(totalResult.rows[0]?.n ?? 0);
-  const page = rows.rows.slice(0, limit).map((row) => ({
-    id: String(row.id),
-    pack: row.agent_key,
-    findingType: String(row.finding_type),
-    severity: row.severity,
-    status: row.status,
-    confidence: String(row.confidence),
-    materiality: String(row.materiality),
-    score: Number(row.score),
-    summary: (row.summary ?? {}) as Record<string, unknown>,
-    subsidiary: row.subsidiary_id
-      ? { id: String(row.subsidiary_id), name: String(row.subsidiary_name ?? "") }
-      : null,
-    hasProposal: Boolean(row.has_proposal),
-    evidenceCount: Number(row.evidence_count),
-    firstDetectedAt: new Date(row.first_detected_at).toISOString(),
-    lastDetectedAt: new Date(row.last_detected_at).toISOString(),
-  }));
+  const page = rows.rows.slice(0, limit).map((row) => {
+    const dueAt = row.due_at ? new Date(row.due_at).toISOString() : null;
+    return {
+      id: String(row.id),
+      pack: row.agent_key,
+      findingType: String(row.finding_type),
+      severity: row.severity,
+      status: row.status,
+      confidence: String(row.confidence),
+      materiality: String(row.materiality),
+      score: Number(row.score),
+      summary: (row.summary ?? {}) as Record<string, unknown>,
+      subsidiary: row.subsidiary_id
+        ? { id: String(row.subsidiary_id), name: String(row.subsidiary_name ?? "") }
+        : null,
+      hasProposal: Boolean(row.has_proposal),
+      evidenceCount: Number(row.evidence_count),
+      assignee: row.assignee_user_id
+        ? { kind: "user" as const, id: String(row.assignee_user_id), name: String(row.assignee_user_name ?? "") }
+        : row.assignee_role
+          ? { kind: "role" as const, id: String(row.assignee_role), name: String(row.assignee_role_name ?? "") }
+          : null,
+      dueAt,
+      overdue:
+        !!dueAt &&
+        new Date(dueAt).getTime() < Date.now() &&
+        (row.status === "open" || row.status === "in_review"),
+      firstDetectedAt: new Date(row.first_detected_at).toISOString(),
+      lastDetectedAt: new Date(row.last_detected_at).toISOString(),
+    };
+  });
 
   return {
     rows: page,
@@ -234,6 +287,9 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
         subsidiaryCounts.rows.find((r) => !r.subsidiary_id)?.n ?? 0,
       ),
       withProposals: Number(proposalCount.rows[0]?.n ?? 0),
+      assignedToMe: Number(mineCount.rows[0]?.n ?? 0),
+      unassigned: Number(unassignedCount.rows[0]?.n ?? 0),
+      overdue: Number(overdueCount.rows[0]?.n ?? 0),
     },
     readablePacks: readable,
   };

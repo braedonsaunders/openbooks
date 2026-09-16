@@ -19,6 +19,27 @@ type Evidence = {
   data: Record<string, unknown>
 }
 
+export type WorkItemAssignmentView = {
+  assigneeUserId: string | null
+  assigneeUserName: string | null
+  assigneeRole: string | null
+  assigneeRoleName: string | null
+  dueAt: string | null
+  overdue: boolean
+}
+
+export type WorkItemNoteView = {
+  id: string
+  userName: string
+  body: string
+  createdAt: string
+}
+
+export type WorkItemAssigneeOptions = {
+  users: { id: string; name: string; email: string }[]
+  roles: { id: string; name: string }[]
+}
+
 export type ContinuousCloseWorkItem = {
   id: string
   agentKey: ContinuousCloseAgentKey
@@ -47,12 +68,24 @@ export function WorkItemDrawer({
   closeHref,
   canWrite,
   proposal,
+  assignment,
+  notes,
+  assignees,
 }: {
   item: ContinuousCloseWorkItem
   closeHref: string
   canWrite: boolean
   /** Viewer-signed governed command; absent when the finding carries no resolvable proposal. */
   proposal?: FindingProposalCommand | null
+  /**
+   * Assignment & SLA for this finding. Undefined hides the section (callers
+   * without the workbench read model); null renders the unassigned state.
+   */
+  assignment?: WorkItemAssignmentView | null
+  /** Comment thread; undefined hides the section. */
+  notes?: WorkItemNoteView[] | null
+  /** Owner/role candidates for the assign form; the form needs canWrite too. */
+  assignees?: WorkItemAssigneeOptions | null
 }) {
   const { money } = useMoney()
   const t = useTranslations('continuousClose')
@@ -82,6 +115,55 @@ export function WorkItemDrawer({
       if (action === 'dismiss') setDismissMode(false)
     } catch {
       toast.error(t('feedback.actionFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const [assigneeUser, setAssigneeUser] = useState(assignment?.assigneeUserId ?? '')
+  const [assigneeRole, setAssigneeRole] = useState(assignment?.assigneeRole ?? '')
+  const [dueDate, setDueDate] = useState(assignment?.dueAt ? assignment.dueAt.slice(0, 10) : '')
+  const [noteBody, setNoteBody] = useState('')
+
+  async function saveAssignment(clear = false) {
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/continuous-close/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'assign',
+          assigneeUserId: clear || !assigneeUser ? null : assigneeUser,
+          assigneeRole: clear || !assigneeRole ? null : assigneeRole,
+          dueAt: clear || !dueDate ? null : new Date(`${dueDate}T00:00:00`).toISOString(),
+        }),
+      })
+      if (!response.ok) throw new Error()
+      toast.success(ta('drawer.assignment.saved'))
+      router.refresh()
+    } catch {
+      toast.error(ta('drawer.assignment.saveFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addNote() {
+    const body = noteBody.trim()
+    if (!body) return
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/continuous-close/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'note', body }),
+      })
+      if (!response.ok) throw new Error()
+      setNoteBody('')
+      toast.success(ta('drawer.notes.added'))
+      router.refresh()
+    } catch {
+      toast.error(ta('drawer.notes.addFailed'))
     } finally {
       setBusy(false)
     }
@@ -166,6 +248,74 @@ export function WorkItemDrawer({
           <section className="space-y-2">
             <h3 className="text-sm font-semibold">{ta('proposal.badge')}</h3>
             <ApplicationCommandCard proposal={proposal} />
+          </section>
+        ) : null}
+
+        {assignment !== undefined ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">{ta('drawer.assignment.title')}</h3>
+            {assignment?.assigneeUserId || assignment?.assigneeRole ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                {assignment.assigneeUserId ? <Badge variant="secondary">{assignment.assigneeUserName || ta('drawer.assignment.owner')}</Badge> : null}
+                {assignment.assigneeRole ? <Badge variant="outline">{assignment.assigneeRoleName || ta('drawer.assignment.team')}</Badge> : null}
+                {assignment.dueAt ? (
+                  <Badge variant={assignment.overdue ? 'destructive' : 'outline'}>
+                    {assignment.overdue ? ta('drawer.assignment.overdue') : ta('drawer.assignment.due')}: {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(assignment.dueAt))}
+                  </Badge>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">{ta('drawer.assignment.unassigned')}</p>
+            )}
+            {canWrite && assignees ? (
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="block text-xs font-medium text-slate-500">{ta('drawer.assignment.owner')}
+                  <select value={assigneeUser} onChange={(event) => setAssigneeUser(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                    <option value="">{ta('drawer.assignment.nobody')}</option>
+                    {assignees.users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-medium text-slate-500">{ta('drawer.assignment.team')}
+                  <select value={assigneeRole} onChange={(event) => setAssigneeRole(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                    <option value="">{ta('drawer.assignment.noTeam')}</option>
+                    {assignees.roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-medium text-slate-500">{ta('drawer.assignment.due')}
+                  <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100" />
+                </label>
+              </div>
+            ) : null}
+            {canWrite && assignees ? (
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => void saveAssignment(true)}>{ta('drawer.assignment.clear')}</Button>
+                <Button size="sm" disabled={busy || (!assigneeUser && !assigneeRole)} onClick={() => void saveAssignment()}>{ta('drawer.assignment.save')}</Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {notes !== undefined ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">{ta('drawer.notes.title')}</h3>
+            {(notes ?? []).length === 0 ? (
+              <p className="text-sm text-slate-500">{ta('drawer.notes.empty')}</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                {(notes ?? []).map((note) => (
+                  <li key={note.id} className="px-3 py-2.5">
+                    <div className="text-sm">{note.body}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">{note.userName} · {new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(note.createdAt))}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canWrite ? (
+              <div className="space-y-2">
+                <Textarea value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder={ta('drawer.notes.placeholder')} />
+                <div className="flex justify-end"><Button size="sm" disabled={busy || !noteBody.trim()} onClick={() => void addNote()}>{ta('drawer.notes.add')}</Button></div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 

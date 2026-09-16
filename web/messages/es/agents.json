@@ -12,7 +12,11 @@
     "proposal": "Propuesta",
     "all": "Todos",
     "withProposal": "Con propuesta",
-    "unresolved": "Sin subsidiaria vinculada"
+    "unresolved": "Sin subsidiaria vinculada",
+    "assignment": "Asignación",
+    "assignedToMe": "Asignados a mí",
+    "unassigned": "Sin asignar",
+    "overdue": "Vencidos"
   },
   "subsidiaryHelp": "La subsidiaria se resuelve en hallazgos vinculados a cuentas; el resto queda sin asignar.",
   "lastVisit": "Novedades desde el {date}",
@@ -63,6 +67,31 @@
   },
   "drawer": {
     "askAboutThis": "Preguntar sobre esto",
-    "askAboutThisHint": "Abrir el chat con la evidencia de este hallazgo adjunta"
+    "askAboutThisHint": "Abrir el chat con la evidencia de este hallazgo adjunta",
+    "assignment": {
+      "title": "Asignación",
+      "unassigned": "Sin asignar: elige un responsable o equipo.",
+      "owner": "Responsable",
+      "team": "Equipo",
+      "nobody": "Nadie",
+      "noTeam": "Sin equipo",
+      "due": "Vence",
+      "overdue": "Vencido",
+      "save": "Guardar",
+      "clear": "Borrar",
+      "saved": "Asignación actualizada.",
+      "saveFailed": "No se pudo actualizar la asignación."
+    },
+    "notes": {
+      "title": "Notas",
+      "empty": "Aún no hay notas.",
+      "placeholder": "Añade una nota…",
+      "add": "Añadir nota",
+      "added": "Nota añadida.",
+      "addFailed": "No se pudo añadir la nota."
+    }
+  },
+  "assignment": {
+    "unassigned": "Sin asignar"
   }
 }
