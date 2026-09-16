@@ -45,6 +45,7 @@ import {
   fileCabinet,
 } from './articles/daily-workflows'
 import { financialReports, analyticsAndSavedViews, periodClose } from './articles/reporting-close'
+import { agentWorkbench } from './articles/agent-workbench'
 import { migrationAndCutover, reconciliationBeforeCutover } from './articles/migration'
 import { migrateWithAConnector } from './articles/migrate-with-a-connector'
 import { companySettings, rolesAndPermissions, dataImports } from './articles/administration-basics'
@@ -171,6 +172,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'property-management': 'transactions-daily',
   'financial-reports': 'reporting-guides',
   'analytics-and-saved-views': 'reporting-guides',
+  'agent-workbench': 'reporting-guides',
   'migrate-with-a-connector': 'integrations-migration',
   'migration-and-cutover': 'integrations-migration',
   'reconciliation-before-cutover': 'integrations-migration',
@@ -235,6 +237,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   itemRates,
   financialReports,
   analyticsAndSavedViews,
+  agentWorkbench,
   migrateWithAConnector,
   migrationAndCutover,
   reconciliationBeforeCutover,
