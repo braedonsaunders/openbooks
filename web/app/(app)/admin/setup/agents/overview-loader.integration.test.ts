@@ -29,7 +29,13 @@ const mockAuthz = `
 // every display string through the catalog.
 const mockIntl = `
   export async function getTranslations(namespace) {
-    return (key, _vars) => namespace + ':' + key;
+    // Interpolates {vars} like the real catalog so loader-computed values
+    // (money, counts) stay assertable while labels stay locale-free.
+    return (key, vars) => {
+      let out = namespace + ':' + key;
+      if (vars) for (const [k, v] of Object.entries(vars)) out += '|' + k + '=' + String(v);
+      return out;
+    };
   }
 `;
 
@@ -84,7 +90,7 @@ test("the overview resolves KPI labels and one row per pack", { skip: !DB }, asy
     const data = await withBypassContext(() => loadAgentsOverview({}));
     assert.equal(data.kpis.length, 4);
     assert.deepEqual(
-      data.kpis.map((kpi) => kpi.label),
+      data.kpis.map((kpi) => kpi.label.split("|")[0]),
       [
         "admin:setup.agents.overview.kpis.enabled",
         "admin:setup.agents.overview.kpis.openFindings",
@@ -92,11 +98,14 @@ test("the overview resolves KPI labels and one row per pack", { skip: !DB }, asy
         "admin:setup.agents.overview.kpis.failed7d",
       ],
     );
+    assert.ok(data.kpis[0]!.value.includes("total="), "the enabled KPI carries its total");
     assert.ok(data.rows.length > 0);
     for (const row of data.rows) {
       assert.equal(row.id, row.agentKey);
       assert.ok(row.name.startsWith("admin:setup.agents.packs."));
       assert.ok(row.configureHref.endsWith(`/${row.agentKey}`));
+      assert.match(row.detectorsLine, /0\.00/, "materiality formats as money, not raw scale-4");
+      assert.doesNotMatch(row.detectorsLine, /\.0000/);
     }
     assert.equal(data.sort, "pack");
     assert.equal(data.dir, "asc");
