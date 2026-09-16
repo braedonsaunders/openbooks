@@ -83,6 +83,64 @@ test(
 );
 
 test(
+  "master-data row failures carry the database SQLSTATE and cause",
+  { skip: !DB },
+  async () => {
+    // A database rejection behind a driver wrapper must not be recorded as a
+    // bare "Failed query: …": the run summary needs the SQLSTATE and the
+    // reason or the next 42702 hides the same way. A non-numeric credit limit
+    // reaches PostgreSQL raw (the loader passes it through) and fails with
+    // 22P02 invalid_text_representation.
+    const org = await createScratchOrg();
+    try {
+      const source: MigrationSource = {
+        name: "migration-test",
+        refKey: "migrationTest",
+        baseCurrency: "CAD",
+        accountingPeriods: async () => [],
+        entities: async () => [],
+        nativeChanges: async () => {
+          throw new Error("not used by this test");
+        },
+        trialBalance: async () => [],
+        monthlyActivity: async () => [],
+      };
+      const stats = await withOrg(org.orgId, () =>
+        loadEntities(
+          source,
+          org.orgId,
+          null,
+          undefined,
+          undefined,
+          [
+            {
+              resource: "parties",
+              records: [
+                {
+                  sourceRef: "bad-credit",
+                  fields: {
+                    displayName: "Bad Credit Co",
+                    kind: "company",
+                    customerRole: { creditLimit: "not-a-decimal" },
+                  },
+                },
+              ],
+            },
+          ],
+        ),
+      );
+      assert.equal(stats.parties?.failed ?? -1, 1);
+      const message = stats.parties?.errors[0]?.message ?? "";
+      assert.match(message, /Failed query: insert into customer_roles/);
+      assert.match(message, /SQLSTATE 22P02/);
+      assert.match(message, /invalid input syntax|invalid_text_representation/i);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "master-data mirror updates persist instead of failing on connector identity",
   { skip: !DB },
   async () => {
