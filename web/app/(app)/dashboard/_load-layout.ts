@@ -17,6 +17,7 @@ import {
   getUserRoleTier,
   type RoleTier,
 } from './_role-tier'
+import { DashboardLayoutInputSchema } from './_layout-input'
 
 type DashboardDefault = {
   layout: DashboardLayoutData
@@ -98,8 +99,20 @@ export async function loadDashboardLayout(
   if (!row || row.source_role !== fallback.sourceKey) {
     return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
   }
+  // Fail-safe read: a stored layout the registry cannot honor — malformed, or
+  // an empty grid left by the pre-fix quick-actions save — falls back to the
+  // default, never a blank dashboard or a render crash. No write-back: the
+  // tenant's next save overwrites the bad row, which is the self-heal.
+  const parsed = DashboardLayoutInputSchema.safeParse(row.layout)
+  if (!parsed.success || parsed.data.widgets.length === 0) {
+    return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
+  }
+  const storedQuickActions = (row.layout as Partial<DashboardLayoutData>).quickActions
   return {
-    layout: row.layout as DashboardLayoutData,
+    layout: {
+      widgets: parsed.data.widgets,
+      ...(Array.isArray(storedQuickActions) ? { quickActions: storedQuickActions } : {}),
+    },
     role,
     isCustomised: row.is_customised,
     hiddenQuickActionIds,

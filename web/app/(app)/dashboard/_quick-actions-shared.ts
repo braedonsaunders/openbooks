@@ -1,4 +1,4 @@
-import type { DashboardQuickAction } from '@openbooks/schema'
+import type { DashboardLayoutData, DashboardQuickAction } from '@openbooks/schema'
 
 export type QuickAction = DashboardQuickAction
 
@@ -242,6 +242,36 @@ export function normalizeQuickAction(action: QuickAction): QuickAction {
 
 export function normalizeQuickActions(actions: readonly QuickAction[]): QuickAction[] {
   return actions.map(normalizeQuickAction)
+}
+
+/**
+ * Merge a quick-actions save into the stored dashboard layout. The widget
+ * grid is owned by the sibling layout save and is retained verbatim — but a
+ * tenant with no stored row (or an empty grid left by the pre-fix save, which
+ * persisted `{widgets: []}` and blanked the dashboard on next read) has no
+ * grid to retain, so the save seeds the resolved default grid instead of an
+ * empty one. `incoming` must already be normalized.
+ */
+export function mergeQuickActionsSave(args: {
+  existingWidgets?: DashboardLayoutData['widgets'] | null
+  existingQuickActions?: readonly QuickAction[] | null
+  incoming: QuickAction[]
+  hiddenIds: ReadonlySet<string>
+  defaultWidgets: DashboardLayoutData['widgets']
+}): DashboardLayoutData {
+  const preserved = normalizeQuickActions(args.existingQuickActions ?? [])
+    .filter((action) => args.hiddenIds.has(action.id))
+  const incomingIds = new Set(args.incoming.map((action) => action.id))
+  return {
+    widgets:
+      args.existingWidgets && args.existingWidgets.length > 0
+        ? args.existingWidgets
+        : args.defaultWidgets,
+    quickActions: [
+      ...args.incoming,
+      ...preserved.filter((action) => !incomingIds.has(action.id)),
+    ],
+  }
 }
 
 export function hiddenCuratedQuickActionIds(

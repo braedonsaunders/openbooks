@@ -32,8 +32,12 @@ test('quick-actions upserts pin the known tenant on the org_id/user_id conflict 
   const body = functionBody('saveQuickActions', 'listQuickActionOptions')
 
   // Quick-action saves must retain the layout grid while replacing only the
-  // caller's quick actions (and any hidden actions preserved by policy).
-  assert.match(body, /widgets:\s*existingLayout\.widgets\s*\?\?\s*\[\]/)
-  assert.match(body, /existingLayout\.quickActions\s*\?\?\s*\[\]/)
+  // caller's quick actions (and any hidden actions preserved by policy) —
+  // and must seed the resolved default grid when nothing is stored, never an
+  // empty one (persisting `{widgets: []}` blanked the dashboard on next read).
+  assert.match(body, /mergeQuickActionsSave\(\{/)
+  assert.match(body, /existingWidgets:\s*existingLayout\.widgets/)
+  assert.match(body, /existingQuickActions:\s*existingLayout\.quickActions/)
+  assert.match(body, /defaultWidgets:\s*dashboardDefault\.layout\.widgets/)
   assertTenantPinned(body)
 })

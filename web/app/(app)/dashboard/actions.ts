@@ -13,6 +13,7 @@ import { WIDGETS } from './_widget-registry'
 import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
+  mergeQuickActionsSave,
   normalizeQuickActions,
   type QuickActionOption,
 } from './_quick-actions-shared'
@@ -127,18 +128,14 @@ export async function saveQuickActions(input: unknown) {
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
     `)))
-    const existingLayout = (existing.rows[0]?.layout ?? { widgets: [] }) as DashboardLayoutData
-    const preserved = normalizeQuickActions(existingLayout.quickActions ?? [])
-      .filter((action) => hiddenIds.has(action.id))
-    const incomingIds = new Set(incoming.map((action) => action.id))
-    const quickActions = [
-      ...incoming,
-      ...preserved.filter((action) => !incomingIds.has(action.id)),
-    ]
-    const layout: DashboardLayoutData = {
-      widgets: existingLayout.widgets ?? [],
-      quickActions,
-    }
+    const existingLayout = (existing.rows[0]?.layout ?? {}) as Partial<DashboardLayoutData>
+    const layout = mergeQuickActionsSave({
+      existingWidgets: existingLayout.widgets,
+      existingQuickActions: existingLayout.quickActions,
+      incoming,
+      hiddenIds,
+      defaultWidgets: dashboardDefault.layout.widgets,
+    })
 
     await tx.execute(sql`
       insert into user_dashboard_layouts (id, org_id, user_id, layout, source_role, is_customised, created_at, updated_at)
