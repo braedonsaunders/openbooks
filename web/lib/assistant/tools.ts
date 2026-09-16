@@ -57,6 +57,7 @@ function money(v: unknown): string {
 
 const whoami: AssistantToolDef = {
   name: "whoami",
+  tier: "core",
   description:
     "The current user's name, role, and permissions, plus the org name and base currency. Call this when unsure what the user may see or do. Read-only.",
   category: "read",
@@ -87,6 +88,7 @@ const whoami: AssistantToolDef = {
 
 const findAccounts: AssistantToolDef = {
   name: "find_accounts",
+  tier: "core",
   description:
     "Search the chart of accounts by number, name, or type, with current balances (balance-sheet accounts cumulative, P&L accounts fiscal-year-to-date, natural sign). Returns a capped list. Read-only.",
   category: "search",
@@ -178,6 +180,7 @@ const accountRegisterTool: AssistantToolDef = {
 
 const findJournalEntries: AssistantToolDef = {
   name: "find_journal_entries",
+  tier: "core",
   description:
     "List posted-ledger journal entries with optional filters (free-text on entry number/memo, status, origin, posting-date range). Returns a capped page plus aggregates over ALL matches: total (count) and sumDebits. Quote the aggregates for counts and totals. Read-only.",
   category: "search",
@@ -266,6 +269,7 @@ const findJournalEntries: AssistantToolDef = {
 
 const getJournalEntry: AssistantToolDef = {
   name: "get_journal_entry",
+  tier: "core",
   description:
     "One journal entry in full: header (entry number, posting date, memo, status, origin) plus every line with account, party, department, and signed amount. Read-only.",
   category: "read",
@@ -340,6 +344,7 @@ async function allowedKinds(authz: Authz): Promise<string[]> {
 
 const findDocuments: AssistantToolDef = {
   name: "find_documents",
+  tier: "core",
   description:
     "Search transaction documents — vendor bills, customer invoices, customer/vendor payments, credits, expense reports, orders, journals, pay runs, field tickets — by kind, status, document number, party name, or date range. Returns a capped page PLUS aggregates over ALL matches: total (count), sumTotal (document totals), sumOpenBalance (unpaid remainder). Quote the aggregates for counts and totals; keep limit small (default 20). Each row carries its exact persisted updatedAt revision. Read-only.",
   category: "search",
@@ -441,6 +446,7 @@ const findDocuments: AssistantToolDef = {
 
 const getDocument: AssistantToolDef = {
   name: "get_document",
+  tier: "core",
   description:
     "One transaction document in full: header (number, party, dates, status, totals), its exact persisted updatedAt revision, plus every line with account/item, description, quantity, and amount. Copy updatedAt verbatim to expectedUpdatedAt for a write; never parse or reformat it. Read-only.",
   category: "read",
@@ -518,6 +524,7 @@ const getDocument: AssistantToolDef = {
 
 const findParties: AssistantToolDef = {
   name: "find_parties",
+  tier: "core",
   description:
     "Find vendors, customers, and other parties by name, short code, or email. Returns a capped list. Read-only.",
   category: "search",
@@ -586,6 +593,7 @@ function capItems<T>(items: T[]): { items: T[]; truncated: boolean } {
 
 const profitAndLossTool: AssistantToolDef = {
   name: "profit_and_loss",
+  tier: "core",
   description:
     "Profit & loss statement for a posting-date range, optionally filtered by department or project: per-account rows (reader-signed, hierarchical) plus revenue, COGS, gross profit, expenses, and net income totals. For any relative period ('YTD', 'this quarter', 'last year') pass a `period` preset — it resolves server-side against the org's fiscal calendar. Read-only.",
   category: "read",
@@ -638,6 +646,7 @@ const profitAndLossTool: AssistantToolDef = {
 
 const balanceSheetTool: AssistantToolDef = {
   name: "balance_sheet",
+  tier: "core",
   description:
     "Balance sheet as of a date: assets, liabilities, and equity account rows (reader-signed, hierarchical, incl. computed accumulated earnings) with section totals. Read-only.",
   category: "read",
@@ -676,6 +685,7 @@ const balanceSheetTool: AssistantToolDef = {
 
 const trialBalanceTool: AssistantToolDef = {
   name: "trial_balance",
+  tier: "core",
   description:
     "Trial balance as of a date: every account with nonzero activity, with lifetime debits, credits, and the debit-signed balance. Read-only.",
   category: "read",
@@ -702,6 +712,7 @@ const trialBalanceTool: AssistantToolDef = {
 
 const agingTool: AssistantToolDef = {
   name: "aging",
+  tier: "core",
   description:
     "AR or AP aging by customer/vendor as of a date: open-item balances bucketed into current, 1–30, 31–60, 61–90, and 90+ days past due, plus totals. Pass `bucket` to rank parties by ONE slice (e.g. over60 = 61–90 + 90+; overdue = everything past due) — rows are then sorted by that slice, zero rows dropped, and bucketTotal returned. Read-only.",
   category: "read",
@@ -810,6 +821,7 @@ const cashFlowTool: AssistantToolDef = {
 
 const financialPeriods: AssistantToolDef = {
   name: "financial_periods",
+  tier: "core",
   description:
     "List recent fiscal periods with exact boundaries, period-close run status, readiness, and locked accounting scopes. Use this before choosing comparison dates. Read-only.",
   category: "read",
@@ -1000,6 +1012,7 @@ const partyConcentration: AssistantToolDef = {
 
 const projectProfitability: AssistantToolDef = {
   name: "project_profitability",
+  tier: "core",
   description:
     "ONE project's full job-cost detail by projectId: budget, posted revenue/cost/margin, commitments, forecast, cost by account, and source documents. Without projectId it only returns a short name-search page (with the total count) — for any ranking, filtering, or portfolio question use rank_projects instead. Read-only.",
   category: "read",
@@ -1176,6 +1189,7 @@ const getContinuousCloseFinding: AssistantToolDef = {
 
 const listOpenItems: AssistantToolDef = {
   name: "list_open_items",
+  tier: "core",
   description:
     "Open (unpaid/unapplied) AR or AP items as of a date, optionally for one party. Each item carries the openLineId that payment allocations require, its source document, due date, and remaining amount — resolve allocations from here, never by guessing ids. Read-only.",
   category: "read",

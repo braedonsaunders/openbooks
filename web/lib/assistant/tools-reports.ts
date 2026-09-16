@@ -61,6 +61,7 @@ async function reportTranslator(): Promise<Translator> {
 
 const listReportDefinitions: AssistantToolDef = {
   name: "list_report_definitions",
+  tier: "core",
   description:
     "List saved report definitions — built-in statements and custom report-studio reports — with id, name, type, and source entity. Use run_report to execute one. Read-only.",
   category: "search",
@@ -131,6 +132,7 @@ function reportScopeDenied(authz: Authz): ToolResult | null {
 
 const runReport: AssistantToolDef = {
   name: "run_report",
+  tier: "core",
   description:
     "Execute any saved report definition (built-in statement or custom report-studio report) through the same resolver the export route and scheduler use, returning its title, summary figures, and tabular groups (rows capped). A `period` preset (fiscal-calendar-resolved) or custom date range overrides the definition's period. Read-only.",
   category: "read",

@@ -137,6 +137,7 @@ const listSetupRecordsTool: AssistantToolDef = {
 
 const listFeaturesTool: AssistantToolDef = {
   name: "list_features",
+  tier: "core",
   description:
     "The Features switchboard: every optional feature's key, category, default, parent/required features, the nav modules it gates, and whether it is currently enabled for this org (resolved state, including data-dependent defaults). Read-only.",
   category: "read",
