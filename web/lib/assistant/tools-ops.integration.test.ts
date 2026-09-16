@@ -34,7 +34,7 @@ function authzFor(orgId: string, permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null }
 }
 
-const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read']
+const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage']
 
 test('assistant data-io tools list resources and import runs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -55,6 +55,43 @@ test('assistant data-io tools list resources and import runs', { skip: !env.OPEN
     })
   } finally {
     await dropScratchOrg(org.orgId)
+  }
+})
+
+test('assistant sync connections list runs with last-run evidence, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    const connId = randomUUID()
+    await withOrgContext(orgA.orgId, async () => {
+      await db.execute(sql`insert into connections (id, org_id, source, display_name, auth_kind, status)
+        values (${connId}, ${orgA.orgId}, 'test-source', 'Test Connector', 'token', 'active')`)
+      await db.execute(sql`insert into sync_runs (org_id, connection_id, source, kind, status, error_message, triggered_by)
+        values (${orgA.orgId}, ${connId}, 'test-source', 'incremental', 'failed', 'boom', 'manual')`)
+    })
+    await withOrgContext(orgB.orgId, async () => {
+      const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_sync_connections', {})
+      assert.equal(other.ok, true, JSON.stringify(other))
+      assert.ok(other.ok)
+      assert.deepEqual((other.data as { items: unknown[] }).items, [])
+    })
+    await withOrgContext(orgA.orgId, async () => {
+      const mine = await executeAssistantTool(authzFor(orgA.orgId, READER), 'list_sync_connections', {})
+      assert.equal(mine.ok, true, JSON.stringify(mine))
+      assert.ok(mine.ok)
+      const items = (mine.data as { items: Record<string, unknown>[] }).items
+      assert.equal(items.length, 1)
+      assert.equal(items[0]!['displayName'], 'Test Connector')
+      assert.equal(items[0]!['hasSecrets'], false)
+      assert.ok(!('secrets' in items[0]!), 'credential blob must not leave the server')
+      const lastRun = items[0]!['lastRun'] as { status: string; error: string } | null
+      assert.ok(lastRun, 'expected last-run evidence')
+      assert.equal(lastRun.status, 'failed')
+      assert.equal(lastRun.error, 'boom')
+    })
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
   }
 })
 

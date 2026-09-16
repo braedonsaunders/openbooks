@@ -7,6 +7,7 @@ const ops = read("./tools-ops.ts");
 const resourcesRoute = read("../../app/api/data/resources/route.ts");
 const importRoute = read("../../app/api/data/import/route.ts");
 const historyView = read("../../app/(app)/data/import/history/view.ts");
+const connectionsRoute = read("../../app/api/platform/connections/route.ts");
 
 test("data-io tools carry the same gates as the routes and views they cover", () => {
   // GET /api/data/resources requires data.export; the import route and the
@@ -25,6 +26,18 @@ test("list_data_resources reuses the registry and filters by the caller's read p
   // subsidiary fence to bind — descriptors carry no tenant rows.
   assert.match(ops, /listResources\(authz\.user\.orgId\)/);
   assert.match(ops, /can\(authz, d\.readPermission\)/);
+});
+
+test("list_sync_connections carries the console's gate and never leaks credential blobs", () => {
+  // GET /api/platform/connections requires admin.setup.manage and strips the
+  // sealed secrets blob via toClient. The tool must equal that gate and
+  // expose only the presence bit.
+  assert.match(connectionsRoute, /guardPermission\("admin\.setup\.manage"\)/);
+  assert.match(ops, /name: "list_sync_connections"[\s\S]{0,800}gate: \{ mode: "anyOf", perms: \["admin\.setup\.manage"\] \}/);
+  assert.match(ops, /listConnections\(authz\.user\.orgId\)/);
+  assert.match(ops, /from sync_runs where org_id/);
+  assert.match(ops, /hasSecrets: c\.secrets !== null/);
+  assert.doesNotMatch(ops, /secrets: c\.secrets/);
 });
 
 test("list_import_runs reuses the history view's query shape and stays org-scoped", () => {

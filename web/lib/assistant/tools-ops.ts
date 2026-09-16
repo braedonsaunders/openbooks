@@ -2,9 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
 import { can } from "../authz";
 import { listResources } from "../data-io/resources";
 import type { AssistantToolDef, ToolResult } from "./types";
+import { truncateText } from "./types";
 import { capList } from "./tools-shared";
 
 /**
@@ -64,7 +66,7 @@ function firstErrorText(errors: unknown): string | null {
       : typeof first === "object" && first !== null && "message" in first
         ? String((first as { message: unknown }).message)
         : JSON.stringify(first);
-  return text.length > 300 ? `${text.slice(0, 300)}…[truncated]` : text;
+  return truncateText(text, 300);
 }
 
 const listImportRuns: AssistantToolDef = {
@@ -135,4 +137,80 @@ const listImportRuns: AssistantToolDef = {
   },
 };
 
-export const OPS_TOOLS: AssistantToolDef[] = [listDataResources, listImportRuns];
+type SyncRunEvidence = {
+  status: string;
+  kind: string;
+  startedAt: unknown;
+  finishedAt: unknown;
+  syncedThrough: unknown;
+  triggeredBy: unknown;
+  error: string | null;
+};
+
+const listSyncConnections: AssistantToolDef = {
+  name: "list_sync_connections",
+  description:
+    "Sync connectors: source, display name, status, mirror schedule, last run time and error, plus the latest run's evidence. Same list and last-run rows as the sync console. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
+  inputSchema: z.object({
+    source: z.string().max(40).optional().describe("Only connectors of this source"),
+    status: z.string().max(30).optional().describe("Only connectors in this status"),
+    limit: z.number().int().min(1).max(100).optional().describe("Max connectors, default 25"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { source?: string; status?: string; limit?: number };
+    const limit = Math.min(a.limit ?? 25, 100);
+    // Same reads as GET /api/platform/connections: the tenant's connections
+    // plus the latest sync_runs rows as last-run evidence. The sealed
+    // credential blob never leaves the server — only its presence bit.
+    const [connections, runs] = await Promise.all([
+      listConnections(authz.user.orgId),
+      db.execute<Record<string, unknown>>(sql`
+        select id, connection_id as "connectionId", source, kind, status,
+               started_at as "startedAt", finished_at as "finishedAt",
+               synced_through as "syncedThrough", error_message as "errorMessage", triggered_by as "triggeredBy"
+          from sync_runs where org_id = ${authz.user.orgId} order by started_at desc limit 200`),
+    ]);
+    const latestByConnection = new Map<string, SyncRunEvidence>();
+    for (const row of runs.rows) {
+      const id = row.connectionId as string | null;
+      if (!id || latestByConnection.has(id)) continue;
+      latestByConnection.set(id, {
+        status: String(row.status),
+        kind: String(row.kind),
+        startedAt: row.startedAt,
+        finishedAt: row.finishedAt,
+        syncedThrough: row.syncedThrough,
+        triggeredBy: row.triggeredBy,
+        error: typeof row.errorMessage === "string" ? truncateText(row.errorMessage, 300) : null,
+      });
+    }
+    const items = connections
+      .filter((c) => !a.source || c.source === a.source)
+      .filter((c) => !a.status || c.status === a.status)
+      .slice(0, limit)
+      .map((c) => ({
+        id: c.id,
+        source: c.source,
+        displayName: c.displayName,
+        authKind: c.authKind,
+        status: c.status,
+        mirrorEnabled: c.mirrorEnabled,
+        mirrorSchedule: c.mirrorSchedule,
+        postedChangePolicy: c.postedChangePolicy,
+        cursor: c.cursor,
+        lastRunAt: c.lastRunAt,
+        lastError: c.lastError ? truncateText(c.lastError, 300) : null,
+        hasSecrets: c.secrets !== null,
+        lastRun: latestByConnection.get(c.id) ?? null,
+      }));
+    const { items: capped, truncated } = capList(items, limit);
+    return {
+      ok: true,
+      data: { total: items.length, truncated, href: "/sync", items: capped },
+    };
+  },
+};
+
+export const OPS_TOOLS: AssistantToolDef[] = [listDataResources, listImportRuns, listSyncConnections];
