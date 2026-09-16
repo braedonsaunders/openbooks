@@ -512,10 +512,79 @@
   },
   "spendVelocity": {
     "title": "支出速度",
-    "backToHub": "アナリティクス"
+    "backToHub": "アナリティクス",
+    "insights": {
+      "highGrowth": {
+        "title": "急成長中の経費科目",
+        "message": "{count, plural, one {# 件の経費科目が月20%超で増加中} other {# 件の経費科目が月20%超で増加中}}",
+        "action": "これらのカテゴリの支出ポリシーを見直してください"
+      },
+      "typeImbalance": {
+        "title": "取引種別の不均衡",
+        "fasterBills": "請求書",
+        "fasterExpenses": "経費精算",
+        "message": "{faster}が他の種別より{pct}%速く増加しています",
+        "action": "承認ワークフローと支出管理を見直してください"
+      },
+      "anomalies": {
+        "title": "支出の異常を検出",
+        "message": "{count, plural, one {# 件の重大な異常は調査が必要です} other {# 件の重大な異常は調査が必要です}}",
+        "action": "フラグ付き取引をエラーや不正支出の観点で確認してください"
+      },
+      "creep": {
+        "title": "緩やかなコスト上昇を検出",
+        "message": "{count, plural, one {# 件の科目が継続的に増加しています} other {# 件の科目が継続的に増加しています}}",
+        "action": "料金の再交渉や代替手段を検討してください"
+      },
+      "concentration": {
+        "title": "支出の集中度が高い",
+        "message": "最大の経費カテゴリが支出の{pct}%を占めています",
+        "action": "コスト最適化の余地を確認してください"
+      },
+      "zombies": {
+        "title": "未使用のサブスクリプションの可能性",
+        "message": "{count, plural, one {# 社の取引先で同一の定期請求あり（年額{amount}）} other {# 社の取引先で同一の定期請求あり（年額{amount}）}}",
+        "action": "利用状況を確認してください — 未使用の自動更新の可能性があります"
+      },
+      "fragmentation": {
+        "title": "購買の分散を検出",
+        "message": "{count, plural, one {# カテゴリで取引件数が多く平均単価が低い} other {# カテゴリで取引件数が多く平均単価が低い}}",
+        "action": "取引先の集約や優先サプライヤー契約を検討してください"
+      },
+      "opexRatio": {
+        "title": "売上高販管費率が高い",
+        "message": "販管費は売上の{pct}%です",
+        "action": "コスト構造を見直し効率化の余地を特定してください"
+      },
+      "cliff": {
+        "title": "購買・販売速度の不均衡",
+        "message": "購買発注速度（月{po}%）が販売受注速度（月{so}%）を{gap}%上回っています — 発注/受注比率：{ratio}倍",
+        "actionWithMonths": "約{months}か月後に資金圧迫のリスク。購買コミットメントを見直してください。",
+        "actionMonitor": "購買速度を監視し販売パイプラインと整合させてください。"
+      },
+      "seasonalHigh": "支出が増加しやすい時期：{months}",
+      "seasonalLow": "支出が減少しやすい時期：{months}"
+    }
   },
   "sentinel": {
     "title": "Sentinel",
     "backToHub": "アナリティクス"
+  },
+  "common": {
+    "monthsShort": {
+      "jan": "1月",
+      "feb": "2月",
+      "mar": "3月",
+      "apr": "4月",
+      "may": "5月",
+      "jun": "6月",
+      "jul": "7月",
+      "aug": "8月",
+      "sep": "9月",
+      "oct": "10月",
+      "nov": "11月",
+      "dec": "12月"
+    },
+    "monthYear": "{yy}年{month}"
   }
 }

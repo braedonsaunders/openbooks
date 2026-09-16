@@ -7,6 +7,7 @@ import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { englishSpendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { getMoneyFormatter } from '../money-server'
 
 /**
@@ -276,7 +277,12 @@ interface ComparisonRow extends Record<string, unknown> {
 
 // ---- main -------------------------------------------------------------------
 
-export async function spendVelocityData(orgId: string, period: { from: string; to: string; label: string }, allowed: ReadonlySet<string> | null): Promise<SpendVelocityData> {
+export async function spendVelocityData(
+  orgId: string,
+  period: { from: string; to: string; label: string },
+  allowed: ReadonlySet<string> | null,
+  strings: SpendVelocityStrings = englishSpendVelocityStrings,
+): Promise<SpendVelocityData> {
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
@@ -668,7 +674,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   });
 
   // ---- seasonal patterns --------------------------------------------------------
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthNames = strings.shortMonths;
   const seasonTotals = new Map<number, number>();
   for (const a of acctMap.values()) for (const m of a.months) seasonTotals.set(m.monthNum, (seasonTotals.get(m.monthNum) ?? 0) + m.amount);
   const seasonVals = [...seasonTotals.values()];
@@ -681,8 +687,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const seasonalInsights: { type: string; message: string }[] = [];
   const highMonths = patterns.filter((p) => p.isHigh);
   const lowMonths = patterns.filter((p) => p.isLow);
-  if (highMonths.length) seasonalInsights.push({ type: "high_season", message: `Higher spending typically occurs in ${highMonths.map((m) => m.monthName).join(", ")}` });
-  if (lowMonths.length) seasonalInsights.push({ type: "low_season", message: `Lower spending typically occurs in ${lowMonths.map((m) => m.monthName).join(", ")}` });
+  if (highMonths.length) seasonalInsights.push({ type: "high_season", message: strings.seasonalHigh(highMonths.map((m) => m.monthName)) });
+  if (lowMonths.length) seasonalInsights.push({ type: "low_season", message: strings.seasonalLow(lowMonths.map((m) => m.monthName)) });
 
   // ---- boiling frog ---------------------------------------------------------------
   const frogAccounts: SpendVelocityData["boilingFrog"]["accounts"] = [];
@@ -1014,24 +1020,30 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const insights: SVInsight[] = [];
   const fmtK = (n: number) => money(n, { maximumFractionDigits: 0 });
   const highVel20 = accountVelocity.filter((a) => a.velocity > 20);
-  if (highVel20.length) insights.push({ type: "alert", title: "High Growth Expense Categories", message: `${highVel20.length} expense account(s) growing >20%/month`, action: "Review spending policies for these categories" });
+  if (highVel20.length) insights.push({ type: "alert", ...strings.highGrowth(highVel20.length) });
   if (Math.abs(billsVelocity - expensesVelocity) > 20) {
-    const faster = billsVelocity > expensesVelocity ? "Bills" : "Expense Reports";
-    insights.push({ type: "warning", title: "Transaction Type Imbalance", message: `${faster} growing ${Math.abs(Math.round(billsVelocity - expensesVelocity))}% faster than other type`, action: "Review approval workflows and spending controls" });
+    insights.push({
+      type: "warning",
+      ...strings.typeImbalance(
+        billsVelocity > expensesVelocity ? "bills" : "expenses",
+        Math.abs(Math.round(billsVelocity - expensesVelocity)),
+      ),
+    });
   }
-  if (anomalies.summary.criticalCount > 0) insights.push({ type: "alert", title: "Spending Anomalies Detected", message: `${anomalies.summary.criticalCount} critical anomalies require investigation`, action: "Review flagged transactions for errors or unauthorized spend" });
-  if (boilingFrog.summary.criticalCount > 0) insights.push({ type: "warning", title: "Gradual Cost Creep Detected", message: `${boilingFrog.summary.criticalCount} account(s) showing consistent increases`, action: "Negotiate rates or find alternative solutions" });
-  if (concentration.summary.top1Share > 25) insights.push({ type: "warning", title: "High Spend Concentration", message: `Top expense category accounts for ${Math.round(concentration.summary.top1Share)}% of spend`, action: "Review for cost optimization opportunities" });
-  if (zombies.summary.count > 0) insights.push({ type: "info", title: "Potential Unused Subscriptions", message: `${zombies.summary.count} vendor(s) with identical recurring charges (${fmtK(zombies.summary.totalAnnualCost)}/year)`, action: "Review for usage — these may be auto-renewing unused services" });
-  if (fragmentation.summary.fragmentedCategories > 0) insights.push({ type: "warning", title: "Purchasing Fragmentation Detected", message: `${fragmentation.summary.fragmentedCategories} category(ies) with high transaction volume and low avg size`, action: "Consider vendor consolidation or preferred supplier agreements" });
-  if (revenue.hasData && revenue.opexRatio > 50) insights.push({ type: "alert", title: "High OpEx to Revenue Ratio", message: `Operating expenses are ${revenue.opexRatio}% of revenue`, action: "Review cost structure and identify efficiency opportunities" });
+  if (anomalies.summary.criticalCount > 0) insights.push({ type: "alert", ...strings.anomalies(anomalies.summary.criticalCount) });
+  if (boilingFrog.summary.criticalCount > 0) insights.push({ type: "warning", ...strings.creep(boilingFrog.summary.criticalCount) });
+  if (concentration.summary.top1Share > 25) insights.push({ type: "warning", ...strings.concentration(Math.round(concentration.summary.top1Share)) });
+  if (zombies.summary.count > 0) insights.push({ type: "info", ...strings.zombies(zombies.summary.count, fmtK(zombies.summary.totalAnnualCost)) });
+  if (fragmentation.summary.fragmentedCategories > 0) insights.push({ type: "warning", ...strings.fragmentation(fragmentation.summary.fragmentedCategories) });
+  if (revenue.hasData && revenue.opexRatio > 50) insights.push({ type: "alert", ...strings.opexRatio(revenue.opexRatio) });
   if (commitmentCliff.summary.status !== "healthy") {
     const c = commitmentCliff.summary;
+    const cliffText = strings.cliff(c.poVelocity, c.soVelocity, c.velocityGap, c.ratio);
     insights.push({
       type: c.status === "critical" ? "alert" : "warning",
-      title: "Purchase-Sales Velocity Imbalance",
-      message: `PO velocity (${c.poVelocity}%/mo) exceeds SO velocity (${c.soVelocity}%/mo) by ${c.velocityGap}% — PO/SO ratio: ${c.ratio}×`,
-      action: c.monthsToCliff ? `Cash pressure risk in ~${c.monthsToCliff} months. Review purchase commitments.` : "Monitor purchase velocity and align with sales pipeline.",
+      title: cliffText.title,
+      message: cliffText.message,
+      action: strings.cliffAction(c.monthsToCliff),
     });
   }
 

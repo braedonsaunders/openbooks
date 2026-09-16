@@ -512,10 +512,79 @@
   },
   "spendVelocity": {
     "title": "支出速率",
-    "backToHub": "分析"
+    "backToHub": "分析",
+    "insights": {
+      "highGrowth": {
+        "title": "高增长费用科目",
+        "message": "{count, plural, one {# 个费用科目月增速超过20%} other {# 个费用科目月增速超过20%}}",
+        "action": "请复核这些类别的支出政策"
+      },
+      "typeImbalance": {
+        "title": "交易类型失衡",
+        "fasterBills": "账单",
+        "fasterExpenses": "费用报销",
+        "message": "{faster}增速比另一类型快{pct}%",
+        "action": "请复核审批流程和支出管控"
+      },
+      "anomalies": {
+        "title": "检测到支出异常",
+        "message": "{count, plural, one {# 个严重异常需要调查} other {# 个严重异常需要调查}}",
+        "action": "请复核标记交易是否存在错误或未经授权的支出"
+      },
+      "creep": {
+        "title": "检测到成本缓慢攀升",
+        "message": "{count, plural, one {# 个科目持续上涨} other {# 个科目持续上涨}}",
+        "action": "请协商费率或寻找替代方案"
+      },
+      "concentration": {
+        "title": "支出集中度过高",
+        "message": "最大的费用类别占总支出的{pct}%",
+        "action": "请寻找成本优化机会"
+      },
+      "zombies": {
+        "title": "可能闲置的订阅",
+        "message": "{count, plural, one {# 个供应商存在相同的周期性收费（{amount}/年）} other {# 个供应商存在相同的周期性收费（{amount}/年）}}",
+        "action": "请核查使用情况——可能是未使用的自动续费"
+      },
+      "fragmentation": {
+        "title": "检测到采购碎片化",
+        "message": "{count, plural, one {# 个类别交易量大但平均金额低} other {# 个类别交易量大但平均金额低}}",
+        "action": "请考虑供应商整合或首选供应商协议"
+      },
+      "opexRatio": {
+        "title": "运营费用占营收比过高",
+        "message": "运营费用占营收的{pct}%",
+        "action": "请复核成本结构并寻找效率提升空间"
+      },
+      "cliff": {
+        "title": "采购与销售增速失衡",
+        "message": "采购订单增速（{po}%/月）超过销售订单增速（{so}%/月）{gap}%——采购/销售比率：{ratio}倍",
+        "actionWithMonths": "约{months}个月后存在现金压力风险，请复核采购承诺。",
+        "actionMonitor": "请监控采购增速并与销售管道保持一致。"
+      },
+      "seasonalHigh": "支出通常在{months}偏高",
+      "seasonalLow": "支出通常在{months}偏低"
+    }
   },
   "sentinel": {
     "title": "Sentinel",
     "backToHub": "分析"
+  },
+  "common": {
+    "monthsShort": {
+      "jan": "1月",
+      "feb": "2月",
+      "mar": "3月",
+      "apr": "4月",
+      "may": "5月",
+      "jun": "6月",
+      "jul": "7月",
+      "aug": "8月",
+      "sep": "9月",
+      "oct": "10月",
+      "nov": "11月",
+      "dec": "12月"
+    },
+    "monthYear": "{yy}年{month}"
   }
 }

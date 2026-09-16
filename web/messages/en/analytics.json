@@ -1551,6 +1551,58 @@
       "li4Bold": "Shadow IT",
       "li4Tail": " — unavailable: {reason}",
       "outro": "Drill-downs fetch that account or vendor's full activity for the period on click (searchable, with monthly trend and breakdown); each row links to the real record in its native module."
+    },
+    "insights": {
+      "highGrowth": {
+        "title": "High Growth Expense Categories",
+        "message": "{count, plural, one {# expense account growing >20%/month} other {# expense accounts growing >20%/month}}",
+        "action": "Review spending policies for these categories"
+      },
+      "typeImbalance": {
+        "title": "Transaction Type Imbalance",
+        "fasterBills": "Bills",
+        "fasterExpenses": "Expense Reports",
+        "message": "{faster} growing {pct}% faster than other type",
+        "action": "Review approval workflows and spending controls"
+      },
+      "anomalies": {
+        "title": "Spending Anomalies Detected",
+        "message": "{count, plural, one {# critical anomaly requires investigation} other {# critical anomalies require investigation}}",
+        "action": "Review flagged transactions for errors or unauthorized spend"
+      },
+      "creep": {
+        "title": "Gradual Cost Creep Detected",
+        "message": "{count, plural, one {# account showing consistent increases} other {# accounts showing consistent increases}}",
+        "action": "Negotiate rates or find alternative solutions"
+      },
+      "concentration": {
+        "title": "High Spend Concentration",
+        "message": "Top expense category accounts for {pct}% of spend",
+        "action": "Review for cost optimization opportunities"
+      },
+      "zombies": {
+        "title": "Potential Unused Subscriptions",
+        "message": "{count, plural, one {# vendor with identical recurring charges ({amount}/year)} other {# vendors with identical recurring charges ({amount}/year)}}",
+        "action": "Review for usage — these may be auto-renewing unused services"
+      },
+      "fragmentation": {
+        "title": "Purchasing Fragmentation Detected",
+        "message": "{count, plural, one {# category with high transaction volume and low avg size} other {# categories with high transaction volume and low avg size}}",
+        "action": "Consider vendor consolidation or preferred supplier agreements"
+      },
+      "opexRatio": {
+        "title": "High OpEx to Revenue Ratio",
+        "message": "Operating expenses are {pct}% of revenue",
+        "action": "Review cost structure and identify efficiency opportunities"
+      },
+      "cliff": {
+        "title": "Purchase-Sales Velocity Imbalance",
+        "message": "PO velocity ({po}%/mo) exceeds SO velocity ({so}%/mo) by {gap}% — PO/SO ratio: {ratio}×",
+        "actionWithMonths": "Cash pressure risk in ~{months} months. Review purchase commitments.",
+        "actionMonitor": "Monitor purchase velocity and align with sales pipeline."
+      },
+      "seasonalHigh": "Higher spending typically occurs in {months}",
+      "seasonalLow": "Lower spending typically occurs in {months}"
     }
   },
   "sentinel": {
@@ -2045,5 +2097,22 @@
       "net": "Net",
       "ending": "Ending"
     }
+  },
+  "common": {
+    "monthsShort": {
+      "jan": "Jan",
+      "feb": "Feb",
+      "mar": "Mar",
+      "apr": "Apr",
+      "may": "May",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Aug",
+      "sep": "Sep",
+      "oct": "Oct",
+      "nov": "Nov",
+      "dec": "Dec"
+    },
+    "monthYear": "{month} '{yy}"
   }
 }

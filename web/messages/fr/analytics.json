@@ -512,10 +512,79 @@
   },
   "spendVelocity": {
     "title": "Vélocité des dépenses",
-    "backToHub": "Analyses"
+    "backToHub": "Analyses",
+    "insights": {
+      "highGrowth": {
+        "title": "Catégories de dépenses à forte croissance",
+        "message": "{count, plural, one {# compte de dépenses en croissance de plus de 20 %/mois} other {# comptes de dépenses en croissance de plus de 20 %/mois}}",
+        "action": "Revoir les politiques de dépenses pour ces catégories"
+      },
+      "typeImbalance": {
+        "title": "Déséquilibre des types de transactions",
+        "fasterBills": "Les factures",
+        "fasterExpenses": "Les notes de frais",
+        "message": "{faster} croissent {pct} % plus vite que l'autre type",
+        "action": "Revoir les workflows d'approbation et les contrôles de dépenses"
+      },
+      "anomalies": {
+        "title": "Anomalies de dépenses détectées",
+        "message": "{count, plural, one {# anomalie critique nécessite une investigation} other {# anomalies critiques nécessitent une investigation}}",
+        "action": "Examiner les transactions signalées (erreurs ou dépenses non autorisées)"
+      },
+      "creep": {
+        "title": "Dérive progressive des coûts détectée",
+        "message": "{count, plural, one {# compte en augmentation constante} other {# comptes en augmentation constante}}",
+        "action": "Renégocier les tarifs ou trouver des solutions alternatives"
+      },
+      "concentration": {
+        "title": "Forte concentration des dépenses",
+        "message": "La principale catégorie de dépenses représente {pct} % des dépenses",
+        "action": "Étudier les pistes d'optimisation des coûts"
+      },
+      "zombies": {
+        "title": "Abonnements potentiellement inutilisés",
+        "message": "{count, plural, one {# fournisseur avec des charges récurrentes identiques ({amount}/an)} other {# fournisseurs avec des charges récurrentes identiques ({amount}/an)}}",
+        "action": "Vérifier l'usage — il peut s'agir de renouvellements automatiques inutilisés"
+      },
+      "fragmentation": {
+        "title": "Fragmentation des achats détectée",
+        "message": "{count, plural, one {# catégorie avec un volume élevé de transactions de faible montant} other {# catégories avec un volume élevé de transactions de faible montant}}",
+        "action": "Envisager la consolidation des fournisseurs ou des accords privilégiés"
+      },
+      "opexRatio": {
+        "title": "Ratio charges d'exploitation / chiffre d'affaires élevé",
+        "message": "Les charges d'exploitation représentent {pct} % du chiffre d'affaires",
+        "action": "Revoir la structure des coûts et identifier des gains d'efficacité"
+      },
+      "cliff": {
+        "title": "Déséquilibre des vélocités achats-ventes",
+        "message": "Vélocité des commandes fournisseurs ({po} %/mois) supérieure à celle des commandes clients ({so} %/mois) de {gap} % — ratio CF/CC : {ratio}×",
+        "actionWithMonths": "Risque de tension de trésorerie dans ~{months} mois. Revoir les engagements d'achat.",
+        "actionMonitor": "Surveiller la vélocité des achats et l'aligner avec le pipeline des ventes."
+      },
+      "seasonalHigh": "Les dépenses élevées se concentrent généralement en {months}",
+      "seasonalLow": "Les dépenses faibles se concentrent généralement en {months}"
+    }
   },
   "sentinel": {
     "title": "Sentinel",
     "backToHub": "Analyses"
+  },
+  "common": {
+    "monthsShort": {
+      "jan": "janv.",
+      "feb": "févr.",
+      "mar": "mars",
+      "apr": "avr.",
+      "may": "mai",
+      "jun": "juin",
+      "jul": "juil.",
+      "aug": "août",
+      "sep": "sept.",
+      "oct": "oct.",
+      "nov": "nov.",
+      "dec": "déc."
+    },
+    "monthYear": "{month} '{yy}"
   }
 }
