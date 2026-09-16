@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.6` image digest in
+2. resolves and records the official `0.1.0-alpha.7` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -711,14 +711,16 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.6` is the current community preview. It is a second hardening
-release: about 300 more atomic defect fixes across the posting kernel, close,
-cash and open items, tax, payroll, standards conformance, reference-ownership
-fences on every write path, concurrency (revision tokens, advisory locks,
-refund-first clawbacks), imports and connectors, plus the dashboard layout
-recovery — each with a red-then-green regression test and an independent
-review, and four forward migrations (0146–0149). See the changelog for the
-areas touched and the operator notes.
+`v0.1.0-alpha.7` is the current community preview. It is the assistant and
+agents release: the in-app assistant and the MCP surface now reach every
+module through one gated tool catalog (about 200 tools, feature-aware,
+permission- and subsidiary-scoped, loaded in two stages so a turn carries
+only the tools it needs), app packages can declare their own assistant
+tools, the background-agent runtime grew from the close pair to ten packs
+configured under Setup → Agents and consumed in the new Agent Workbench, and
+connectors mirror source reconciliation evidence. Eight forward migrations
+(0151–0158), all additive. See the changelog for the areas touched and the
+operator notes.
 
 Good uses today:
 
