@@ -16,8 +16,9 @@ import { capList, uuidInput } from "./tools-shared";
  */
 
 // Close diagnostics span the organization: a selected subsidiary must never
-// authorize them (guardCloseScope). Fail closed like the page does.
-function closeScopeDenied(authz: Authz): ToolResult | null {
+// authorize them (guardCloseScope). Fail closed like the page does. Shared
+// with the FX consolidation view, which is the same org-wide surface.
+export function closeScopeDenied(authz: Authz): ToolResult | null {
   return authz.allowedSubsidiaryIds === null ? null : { ok: false, error: "forbidden" };
 }
 

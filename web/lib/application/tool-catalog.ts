@@ -22,6 +22,7 @@ import {
   decideReopenRequest,
   getCloseRun,
   listCloseRuns,
+  runPeriodRevaluation,
   startApplicationCloseRun,
 } from "./close";
 import type { ApplicationContext } from "./context";
@@ -608,6 +609,14 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.reopen"),
     execute: async (context, input) => ({ ok: true, ...await decideReopenRequest(context, input) }),
+  }),
+  definition({
+    name: "run_revaluation", title: "Run FX Revaluation",
+    description: "Run period-end unrealized FX revaluation for an accounting period: restate foreign-currency monetary balances to the period-end spot rate, booking the remaining gain/loss plus its next-period mirror. Reruns book only incremental corrections; unchanged reruns post nothing. Requires the multi-currency module and a configured unrealized gain/loss account.",
+    inputSchema: z.object({ periodId: UUID, bookId: UUID.optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("close.run"), featureKey: "multiCurrency",
+    execute: async (context, input) => ({ ok: true, ...(await runPeriodRevaluation(context, input)) }),
   }),
   ...(["submit", "post"] as const).map((action) => definition({
     name: `${action}_document`, title: `${action === "submit" ? "Submit" : "Post"} Document`,

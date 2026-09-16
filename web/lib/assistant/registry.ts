@@ -22,6 +22,7 @@ import { CRM_TOOLS } from "./tools-crm";
 import { SUBSCRIPTION_TOOLS } from "./tools-subscriptions";
 import { PROPERTY_TOOLS } from "./tools-property";
 import { TIME_TOOLS } from "./tools-time";
+import { FX_TOOLS } from "./tools-fx";
 import { PROJECT_TOOLS } from "./tools-projects";
 import { TAX_TOOLS } from "./tools-tax";
 import { FILE_TOOLS } from "./tools-files";
@@ -59,6 +60,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...REPORTING_TOOLS,
   ...BANKING_TOOLS,
   ...CLOSE_TOOLS,
+  ...FX_TOOLS,
   ...PAYROLL_TOOLS,
   ...FILE_TOOLS,
   ...INVENTORY_TOOLS,
