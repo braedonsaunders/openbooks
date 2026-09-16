@@ -45,6 +45,9 @@ Three things are published here:
 
 - **[Latest conformance matrix](docs/trust/conformance-matrix.md)** — every
   standards requirement, its citation, and its status.
+- **[Latest internal-controls matrix](docs/trust/controls-matrix.md)** — every
+  executable check of the system's own financial controls, mapped to its
+  AUDIT-CONTROLS.md control id.
 - **[Latest invariant checkpoint](docs/trust/checkpoint.json)** — the diffable
   trial balance, control tie-outs, check results, and report timings.
 - **[History](docs/trust/history.json)** — one append-only record per commit,

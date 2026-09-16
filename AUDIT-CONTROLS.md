@@ -99,6 +99,7 @@ enabled on **378 tables**.
 | A9 | Lease liabilities are measured at the exact present value of the payments on BigInt rationals — a 5%/12 monthly rate is carried as the exact fraction, never a truncated decimal — and every schedule retires to exactly zero. | Service | `engine/src/leases.test.ts`, `engine/src/present-value.ts` |
 | A10 | Inventory NRV write-downs remeasure value only: quantity is untouched, the change distributes across cost layers with no lost cent, and the subledger stays equal to the general ledger. | Service | `engine/src/inventory-nrv.integration.test.ts` |
 | A11 | Current tax is measured on taxable profit: the year's originating or reversing movement in temporary differences adjusts taxable income, so income tax payable is the amount owed on the return. | Service | Conformance case `tax-current-tax-omits-temporary-differences` |
+| A12 | **Allocation runs are immutable, reversible, and explainable.** A posted period sweep is never edited: corrections reverse the stored lines or re-run to a linked fresh run, at most one posted run exists per rule/period/book/subsidiary, an unchanged re-run posts nothing, unbalanced contributor sets are refused before any write, net-zero pairs leave every account total unchanged, published versions are frozen with a stable definition hash, and every allocated line carries lineage to the version that produced it. | Service + Corpus | Internal-controls cases `alloc-no-lost-cent`, `alloc-entry-group-sum`, `alloc-reversal-restores`, `alloc-rerun-idempotent`, `alloc-contributor-balance`, `alloc-net-zero-pair-account-total-unchanged`, `alloc-published-version-frozen` (`npm -w engine run conformance -- controls report`) |
 
 ### Cutoff
 *Transactions and events are recorded in the correct accounting period.*
@@ -239,6 +240,12 @@ Run the standards conformance corpus and produce the published matrix:
 
 ```bash
 npm -w engine run conformance -- report
+```
+
+Run the internal-controls evidence set and produce its matrix:
+
+```bash
+npm -w engine run conformance -- controls report
 ```
 
 Run the golden harness against a company and produce a diffable checkpoint:
