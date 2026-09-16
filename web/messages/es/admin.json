@@ -1373,9 +1373,6 @@
         },
         "forensics": {
           "title": "Forense",
-          "description": "Análisis programados de anomalías — contabilizaciones en fin de semana y en cifras redondas, trampas de umbral y facturas duplicadas — que solo muestran hallazgos nuevos.",
-          "reads": "Asientos y facturas de proveedores bajo la lupa de anomalías.",
-          "proposes": "Hallazgos con evidencia y filas exactas — solo revisión, sin escrituras."
           "description": "Publicaciones en fin de semana, cifras redondas, importes justo bajo el límite y facturas duplicadas.",
           "reads": "Documentos de gasto y el panel centinela.",
           "proposes": "Enlaces de revisión al panel centinela en cada hallazgo — solo revisión, sin escrituras."
