@@ -7,7 +7,7 @@ export const overheadCosting: DocArticle = {
   order: 2,
   summary:
     'A step-by-step guide to allocating company overhead to projects: classify costs, review computed rates, publish the rate card, and apply a method to your project types.',
-  updated: '2026-07-20',
+  updated: '2026-09-16',
   keywords: ['overhead', 'burden', 'rate card', 'cost pools', 'departments', 'fully burdened', 'margin', 'wizard', 'publish'],
   related: ['project-types'],
   body: `# Setting Up Overhead Costing
@@ -43,8 +43,11 @@ Two principles the system enforces:
    Insurance, Administration). Accounts that have not been classified appear
    under **Unassigned** and should be reviewed before rates are published.
 2. **Review the computed rates.** The **Matrix** tab shows each department's
-   rate: its share of overhead divided by its labor hours. This analytical
-   preview recalculates from actuals and is not used directly for project costing.
+   rate, derived from actual overhead and labor hours through the category
+   allocation methods and the profile composite method described below. This
+   analytical preview recalculates from actuals; the department figures it
+   shows are exactly the values publishing persists, so what you review is
+   what projects will carry.
 3. **Run the Setup wizard.** Select the method, confirm the rates to publish,
    and choose the applicable project types. The **department rate card** is the
    recommended default. Rate values are prefilled from the computed amounts and
@@ -64,6 +67,30 @@ rates; only work from the effective date forward uses the new ones.
 To adjust a single department or add a historical rate, edit the rows directly
 on the **Overhead Rates** card — each row is a department, a rate, and an
 effective date range.
+
+## How published rates are derived
+
+The preview and the publisher share one rate calculation, so configuration
+always governs the rates projects actually carry:
+
+- Each category's department rate honors its allocation method. Simple
+  division divides department expense by the department base; weighted behaves
+  the same per department (a department weight scales its own expense and its
+  own base equally); stepped tiers resolve against each department's own base
+  and fall back to division outside every tier.
+- Each department's composite honors the profile composite method. Sum adds
+  the included category rates, weighted averages them by expense, and
+  cascading runs them over the department labor rate in order.
+- Rates are derived with exact decimal arithmetic, never floating point:
+  internal rates are exact to four decimals and the published card rounds once
+  to cents, halves away from zero.
+
+One restriction: the rate card holds hourly rates, so a category whose output
+format is not Currency/Hour (percent of labor, percent of cost, per-FTE, or
+per-unit) cannot publish while it is included in the composite. Publishing
+refuses explicitly and names the category — switch it to Currency/Hour or
+exclude it from the composite. The preview keeps rendering; only publishing
+is blocked.
 
 ## Choosing a method
 

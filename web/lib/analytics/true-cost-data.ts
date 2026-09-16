@@ -4,7 +4,15 @@ import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+import { add, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money.ts";
+import {
+  deriveOverheadCategoryDeptRates,
+  deriveOverheadDeptComposite,
+  formatOverheadPublishRate,
+  overheadPublishBlockers,
+  quantizeOverheadMoney,
+  type OverheadPublishBlocker,
+} from "@openbooks/engine/src/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
 import {
@@ -54,6 +62,12 @@ export interface Dept {
   billedHours: number;
   totalHours: number;
   composite: number; // dept burden ÷ dept billed hours
+  /**
+   * Exact 2dp department rate from the shared engine contract — the value
+   * publication persists. Empty when the publish gate blocks (see
+   * `ratePublication`); publication refuses before reading it.
+   */
+  compositeExact: string;
 }
 
 export interface BurdenAccount {
@@ -181,6 +195,13 @@ export interface TrueCostData {
   hasBurdenGL: boolean; // the 5200 applied account carries postings
   /** Allocation base values () for the engine + UI. */
   bases: AllocationBaseBundle;
+  /**
+   * Publication readiness for the per-hour rate card. When `supported` is
+   * false the Matrix preview still renders (display-only floats) but
+   * `computeLiveOverheadRates` refuses with these blockers; `compositeExact`
+   * is empty on every department.
+   */
+  ratePublication: { supported: boolean; blockers: OverheadPublishBlocker[] };
   /** Active engine config: composite method, per-category settings, custom categories, profiles. */
   config: {
     activeProfileId: string;
@@ -217,6 +238,9 @@ interface HoursSqlRow {
   billed_hours: TrueCostSqlNumeric;
   total_hours: TrueCostSqlNumeric;
   nonbill_cost: TrueCostSqlNumeric;
+  /** Exact decimal twins of the merged hour sums (rate-derivation input). */
+  billed_hours_exact?: string;
+  total_hours_exact?: string;
 }
 
 /**
@@ -523,33 +547,54 @@ export async function trueCostData(
     }
     for (const v of byKey.values()) acctTranslated.push(v);
   }
-  // Time legs merged back to (department, month) rows; hours re-added.
+  // Time legs merged back to (department, month) rows; hours re-added. The
+  // exact twins accumulate the raw numerics without crossing a float, so the
+  // rate engine divides the same hours the display sums.
   const hourTranslated: HoursSqlRow[] = [];
   {
-    const byKey = new Map<string, HoursSqlRow & { billed: number; total: number; nonbill: string }>();
+    const byKey = new Map<string, HoursSqlRow & { billed: number; total: number; nonbill: string; billedExact: string; totalExact: string }>();
     for (const r of hourLegs) {
       const key = JSON.stringify([r.department_id, r.month]);
-      const prev = byKey.get(key) ?? { ...r, billed: 0, total: 0, nonbill: "0" };
+      const prev = byKey.get(key) ?? { ...r, billed: 0, total: 0, nonbill: "0", billedExact: "0.0000", totalExact: "0.0000" };
       prev.billed += Number(r.billed_hours ?? 0);
       prev.total += Number(r.total_hours ?? 0);
+      prev.billedExact = add(prev.billedExact, normalizeMoney(String(r.billed_hours ?? 0)));
+      prev.totalExact = add(prev.totalExact, normalizeMoney(String(r.total_hours ?? 0)));
       prev.nonbill = add(String(prev.nonbill), translateLeg(String(r.nonbill_cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
       byKey.set(key, prev);
     }
     for (const v of byKey.values()) {
-      hourTranslated.push({ ...v, billed_hours: v.billed, total_hours: v.total, nonbill_cost: v.nonbill });
+      hourTranslated.push({ ...v, billed_hours: v.billed, total_hours: v.total, nonbill_cost: v.nonbill, billed_hours_exact: v.billedExact, total_hours_exact: v.totalExact });
     }
   }
   // Employee legs merged to one presentation row each: the rate is
   // translated cost over rated hours, never an average of raw rates.
   const empTranslated: EmployeeRateSqlRow[] = [];
+  // Exact per-department labor cost ÷ rated hours for the cascading composite
+  // base (mirrors the Overall hours-weighted average per department).
+  const deptLaborExact = new Map<string, { cost: string; rated: string }>();
+  let overallLaborCostExact = "0.0000";
+  let overallLaborRatedExact = "0.0000";
   {
-    const byId = new Map<string, { base: EmployeeRateSqlRow; hours: number; cost: string; rated: number }>();
+    const byId = new Map<string, { base: EmployeeRateSqlRow; hours: number; cost: string; rated: number; ratedExact: string }>();
     for (const r of empLegs) {
-      const prev = byId.get(r.id) ?? { base: r, hours: 0, cost: "0", rated: 0 };
+      const prev = byId.get(r.id) ?? { base: r, hours: 0, cost: "0", rated: 0, ratedExact: "0.0000" };
       prev.hours += Number(r.hours ?? 0);
       prev.rated += Number(r.rated_hours ?? 0);
+      prev.ratedExact = add(prev.ratedExact, normalizeMoney(String(r.rated_hours ?? 0)));
       prev.cost = add(String(prev.cost), translateLeg(String(r.cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
       byId.set(r.id, prev);
+    }
+    for (const v of byId.values()) {
+      overallLaborCostExact = add(overallLaborCostExact, v.cost);
+      overallLaborRatedExact = add(overallLaborRatedExact, v.ratedExact);
+      const deptId = v.base.dept_id;
+      if (deptId) {
+        const prev = deptLaborExact.get(deptId) ?? { cost: "0.0000", rated: "0.0000" };
+        prev.cost = add(prev.cost, v.cost);
+        prev.rated = add(prev.rated, v.ratedExact);
+        deptLaborExact.set(deptId, prev);
+      }
     }
     for (const v of byId.values()) {
       empTranslated.push({
@@ -607,11 +652,23 @@ export async function trueCostData(
   const nonbillCostByMonth = new Map<string, number>();
   const nonbillCostByDeptMonth = new Map<string, number>(); // `${dept}|${month}`
   let billedHours = 0, totalHours = 0, nonbillCostTotal = 0;
+  // Exact twins of the billed/total hour aggregates: the rate engine's
+  // allocation denominators, never a float.
+  const deptBilledExact = new Map<string, string>();
+  const deptTotalExact = new Map<string, string>();
+  let billedHoursExact = "0.0000";
+  let totalHoursExact = "0.0000";
   for (const r of hourTranslated) {
     const dept = r.department_id ?? "none";
     const billed = Number(r.billed_hours ?? 0);
     const total = Number(r.total_hours ?? 0);
     const nonbill = Number(r.nonbill_cost ?? 0);
+    const billedExact = r.billed_hours_exact ?? normalizeMoney(String(r.billed_hours ?? 0));
+    const totalExact = r.total_hours_exact ?? normalizeMoney(String(r.total_hours ?? 0));
+    deptBilledExact.set(dept, add(deptBilledExact.get(dept) ?? "0.0000", billedExact));
+    deptTotalExact.set(dept, add(deptTotalExact.get(dept) ?? "0.0000", totalExact));
+    billedHoursExact = add(billedHoursExact, billedExact);
+    totalHoursExact = add(totalHoursExact, totalExact);
     const dh = deptHours.get(dept) ?? { billed: 0, total: 0 };
     dh.billed += billed; dh.total += total;
     deptHours.set(dept, dh);
@@ -666,11 +723,14 @@ export async function trueCostData(
     total: number;
     accounts: Map<string, BurdenAccount>;
     byDept: Map<string, number>;
+    /** Tagged-department exact amounts; untagged accumulates separately. */
+    byDeptTaggedExact: Map<string, string>;
+    untaggedExact: string;
     byMonth: Map<string, number>;
   }
   const cats = new Map<string, CatAgg>();
   for (const g of burdenGroups.groups) {
-    cats.set(g.id, { id: g.id, key: g.key, name: g.name, color: g.color, total: 0, accounts: new Map(), byDept: new Map(), byMonth: new Map() });
+    cats.set(g.id, { id: g.id, key: g.key, name: g.name, color: g.color, total: 0, accounts: new Map(), byDept: new Map(), byDeptTaggedExact: new Map(), untaggedExact: "0.0000", byMonth: new Map() });
   }
   const unassignedMap = new Map<string, BurdenAccount>();
   const monthBurden = new Map<string, number>();
@@ -681,6 +741,9 @@ export async function trueCostData(
     if (directLabor.has(r.account_id)) continue; // direct labour is not burden
     const amount = Number(r.amount ?? 0);
     if (amount === 0) continue;
+    // Exact twin: translated legs already sum in money strings, so this
+    // validation is a no-op pass-through that fails closed on corruption.
+    const amountExact = normalizeMoney(String(r.amount ?? 0));
     const group = burdenGroups.byAccount.get(r.account_id);
 
     if (!group) {
@@ -725,10 +788,33 @@ export async function trueCostData(
     };
     if (r.department_id && billedShare.has(r.department_id)) {
       spread(r.department_id, amount);
+      cat.byDeptTaggedExact.set(r.department_id, add(cat.byDeptTaggedExact.get(r.department_id) ?? "0.0000", amountExact));
     } else {
       for (const d of departmentsBase) spread(d.id, amount * (billedShare.get(d.id) ?? 0));
+      // Exact untagged attribution happens once below (splitUntaggedExact):
+      // per-row float shares stay display-only so rounding compounds once.
+      cat.untaggedExact = add(cat.untaggedExact, amountExact);
     }
   }
+
+  /**
+   * Split one category's untagged exact total across burden centres by billed
+   * hours — the exact twin of the per-row float spread above. Each
+   * department's share is one exact proportional allocation (mulRatio,
+   * halves away), so the published rate compounds rounding exactly once.
+   */
+  const splitUntaggedExact = (tagged: Map<string, string>, untagged: string): Map<string, string> => {
+    const out = new Map<string, string>();
+    const totalUnits = toUnits(billedHoursExact);
+    for (const d of departmentsBase) {
+      const share =
+        totalUnits === 0n
+          ? "0.0000"
+          : mulRatio(untagged, toUnits(deptBilledExact.get(d.id) ?? "0.0000"), totalUnits);
+      out.set(d.id, add(tagged.get(d.id) ?? "0.0000", share));
+    }
+    return out;
+  };
 
   // ---- native non-billable time category ---------------------------------------
   // Distribute non-billable labour cost across burden centres (tagged dept kept,
@@ -743,6 +829,21 @@ export async function trueCostData(
     if (dept !== "none" && billedShare.has(dept)) timeExpenseByDept[dept]! += cost;
     else for (const d of departmentsBase) timeExpenseByDept[d.id]! += cost * (billedShare.get(d.id) ?? 0);
   }
+  // Exact twin of the loop above, partitioned identically: non-billable legs
+  // already merge in money strings, so the engine input never sees a float.
+  const timeTaggedExact = new Map<string, string>();
+  let timeUntaggedExact = "0.0000";
+  for (const r of hourTranslated) {
+    const costExact = normalizeMoney(String(r.nonbill_cost ?? 0));
+    if (costExact === "0.0000") continue;
+    const dept = r.department_id ?? "none";
+    if (dept !== "none" && billedShare.has(dept)) {
+      timeTaggedExact.set(dept, add(timeTaggedExact.get(dept) ?? "0.0000", costExact));
+    } else {
+      timeUntaggedExact = add(timeUntaggedExact, costExact);
+    }
+  }
+  const timeExpenseExactByDept = splitUntaggedExact(timeTaggedExact, timeUntaggedExact);
   for (const [month, cost] of nonbillCostByMonth) {
     if (cost === 0) continue;
     monthBurden.set(month, (monthBurden.get(month) ?? 0) + cost);
@@ -763,25 +864,68 @@ export async function trueCostData(
   const totalOverhead = [...cats.values()].reduce((s, c) => s + c.total, 0) + nonbillCostTotal;
   const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
+  /**
+   * Exact per-department allocation-base values for one base type. Same scope
+   * as the float bundle (burden centres only): hours from the exact twins,
+   * money bases from the translated legs, headcount as integers, and config
+   * overrides quantized exactly (a no-op for ordinary decimals).
+   */
+  const baseExactFor = (base: AllocationBase): Record<string, string> => {
+    const byDept: Record<string, string> = {};
+    for (const d of departmentsBase) {
+      switch (base) {
+        case "billed_hours": byDept[d.id] = deptBilledExact.get(d.id) ?? "0.0000"; break;
+        case "total_hours": byDept[d.id] = deptTotalExact.get(d.id) ?? "0.0000"; break;
+        case "labor_dollars": byDept[d.id] = baseTranslated.get(d.id)?.labor_dollars ?? "0.0000"; break;
+        case "headcount": byDept[d.id] = String(baseTranslated.get(d.id)?.headcount ?? 0); break;
+        case "revenue": byDept[d.id] = baseTranslated.get(d.id)?.revenue ?? "0.0000"; break;
+        case "direct_cost": byDept[d.id] = baseTranslated.get(d.id)?.direct_cost ?? "0.0000"; break;
+        case "square_feet": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.squareFeet?.[d.id] ?? 0); break;
+        case "units": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.units?.[d.id] ?? 0); break;
+        case "custom": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.custom?.[d.id] ?? 0); break;
+      }
+    }
+    return byDept;
+  };
+
+  // Exact per-category department rates for the shared publish contract,
+  // keyed by category id (per_hour categories only; other formats stay
+  // display-only and block publication through the gate below).
+  const exactRatesByCat = new Map<string, { rates: Record<string, string>; expenses: Record<string, string> }>();
+
   // Apply the rate engine to one category's expense-by-dept: allocation
   // base × method → raw rate, then formatted per the category's rate format.
   function buildCategory(
     id: string, key: string, name: string, color: string | null,
     categoryType: BurdenCategory["categoryType"], match: BurdenCategory["match"],
     expenseByDept: Record<string, number>, total: number, accounts: BurdenAccount[],
+    expenseExactByDept: Record<string, string>,
   ): BurdenCategory {
     const s = settingsOf(id);
     const allocationBase = s.allocationBase ?? "billed_hours";
     const allocationMethod = s.allocationMethod ?? "simple";
     const rateFormat = s.rateFormat ?? "per_hour";
     const includeInComposite = s.includeInComposite ?? true;
+    const baseExact = baseExactFor(allocationBase);
     const baseByDept: Record<string, number> = {};
     const byDept: Record<string, { amount: number; rate: number }> = {};
+    // Department rates come from the shared exact contract for per-hour
+    // categories (method-aware, no floats); other formats keep the legacy
+    // display division and block publication instead of publishing
+    // base-unit ratios as $/hr.
+    const exactRates = rateFormat === "per_hour"
+      ? deriveOverheadCategoryDeptRates({
+        id, allocationMethod, allocationTiers: s.allocationTiers,
+        expenseByDept: expenseExactByDept, baseByDept: baseExact,
+      })
+      : null;
+    if (exactRates) exactRatesByCat.set(id, { rates: exactRates, expenses: expenseExactByDept });
     for (const d of departmentsBase) {
       const amount = expenseByDept[d.id] ?? 0;
       const deptBase = getAllocationBaseValue(allocationBase, bases, d.id);
       baseByDept[d.id] = deptBase;
-      byDept[d.id] = { amount, rate: deptBase > 0 ? amount / deptBase : 0 };
+      const exact = exactRates?.[d.id];
+      byDept[d.id] = { amount, rate: exact !== undefined ? Number(exact) : (deptBase > 0 ? amount / deptBase : 0) };
     }
     const rawRate = allocationMethod === "weighted"
       ? calculateRate({ id, allocationMethod, allocationWeights: s.allocationWeights, allocationTiers: s.allocationTiers }, expenseByDept, baseByDept, allocationMethod)
@@ -799,7 +943,7 @@ export async function trueCostData(
     const c = cats.get(g.id)!;
     const expenseByDept: Record<string, number> = {};
     for (const d of departmentsBase) expenseByDept[d.id] = c.byDept.get(d.id) ?? 0;
-    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, c.total, [...c.accounts.values()].sort((a, b) => b.amount - a.amount));
+    return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, c.total, [...c.accounts.values()].sort((a, b) => b.amount - a.amount), Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact)));
   }).filter((c) => Math.abs(c.totalAmount) > 0);
 
   // ---- native non-billable time category ---------------------------------------
@@ -807,7 +951,7 @@ export async function trueCostData(
   // of non-billable hours, spread over billed hours like every other rate.
   const timeCategories: BurdenCategory[] = [];
   if (nonbillCostTotal > 0) {
-    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, []));
+    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, [], Object.fromEntries(timeExpenseExactByDept)));
   }
 
   // ---- custom categories (manual / derived / formula) --------------------------
@@ -824,7 +968,11 @@ export async function trueCostData(
     categoryTotals[cc.id] = { expenseOverall: calc.totalExpense };
     // Custom category settings live on the category record itself.
     profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
-    const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, []);
+    // Synthetic expenses cross from float-land through exact shortest-repr
+    // quantization (a no-op for ordinary config decimals like 100.50).
+    const customExpenseExact: Record<string, string> = {};
+    for (const d of departmentsBase) customExpenseExact[d.id] = quantizeOverheadMoney(calc.expense[d.id] ?? 0);
+    const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, [], customExpenseExact);
     if (Math.abs(built.totalAmount) > 0) customCategories.push(built);
   }
 
@@ -839,14 +987,52 @@ export async function trueCostData(
   const composite = calculateCompositeRate(compositeCats, { method: profile.compositeMethod, baseLaborRate: profile.baseLaborRate }, { avgLaborRate: laborHoursSumForComposite });
   const compositeRate = composite.value;
 
+  // Exact Overall/department labor averages for the cascading composite base:
+  // the hours-weighted cost rate each cascade runs over (Overall mirrors the
+  // float `employeesWeightedRate` above; departments mirror it per centre).
+  const overallLaborRateExact =
+    overallLaborRatedExact === "0.0000" ? "50.0000" : div(overallLaborCostExact, overallLaborRatedExact);
+  const deptLaborRateExact = (deptId: string): string => {
+    const leg = deptLaborExact.get(deptId);
+    if (!leg || leg.rated === "0.0000") return overallLaborRateExact;
+    return div(leg.cost, leg.rated);
+  };
+
   const totalsByDept: Record<string, number> = {};
+  // Department composites run the SAME contract publication uses: the
+  // configured composite method over exact per-department category rates, so
+  // the Matrix preview can never disagree with the published card. A
+  // non-hourly included format blocks the contract (blending it into a $/hr
+  // card is a unit error): the preview falls back to the legacy display sum
+  // and records why publication will refuse.
+  const publishBlockers = overheadPublishBlockers(
+    categories.map((c) => ({ id: c.id, name: c.name, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite })),
+  );
+  const exactSupported = publishBlockers.length === 0;
   const departments: Dept[] = departmentsBase.map((d) => {
-    // Dept composite = sum of each included category's per-dept rate (matches the
-    // matrix column), consistent with the sum composite; other methods still
-    // headline via the engine value above.
-    const composite = categories.filter((c) => c.includeInComposite).reduce((s, c) => s + (c.byDept[d.id]?.rate ?? 0), 0);
+    let composite: number;
+    let compositeExact = "";
+    if (exactSupported) {
+      const composite4 = deriveOverheadDeptComposite({
+        compositeMethod: profile.compositeMethod,
+        baseLaborRate: deptLaborRateExact(d.id),
+        categories: categories
+          .filter((c) => c.includeInComposite)
+          .map((c) => ({
+            id: c.id,
+            rate: exactRatesByCat.get(c.id)?.rates[d.id] ?? "0.0000",
+            expense: exactRatesByCat.get(c.id)?.expenses[d.id] ?? "0.0000",
+            rateFormat: "per_hour" as const,
+            includeInComposite: true,
+          })),
+      });
+      compositeExact = formatOverheadPublishRate(composite4);
+      composite = Number(compositeExact);
+    } else {
+      composite = categories.filter((c) => c.includeInComposite).reduce((s, c) => s + (c.byDept[d.id]?.rate ?? 0), 0);
+    }
     totalsByDept[d.id] = composite;
-    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, composite };
+    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, composite, compositeExact };
   });
 
   // ---- absorption (utilization-recovery model unless the GL mechanism is live) --
@@ -957,6 +1143,7 @@ export async function trueCostData(
     forecast,
     hasBurdenGL,
     bases,
+    ratePublication: { supported: exactSupported, blockers: publishBlockers },
     config: {
       activeProfileId: cfg.activeProfileId,
       compositeMethod: profile.compositeMethod,
