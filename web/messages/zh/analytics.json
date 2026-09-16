@@ -387,6 +387,20 @@
     "backToHub": "分析",
     "configureInSetup": "在设置中配置 →",
     "openReport": "打开报告",
+    "scenarios": {
+      "hire": "以 {util}% 的利用率增加{count, plural, one {# 名员工} other {# 名员工}}，每月可计费小时增加 {hours} 小时。",
+      "terminate": "减少{count, plural, one {# 名员工} other {# 名员工}}可节省 {savings} 间接费用，但会损失 {hours} 可计费小时。",
+      "winContract": "赢得合同每月增加 {hours} 小时，间接费用将分摊到更大的业务量上。",
+      "loseContract": "失去合同每月减少 {hours} 小时，间接费用将集中到更少的时间上。",
+      "costChange": "间接费用{direction, select, decrease {减少} other {增加}} {amount}。",
+      "utilizationChange": "利用率从 {from}% 变为 {to}%，可计费小时{direction, select, up {增加} other {减少}}。"
+    },
+    "labels": {
+      "timeCategory": "不可计费时间",
+      "unknownEmployee": "未知",
+      "defaultProfile": "默认",
+      "formulaError": "公式结果无效"
+    },
     "formats": {
       "perHour": "{amount}/小时"
     },

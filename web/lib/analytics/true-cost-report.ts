@@ -1,13 +1,16 @@
 import 'server-only'
 import { requireReportAuthz } from '../report-execution-context'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { trueCostData } from './true-cost-data'
+import { trueCostStrings } from './true-cost-strings'
 import type { ExportData } from '../report-pdf'
 
 /** One output contract for paper, spreadsheet, CSV, PDF and scheduled runs. */
 export async function trueCostExportData(orgId: string, period: { from: string; to: string; label: string }): Promise<ExportData> {
   const authz = await requireReportAuthz(orgId)
-  const [data, t] = await Promise.all([trueCostData(orgId, period, authz.allowedSubsidiaryIds), getTranslations('analytics.trueCost')])
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = trueCostStrings((key, values) => tc(key, values), locale)
+  const [data, t] = await Promise.all([trueCostData(orgId, period, authz.allowedSubsidiaryIds, strings), getTranslations('analytics.trueCost')])
   return {
     title: t('title'), dateRangeLabel: period.label,
     summary: [

@@ -858,6 +858,20 @@
     "backToHub": "Analytics",
     "configureInSetup": "Configure in Setup →",
     "openReport": "Open report",
+    "scenarios": {
+      "hire": "Adding {count, plural, one {# employee} other {# employees}} at {util}% utilization adds {hours} monthly billable hours.",
+      "terminate": "Reducing {count, plural, one {# employee} other {# employees}} saves {savings} in overhead but loses {hours} billable hours.",
+      "winContract": "Winning contract adds {hours} monthly hours, spreading overhead across more volume.",
+      "loseContract": "Losing contract removes {hours} monthly hours, concentrating overhead on fewer hours.",
+      "costChange": "{direction, select, decrease {Reducing} other {Adding}} {amount} in overhead costs.",
+      "utilizationChange": "Changing utilization from {from}% to {to}% {direction, select, up {increases} other {decreases}} billable hours."
+    },
+    "labels": {
+      "timeCategory": "Non-Billable Time",
+      "unknownEmployee": "Unknown",
+      "defaultProfile": "Default",
+      "formulaError": "Invalid formula result"
+    },
     "formats": {
       "perHour": "{amount}/hr"
     },

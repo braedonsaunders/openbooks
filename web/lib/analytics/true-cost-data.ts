@@ -22,6 +22,7 @@ import {
   calculateFormulaCategoryData,
   getAllocationBaseValue,
 } from "./true-cost-engine";
+import { englishTrueCostStrings, type TrueCostStrings } from "./true-cost-strings";
 
 /**
  * True Cost — data and calculations for the Burden (Rate Engine) dashboard.
@@ -256,12 +257,6 @@ interface PriorBurdenSqlRow {
   billed_hours: TrueCostSqlNumeric;
 }
 
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1, 1));
-  return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
-}
-
 /** Hours-weighted average labour cost rate (cascading composite base). */
 function employeesWeightedRate(rows: EmployeeRateSqlRow[]): number {
   let wsum = 0, hsum = 0;
@@ -299,7 +294,12 @@ export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfile
   return { activeProfileId, profiles, profile };
 }
 
-export async function trueCostData(orgId: string, period: { from: string; to: string; label: string }, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<TrueCostData> {
+export async function trueCostData(
+  orgId: string,
+  period: { from: string; to: string; label: string },
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  strings: TrueCostStrings = englishTrueCostStrings,
+): Promise<TrueCostData> {
   if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled")
   const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]
   const allowed = ids?.length ? sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
@@ -807,7 +807,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   // of non-billable hours, spread over billed hours like every other rate.
   const timeCategories: BurdenCategory[] = [];
   if (nonbillCostTotal > 0) {
-    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, "Non-Billable Time", "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, []));
+    timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, []));
   }
 
   // ---- custom categories (manual / derived / formula) --------------------------
@@ -820,7 +820,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     let calc: { expense: Record<string, number>; totalExpense: number };
     if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases);
     else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases);
-    else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases);
+    else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, strings);
     categoryTotals[cc.id] = { expenseOverall: calc.totalExpense };
     // Custom category settings live on the category record itself.
     profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
@@ -884,7 +884,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         byDept[deptId] = db_ > 0 ? amt / db_ : 0;
       }
     }
-    return { month: m, label: monthLabel(m), burden, billedHours: billed, rate: billed > 0 ? burden / billed : 0, byCategory, byDept };
+    return { month: m, label: strings.monthLabel(m), burden, billedHours: billed, rate: billed > 0 ? burden / billed : 0, byCategory, byDept };
   });
 
   // Linear regression over monthly composite → next 3 months. Outlier months
@@ -912,14 +912,14 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     for (let i = 1; i <= 3; i++) {
       const d = new Date(Date.UTC(ly!, lm! - 1 + i, 1));
       const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-      forecast.push({ month: ym, label: monthLabel(ym), rate: Math.max(0, intercept + slope * (lastIdx + i)) });
+      forecast.push({ month: ym, label: strings.monthLabel(ym), rate: Math.max(0, intercept + slope * (lastIdx + i)) });
     }
   }
 
   // ---- labour rates ------------------------------------------------------------------------
   const employees: EmployeeRate[] = typedEmployeeRows
     .map((r) => ({
-      id: r.id, name: r.name, deptId: r.dept_id, deptName: r.dept_name, title: r.title,
+      id: r.id, name: strings.displayEmployeeName(r.name), deptId: r.dept_id, deptName: r.dept_name, title: r.title,
       rate: Number(r.rate ?? 0), hours: Number(r.hours ?? 0),
     }))
     .filter((e) => e.rate > 0);
@@ -963,7 +963,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       baseLaborRate: profile.baseLaborRate,
       fringeRate: profile.fringeRate,
       categorySettings: profile.categorySettings,
-      profiles: cfg.profiles.map((p) => ({ id: p.id, name: p.name, color: p.color })),
+      profiles: cfg.profiles.map((p) => ({ id: p.id, name: strings.displayProfileName(p.name), color: p.color })),
       customCategories: profile.customCategories,
     },
   };
