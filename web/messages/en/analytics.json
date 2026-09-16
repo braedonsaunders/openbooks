@@ -855,7 +855,85 @@
   "cashflow": {
     "title": "Cash Flow",
     "backToHub": "Analytics",
-    "asOf": "as of {date}"
+    "asOf": "as of {date}",
+    "tabs": {
+      "overview": "Overview",
+      "category": "Category Analysis"
+    },
+    "kpi": {
+      "currentCash": "Current Cash",
+      "projectedEnd": "Projected End",
+      "lowestPoint": "Lowest Point",
+      "inflows": "Inflows",
+      "outflows": "Outflows",
+      "netSub": "{change} net"
+    },
+    "vitals": {
+      "burnRate": "Cash Burn Rate",
+      "burnHint": "Avg weekly outflow",
+      "burnBadge": "Weekly",
+      "arCoverage": "AR Coverage",
+      "arHint": "(Cash + AR) / AP",
+      "cashCycle": "Cash Cycle",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Net Period Flow",
+      "netFlowHint": "Inflows − Outflows",
+      "runway": "Cash Runway",
+      "runwayCritical": "Critical",
+      "runwayCaution": "Caution",
+      "runwayHealthy": "Healthy"
+    },
+    "panels": {
+      "bridge": "Cash Flow Bridge",
+      "forecast": "Cash Position Forecast",
+      "ar": "Accounts Receivable",
+      "ap": "Accounts Payable",
+      "forecastCategories": "Forecast Categories",
+      "forecastCatHint": "Non-AR/AP flows configured in the Configuration tab",
+      "agingHint": "{amount} · {pct} current"
+    },
+    "series": {
+      "endingCash": "Ending cash"
+    },
+    "catTable": {
+      "category": "Category",
+      "method": "Method",
+      "logic": "Forecast Logic",
+      "perWeek": "Per Week (avg)",
+      "horizonTotal": "Horizon Total"
+    },
+    "toggle": {
+      "outflowsAp": "Outflows (AP)",
+      "inflowsAr": "Inflows (AR)"
+    },
+    "footnote": {
+      "text": "Predicted {flow} over the {weeks}-week horizon, grouped by party. Each amount is scheduled into the week its collection/payment date is predicted.",
+      "flowAp": "payments to vendors",
+      "flowAr": "collections from customers"
+    },
+    "partyPanel": {
+      "byParty": "{side} by Party",
+      "payables": "Payables",
+      "receivables": "Receivables"
+    },
+    "partyTable": {
+      "party": "Party",
+      "items": "Items",
+      "amount": "Amount",
+      "share": "Share"
+    },
+    "footer": {
+      "pre": "Act on these numbers in the",
+      "cashCockpit": "Cash cockpit",
+      "mid": "(weekly drill + forecast config) and the",
+      "apCockpit": "AP cockpit",
+      "post": "(pay-run planner + selection rule)."
+    },
+    "horizon": {
+      "label": "Horizon",
+      "aria": "Forecast horizon",
+      "weeks": "{count, plural, one {# Week} other {# Weeks}}"
+    }
   },
   "trueCost": {
     "title": "True Cost",
