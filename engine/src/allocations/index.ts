@@ -182,3 +182,4 @@ export {
   runAllocationCloseAction,
   type RunAllocationConfig,
 } from "./scheduling.ts";
+export { allocationServiceDeps } from "./service.ts";

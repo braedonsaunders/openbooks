@@ -11,7 +11,7 @@ import {
   DriverNotAvailableError,
   previewDriverVector,
 } from "../../../../../../engine/src/allocations/drivers.ts";
-import { runDriverReport } from "../../../../../../engine/src/allocations/report-runner.ts";
+import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
 
 export const runtime = "nodejs";
 
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     const asOf = periodId !== undefined ? { periodId } : { date: date! };
     const result = await previewDriverVector(
       { orgId: gate.user.orgId, driverId, asOf, actorId: gate.user.id },
-      { reportRunner: { runReport: runDriverReport } },
+      allocationServiceDeps(),
     );
     const labels = await getDimensionValueLabels(
       gate.user.orgId,

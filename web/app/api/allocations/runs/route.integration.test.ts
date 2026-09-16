@@ -228,6 +228,116 @@ test("preview runs the real engine", { skip: !DB }, async () => {
   }
 });
 
+test("preview resolves report drivers through the production composition", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  try {
+    await enableAllocations(org.orgId);
+    // The engine runner enforces reports.read under the actor identity.
+    await db.execute(sql`
+      insert into user_permission_overrides (org_id, user_id, permission, effect)
+      values (${org.orgId}, ${actorId}, 'reports.read', 'grant')`);
+    const adjustment = org.accounts.adjustment;
+    const bank = org.accounts.bank;
+    await postProjectGlEntry({
+      orgId: org.orgId,
+      actorId,
+      origin: "manual",
+      entryNumber: `ROUTE-SVC-${randomUUID()}`,
+      postingDate: org.date,
+      memo: "Route service pool",
+      subsidiaryId: org.subsidiaryId,
+      currency: "CAD",
+      lines: [
+        { accountId: adjustment, amount: "1000.0000" },
+        { accountId: bank, amount: "-1000.0000" },
+      ],
+    });
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${definitionId}, ${org.orgId}, 'custom', 'driver-route-service', 'Driver route service', 'query',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          mode: "summarize",
+          columns: [],
+          breakouts: [{ column: "account_id" }],
+          measures: [{ fn: "sum", column: "debit" }],
+        })}::jsonb)`);
+    const driverId = randomUUID();
+    await db.execute(sql`
+      insert into allocation_drivers (id, org_id, key, name, dimension, source_kind, config, is_active)
+      values (${driverId}, ${org.orgId}, 'route-svc-report', 'Route service report', 'extra:account',
+              'report_definition',
+              ${JSON.stringify({
+                reportDefinitionId: definitionId,
+                dimensionColumn: "account_id",
+                valueColumn: "debit",
+                params: {},
+              })}::jsonb, true)`);
+    const ruleId = randomUUID();
+    const versionId = randomUUID();
+    await db.execute(sql`
+      insert into allocation_rules (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
+      values (${ruleId}, ${org.orgId}, 'route-svc-rule', 'Route service rule', 'period', 100, true, false, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into allocation_rule_versions
+        (id, org_id, rule_id, version_no, status, effective_from, effective_to,
+         book_scope, book_ids, account_scope, dimension_filters, source_measure,
+         basis_kind, driver_id, driver_as_of, basis_config,
+         target_kind, dynamic_target, impact, residual_policy, solve_method,
+         run_policy, run_offset_days, memo_template, published_at)
+      values (${versionId}, ${org.orgId}, ${ruleId}, 1, 'draft', '2026-01-01', null,
+         'primary', '[]'::jsonb,
+         ${JSON.stringify({ kind: "accounts", accountIds: [adjustment] })}::jsonb,
+         '{}'::jsonb, 'period_activity',
+         'driver', ${driverId}, 'period', '{}'::jsonb,
+         'explicit', '{}'::jsonb, 'reclass', 'largest_share', 'sequential',
+         'manual', 0, 'Route {{rule.name}} for {{period.name}}', now())`);
+    for (const [sequence, accountId] of [adjustment, bank].entries()) {
+      await db.execute(sql`
+        insert into allocation_rule_targets
+          (id, org_id, version_id, sequence, target_account_id, extra_dims, label, custom)
+        values (${randomUUID()}, ${org.orgId}, ${versionId}, ${sequence + 1}, null,
+                ${JSON.stringify({ account: accountId })}::jsonb, ${`Target ${sequence + 1}`}, '{}'::jsonb)`);
+    }
+    await db.execute(sql`
+      update allocation_rule_versions
+         set status = 'published', definition_hash = ${`testhash-${versionId}`}, published_at = now()
+       where id = ${versionId} and org_id = ${org.orgId}`);
+    await db.execute(sql`
+      update allocation_rules set current_version_id = ${versionId}
+       where id = ${ruleId} and org_id = ${org.orgId}`);
+
+    authenticate(org.orgId, actorId, ["allocations.run"]);
+    const res = await previewRoute.POST(
+      jsonRequest("/api/allocations/runs/preview", "POST", {
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+      }),
+    );
+    assert.equal(res.status, 200);
+    const computation = (
+      await res.json()
+    ) as {
+      computation: {
+        sourceTotal: string;
+        driver: { vector: { key: string; value: string }[] } | null;
+      };
+    };
+    assert.equal(computation.computation.sourceTotal, "1000.0000");
+    const vector = new Map(
+      (computation.computation.driver?.vector ?? []).map((e) => [e.key, e.value] as [string, string]),
+    );
+    assert.equal(vector.get(adjustment), "1000.0000");
+    assert.equal(vector.get(bank), "0.0000");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("post/reverse/rerun need gl.post + reason and run the real engine", { skip: !DB }, async () => {
   const s = await setup();
   try {
