@@ -4,6 +4,7 @@ import {
   activateTurnModules,
   CORE_TOOL_MODULES,
   createTurnScope,
+  findToolsModules,
   isCoreTier,
   matchTools,
   MODULE_KEYWORDS,
@@ -139,6 +140,16 @@ test("matchTools ranks name hits above blurb hits and respects the limit", () =>
   assert.deepEqual(matchTools(catalog, "inventory", 1).map((h) => h.name), ["inventory_levels"]);
   assert.deepEqual(matchTools(catalog, "", 8), []);
   assert.deepEqual(matchTools(catalog, "zzz-no-such-capability", 8), []);
+});
+
+test("findToolsModules reads activation modules off success results only", () => {
+  assert.deepEqual(
+    findToolsModules({ ok: true, data: { tools: [], modules: ["payroll", "core", "payroll"], total: 3 } }),
+    ["payroll"],
+  );
+  assert.deepEqual(findToolsModules({ ok: false, error: "unknown module" }), []);
+  assert.deepEqual(findToolsModules({ ok: true, data: null }), []);
+  assert.deepEqual(findToolsModules({ ok: true, data: { tools: [] } }), []);
 });
 
 test("routing table stays vendor-neutral", () => {

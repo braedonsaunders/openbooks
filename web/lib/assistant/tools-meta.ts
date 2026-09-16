@@ -4,6 +4,7 @@ import { can, type Authz } from "../authz";
 import { APPLICATION_TOOLS } from "../application/tool-catalog";
 import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
 import { canRunTool } from "./gate";
+import { matchTools, moduleOfTool } from "./tool-router";
 import type { AssistantToolDef, ToolResult } from "./types";
 
 /**
@@ -91,4 +92,88 @@ const describeCapabilities: AssistantToolDef = {
   },
 };
 
-export const META_TOOLS: AssistantToolDef[] = [describeCapabilities];
+const findToolsSchema = z.object({
+  query: z.string().trim().min(1).max(200).optional()
+    .describe("Keywords for the capability you need (e.g. inventory, pay run, tax return)"),
+  module: z.string().max(40).optional()
+    .describe("Return every tool in this module (module keys come from the empty call)"),
+  limit: z.number().int().min(1).max(20).optional()
+    .describe("Max tools to return for a query (default 8)"),
+});
+
+/** Live, gated catalog entries shaped for search: the same gates that build the model tool set. */
+async function searchableCatalog(authz: Authz): Promise<{ name: string; blurb: string; module: string }[]> {
+  // Dynamic imports: registry.ts mounts this file, so static imports would cycle.
+  const { ASSISTANT_TOOLS, applicationToolVisible } = await import("./registry");
+  const features = await resolvedFeatureState(authz.user.orgId);
+  const catalog = ASSISTANT_TOOLS.filter((tool) => canRunTool(authz, tool, features)).map((tool) => ({
+    name: tool.name,
+    blurb: oneLine(tool.description),
+    module: moduleOfTool(tool.name, tool.feature),
+  }));
+  for (const definition of APPLICATION_TOOLS) {
+    if (!applicationToolVisible(definition, authz, features)) continue;
+    if (!definition.readOnly && !can(authz, "assistant.write")) continue;
+    catalog.push({
+      name: definition.name,
+      blurb: oneLine(definition.description),
+      module: moduleOfTool(definition.name, definition.featureKey),
+    });
+  }
+  return catalog;
+}
+
+const findTools: AssistantToolDef = {
+  name: "find_tools",
+  description:
+    "Search assistant capabilities by keyword or module; returns matching tools with one-line blurbs and activates their modules for the rest of this turn. Call before saying a capability is missing. Read-only.",
+  category: "search",
+  tier: "core",
+  // Which tools exist for the caller is not sensitive; every assistant user may ask.
+  gate: { mode: "public" },
+  inputSchema: findToolsSchema,
+  execute: async (raw, authz: Authz): Promise<ToolResult> => {
+    const parsed = findToolsSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false, error: "invalid_input" };
+    const { query, module: onlyModule, limit = 8 } = parsed.data;
+    const catalog = await searchableCatalog(authz);
+    if (onlyModule !== undefined) {
+      const names = new Set(catalog.map((tool) => tool.module));
+      if (!names.has(onlyModule)) {
+        return { ok: false, error: `unknown module; use one of: ${[...names].sort().join(", ")}` };
+      }
+      const tools = catalog
+        .filter((tool) => tool.module === onlyModule)
+        .sort((a, b) => (a.name < b.name ? -1 : 1))
+        .slice(0, 20);
+      return {
+        ok: true,
+        data: { tools, modules: [onlyModule], total: tools.length },
+        note: `Module ${onlyModule} is now active for the rest of this turn.`,
+      };
+    }
+    if (query !== undefined) {
+      const tools = matchTools(catalog, query, limit);
+      const modules = [...new Set(tools.map((tool) => tool.module))].filter((m) => m !== "core").sort();
+      return {
+        ok: true,
+        data: { tools, modules, total: tools.length },
+        note: modules.length
+          ? `Modules now active for the rest of this turn: ${modules.join(", ")}.`
+          : "No new module matched; the core tools already cover this.",
+      };
+    }
+    const counts = new Map<string, number>();
+    for (const tool of catalog) counts.set(tool.module, (counts.get(tool.module) ?? 0) + 1);
+    const modules = [...counts.entries()]
+      .map(([module, count]) => ({ module, count }))
+      .sort((a, b) => (a.module < b.module ? -1 : 1));
+    return {
+      ok: true,
+      data: { tools: [], modules: modules.map((m) => m.module), counts: modules, total: catalog.length },
+      note: "Module overview; call again with module or query for tool blurbs.",
+    };
+  },
+};
+
+export const META_TOOLS: AssistantToolDef[] = [describeCapabilities, findTools];

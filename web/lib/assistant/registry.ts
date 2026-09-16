@@ -10,6 +10,7 @@ import {
   executeApplicationTool,
 } from "../application/tool-catalog";
 import { canRunTool } from "./gate";
+import { findToolsModules } from "./tool-router";
 import { listAppToolViews, toAssistantToolDef } from "../apps/tools";
 import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
@@ -155,14 +156,34 @@ export async function buildToolRegistryAsync(authz: Authz, features?: FeatureSta
   return base;
 }
 
+/**
+ * Chat-loop hooks. The MCP surface and background agents pass none, so
+ * find_tools there is plain catalog search; the chat turn passes
+ * onActivateModules to grow the sent tool set for the rest of the turn.
+ */
+export type ChatToolHooks = {
+  onActivateModules?: (modules: string[]) => void;
+};
+
 /** Construct the permission- and feature-bound tool set the model may use this
  *  turn. `features` is the org's resolved feature state (resolve it once per
  *  turn with resolvedFeatureState); tools of disabled features are omitted. */
-export function buildToolRegistry(authz: Authz, features?: FeatureState | null): ToolSet {
+export function buildToolRegistry(authz: Authz, features?: FeatureState | null, hooks?: ChatToolHooks): ToolSet {
   const runnable = ASSISTANT_TOOLS.filter((t) => canRunTool(authz, t, features));
   const entries = runnable.map((t) => {
     // Shared execute wrapper: defensive gate re-check + never-throw contract.
-    const execute = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, t.name, args, features);
+    const base = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, t.name, args, features);
+    // find_tools both answers and activates: a successful search grows the
+    // turn's sent tool set through the hook (no-op when no hook is passed).
+    const onActivate = hooks?.onActivateModules;
+    const execute = t.name === "find_tools" && onActivate
+      ? async (args: unknown): Promise<ToolResult> => {
+        const result = await base(args);
+        const modules = findToolsModules(result);
+        if (modules.length > 0) onActivate(modules);
+        return result;
+      }
+      : base;
     return [
       t.name,
       tool({ description: t.description, inputSchema: t.inputSchema, execute }),
