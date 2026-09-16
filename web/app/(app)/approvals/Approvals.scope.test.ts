@@ -17,5 +17,9 @@ test('approval worklists enforce subsidiary visibility in every consumer', () =>
   const pageFilters = page.match(/subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, authz\.allowedSubsidiaryIds\)/g) ?? []
   assert.equal(pageFilters.length, 2, 'all and submitted approval queries must be scoped')
   const dashboardFilters = dashboard.match(/subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, authz\.allowedSubsidiaryIds\)/g) ?? []
-  assert.equal(dashboardFilters.length, 2, 'dashboard approval count and list must be scoped')
+  assert.equal(dashboardFilters.length, 1, 'dashboard approval count query must be scoped')
+  // The dashboard list reads the unified worklist, which scopes every kind
+  // (Flows gates, document approvals, pay runs) by the caller's authz.
+  assert.match(dashboard, /approvalWorklistForAuthz\(authz\)/)
+  assert.match(application, /export async function approvalWorklistForAuthz\(authz: Authz\)/)
 })
