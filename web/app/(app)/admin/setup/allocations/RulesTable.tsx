@@ -7,11 +7,7 @@ import { Badge, Button } from '@openbooks/ui'
 import type { RuleHeadSummary } from '../../../../../../engine/src/allocations/index.ts'
 import { PagedTable } from '../../../../../components/paged-table'
 import { mergeHref } from '../../../../../lib/list-params'
-
-/** Effective window cell text — pure for unit tests. */
-export function formatWindow(from: string, to: string | null, openEnded: string): string {
-  return `${from} – ${to ?? openEnded}`
-}
+import { formatWindow } from './rule-window'
 
 /**
  * Rules tab list: every head with its current-version summary. House-style
@@ -42,6 +38,7 @@ export function RulesTable({
     router.push(mergeHref('/admin/setup/allocations', currentParams, { rule: ruleParam }) as never)
   }
   return (
+    <div className="overflow-x-auto">
     <PagedTable<RuleHeadSummary>
       rows={rules}
       rowKey={(row) => row.rule.id}
@@ -122,5 +119,6 @@ export function RulesTable({
         },
       ]}
     />
+    </div>
   )
 }
