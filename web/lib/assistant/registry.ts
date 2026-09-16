@@ -13,6 +13,9 @@ import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
 import { ANALYTICS_TOOLS } from "./tools-analytics";
 import { BANKING_TOOLS } from "./tools-banking";
+import { CONSTRUCTION_TOOLS } from "./tools-construction";
+import { PROJECT_TOOLS } from "./tools-projects";
+import { TAX_TOOLS } from "./tools-tax";
 import { FILE_TOOLS } from "./tools-files";
 import { PAYROLL_TOOLS } from "./tools-payroll";
 import { REPORTING_TOOLS } from "./tools-reports";
@@ -30,6 +33,9 @@ import { safeApplicationToolError } from "./tool-errors";
 
 export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...READ_TOOLS,
+  ...PROJECT_TOOLS,
+  ...TAX_TOOLS,
+  ...CONSTRUCTION_TOOLS,
   ...ANALYTICS_TOOLS,
   ...REPORTING_TOOLS,
   ...BANKING_TOOLS,

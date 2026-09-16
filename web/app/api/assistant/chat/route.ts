@@ -6,7 +6,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { can, guardPermission } from "../../../../lib/authz";
 import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
-import { runAgentTurn } from "../../../../lib/assistant/agent";
+import { NO_ANSWER_MESSAGE, runAgentTurn } from "../../../../lib/assistant/agent";
 import { buildToolRegistry } from "../../../../lib/assistant/registry";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -160,7 +160,7 @@ export async function POST(req: Request): Promise<Response> {
           ? "Response stopped."
           : finishReason === "error"
             ? TURN_FAILURE_MESSAGE
-            : "";
+            : NO_ANSWER_MESSAGE;
         const content = text || fallback;
         const persistedParts = parts.length
           ? parts

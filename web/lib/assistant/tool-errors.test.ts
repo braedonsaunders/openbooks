@@ -15,3 +15,17 @@ test('unexpected errors, internals and permission details stay private', () => {
   assert.equal(safeApplicationToolError(forbidden('private.permission')), 'forbidden')
   assert.equal(safeApplicationToolError({ code: 'invalid_input', status: 422, message: 'untrusted' }), 'tool_failed')
 })
+
+test('engine domain errors surface their operator-facing message', () => {
+  class PayrollError extends Error {}
+  class PayrollLimitError extends PayrollError {}
+  assert.equal(
+    safeApplicationToolError(new PayrollError('Committed payroll has an unknown historical filing account.')),
+    'payroll: Committed payroll has an unknown historical filing account.',
+  )
+  assert.equal(safeApplicationToolError(new PayrollLimitError('over limit')), 'payroll: over limit')
+  class TaxReturnError extends Error {}
+  assert.equal(safeApplicationToolError(new TaxReturnError('form "X" is not configured')), 'tax_return: form "X" is not configured')
+  class RandomError extends Error {}
+  assert.equal(safeApplicationToolError(new RandomError('postgres://secret')), 'tool_failed')
+})

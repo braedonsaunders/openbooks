@@ -809,16 +809,16 @@ const arPositionTool: AssistantToolDef = {
 const cashPositionTool: AssistantToolDef = {
   name: "cash_position",
   description:
-    "Company-wide cash position (the Banking cash cockpit, consolidated — no subsidiary filter): bank balances rolled through a 4, 8, or 12-week forecast timeline (default 8) of predicted AR, capacity-scheduled AP, and recurring category flows, with projected end, lowest-cash week, burn rate, runway, and AR/AP coverage. Read-only.",
+    "Company-wide cash position (the Banking cash cockpit, consolidated — no subsidiary filter): bank balances rolled through a 1–26 week forecast timeline (default 8; use 13 for a standard 13-week forecast) of predicted AR, capacity-scheduled AP, and recurring category flows, with projected end, lowest-cash week, burn rate, runway, and AR/AP coverage. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["banking.read"] },
   inputSchema: z.object({
-    horizonWeeks: z.union([z.literal(4), z.literal(8), z.literal(12)]).optional(),
+    horizonWeeks: z.number().int().min(1).max(26).optional().describe("Forecast horizon in weeks, 1–26 (default 8; 13 = standard 13-week forecast)"),
     asOfDate: dateInput.optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { horizonWeeks?: 4 | 8 | 12; asOfDate?: string };
-    const horizon = a.horizonWeeks ?? 8;
+    const a = raw as { horizonWeeks?: number; asOfDate?: string };
+    const horizon = Math.min(26, Math.max(1, Math.trunc(a.horizonWeeks ?? 8)));
     const orgId = authz.user.orgId;
     const r = await withOrg(orgId, async () => {
       const apSettings = await loadApSettings(orgId);
