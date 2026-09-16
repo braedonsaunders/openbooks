@@ -50,6 +50,19 @@ const NS_ACCOUNT_TYPE: Record<string, string> = {
   DeferExpense: "expense_deferred",
 };
 
+/**
+ * Reconcilability is a bank-reconciliation input, not a general account
+ * attribute: only bank and card accounts may inherit the source's
+ * `reconcilewithmatching` flag. NetSuite lets the flag sit on any type (the
+ * real tenant carries it on a COGS and an expense account), so the import
+ * gates it by resolved openbooks type instead of trusting it verbatim.
+ */
+export function netSuiteReconcilableAccount(accttype: string, reconcile: unknown): boolean {
+  const type = NS_ACCOUNT_TYPE[accttype];
+  if (type !== "asset_bank" && type !== "liability_card") return false;
+  return reconcile === "T" || reconcile === true;
+}
+
 const NS_ITEM_KIND: Record<string, string> = {
   NonInvtPart: "non_inventory",
   Service: "service",
@@ -833,7 +846,7 @@ export class NetSuiteSource implements MigrationSource {
           isSummary: isT(a.issummary),
           isActive: !isT(a.isinactive),
           eliminate: isT(a.eliminate),
-          reconcilable: isT(a.reconcile),
+          reconcilable: netSuiteReconcilableAccount(a.accttype, a.reconcile),
         },
       });
     }
