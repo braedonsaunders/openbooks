@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -265,6 +266,58 @@ test("driver preview returns exact shares; empty drivers report why", { skip: !D
     }));
     assert.equal(unavailable.status, 422);
     assert.match(((await unavailable.json()) as { error: string }).error, /no data source/);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("report_definition preview runs under the actor via the engine runner", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await enableAllocations(org.orgId);
+    authenticate(org.orgId, actorId, [...READ, ...MANAGE]);
+
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, report_type, slug, name, query)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'driver-probe', 'Driver probe',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          mode: "rows",
+          columns: ["account_id", "amount"],
+          filters: { combinator: "and", rules: [] },
+        })}::jsonb)`);
+    const created = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
+      key: "preview-report",
+      name: "Preview report",
+      dimension: "department",
+      sourceKind: "report_definition",
+      config: { reportDefinitionId: definitionId, dimensionColumn: "account_id", valueColumn: "amount" },
+    }));
+    assert.equal(created.status, 201);
+    const driverId = ((await created.json()) as { driver: { id: string } }).driver.id;
+
+    // The scratch actor carries no report permission: the engine runner
+    // refuses under that identity instead of measuring.
+    const denied = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
+      driverId,
+      date: "2026-05-01",
+    }));
+    assert.equal(denied.status, 422);
+
+    // With reports.read granted, the definition runs under the actor (an
+    // empty scratch ledger previews zero rows, never an error).
+    await db.execute(sql`
+      insert into user_permission_overrides (org_id, user_id, permission, effect)
+      values (${org.orgId}, ${actorId}, 'reports.read', 'grant')`);
+    const ok = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
+      driverId,
+      date: "2026-05-01",
+    }));
+    assert.equal(ok.status, 200);
+    assert.deepEqual(((await ok.json()) as { rows: unknown[] }).rows, []);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);

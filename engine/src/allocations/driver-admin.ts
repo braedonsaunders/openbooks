@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
 import { documentRevisionSql } from "../document-revision.ts";
-import { normalizeDecimal } from "../money.ts";
+import { div, normalizeDecimal } from "../money.ts";
 import type {
   AccountScope,
   AllocationDimension,
   AllocationDriver,
   AllocationDriverSourceKind,
+  DriverVector,
 } from "./types.ts";
 
 /**
@@ -621,4 +622,58 @@ export async function deleteDriverValue(
     await tx.execute(sql`delete from allocation_driver_values where org_id = ${orgId} and id = ${id}`);
     await audit(tx, orgId, "allocation_driver_values", id, "delete", { before }, actorId);
   });
+}
+
+/**
+ * Display names for driver vector keys (dimension value ids). Custom
+ * segments have no fixed label table: the caller falls back to ids.
+ */
+export async function getDimensionValueLabels(
+  orgId: string,
+  dimension: AllocationDimension,
+  ids: string[],
+  executor?: SqlExecutor,
+): Promise<Map<string, string>> {
+  const labels = new Map<string, string>();
+  if (ids.length === 0) return labels;
+  const table =
+    dimension === "department" ? "departments"
+    : dimension === "location" ? "locations"
+    : dimension === "class" ? "classes"
+    : dimension === "project" ? "projects"
+    : dimension === "subsidiary" ? "subsidiaries"
+    : null;
+  if (!table) return labels;
+  const ex = executor ?? db;
+  const rows = await ex.execute<{ id: string; name: string }>(sql`
+    select id::text as id, name from ${sql.raw(table)}
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`);
+  for (const row of rows.rows) labels.set(row.id, row.name);
+  return labels;
+}
+
+/** Exact display shares (4dp, bigint math) for a preview vector. Zero-safe. */
+export function vectorShares(vector: DriverVector): Map<string, string> {
+  const shares = new Map<string, string>();
+  if (vector.size === 0) return shares;
+  let total = "0";
+  for (const value of vector.values()) {
+    const [whole = "0", fraction = ""] = value.split(".");
+    total = addDecimal(total, `${whole}.${(fraction + "0000").slice(0, 4)}`);
+  }
+  for (const [key, value] of vector) {
+    shares.set(key, total === "0.0000" ? "0.0000" : div(value, total));
+  }
+  return shares;
+}
+
+function addDecimal(a: string, b: string): string {
+  const parse = (s: string) => {
+    const [whole = "0", fraction = ""] = s.split(".");
+    return BigInt(whole) * 10000n + BigInt((fraction + "0000").slice(0, 4).padEnd(4, "0"));
+  };
+  const sum = parse(a) + parse(b);
+  const negative = sum < 0n;
+  const abs = negative ? -sum : sum;
+  return `${negative ? "-" : ""}${abs / 10000n}.${String(abs % 10000n).padStart(4, "0")}`;
 }

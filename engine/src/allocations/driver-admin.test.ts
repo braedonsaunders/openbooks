@@ -7,6 +7,7 @@ import {
   validateDriverConfig,
   validateDriverKey,
   validateDriverValueDecimal,
+  vectorShares,
 } from "./driver-admin.ts";
 
 // Pure input validation for the driver registry (A8). Service SQL is covered
@@ -92,6 +93,15 @@ test("manual values keep exact decimals, never negative", () => {
   assert.throws(() => validateDriverValueDecimal("-1"), /negative|>= 0/);
   assert.throws(() => validateDriverValueDecimal("1.23456"), /precision/);
   assert.throws(() => validateDriverValueDecimal("lots"), /decimal/);
+});
+
+test("vector shares are exact decimals, zero-safe", () => {
+  assert.deepEqual(
+    vectorShares(new Map([["a", "1.0000"], ["b", "3.0000"]])),
+    new Map([["a", "0.2500"], ["b", "0.7500"]]),
+  );
+  assert.deepEqual(vectorShares(new Map([["a", "0.0000"]])), new Map([["a", "0.0000"]]));
+  assert.deepEqual(vectorShares(new Map()), new Map());
 });
 
 test("effective windows overlap on shared days", () => {

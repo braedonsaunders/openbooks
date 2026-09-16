@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { projectDriverRows } from "./report-runner.ts";
+import { DriverNotAvailableError } from "./drivers.ts";
+import { projectDriverRows, runDriverReport } from "./report-runner.ts";
 
 const rowsCompiled = {
   mode: "rows" as const,
@@ -93,4 +94,21 @@ test("summarize falls back to the single candidate, else refuses", () => {
     measures: [{ fn: "sum" as const, column: "v" }],
   };
   assert.throws(() => projectDriverRows([{ d0: "x", m0: "7" }], multi, "zzz", "v"), /zzz/);
+});
+
+test("report drivers fail closed without an actor", async () => {
+  await assert.rejects(
+    () =>
+      runDriverReport({
+        orgId: "org-1",
+        reportDefinitionId: "def-1",
+        dimensionColumn: "account_id",
+        valueColumn: "amount",
+        params: {},
+        from: "2026-01-01",
+        to: "2026-12-31",
+        actorId: "",
+      }),
+    (error: unknown) => error instanceof DriverNotAvailableError && /actorId/.test(error.message),
+  );
 });
