@@ -34,6 +34,16 @@ const PACK_MISSIONS: Partial<Record<ContinuousCloseAgentKey, string>> = {
     "Create a reconciliation review. Confirm each match candidate against the statement line and journal leg, and state exactly which sessions can be signed off and which accounts still need a first session.",
   hygiene:
     "Create a data-hygiene review. Verify each master-data gap against the live record and prescribe the exact setup correction and navigation path for every item.",
+  forensics:
+    "Investigate every supplied finding down to its spend document: load the bill, expense, or journal entry behind each item with find_documents, get_document, and find_journal_entries, and decide whether the pattern is genuine exposure or a posting artefact. Cite the document behind every explanation.",
+  tax:
+    "Investigate every supplied finding against the filing surface: re-run tax_return for a blocked return, list_tax_return_forms for coverage, and documents_missing_tax_code for code gaps. Name the exact missing input or engine error behind each flag.",
+  payroll:
+    "Investigate every supplied finding in the pay records: list_pay_runs and payroll_remittances for dues and their bills, list_payroll_employees and payroll_year_end for elections and slip gaps. Tie every amount to its run or remittance group.",
+  projects:
+    "Investigate every supplied finding at the project level: rank_projects and project_profitability for the margin, budget, commitment, and unbilled detail behind each flag. Name the cost, commitment, or unbilled balance driving it and link the project cockpit.",
+  cash:
+    "Investigate every supplied finding against live liquidity: list_open_items and aging for what is due when, cash_flow for the statement view. Tie each crunch or shortfall week to the bills and receipts behind it.",
 };
 
 /** The mission paragraph of the enrichment prompt; packs without an entry keep the close-readiness brief. */
