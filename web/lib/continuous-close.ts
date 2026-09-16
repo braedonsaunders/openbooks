@@ -25,6 +25,7 @@ const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]> = {
   payables: ["ap.read"],
   reconciliation: ["banking.read", "banking.reconcile"],
   hygiene: ["gl.read", "close.read"],
+  forensics: ["gl.read", "close.read"],
 };
 
 /** The read grants that make one agent pack's findings visible. */

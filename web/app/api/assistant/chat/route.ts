@@ -8,8 +8,7 @@ import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { NO_ANSWER_MESSAGE, runAgentTurn } from "../../../../lib/assistant/agent";
 import { buildChatTurn } from "../../../../lib/assistant/registry";
-import { priorToolNames } from "../../../../lib/assistant/tool-router";
-import { ASSISTANT_TOOLS, buildToolRegistryAsync } from "../../../../lib/assistant/registry";
+import { ASSISTANT_TOOLS } from "../../../../lib/assistant/registry";
 import { APPLICATION_TOOLS } from "../../../../lib/application/tool-catalog";
 import { withModelCompaction } from "../../../../lib/assistant/result-compaction";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
@@ -130,18 +129,6 @@ export async function POST(req: Request): Promise<Response> {
 
   const today = await businessToday(authz.user.orgId);
   const features = await resolvedFeatureState(authz.user.orgId);
-  const system = assistantSystemPrompt({
-    orgName: aiConfig?.org?.name ?? null,
-    baseCurrency: org.rows[0]?.base_currency ?? null,
-    userName: authz.user.name,
-    today,
-    fiscal: await orgFiscalContext(today, authz.user.orgId),
-    canWrite: can(authz, "assistant.write"),
-    features,
-  });
-  // Model-facing tool outputs are compacted (history conversion and live
-  // steps); the streamed and persisted parts keep the full results.
-  const tools = withModelCompaction(await buildToolRegistryAsync(authz, features));
   // Static catalog snapshot for the pure b01 module router (payload routing
   // only — gates stay in the registry above).
   const moduleByTool = new Map<string, string>([
@@ -183,8 +170,8 @@ export async function POST(req: Request): Promise<Response> {
     for (const message of historyView) {
       windowPins = foldPartsIntoPins(windowPins, message.parts);
     }
-    const priorToolNames = collectPriorToolNames(historyView);
-    const maxSteps = resolveStepBudget(prompt, priorToolNames, resolveModule);
+    const priorNames = collectPriorToolNames(historyView);
+    const maxSteps = resolveStepBudget(prompt, priorNames, resolveModule);
 
     const system = assistantSystemPrompt({
       orgName: aiConfig?.org?.name ?? null,
@@ -208,7 +195,7 @@ export async function POST(req: Request): Promise<Response> {
     // typed activation) while each step only SENDS core ∪ pre-routed ∪
     // activated tools. Model-facing outputs are compacted; the streamed and
     // persisted parts keep the full results.
-    const turn = await buildChatTurn(authz, features, prompt, priorToolNames(uiMessages));
+    const turn = await buildChatTurn(authz, features, prompt, priorNames);
     const tools = withModelCompaction(turn.tools);
 
     let modelMessages;
