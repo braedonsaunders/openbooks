@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { parseJsonBody } from "../../../../../../lib/api/json";
 import { gateCan, guardAllocations, missingPermission } from "../../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../../lib/list-params";
 import { rerunAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
@@ -24,26 +25,12 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!gateCan(gate, "gl.post")) return missingPermission("gl.post");
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
-  // No body is the common case (the Runs tab re-runs with one click); an
-  // explicit reason travels in an optional JSON body when the caller has one.
-  const raw: unknown = await req.json().catch(() => undefined);
-  let reason = "Re-run requested from the Runs tab";
-  let reversalDate: string | undefined;
-  if (raw !== undefined) {
-    const parsed = rerunBodySchema.safeParse(raw);
-    if (!parsed.success) {
-      const issues = parsed.error.issues.map((issue) => ({
-        path: issue.path.map(String).join("."),
-        message: issue.message,
-      }));
-      return NextResponse.json(
-        { error: issues[0]?.message ?? "invalid body", issues },
-        { status: 400 },
-      );
-    }
-    if (parsed.data.reason !== undefined) reason = parsed.data.reason.trim();
-    reversalDate = parsed.data.reversalDate;
-  }
+  // The Runs tab always posts a JSON object (`{}` for a one-click re-run);
+  // an explicit reason/reversalDate travel in it when the caller has one.
+  const parsedBody = await parseJsonBody(req, rerunBodySchema);
+  if (!parsedBody.ok) return parsedBody.response;
+  const reason = parsedBody.data.reason?.trim() || "Re-run requested from the Runs tab";
+  const reversalDate = parsedBody.data.reversalDate;
   const { run } = await rerunAllocationRun(id, gate.user.id, reason, { reversalDate });
   return NextResponse.json({ runId: run.id });
 }

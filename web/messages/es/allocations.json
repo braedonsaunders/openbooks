@@ -191,13 +191,20 @@
       "filtersHeading": "Filtros por dimensión",
       "filtersUntagged": "Solo líneas sin asignar",
       "filtersUntaggedHint": "Solo coinciden líneas sin valor en las dimensiones marcadas.",
-      "filtersReadonly": "Los filtros de tercero, artículo y segmentos propios de esta versión son de solo lectura aquí.",
       "filters": {
         "department": "Departamentos",
         "location": "Ubicaciones",
         "class": "Clases",
         "project": "Proyectos",
-        "subsidiary": "Subsidiarias"
+        "subsidiary": "Subsidiarias",
+        "party": "Terceros",
+        "item": "Artículos"
+      },
+      "partyRoles": {
+        "vendor": "Proveedores",
+        "customer": "Clientes",
+        "employee": "Empleados",
+        "other": "Otros terceros"
       },
       "accountGroupDimension": "Dimensión del grupo",
       "dynamicMinWeight": "Peso mínimo de la clave",

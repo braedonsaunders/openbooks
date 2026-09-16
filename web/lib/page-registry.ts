@@ -388,6 +388,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/setup/allocations': {
+    route: '/admin/setup/allocations',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/allocations/view')
+      return {
+        load: (input) => m.loadAllocations(input.searchParams ?? {}),
+        spec: (data) => m.allocationsSpec(data as never),
+      }
+    },
+  },
   '/admin/setup/bank-feeds': {
     route: '/admin/setup/bank-feeds',
     segments: [],

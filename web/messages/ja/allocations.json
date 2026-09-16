@@ -191,13 +191,20 @@
       "filtersHeading": "ディメンションフィルター",
       "filtersUntagged": "未付番明細のみ",
       "filtersUntaggedHint": "チェックしたディメンションに値がない明細のみ一致します。",
-      "filtersReadonly": "このバージョンの取引先・品目・カスタムセグメントフィルターはここでは読取専用です。",
       "filters": {
         "department": "部門",
         "location": "拠点",
         "class": "クラス",
         "project": "プロジェクト",
-        "subsidiary": "子会社"
+        "subsidiary": "子会社",
+        "party": "取引先",
+        "item": "品目"
+      },
+      "partyRoles": {
+        "vendor": "仕入先",
+        "customer": "得意先",
+        "employee": "従業員",
+        "other": "その他の取引先"
       },
       "accountGroupDimension": "グループディメンション",
       "dynamicMinWeight": "最小基準ウェイト",

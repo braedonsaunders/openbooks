@@ -31,6 +31,7 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/admin/ai/test/route.ts": "bodyless connectivity test using saved configuration",
   "web/app/api/admin/backups/run/route.ts": "bodyless queue action",
   "web/app/api/admin/scripts/[id]/run/route.ts": "bodyless execution action; script id is a path parameter",
+  "web/app/api/allocations/rules/[id]/versions/[versionId]/publish/route.ts": "bodyless lifecycle action; rule and version ids are path parameters",
   "web/app/api/admin/setup/agents/[agentKey]/run/route.ts": "bodyless execution action; agent pack key is a path parameter",
   "web/app/api/ap-capture/[id]/materialize/route.ts": "bodyless lifecycle action; capture id is a path parameter",
   "web/app/api/ap-capture/route.ts": "multipart document upload",

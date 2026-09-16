@@ -191,13 +191,20 @@
       "filtersHeading": "Dimensionsfilter",
       "filtersUntagged": "Nur Zeilen ohne Zuordnung",
       "filtersUntaggedHint": "Nur Zeilen ohne Wert in den markierten Dimensionen treffen zu.",
-      "filtersReadonly": "Partei-, Artikel- und Segmentfilter dieser Version sind hier schreibgeschützt.",
       "filters": {
         "department": "Abteilungen",
         "location": "Standorte",
         "class": "Klassen",
         "project": "Projekte",
-        "subsidiary": "Tochtergesellschaften"
+        "subsidiary": "Tochtergesellschaften",
+        "party": "Parteien",
+        "item": "Artikel"
+      },
+      "partyRoles": {
+        "vendor": "Lieferanten",
+        "customer": "Kunden",
+        "employee": "Mitarbeitende",
+        "other": "Sonstige Parteien"
       },
       "accountGroupDimension": "Gruppendimension",
       "dynamicMinWeight": "Mindestgewicht des Schlüssels",
