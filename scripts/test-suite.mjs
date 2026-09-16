@@ -32,6 +32,7 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'engine/src/business-date.test.ts',
   'engine/src/close.test.ts',
   'engine/src/conformance/conformance.test.ts',
+  'engine/src/conformance/controls.test.ts',
   'engine/src/control-accounts.test.ts',
   'engine/src/dashboard-reporting.test.ts',
   'engine/src/direct-debit.test.ts',
