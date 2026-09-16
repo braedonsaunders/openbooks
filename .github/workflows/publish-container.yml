@@ -112,7 +112,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify deployment workflow contracts
-        run: node --test scripts/deploy-edge-workflow.test.mjs
+        run: node --test scripts/deploy-edge-workflow.test.mjs scripts/deploy-production-workflow.test.mjs
       - name: Bootstrap a clean release database
         env:
           NODE_ENV: production
@@ -296,3 +296,16 @@ jobs:
           subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.merge.outputs.digest }}
           push-to-registry: true
+
+  # A release tag deploys itself: after the attested publish, the LAN runner
+  # releases the exact digest to the production swarm (deploy-production.yml).
+  # Manual edge publishes never deploy; the `production` environment's
+  # deployment policy additionally refuses any ref that is not a v* tag.
+  deploy:
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/deploy-production.yml
+    with:
+      digest: ${{ needs.publish.outputs.digest }}
+      expected_version: ${{ github.ref_name }}
+    secrets: inherit

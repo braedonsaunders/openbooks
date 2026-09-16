@@ -59,6 +59,37 @@ multiple web/worker replicas. The order is:
 Database, Redis, S3, ingress, secret management, observability, and backup HA
 are external responsibilities in that example.
 
+## Swarm release from CI
+
+The reference swarm installation releases itself from a version tag. Pushing
+`v<version>` runs `publish-container.yml`: the tagged commit must already have
+a green `test` run, both architectures are built and scanned, the merged image
+is attested, and then `deploy-production.yml` runs on the self-hosted runner
+that shares a network with the swarm manager. That job connects to the
+manager over ssh with a dedicated deploy key and executes
+`deploy/swarm-release.sh` for the attested digest: migrations apply first from
+the exact image being released, both service pins swap only if the migration
+chain succeeds, and the job stays red until the health endpoint reports the
+tagged version. Manual edge publishes never deploy.
+
+The deploy job reads its settings from the `production` GitHub environment,
+whose deployment policy admits only `v*` tags:
+
+| setting | kind | value |
+| --- | --- | --- |
+| `PRODUCTION_DEPLOY_SSH_KEY` | secret | private half of a key authorized on the manager with `no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding` |
+| `PRODUCTION_SSH_KNOWN_HOSTS` | variable | the manager's host key line, so an unknown key aborts the release |
+| `PRODUCTION_SSH_HOST` / `PRODUCTION_SSH_USER` | variable | the manager and the account that can run `docker` with `sudo` |
+| `PRODUCTION_HEALTH_URL` | variable | the public `/api/v1/health` URL whose `version` must match the tag |
+
+To re-deploy or roll back to an earlier attested digest, run
+`deploy-production.yml` manually from the release tag ref with the digest and
+the version the health endpoint should report. The release script leaves the
+previous Dokploy compose file and env under
+`/home/<user>/openbooks-deploy-backup-<stamp>/` on the manager; restoring that
+compose file into Dokploy and redeploying is the application-tier rollback
+when no migration changed the schema.
+
 ## Rollback
 
 If bootstrap did not change the schema, reverting the application digest may be
