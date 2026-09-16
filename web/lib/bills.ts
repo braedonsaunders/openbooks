@@ -306,8 +306,11 @@ export async function loadBill(id: string, orgId?: string) {
   if (!doc.rows[0]) return null
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.description, l.amount, l.tax_code_id, l.tax_amount,
-           l.tax_overridden, l.department_id, l.project_id, l.custom
+           l.tax_overridden, l.department_id, l.project_id, l.custom,
+           l.distribution_group_id, l.distribution_rule_id, l.distribution_version_id,
+           l.distribution_locked, ar.name as distribution_rule_name
       from document_lines l
+      left join allocation_rules ar on ar.id = l.distribution_rule_id and ar.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
   `))

@@ -1,4 +1,16 @@
 import 'server-only'
+import { resolveAccountGroups } from '@openbooks/engine/src/account-groups.ts'
+import {
+  EntryAllocationError,
+  loadEntryRuleByKey,
+  planEntryDistributions,
+  type EntryDocumentContext,
+  type EntryLineInput,
+  type EntryPlan,
+  type StoredEntryGroup,
+} from '@openbooks/engine/src/allocations/entry.ts'
+import { listRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
+import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
 import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 export { documentRevisionSql }
@@ -397,8 +409,11 @@ export async function loadDocument(id: string, orgId?: string) {
            l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
            l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
-           l.stock_location_id, l.extra_dims, l.custom
+           l.stock_location_id, l.extra_dims, l.custom,
+           l.distribution_group_id, l.distribution_rule_id, l.distribution_version_id,
+           l.distribution_locked, ar.name as distribution_rule_name
       from document_lines l
+      left join allocation_rules ar on ar.id = l.distribution_rule_id and ar.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
   `))
@@ -430,6 +445,12 @@ export interface DocumentLineInput extends BillLineInput {
   stockLocationId?: string | null
   extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
+  /** Entry-mode allocation: rule key to explode this line (explicit request). */
+  distributionKey?: string | null
+  /** Stored distribution group this submitted line belongs to (re-save matching). */
+  distributionGroupId?: string | null
+  /** True locks the group against re-explosion; false unlocks; absent preserves. */
+  distributionLocked?: boolean | null
 }
 
 /** The header + lines payload for a document edit. Every field is optional; an
@@ -463,6 +484,8 @@ export interface DocumentEditInput {
   currency?: string
   custom?: Record<string, unknown>
   lines?: DocumentLineInput[]
+  /** Stored distribution groups collapsing back to one line each. */
+  unsplitDistributionGroups?: string[]
 }
 
 /** The pre-edit snapshot a caller loads under its own org scope. */
@@ -735,6 +758,199 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
 }
 
 /**
+ * Entry-mode allocation gate. The `allocationsAtEntry` key is owned by the
+ * platform slice (A10); an unknown key resolves false, and any registry
+ * failure fails closed, so entry rules can never fire before the feature
+ * exists. Exported for the data-io import writer, which shares the gate.
+ */
+export async function entryAllocationsEnabled(orgId: string): Promise<boolean> {
+  try {
+    return await isFeatureEnabled(orgId, 'allocationsAtEntry')
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Plan entry-mode distributions for a document save: resolve explicit
+ * distributionKeys (unknown/inactive/wrong-mode keys are clear 422s),
+ * load the entry rules in effect on the document date, preload the account
+ * groups referenced by their scopes, snapshot the stored groups for re-save
+ * matching, and run the pure kernel planner. Returns null when the feature
+ * is off — the submitted lines are then saved untouched.
+ */
+async function planDocumentEntryAllocations(args: {
+  orgId: string
+  documentId: string
+  kind: string
+  documentDate: string
+  header: Pick<
+    DocumentEditInput,
+    'departmentId' | 'projectId' | 'locationId' | 'classId' | 'subsidiaryId'
+  >
+  lines: DocumentLineInput[]
+  unsplitDistributionGroups?: string[]
+}): Promise<EntryPlan | null> {
+  const { orgId } = args
+  if (!(await entryAllocationsEnabled(orgId))) return null
+  const asOf = args.documentDate
+
+  const keys = [
+    ...new Set(
+      args.lines
+        .map((l) => l.distributionKey)
+        .filter((k): k is string => typeof k === 'string' && k.length > 0),
+    ),
+  ]
+  const explicitRules = new Map<string, RuleInEffect>()
+  for (const key of keys) {
+    const lookup = await loadEntryRuleByKey(orgId, key, asOf)
+    if (lookup.status === 'not_found') {
+      throw new DocumentEditError(422, `distributionKey "${key}" does not match an allocation rule`)
+    }
+    if (lookup.status === 'wrong_mode') {
+      throw new DocumentEditError(
+        422,
+        `distributionKey "${key}" is a ${lookup.mode} rule — only entry rules can split document lines`,
+      )
+    }
+    if (lookup.status === 'inactive') {
+      throw new DocumentEditError(
+        422,
+        `distributionKey "${key}" is not active with a published version in effect`,
+      )
+    }
+    explicitRules.set(key, lookup.rule)
+  }
+
+  const rules = await listRulesInEffect({ orgId, mode: 'entry', asOf })
+
+  // Account-group scopes resolve through one preloaded membership map per
+  // referenced (dimension, groupKey) pair, keeping the matcher itself db-free.
+  const needs = new Map<string, { dimension: string; groupKey: string }>()
+  for (const r of [...rules, ...explicitRules.values()]) {
+    const scope = r.version.accountScope
+    if (scope.kind === 'account_group') {
+      needs.set(JSON.stringify([scope.dimension, scope.groupKey]), {
+        dimension: scope.dimension,
+        groupKey: scope.groupKey,
+      })
+    }
+  }
+  let resolveAccountGroup: ((dimension: string, groupKey: string) => Set<string>) | undefined
+  if (needs.size > 0) {
+    const memberships = new Map<string, Set<string>>()
+    for (const need of needs.values()) {
+      const resolved = await resolveAccountGroups(need.dimension, orgId)
+      const members = new Set<string>()
+      for (const [accountId, ref] of resolved.byAccount) {
+        if (ref.key === need.groupKey) members.add(accountId)
+      }
+      memberships.set(JSON.stringify([need.dimension, need.groupKey]), members)
+    }
+    resolveAccountGroup = (dimension, groupKey) =>
+      memberships.get(JSON.stringify([dimension, groupKey])) ?? new Set<string>()
+  }
+
+  // Stored groups for re-save matching: group-level lock is ANY locked
+  // child, and the total is normalized so the planner's exact comparison
+  // cannot trip on numeric scale. Groups without rule stamps (never written
+  // by this path) are left out — their members match fresh below.
+  const existingGroups = new Map<string, StoredEntryGroup>()
+  const stored = await db.execute<{
+    groupId: string
+    ruleId: string | null
+    versionId: string | null
+    locked: boolean
+    total: string
+    memberIds: string[]
+  }>(sql`
+    select distribution_group_id as "groupId",
+           min(distribution_rule_id::text)::uuid as "ruleId",
+           min(distribution_version_id::text)::uuid as "versionId",
+           bool_or(distribution_locked) as "locked",
+           sum(amount)::text as "total",
+           array_agg(id order by line_number) as "memberIds"
+      from document_lines
+     where document_id = ${args.documentId} and org_id = ${orgId}
+       and distribution_group_id is not null
+     group by distribution_group_id
+  `)
+  for (const row of stored.rows) {
+    if (!row.ruleId || !row.versionId) continue
+    existingGroups.set(row.groupId, {
+      groupId: row.groupId,
+      ruleId: row.ruleId,
+      versionId: row.versionId,
+      locked: row.locked === true,
+      total: normalizeMoney(row.total),
+      memberIds: row.memberIds ?? [],
+    })
+  }
+
+  // Header-default dims feed the match coordinate when a line leaves them blank.
+  const headerRow = (
+    await db.execute<{
+      departmentId: string | null
+      projectId: string | null
+      locationId: string | null
+      classId: string | null
+      subsidiaryId: string | null
+    }>(sql`
+      select department_id as "departmentId", project_id as "projectId",
+             location_id as "locationId", class_id as "classId",
+             subsidiary_id as "subsidiaryId"
+        from documents where id = ${args.documentId} and org_id = ${orgId}
+    `)
+  ).rows[0]
+  const docContext: EntryDocumentContext = {
+    kind: args.kind,
+    departmentId: args.header.departmentId ?? headerRow?.departmentId ?? null,
+    projectId: args.header.projectId ?? headerRow?.projectId ?? null,
+    locationId: args.header.locationId ?? headerRow?.locationId ?? null,
+    classId: args.header.classId ?? headerRow?.classId ?? null,
+    subsidiaryId: args.header.subsidiaryId ?? headerRow?.subsidiaryId ?? null,
+    unsplitDistributionGroups: args.unsplitDistributionGroups,
+  }
+  const entryLines: EntryLineInput[] = args.lines.map((l) => ({
+    accountId: l.accountId!,
+    amount: String(l.amount),
+    quantity: l.quantity ?? null,
+    unit: l.unit ?? null,
+    unitPrice: l.unitPrice ?? null,
+    itemId: l.itemId ?? null,
+    description: l.description ?? null,
+    taxCodeId: l.taxCodeId ?? null,
+    taxGroupId: l.taxGroupId ?? null,
+    partyId: l.partyId ?? null,
+    departmentId: l.departmentId ?? null,
+    projectId: l.projectId ?? null,
+    locationId: l.locationId ?? null,
+    classId: l.classId ?? null,
+    subsidiaryId: null,
+    stockLocationId: l.stockLocationId ?? null,
+    extraDims: Object.fromEntries(
+      Object.entries(l.extraDims ?? {}).filter(([, v]) => v !== null && v !== undefined),
+    ) as Record<string, string>,
+    custom: l.custom ?? {},
+    isBillable: null,
+    distributionKey: l.distributionKey ?? null,
+    distributionGroupId: l.distributionGroupId ?? null,
+    distributionLocked: l.distributionLocked ?? null,
+  }))
+  try {
+    return planEntryDistributions(docContext, entryLines, rules, {
+      explicitRules,
+      existingGroups,
+      resolveAccountGroup,
+    })
+  } catch (error) {
+    if (error instanceof EntryAllocationError) throw new DocumentEditError(422, error.message)
+    throw error
+  }
+}
+
+/**
  * A document-layer signature of everything that shapes a posting document's GL
  * impact. Comparing before vs after a save tells us whether the edit was
  * GL-affecting WITHOUT assuming the stored entry was produced by our own
@@ -882,8 +1098,12 @@ export async function applyDocumentEdit(
   // Pre-validate + prepare lines before touching the DB, so a bad line fails
   // without a partial write.
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
+  // Entry-mode distribution plan for this save (null when the feature is off
+  // or no lines were submitted). Declared beside preparedLines so the write
+  // transaction below can persist its stamps and lineage rows.
+  let entryPlan: EntryPlan | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -957,6 +1177,19 @@ export async function applyDocumentEdit(
         throw new DocumentEditError(404, `Line ${lineNumber}: ${def.label} not found in this organization`)
       }
     }
+    // Allocation kernel, entry mode: explode distribution lines BEFORE totals
+    // + tax so every child is taxed as its own real line. A null plan means
+    // the feature is off and the submitted lines are saved untouched.
+    entryPlan = await planDocumentEntryAllocations({
+      orgId,
+      documentId: id,
+      kind: current.kind,
+      documentDate: body.documentDate ?? current.documentDate,
+      header: body,
+      lines: body.lines,
+      unsplitDistributionGroups: body.unsplitDistributionGroups,
+    })
+    const linesForTotals: DocumentLineInput[] = entryPlan ? entryPlan.lines : body.lines
     // Validate, don't filter. The old `filter((l) => l.accountId && cmp(l.amount, '0') > 0)`
     // dropped negative and zero lines before the totals were computed, so any
     // edit of a document carrying one rewrote it without that line — the
@@ -965,12 +1198,15 @@ export async function applyDocumentEdit(
     // submitted (the tax engine handles signed bases) or fails closed with a
     // 422 naming the offending line.
     let computed: Awaited<ReturnType<typeof computeBillTotalsWithProvider>>
-    if (ctx.precomputedTotals) {
+    // An explosion changes the line set the totals were precomputed for (and
+    // taxes every child individually), so a structural change always
+    // recomputes instead of reusing the create-path preflight.
+    if (ctx.precomputedTotals && !entryPlan?.exploded) {
       computed = ctx.precomputedTotals
     } else {
       try {
         computed = await computeBillTotalsWithProvider(
-          validateEditableDocumentLines(body.lines),
+          validateEditableDocumentLines(linesForTotals),
           await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
           {
             orgId,
@@ -1022,6 +1258,10 @@ export async function applyDocumentEdit(
       if (amount === null) {
         throw new DocumentEditError(422, `Line ${i + 1}: amount is not a valid amount`)
       }
+      // Entry-mode stamps ride the planned line by index: computed lines
+      // preserve the input order, so the i-th planned line stamps the i-th
+      // prepared line (nulls when the feature is off or the line stayed plain).
+      const stamp = entryPlan?.lines[i]
       preparedLines.push({
         accountId: l.accountId!,
         itemId: l.itemId ?? null,
@@ -1045,6 +1285,10 @@ export async function applyDocumentEdit(
         stockLocationId: l.stockLocationId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
+        distributionGroupId: stamp?.distributionGroupId ?? null,
+        distributionRuleId: stamp?.distributionRuleId ?? null,
+        distributionVersionId: stamp?.distributionVersionId ?? null,
+        distributionLocked: stamp?.distributionLocked ?? false,
       })
     }
   }
@@ -1118,6 +1362,7 @@ export async function applyDocumentEdit(
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
+        const insertedLineIds: string[] = []
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
           const inserted = (await tx.execute<{ id: string }>(sql`
@@ -1125,14 +1370,19 @@ export async function applyDocumentEdit(
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
                                         tax_amount, tax_overridden,
                                         party_id, department_id, project_id, location_id, class_id,
-                                        stock_location_id, extra_dims, custom)
+                                        stock_location_id, extra_dims, custom,
+                                        distribution_group_id, distribution_rule_id, distribution_version_id,
+                                        distribution_locked)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden},
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
-                    ${l.stockLocationId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
+                    ${l.stockLocationId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)},
+                    ${l.distributionGroupId}, ${l.distributionRuleId}, ${l.distributionVersionId},
+                    ${l.distributionLocked})
             returning id
           `))
+          insertedLineIds.push(inserted.rows[0]!.id)
           await persistLineTaxComponents(tx, {
             orgId,
             documentLineId: inserted.rows[0]!.id,
@@ -1152,6 +1402,32 @@ export async function applyDocumentEdit(
               update tax_rate_provider_configs
                  set last_attempt_at = now(), last_success_at = now(), last_error = null
                where id = ${l.providerQuote.providerConfigId} and org_id = ${orgId}
+            `)
+          }
+        }
+        // Entry-mode lineage rows land in the same transaction as the child
+        // lines they explain: mode 'entry' anchored on the document, with
+        // the replaced source line (regenerations) and the new child target.
+        if (entryPlan && entryPlan.lineage.length > 0) {
+          for (const row of entryPlan.lineage) {
+            const childId = insertedLineIds[row.targetLineIndex]
+            if (!childId) {
+              throw new Error(
+                `entry allocation lineage pointed past the inserted lines (index ${row.targetLineIndex})`,
+              )
+            }
+            if (!row.definitionHash) {
+              throw new Error('entry allocation lineage is missing its definition hash')
+            }
+            await tx.execute(sql`
+              insert into allocation_lineage
+                (org_id, mode, rule_id, version_id, definition_hash, document_id,
+                 source_document_line_id, target_document_line_id, driver_id,
+                 driver_value, driver_total, share, amount, residual)
+              values (${orgId}, 'entry', ${row.ruleId}, ${row.versionId}, ${row.definitionHash}, ${id},
+                      ${row.sourceDocumentLineId ?? null}, ${childId}, ${row.driverId ?? null},
+                      ${row.driverValue ?? null}, ${row.driverTotal ?? null}, ${row.share ?? null},
+                      ${row.amount}, ${row.residual})
             `)
           }
         }
