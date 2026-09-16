@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { postProjectGlEntry } from "../project-recognition.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -64,6 +65,85 @@ test("report runner honors canonical feature defaults (timeTracking on unless di
       actorId: actor,
     });
     assert.deepEqual(rows, [{ dimension: "Crew A", value: "8.0000" }]);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("report runner refuses evidence that reaches the query row cap instead of truncating", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await seedReportsReader(org.orgId);
+    await postProjectGlEntry({
+      orgId: org.orgId,
+      actorId: actor,
+      origin: "manual",
+      entryNumber: `TRUNC-SEED-${randomUUID()}`,
+      postingDate: org.date,
+      memo: "Truncation probe pool",
+      subsidiaryId: org.subsidiaryId,
+      currency: "CAD",
+      lines: [
+        { accountId: org.accounts.adjustment, amount: "100.0000" },
+        { accountId: org.accounts.bank, amount: "-100.0000" },
+      ],
+    });
+    // One matching row against a limit-1 display query: the runner cannot
+    // prove completeness, so it must refuse with a named error — a truncated
+    // weight vector would apportion real money on partial inputs.
+    const cappedId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${cappedId}, ${org.orgId}, 'custom', 'driver-capped-test', 'Driver capped test', 'query',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          mode: "rows",
+          columns: ["account_id", "debit"],
+          limit: 1,
+          filters: {
+            combinator: "and",
+            rules: [{ field: "account_id", op: "eq", value: org.accounts.adjustment }],
+          },
+        })}::jsonb)`);
+    await assert.rejects(
+      runDriverReport({
+        orgId: org.orgId,
+        reportDefinitionId: cappedId,
+        dimensionColumn: "account_id",
+        valueColumn: "debit",
+        params: {},
+        from: org.date,
+        to: org.date,
+        actorId: actor,
+      }),
+      (error: unknown) => error instanceof DriverNotAvailableError && /driver_evidence_truncated/.test(error.message),
+    );
+    // The same evidence under a roomy limit resolves normally.
+    const roomyId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${roomyId}, ${org.orgId}, 'custom', 'driver-roomy-test', 'Driver roomy test', 'query',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          mode: "rows",
+          columns: ["account_id", "debit"],
+          limit: 100,
+          filters: {
+            combinator: "and",
+            rules: [{ field: "account_id", op: "eq", value: org.accounts.adjustment }],
+          },
+        })}::jsonb)`);
+    const rows = await runDriverReport({
+      orgId: org.orgId,
+      reportDefinitionId: roomyId,
+      dimensionColumn: "account_id",
+      valueColumn: "debit",
+      params: {},
+      from: org.date,
+      to: org.date,
+      actorId: actor,
+    });
+    assert.deepEqual(rows, [{ dimension: org.accounts.adjustment, value: "100.0000" }]);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
