@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { settleCumulativeRetainage } from "./currencies.ts";
+import { roundCurrencyMoney, settleCumulativeRetainage } from "./currencies.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
@@ -290,6 +290,65 @@ async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promi
   return r.rows[0]?.acct ?? null;
 }
 
+/** Resolve a currency's ISO minor units from the tenant registry. Fail closed:
+ * without a registered quantum there is no rounding policy to settle with. */
+async function retainageCurrencyMinorUnits(tx: SqlExecutor, currency: string): Promise<number> {
+  const row = (await tx.execute<{ minor_units: number }>(sql`
+    select minor_units from currencies where code = ${currency}
+  `)).rows[0];
+  if (!row || !Number.isInteger(row.minor_units)) {
+    throw new ConstructionBillingError(
+      `Currency ${currency} is not in the currency registry — add it before billing retainage`,
+    );
+  }
+  return row.minor_units;
+}
+
+/**
+ * Settlement basis for one draw: the project currency's minor units plus the
+ * exact retainage of already-settled draws, oldest first, so the residual
+ * carries across draws and the settled total is the rounded cumulative amount
+ * exactly. The replay set (lower application numbers, never voided) is stable
+ * between submit and invoice generation: later applications take higher
+ * numbers, and voiding a billed draw returns it to approved rather than
+ * removing it. Percents are the stored per-line values with the same
+ * application fallback the draw math uses, so the replay reproduces history.
+ */
+async function projectRetainageSettlement(
+  tx: SqlExecutor,
+  orgId: string,
+  projectId: string,
+  currentApplicationNumber: number,
+): Promise<{ minorUnits: number; priorExactRetainage: string[] }> {
+  const scope = (await tx.execute<{ currency: string | null }>(sql`
+    select coalesce(nullif(trim(s.base_currency), ''), o.base_currency) as currency
+      from projects p
+      join orgs o on o.id = p.org_id
+      left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
+     where p.org_id = ${orgId} and p.id = ${projectId}
+  `)).rows[0];
+  if (!scope?.currency) {
+    throw new ConstructionBillingError("Retainage settlement requires a project currency");
+  }
+  const minorUnits = await retainageCurrencyMinorUnits(tx, scope.currency);
+  const prior = (await tx.execute<{ work: string; stored: string; prev_stored: string; percent: string }>(sql`
+    select pal.this_period_completed::text as work, pal.materials_stored::text as stored,
+           pal.previous_materials_stored::text as prev_stored,
+           coalesce(sl.retainage_percent, pa.retainage_percent)::text as percent
+      from pay_application_lines pal
+      join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
+      join sov_lines sl on sl.id = pal.sov_line_id and sl.org_id = pal.org_id
+     where pal.org_id = ${orgId} and pa.project_id = ${projectId}
+       and pa.application_number < ${currentApplicationNumber} and pa.status <> 'void'
+     order by pa.application_number, sl.sort_order
+  `)).rows;
+  const priorExactRetainage = prior.map((row) => {
+    const gross = add(row.work, add(row.stored, neg(row.prev_stored)));
+    return cmp(row.percent, "0") > 0 ? mulPercent(gross, row.percent) : "0.0000";
+  });
+  return { minorUnits, priorExactRetainage };
+}
+
 /** Shared held balance for the release boundary and its overview. Amounts are
  * in the journal LINE entity's functional currency, regardless of txn currency.
  * A scalar primary-book lookup deliberately refuses ambiguous configuration. */
@@ -411,8 +470,8 @@ export async function submitPayApplication(
 ): Promise<ComputedApplication> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const appRes = (await tx.execute<{ id: string; project_id: string; status: string; retainage_percent: string }>(sql`
-      select id, project_id, status, retainage_percent
+    const appRes = (await tx.execute<{ id: string; project_id: string; status: string; retainage_percent: string; application_number: number }>(sql`
+      select id, project_id, status, retainage_percent, application_number
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
     `));
     const app = appRes.rows[0];
@@ -448,6 +507,7 @@ export async function submitPayApplication(
        where pal.pay_application_id = ${payAppId} and pal.org_id = ${orgId}
        order by sl.sort_order
     `));
+    const settlement = await projectRetainageSettlement(tx, orgId, app.project_id, app.application_number);
     const computed = computeApplication(linesRes.rows.map((line) => ({
       sovLineId: line.sov_line_id,
       scheduledValue: String(line.scheduled_value ?? "0"),
@@ -456,7 +516,7 @@ export async function submitPayApplication(
       thisPeriodCompleted: String(line.this_period_completed ?? "0"),
       materialsStored: String(line.materials_stored ?? "0"),
       retainagePercent: line.retainage_percent != null ? String(line.retainage_percent) : app.retainage_percent,
-    })));
+    })), settlement);
     if (cmp(computed.grossThisPeriod, "0") <= 0) throw new ConstructionBillingError("Enter work completed before submitting");
     await tx.execute(sql`
       update pay_applications
@@ -576,6 +636,7 @@ export async function generatePayApplicationInvoice(
        order by sl.sort_order
     `));
 
+    const settlement = await projectRetainageSettlement(tx, orgId, app.project_id, app.application_number);
     const computed = computeApplication(
       linesRes.rows.map((l) => ({
         sovLineId: l.sov_line_id,
@@ -586,6 +647,7 @@ export async function generatePayApplicationInvoice(
         materialsStored: String(l.materials_stored ?? "0"),
         retainagePercent: l.retainage_percent != null ? String(l.retainage_percent) : String(app.retainage_percent),
       })),
+      settlement,
     );
 
     if (cmp(computed.grossThisPeriod, "0") === 0) {
@@ -748,6 +810,14 @@ export async function releaseRetainage(
     }
     const available = add(String(balance.rows[0]?.held ?? "0"), neg(String(balance.rows[0]?.reserved ?? "0")));
     if (cmp(exactAmount, available) > 0) throw new ConstructionBillingError("Release amount exceeds available retained funds");
+    // Collectible totals obey the currency policy: settled draws hold whole
+    // minor units, so a fractional release could never reconcile exactly.
+    const releaseMinorUnits = await retainageCurrencyMinorUnits(tx, subsidiary.currency);
+    if (cmp(roundCurrencyMoney(exactAmount, releaseMinorUnits), exactAmount) !== 0) {
+      throw new ConstructionBillingError(
+        `Release amount must be in whole minor units of ${subsidiary.currency} (${releaseMinorUnits} decimals)`,
+      );
+    }
 
     const documentNumber = await nextNumber(tx, orgId, "customer_invoice", "INV-");
     const invoice = (await tx.execute<{ id: string }>(sql`

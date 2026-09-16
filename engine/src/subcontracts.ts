@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { settleCumulativeRetainage } from "./currencies.ts";
+import { roundCurrencyMoney, settleCumulativeRetainage } from "./currencies.ts";
 import { businessToday } from "./business-date.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
@@ -754,7 +754,48 @@ export async function updateVendorPayApplicationLines(input: {
   });
 }
 
+/** Resolve a currency's ISO minor units from the tenant registry. Fail closed:
+ * without a registered quantum there is no rounding policy to settle with. */
+async function retainageCurrencyMinorUnits(tx: SqlExecutor, currency: string): Promise<number> {
+  const row = (await tx.execute<{ minor_units: number }>(sql`
+    select minor_units from currencies where code = ${currency}
+  `)).rows[0];
+  if (!row || !Number.isInteger(row.minor_units)) {
+    throw new SubcontractError(
+      `Currency ${currency} is not in the currency registry — add it before billing retainage`,
+    );
+  }
+  return row.minor_units;
+}
+
 async function computeApplicationTx(tx: SqlExecutor, orgId: string, payApplicationId: string): Promise<ComputedVendorApplication> {
+  const meta = (await tx.execute<{ application_number: number; subcontract_id: string; currency: string | null }>(sql`
+    select a.application_number, a.subcontract_id, s.currency
+      from vendor_pay_applications a
+      join subcontracts s on s.id = a.subcontract_id and s.org_id = a.org_id
+     where a.org_id = ${orgId} and a.id = ${payApplicationId}
+  `)).rows[0];
+  if (!meta) throw new SubcontractError("Vendor application not found");
+  if (!meta.currency) throw new SubcontractError("Retainage settlement requires a subcontract currency");
+  const minorUnits = await retainageCurrencyMinorUnits(tx, meta.currency);
+  // Replay the exact retainage of already-settled draws, oldest first, so the
+  // residual carries across draws. The replay set (lower application numbers,
+  // never voided) is stable between submit and bill generation: later draws
+  // take higher numbers, and voiding a billed draw returns it to approved
+  // rather than removing it.
+  const prior = (await tx.execute<{ gross: string; percent: string }>(sql`
+    select (l.work_completed_this_period + l.materials_stored_current - l.previous_materials_stored)::text as gross,
+           l.retainage_percent::text as percent
+      from vendor_pay_application_lines l
+      join vendor_pay_applications a on a.id = l.pay_application_id and a.org_id = l.org_id
+      join subcontract_sov_lines s on s.id = l.sov_line_id and s.org_id = l.org_id
+     where l.org_id = ${orgId} and a.subcontract_id = ${meta.subcontract_id}
+       and a.application_number < ${meta.application_number} and a.status <> 'void'
+     order by a.application_number, s.sort_order
+  `)).rows;
+  const priorExactRetainage = prior.map((row) =>
+    cmp(row.gross, "0") > 0 && cmp(row.percent, "0") > 0 ? mulPercent(row.gross, row.percent) : "0.0000",
+  );
   const result = (await tx.execute<any>(sql`
     select l.sov_line_id, s.scheduled_value, l.previous_earned, l.previous_materials_stored,
            l.work_completed_this_period, l.materials_stored_current, l.retainage_percent
@@ -772,7 +813,7 @@ async function computeApplicationTx(tx: SqlExecutor, orgId: string, payApplicati
     workCompletedThisPeriod: row.work_completed_this_period,
     materialsStoredCurrent: row.materials_stored_current,
     retainagePercent: row.retainage_percent,
-  })));
+  })), { minorUnits, priorExactRetainage });
 }
 
 export async function submitVendorPayApplication(orgId: string, userId: string, id: string): Promise<ComputedVendorApplication> {
@@ -941,6 +982,14 @@ export async function releaseVendorRetainage(input: {
     `));
     const available = add(balance.rows[0]?.held ?? "0", neg(balance.rows[0]?.released ?? "0"));
     if (cmp(amount, available) > 0) throw new SubcontractError("Release exceeds posted retainage currently held");
+    // Payable totals obey the currency policy: settled draws hold whole minor
+    // units, so a fractional release could never reconcile exactly.
+    const releaseMinorUnits = await retainageCurrencyMinorUnits(tx, row.currency);
+    if (cmp(roundCurrencyMoney(amount, releaseMinorUnits), amount) !== 0) {
+      throw new SubcontractError(
+        `Release amount must be in whole minor units of ${row.currency} (${releaseMinorUnits} decimals)`,
+      );
+    }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, "BILL-");
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
