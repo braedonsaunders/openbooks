@@ -257,6 +257,7 @@ export interface PartnerStatementResult {
   closing: ExactDecimal
   lines: RegisterLine[]
   aging: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal }
+  truncated: boolean
 }
 
 /** Account statement for a single party: opening balance on the control
@@ -299,6 +300,7 @@ export async function partnerStatement(
     closing: p?.closing ?? opening,
     lines: p?.lines ?? [],
     aging: agingTotals,
+    truncated: reg.truncated,
   }
 }
 
