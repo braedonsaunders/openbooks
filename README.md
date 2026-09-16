@@ -699,10 +699,18 @@ Release verification:
 npm run verify:release
 ```
 
-The gate type-checks every workspace, runs unit and database-integration tests
-when a database is configured, and creates a production build. GitHub Actions
-also runs a PostgreSQL-backed integration canary, full integration suite,
-coverage, and Playwright browser smoke tests.
+The gate type-checks every workspace, runs the full unit and
+database-integration suite (`npm test`; database-backed tests execute when
+`OPENBOOKS_DB_URL` points at a bootstrapped scratch database and skip
+otherwise), and creates a production build. For the fast path without the
+suite:
+
+```bash
+npm run verify:release:quick
+```
+
+GitHub Actions also runs a PostgreSQL-backed integration canary, full
+integration suite, coverage, and Playwright browser smoke tests.
 
 The release suite covers ledger, posting, payment, banking, close, tax,
 fixed-asset, inventory, project, workflow, reporting, security boundaries, and
