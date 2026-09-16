@@ -7,7 +7,7 @@ import {
   recordConnectionError,
   webConnectorLastError,
 } from '@openbooks/engine/src/qbd/bridge.ts'
-import { firstNode, parseXml, xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
+import { firstNode, hasNode, parseXml, xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
 import { readBoundedBodyText } from '../../../../../lib/bounded-body'
 
 export const runtime = 'nodejs'
@@ -63,9 +63,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return fault('Malformed SOAP XML')
   }
 
-  if (firstNode(parsed, 'serverVersion')) return scalar('serverVersion', '1.0.0')
-  const clientVersion = firstNode(parsed, 'clientVersion')
-  if (clientVersion) return scalar('clientVersion', '')
+  // Presence-dispatched: handshake elements are childless or text-only, so
+  // firstNode (object-valued nodes only) never matches them.
+  if (hasNode(parsed, 'serverVersion')) return scalar('serverVersion', '1.0.0')
+  if (hasNode(parsed, 'clientVersion')) return scalar('clientVersion', '')
 
   const auth = firstNode(parsed, 'authenticate')
   if (auth) {

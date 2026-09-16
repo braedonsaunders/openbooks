@@ -186,6 +186,21 @@ export function firstNode<T extends Record<string, unknown> = Record<string, unk
   return found;
 }
 
+/**
+ * Element-presence check for dispatching on childless or text-only elements.
+ * firstNode only matches object-valued nodes (elements with children or
+ * attributes), so handshake elements such as `<serverVersion/>` or
+ * `<clientVersion>1.5</clientVersion>` never match it and would fall through
+ * to the unsupported-method fault. Presence is all the dispatcher needs.
+ */
+export function hasNode(parsed: unknown, suffix: string): boolean {
+  if (Array.isArray(parsed)) return parsed.some((item) => hasNode(item, suffix));
+  if (!parsed || typeof parsed !== "object") return false;
+  return Object.keys(parsed as Record<string, unknown>).some(
+    (key) => key.endsWith(suffix) || hasNode((parsed as Record<string, unknown>)[key], suffix),
+  );
+}
+
 export function nodes<T extends Record<string, unknown> = Record<string, unknown>>(parsed: unknown, suffix: string): T[] {
   const out: T[] = [];
   const collect = (value: unknown): void => {

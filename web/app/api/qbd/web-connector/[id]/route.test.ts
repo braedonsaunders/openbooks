@@ -59,3 +59,19 @@ test("an empty body faults instead of crashing", async () => {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /soap:Fault/);
 });
+
+function soapEnvelope(inner: string): string {
+  return `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>${inner}</soap:Body></soap:Envelope>`;
+}
+
+test("the version handshake is answered, not faulted", async () => {
+  const version = await post(soapEnvelope("<serverVersion/>"));
+  assert.equal(version.status, 200);
+  assert.match(await version.text(), /<serverVersionResult>1\.0\.0<\/serverVersionResult>/);
+});
+
+test("the client version handshake is answered, not faulted", async () => {
+  const client = await post(soapEnvelope('<clientVersion>1.5</clientVersion>'));
+  assert.equal(client.status, 200);
+  assert.match(await client.text(), /<clientVersionResult><\/clientVersionResult>/);
+});
