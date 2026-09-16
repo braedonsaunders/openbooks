@@ -29,7 +29,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'agents-briefing-actions': { props: [], open: true },
   'agents-briefing-body': { props: ['text'] },
   'agents-kpi-strip': { props: ['items'] },
-  'agents-pack-actions': { props: ['agentKey', 'enabled', 'featureEnabled', 'packTitle', 'policy'] },
+  'agents-pack-actions': { props: ['agentKey', 'configureHref', 'configureLabel', 'enabled', 'featureEnabled', 'packTitle', 'policy'] },
   'agents-pack-card': { props: ['agentKey', 'checksNote', 'checksTitle', 'configureHref', 'configureLabel', 'description', 'detectors', 'featureEnabled', 'installLabel', 'installPolicy', 'installed', 'installedLabel', 'moduleLine', 'name', 'needsLabel', 'permissions', 'proposes', 'proposesLabel', 'reads', 'readsLabel'] },
   'agents-pack-last-run': { props: ['dateLine', 'hasRun', 'nextLine', 'statusLabel', 'statusVariant'] },
   'agents-policy-form': { props: ['description', 'featureEnabled', 'notification', 'pack', 'roles', 'runLine', 'specs', 'statusEnabled', 'statusLabel', 'users', 'usersTruncated'] },

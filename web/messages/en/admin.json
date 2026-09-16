@@ -1567,7 +1567,6 @@
           "schedule": "Schedule",
           "lastRun": "Last run",
           "findings": "Findings",
-          "policy": "Policy",
           "actions": "Actions"
         },
         "kpis": {
