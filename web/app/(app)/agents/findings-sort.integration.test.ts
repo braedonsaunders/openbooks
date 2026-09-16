@@ -124,6 +124,7 @@ test('workbench loader serves the list source sort, filters, and row shape', { s
       assert.equal(ranked.rows[0]?.due, '');
       assert.equal(ranked.rows.find((r) => r.id === lateId)?.due, 'facets.overdue');
       assert.deepEqual(ranked.sinceOptions.map((o) => o.value), ['day', 'week']);
+      assert.equal(ranked.triageHint, 'triage.hint');
       // Header KPIs: open count, proposals, overdue with the bad tone, and
       // the never label with no runs recorded.
       assert.deepEqual(ranked.kpis.map((k) => k.label), ['kpis.open', 'kpis.proposals', 'kpis.overdue', 'kpis.lastRun']);

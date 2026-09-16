@@ -155,6 +155,8 @@ export interface AgentsData {
     errorLabels: Record<string, string>
   }
   inboxEmpty: boolean
+  /** Localized keyboard-helper sentence for the paging row. */
+  triageHint: string
   proposalsEmpty: boolean
   proposalsEmptyTitle: string
   proposalsEmptyDescription: string
@@ -423,6 +425,7 @@ export async function loadAgents(
       },
     },
     inboxEmpty: !proposalsOnly && !briefingMode && inbox.total === 0,
+    triageHint: t('triage.hint'),
     proposalsEmpty: proposalsOnly && !briefingMode && inbox.total === 0,
     proposalsEmptyTitle: t('lane.emptyTitle'),
     proposalsEmptyDescription: t('lane.emptyDescription'),
@@ -629,13 +632,16 @@ export function agentsSpec(data: AgentsData): PageSpec {
         when: f('findingsPresent'),
       },
       {
-        ...pagination({
-          basePath: '/agents',
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
-          bare: true,
-        }),
+        ...grid('mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2', [
+          pagination({
+            basePath: '/agents',
+            total: f('total'),
+            page: f('currentPage'),
+            perPage: f('perPage'),
+            bare: true,
+          }),
+          widgetBlock('agents-triage-hint', { text: data.triageHint }),
+        ]),
         when: f('findingsPresent'),
       },
       { ...widgetBlock('work-item-drawer', { drawer: data.itemDrawer }), when: f('itemDrawerOpen') },

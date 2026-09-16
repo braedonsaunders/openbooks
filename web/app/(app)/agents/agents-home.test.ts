@@ -22,6 +22,10 @@ test("agents home loads through the shared inbox resolver", () => {
   assert.match(view, /\.\.\.findings\.filters,/);
   assert.match(view, /widgetBlock\('agents-triage-keys'/);
   assert.doesNotMatch(view, /widgetBlock\('agents-triage',/);
+  // The keyboard helper lives on the paging row with kbd-styled keys —
+  // never loose text above the KPIs.
+  assert.match(view, /widgetBlock\('agents-triage-hint', \{ text: data\.triageHint \}\)/);
+  assert.doesNotMatch(island, /t\('triage\.hint'\)/);
   assert.match(view, /widgetBlock\('work-item-drawer'/);
   assert.match(view, /findingProposalCommand\(authz, selected\.summary\)/);
   assert.match(view, /findingSummaryLine\(/);

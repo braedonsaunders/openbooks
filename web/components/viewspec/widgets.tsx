@@ -1351,6 +1351,32 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'agents-triage-keys': (props) => (
     <AgentsTriageKeys {...(props as unknown as ComponentProps<typeof AgentsTriageKeys>)} />
   ),
+  /** Muted keyboard helper for the paging row (never above the KPIs). The
+   *  loader computed the localized sentence; this only binds the key caps —
+   *  the first token of each ·-separated part — in the house kbd style. */
+  'agents-triage-hint': (props) => {
+    const text = str(props, 'text')
+    if (!text) return null
+    return (
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {text.split('·').map((part, index) => {
+          const trimmed = part.trim()
+          const space = trimmed.indexOf(' ')
+          const key = space === -1 ? trimmed : trimmed.slice(0, space)
+          const rest = space === -1 ? '' : trimmed.slice(space)
+          return (
+            <Fragment key={index}>
+              {index > 0 ? ' · ' : null}
+              <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                {key}
+              </kbd>
+              {rest}
+            </Fragment>
+          )
+        })}
+      </p>
+    )
+  },
   /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
    *  the stat-tile block's (same arrangement as `equipment-kpi-strip`). */
   'agents-kpi-strip': (props) => (
