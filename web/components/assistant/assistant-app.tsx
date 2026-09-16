@@ -42,6 +42,7 @@ import {
   formatMessageTimestamp,
   MESSAGE_PAGE_SIZE,
   reconcileThreadAfterStop,
+  TITLE_REFRESH_DELAY_MS,
   withLastAssistantParts,
 } from './thread-state'
 
@@ -123,6 +124,18 @@ export function AssistantApp({
   // Threads this client created whose id the server list may not know yet.
   // They stay pinned at the top of the sidebar until a refresh confirms them.
   const provisionalIdsRef = useRef<Set<string>>(new Set())
+  // Only a thread's first completed turn can change its title (later turns
+  // leave it alone), so only that turn schedules the delayed title refresh.
+  const firstTurnRef = useRef(initialMessages.length === 0)
+  const titleRefreshTimerRef = useRef<number | null>(null)
+
+  // A refresh timer must never fire after unmount.
+  useEffect(() => {
+    const timer = titleRefreshTimerRef
+    return () => {
+      if (timer.current !== null) window.clearTimeout(timer.current)
+    }
+  }, [])
   // Long-history paging: whether a page exists above the visible head. A full
   // first page optimistically shows the button; the first probe or page load
   // resolves the truth (a thread of exactly one page hides it again).
@@ -333,6 +346,24 @@ export function AssistantApp({
         setStreaming(false)
         if (abortRef.current === ac) abortRef.current = null
         void refreshConversations()
+        // The server generates the thread title after the stream closes, so
+        // the refresh above usually still shows the placeholder: one delayed
+        // second pass picks the generated title up. Bounded to the thread's
+        // first turn — the only turn that can change the title.
+        if (
+          resolvedConversationId &&
+          producedParts &&
+          completedNormally &&
+          !ac.signal.aborted &&
+          firstTurnRef.current &&
+          titleRefreshTimerRef.current === null
+        ) {
+          firstTurnRef.current = false
+          titleRefreshTimerRef.current = window.setTimeout(() => {
+            titleRefreshTimerRef.current = null
+            void refreshConversations()
+          }, TITLE_REFRESH_DELAY_MS)
+        }
       }
     },
     [aiEnabled, currentId, findingId, probeHasOlder, refreshConversations, scrollToBottom, t],

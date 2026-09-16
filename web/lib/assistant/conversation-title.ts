@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { generateText, type LanguageModel } from "ai";
 import { db } from "@openbooks/engine/src/db.ts";
 import type { Authz } from "../authz";
-import { isMissingMetadataColumn } from "./conversation-memory";
+import { countConversationAssistantTurns, isMissingMetadataColumn } from "./conversation-memory";
 
 /**
  * Auto titles for assistant threads: the 60-char prompt slice stored at
@@ -154,6 +154,53 @@ export async function markTitleRenamed(authz: Authz, conversationId: string): Pr
       console.warn("[assistant/title] failed to record user rename", error);
     }
   }
+}
+
+/** Seams for the post-close scheduler's unit test (production defaults hit the DB/model). */
+export type AutoTitleDeps = {
+  countTurns?: (authz: Authz, conversationId: string) => Promise<number>;
+  readState?: (authz: Authz, conversationId: string) => Promise<TitleState | null>;
+  generate?: typeof generateText;
+  write?: (authz: Authz, conversationId: string, title: string) => Promise<boolean>;
+};
+
+/**
+ * Fire-and-forget auto title for AFTER the stream closes. Returns
+ * immediately — the SSE stream (and the composer's locked state) never waits
+ * for the title round-trip, which carries its own bounded tokens and hard
+ * timeout inside. All failures resolve to keeping the placeholder; a user
+ * rename still wins via shouldAttemptAutoTitle. Never throws.
+ */
+export function scheduleAutoTitle(args: {
+  authz: Authz;
+  conversationId: string;
+  prompt: string;
+  assistantContent: string;
+  model: LanguageModel | null;
+  deps?: AutoTitleDeps;
+}): void {
+  if (!args.model) return;
+  const model = args.model;
+  const deps = args.deps ?? {};
+  void (async () => {
+    try {
+      const countTurns = deps.countTurns ?? countConversationAssistantTurns;
+      const readState = deps.readState ?? readTitleState;
+      const write = deps.write ?? writeAutoTitle;
+      const turns = await countTurns(args.authz, args.conversationId);
+      const state = await readState(args.authz, args.conversationId);
+      if (!shouldAttemptAutoTitle(state, turns)) return;
+      const title = await generateConversationTitle({
+        model,
+        prompt: args.prompt,
+        assistantContent: args.assistantContent,
+        generate: deps.generate,
+      });
+      if (title) await write(args.authz, args.conversationId, title);
+    } catch {
+      // best-effort — the placeholder stays
+    }
+  })();
 }
 
 /**
