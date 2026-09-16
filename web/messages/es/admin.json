@@ -1483,6 +1483,13 @@
         "title": "Actividad",
         "description": "Cada análisis de agentes en todos los paquetes: estado, duración, hallazgos y errores. Vuelva a ejecutar cualquier paquete desde aquí.",
         "allPacks": "Todos los paquetes",
+        "allStatuses": "Todos los estados",
+        "sinceColumn": "Desde",
+        "sinceAll": "Todo el período",
+        "since": {
+          "day": "Últimas 24 horas",
+          "week": "Últimos 7 días"
+        },
         "packColumn": "Paquete",
         "triggerColumn": "Origen",
         "triggers": {

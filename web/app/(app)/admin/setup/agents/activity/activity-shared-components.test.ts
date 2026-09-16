@@ -40,3 +40,20 @@ test("the list contract pages and sorts server-side", () => {
   assert.match(lib, /offset/);
   assert.match(lib, /sort/);
 });
+
+test("status badges are Title case and started uses the shared dateTime", () => {
+  assert.match(view, /setup\.agents\.runStatuses\./);
+  assert.doesNotMatch(view, /overview\.runStatus/);
+  assert.match(view, /dateTime\(run\.startedAt\)/);
+  assert.doesNotMatch(view, /toLocaleString\(\)/);
+});
+
+test("status and since filter chips sit beside pack with URL state", () => {
+  assert.match(view, /paramKey: 'status'/);
+  assert.match(view, /paramKey: 'since'/);
+  assert.match(view, /findingsSinceIso\(sinceKey\)/);
+  assert.match(view, /currentParams: data\.currentParams/);
+  assert.match(lib, /AGENT_RUN_STATUSES/);
+  assert.match(lib, /and status = /);
+  assert.match(lib, /and started_at > /);
+});
