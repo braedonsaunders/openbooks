@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { SplitLinesEditor } from '../../../../../components/allocations/SplitLinesEditor'
 import type { AllocationLine } from '../../../../../components/allocations/split-lines-model'
+import type { AllocationRuleTarget, AllocationRuleVersion } from '@openbooks/engine/src/allocations/types.ts'
 import { confirmDialog } from '../../../../../lib/confirm'
 import {
   apiError,
@@ -54,10 +55,8 @@ interface RuleDetail {
 }
 
 interface VersionDetail {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  version: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  targets: any[]
+  version: AllocationRuleVersion
+  targets: AllocationRuleTarget[]
   revision: string
 }
 
