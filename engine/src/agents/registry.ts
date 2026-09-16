@@ -2,6 +2,7 @@ import type { ContinuousCloseAgentKey } from "../continuous-close-config.ts";
 import { accountingFindings } from "./accounting.ts";
 import { collectionsFindings } from "./collections.ts";
 import { financeFindings } from "./finance.ts";
+import { forensicsFindings } from "./forensics.ts";
 import { hygieneFindings } from "./hygiene.ts";
 import { payablesFindings } from "./payables.ts";
 import { reconciliationFindings } from "./reconciliation.ts";
@@ -22,4 +23,5 @@ export const AGENT_PACKS: Record<ContinuousCloseAgentKey, AgentPackFindings> = {
   payables: payablesFindings,
   reconciliation: reconciliationFindings,
   hygiene: hygieneFindings,
+  forensics: forensicsFindings,
 };

@@ -917,6 +917,8 @@
         "criticalItemCount": "Cantidad crítica de elementos",
         "criticalMaterialityMultiple": "Múltiplo crítico de materialidad",
         "staleAfterDays": "Obsoleto después de",
+        "lookbackDays": "Período de búsqueda",
+        "duplicateDays": "Ventana de duplicados",
         "minimumVariancePercent": "Desviación desfavorable mínima",
         "criticalVariancePercent": "Desviación desfavorable crítica",
         "minimumDeclinePercent": "Disminución mínima de ingresos",
@@ -936,6 +938,22 @@
         "stale_accounting_documents": {
           "title": "Documentos contables obsoletos",
           "description": "Encuentra facturas, créditos, gastos y asientos en borrador o pendientes que superaron la antigüedad configurada."
+        },
+        "forensic_weekend_postings": {
+          "title": "Gastos publicados en fin de semana",
+          "description": "Detecta documentos de gasto con fecha de fin de semana dentro del período de búsqueda, una señal clásica de malversación."
+        },
+        "forensic_round_dollar": {
+          "title": "Gastos en cifras redondas",
+          "description": "Detecta documentos de gasto por miles exactos por encima del umbral dentro del período de búsqueda."
+        },
+        "forensic_threshold_trap": {
+          "title": "Importes justo bajo el límite",
+          "description": "Detecta documentos de gasto con precios justo por debajo de un límite de aprobación redondo (importes terminados en 99)."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Facturas duplicadas",
+          "description": "Detecta documentos a pagar con el mismo proveedor, tipo e importe contabilizados dentro de la ventana de duplicados."
         },
         "missing_approved_budget": {
           "title": "Falta un presupuesto aprobado",
@@ -963,6 +981,11 @@
         "title": "Agente financiero",
         "description": "Controles continuos de desviaciones y rendimiento.",
         "coverage": "Comprueba desviaciones del presupuesto aprobado, disminución de ingresos y margen bruto, y ausencia de presupuesto."
+      },
+      "forensics": {
+        "title": "Agente forense",
+        "description": "Controles continuos de anomalías en el gasto.",
+        "coverage": "Comprueba publicaciones en fin de semana, cifras redondas, importes justo bajo el límite y facturas duplicadas."
       },
       "lastRun": "Última ejecución: {date} · {status}",
       "nextRun": "Próxima ejecución programada: {date}",

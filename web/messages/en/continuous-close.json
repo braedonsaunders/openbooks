@@ -6,7 +6,8 @@
   "tabs": { "ariaLabel": "Continuous close sections", "findings": "Findings", "reports": "Reports" },
   "agents": {
     "accounting": "Accounting",
-    "finance": "Finance"
+    "finance": "Finance",
+    "forensics": "Forensics"
   },
   "metrics": {
     "active": "Active",
@@ -48,6 +49,22 @@
     "stale_accounting_documents": {
       "title": "Stale accounting documents",
       "description": "Draft or pending accounting documents have remained unfinished beyond the configured age."
+    },
+    "forensic_weekend_postings": {
+      "title": "Weekend spend posting",
+      "description": "A spend document was posted on a weekend."
+    },
+    "forensic_round_dollar": {
+      "title": "Round-dollar spend",
+      "description": "A spend document is priced at a whole thousand."
+    },
+    "forensic_threshold_trap": {
+      "title": "Just-below-limit amount",
+      "description": "A spend document sits just below a round approval limit."
+    },
+    "forensic_duplicate_bills": {
+      "title": "Possible duplicate bill",
+      "description": "Two payable documents share party, kind, and amount within days of each other."
     },
     "missing_approved_budget": {
       "title": "No approved budget",

@@ -46,6 +46,7 @@ export type AgentTrigger = "manual" | "scheduler";
 export type { WorkItemSeverity } from "./agents/measure.ts";
 export {
   classifyBudgetVariance,
+  classifyForensicItem,
   classifyPeriodPerformance,
   classifyUnmatchedBankActivity,
 } from "./agents/measure.ts";

@@ -54,6 +54,7 @@ const AGENT_PACK_PERMISSIONS: Record<ContinuousCloseAgentKey, string[]> = {
   payables: ["ap.read", "banking.read", "flows.read"],
   reconciliation: ["banking.read", "banking.reconcile"],
   hygiene: ["ap.read", "ar.read", "projects.read", "budgets.read", "admin.setup.manage"],
+  forensics: ["close.read", "ap.read", "ar.read", "expenses.read"],
 };
 
 const AGENT_PACK_NAMES: Record<ContinuousCloseAgentKey, string> = {
@@ -63,6 +64,7 @@ const AGENT_PACK_NAMES: Record<ContinuousCloseAgentKey, string> = {
   payables: "Payables agent",
   reconciliation: "Reconciliation agent",
   hygiene: "Data hygiene agent",
+  forensics: "Forensics agent",
 };
 
 function systemAuthz(orgId: string, agentKey: ContinuousCloseAgentKey): Authz {
