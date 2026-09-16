@@ -6,6 +6,8 @@ import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
 import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../pdf-templates/catalog";
 import { getPdfTemplate, listPdfTemplates } from "../pdf-templates/store";
+import { loadReportDefinition } from "../custom-reports";
+import { canAccessReportArtifact, canAccessReportDefinition } from "../report-execution-context";
 import { can } from "../authz";
 import { listResources } from "../data-io/resources";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -329,6 +331,141 @@ const getPdfTemplateTool: AssistantToolDef = {
   },
 };
 
+type ReportRunRow = {
+  id: string;
+  definition_id: string;
+  trigger: string;
+  status: string;
+  error: string | null;
+  row_count: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  scheduled_for: string | null;
+  recipient_emails: unknown;
+  authorization_snapshot: unknown;
+};
+
+async function visibleReportLabel(
+  authz: Parameters<typeof canAccessReportDefinition>[0],
+  orgId: string,
+  definitionId: string,
+  snapshot: unknown,
+): Promise<string | null> {
+  // Same visibility rule as GET /api/reports/schedules: the definition must
+  // be loadable and runnable by this caller, and a stamped run must still
+  // grant artifact access. Snapshots stay server-side either way.
+  const def = await loadReportDefinition(orgId, definitionId);
+  if (!def) return null;
+  if (!(await canAccessReportDefinition(authz, def))) return null;
+  if (snapshot != null && !(await canAccessReportArtifact(authz, snapshot))) return null;
+  return def.name;
+}
+
+const listReportRuns: AssistantToolDef = {
+  name: "list_report_runs",
+  description:
+    "Scheduled and manual report runs: definition, trigger, status, row counts, timing, and error, newest first. Same visibility rule as the schedules screen. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({
+    definitionId: uuidInput.optional().describe("Only runs of this report definition"),
+    status: z.string().max(30).optional().describe("Only runs in this status, e.g. succeeded, failed"),
+    limit: z.number().int().min(1).max(100).optional().describe("Max runs, default 25"),
+    offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { definitionId?: string; status?: string; limit?: number; offset?: number };
+    const limit = Math.min(a.limit ?? 25, 100);
+    const offset = a.offset ?? 0;
+    let where = sql`r.org_id = ${authz.user.orgId}`;
+    if (a.definitionId) where = sql`${where} and r.definition_id = ${a.definitionId}`;
+    if (a.status) where = sql`${where} and r.status = ${a.status}`;
+    const rows = (await db.execute<ReportRunRow>(sql`
+      select r.id, r.definition_id, r.trigger, r.status, r.error, r.row_count,
+             r.started_at, r.finished_at, r.scheduled_for, r.recipient_emails, r.authorization_snapshot
+        from report_runs r
+       where ${where}
+       order by r.started_at desc nulls last, r.created_at desc
+       limit ${limit} offset ${offset}
+    `));
+    const items: Record<string, unknown>[] = [];
+    for (const row of rows.rows) {
+      const label = await visibleReportLabel(authz, authz.user.orgId, row.definition_id, row.authorization_snapshot);
+      if (!label) continue;
+      items.push({
+        id: row.id,
+        definitionId: row.definition_id,
+        definitionName: label,
+        trigger: row.trigger,
+        status: row.status,
+        rowCount: row.row_count,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at,
+        scheduledFor: row.scheduled_for,
+        recipientCount: Array.isArray(row.recipient_emails) ? row.recipient_emails.length : 0,
+        error: typeof row.error === "string" ? truncateText(row.error, 300) : null,
+      });
+    }
+    return {
+      ok: true,
+      data: { returned: items.length, offset, href: "/reports", runs: items },
+    };
+  },
+};
+
+const listEmailDeliveries: AssistantToolDef = {
+  name: "list_email_deliveries",
+  description:
+    "Report email deliveries: recipient, status, attempts, timing, and error, newest first. Same visibility rule as the schedules screen. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  inputSchema: z.object({
+    status: z.string().max(30).optional().describe("Only deliveries in this status, e.g. sent, failed, pending"),
+    recipient: z.string().max(200).optional().describe("Filter by recipient address text"),
+    limit: z.number().int().min(1).max(100).optional().describe("Max deliveries, default 25"),
+    offset: z.number().int().min(0).optional().describe("Rows to skip for paging (default 0)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { recipient?: string; status?: string; limit?: number; offset?: number };
+    const limit = Math.min(a.limit ?? 25, 100);
+    const offset = a.offset ?? 0;
+    let where = sql`d.org_id = ${authz.user.orgId}`;
+    if (a.status) where = sql`${where} and d.status = ${a.status}`;
+    if (a.recipient) where = sql`${where} and d.recipient ilike ${"%" + a.recipient + "%"}`;
+    const rows = (await db.execute<Record<string, unknown>>(sql`
+      select d.id, d.run_id as "runId", d.recipient, d.status, d.attempt_count as "attemptCount",
+             d.last_attempt_at as "lastAttemptAt", d.sent_at as "sentAt", d.error, d.created_at as "createdAt",
+             r.definition_id as "definitionId", r.authorization_snapshot as "snapshot"
+        from report_delivery_outbox d
+        join report_runs r on r.id = d.run_id and r.org_id = d.org_id
+       where ${where}
+       order by d.created_at desc
+       limit ${limit} offset ${offset}
+    `));
+    const items: Record<string, unknown>[] = [];
+    for (const row of rows.rows) {
+      const label = await visibleReportLabel(authz, authz.user.orgId, String(row.definitionId), row.snapshot);
+      if (!label) continue;
+      items.push({
+        id: row.id,
+        runId: row.runId,
+        definitionName: label,
+        recipient: row.recipient,
+        status: row.status,
+        attemptCount: row.attemptCount,
+        lastAttemptAt: row.lastAttemptAt,
+        sentAt: row.sentAt,
+        createdAt: row.createdAt,
+        error: typeof row.error === "string" ? truncateText(row.error, 300) : null,
+      });
+    }
+    return {
+      ok: true,
+      data: { returned: items.length, offset, href: "/reports", deliveries: items },
+    };
+  },
+};
+
 export const OPS_TOOLS: AssistantToolDef[] = [
   listDataResources,
   listImportRuns,
@@ -336,4 +473,6 @@ export const OPS_TOOLS: AssistantToolDef[] = [
   listEnvironments,
   listPdfTemplatesTool,
   getPdfTemplateTool,
+  listReportRuns,
+  listEmailDeliveries,
 ];

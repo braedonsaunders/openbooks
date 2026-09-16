@@ -10,6 +10,7 @@ const historyView = read("../../app/(app)/data/import/history/view.ts");
 const connectionsRoute = read("../../app/api/platform/connections/route.ts");
 const sandboxesView = read("../../app/(app)/admin/sandboxes/view.ts");
 const pdfRoute = read("../../app/api/pdf-templates/route.ts");
+const schedulesRoute = read("../../app/api/reports/schedules/route.ts");
 
 test("data-io tools carry the same gates as the routes and views they cover", () => {
   // GET /api/data/resources requires data.export; the import route and the
@@ -67,6 +68,28 @@ test("pdf template tools carry the admin gate and keep bodies out of lists", () 
   assert.doesNotMatch(listTool, /sourceHtml/);
   assert.doesNotMatch(listTool, /compiledHtml/);
   assert.match(ops, /truncateText\(row\.sourceHtml, 6000\)/);
+});
+
+test("report run and delivery tools reuse the schedules visibility rule", () => {
+  // GET /api/reports/schedules requires reports.read, loads each definition,
+  // checks canAccessReportDefinition (+ artifact check when stamped), and
+  // strips the snapshot. Both tools must do the same — org-scoped queries,
+  // no snapshot in the output.
+  assert.match(schedulesRoute, /guardPermission\('reports\.read'\)/);
+  assert.match(schedulesRoute, /canAccessReportDefinition\(gate, def\)/);
+  for (const name of ["list_report_runs", "list_email_deliveries"]) {
+    assert.match(ops, new RegExp(`name: "${name}"[\\s\\S]{0,800}gate: \\{ mode: "anyOf", perms: \\["reports\\.read"\\] \\}`));
+  }
+  assert.match(ops, /from report_runs r/);
+  assert.match(ops, /r\.org_id =/);
+  assert.match(ops, /from report_delivery_outbox d/);
+  assert.match(ops, /d\.org_id =/);
+  assert.match(ops, /canAccessReportDefinition\(authz, def\)/);
+  assert.match(ops, /canAccessReportArtifact\(authz, snapshot\)/);
+  // The snapshot is read only to run the check — the helper returns the
+  // definition label, never the snapshot itself.
+  assert.match(ops, /r\.authorization_snapshot/);
+  assert.match(ops, /return def\.name/);
 });
 
 test("list_import_runs reuses the history view's query shape and stays org-scoped", () => {

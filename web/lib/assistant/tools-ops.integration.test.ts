@@ -171,6 +171,62 @@ test('assistant pdf templates list without bodies and get truncates, isolated pe
   }
 })
 
+test('assistant report runs and deliveries surface with visibility filtering, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const orgA = await createScratchOrg()
+  const orgB = await createScratchOrg()
+  try {
+    const runId = randomUUID()
+    const { ensureReportDefinitions } = await import('@openbooks/engine/src/ensure-report-definitions.ts')
+    await withOrgContext(orgA.orgId, async () => {
+      const authz = authzFor(orgA.orgId, READER)
+      // Seed the built-in catalog (same seeding the product paths use), then
+      // borrow a feature-free statement definition for the probe rows.
+      await ensureReportDefinitions(orgA.orgId)
+      const found = await db.execute<{ id: string }>(sql`select id from report_definitions
+        where org_id = ${orgA.orgId} and report_type = 'statement'
+          and (statement->>'kind' is null or statement->>'kind' not in ('project-profitability', 'true-cost', 'budget'))
+        limit 1`)
+      assert.ok(found.rows[0], 'seeded statement definitions missing')
+      const defId = found.rows[0]!.id
+      await db.execute(sql`insert into report_runs (id, org_id, definition_id, trigger, status, row_count)
+        values (${runId}, ${orgA.orgId}, ${defId}, 'manual', 'succeeded', 7)`)
+      await db.execute(sql`insert into report_delivery_outbox (org_id, run_id, recipient, status)
+        values (${orgA.orgId}, ${runId}, 'reader@example.test', 'sent')`)
+      const runs = await executeAssistantTool(authz, 'list_report_runs', {})
+      assert.equal(runs.ok, true, JSON.stringify(runs))
+      assert.ok(runs.ok)
+      const runRows = (runs.data as { runs: Record<string, unknown>[] }).runs
+      assert.equal(runRows.length, 1)
+      assert.equal(runRows[0]!['status'], 'succeeded')
+      assert.equal(runRows[0]!['rowCount'], 7)
+      assert.ok(!('authorization_snapshot' in runRows[0]!), 'snapshot must not leave the server')
+      const deliveries = await executeAssistantTool(authz, 'list_email_deliveries', {})
+      assert.equal(deliveries.ok, true, JSON.stringify(deliveries))
+      assert.ok(deliveries.ok)
+      const delRows = (deliveries.data as { deliveries: Record<string, unknown>[] }).deliveries
+      assert.equal(delRows.length, 1)
+      assert.equal(delRows[0]!['recipient'], 'reader@example.test')
+      assert.equal(delRows[0]!['status'], 'sent')
+      const bare = await executeAssistantTool(authzFor(orgA.orgId, ['assistant.use']), 'list_report_runs', {})
+      assert.deepEqual(bare, { ok: false, error: 'forbidden' })
+    })
+    await withOrgContext(orgB.orgId, async () => {
+      const authz = authzFor(orgB.orgId, READER)
+      const runs = await executeAssistantTool(authz, 'list_report_runs', {})
+      assert.equal(runs.ok, true, JSON.stringify(runs))
+      assert.ok(runs.ok)
+      assert.deepEqual((runs.data as { runs: unknown[] }).runs, [])
+      const deliveries = await executeAssistantTool(authz, 'list_email_deliveries', {})
+      assert.equal(deliveries.ok, true, JSON.stringify(deliveries))
+      assert.ok(deliveries.ok)
+      assert.deepEqual((deliveries.data as { deliveries: unknown[] }).deliveries, [])
+    })
+  } finally {
+    await dropScratchOrg(orgA.orgId)
+    await dropScratchOrg(orgB.orgId)
+  }
+})
+
 test('assistant data-io tools refuse without their permission', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
   try {
