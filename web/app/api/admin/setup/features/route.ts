@@ -40,8 +40,9 @@ export async function PUT(req: Request) {
   // assistant/MCP `update_features` command is the same operation.
   const result = await applyFeatureChanges(orgId, gate.user.id, normalized.changes)
   if (!result.ok) {
-    const { ok: _ok, ...dependencyError } = result
-    return NextResponse.json(dependencyError, { status: dependencyError.error === 'not-found' ? 404 : 409 })
+    const dependencyError: Record<string, unknown> = { ...result }
+    delete dependencyError.ok
+    return NextResponse.json(dependencyError, { status: result.error === 'not-found' ? 404 : 409 })
   }
   return NextResponse.json({ ok: true })
 }
