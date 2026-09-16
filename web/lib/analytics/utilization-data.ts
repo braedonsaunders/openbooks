@@ -3,6 +3,8 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
 import { getMoneyFormatter } from '../money-server'
 
@@ -101,6 +103,8 @@ interface RawStatRow extends Record<string, unknown> {
   department_name: string | null;
   item: string | null;
   item_name: string | null;
+  func: string | null;
+  late: string | null;
   total_hours: string | number;
   billable_hours: string | number;
   non_billable_cost: string | number;
@@ -109,6 +113,11 @@ interface RawStatRow extends Record<string, unknown> {
 /** One grouped scan per range.
  *  org filter is EXPLICIT (defense in depth — do not rely on ambient RLS). */
 async function fetchTimeStats(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<StatRow[]> {
+  // Cost rates are stamped in the worker's own functional (the posting
+  // kernel groups labour the same way and never fuses currencies), so the
+  // scan arrives per (group, functional) and each cost leg translates to
+  // presentation at its latest worked date before merging. Hours are
+  // currency-blind: splitting then re-adding them is exact.
   const res = await db.execute<RawStatRow>(sql`
     select
       t.employee_party_id as employee,
@@ -117,6 +126,8 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
       d.name as department_name,
       t.item_id as item,
       i.name as item_name,
+      coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+      max(t.worked_on)::text as late,
       sum(t.hours) as total_hours,
       coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
       coalesce(sum(coalesce(t.cost_rate, 0) * t.hours) filter (where not t.is_billable), 0) as non_billable_cost
@@ -125,25 +136,46 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
     left join projects project on project.id = t.project_id and project.org_id = t.org_id
     left join departments d on d.id = t.department_id and d.org_id = t.org_id
     left join items i on i.id = t.item_id and i.org_id = t.org_id
+    left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
+    join orgs o on o.id = t.org_id
     where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
       -- Draft, submitted and rejected hours are not worked reality (rejected
       -- hours never will be) — the same approved-only rule as project
       -- profitability hours and the time drill-down.
       and t.status = 'approved'
       ${subsidiaryVisibleFilter(sql`coalesce(project.subsidiary_id, p.subsidiary_id)`, allowed)}
-    group by 1, 2, 3, 4, 5, 6
+    group by 1, 2, 3, 4, 5, 6, 7
   `);
-  return res.rows.map((r) => ({
-    employee: r.employee,
-    employee_name: r.employee_name,
-    department: r.department,
-    department_name: r.department_name,
-    item: r.item,
-    item_name: r.item_name,
-    total_hours: Number(r.total_hours ?? 0),
-    billable_hours: Number(r.billable_hours ?? 0),
-    non_billable_cost: Number(r.non_billable_cost ?? 0),
-  }));
+  const ctx = await flowRates(orgId, res.rows.map((r) => ({
+    func: (r.func as string | null) ?? null, date: String(r.late ?? to).slice(0, 10),
+  })));
+  const merged = new Map<string, { row: StatRow; cost: string }>();
+  for (const r of res.rows) {
+    const key = JSON.stringify([r.employee, r.employee_name, r.department, r.department_name, r.item, r.item_name]);
+    const prev = merged.get(key) ?? {
+      row: {
+        employee: r.employee,
+        employee_name: r.employee_name,
+        department: r.department,
+        department_name: r.department_name,
+        item: r.item,
+        item_name: r.item_name,
+        total_hours: 0,
+        billable_hours: 0,
+        non_billable_cost: 0,
+      },
+      cost: "0",
+    };
+    const leg = String(r.non_billable_cost ?? 0);
+    const translated = Number(leg) === 0
+      ? "0"
+      : mulDecimal(leg, ctx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)));
+    prev.row.total_hours += Number(r.total_hours ?? 0);
+    prev.row.billable_hours += Number(r.billable_hours ?? 0);
+    prev.cost = add(prev.cost, translated);
+    merged.set(key, prev);
+  }
+  return [...merged.values()].map(({ row, cost }) => ({ ...row, non_billable_cost: Number(cost) }));
 }
 
 const ymd = (d: Date) =>
