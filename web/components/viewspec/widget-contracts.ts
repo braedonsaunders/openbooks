@@ -26,7 +26,6 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'admin-hub-card': { props: ['accent', 'description', 'href', 'iconKey', 'title'] },
   'admin-roles-table': { props: ['basePath', 'currentParams', 'dir', 'labels', 'roles', 'sort', 'subsidiaries'] },
   'admin-users-table': { props: ['allRoles', 'basePath', 'currentParams', 'dir', 'labels', 'sort', 'users'] },
-  'agents-briefing': { props: [], open: true },
   'agents-briefing-actions': { props: [], open: true },
   'agents-briefing-body': { props: ['text'] },
   'agents-kpi-strip': { props: ['items'] },
