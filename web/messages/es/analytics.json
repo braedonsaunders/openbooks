@@ -512,10 +512,79 @@
   },
   "spendVelocity": {
     "title": "Velocidad de gasto",
-    "backToHub": "Analítica"
+    "backToHub": "Analítica",
+    "insights": {
+      "highGrowth": {
+        "title": "Categorías de gasto de alto crecimiento",
+        "message": "{count, plural, one {# cuenta de gastos con crecimiento superior al 20 %/mes} other {# cuentas de gastos con crecimiento superior al 20 %/mes}}",
+        "action": "Revisar las políticas de gasto de estas categorías"
+      },
+      "typeImbalance": {
+        "title": "Desequilibrio entre tipos de transacción",
+        "fasterBills": "Las facturas",
+        "fasterExpenses": "Los informes de gastos",
+        "message": "{faster} crecen un {pct} % más rápido que el otro tipo",
+        "action": "Revisar los flujos de aprobación y los controles de gasto"
+      },
+      "anomalies": {
+        "title": "Anomalías de gasto detectadas",
+        "message": "{count, plural, one {# anomalía crítica requiere investigación} other {# anomalías críticas requieren investigación}}",
+        "action": "Revisar las transacciones marcadas por errores o gasto no autorizado"
+      },
+      "creep": {
+        "title": "Aumento gradual de costos detectado",
+        "message": "{count, plural, one {# cuenta con aumentos constantes} other {# cuentas con aumentos constantes}}",
+        "action": "Negociar tarifas o buscar soluciones alternativas"
+      },
+      "concentration": {
+        "title": "Alta concentración del gasto",
+        "message": "La principal categoría de gastos representa el {pct} % del gasto",
+        "action": "Buscar oportunidades de optimización de costos"
+      },
+      "zombies": {
+        "title": "Posibles suscripciones sin uso",
+        "message": "{count, plural, one {# proveedor con cargos recurrentes idénticos ({amount}/año)} other {# proveedores con cargos recurrentes idénticos ({amount}/año)}}",
+        "action": "Revisar el uso — podrían ser renovaciones automáticas sin utilizar"
+      },
+      "fragmentation": {
+        "title": "Fragmentación de compras detectada",
+        "message": "{count, plural, one {# categoría con alto volumen de transacciones de bajo importe} other {# categorías con alto volumen de transacciones de bajo importe}}",
+        "action": "Considerar la consolidación de proveedores o acuerdos preferentes"
+      },
+      "opexRatio": {
+        "title": "Ratio alto de gastos operativos sobre ingresos",
+        "message": "Los gastos operativos representan el {pct} % de los ingresos",
+        "action": "Revisar la estructura de costos e identificar eficiencias"
+      },
+      "cliff": {
+        "title": "Desequilibrio entre velocidad de compras y ventas",
+        "message": "La velocidad de OC ({po} %/mes) supera la de OV ({so} %/mes) en un {gap} % — ratio OC/OV: {ratio}×",
+        "actionWithMonths": "Riesgo de presión de caja en ~{months} meses. Revisar los compromisos de compra.",
+        "actionMonitor": "Vigilar la velocidad de compras y alinearla con el pipeline de ventas."
+      },
+      "seasonalHigh": "El gasto elevado suele concentrarse en {months}",
+      "seasonalLow": "El gasto reducido suele concentrarse en {months}"
+    }
   },
   "sentinel": {
     "title": "Sentinel",
     "backToHub": "Analítica"
+  },
+  "common": {
+    "monthsShort": {
+      "jan": "ene",
+      "feb": "feb",
+      "mar": "mar",
+      "apr": "abr",
+      "may": "may",
+      "jun": "jun",
+      "jul": "jul",
+      "aug": "ago",
+      "sep": "sep",
+      "oct": "oct",
+      "nov": "nov",
+      "dec": "dic"
+    },
+    "monthYear": "{month} '{yy}"
   }
 }

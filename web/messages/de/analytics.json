@@ -512,10 +512,79 @@
   },
   "spendVelocity": {
     "title": "Ausgabendynamik",
-    "backToHub": "Analytik"
+    "backToHub": "Analytik",
+    "insights": {
+      "highGrowth": {
+        "title": "Stark wachsende Ausgabenkonten",
+        "message": "{count, plural, one {# Aufwandskonto wächst schneller als 20 %/Monat} other {# Aufwandskonten wachsen schneller als 20 %/Monat}}",
+        "action": "Ausgabenrichtlinien für diese Kategorien prüfen"
+      },
+      "typeImbalance": {
+        "title": "Ungleichgewicht der Transaktionsarten",
+        "fasterBills": "Rechnungen",
+        "fasterExpenses": "Reisekostenabrechnungen",
+        "message": "{faster} wachsen {pct} % schneller als die andere Art",
+        "action": "Genehmigungsprozesse und Ausgabenkontrollen prüfen"
+      },
+      "anomalies": {
+        "title": "Auffällige Ausgaben erkannt",
+        "message": "{count, plural, one {# kritische Anomalie erfordert Prüfung} other {# kritische Anomalien erfordern Prüfung}}",
+        "action": "Markierte Transaktionen auf Fehler oder unbefugte Ausgaben prüfen"
+      },
+      "creep": {
+        "title": "Schleichender Kostenanstieg erkannt",
+        "message": "{count, plural, one {# Konto mit stetigen Steigerungen} other {# Konten mit stetigen Steigerungen}}",
+        "action": "Konditionen neu verhandeln oder Alternativen suchen"
+      },
+      "concentration": {
+        "title": "Hohe Ausgabenkonzentration",
+        "message": "Die größte Ausgabenkategorie macht {pct} % der Ausgaben aus",
+        "action": "Auf Optimierungspotenzial prüfen"
+      },
+      "zombies": {
+        "title": "Möglicherweise ungenutzte Abonnements",
+        "message": "{count, plural, one {# Lieferant mit identischen wiederkehrenden Beträgen ({amount}/Jahr)} other {# Lieferanten mit identischen wiederkehrenden Beträgen ({amount}/Jahr)}}",
+        "action": "Nutzung prüfen — möglicherweise ungenutzte automatische Verlängerungen"
+      },
+      "fragmentation": {
+        "title": "Fragmentierte Beschaffung erkannt",
+        "message": "{count, plural, one {# Kategorie mit hohem Transaktionsvolumen und kleiner Durchschnittsgröße} other {# Kategorien mit hohem Transaktionsvolumen und kleiner Durchschnittsgröße}}",
+        "action": "Lieferantenbündelung oder Vorzugslieferanten erwägen"
+      },
+      "opexRatio": {
+        "title": "Hohes Verhältnis Betriebskosten zu Umsatz",
+        "message": "Die Betriebskosten betragen {pct} % des Umsatzes",
+        "action": "Kostenstruktur prüfen und Effizienzpotenziale identifizieren"
+      },
+      "cliff": {
+        "title": "Ungleichgewicht Einkaufs- vs. Verkaufsdynamik",
+        "message": "Bestelldynamik ({po} %/Mo.) übersteigt die Auftragsdynamik ({so} %/Mo.) um {gap} % — Bestell/Auftrags-Verhältnis: {ratio}×",
+        "actionWithMonths": "Liquiditätsrisiko in ~{months} Monaten. Einkaufsverpflichtungen prüfen.",
+        "actionMonitor": "Einkaufsdynamik beobachten und mit der Vertriebspipeline abstimmen."
+      },
+      "seasonalHigh": "Höhere Ausgaben fallen typischerweise in {months}",
+      "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}"
+    }
   },
   "sentinel": {
     "title": "Sentinel",
     "backToHub": "Analytik"
+  },
+  "common": {
+    "monthsShort": {
+      "jan": "Jan",
+      "feb": "Feb",
+      "mar": "Mär",
+      "apr": "Apr",
+      "may": "Mai",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Aug",
+      "sep": "Sep",
+      "oct": "Okt",
+      "nov": "Nov",
+      "dec": "Dez"
+    },
+    "monthYear": "{month} '{yy}"
   }
 }

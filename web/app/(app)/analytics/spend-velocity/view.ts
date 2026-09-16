@@ -1,11 +1,12 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { spendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
+import { spendVelocityStrings } from '../../../../lib/analytics/spend-velocity-strings'
 import type { SpendVelocityView } from './SpendVelocityView'
 
 /**
@@ -39,7 +40,12 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds)
+  // Insight sentences resolve through the analytics catalog in the request
+  // locale (users.locale ?? org defaultLocale ?? en) — the same locale the
+  // statements use. Direct loader callers keep the English default.
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = spendVelocityStrings((key, values) => tc(key, values), locale)
+  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds, strings)
 
   return {
     title: t('title'),
