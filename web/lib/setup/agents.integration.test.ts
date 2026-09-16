@@ -4,6 +4,7 @@ import test from 'node:test'
 registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
+const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import('@openbooks/engine/src/continuous-close-config.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/test-fixtures.ts'
 )
@@ -25,7 +26,7 @@ const {
  *
  * New pack keys (collections/…) persist once the agent_key CHECK widening
  * lands; until then the write path is proved on `accounting` (accepted by the
- * current storage CHECK) while reads cover all six registry packs.
+ * current storage CHECK) while reads cover every registry pack.
  */
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -117,6 +118,8 @@ test(
       Promise.all([getAgentsOverview(orgA.orgId), getAgentsOverview(orgB.orgId)]),
     )
     // One row per registered pack, even never-configured ones (defaults).
+    // Derived from the registry, never a hardcoded count: the next pack must
+    // not break this test.
     assert.equal(rowsA.length, CONTINUOUS_CLOSE_AGENT_KEYS.length)
     assert.equal(rowsB.length, CONTINUOUS_CLOSE_AGENT_KEYS.length)
     const accountingA = rowsA.find((row) => row.agentKey === 'accounting')!

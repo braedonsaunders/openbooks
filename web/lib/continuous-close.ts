@@ -16,8 +16,9 @@ export type WorkItemAccess = {
  * Minimum read grants that make one agent pack's findings visible. Each pack
  * mirrors the screen its detectors read: collections watches receivables,
  * payables watches the AP cockpit, reconciliation watches bank data, data
- * hygiene watches ledger and master-data quality, and forensics replays
- * posted-journal patterns — all for accounting stewards.
+ * hygiene watches ledger and master-data quality for accounting stewards, and
+ * forensics watches the spend-document screens (bills, credits, expenses,
+ * journals) its sentinel-diff items come from.
  */
 const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]> = {
   accounting: ["banking.read", "gl.read", "close.read"],
@@ -26,7 +27,7 @@ const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]> = {
   payables: ["ap.read"],
   reconciliation: ["banking.read", "banking.reconcile"],
   hygiene: ["gl.read", "close.read"],
-  forensics: ["gl.read", "close.read"],
+  forensics: ["gl.read", "ap.read", "ar.read", "expenses.read"],
 };
 
 /** The read grants that make one agent pack's findings visible. */

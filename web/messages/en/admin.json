@@ -1510,6 +1510,9 @@
           "description": "Scheduled anomaly scans — weekend and round-dollar postings, threshold traps and duplicate bills — surfacing only new findings.",
           "reads": "Journal postings and vendor bills through the anomaly lens.",
           "proposes": "Evidence-backed findings with the exact rows — review only, no writes."
+          "description": "Weekend postings, round-dollar spend, just-below-limit amounts and duplicate bills.",
+          "reads": "Spend documents and the sentinel dashboard.",
+          "proposes": "Sentinel review links on every finding — review only, no writes."
         }
       }
     },
