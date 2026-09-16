@@ -722,8 +722,9 @@ export function DocumentDrawer({
   const [distApplying, setDistApplying] = useState(false)
   const [splitTarget, setSplitTarget] = useState<number | null>(null)
   const distInflight = useRef(new Set<string>())
+  // Staged-key display names only: applied-rule names ride the read-path
+  // stamps (distribution_rule_name, A4), never this cache.
   const distNamesByKey = useRef(new Map<string, string>())
-  const distNamesById = useRef(new Map<string, string>())
 
   const distCoordKey = (row: LineRow): string =>
     JSON.stringify([row.accountId, row.departmentId, row.projectId, row.locationId, row.classId])
@@ -741,7 +742,6 @@ export function DocumentDrawer({
   const cacheDistNames = (rules: EntryDistributionCandidate[]): void => {
     for (const rule of rules) {
       distNamesByKey.current.set(rule.ruleKey, rule.ruleName)
-      distNamesById.current.set(rule.ruleId, rule.ruleName)
     }
   }
 
@@ -836,9 +836,6 @@ export function DocumentDrawer({
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distLineSignature, distOn, distEditable])
-
-  const distRuleName = (row: LineRow): string =>
-    row.distributionRuleName || (row.distributionRuleId ? (distNamesById.current.get(row.distributionRuleId) ?? '') : '')
 
   const distNameByKey = (key: string): string | null => distNamesByKey.current.get(key) ?? null
 
@@ -1012,13 +1009,13 @@ export function DocumentDrawer({
 
   const distribution = useMemo<LineGridDistribution<LineRow> | undefined>(() => {
     if (!distOn || !distEditable) return undefined
-    const groups = groupHeaderModels(rows, { ruleNameOf: (member) => distRuleName(member) || null })
+    const groups = groupHeaderModels(rows, { ruleNameOf: (member) => member.distributionRuleName || null })
     const groupedIndexes = new Set<number>()
     for (const group of groups) {
       for (const member of groupMembers(rows, group.key)) groupedIndexes.add(member.index)
     }
     const lookup = {
-      ruleNameOf: (row: LineRow) => distRuleName(row),
+      ruleNameOf: (row: LineRow) => row.distributionRuleName || null,
       pendingRuleNameOf: (row: LineRow) =>
         row.distributionKey ? (distNameByKey(row.distributionKey) ?? row.distributionKey) : null,
       suggestionOf: (row: LineRow) => {
