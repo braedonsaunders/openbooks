@@ -1206,6 +1206,38 @@
         "library": "Biblioteca",
         "activity": "Actividad"
       },
+      "overview": {
+        "title": "Agentes",
+        "description": "Agentes en segundo plano que vigilan los libros y proponen próximos pasos revisables. Nunca contabilizan ni modifican registros por su cuenta.",
+        "configure": "Configurar",
+        "runNow": "Ejecutar ahora",
+        "enabled": "Activado",
+        "disabled": "Desactivado",
+        "controlsEnabled": "{count} de {total} controles activos",
+        "manualOnly": "Solo ejecuciones manuales",
+        "cadences": {
+          "daily": "Diario",
+          "weekly": "Semanal"
+        },
+        "materialitySummary": "Materialidad {amount}",
+        "lastRun": "Última ejecución {date} · {status}",
+        "runStatus": {
+          "completed": "completada",
+          "failed": "fallida",
+          "skipped": "omitida",
+          "running": "en curso"
+        },
+        "neverRun": "Sin ejecuciones",
+        "nextRun": "Próxima {date}",
+        "openFindings": "{count, plural, one {# hallazgo abierto} other {# hallazgos abiertos}}",
+        "reviewWork": "Revisar el trabajo",
+        "featureOff": "El módulo de Cierre continuo está desactivado, por lo que los paquetes no se pueden activar ni ejecutar.",
+        "enableModule": "Actívelo en Funciones",
+        "featureOffError": "Active el módulo de Cierre continuo antes de activar un paquete.",
+        "toggleFailed": "No se pudo guardar el ajuste del paquete.",
+        "scanComplete": "{count, plural, one {# hallazgo detectado} other {# hallazgos detectados}}",
+        "scanFailed": "No se pudo iniciar el análisis."
+      },
       "packs": {
         "accounting": {
           "title": "Controles contables",

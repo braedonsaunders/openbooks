@@ -109,6 +109,7 @@ import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remit
 import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
+import { AgentsOverviewWorkspace } from '../../app/(app)/admin/setup/agents/AgentsOverviewWorkspace'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
@@ -1279,6 +1280,10 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** THREE FLAT props, no wrapper bag — the bank-feeds division. */
   'features-workspace': (props) => (
     <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
+  ),
+  /** Whole props bag — the island owns its header, cards and toggle flow. */
+  'agents-overview-workspace': (props) => (
+    <AgentsOverviewWorkspace {...(props as unknown as ComponentProps<typeof AgentsOverviewWorkspace>)} />
   ),
   /** ONE prop. The secret ciphertext never leaves the engine module; only
    *  `hasSecret` crosses into the redacted view the loader reads. */
