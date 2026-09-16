@@ -9,6 +9,7 @@ import {
   CONTINUOUS_CLOSE_DETECTOR_SPECS,
   isContinuousCloseAgentKey,
 } from '@openbooks/engine/src/continuous-close.ts'
+import type { ContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close-config.ts'
 import type { ProviderSpecLite, DetectorSpecLite } from './AiSettingsForm'
 
 /**
@@ -45,7 +46,7 @@ export interface AdminAiData {
   specs: ProviderSpecLite[]
   detectorSpecs: DetectorSpecLite[]
   initial: OrgAiSettings
-  selectedAgentKey: 'accounting' | 'finance' | null
+  selectedAgentKey: ContinuousCloseAgentKey | null
 }
 
 export async function loadAdminAi(

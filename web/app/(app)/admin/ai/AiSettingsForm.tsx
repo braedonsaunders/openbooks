@@ -7,6 +7,7 @@
 // convention (no server actions) and single-org scope (no platform
 // policy selector, no journal-automation toggle).
 
+import type { ContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close-config.ts'
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -50,7 +51,7 @@ type DocumentCapturePolicy = {
 
 type AgentPolicy = {
   id: string | null
-  agentKey: 'accounting' | 'finance'
+  agentKey: ContinuousCloseAgentKey
   enabled: boolean
   automaticRuns: boolean
   cadence: 'daily' | 'weekly'

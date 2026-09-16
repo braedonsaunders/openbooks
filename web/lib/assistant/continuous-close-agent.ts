@@ -1,3 +1,4 @@
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
 import "server-only";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -44,16 +45,34 @@ type AgentNarrative = {
   generatedAt: string;
 };
 
-function systemAuthz(orgId: string, agentKey: "accounting" | "finance"): Authz {
+/** Read permissions each background agent pack runs with. Packs only ever
+ *  READ and propose; nothing here grants a write. */
+const AGENT_PACK_PERMISSIONS: Record<ContinuousCloseAgentKey, string[]> = {
+  accounting: ["banking.read", "banking.reconcile", "close.read", "ap.read", "ar.read", "expenses.read"],
+  finance: ["budgets.read", "ap.read", "ar.read", "projects.read", "close.read"],
+  collections: ["ar.read", "banking.read"],
+  payables: ["ap.read", "banking.read", "flows.read"],
+  reconciliation: ["banking.read", "banking.reconcile"],
+  hygiene: ["ap.read", "ar.read", "projects.read", "budgets.read", "admin.setup.manage"],
+};
+
+const AGENT_PACK_NAMES: Record<ContinuousCloseAgentKey, string> = {
+  accounting: "Accounting agent",
+  finance: "Finance agent",
+  collections: "Collections agent",
+  payables: "Payables agent",
+  reconciliation: "Reconciliation agent",
+  hygiene: "Data hygiene agent",
+};
+
+function systemAuthz(orgId: string, agentKey: ContinuousCloseAgentKey): Authz {
   const common = ["assistant.use", "gl.read", "reports.read", "parties.read"];
-  const permissions = agentKey === "accounting"
-    ? [...common, "banking.read", "banking.reconcile", "close.read", "ap.read", "ar.read", "expenses.read"]
-    : [...common, "budgets.read", "ap.read", "ar.read", "projects.read", "close.read"];
+  const permissions = [...common, ...(AGENT_PACK_PERMISSIONS[agentKey] ?? [])];
   return {
     user: {
       id: SYSTEM_USER_ID,
       email: "continuous-close@system.invalid",
-      name: agentKey === "accounting" ? "Accounting agent" : "Finance agent",
+      name: AGENT_PACK_NAMES[agentKey] ?? `${agentKey} agent`,
       roles: [{ key: "system_agent", name: "System agent" }],
       orgId,
       envKind: "production",
