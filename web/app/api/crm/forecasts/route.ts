@@ -69,6 +69,12 @@ export async function POST(req: NextRequest) {
   if (body.overrideAmount != null && body.overrideAmount !== '' && (overrideRaw === null || compareDecimal(overrideRaw, '0') < 0)) {
     return NextResponse.json({ error: 'override must be a non-negative amount' }, { status: 422 })
   }
+  // override_amount is numeric(19,4): a wider figure would die in Postgres as
+  // a raw storage failure (HTTP 500 — this verb has no catch), so refuse it
+  // here with a named 422 and nothing written.
+  if (overrideRaw !== null && overrideRaw.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    return NextResponse.json({ error: 'override is out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
+  }
   const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw)
   const kind = body.snapshotKind ?? (overrideAmount === null ? 'calculated' : 'rep_override')
   if (!['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
