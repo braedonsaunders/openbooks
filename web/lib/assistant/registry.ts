@@ -20,6 +20,7 @@ import { PROJECT_TOOLS } from "./tools-projects";
 import { TAX_TOOLS } from "./tools-tax";
 import { FILE_TOOLS } from "./tools-files";
 import { INVENTORY_TOOLS } from "./tools-inventory";
+import { ORDERS_TOOLS } from "./tools-orders";
 import { PAYROLL_TOOLS } from "./tools-payroll";
 import { REPORTING_TOOLS } from "./tools-reports";
 import { SETUP_TOOLS } from "./tools-setup";
@@ -47,6 +48,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...PAYROLL_TOOLS,
   ...FILE_TOOLS,
   ...INVENTORY_TOOLS,
+  ...ORDERS_TOOLS,
   ...SETUP_TOOLS,
   ...META_TOOLS,
   ...WRITE_TOOLS,
