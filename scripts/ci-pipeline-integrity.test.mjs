@@ -596,7 +596,7 @@ test('jobs running the suite retain complete local history', () => {
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
   const scriptsRunningSuite = Object.keys(scripts).filter((name) => /npm test\b/.test(scripts[name]))
   const SUITE_ENTRYPOINTS = new RegExp(
-    ['npm (?:run )?test(?![:\\w-])', ...scriptsRunningSuite.map((name) => `npm run ${name}\\b`)].join('|'),
+    ['npm (?:run )?test(?![:\\w-])', ...scriptsRunningSuite.map((name) => `npm run ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![:\\w-])`)].join('|'),
   )
   for (const file of readdirSync(WORKFLOW_DIR).filter((name) => name.endsWith('.yml'))) {
     const workflow = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
