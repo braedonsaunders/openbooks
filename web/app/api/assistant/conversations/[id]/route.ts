@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
 import {
   deleteConversation,
+  olderMessages,
   ownsConversation,
   recentMessages,
   renameConversation,
@@ -14,14 +15,26 @@ export const runtime = "nodejs";
 const SCOPE = "assistant";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Recent messages of one owned conversation, oldest first. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * Recent messages of one owned conversation, oldest first. With
+ * `?before=<messageId>&limit=<n>` returns the older page above the cursor
+ * plus whether more history exists above that page.
+ */
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("assistant.use");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   if (!(await ownsConversation(gate, id, SCOPE))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const { searchParams } = new URL(req.url);
+  const before = searchParams.get("before");
+  if (before !== null) {
+    if (!UUID_RE.test(before)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+    const limit = Number.parseInt(searchParams.get("limit") ?? "", 10);
+    const page = await olderMessages(gate, id, before, Number.isFinite(limit) ? limit : undefined);
+    return NextResponse.json(page);
   }
   const messages = await recentMessages(gate, id);
   return NextResponse.json({ messages });

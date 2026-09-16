@@ -16,6 +16,9 @@
   "send": "Send",
   "stop": "Stop",
   "responding": "Assistant is responding",
+  "loadEarlier": "Load earlier messages",
+  "loadingEarlier": "Loading earlier messages…",
+  "loadEarlierFailed": "Earlier messages could not be loaded.",
   "writeHint": "The assistant can draft journal entries, but nothing is saved until you click Apply — and drafts still need to be posted by you.",
   "suggestions": {
     "s1": "How did we do last month? Summarize the P&L.",

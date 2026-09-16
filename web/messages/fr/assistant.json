@@ -15,6 +15,9 @@
   "send": "Envoyer",
   "stop": "Arrêter",
   "responding": "L'assistant répond",
+  "loadEarlier": "Charger les messages précédents",
+  "loadingEarlier": "Chargement des messages précédents…",
+  "loadEarlierFailed": "Impossible de charger les messages précédents.",
   "writeHint": "L'assistant peut préparer des écritures de journal, mais rien n'est enregistré avant que vous cliquiez sur Appliquer — et les brouillons doivent encore être comptabilisés par vous.",
   "suggestions": {
     "s1": "Comment s'est passé le mois dernier ? Résume l'état des résultats.",

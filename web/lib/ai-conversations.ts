@@ -102,6 +102,45 @@ export async function appendMessage(
   });
 }
 
+/** Page size for "load earlier" history paging (matches the recent window). */
+export const AI_MESSAGE_PAGE = 30;
+
+/** One older page of messages, oldest first (owner-only). */
+export async function olderMessages(
+  authz: Authz,
+  conversationId: string,
+  beforeId: string,
+  limit = AI_MESSAGE_PAGE,
+): Promise<{ messages: AiStoredMessage[]; hasOlder: boolean }> {
+  const empty = { messages: [], hasOlder: false };
+  const safeLimit = Math.min(Math.max(Math.floor(limit) || AI_MESSAGE_PAGE, 1), AI_MESSAGE_PAGE);
+  // Anchor the keyset on the cursor's own (created_at, id): a cursor from
+  // another thread — or a stranger's guess — anchors nothing.
+  const anchor = await db.execute<{ created_at: string; id: string }>(sql`
+    select m.created_at, m.id
+      from ai_messages m
+      join ai_conversations c on c.id = m.conversation_id
+     where m.id = ${beforeId} and m.conversation_id = ${conversationId}
+       and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
+  `);
+  if (anchor.rows.length === 0) return empty;
+  const { created_at, id } = anchor.rows[0]!;
+  const r = await db.execute<AiStoredMessage>(sql`
+    select m.id, m.role, m.content, m.data, m.created_at as "createdAt"
+      from ai_messages m
+      join ai_conversations c on c.id = m.conversation_id
+     where m.conversation_id = ${conversationId}
+       and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
+       and (m.created_at, m.id) < (${created_at}::timestamptz, ${id}::uuid)
+     order by m.created_at desc, m.id desc
+     limit ${safeLimit + 1}
+  `);
+  return {
+    messages: r.rows.slice(0, safeLimit).reverse(),
+    hasOlder: r.rows.length > safeLimit,
+  };
+}
+
 /** The most recent window of messages, oldest first (owner-only). */
 export async function recentMessages(
   authz: Authz,

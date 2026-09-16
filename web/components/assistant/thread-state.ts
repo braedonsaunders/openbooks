@@ -20,6 +20,24 @@ export function withLastAssistantParts<T extends ThreadMessage>(
   return copy;
 }
 
+/**
+ * History page size (mirrors AI_MESSAGE_WINDOW in ai-conversations.ts, which
+ * the client bundle cannot import — it pulls in server-only).
+ */
+export const MESSAGE_PAGE_SIZE = 30;
+
+/**
+ * Restore the reader's position after prepending history: the viewport keeps
+ * its exact distance from the old head by the height the new rows added.
+ */
+export function anchorScrollTop(
+  prevScrollTop: number,
+  prevScrollHeight: number,
+  nextScrollHeight: number,
+): number {
+  return prevScrollTop + (nextScrollHeight - prevScrollHeight);
+}
+
 /** Number of assistant turns witnessed (the persistence-gap floor). */
 export function countAssistantTurns(list: ThreadMessage[]): number {
   return list.reduce((count, message) => count + (message.role === "assistant" ? 1 : 0), 0);

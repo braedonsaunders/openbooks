@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  anchorScrollTop,
   countAssistantTurns,
   formatMessageTimestamp,
+  MESSAGE_PAGE_SIZE,
   reconcileThreadAfterStop,
   withLastAssistantParts,
 } from "./thread-state";
@@ -43,6 +45,13 @@ test("a completed stream stays visible while persistence catches up", () => {
 test("countAssistantTurns counts assistant rows", () => {
   assert.equal(countAssistantTurns([]), 0);
   assert.equal(countAssistantTurns([user("u1"), assistant("a1"), assistant("a2")]), 2);
+});
+
+test("history pages match the server window and prepending holds position", () => {
+  assert.equal(MESSAGE_PAGE_SIZE, 30);
+  // 500px of new rows above a reader sitting at 1200px leaves them at 1700px.
+  assert.equal(anchorScrollTop(1200, 4000, 4500), 1700);
+  assert.equal(anchorScrollTop(0, 1000, 1000), 0);
 });
 
 test("timestamps show time today, date + time otherwise", () => {
