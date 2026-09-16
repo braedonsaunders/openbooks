@@ -204,6 +204,15 @@ test("published effective windows of one rule must not overlap", () => {
   assert.ok(codes(version({ effectiveFrom: "2026-05-01", effectiveTo: "2026-04-01" }), [tgt()], ctx()).includes("effective_window"));
 });
 
+test("simultaneous solving is refused: the kernel executes sequentially only", () => {
+  const problems = validateRuleVersion(version({ solveMethod: "simultaneous" }), [tgt()], ctx());
+  const flagged = problems.find((p) => p.code === "solve_method");
+  assert.ok(flagged, "expected a solve_method problem");
+  assert.equal(flagged?.field, "solveMethod");
+  assert.match(flagged?.message ?? "", /simultaneous/);
+  assert.deepEqual(codes(version({ solveMethod: "sequential" }), [tgt()], ctx()), []);
+});
+
 test("book_scope books needs live posting books and nothing else", () => {
   const c = ctx({ activePostingBookIds: ["book-1", "book-2"] });
   const v = version({ bookScope: "books", bookIds: [] });

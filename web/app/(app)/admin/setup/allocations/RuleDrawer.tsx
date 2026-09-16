@@ -1116,7 +1116,8 @@ function DefinitionTab({
               <Field label={t('rules.definition.solveMethod')}>
                 <Select value={form.solveMethod} disabled={!isDraft} aria-label={t('rules.definition.solveMethod')} onChange={(e) => set('solveMethod', e.target.value as DefinitionForm['solveMethod'])}>
                   <option value="sequential">{t('rules.definition.solveMethods.sequential')}</option>
-                  <option value="simultaneous">{t('rules.definition.solveMethods.simultaneous')}</option>
+                  {/* Simultaneous (reciprocal) solving is not implemented: publication and runs
+                      refuse it, so it is hidden here rather than offered. */}
                 </Select>
               </Field>
             </div>

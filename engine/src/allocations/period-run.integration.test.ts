@@ -58,6 +58,7 @@ async function seedPeriodRule(opts: {
   dynamicTarget?: unknown;
   driverId?: string | null;
   targets?: SeedTarget[];
+  solveMethod?: "sequential" | "simultaneous";
 }): Promise<{ ruleId: string; versionId: string }> {
   const ruleId = randomUUID();
   const versionId = randomUUID();
@@ -81,7 +82,7 @@ async function seedPeriodRule(opts: {
        ${opts.sourceMeasure ?? "period_activity"},
        ${opts.basisKind ?? "fixed_percent"}, ${opts.driverId ?? null}, 'period', '{}'::jsonb,
        ${opts.targetKind ?? "explicit"}, ${JSON.stringify(opts.dynamicTarget ?? {})}::jsonb,
-       ${opts.impact ?? "reclass"}, 'largest_share', 'sequential',
+       ${opts.impact ?? "reclass"}, 'largest_share', ${opts.solveMethod ?? "sequential"},
        'manual', 0, 'Allocation {{rule.name}} for {{period.name}}', now())`);
   const targets = opts.targets ?? [];
   let sequence = 1;
@@ -197,6 +198,42 @@ async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
      where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows;
   return Number(rows[0]?.count ?? 0);
 }
+
+test(
+  "preview refuses a simultaneous-solve version instead of silently running it sequentially",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const deptA = await seedDepartment(org.orgId, "Dept A");
+      const deptB = await seedDepartment(org.orgId, "Dept B");
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        impact: "reclass",
+        solveMethod: "simultaneous",
+        targets: [
+          { departmentId: deptA, fixedPercent: "60.0000", label: "Dept A" },
+          { departmentId: deptB, fixedPercent: "40.0000", label: "Dept B" },
+        ],
+      });
+      await assert.rejects(
+        previewAllocationRun({
+          orgId: org.orgId,
+          ruleId,
+          periodId: org.periodId,
+          bookId: org.bookId,
+          actorId,
+          trigger: "manual",
+        }),
+        /simultaneous/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "reclass preview apportions every cent and post leaves the trial balance total unchanged",

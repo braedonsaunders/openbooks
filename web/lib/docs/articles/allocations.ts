@@ -331,7 +331,9 @@ but declined at every binding moment. Dynamic targets resolve active
 department, location, class, project, and subsidiary values; custom
 segments are not target dimensions yet. Period-source filters cannot use
 item filters. When several rules sweep one close, the close action runs
-them in rule sort order; simultaneous solving is stored but not solved.
+them in rule sort order. Simultaneous (reciprocal) solving is not
+implemented: versions that select it are refused at publication and at
+every run, and the setup UI offers sequential only.
 Report-backed drivers need an actor with report rights.
 `,
 }

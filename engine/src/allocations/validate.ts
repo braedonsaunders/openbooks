@@ -276,6 +276,17 @@ export function validateRuleVersion(
     }
   }
 
+  // Reciprocal (simultaneous) solving is not implemented: the kernel always
+  // executes sequentially, so publishing a simultaneous version would promise
+  // math the runs never perform. Refuse at publication, not at posting.
+  if (version.solveMethod === "simultaneous") {
+    problems.push({
+      code: "solve_method",
+      message: "simultaneous solving is not supported; publish the version as sequential",
+      field: "solveMethod",
+    });
+  }
+
   if (version.targetKind === "explicit") {
     if (targets.length === 0) {
       problems.push({
