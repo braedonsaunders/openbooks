@@ -74,3 +74,39 @@ export function capList<T>(items: T[], max = MAX_LIST_ROWS): { items: T[]; trunc
   return { items: items.slice(0, max), truncated: items.length > max };
 }
 
+/** Default per-string ceiling inside compacted rows (see compactRows). */
+export const MAX_ROW_STRING = 500;
+
+/** Recursively cap string leaves so one wide field can't blow the model
+ *  context. Plain data passes through; class instances (Date, …) are left
+ *  untouched so their wire shape never changes here. */
+function truncateLeaves(value: unknown, max: number): unknown {
+  if (typeof value === "string") {
+    return value.length > max ? `${value.slice(0, max)}…[truncated]` : value;
+  }
+  if (Array.isArray(value)) return value.map((entry) => truncateLeaves(entry, max));
+  if (typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, truncateLeaves(entry, max)]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Cap a row list AND trim wide string fields in one step: the `{ items,
+ * total, returned, truncated }` shape list tools return, with every string
+ * leaf capped at `maxString` (marked with `[truncated]`). Prefer this over
+ * hand-rolled `capList(rows.map(...))` in new tools so result budgets stay
+ * uniform across the catalog.
+ */
+export function compactRows<T>(
+  rows: readonly T[],
+  opts?: { limit?: number; maxString?: number },
+): { items: T[]; total: number; returned: number; truncated: boolean } {
+  const limit = opts?.limit ?? MAX_LIST_ROWS;
+  const maxString = opts?.maxString ?? MAX_ROW_STRING;
+  const items = rows.slice(0, limit).map((row) => truncateLeaves(row, maxString) as T);
+  return { items, total: rows.length, returned: items.length, truncated: rows.length > limit };
+}
+
