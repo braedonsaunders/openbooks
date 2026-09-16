@@ -348,6 +348,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0162_scheduler_outbox_allocation_scope.sql",
     "0163_allocation_lineage_time_entry_anchor.sql",
     "0164_allocation_lineage_time_entry_cascade.sql",
+    "0165_jl_guard_original_parent_immutability.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
