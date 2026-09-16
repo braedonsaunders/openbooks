@@ -60,5 +60,9 @@
     "unavailable": "No apply action available — open the finding for details.",
     "emptyTitle": "No proposals",
     "emptyDescription": "No findings carry a proposed command right now."
+  },
+  "drawer": {
+    "askAboutThis": "Ask about this",
+    "askAboutThisHint": "Open chat with this finding's evidence attached"
   }
 }

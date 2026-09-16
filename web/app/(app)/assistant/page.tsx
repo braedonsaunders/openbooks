@@ -13,7 +13,7 @@ export async function generateMetadata() {
 export default async function AssistantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; finding?: string }>
 }) {
   const sp = await searchParams
   const data = await loadAssistant(sp)

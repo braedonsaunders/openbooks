@@ -24,6 +24,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  X,
 } from 'lucide-react'
 import { Button, EmptyState, cn } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
@@ -76,6 +77,7 @@ export function AssistantApp({
   canConfigureAi = false,
   aiEnabled,
   initialPrompt,
+  initialFindingId,
 }: {
   conversations: ConversationSummary[]
   activeId: string | null
@@ -85,6 +87,8 @@ export function AssistantApp({
   aiEnabled: boolean
   /** Prompt passed via /assistant?q= (the ⌘K launcher); auto-sent once. */
   initialPrompt?: string
+  /** Finding id passed via /assistant?finding= (the workbench "Ask about this"). */
+  initialFindingId?: string
 }) {
   const t = useTranslations('assistant')
   const admin = useTranslations('admin.ai')
@@ -93,6 +97,10 @@ export function AssistantApp({
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages.map(toChatMessage))
   const [convos, setConvos] = useState(conversations)
   const [currentId, setCurrentId] = useState<string | null>(activeId)
+  // Workbench finding context: attached to turns until removed. A fresh chat
+  // (Link to /assistant) remounts and reads the URL again, so no clearing
+  // logic is needed here beyond the dismiss chip.
+  const [findingId, setFindingId] = useState<string | null>(initialFindingId ?? null)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -143,7 +151,7 @@ export function AssistantApp({
         const res = await fetch('/api/assistant/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ conversationId, prompt: text }),
+          body: JSON.stringify({ conversationId, prompt: text, ...(findingId ? { findingId } : {}) }),
           signal: ac.signal,
         })
         const responseConversationId = res.headers.get('x-conversation-id')
@@ -206,7 +214,7 @@ export function AssistantApp({
         void refreshConversations()
       }
     },
-    [aiEnabled, currentId, refreshConversations, scrollToBottom, t],
+    [aiEnabled, currentId, findingId, refreshConversations, scrollToBottom, t],
   )
 
   // Auto-send a prompt passed via ?q= (from the ⌘K launcher) once per distinct
@@ -460,6 +468,22 @@ export function AssistantApp({
                 </div>
               </div>
             ) : (
+              <div className="space-y-1.5">
+                {findingId ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{t('context.attached')}</span>
+                    <button
+                      type="button"
+                      onClick={() => setFindingId(null)}
+                      className="shrink-0 rounded p-0.5 hover:bg-teal-100 dark:hover:bg-teal-900"
+                      aria-label={t('context.remove')}
+                      title={t('context.remove')}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : null}
               <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
                 <textarea
                   value={input}
@@ -493,6 +517,7 @@ export function AssistantApp({
                     <Send className="h-4 w-4" />
                   </Button>
                 )}
+              </div>
               </div>
             )}
             {canWrite && aiEnabled ? (

@@ -5,6 +5,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { getOrgAiConfig } from '../../../lib/assistant/ai-config'
 import { getModel } from '../../../lib/assistant/client'
 import { listConversations } from '../../../lib/ai-conversations'
+import { isUuid } from '../../../lib/list-params'
 
 /**
  * The assistant new-chat page, split into a loader and a spec.
@@ -36,6 +37,8 @@ export interface AssistantData {
   canConfigureAi: boolean
   aiEnabled: boolean
   initialPrompt?: string
+  /** Finding id from /assistant?finding= (the workbench "Ask about this"). */
+  initialFindingId?: string
 }
 
 export async function loadAssistant(
@@ -48,6 +51,7 @@ export async function loadAssistant(
     getOrgAiConfig(authz.user.orgId),
   ])
   const q = sp.q
+  const finding = sp.finding
   return {
     conversations,
     canWrite: can(authz, 'assistant.write'),
@@ -55,6 +59,9 @@ export async function loadAssistant(
     aiEnabled: getModel(aiConfig, 'smart') !== null,
     // Single-valued ?q= only; an array (or absent) prompt is no prompt.
     ...(typeof q === 'string' ? { initialPrompt: q } : {}),
+    // Single-valued uuid ?finding= only; anything else is no handoff (the
+    // chat route re-validates and the context loader fails closed anyway).
+    ...(typeof finding === 'string' && isUuid(finding) ? { initialFindingId: finding } : {}),
   }
 }
 
@@ -78,6 +85,7 @@ export function assistantSpec(data: AssistantData): PageSpec {
         // explicit prop the component treats the same, but a missing key
         // keeps the two render paths' props objects identical.
         ...(data.initialPrompt !== undefined ? { initialPrompt: data.initialPrompt } : {}),
+        ...(data.initialFindingId !== undefined ? { initialFindingId: data.initialFindingId } : {}),
       }),
     ],
   })
