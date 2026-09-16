@@ -2228,6 +2228,289 @@ test("customer-payment surcharge posting rejects a non-income fee account", { sk
   }
 });
 
+test("draft allocation shape validation fails closed before any open-item read", { skip: !DB }, async () => {
+  // validateAllocationInputs is a mutation target with no coverage: every
+  // guard below (missing line, duplicate line, non-positive amounts, bad
+  // evidence source, blank reference, unusable rate) must refuse the draft
+  // before the open-item lookup, which these shapes never reach.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Allocation shape guard", "admin");
+    const payment = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "vendor_payment",
+      createdBy: userId,
+      partyId: org.vendorId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    });
+    const lineId = randomUUID();
+    const shape = (overrides: Record<string, unknown>) => ({
+      openLineId: lineId,
+      sourceTransactionAmount: "10",
+      targetTransactionAmount: "10",
+      settlementRate: "1",
+      settlementRateSource: "same_currency" as const,
+      settlementRateReference: "same transaction currency",
+      ...overrides,
+    });
+    const cases: Array<[string, Record<string, unknown> | Array<Record<string, unknown>>, RegExp]> = [
+      ["missing open item line", { openLineId: "" }, /missing its open item line/],
+      ["duplicate open item", [shape({}), shape({})], /allocated twice/],
+      ["zero source amount", { sourceTransactionAmount: "0" }, /positive exact decimals/],
+      ["negative target amount", { targetTransactionAmount: "-1" }, /positive exact decimals/],
+      ["zero target base amount", { targetBaseAmount: "0" }, /positive exact decimals/],
+      ["negative target base amount", { targetBaseAmount: "-2.5" }, /positive exact decimals/],
+      ["invalid evidence source", { settlementRateSource: "bogus" }, /evidence source is invalid/],
+      ["blank evidence reference", { settlementRateReference: "   " }, /evidence reference is required/],
+      ["over-precise rate", { settlementRate: "1.00000000001" }, /positive exact decimals/],
+      ["zero rate", { settlementRate: "0.0000000000" }, /positive exact decimals/],
+      ["negative rate", { settlementRate: "-1" }, /positive exact decimals/],
+    ];
+    for (const [name, allocations, message] of cases) {
+      await assert.rejects(
+        updateDraftPayment(
+          payment.id,
+          { allocations: (Array.isArray(allocations) ? allocations : [shape(allocations)]) as never },
+          userId,
+          org.orgId,
+        ),
+        (error: unknown) => error instanceof PaymentError && message.test(error.message),
+        name,
+      );
+    }
+    // A well-formed shape clears validation and dies later at the open-item
+    // lookup, proving the guards above are ordered before it.
+    await assert.rejects(
+      updateDraftPayment(payment.id, { allocations: [shape({})] }, userId, org.orgId),
+      (error: unknown) => error instanceof PaymentError && /not an open item for this party/.test(error.message),
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("settlement evidence must cross-foot and match the currency rules", { skip: !DB }, async () => {
+  // validateSettlementEvidence is uncovered: a rate that does not reproduce
+  // the target amount, same-currency pairs without a unit rate, and
+  // cross-currency pairs without explicit evidence must all fail closed.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Settlement evidence guard", "admin");
+    const invoiceId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-EVIDENCE-1',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+              '100', '0', '100', ${userId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price,
+         amount, tax_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100',
+              '100', '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
+    const invoiceEntryId = await postDocument(invoiceId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
+    const openLineId = (await db.execute<{ id: string }>(sql`
+      select id from journal_lines
+       where entry_id = ${invoiceEntryId} and org_id = ${org.orgId}
+         and is_open_item
+    `)).rows[0]!.id;
+
+    const payment = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    });
+    const evidence = (overrides: Record<string, unknown>) => ({
+      openLineId,
+      sourceTransactionAmount: "80",
+      targetTransactionAmount: "80",
+      settlementRate: "1",
+      settlementRateSource: "same_currency" as const,
+      settlementRateReference: "same transaction currency",
+      ...overrides,
+    });
+    const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+      ["rate does not cross-foot", { targetTransactionAmount: "100", settlementRate: "1.2" }, /does not cross-foot/],
+      ["same-currency pair without a unit rate", { settlementRate: "1.0000000001", settlementRateSource: "manual" }, /require equal amounts and a rate of one/],
+      ["same-currency pair without same-currency evidence", { settlementRateSource: "manual" }, /require equal amounts and a rate of one/],
+    ];
+    for (const [name, allocation, message] of cases) {
+      await assert.rejects(
+        updateDraftPayment(payment.id, { allocations: [evidence(allocation)] }, userId, org.orgId),
+        (error: unknown) => error instanceof PaymentError && message.test(error.message),
+        name,
+      );
+    }
+
+    const foreignInvoiceId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${foreignInvoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-EVIDENCE-FX',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'EUR', '1.2',
+              '100', '0', '100', ${userId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price,
+         amount, tax_amount)
+        values (${org.orgId}, ${foreignInvoiceId}, 1, ${org.accounts.revenue}, '1', '100',
+              '100', '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${foreignInvoiceId} and org_id = ${org.orgId}`);
+    const foreignEntryId = await postDocument(foreignInvoiceId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
+    const foreignLineId = (await db.execute<{ id: string }>(sql`
+      select id from journal_lines
+       where entry_id = ${foreignEntryId} and org_id = ${org.orgId}
+         and is_open_item
+    `)).rows[0]!.id;
+    const foreignPayment = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "USD",
+      fxRate: "1.1",
+    });
+    const foreign = (overrides: Record<string, unknown>) => ({
+      openLineId: foreignLineId,
+      sourceTransactionAmount: "100",
+      targetTransactionAmount: "120",
+      settlementRate: "1.2",
+      settlementRateSource: "manual" as const,
+      settlementRateReference: "BANK-ADVICE-7",
+      ...overrides,
+    });
+    await assert.rejects(
+      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "same_currency" })] }, userId, org.orgId),
+      (error: unknown) => error instanceof PaymentError && /require explicit settlement-rate evidence/.test(error.message),
+      "cross-currency pair without explicit evidence",
+    );
+    await assert.rejects(
+      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "provider" })] }, userId, org.orgId),
+      (error: unknown) => error instanceof PaymentError && /requires an FX rate observation/.test(error.message),
+      "provider evidence without an observation",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posting compares allocations against the approved snapshot", { skip: !DB }, async () => {
+  // allocationsMatchApprovedSnapshot is uncovered: posting the approved
+  // allocations verbatim must succeed, while any drift must fail closed
+  // before cash moves.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Snapshot match guard", "admin");
+    const invoiceIds = [randomUUID(), randomUUID()];
+    const openLineIds: string[] = [];
+    for (let i = 0; i < 2; i += 1) {
+      const invoiceId = invoiceIds[i]!;
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${`INV-SNAPSHOT-${i}`},
+                ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+                '100', '0', '100', ${userId})`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount)
+          values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100',
+                '100', '0')`);
+      await db.execute(sql`
+        update documents set status = 'approved', updated_at = now()
+         where id = ${invoiceId} and org_id = ${org.orgId}`);
+      const entryId = await postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      openLineIds.push((await db.execute<{ id: string }>(sql`
+        select id from journal_lines
+         where entry_id = ${entryId} and org_id = ${org.orgId}
+           and is_open_item
+      `)).rows[0]!.id);
+    }
+    const stored = (lineId: string, amount: string) => ({
+      openLineId: lineId,
+      sourceTransactionAmount: amount,
+      targetTransactionAmount: amount,
+      settlementRate: "1",
+      settlementRateSource: "same_currency" as const,
+      settlementRateReference: "same transaction currency",
+    });
+    const paymentIds: string[] = [];
+    for (let i = 0; i < 2; i += 1) {
+      const payment = await createPaymentDocument({
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "CAD",
+      });
+      const saved = await updateDraftPayment(payment.id, {
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        allocations: [stored(openLineIds[i]!, "100")],
+      }, userId, org.orgId);
+      // The drawer renders the returned document: a loader that answers
+      // null for a just-saved draft breaks the round trip.
+      assert.ok(saved, "draft save returns the document");
+      assert.equal(saved.doc.id, payment.id);
+      assert.equal(saved.allocations.length, 1);
+      await db.execute(sql`
+        update documents
+           set status = 'approved', submitted_by = ${userId}, submitted_at = now()
+         where id = ${payment.id}
+      `);
+      paymentIds.push(payment.id);
+    }
+    // The approved allocations verbatim: the snapshot matches and cash moves.
+    const { entryId } = await postPaymentWithApplications(
+      paymentIds[0]!,
+      [stored(openLineIds[0]!, "100")],
+      userId,
+    );
+    assert.ok(entryId, "verbatim allocations post");
+    // Drifted amounts: the snapshot mismatches and nothing posts.
+    await assert.rejects(
+      postPaymentWithApplications(paymentIds[1]!, [stored(openLineIds[1]!, "70")], userId),
+      (error: unknown) => error instanceof PaymentError && /differ from the approved document/.test(error.message),
+    );
+    const drifted = await db.execute<{ status: string; posted_entry_id: string | null }>(sql`
+      select status, posted_entry_id from documents where id = ${paymentIds[1]} and org_id = ${org.orgId}
+    `);
+    assert.deepEqual(drifted.rows[0], { status: "approved", posted_entry_id: null });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("customer receipts refuse a vendor-style early-payment discount", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -2627,3 +2910,138 @@ test(
     }
   },
 );
+
+test(
+  "application suggestions walk the whole queue for a one-unit remainder",
+  { skip: !DB },
+  async () => {
+    // A widened FIFO loop bound (remaining <= 1n) stops after the first
+    // invoice and leaves a one-unit remainder on account; the queue must
+    // be walked until the remainder is exactly zero.
+    const org = await createScratchOrg();
+    const firstLineId = randomUUID();
+    const secondLineId = randomUUID();
+    // Two entries with ordered numbers: the queue order is deterministic
+    // (due date, posting date, entry number), so the dust must land on the
+    // second invoice exactly.
+    try {
+    const dustLineId = randomUUID();
+    for (const [tag, lineId, amount] of [
+      ["A", firstLineId, 80],
+      ["B", secondLineId, 50],
+      ["C", dustLineId, 0.0001],
+    ] as const) {
+      const documentId = randomUUID();
+      const entryId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-FIFO-DUST-${tag}`},
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', ${amount}, 0, ${amount}, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           ${`INV-FIFO-DUST-${tag}`}, ${org.date}, ${org.periodId}, 'FIFO dust fixture',
+           'draft', ${documentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${lineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue},
+           ${org.subsidiaryId}, ${-amount}, 'CAD', ${-amount}, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id = ${entryId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${documentId}
+      `);
+    }
+
+      const dust = await suggestApplications(org.customerId, "80.0001", "ar", {
+        sourceCurrency: "CAD",
+        orgId: org.orgId,
+      });
+      assert.equal(dust.strategy, "fifo");
+      assert.equal(dust.applied, "80.0001");
+      assert.equal(dust.remaining, "0.0000");
+      assert.deepEqual(dust.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
+        [firstLineId, "80.0000"],
+        [secondLineId, "0.0001"],
+      ]);
+
+      // A reference naming the second invoice resolves there, not on the
+      // first queue entry: an inverted matcher settles the wrong invoice.
+      const bySecondRef = await suggestApplications(org.customerId, "80.0001", "ar", {
+        sourceCurrency: "CAD",
+        orgId: org.orgId,
+        reference: "inv-fifo-dust-b",
+      });
+      assert.equal(bySecondRef.strategy, "reference");
+      assert.equal(bySecondRef.applied, "50.0000");
+      assert.equal(bySecondRef.remaining, "30.0001");
+      assert.deepEqual(bySecondRef.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
+        [secondLineId, "50.0000"],
+      ]);
+
+      // A dust open line is still suggested: a widened positivity filter
+      // drops it from the queue and the exact match misses.
+      const dustExact = await suggestApplications(org.customerId, "0.0001", "ar", {
+        sourceCurrency: "CAD",
+        orgId: org.orgId,
+      });
+      assert.equal(dustExact.strategy, "exact");
+      assert.equal(dustExact.applied, "0.0001");
+      assert.deepEqual(dustExact.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
+        [dustLineId, "0.0001"],
+      ]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application suggestions answer empty and degenerate amounts exactly",
+  { skip: !DB },
+  async () => {
+    // The early return is a mutation target: narrowed bounds proceed into
+    // the queue (spelling the zero applied amount differently), a widened
+    // item bound skips the return for an empty queue, and the negative
+    // clamp shapes the remainder. The vendor has no AR lines, so every
+    // row below takes the early return on purpose.
+    const org = await createScratchOrg();
+    try {
+      for (const amount of ["0", "-5", "-0.0001"] as const) {
+        assert.deepEqual(
+          await suggestApplications(org.vendorId, amount, "ar", { sourceCurrency: "CAD", orgId: org.orgId }),
+          { allocations: [], applied: "0", remaining: "0.0000", strategy: "none" },
+          `amount ${amount}`,
+        );
+      }
+      assert.deepEqual(
+        await suggestApplications(org.vendorId, "5", "ar", { sourceCurrency: "CAD", orgId: org.orgId }),
+        { allocations: [], applied: "0", remaining: "5.0000", strategy: "none" },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
