@@ -1,0 +1,114 @@
+{
+  "kind": "internal-controls",
+  "at": "2026-09-16T15:55:03.569Z",
+  "gitSha": null,
+  "totals": {
+    "pass": 7,
+    "fail": 0,
+    "gap": 0,
+    "skipped": 0
+  },
+  "pass": true,
+  "cases": [
+    {
+      "id": "alloc-no-lost-cent",
+      "title": "Apportioning an indivisible total loses no cent",
+      "control": "A12",
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Splitting 100.00 across three equal weights assigns the entire 100.00 — the one-unit leftover lands deterministically on the first target and is recorded as residual, never dropped or invented.",
+      "facts": [
+        "Total 100.00 over three equal weights of 1 with the largest-share residual policy.",
+        "A hundredth of a cent of difference is a failure."
+      ],
+      "ms": 1
+    },
+    {
+      "id": "alloc-entry-group-sum",
+      "title": "Exploded entry children sum to the entered amount",
+      "control": "A12",
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A 1,000.01 bill line exploded by a 60/30/10 entry rule becomes children of 600.0060, 300.0030, and 100.0010 that sum to exactly the entered 1,000.01.",
+      "facts": [
+        "Entry rule with explicit fixed-percent targets Engineering 60, Sales 30, Support 10.",
+        "Entered line amount 1000.01 with no quantity."
+      ],
+      "ms": 1
+    },
+    {
+      "id": "alloc-reversal-restores",
+      "title": "Reversing a posted run restores every balance",
+      "control": "A12",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Posting a 1,000.00 reclass sweep moves 600.00 and 400.00 onto the two target accounts, reversing mirrors every leg, and the ledger afterwards equals the pre-run ledger on every account.",
+      "facts": [
+        "Source balance 1000.00 in the pool account in period 2026-07.",
+        "Period rule with explicit fixed-percent targets 60 and 40 on two target accounts, reclass impact.",
+        "Posting reason and reversal reason recorded; reversal dated inside the open period."
+      ],
+      "ms": 118
+    },
+    {
+      "id": "alloc-rerun-idempotent",
+      "title": "Re-running an unchanged sweep posts nothing new",
+      "control": "A12",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Re-running a posted sweep with unchanged inputs returns the existing run, posts no journal, and leaves exactly one posted run — the fingerprint comparison, not a second posting.",
+      "facts": [
+        "Source balance 1000.00 in the pool account in period 2026-07.",
+        "Period rule with explicit fixed-percent targets 60 and 40 on two target accounts, reclass impact.",
+        "The sweep is previewed and posted once, then re-run with identical inputs."
+      ],
+      "ms": 23
+    },
+    {
+      "id": "alloc-contributor-balance",
+      "title": "Posting refuses an unbalanced contributor set",
+      "control": "A12",
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A contributor line set whose subsidiary totals do not net to zero is refused before it can join the kernel union — posting throws instead of writing a partial entry.",
+      "facts": [
+        "One rule contributor with two lines netting to 0.01, not zero.",
+        "The balance check runs inside the collection step and again at the posting seam, both before any write."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "alloc-net-zero-pair-account-total-unchanged",
+      "title": "A net-zero pair leaves every account total unchanged",
+      "control": "A12",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A 1,000.00 net-zero sweep onto three departments posts 600.00, 300.00, and 100.00 of dimensional attribution while the account total stays exactly 1,000.00 — company profit and loss cannot move.",
+      "facts": [
+        "Source balance 1000.00 in the pool account in period 2026-07.",
+        "Period rule with explicit fixed-percent targets 60, 30, and 10 on the source account with three departments, net-zero-pair impact."
+      ],
+      "ms": 16
+    },
+    {
+      "id": "alloc-published-version-frozen",
+      "title": "A published rule version is frozen",
+      "control": "A12",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Once published, a version refuses definition edits, target replacement, and re-publication — and its definition hash is byte-identical afterwards, so posted runs stay explainable.",
+      "facts": [
+        "Period rule created, drafted, and published through the real rule service.",
+        "An edit, a target replacement, and a second publish are each attempted against the published version."
+      ],
+      "ms": 36
+    }
+  ]
+}

@@ -495,6 +495,19 @@ test('the trust workflow consumes the checkpoint but never produces simulation e
     'trust.yml must not provision simulation companies: the checkpoint arrives from test.yml',
   )
 
+  // The internal-controls evidence set rides the same job: pin it so it
+  // cannot be quietly dropped while the standards corpus keeps running.
+  const controlsRuns = blocks.filter((b) => /conformance\/cli\.ts\s+controls\s+report/.test(withoutComments(b.body)))
+  assert.equal(
+    controlsRuns.length,
+    1,
+    'trust.yml must run the internal-controls evidence set exactly once; it is missing, duplicated, or renamed',
+  )
+  assert.ok(
+    !toleratesFailure(withoutComments(controlsRuns[0].body)),
+    'a `||` fallback on the controls run is a statement that control failures may pass silently',
+  )
+
   // The consumer wiring itself is pinned: publish must download the
   // checkpoint from the triggering test run (run-id), not from thin air, and
   // must stamp the corpus with that run's SHA rather than its own checkout.
