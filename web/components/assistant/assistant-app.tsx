@@ -4,7 +4,7 @@
 // composer. Streams via the UI-message protocol (readUIMessageStream) so the
 // SAME parts[] renderer serves live tokens and reloaded transcripts.
 
-import { memo, useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -37,8 +37,10 @@ import {
   upsertProvisionalConversation,
 } from './sidebar-state'
 import {
+  anchorScrollTop,
   countAssistantTurns,
   formatMessageTimestamp,
+  MESSAGE_PAGE_SIZE,
   reconcileThreadAfterStop,
   withLastAssistantParts,
 } from './thread-state'
@@ -121,6 +123,17 @@ export function AssistantApp({
   // Threads this client created whose id the server list may not know yet.
   // They stay pinned at the top of the sidebar until a refresh confirms them.
   const provisionalIdsRef = useRef<Set<string>>(new Set())
+  // Long-history paging: whether a page exists above the visible head. A full
+  // first page optimistically shows the button; the first probe or page load
+  // resolves the truth (a thread of exactly one page hides it again).
+  const [hasOlder, setHasOlder] = useState(initialMessages.length >= MESSAGE_PAGE_SIZE)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const prependAnchorRef = useRef<{
+    firstMessageId: string | undefined
+    scrollHeight: number
+    scrollTop: number
+  } | null>(null)
 
   const scrollToBottom = useCallback(() => {
     window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }))
@@ -148,6 +161,65 @@ export function AssistantApp({
     }
   }, [])
 
+  // Lightweight probe: is there any history above the given head? Resolves
+  // the optimistic initial flag without loading a page.
+  const probeHasOlder = useCallback(async (convId: string, headId: string | undefined) => {
+    if (!headId) {
+      setHasOlder(false)
+      return
+    }
+    try {
+      const res = await fetch(
+        `/api/assistant/conversations/${convId}?before=${encodeURIComponent(headId)}&limit=1`,
+      )
+      if (!res.ok) return
+      const body = (await res.json()) as { messages: StoredMessage[]; hasOlder: boolean }
+      setHasOlder(body.hasOlder)
+    } catch {
+      // best-effort — a failed probe hides the button rather than erroring
+      setHasOlder(false)
+    }
+  }, [])
+
+  async function loadOlder() {
+    const viewport = viewportRef.current
+    const first = messages.find((m) => m.role !== 'system')
+    if (!viewport || !currentId || !first || loadingOlder || streaming || !hasOlder) return
+    prependAnchorRef.current = {
+      firstMessageId: first.id,
+      scrollHeight: viewport.scrollHeight,
+      scrollTop: viewport.scrollTop,
+    }
+    setLoadingOlder(true)
+    setError(null)
+    try {
+      const res = await fetch(
+        `/api/assistant/conversations/${currentId}?before=${encodeURIComponent(first.id)}&limit=${MESSAGE_PAGE_SIZE}`,
+      )
+      if (!res.ok) throw new Error()
+      const body = (await res.json()) as { messages: StoredMessage[]; hasOlder: boolean }
+      const older = body.messages.map(toChatMessage)
+      setMessages((prev) => [...older, ...prev])
+      setHasOlder(body.hasOlder)
+    } catch {
+      prependAnchorRef.current = null
+      setError(t('loadEarlierFailed'))
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
+  // Prepending history must not move the message the reader was looking at:
+  // restore the exact distance from the old head by the height the new rows
+  // added above it.
+  useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current
+    const viewport = viewportRef.current
+    if (!anchor || !viewport || messages[0]?.id === anchor.firstMessageId) return
+    viewport.scrollTop = anchorScrollTop(anchor.scrollTop, anchor.scrollHeight, viewport.scrollHeight)
+    prependAnchorRef.current = null
+  }, [messages])
+
   const send = useCallback(
     async (rawText: string) => {
       const text = rawText.trim()
@@ -167,6 +239,9 @@ export function AssistantApp({
       ])
       scrollToBottom()
       setStreaming(true)
+      let lastParts: unknown[] = []
+      let producedParts = false
+      let completedNormally = false
       try {
         const res = await fetch('/api/assistant/chat', {
           method: 'POST',
@@ -209,9 +284,6 @@ export function AssistantApp({
             },
           }),
         )
-        let lastParts: unknown[] = []
-        let producedParts = false
-        let completedNormally = false
         for await (const message of readUIMessageStream({ stream: chunkStream })) {
           lastParts = message.parts as unknown[]
           if (lastParts.length > 0) producedParts = true
@@ -246,6 +318,13 @@ export function AssistantApp({
               setMessages((prev) =>
                 reconcileThreadAfterStop(prev, server, completedTurnsRef.current),
               )
+              // An adopted server window may itself sit below older history.
+              if (server.length >= MESSAGE_PAGE_SIZE) {
+                void probeHasOlder(
+                  resolvedConversationId,
+                  server.find((m) => m.role !== 'system')?.id,
+                )
+              }
             }
           } catch {
             // keep the streamed state
@@ -256,7 +335,7 @@ export function AssistantApp({
         void refreshConversations()
       }
     },
-    [aiEnabled, currentId, findingId, refreshConversations, scrollToBottom, t],
+    [aiEnabled, currentId, findingId, probeHasOlder, refreshConversations, scrollToBottom, t],
   )
 
   // Auto-send a prompt passed via ?q= (from the ⌘K launcher) once per distinct
@@ -462,8 +541,20 @@ export function AssistantApp({
           </div>
         </header>
 
-        <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+        <div ref={viewportRef} className="app-scroll min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-4 py-6">
+            {hasOlder && messages.length > 0 ? (
+              <div className="mb-4 flex justify-center">
+                <button
+                  type="button"
+                  disabled={loadingOlder || streaming}
+                  onClick={() => void loadOlder()}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-wait disabled:text-slate-400 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                >
+                  {loadingOlder ? t('loadingEarlier') : t('loadEarlier')}
+                </button>
+              </div>
+            ) : null}
             {messages.length === 0 ? (
               <Welcome
                 suggestions={suggestions}

@@ -15,6 +15,9 @@
   "send": "Enviar",
   "stop": "Detener",
   "responding": "El asistente está respondiendo",
+  "loadEarlier": "Cargar mensajes anteriores",
+  "loadingEarlier": "Cargando mensajes anteriores…",
+  "loadEarlierFailed": "No se pudieron cargar los mensajes anteriores.",
   "writeHint": "El asistente puede redactar asientos de diario, pero nada se guarda hasta que haga clic en Aplicar — y los borradores aún deben ser contabilizados por usted.",
   "suggestions": {
     "s1": "¿Cómo nos fue el mes pasado? Resume el estado de resultados.",
