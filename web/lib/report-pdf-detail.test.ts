@@ -16,7 +16,7 @@ registerHooks({
   },
 })
 
-const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData } = await import('./report-pdf.ts')
+const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData, journalExportData, registerExportData, partnerStatementExportData } = await import('./report-pdf.ts')
 const { decimalRatio } = await import('./reports/decimals.ts')
 
 const t = (key: string) => key
@@ -84,6 +84,127 @@ test('general-ledger export mirrors the paper view with one section per account'
   ])
   assert.equal(data.groups[0]?.rows[1]?.[1], 'JE-100')
   assert.equal(data.groups[0]?.rows[1]?.[3], '125.0000')
+})
+
+test('detail exports disclose line truncation in the summary instead of silently omitting rows', () => {
+  const gl = generalLedgerExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: true,
+    accounts: [],
+  }, 'General Ledger', t)
+  assert.ok(
+    gl.summary.some((item) => item.label === 'generalLedger.truncated'),
+    `truncated GL export must warn, got summary: ${JSON.stringify(gl.summary)}`,
+  )
+
+  const journal = journalExportData({
+    entries: [],
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: true,
+  }, 'Journal', t)
+  assert.ok(
+    journal.summary.some((item) => item.label === 'journal.truncated'),
+    `truncated journal export must warn, got summary: ${JSON.stringify(journal.summary)}`,
+  )
+
+  const register = registerExportData({
+    parties: [],
+    from: '2026-01-01',
+    to: '2026-01-31',
+    side: 'ar',
+    truncated: true,
+  }, 'A/R Register', t)
+  assert.ok(
+    register.summary.some((item) => item.label === 'registers.truncated'),
+    `truncated register export must warn, got summary: ${JSON.stringify(register.summary)}`,
+  )
+
+  const statement = partnerStatementExportData({
+    party: { id: 'party-1', name: 'Acme' },
+    side: 'ar',
+    from: '2026-01-01',
+    to: '2026-01-31',
+    opening: '0.0000',
+    closing: '100.0000',
+    lines: [],
+    aging: { current: '100.0000', b1: '0.0000', b2: '0.0000', b3: '0.0000', b4: '0.0000', total: '100.0000' },
+    truncated: true,
+  }, t)
+  assert.ok(
+    statement.summary.some((item) => item.label === 'registers.truncated'),
+    `truncated partner-statement export must warn, got summary: ${JSON.stringify(statement.summary)}`,
+  )
+})
+
+test('tabular exports carry the truncation notice instead of dropping the summary', async () => {
+  const data = generalLedgerExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: true,
+    accounts: [{
+      id: 'account-1',
+      number: '5210',
+      name: 'Overhead Allowance',
+      type: 'cogs',
+      opening: '0.0000',
+      closing: '10.0000',
+      lines: [],
+    }],
+  }, 'General Ledger', t)
+
+  const result = exportDataToRunResult(data)
+  const lastGroup = result.groups[result.groups.length - 1]
+  assert.ok(
+    lastGroup?.rows.some((row) => String(row[0] ?? '').includes('generalLedger.truncated')),
+    `run result must end with the truncation notice, got: ${JSON.stringify(lastGroup?.rows.slice(-2))}`,
+  )
+
+  const csv = exportDataToCsv(data, {})
+  assert.ok(
+    csv.includes('generalLedger.truncated'),
+    `truncated GL CSV must warn, got tail: ${JSON.stringify(csv.slice(-160))}`,
+  )
+
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(await exportDataToXlsx(data, {
+    reportName: 'General Ledger',
+    generatedAt: new Date('2026-01-31T00:00:00Z'),
+  }) as unknown as ArrayBuffer)
+  const sheet = workbook.worksheets[workbook.worksheets.length - 1]
+  assert.ok(
+    String(sheet?.lastRow?.getCell(1).value ?? '').includes('generalLedger.truncated'),
+    `truncated GL workbook must warn, got: ${JSON.stringify(sheet?.lastRow?.values)}`,
+  )
+})
+
+test('tabular exports still warn when truncation left zero data groups', () => {
+  const data = generalLedgerExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: true,
+    accounts: [],
+  }, 'General Ledger', t)
+  const emptyResult = exportDataToRunResult(data)
+  assert.ok(
+    emptyResult.groups.some((g) => g.rows.some((row) => String(row[0] ?? '').includes('generalLedger.truncated'))),
+    'a truncated export with no data groups must still carry the cap notice',
+  )
+  assert.ok(
+    exportDataToCsv(data, {}).includes('generalLedger.truncated'),
+    'a truncated export with no rows must still disclose the cap in CSV',
+  )
+})
+
+test('detail exports stay quiet when nothing was truncated', () => {
+  const gl = generalLedgerExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: false,
+    accounts: [],
+  }, 'General Ledger', t)
+  assert.deepEqual(gl.summary, [])
 })
 
 test('general-ledger export preserves exact money strings and their column flags', () => {

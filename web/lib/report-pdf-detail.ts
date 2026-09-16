@@ -86,7 +86,8 @@ export function generalLedgerExportData(
   return {
     title,
     dateRangeLabel: t('pnl.dateRange', { from: gl.from, to: gl.to }),
-    summary: [],
+    // A capped export without this notice reads as a complete ledger.
+    summary: gl.truncated ? [{ label: t('generalLedger.truncated'), value: '' }] : [],
     groups,
   }
 }

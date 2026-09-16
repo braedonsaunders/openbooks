@@ -158,6 +158,21 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     isEmpty: g.isEmpty,
   }))
   const rowCount = data.groups.reduce((n, g) => n + g.rows.length, 0)
+  // Tabular renderers print groups only, so a summary carried solely in
+  // `summary` would vanish from CSV/XLSX — including truncation notices, which
+  // would then read as complete files. Repeat it as trailing footer rows
+  // (raw values, matching the file's own exact-decimal cells).
+  const footers = data.summary
+    .map((item) => (item.value === '' || item.value === null || item.value === undefined
+      ? item.label
+      : `${item.label}: ${String(item.value)}`))
+    .filter((text) => text !== '')
+    .map((text) => [text])
+  if (footers.length > 0) {
+    const last = groups[groups.length - 1]
+    if (last) last.rows.push(...footers)
+    else groups.push({ kind: 'results', title: data.title, columns: [], rows: footers, isEmpty: false })
+  }
   return { groups, summary: data.summary, rowCount }
 }
 
@@ -728,7 +743,7 @@ export function journalExportData(j: JournalReportResult, title: string, t: Tran
       rows.push([e.entryNumber ?? '', e.date, `${l.accountNumber ?? ''} ${l.accountName}`.trim(), [l.party, l.memo].filter(Boolean).join(' · '), decimalIsZero(l.debit) ? null : l.debit, decimalIsZero(l.credit) ? null : l.credit])
     }
   }
-  return { title, dateRangeLabel: t('pnl.dateRange', { from: j.from, to: j.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'left', 'right', 'right'], money: [false, false, false, false, true, true] }] }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: j.from, to: j.to }), summary: j.truncated ? [{ label: t('journal.truncated'), value: '' }] : [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'left', 'right', 'right'], money: [false, false, false, false, true, true] }] }
 }
 
 export function registerExportData(reg: RegisterResult, title: string, t: Translator): ExportData {
@@ -747,7 +762,7 @@ export function registerExportData(reg: RegisterResult, title: string, t: Transl
     for (const l of pt.lines) rows.push([name, l.date, l.entryNumber ?? '', decimalIsZero(l.debit) ? null : l.debit, decimalIsZero(l.credit) ? null : l.credit, l.balance])
     rows.push([name, '', t('registers.closing'), null, null, pt.closing])
   }
-  return { title, dateRangeLabel: t('pnl.dateRange', { from: reg.from, to: reg.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'right', 'right', 'right'], money: [false, false, false, true, true, true] }] }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: reg.from, to: reg.to }), summary: reg.truncated ? [{ label: t('registers.truncated'), value: '' }] : [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'right', 'right', 'right'], money: [false, false, false, true, true, true] }] }
 }
 
 export function partnerStatementExportData(st: PartnerStatementResult, t: Translator): ExportData {
@@ -766,6 +781,7 @@ export function partnerStatementExportData(st: PartnerStatementResult, t: Transl
     title,
     dateRangeLabel: t('pnl.dateRange', { from: st.from, to: st.to }),
     summary: [
+      ...(st.truncated ? [{ label: t('registers.truncated'), value: '' }] : []),
       { label: t('aging.buckets.current'), value: st.aging.current, money: true },
       { label: t('aging.buckets.b1'), value: st.aging.b1, money: true },
       { label: t('aging.buckets.b2'), value: st.aging.b2, money: true },
