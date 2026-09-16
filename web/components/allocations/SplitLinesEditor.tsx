@@ -31,10 +31,14 @@ export interface CodingConfig {
 
 export interface AllocationLine {
   accountId: string
-  // Fixed amounts stay as their exact decimal text while they are being
-  // edited. Converting every keystroke through Number loses precision before
-  // the server-side money validator can canonicalize the value.
-  portion: { kind: 'remainder' } | { kind: 'percent'; value: number } | { kind: 'fixed'; value: string }
+  // Fixed amounts and manual weights stay as their exact decimal text while
+  // they are being edited. Converting every keystroke through Number loses
+  // precision before the server-side money validator can canonicalize the value.
+  portion:
+    | { kind: 'remainder' }
+    | { kind: 'percent'; value: number }
+    | { kind: 'fixed'; value: string }
+    | { kind: 'weight'; value: string }
   departmentId?: string | null
   projectId?: string | null
   locationId?: string | null
@@ -42,6 +46,42 @@ export interface AllocationLine {
   taxCodeId?: string | null
   partyId?: string | null
   description?: string | null
+  /** Allocation target label (the rule drawer shows it beside the share). */
+  label?: string | null
+}
+
+/**
+ * The target-basis half of an allocation line: everything the allocation
+ * kernel's explicit targets carry beyond the dimension coordinate. The rule
+ * drawer serializes editor lines through `allocationTargetBasisFromLine`
+ * (dimensions map one-to-one); an empty account means "same account".
+ */
+export interface AllocationTargetBasis {
+  targetAccountId: string | null
+  fixedPercent: string | null
+  weight: string | null
+  isRemainder: boolean
+  label: string | null
+}
+
+export function allocationTargetBasisFromLine(line: AllocationLine): AllocationTargetBasis {
+  const base = {
+    targetAccountId: line.accountId === '' ? null : line.accountId,
+    label: line.label ?? null,
+  }
+  switch (line.portion.kind) {
+    case 'remainder':
+      return { ...base, fixedPercent: null, weight: null, isRemainder: true }
+    case 'percent':
+      return { ...base, fixedPercent: String(line.portion.value), weight: null, isRemainder: false }
+    case 'weight':
+      return { ...base, fixedPercent: null, weight: line.portion.value, isRemainder: false }
+    case 'fixed':
+      // Fixed-amount splits belong to entry/bank surfaces, not allocation
+      // targets — the drawer never offers the kind, but the mapping stays
+      // total so a misconfigured line fails closed at publish, not silently.
+      return { ...base, fixedPercent: null, weight: null, isRemainder: false }
+  }
 }
 
 export interface SplitLinesLabels {
@@ -51,10 +91,13 @@ export interface SplitLinesLabels {
   remainder: string
   percent: string
   fixed: string
+  weight: string
+  sameAccount: string
   addLine: string
   removeLine: string
   none: string
   descriptionPlaceholder: string
+  labelPlaceholder: string
 }
 
 const DEFAULT_LABELS: SplitLinesLabels = {
@@ -64,10 +107,13 @@ const DEFAULT_LABELS: SplitLinesLabels = {
   remainder: 'Remainder',
   percent: 'Percent',
   fixed: 'Fixed',
+  weight: 'Weight',
+  sameAccount: 'Same account',
   addLine: 'Add line',
   removeLine: 'Remove line',
   none: '—',
   descriptionPlaceholder: 'Line memo',
+  labelPlaceholder: 'Target label',
 }
 
 export function newAllocationLine(accountId = ''): AllocationLine {
@@ -80,9 +126,19 @@ export function allocationPortionFromInput(
   rawValue: string,
 ): AllocationLine['portion'] {
   if (portion.kind === 'fixed') return { kind: 'fixed', value: rawValue }
+  if (portion.kind === 'weight') return { kind: 'weight', value: rawValue }
   if (portion.kind === 'percent') return { kind: 'percent', value: Number(rawValue) || 0 }
   return portion
 }
+
+const PORTION_LABEL: Record<AllocationLine['portion']['kind'], keyof SplitLinesLabels> = {
+  remainder: 'remainder',
+  percent: 'percent',
+  fixed: 'fixed',
+  weight: 'weight',
+}
+
+const DEFAULT_PORTION_KINDS: AllocationLine['portion']['kind'][] = ['remainder', 'percent', 'fixed']
 
 export function SplitLinesEditor({
   lines,
@@ -91,6 +147,9 @@ export function SplitLinesEditor({
   codings = [],
   showDescription = false,
   labels: labelOverrides,
+  portionKinds = DEFAULT_PORTION_KINDS,
+  allowEmptyAccount = false,
+  showLabel = false,
 }: {
   lines: AllocationLine[]
   onChange: (lines: AllocationLine[]) => void
@@ -98,6 +157,12 @@ export function SplitLinesEditor({
   codings?: CodingConfig[]
   showDescription?: boolean
   labels?: Partial<SplitLinesLabels>
+  /** Which portion kinds the select offers (allocation targets use remainder/percent/weight). */
+  portionKinds?: AllocationLine['portion']['kind'][]
+  /** An empty account means "same account" (allocation targets). */
+  allowEmptyAccount?: boolean
+  /** Show the per-line target label input (allocation targets). */
+  showLabel?: boolean
 }) {
   const labels = { ...DEFAULT_LABELS, ...labelOverrides }
 
@@ -106,7 +171,7 @@ export function SplitLinesEditor({
     onChange(next)
   }
   const removeAt = (i: number) => onChange(lines.filter((_, j) => j !== i))
-  const add = () => onChange([...lines, newAllocationLine(accountOptions[0]?.value ?? '')])
+  const add = () => onChange([...lines, newAllocationLine(allowEmptyAccount ? '' : (accountOptions[0]?.value ?? ''))])
 
   const setPortionKind = (i: number, kind: AllocationLine['portion']['kind']) => {
     const portion: AllocationLine['portion'] =
@@ -114,7 +179,9 @@ export function SplitLinesEditor({
         ? { kind: 'remainder' }
         : kind === 'percent'
           ? { kind: 'percent', value: 100 }
-          : { kind: 'fixed', value: '0' }
+          : kind === 'weight'
+            ? { kind: 'weight', value: '1' }
+            : { kind: 'fixed', value: '0' }
     setLine(i, { portion })
   }
 
@@ -128,7 +195,9 @@ export function SplitLinesEditor({
                 options={accountOptions}
                 value={line.accountId}
                 onChange={(v) => setLine(i, { accountId: v ?? '' })}
-                placeholder={labels.accountPlaceholder}
+                placeholder={allowEmptyAccount ? labels.sameAccount : labels.accountPlaceholder}
+                clearable={allowEmptyAccount}
+                emptyLabel={allowEmptyAccount ? labels.sameAccount : undefined}
               />
             </div>
             <Select
@@ -136,9 +205,9 @@ export function SplitLinesEditor({
               value={line.portion.kind}
               onChange={(e) => setPortionKind(i, e.target.value as AllocationLine['portion']['kind'])}
             >
-              <option value="remainder">{labels.remainder}</option>
-              <option value="percent">{labels.percent}</option>
-              <option value="fixed">{labels.fixed}</option>
+              {portionKinds.map((kind) => (
+                <option key={kind} value={kind}>{labels[PORTION_LABEL[kind]]}</option>
+              ))}
             </Select>
             {line.portion.kind !== 'remainder' ? (
               <div className="relative">
@@ -169,7 +238,7 @@ export function SplitLinesEditor({
             </Button>
           </div>
 
-          {(codings.length > 0 || showDescription) && (
+          {(codings.length > 0 || showDescription || showLabel) && (
             <div className="flex flex-wrap items-center gap-2 pl-0.5">
               {codings.map((c) => {
                 const fieldKey = CODING_FIELD[c.key]
@@ -193,6 +262,14 @@ export function SplitLinesEditor({
                   value={line.description ?? ''}
                   placeholder={labels.descriptionPlaceholder}
                   onChange={(e) => setLine(i, { description: e.target.value || null })}
+                />
+              ) : null}
+              {showLabel ? (
+                <Input
+                  className="h-8 min-w-[8rem] flex-1"
+                  value={line.label ?? ''}
+                  placeholder={labels.labelPlaceholder}
+                  onChange={(e) => setLine(i, { label: e.target.value || null })}
                 />
               ) : null}
             </div>

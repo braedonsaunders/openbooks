@@ -260,6 +260,7 @@ export type SplitPortion =
   | { kind: 'remainder' }
   | { kind: 'percent'; value: number }
   | { kind: 'fixed'; value: string }
+  | { kind: 'weight'; value: string }
 
 export function splitPortionsToAmounts(
   portions: readonly SplitPortion[],
@@ -271,6 +272,10 @@ export function splitPortionsToAmounts(
   } catch {
     return null
   }
+  // Manual weights belong to allocation targets, not entry splits: a weight
+  // names no amount, so a weight line can never price into the total. Fail
+  // closed (the allocation drawer never offers this kind here).
+  if (portions.some((portion) => portion.kind === 'weight')) return null
   const amounts = new Array<bigint>(portions.length).fill(0n)
   let placed = 0n
   for (let i = 0; i < portions.length; i++) {
