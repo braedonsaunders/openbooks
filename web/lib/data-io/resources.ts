@@ -19,6 +19,11 @@ import {
   PRIOR_PAYROLL_REGISTER_KEY,
   priorPayrollRegisterResource,
 } from './prior-payroll-register-resource'
+import {
+  FIXED_ASSETS_DESCRIPTOR,
+  FIXED_ASSETS_KEY,
+  fixedAssetsResource,
+} from './fixed-asset-resources'
 import { MASTER_ENTITIES, MASTER_BY_KEY, masterDescriptor, masterResource } from './master-data-resources'
 import { PROPERTY_DESCRIPTORS, PROPERTY_DESCRIPTOR_BY_KEY, propertyDataResource, propertyManagementEnabled } from './property-resources'
 import { recordSections, recordResource } from './record-resources'
@@ -287,6 +292,10 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
     if (await isDocKindEnabled(orgId, cfg.kind)) transactions.push(transactionDescriptor(cfg))
   }
   const propertyManagement = featureEnabled(features, 'propertyManagement') ? PROPERTY_DESCRIPTORS : []
+  // Mid-life fixed-asset onboarding — a whole register carried in from the
+  // outgoing system, opening accumulated figures included. See
+  // ./fixed-asset-resources.ts.
+  const fixedAssets = featureEnabled(features, 'fixedAssets') ? [FIXED_ASSETS_DESCRIPTOR] : []
   // Mid-year adoption carry-in — a bulk load from the outgoing provider's
   // year-to-date report. See ./payroll-opening-balances-resource.ts.
   // Mid-year adoption carry-in, plus the prior provider's per-period register
@@ -298,7 +307,7 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
       ]
     : []
-  return [...setup, ...master, ...records, ...propertyManagement, ...payroll, ...transactions]
+  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...transactions]
 }
 
 /** Resolve one resource bound to the org and (for export reads) its visibility scope. */
@@ -323,6 +332,10 @@ export async function getResource(
   if (key === PAYROLL_OPENING_ENTITLEMENTS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(payrollOpeningEntitlementsResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === FIXED_ASSETS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'fixedAssets'))) return null
+    return bindReadScope(fixedAssetsResource(orgId), orgId, allowedSubsidiaryIds)
   }
   const setup = SETUP_ENTITY_BY_KEY.get(key)
   if (setup) {
