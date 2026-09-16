@@ -6,6 +6,78 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8] - 2026-09-16
+
+Allocations release. One allocation kernel replaces three requests that used
+to be separate products elsewhere (allocation schedules, distribution keys at
+transaction entry, and a posting-time GL plug-in): a versioned, effective-dated
+rule model bound at three moments, a driver registry, one exact apportionment
+engine, and a lineage table that traces every allocated cent to its source
+line, rule version, and driver value.
+
+### Allocation kernel
+
+- Rules are versioned and effective-dated; a published version is frozen and
+  hashed, and every run and lineage row carries that hash. Applicability is
+  per GL account (or account group) and per department, location, class,
+  project, subsidiary, party, item, or custom segment, including untagged
+  pools. Bases are fixed percentages, stepped tiers, or a driver; targets are
+  explicit or dynamic (every active dimension value with weight). Impacts are
+  reclass, net-zero pair (never changes an account total), or report-only.
+- Drivers resolve from statistical journals (`journal_lines.quantity`), GL
+  activity or balance, seven native measures (headcount, labor hours, billed
+  hours, labor cost, revenue, direct cost, rentable area), effective-dated
+  manual tables, or any saved report definition, run under the actor's own
+  permissions; unavailable measures fail loudly instead of returning zeros.
+- Entry mode: a bill, expense, or journal line that matches an automatic
+  rule explodes on save into a stamped group of real lines (amounts exact,
+  quantities proportional, tax recomputed per child); suggest rules offer a
+  chip; a split dialog, group headers, un-split, and lock live in the line
+  grid; imports and the records API accept `distributionKey`.
+- Post mode: contributions land on the transaction's own journal entry,
+  stamped with their contributor (`journal_lines.contributor_kind/ref`),
+  balanced per contributor and per subsidiary, mirrored on void, written to
+  secondary posting books as their own entries, and grouped in the GL impact
+  drawer. A `custom_gl_lines` user-script trigger contributes lines the same
+  way, with the kernel lines frozen.
+- Period mode: preview, post, reverse, and re-run per rule, period, and book
+  with one posted run per occurrence, an explain payload (sources, driver
+  vector, shares, residual), re-run idempotency by fingerprint, scheduled
+  occurrences through the durable outbox, a close automation action
+  (`run_allocation`), and approval flows that hold a run pending until the
+  flow approves.
+- The overhead net-zero-pair writer is now a system-owned kernel rule derived
+  from the overhead settings and rate card, proven byte-identical to the
+  previous journal lines, with per-time-entry lineage.
+- Setup → Allocations workspace (Rules, Drivers, Runs tabs with a
+  four-tab rule drawer, driver values grid, run detail with lineage drill),
+  Allocation summary and Allocation lineage reports, an in-app help article,
+  six locale catalogs, seven read-only assistant/MCP tools, and an
+  internal-controls evidence set (seven cases) published beside the trust
+  corpus.
+
+### Assistant, agents, and setup
+
+- Chat threads appear in the sidebar instantly, page long histories, get short
+  generated titles, and forward finding handoffs; page headers wrap actions
+  under the title on phones.
+- Agents overview, library, policy pages, activity, inbox, proposals, and
+  briefings are rebuilt on the shared setup and table components.
+- Analytics sentences are localizable; source-evidenced bank sign-offs count
+  as reconciled for close readiness; JPY/KWD are pinned end to end.
+
+### Operator action
+
+- Five additive migrations (0160–0164) run automatically before the new code
+  serves. No posted history is reinterpreted; the dormant planning-era
+  allocation tables are replaced only if empty (they are, on every install).
+- Re-run `engine/src/seed-roles.ts` after upgrading: built-in roles gain the
+  `allocations.read/manage/run/approve` grants (roles are snapshots).
+- The `allocations` feature defaults off. Enable it, and the entry and
+  posting sub-features, under Company Settings → Features.
+- Posting a document under a rule whose driver is a saved report requires the
+  posting actor to hold `reports.read` (fail-closed by design).
+
 ## [0.1.0-alpha.7] - 2026-09-16
 
 Assistant and agents release. A live benchmark of the in-app assistant on a
