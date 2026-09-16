@@ -31,7 +31,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'agents-kpi-strip': { props: ['items'] },
   'agents-pack-actions': { props: ['agentKey', 'enabled', 'featureEnabled', 'packTitle', 'policy'] },
   'agents-pack-card': { props: ['agentKey', 'checksNote', 'checksTitle', 'configureHref', 'configureLabel', 'description', 'detectors', 'featureEnabled', 'installLabel', 'installPolicy', 'installed', 'installedLabel', 'moduleLine', 'name', 'needsLabel', 'permissions', 'proposes', 'proposesLabel', 'reads', 'readsLabel'] },
-  'agents-policy-workspace': { props: [], open: true },
+  'agents-policy-form': { props: ['description', 'featureEnabled', 'notification', 'pack', 'roles', 'runLine', 'specs', 'statusEnabled', 'statusLabel', 'users', 'usersTruncated'] },
   'agents-triage': { props: [], open: true },
   'aging-strip': { props: ['cells', 'total', 'totalDrill', 'totalLabel'] },
   'ai-settings-form': { props: ['initial', 'specs'] },

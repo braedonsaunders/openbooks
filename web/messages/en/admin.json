@@ -1610,7 +1610,9 @@
         "usersLabel": "People",
         "noTargets": "None",
         "usersTruncatedNote": "Showing the first 200 people.",
-        "deliveryNote": "Email delivery is not wired yet — this stores who should get what. Findings always appear under Agent Activity in the meantime."
+        "deliveryNote": "Email delivery is not wired yet — this stores who should get what. Findings always appear under Agent Activity in the meantime.",
+        "rolesPlaceholder": "Add a role…",
+        "usersPlaceholder": "Add a person…"
       },
       "activity": {
         "title": "Activity",

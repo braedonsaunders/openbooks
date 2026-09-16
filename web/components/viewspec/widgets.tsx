@@ -111,7 +111,7 @@ import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
 import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
-import { AgentPolicyWorkspace } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyWorkspace'
+import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
 import { AgentsTriage } from '../../app/(app)/agents/AgentsTriage'
 import { AgentsBriefing } from '../../app/(app)/agents/AgentsBriefing'
@@ -1321,9 +1321,21 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       configureLabel={str(props, 'configureLabel') ?? ''}
     />
   ),
-  /** Whole props bag — the policy island owns its schedule/detector/analysis/routing form. */
-  'agents-policy-workspace': (props) => (
-    <AgentPolicyWorkspace {...(props as unknown as ComponentProps<typeof AgentPolicyWorkspace>)} />
+  /** One pack's policy form: shared Card sections, shared form fields. */
+  'agents-policy-form': (props) => (
+    <AgentPolicyForm
+      statusLabel={str(props, 'statusLabel') ?? ''}
+      statusEnabled={props.statusEnabled === true}
+      description={str(props, 'description') ?? ''}
+      runLine={str(props, 'runLine') ?? ''}
+      pack={props.pack as ComponentProps<typeof AgentPolicyForm>['pack']}
+      specs={(props.specs as ComponentProps<typeof AgentPolicyForm>['specs']) ?? []}
+      notification={(props.notification as ComponentProps<typeof AgentPolicyForm>['notification']) ?? null}
+      roles={(props.roles as ComponentProps<typeof AgentPolicyForm>['roles']) ?? []}
+      users={(props.users as ComponentProps<typeof AgentPolicyForm>['users']) ?? []}
+      usersTruncated={props.usersTruncated === true}
+      featureEnabled={props.featureEnabled === true}
+    />
   ),
   /** Whole props bag — the activity island owns its filterable runs table. */
   'agents-activity-workspace': (props) => (

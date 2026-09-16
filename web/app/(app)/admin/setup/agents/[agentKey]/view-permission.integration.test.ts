@@ -29,6 +29,12 @@ const mockNavigation = `
   export function redirect(to) { throw new Error('NEXT_REDIRECT:' + to); }
 `;
 
+const mockIntl = `
+  export async function getTranslations(namespace) {
+    return (key, _vars) => namespace + ':' + key;
+  }
+`;
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
@@ -43,6 +49,9 @@ const hooks = registerHooks({
       if (specifier === "next/navigation") {
         return { url: "mock:agent-policy-navigation", shortCircuit: true };
       }
+      if (specifier === "next-intl/server") {
+        return { url: "mock:agent-policy-intl", shortCircuit: true };
+      }
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
@@ -55,6 +64,9 @@ const hooks = registerHooks({
     }
     if (url === "mock:agent-policy-navigation") {
       return { format: "module", source: mockNavigation, shortCircuit: true };
+    }
+    if (url === "mock:agent-policy-intl") {
+      return { format: "module", source: mockIntl, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -82,6 +94,11 @@ test("a setup manager gets the pack policy, specs and routing targets", { skip: 
     const data = await withBypassContext(() => loadAgentPolicy("accounting"));
     assert.equal(data.pack.agentKey, "accounting");
     assert.equal(data.pack.policy.enabled, false);
+    assert.equal(data.title, "admin:setup.agents.packs.accounting.title");
+    assert.equal(data.backHref, "/admin/setup/agents");
+    assert.equal(data.hasFeatureOff, false);
+    assert.ok(data.description.startsWith("admin:setup.agents.packs.accounting."));
+    assert.ok(data.runLine.startsWith("admin:setup.agents.overview."));
     assert.deepEqual(
       data.specs.map((spec) => spec.detectorKey),
       detectorSpecsForAgent("accounting").map((spec) => spec.detectorKey),
