@@ -52,6 +52,7 @@ import {
   setLayout,
   validateLayout,
 } from "./page-layouts";
+import type { ToolTier } from "../assistant/types";
 import { orgVitals } from "./vitals";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -77,6 +78,8 @@ export interface ApplicationToolDefinition {
   visibleTo: (authz: Authz) => boolean;
   /** Optional-feature key; adapters hide the tool while the org has it off. */
   featureKey?: string;
+  /** Chat-payload tier; absent means "module" (only sent when activated). MCP ignores tiers. */
+  tier?: ToolTier;
   execute: (context: ApplicationContext, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
