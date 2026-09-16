@@ -625,7 +625,19 @@
   },
   "sentinel": {
     "title": "Sentinel",
-    "backToHub": "Analyses"
+    "backToHub": "Analyses",
+    "basis": {
+      "note": "La détection s'exécute par devise de transaction — une facture de 100 USD n'est jamais comparée à une facture de 100 CAD. Les montants consolidés sont en {currency}, chacun converti à son propre taux du document."
+    },
+    "table": {
+      "currency": "Devise",
+      "members": "Documents",
+      "span": "Écart"
+    },
+    "duplicates": {
+      "sharedReference": "référence partagée {reference}",
+      "spanDays": "{days} j"
+    }
   },
   "common": {
     "monthsShort": {

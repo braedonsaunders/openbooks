@@ -140,8 +140,8 @@ export const analyticsAndSavedViews: DocArticle = {
   order: 2,
   summary:
     'Choose between financial reports, operational analytics, dashboard cards, custom reports, and reusable record views.',
-  updated: '2026-07-19',
-  keywords: ['analytics', 'dashboard', 'insights', 'saved search', 'saved view', 'custom report', 'KPI', 'query'],
+  updated: '2026-09-16',
+  keywords: ['analytics', 'dashboard', 'insights', 'saved search', 'saved view', 'custom report', 'KPI', 'query', 'sentinel', 'forensics', 'duplicates'],
   related: ['financial-reports', 'switching-from-enterprise-systems', 'apps'],
   body: `# Analytics, Dashboards, and Saved Views
 
@@ -160,6 +160,26 @@ Use **Analytics** for focused operating and risk views such as cash flow,
 financial health, customer intelligence, spend velocity, utilization, vendor
 performance, true cost, and anomaly monitoring. Each view should be read in the
 context of its filters and configured thresholds.
+
+## Sentinel document forensics
+
+Sentinel watches spend documents for error and fraud signals: duplicate
+payments, digit-distribution anomalies, approval-limit traps, off-hours
+documents, vendor outliers, sequential invoice runs, ghost vendors, and audit
+trail changes. Two currency rules keep its findings honest.
+
+First, every statistical test runs per document currency. A USD 100 bill is
+never compared with a CAD 100 bill. Duplicates only group documents that
+share vendor, document kind, currency, amount and vendor reference inside the
+configured window, and report one finding per group with every member
+document listed. Benford, outlier and sequential analysis each run inside one
+currency. Threshold traps deliberately stay transaction denominated, because
+approval limits are set per transaction currency.
+
+Second, consolidated money is translated, and labelled. Totals, calendars
+and roll-ups convert each document at its own document rate into the
+organization base currency; detector rows keep their transaction amounts with
+a currency column so the evidence stays denominated.
 
 ## Dashboards
 

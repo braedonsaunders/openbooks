@@ -7,7 +7,7 @@ import {
   History, Info, ListOrdered, Scale, ShieldAlert, SlidersHorizontal, Sigma, Zap, Database, Download,
 } from 'lucide-react'
 import { cn, Badge, Drawer } from '@openbooks/ui'
-import type { SentinelData, FlaggedDoc } from '../../../../lib/analytics/sentinel-data'
+import type { SentinelData, FlaggedDoc, DuplicateGroup } from '../../../../lib/analytics/sentinel-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Chart } from '../_ui/charts'
@@ -33,6 +33,7 @@ interface BenfordDrillDocument {
   docNumber: string | null
   partyName: string | null
   amount: string
+  currency?: string
 }
 
 interface BenfordDrillData {
@@ -108,6 +109,7 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
             <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
             <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
             <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
+            <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
             <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
             <th className="px-4 py-2 text-center font-medium">{t('table.flag')}</th>
             {showReason ? <th className="px-4 py-2 text-left font-medium">{t('table.reason')}</th> : null}
@@ -120,13 +122,14 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
               <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{f.date}</td>
               <td className="px-4 py-2"><DocCell f={f} /></td>
               <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={f.partyName}>{f.partyName || '—'}</td>
+              <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{f.currency}</td>
               <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(f.amount)}</td>
               <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', FLAG_BADGE_CLS[f.flagType])}>{t(`flag.${f.flagType}`)}</span></td>
               {showReason ? <td className="max-w-72 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={f.reason}>{f.reason}</td> : null}
               <td className="px-4 py-2 text-right"><RiskPill score={f.riskScore} /></td>
             </tr>
           )) : (
-            <tr><td colSpan={showReason ? 7 : 6} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.nothingFlagged')}</td></tr>
+            <tr><td colSpan={showReason ? 8 : 7} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.nothingFlagged')}</td></tr>
           )}
         </tbody>
       </table>
@@ -165,6 +168,10 @@ export function SentinelView({ data }: { data: SentinelData }) {
         <Database size={13} className="shrink-0 text-teal-500" />
         {t('banner.pre')}<span className="font-semibold text-slate-700 dark:text-slate-200">{t('banner.ledger')}</span>
         {` `}{t('banner.stats', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: (data.meta.queryMs / 1000).toFixed(1) })}
+      </p>
+      <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
+        <Info size={14} className="mt-0.5 shrink-0" />
+        <span>{t('basis.note', { currency: data.meta.presentationCurrency })}</span>
       </p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -284,8 +291,14 @@ function BenfordTab({ data }: { data: SentinelData }) {
   const conformLabel = (v: string) => v === 'Conforming' ? t('benford.conforming') : v === 'Marginal' ? t('benford.marginal') : v === 'Non-Conforming' ? t('benford.nonConforming') : v
   const [sub, setSub] = useState<'1d' | '2d' | 'trap'>('1d')
   const [drill, setDrill] = useState<{ digit: number; dim: '1d' | '2d' } | null>(null)
-  const b1 = data.benford1D
-  const b2 = data.benford2D
+  // Benford runs one distribution per document currency: the pills pick the
+  // slice, defaulting to the largest. The legacy top-level shape is the
+  // fallback for an empty period.
+  const slices = data.benford1D.byCurrency
+  const [ccy, setCcy] = useState<string | undefined>(slices[0]?.currency)
+  const activeCcy = slices.some((s) => s.currency === ccy) ? ccy : slices[0]?.currency
+  const b1 = slices.find((s) => s.currency === activeCcy) ?? data.benford1D
+  const b2 = data.benford2D.byCurrency.find((s) => s.currency === activeCcy) ?? data.benford2D
   const trap = data.thresholdTrap
   return (
     <div className="space-y-4">
@@ -294,7 +307,10 @@ function BenfordTab({ data }: { data: SentinelData }) {
         { key: '2d', label: t('benford.firstTwoDigits2D'), count: b2.anomalies.length },
         { key: 'trap', label: t('benford.thresholdTrap'), count: trap.total },
       ]} />
-      {drill ? <BenfordDrill digit={drill.digit} dim={drill.dim} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} /> : null}
+      {sub !== 'trap' && slices.length > 0 ? (
+        <SubPills value={activeCcy ?? ''} onChange={setCcy} options={slices.map((s) => ({ key: s.currency, label: s.currency, count: s.totalTransactions }))} />
+      ) : null}
+      {drill ? <BenfordDrill digit={drill.digit} dim={drill.dim} currency={sub === 'trap' ? undefined : activeCcy} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} /> : null}
 
       {sub === '1d' ? (
         <div className="space-y-5">
@@ -422,8 +438,8 @@ function BenfordTab({ data }: { data: SentinelData }) {
   )
 }
 
-/** Benford digit → transactions drill (). */
-function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '1d' | '2d'; from: string; to: string; onClose: () => void }) {
+/** Benford digit → transactions drill (scoped to the active currency slice). */
+function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: number; dim: '1d' | '2d'; currency?: string; from: string; to: string; onClose: () => void }) {
   const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
@@ -431,12 +447,13 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
   const [error, setError] = useState(false)
   useEffect(() => {
     let live = true
-    fetch(`/api/analytics/sentinel/benford?digit=${digit}&dim=${dim}&from=${from}&to=${to}`)
+    const scope = currency ? `&currency=${encodeURIComponent(currency)}` : ''
+    fetch(`/api/analytics/sentinel/benford?digit=${digit}&dim=${dim}&from=${from}&to=${to}${scope}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((j) => { if (live) setData(j) })
       .catch(() => { if (live) setError(true) })
     return () => { live = false }
-  }, [digit, dim, from, to])
+  }, [digit, dim, currency, from, to])
   const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
   return (
@@ -455,6 +472,7 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
                 <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
                 <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
                 <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
                 <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
               </tr>
             </thead>
@@ -464,6 +482,7 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
                   <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(d.date)}</td>
                   <td className="px-4 py-1.5"><TxnLink entryId={d.entryId ?? ''} docKind={d.docKind} docId={d.docId} className="font-medium text-slate-700 hover:text-teal-600 dark:text-slate-200 dark:hover:text-teal-400">{d.docNumber || d.docKind}</TxnLink></td>
                   <td className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName ?? undefined}>{d.partyName || '—'}</td>
+                  <td className="px-4 py-1.5 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{d.currency ?? '—'}</td>
                   <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount)}</td>
                 </tr>
               ))}
@@ -528,6 +547,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
                     <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
                     <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
                     <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.secondLargest')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('flag.rsf')}</th>
@@ -540,6 +560,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
                       <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{r.date}</td>
                       <td className="px-4 py-2"><DocCell f={r} /></td>
                       <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={r.partyName}>{r.partyName}</td>
+                      <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{r.currency}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(r.amount)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(r.secondLargest)}</td>
                       <td className="px-4 py-2 text-right font-bold tabular-nums text-amber-600 dark:text-amber-400">{r.rsf.toFixed(1)}×</td>
@@ -567,6 +588,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
                     <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
                     <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
                     <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.partyAvg')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.z')}</th>
@@ -579,6 +601,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
                       <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500 dark:text-slate-400">{z.date}</td>
                       <td className="px-4 py-2"><DocCell f={z} /></td>
                       <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={z.partyName}>{z.partyName}</td>
+                      <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{z.currency}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(z.amount)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-400">{money0(z.vendorAvg)}</td>
                       <td className="px-4 py-2 text-right font-bold tabular-nums text-sky-600 dark:text-sky-400">{z.zScore.toFixed(1)}σ</td>
@@ -646,7 +669,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <KpiCard icon={Copy} accent="red" label={t('kpi.duplicatePairs')} value={num(data.duplicates.total)} sub={t('sub.allMatchingPairs')} tone="negative" />
             <KpiCard icon={Scale} accent="amber" label={t('kpi.valueAtRisk')} value={money(s.totalDuplicateAmount)} sub={t('sub.sumPairAmounts')} />
-            <KpiCard icon={Info} accent="slate" label={t('kpi.rule')} value={t('duplicates.ruleValue')} sub={t('duplicates.ruleNote', { min: money(100) })} />
+            <KpiCard icon={Info} accent="slate" label={t('kpi.rule')} value={t('duplicates.ruleValue', { days: data.config.duplicateDays! })} sub={t('duplicates.ruleNote', { min: money(data.config.duplicateMinAmount!) })} />
           </div>
           <Panel title={t('panels.potentialDuplicates')} icon={Copy} hint={t('panels.duplicatesHint')} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
@@ -654,30 +677,35 @@ function DetectionTab({ data }: { data: SentinelData }) {
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                     <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.doc1')}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t('table.doc2')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.members')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.currency')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t('table.daysApart')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.span')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.confidence')}</th>
                     <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.duplicates.pairs.map((p, i) => (
-                    <tr key={`${p.docId1}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <td className="max-w-44 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={p.partyName}>{p.partyName}</td>
+                  {data.duplicates.groups.map((g: DuplicateGroup) => (
+                    <tr key={g.groupId} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <td className="max-w-44 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={g.partyName}>{g.partyName}</td>
                       <td className="px-4 py-2">
-                        <TxnLink entryId={p.docId1} docKind={p.kind} docId={p.docId1} className="text-teal-600 hover:underline dark:text-teal-400">{p.docNumber1 || kindLabel(p.kind)}</TxnLink>
-                        <span className="block text-[10px] tabular-nums text-slate-400">{p.date1}</span>
+                        <span className="flex flex-wrap gap-1.5">
+                          {g.members.slice(0, 8).map((m) => (
+                            <TxnLink key={m.docId} entryId={m.docId} docKind={g.kind} docId={m.docId} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:text-slate-300 dark:hover:text-teal-400">
+                              <span className="font-semibold">{m.docNumber || kindLabel(g.kind)}</span>
+                              {` · `}<span className="tabular-nums">{m.date}</span>
+                            </TxnLink>
+                          ))}
+                          {g.members.length > 8 ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.members.length - 8 })}</span> : null}
+                        </span>
+                        {g.sameReference && g.members[0]?.reference ? <span className="mt-1 block text-[10px] text-slate-400">{t('duplicates.sharedReference', { reference: g.members[0].reference })}</span> : null}
                       </td>
-                      <td className="px-4 py-2">
-                        <TxnLink entryId={p.docId2} docKind={p.kind} docId={p.docId2} className="text-teal-600 hover:underline dark:text-teal-400">{p.docNumber2 || kindLabel(p.kind)}</TxnLink>
-                        <span className="block text-[10px] tabular-nums text-slate-400">{p.date2}</span>
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(p.amount)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{p.daysBetween}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(p.confidence * 100)}%{p.sameMemo ? <span className="ml-1 text-[10px] text-rose-500">{t('duplicates.sameMemo')}</span> : null}</td>
-                      <td className="px-4 py-2 text-right"><RiskPill score={p.riskScore} /></td>
+                      <td className="px-4 py-2 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">{g.currency}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(g.amount)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{t('duplicates.spanDays', { days: num(g.dateSpanDays) })}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(g.confidence * 100)}%</td>
+                      <td className="px-4 py-2 text-right"><RiskPill score={g.riskScore} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -709,12 +737,12 @@ function DetectionTab({ data }: { data: SentinelData }) {
           </p>
           <div className="space-y-4">
             {data.sequential.length ? data.sequential.map((g, i) => (
-              <Panel key={`${g.partyId}-${i}`} title={g.partyName} icon={ListOrdered} actions={<Badge variant={g.riskLevel === 'high' ? 'destructive' : 'warning'}>{g.riskLevel} · {g.riskScore}</Badge>}>
+              <Panel key={`${g.partyId}-${g.currency}-${i}`} title={g.partyName} icon={ListOrdered} actions={<span className="flex items-center gap-1.5"><Badge variant="secondary">{g.currency}</Badge><Badge variant={g.riskLevel === 'high' ? 'destructive' : 'warning'}>{g.riskLevel} · {g.riskScore}</Badge></span>}>
                 <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{g.reason}{t('sequential.runTotal', { total: money0(g.totalAmount), first: g.firstDate, last: g.lastDate })}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {g.invoices.map((inv) => (
                     <TxnLink key={inv.docId} entryId={inv.docId} docKind="vendor_bill" docId={inv.docId} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:text-slate-300 dark:hover:text-teal-400">
-                      <span className="font-semibold">#{inv.reference}</span> · {money(inv.amount)} · <span className="tabular-nums">{inv.date}</span>
+                      <span className="font-semibold">#{inv.reference}</span> · {money(inv.amount)} {inv.currency} · <span className="tabular-nums">{inv.date}</span>
                     </TxnLink>
                   ))}
                   {g.count > g.invoices.length ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.count - g.invoices.length })}</span> : null}
