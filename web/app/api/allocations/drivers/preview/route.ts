@@ -2,16 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
-import { createReportDriverRunner } from "../../../../../lib/allocations-report-runner";
-import { DriverAdminError } from "../../../../../../engine/src/allocations/driver-admin.ts";
+import {
+  DriverAdminError,
+  getDimensionValueLabels,
+  vectorShares,
+} from "../../../../../../engine/src/allocations/driver-admin.ts";
 import {
   DriverNotAvailableError,
   previewDriverVector,
 } from "../../../../../../engine/src/allocations/drivers.ts";
-import {
-  getDimensionValueLabels,
-  vectorShares,
-} from "../../../../../../engine/src/allocations/a8-shims.ts";
+import { runDriverReport } from "../../../../../../engine/src/allocations/report-runner.ts";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ const previewBodySchema = z.object({
 /**
  * Driver vector preview (A8): period picker (or exact date) → the
  * dimension value → weight table with exact shares, resolved by A2's
- * previewDriverVector with the real ReportDriverRunner for
+ * previewDriverVector with the engine ReportDriverRunner for
  * report_definition drivers. Drivers that cannot be computed (no GL
  * activity, empty manual table, report refused) answer 422 with the
  * reason — never a guessed vector.
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     const asOf = periodId !== undefined ? { periodId } : { date: date! };
     const result = await previewDriverVector(
       { orgId: gate.user.orgId, driverId, asOf, actorId: gate.user.id },
-      { reportRunner: createReportDriverRunner(gate) },
+      { reportRunner: { runReport: runDriverReport } },
     );
     const labels = await getDimensionValueLabels(
       gate.user.orgId,

@@ -10,6 +10,7 @@ import {
   createDriverValue,
   deleteDriver,
   deleteDriverValue,
+  getDimensionValueLabels,
   getDriver,
   listDriverValues,
   listDrivers,
@@ -202,6 +203,24 @@ test("revision tokens round-trip; stale tokens refused", { skip: !DB }, async ()
         expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
       }),
       (error: unknown) => error instanceof DriverAdminError && error.code === "stale",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("dimension value labels resolve names, unknown ids stay bare", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await seedFlowActors(org.orgId);
+    const labels = await getDimensionValueLabels(org.orgId, "subsidiary", [org.subsidiaryId]);
+    assert.equal(labels.size, 1);
+    assert.ok((labels.get(org.subsidiaryId) ?? "").length > 0);
+    assert.deepEqual(await getDimensionValueLabels(org.orgId, "subsidiary", []), new Map());
+    // Custom segments have no label table: the caller falls back to ids.
+    assert.deepEqual(
+      await getDimensionValueLabels(org.orgId, "extra:region", [org.subsidiaryId]),
+      new Map(),
     );
   } finally {
     await dropScratchOrg(org.orgId);

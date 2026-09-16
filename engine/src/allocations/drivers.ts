@@ -221,9 +221,9 @@ export type ReportDriverRunInput = {
 
 /**
  * Runs a report definition for a `report_definition` driver. Implemented
- * in the web layer (packages/reports run path with the period injected);
- * engine tests and A3's early cutover use a fake. The implementation owns
- * the report engine's permission checks under `actorId`.
+ * by the engine (`report-runner.ts`: the saved entity-query definition
+ * compiled with the as-of window injected). The implementation owns the
+ * report engine's permission checks under `actorId`.
  */
 export type ReportDriverRunner = {
   runReport(input: ReportDriverRunInput): Promise<ReportDriverRow[]>;

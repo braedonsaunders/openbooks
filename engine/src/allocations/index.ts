@@ -110,6 +110,7 @@ export {
   deleteDriver,
   deleteDriverValue,
   driverValueWindowsOverlap,
+  getDimensionValueLabels,
   getDriver,
   listDriverValues,
   listDrivers,
@@ -119,6 +120,7 @@ export {
   validateDriverConfig,
   validateDriverKey,
   validateDriverValueDecimal,
+  vectorShares,
   type CreateDriverInput,
   type DriverValueInput,
   type DriverValueRow,
@@ -152,19 +154,22 @@ export {
   type RunSummary,
 } from "./run-queries.ts";
 export {
-  ENGINE_PENDING,
-  EnginePendingError,
-  getDimensionValueLabels,
-  getPeriodRunEngine,
-  pendingPeriodRunEngine,
-  setPeriodRunEngine,
-  vectorShares,
-  type PeriodRunEngine,
-  type PostRunInput,
-  type PreviewRunInput,
-  type RerunInput,
-  type ReverseRunInput,
-} from "./a8-shims.ts";
+  postAllocationRun,
+  previewAllocationRun,
+  rerunAllocationRun,
+  reverseAllocationRun,
+  staticDriverResolver,
+  type AllocationRunRecord,
+  type PeriodRunDeps,
+  type PreviewAllocationRunOptions,
+  type RerunAllocationRunOptions,
+  type RerunAllocationRunResult,
+  type ReverseAllocationRunOptions,
+} from "./period-run.ts";
+export {
+  getRun as getAllocationRun,
+  listRuns as listAllocationRuns,
+} from "./run-queries.ts";
 export {
   ALLOCATION_RUN_OUTBOX_KIND,
   allocationRunOccurrenceKey,
