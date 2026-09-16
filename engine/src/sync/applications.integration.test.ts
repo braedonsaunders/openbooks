@@ -4,7 +4,7 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../db.ts";
-import { reconcileApplications } from "./applications.ts";
+import { recomputeOpenBalances, reconcileApplications } from "./applications.ts";
 import { DocumentVoidError, requestDocumentVoid } from "../document-void.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
 
@@ -1034,6 +1034,624 @@ test(
           from applications
          where org_id = ${org.orgId} and unapplied_at is null`);
       assert.ok(Number(applied.rows[0]!.total) <= 100, `over-applied: ${applied.rows[0]!.total}`);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
+
+interface FixtureLine {
+  readonly accountId: string;
+  readonly amount: string;
+  readonly txnAmount?: string;
+  readonly fxRate?: string;
+  readonly currency?: string;
+  readonly partyId: string | null;
+  readonly open: boolean;
+}
+
+/**
+ * Post a document with exact lines; returns the ids for assertions. Signs
+ * are the caller's: payments carry positive AR lines, invoices negative
+ * ones, so opposites settle.
+ */
+async function postFixtureDoc(
+  org: ScratchOrg,
+  docNumber: string,
+  sourceId: string,
+  lines: readonly FixtureLine[],
+  docKind = "customer_invoice",
+): Promise<{ documentId: string; entryId: string; lineIds: string[] }> {
+  const documentId = randomUUID();
+  const entryId = randomUUID();
+  const lineIds = lines.map(() => randomUUID());
+  const total = lines
+    .reduce((sum, line) => (line.amount.startsWith("-") ? sum : sum + Number(line.amount)), 0)
+    .toFixed(4);
+  // The open-item currency guard ties the document currency to its lines —
+  // foreign-currency fixtures must carry the line currency, not CAD.
+  const docCurrency = lines[0]?.currency ?? "CAD";
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, document_number, party_id, subsidiary_id,
+       document_date, posting_date, currency, status, subtotal, tax_total,
+       total, custom)
+    values
+      (${documentId}, ${org.orgId}, ${docKind}, ${docNumber},
+       ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+       ${docCurrency}, 'approved', ${total}, '0', ${total}, ${JSON.stringify({ sourceId })})
+  `);
+  await db.execute(sql`
+    insert into journal_entries
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+       period_id, memo, status, source_document_id, origin)
+    values
+      (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+       ${docNumber}, ${org.date}, ${org.periodId}, ${`Fixture ${docNumber}`},
+       'draft', ${documentId}, 'document')
+  `);
+  // One multi-row statement: the jl_balanced / jl_balanced_by_subsidiary
+  // constraint triggers fire at commit, so every line of the entry must land
+  // in the same statement — per-line inserts trip the guard mid-entry.
+  const lineValues = lines.map((line, i) => sql`(${lineIds[i]}, ${org.orgId}, ${entryId}, ${i + 1}, ${line.accountId},
+         ${org.subsidiaryId}, ${line.amount}, ${line.currency ?? "CAD"},
+         ${line.txnAmount ?? line.amount}, ${line.fxRate ?? "1"},
+         ${line.partyId}, ${line.open})`);
+  await db.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+         amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+      values ${sql.join(lineValues, sql`, `)}
+    `);
+  await db.execute(sql`
+    update journal_entries
+       set status = 'posted', posted_at = now()
+     where id = ${entryId}
+  `);
+  await db.execute(sql`
+    update documents
+       set posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}, status = 'posted'
+     where id = ${documentId}
+  `);
+  return { documentId, entryId, lineIds };
+}
+
+test(
+  "application reconciliation settles nothing when a link names the same line twice",
+  { skip: !DB },
+  async () => {
+    // A degenerate source link whose payment and applied references resolve
+    // to the same open line must not self-apply: no compatible counterpart
+    // exists, so the full amount stays unallocated instead of settling the
+    // line against itself.
+    const org = await createScratchOrg();
+    const documentId = randomUUID();
+    const entryId = randomUUID();
+    const openLineId = randomUUID();
+    try {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, status, subtotal, tax_total,
+           total, custom)
+        values
+          (${documentId}, ${org.orgId}, 'customer_payment', 'PAY-SELF',
+           ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+           'CAD', 'approved', 50, 0, 50, '{"sourceId":"self-1"}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin)
+        values
+          (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+           'PAY-SELF', ${org.date}, ${org.periodId}, 'Self-link payment',
+           'draft', ${documentId}, 'document')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, party_id, is_open_item)
+        values
+          (${openLineId}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ar},
+           ${org.subsidiaryId}, 50, 'CAD', 50, 1, ${org.customerId}, true),
+          (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.bank},
+           ${org.subsidiaryId}, -50, 'CAD', -50, 1, null, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id = ${entryId}
+      `);
+      await db.execute(sql`
+        update documents
+           set posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}, status = 'posted'
+         where id = ${documentId}
+      `);
+
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "self-1", appliedRef: "self-1", amount: "50", currency: "CAD" },
+      ]);
+      assert.deepEqual(result, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "50.0000",
+      });
+      const applied = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from applications where org_id = ${org.orgId}`);
+      assert.equal(applied.rows[0]!.count, "0");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation caps two pairs sharing one payment line",
+  { skip: !DB },
+  async () => {
+    // One call, one 120 payment line, links of 100 and 60: the second pair
+    // must see the room the first pair consumed. Dropped accumulators (or a
+    // pair remainder that never decrements) over-settle the line instead.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-SHARED", "pay-shared", [
+        { accountId: org.accounts.ar, amount: "120", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-120", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-SHARED-A", "inv-shared-a", [
+        { accountId: org.accounts.ar, amount: "-100", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "100", partyId: null, open: false },
+      ]);
+      await postFixtureDoc(org, "INV-SHARED-B", "inv-shared-b", [
+        { accountId: org.accounts.ar, amount: "-60", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "60", partyId: null, open: false },
+      ]);
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-shared", appliedRef: "inv-shared-a", amount: "100", currency: "CAD" },
+        { paymentRef: "pay-shared", appliedRef: "inv-shared-b", amount: "60", currency: "CAD" },
+      ]);
+      assert.deepEqual(result, {
+        pairs: 2,
+        inserted: 2,
+        insertedAmount: "120.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "40.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation caps two pairs sharing one invoice line",
+  { skip: !DB },
+  async () => {
+    // Mirror image: two payments against one 120 invoice line with links of
+    // 100 and 60 settle 120 and leave 40 unallocated.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-SHARED-A", "pay-shared-a", [
+        { accountId: org.accounts.ar, amount: "100", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-100", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "PAY-SHARED-B", "pay-shared-b", [
+        { accountId: org.accounts.ar, amount: "60", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-60", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-SHARED", "inv-shared", [
+        { accountId: org.accounts.ar, amount: "-120", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "120", partyId: null, open: false },
+      ]);
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-shared-a", appliedRef: "inv-shared", amount: "100", currency: "CAD" },
+        { paymentRef: "pay-shared-b", appliedRef: "inv-shared", amount: "60", currency: "CAD" },
+      ]);
+      assert.deepEqual(result, {
+        pairs: 2,
+        inserted: 2,
+        insertedAmount: "120.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "40.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation re-running a foreign pair with a larger link settles nothing new",
+  { skip: !DB },
+  async () => {
+    // After a 120 link fully settles the payment line, a 130 link must find
+    // no room: the hydrated usage (not the pair delta alone) binds. Flipped
+    // hydration columns or inflated accumulators settle phantom money here.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-FX-RERUN", "pay-fx-rerun", [
+        { accountId: org.accounts.ar, amount: "120", txnAmount: "100", fxRate: "1.2", currency: "USD", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-120", txnAmount: "-100", fxRate: "1.2", currency: "USD", partyId: null, open: false },
+      ], "customer_payment");
+      // Same transaction currency on both sides with different carrying
+      // rates: cross-currency pairs never match by design (the reconciler
+      // joins on line currency), but the FX hydration/capacity paths still
+      // apply and the realized-FX entry still mints on the rate gap.
+      await postFixtureDoc(org, "INV-FX-RERUN", "inv-fx-rerun", [
+        { accountId: org.accounts.ar, amount: "-110", txnAmount: "-100", fxRate: "1.1", currency: "USD", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "110", txnAmount: "100", fxRate: "1.1", currency: "USD", partyId: null, open: false },
+      ]);
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-fx-rerun", appliedRef: "inv-fx-rerun", amount: "120", currency: "CAD" },
+      ]);
+      assert.deepEqual(first, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "110.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-fx-rerun", appliedRef: "inv-fx-rerun", amount: "130", currency: "CAD" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "10.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation caps a huge second link by remaining transaction capacity",
+  { skip: !DB },
+  async () => {
+    // The payment line keeps 30 of transaction room after the first call; a
+    // 1000 link must settle exactly that. A negated capacity guard settles
+    // the whole link against room that does not exist.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-CAP", "pay-cap", [
+        { accountId: org.accounts.ar, amount: "120", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-120", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-CAP-A", "inv-cap-a", [
+        { accountId: org.accounts.ar, amount: "-1000", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "1000", partyId: null, open: false },
+      ]);
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-cap", appliedRef: "inv-cap-a", amount: "90", currency: "CAD" },
+      ]);
+      assert.equal(first.inserted, 1);
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-cap", appliedRef: "inv-cap-a", amount: "1000", currency: "CAD" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "30.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "880.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation settles dust usage exactly and never twice",
+  { skip: !DB },
+  async () => {
+    // A 0.0001 settlement is real usage: skipping it overstates room on the
+    // next call, and a one-unit remainder must still allocate. The third
+    // call re-runs the settled total and reports it settled.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-DUST", "pay-dust", [
+        { accountId: org.accounts.ar, amount: "100", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-100", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-DUST", "inv-dust", [
+        { accountId: org.accounts.ar, amount: "-100", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "100", partyId: null, open: false },
+      ]);
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dust", appliedRef: "inv-dust", amount: "0.0001", currency: "CAD" },
+      ]);
+      assert.deepEqual(first, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "0.0001",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dust", appliedRef: "inv-dust", amount: "100.0001", currency: "CAD" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "99.9999",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0001",
+      });
+      // Re-running exactly the settled total reports the pair settled; the
+      // 0.0001 the second call left unallocated stays unallocated, not phantom.
+      const third = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dust", appliedRef: "inv-dust", amount: "100.0000", currency: "CAD" },
+      ]);
+      assert.deepEqual(third, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 1,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation allocates a one-unit remainder from one-unit rooms",
+  { skip: !DB },
+  async () => {
+    // After settling 50 of a 50.0001 payment, every room holds exactly one
+    // unit: guards widened to one unit skip the 0.0001 settlement and leave
+    // it unallocated.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-DUSTB", "pay-dustb", [
+        { accountId: org.accounts.ar, amount: "50.0001", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-50.0001", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-DUSTB", "inv-dustb", [
+        { accountId: org.accounts.ar, amount: "-100", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "100", partyId: null, open: false },
+      ]);
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dustb", appliedRef: "inv-dustb", amount: "50", currency: "CAD" },
+      ]);
+      assert.equal(first.inserted, 1);
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dustb", appliedRef: "inv-dustb", amount: "50.0001", currency: "CAD" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "0.0001",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation settles a dust-sized open line in full",
+  { skip: !DB },
+  async () => {
+    // A 0.0001 invoice line is settleable: room and candidate guards that
+    // demand more than one unit skip it and leave it open forever.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-DUSTC", "pay-dustc", [
+        { accountId: org.accounts.ar, amount: "100", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-100", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-DUSTC", "inv-dustc", [
+        { accountId: org.accounts.ar, amount: "-0.0001", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "0.0001", partyId: null, open: false },
+      ]);
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dustc", appliedRef: "inv-dustc", amount: "0.0001", currency: "CAD" },
+      ]);
+      assert.deepEqual(result, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "0.0001",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation walks three payment lines for a dust remainder",
+  { skip: !DB },
+  async () => {
+    // PayLines stay line-number sorted, so one 80.0001 link walks lines 1-3
+    // (40, 40, 40.0001) in order and settles everything: a remainder check
+    // widened to one unit breaks out after line 2 and strands the dust.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      // Three open AR lines, not one: the helper posts the whole balanced
+      // entry (three open lines plus the offsetting bank line) in one go.
+      await postFixtureDoc(org, "PAY-DUST3", "pay-dust3", [
+        { accountId: org.accounts.ar, amount: "40", partyId: customer, open: true },
+        { accountId: org.accounts.ar, amount: "40", partyId: customer, open: true },
+        { accountId: org.accounts.ar, amount: "40.0001", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-120.0001", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-DUST3", "inv-dust3", [
+        { accountId: org.accounts.ar, amount: "-120", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "120", partyId: null, open: false },
+      ]);
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dust3", appliedRef: "inv-dust3", amount: "80.0001", currency: "CAD" },
+      ]);
+      assert.deepEqual(result, {
+        pairs: 1,
+        inserted: 3,
+        insertedAmount: "80.0001",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation breaks on a zero transaction allocation instead of posting dust",
+  { skip: !DB },
+  async () => {
+    // With a 1000 carrying rate, a one-unit (0.0001) functional remainder
+    // rounds to a zero transaction allocation: posting it would write a
+    // zero-txn application row, so the drain breaks and leaves the dust
+    // unallocated instead.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-DUSTFX", "pay-dustfx", [
+        { accountId: org.accounts.ar, amount: "101000", txnAmount: "101", fxRate: "1000", currency: "USD", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-101000", txnAmount: "-101", fxRate: "1000", currency: "USD", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-DUSTFX", "inv-dustfx", [
+        { accountId: org.accounts.ar, amount: "-10000", txnAmount: "-10000", fxRate: "1", currency: "USD", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "10000", txnAmount: "10000", fxRate: "1", currency: "USD", partyId: null, open: false },
+      ]);
+      const first = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dustfx", appliedRef: "inv-dustfx", amount: "100000", currency: "CAD" },
+      ]);
+      assert.deepEqual(first, {
+        pairs: 1,
+        inserted: 1,
+        insertedAmount: "100.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0000",
+      });
+      const second = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-dustfx", appliedRef: "inv-dustfx", amount: "100000.0001", currency: "CAD" },
+      ]);
+      assert.deepEqual(second, {
+        pairs: 1,
+        inserted: 0,
+        insertedAmount: "0.0000",
+        alreadySettled: 0,
+        skippedNoLine: 0,
+        unallocated: "0.0001",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "application reconciliation derives a fresh entry number on collision",
+  { skip: !DB },
+  async () => {
+    // The preferred realized-FX number is taken by an earlier entry, so the
+    // allocator must walk to the first free generation. Starting at zero,
+    // suffixing unconditionally, or stepping by two all mint the wrong name.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      const payment = await postFixtureDoc(org, "PAY-COLLIDE", "pay-collide", [
+        { accountId: org.accounts.ar, amount: "120", txnAmount: "100", fxRate: "1.2", currency: "USD", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-120", txnAmount: "-100", fxRate: "1.2", currency: "USD", partyId: null, open: false },
+      ], "customer_payment");
+      await postFixtureDoc(org, "INV-COLLIDE", "inv-collide", [
+        { accountId: org.accounts.ar, amount: "-110", txnAmount: "-100", fxRate: "1.1", currency: "USD", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "110", txnAmount: "100", fxRate: "1.1", currency: "USD", partyId: null, open: false },
+      ]);
+      // Squat the preferred realized-FX number with a real posted entry (a
+      // bare lineless entry trips the posted-balanced guard; closed lines
+      // keep it balanced and invisible to the reconciler).
+      await postFixtureDoc(org, `${payment.documentId}-FX`, "blocker-number", [
+        { accountId: org.accounts.ar, amount: "10", partyId: customer, open: false },
+        { accountId: org.accounts.bank, amount: "-10", partyId: null, open: false },
+      ]);
+      const result = await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-collide", appliedRef: "inv-collide", amount: "120", currency: "CAD" },
+      ]);
+      assert.equal(result.inserted, 1);
+      const numbers = await db.execute<{ entryNumber: string }>(sql`
+        select e.entry_number as "entryNumber"
+          from journal_entries e
+         where e.org_id = ${org.orgId} and e.origin = 'fx_settlement'
+      `);
+      assert.deepEqual(numbers.rows.map((row) => row.entryNumber), [`${payment.documentId}-FX-2`]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "open-balance recomputation heals out-of-band drift without touching clean rows",
+  { skip: !DB },
+  async () => {
+    // recomputeOpenBalances has no coverage: direct document edits bypass
+    // the application trigger, and only the recompute restores the
+    // denormalized balance the aging reports read.
+    const org = await createScratchOrg();
+    const customer = org.customerId;
+    try {
+      await postFixtureDoc(org, "PAY-HEAL", "pay-heal", [
+        { accountId: org.accounts.ar, amount: "50", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "-50", partyId: null, open: false },
+      ], "customer_payment");
+      const invoice = await postFixtureDoc(org, "INV-HEAL", "inv-heal", [
+        { accountId: org.accounts.ar, amount: "-50", partyId: customer, open: true },
+        { accountId: org.accounts.bank, amount: "50", partyId: null, open: false },
+      ]);
+      await reconcileApplications(org.orgId, "sourceId", [
+        { paymentRef: "pay-heal", appliedRef: "inv-heal", amount: "50", currency: "CAD" },
+      ]);
+      const settled = await db.execute<{ balance: string }>(sql`
+        select open_balance::text as balance from documents
+         where id = ${invoice.documentId} and org_id = ${org.orgId}`);
+      assert.equal(settled.rows[0]!.balance, "0.0000");
+      await db.execute(sql`
+        update documents set open_balance = '999.0000'
+         where id = ${invoice.documentId} and org_id = ${org.orgId}`);
+      assert.equal(await recomputeOpenBalances(org.orgId), 1);
+      const healed = await db.execute<{ balance: string }>(sql`
+        select open_balance::text as balance from documents
+         where id = ${invoice.documentId} and org_id = ${org.orgId}`);
+      assert.equal(healed.rows[0]!.balance, "0.0000");
+      assert.equal(await recomputeOpenBalances(org.orgId), 0);
     } finally {
       await dropScratchOrg(org.orgId);
     }
