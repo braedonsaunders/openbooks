@@ -1527,6 +1527,13 @@
         "title": "Activité",
         "description": "Chaque analyse des agents dans tous les packs : état, durée, constats et erreurs. Relancez n'importe quel pack d'ici.",
         "allPacks": "Tous les packs",
+        "allStatuses": "Tous les états",
+        "sinceColumn": "Depuis",
+        "sinceAll": "Toute période",
+        "since": {
+          "day": "Dernières 24 heures",
+          "week": "7 derniers jours"
+        },
         "packColumn": "Pack",
         "triggerColumn": "Origine",
         "triggers": {

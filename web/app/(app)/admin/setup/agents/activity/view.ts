@@ -19,11 +19,19 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../../lib/authz'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
+import { dateTime } from '../../../../../../lib/format'
 import {
+  AGENT_RUN_STATUSES,
   CONTINUOUS_CLOSE_AGENT_KEYS,
   listAgentRuns,
   type AgentActivitySort,
+  type AgentRunStatus,
 } from '../../../../../../lib/setup/agents'
+import {
+  FINDING_SINCE_WINDOWS,
+  findingsSinceIso,
+  type FindingSince,
+} from '../../../../../../lib/list/agent-findings'
 import { parseListParams, pickString } from '../../../../../../lib/list-params'
 
 /**
@@ -31,20 +39,22 @@ import { parseListParams, pickString } from '../../../../../../lib/list-params'
  * errors) with re-run and a link into findings. Split into a loader and a spec.
  *
  * The page composes the SHARED components (the `[entity]` setup precedent):
- * an in-content heading + `setup-description`, a URL-backed `filter-chips`
- * pack filter, a card-wrapped spec `table` (app variant, shared sort headers
- * over pack/status/started), the server `pagination` block driven by the
- * read-model total, and the shared `empty-state` when no runs match. THE
- * LOADER COMPUTES: pack names, trigger/status/duration lines and the filter
- * options resolve here via `getTranslations`. The ONLY custom island is the
- * actions cell (`agents-run-actions`: findings link + re-run, which POSTs to
- * the per-pack run route and toasts + `router.refresh()` like the overview
- * run-now so the server-paged table reloads).
+ * an in-content heading + `setup-description`, URL-backed `filter-chips` for
+ * pack, status and since (the inbox filter-bar precedent — stable day/week
+ * keys the loader maps to ISO lookbacks), a card-wrapped spec `table` (app
+ * variant, shared sort headers over pack/status/started), the server
+ * `pagination` block driven by the read-model total, and the shared
+ * `empty-state` when no runs match. THE LOADER COMPUTES: pack names,
+ * trigger/status/duration lines and the filter options resolve here via
+ * `getTranslations`. The ONLY custom island is the actions cell
+ * (`agents-run-actions`: findings link + re-run, which POSTs to the per-pack
+ * run route and toasts + `router.refresh()` like the overview run-now so the
+ * server-paged table reloads).
  *
- * Loader work: the `admin.setup.manage` gate, the `?agent=` whitelist (an
- * unknown key degrades to unfiltered, never a 404 — a filter is not a
- * resource), and one `listAgentRuns` call with the parsed
- * `?sort=`/`?dir=`/`?page=` window.
+ * Loader work: the `admin.setup.manage` gate, the `?agent=`/`?status=`/
+ * `?since=` whitelists (an unknown value degrades to unfiltered, never a
+ * 404 — a filter is not a resource), and one `listAgentRuns` call with the
+ * parsed `?sort=`/`?dir=`/`?page=` window.
  */
 
 const ACTIVITY_SORTS = ['started', 'status', 'pack'] as const
@@ -74,6 +84,11 @@ export interface AgentsActivityData {
   filterLabel: string
   filterAll: string
   filterOptions: { value: string; label: string }[]
+  statusAll: string
+  statusOptions: { value: string; label: string }[]
+  sinceLabel: string
+  sinceAll: string
+  sinceOptions: { value: string; label: string }[]
   currentParams: Record<string, string | string[] | undefined>
   colPack: string
   colTrigger: string
@@ -117,8 +132,23 @@ export async function loadAgentsActivity(
   })
   const rawAgent = pickString(sp.agent)
   const agentKey = rawAgent && isContinuousCloseAgentKey(rawAgent) ? rawAgent : undefined
+  const rawStatus = pickString(sp.status)
+  const status: AgentRunStatus | undefined =
+    rawStatus && (AGENT_RUN_STATUSES as readonly string[]).includes(rawStatus)
+      ? (rawStatus as AgentRunStatus)
+      : undefined
+  // Stable day/week keys like the inbox — the loader maps them to ISO
+  // lookback instants so shared links never rot; unknown degrades to
+  // unfiltered, never a 404.
+  const rawSince = pickString(sp.since)
+  const sinceKey: FindingSince | undefined =
+    rawSince && (Object.keys(FINDING_SINCE_WINDOWS) as string[]).includes(rawSince)
+      ? (rawSince as FindingSince)
+      : undefined
   const result = await listAgentRuns(authz.user.orgId, {
     agentKey,
+    status,
+    startedAfter: findingsSinceIso(sinceKey),
     limit: params.perPage,
     offset: (params.page - 1) * params.perPage,
     sort: params.sort,
@@ -135,6 +165,17 @@ export async function loadAgentsActivity(
     filterLabel: t('setup.agents.activity.packColumn'),
     filterAll: t('setup.agents.activity.allPacks'),
     filterOptions: [...CONTINUOUS_CLOSE_AGENT_KEYS].map((key) => ({ value: key, label: packName(key) })),
+    statusAll: t('setup.agents.activity.allStatuses'),
+    statusOptions: [...AGENT_RUN_STATUSES].map((value) => ({
+      value,
+      label: t(`setup.agents.runStatuses.${value}`),
+    })),
+    sinceLabel: t('setup.agents.activity.sinceColumn'),
+    sinceAll: t('setup.agents.activity.sinceAll'),
+    sinceOptions: (Object.keys(FINDING_SINCE_WINDOWS) as FindingSince[]).map((value) => ({
+      value,
+      label: t(`setup.agents.activity.since.${value}`),
+    })),
     currentParams: sp,
     colPack: t('setup.agents.activity.packColumn'),
     colTrigger: t('setup.agents.activity.triggerColumn'),
@@ -154,7 +195,9 @@ export async function loadAgentsActivity(
     currentPage: params.page,
     perPage: params.perPage,
     rows: result.runs.map((run) => {
-      const failedLabel = t(`setup.agents.overview.runStatus.${run.status}`)
+      // Title-case runStatuses like every other status badge — not the
+      // lowercase sentence copy the overview header line uses.
+      const failedLabel = t(`setup.agents.runStatuses.${run.status}`)
       return {
         id: run.id,
         agentKey: run.agentKey,
@@ -170,7 +213,7 @@ export async function loadAgentsActivity(
               : run.status === 'skipped'
                 ? 'secondary'
                 : 'outline',
-        startedLine: new Date(run.startedAt).toLocaleString(),
+        startedLine: dateTime(run.startedAt),
         durationLine: formatDuration(run.durationMs),
         detected: run.detected,
         autoResolved: run.autoResolved,
@@ -219,6 +262,22 @@ export function agentsActivitySpec(data: AgentsActivityData): PageSpec {
             label: data.filterLabel,
             allLabel: data.filterAll,
             options: data.filterOptions,
+          }),
+          widgetBlock('filter-chips', {
+            basePath: '/admin/setup/agents/activity',
+            currentParams: data.currentParams,
+            paramKey: 'status',
+            label: data.colStatus,
+            allLabel: data.statusAll,
+            options: data.statusOptions,
+          }),
+          widgetBlock('filter-chips', {
+            basePath: '/admin/setup/agents/activity',
+            currentParams: data.currentParams,
+            paramKey: 'since',
+            label: data.sinceLabel,
+            allLabel: data.sinceAll,
+            options: data.sinceOptions,
           }),
         ]),
         {

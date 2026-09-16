@@ -1623,6 +1623,13 @@
         "title": "Activity",
         "description": "Every agent scan across packs — status, duration, findings and errors. Re-run any pack from here.",
         "allPacks": "All packs",
+        "allStatuses": "All statuses",
+        "sinceColumn": "Since",
+        "sinceAll": "All time",
+        "since": {
+          "day": "Last 24 hours",
+          "week": "Last 7 days"
+        },
         "packColumn": "Pack",
         "triggerColumn": "Trigger",
         "triggers": {

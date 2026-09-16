@@ -202,17 +202,26 @@ const MAX_ACTIVITY_ROWS = 200
 const ACTIVITY_SORTS = ['started', 'status', 'pack'] as const
 export type AgentActivitySort = (typeof ACTIVITY_SORTS)[number]
 
+/** Whitelisted `?status=` values for the Activity page — unknown degrades to unfiltered, never a 404. */
+export const AGENT_RUN_STATUSES = ['completed', 'failed', 'skipped', 'running'] as const
+export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number]
+
 /**
  * Run envelopes across packs — the Activity page read model and its list
- * contract: the `?agent=` filter, server `limit`/`offset` paging and a
- * whitelisted `sort`/`dir` order. `total` counts all matching runs;
- * `truncated` says more rows exist past this window (it stays for the JSON
- * API's show-more shape; the page drives the `pagination` block from total).
+ * contract: the `?agent=` filter, the whitelisted `?status=` filter, the
+ * `?since=` lookback (a stable day/week key the loader already mapped to an
+ * ISO instant, so shared links never rot — the inbox precedent), server
+ * `limit`/`offset` paging and a whitelisted `sort`/`dir` order. `total`
+ * counts all matching runs; `truncated` says more rows exist past this
+ * window (it stays for the JSON API's show-more shape; the page drives the
+ * `pagination` block from total).
  */
 export async function listAgentRuns(
   orgId: string,
   options: {
     agentKey?: string
+    status?: AgentRunStatus
+    startedAfter?: string
     limit?: number
     offset?: number
     sort?: AgentActivitySort
@@ -242,16 +251,22 @@ export async function listAgentRuns(
     options.agentKey && isContinuousCloseAgentKey(options.agentKey)
       ? sql`and agent_key = ${options.agentKey}`
       : sql``
+  const statusFilter =
+    options.status && (AGENT_RUN_STATUSES as readonly string[]).includes(options.status)
+      ? sql`and status = ${options.status}`
+      : sql``
+  const sinceMs = options.startedAfter ? Date.parse(options.startedAfter) : Number.NaN
+  const sinceFilter = Number.isNaN(sinceMs) ? sql`` : sql`and started_at > ${new Date(sinceMs).toISOString()}`
   const [totalRes, runRes] = await Promise.all([
     db.execute<{ n: number }>(sql`
       select count(*)::int as n from ai_agent_runs
-       where org_id = ${orgId} ${agentFilter}
+       where org_id = ${orgId} ${agentFilter} ${statusFilter} ${sinceFilter}
     `),
     db.execute<LastRunRow & { agent_key: ContinuousCloseAgentKey; detector_version: string; error_code: string | null }>(sql`
       select agent_key, id::text as id, status, trigger, started_at, finished_at,
              stats, detector_version, error_code
         from ai_agent_runs
-       where org_id = ${orgId} ${agentFilter}
+       where org_id = ${orgId} ${agentFilter} ${statusFilter} ${sinceFilter}
        order by ${order}
        limit ${limit + 1} offset ${offset}
     `),
