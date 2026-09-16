@@ -832,7 +832,8 @@ function share10(value: string, total: string): string {
 
 export function buildNetZeroPairLines(args: {
   rule: RuleInEffect;
-  currency: string;
+  /** Functional currency of the amounts; omitted when the poster resolves it (the overhead event path). */
+  currency?: string;
   source: NetZeroPairSource;
   total: string;
   targets: NetZeroPairLegTarget[];

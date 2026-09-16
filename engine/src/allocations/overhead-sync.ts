@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../db.ts";
 import { fromUnits, toUnits } from "../money.ts";
 import { loadRuleInEffectByKey } from "./rules.ts";
-import type { AllocationRuleVersion } from "./types.ts";
+import type { AllocationRuleVersion, RuleInEffect } from "./types.ts";
 import { definitionHash, validateRuleVersion } from "./validate.ts";
 
 /**
@@ -283,26 +283,31 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
   const orgId = checkedUuid(orgIdInput, "orgId");
   const actorId = actorIdInput === null ? null : checkedUuid(actorIdInput, "actorId");
   return withOrgTransaction(orgId, async () => {
-    // The head lock serializes concurrent syncs: the loser re-reads fresh
-    // state below and degrades to a no-op instead of double-publishing.
+    // Provision-then-lock: the row may not exist yet, and two concurrent
+    // first-use syncs must not both insert. ON CONFLICT absorbs the loser,
+    // and the following SELECT … FOR UPDATE then serializes them on the one
+    // surviving row — the loser re-reads fresh state below and degrades to a
+    // no-op instead of double-publishing.
+    const provisionedId = randomUUID();
+    const inserted = await db.execute<{ id: string }>(sql`insert into allocation_rules
+      (id, org_id, key, name, description, mode, sort_order, is_active, is_system, custom, created_by, updated_by)
+      values (${provisionedId}, ${orgId}, ${OVERHEAD_SYSTEM_RULE_KEY}, ${OVERHEAD_SYSTEM_RULE_NAME},
+        'Engine-owned mirror of the overhead net-zero-pair policy and rate card. Managed only through overhead settings; never hand-edited.',
+        'post', 100, true, true, ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})
+      on conflict (org_id, key) do nothing
+      returning id`);
     const headRows = await db.execute<{ id: string; is_system: boolean; mode: string; current_version_id: string | null }>(sql`
       select id, is_system, mode, current_version_id from allocation_rules
        where org_id = ${orgId} and key = ${OVERHEAD_SYSTEM_RULE_KEY} for update`);
-    let ruleId = headRows.rows[0]?.id ?? null;
-    if (ruleId !== null) {
-      const head = headRows.rows[0]!;
-      if (!head.is_system || head.mode !== "post") {
-        throw new OverheadSyncError(
-          `allocation rule key "${OVERHEAD_SYSTEM_RULE_KEY}" is taken by a tenant ${head.mode}-mode rule; refusing to adopt it`,
-        );
-      }
-    } else {
-      ruleId = randomUUID();
-      await db.execute(sql`insert into allocation_rules
-        (id, org_id, key, name, description, mode, sort_order, is_active, is_system, custom, created_by, updated_by)
-        values (${ruleId}, ${orgId}, ${OVERHEAD_SYSTEM_RULE_KEY}, ${OVERHEAD_SYSTEM_RULE_NAME},
-          'Engine-owned mirror of the overhead net-zero-pair policy and rate card. Managed only through overhead settings; never hand-edited.',
-          'post', 100, true, true, ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})`);
+    const head = headRows.rows[0];
+    if (!head) throw new OverheadSyncError("overhead system rule vanished during provisioning");
+    if (!head.is_system || head.mode !== "post") {
+      throw new OverheadSyncError(
+        `allocation rule key "${OVERHEAD_SYSTEM_RULE_KEY}" is taken by a tenant ${head.mode}-mode rule; refusing to adopt it`,
+      );
+    }
+    const ruleId = head.id;
+    if (inserted.rows.length > 0) {
       await auditEvidence({
         orgId, table: "allocation_rules", rowId: ruleId, action: "insert",
         event: "rule.provisioned", before: null, after: { key: OVERHEAD_SYSTEM_RULE_KEY }, actorId,
@@ -362,18 +367,21 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
 
     // Provision the labor-hours driver the version names (engine-owned row;
     // a squatting tenant row with a different shape fails closed).
+    const provisionedDriverId = randomUUID();
+    const driverInserted = await db.execute<{ id: string }>(sql`insert into allocation_drivers
+      (id, org_id, key, name, description, unit, dimension, source_kind, config, is_active, custom, created_by, updated_by)
+      values (${provisionedDriverId}, ${orgId}, ${OVERHEAD_SYSTEM_DRIVER_KEY}, 'Overhead labor hours',
+        'Engine-owned measure for the overhead net-zero pair: approved project hours priced by the published department rate card.',
+        'hours', 'project', 'native_measure', ${JSON.stringify({ measure: "labor_hours" })}, true,
+        ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})
+      on conflict (org_id, key) do nothing
+      returning id`);
     const driverRows = await db.execute<{ id: string; dimension: string; source_kind: string; config: unknown; is_active: boolean }>(sql`
       select id, dimension, source_kind, config, is_active from allocation_drivers
        where org_id = ${orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`);
-    let driverId = driverRows.rows[0]?.id ?? null;
-    if (driverId === null) {
-      driverId = randomUUID();
-      await db.execute(sql`insert into allocation_drivers
-        (id, org_id, key, name, description, unit, dimension, source_kind, config, is_active, custom, created_by, updated_by)
-        values (${driverId}, ${orgId}, ${OVERHEAD_SYSTEM_DRIVER_KEY}, 'Overhead labor hours',
-          'Engine-owned measure for the overhead net-zero pair: approved project hours priced by the published department rate card.',
-          'hours', 'project', 'native_measure', ${JSON.stringify({ measure: "labor_hours" })}, true,
-          ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})`);
+    const driverId = driverRows.rows[0]?.id ?? null;
+    if (driverId === null) throw new OverheadSyncError("overhead system driver vanished during provisioning");
+    if (driverInserted.rows.length > 0) {
       await auditEvidence({
         orgId, table: "allocation_drivers", rowId: driverId, action: "insert",
         event: "driver.provisioned", before: null, after: { key: OVERHEAD_SYSTEM_DRIVER_KEY }, actorId,
@@ -497,6 +505,22 @@ export async function resolveOverheadRuleBinding(orgId: string, onDate: string):
     driverId: found.version.driverId ?? null,
     accountId,
   };
+}
+
+/**
+ * The full system rule in force on a date (head + version + targets) for
+ * kernel line-building. Null past a lazy sync is fail-closed evidence of an
+ * inconsistency, never a silent fallback.
+ */
+export async function loadOverheadRuleInEffect(
+  orgId: string,
+  onDate: string,
+): Promise<RuleInEffect | null> {
+  const found = await loadRuleInEffectByKey(orgId, OVERHEAD_SYSTEM_RULE_KEY, onDate);
+  if (!found || !found.version.definitionHash) return null;
+  const scope = found.version.accountScope;
+  if (scope.kind !== "accounts" || !scope.accountIds[0]) return null;
+  return found;
 }
 
 /** Read-only evidence for the Overhead Model workspace (system rule slot). */

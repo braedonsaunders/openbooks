@@ -7,7 +7,10 @@ import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
 } from "./project-recognition.ts";
-import { add, isZero, neg, normalizeMoney } from "./money.ts";
+import { buildNetZeroPairLines } from "./allocations/post.ts";
+import { loadOverheadRuleInEffect, syncOverheadSystemRule } from "./allocations/overhead-sync.ts";
+import type { RuleInEffect } from "./allocations/types.ts";
+import { add, isZero, normalizeMoney } from "./money.ts";
 
 /**
  * Overhead application — a net-zero journal pair,
@@ -26,6 +29,13 @@ import { add, isZero, neg, normalizeMoney } from "./money.ts";
  * Deliberately reads the STANDARD published `overhead_rates` (not the live
  * engine): every posting is reproducible from the rate card in force on the
  * worked day.
+ *
+ * Allocation-kernel fold: the pair is built by the kernel
+ * (buildNetZeroPairLines) under the system-owned post rule
+ * 'overhead-net-zero-pair' derived from this same policy + card
+ * (allocations/overhead-sync.ts). Lines carry contributor_kind 'rule' and
+ * every carried entry gets an allocation_lineage row; the idempotency stamp,
+ * origin and posted amounts are unchanged.
  */
 
 export interface OverheadApplicationSettings {
@@ -104,9 +114,38 @@ export interface OverheadApplyResult {
  * tagged, not yet carried, whose project type doesn't opt out (overhead
  * method 'none'), and whose worked day has a published rate participate.
  */
+/**
+ * Resolve the kernel rule for the posting, provisioning it on first use. The
+ * policy read here is advisory — the transaction re-checks under lock — so a
+ * mid-flight policy change degrades to the long-standing no-post, never to a
+ * mis-stamped one. Null means the policy is not an active pair and no kernel
+ * rule is needed (the posting below returns none before touching the rule).
+ */
+async function ensureOverheadKernelRule(
+  orgId: string,
+  actorId: string,
+  accountId: string | null,
+  onDate: string,
+): Promise<RuleInEffect | null> {
+  if (!accountId) return null;
+  let rule = await loadOverheadRuleInEffect(orgId, onDate);
+  if (!rule) {
+    await syncOverheadSystemRule(orgId, actorId);
+    rule = await loadOverheadRuleInEffect(orgId, onDate);
+  }
+  return rule;
+}
+
 export async function applyOverheadForTime(orgId: string, actorId: string, timeEntryIds: string[]): Promise<OverheadApplyResult> {
   const none: OverheadApplyResult = { entryId: null, total: "0", entries: 0, projects: 0 };
   if (timeEntryIds.length === 0) return none;
+  // Advisory pre-read: provision the kernel rule outside the posting
+  // transaction (its sync owns its transactions) when the policy looks
+  // active, so the hot path inside stays a pure read.
+  const advisory = await overheadApplicationSettings(orgId);
+  const advisoryRule = advisory.mode === "net_zero_pair"
+    ? await ensureOverheadKernelRule(orgId, actorId, advisory.accountId, await businessToday(orgId))
+    : null;
   return inDbTransaction(async (tx) => {
     // Lock the policy row through commit so a configuration change cannot
     // reinterpret half of one source claim.
@@ -159,6 +198,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     if (rows.rows.length === 0) return none;
 
     const byProject = new Map<string, string>();
+    const entriesByProject = new Map<string, Array<{ id: string; amount: string }>>();
     const carried: string[] = [];
     let total = "0";
     let maxDate = "";
@@ -166,19 +206,46 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       const amt = normalizeMoney(String(r.amount));
       if (isZero(amt)) continue;
       byProject.set(r.project_id, add(byProject.get(r.project_id) ?? "0", amt));
+      const legEntries = entriesByProject.get(r.project_id);
+      if (legEntries) legEntries.push({ id: r.id, amount: amt });
+      else entriesByProject.set(r.project_id, [{ id: r.id, amount: amt }]);
       total = add(total, amt);
       carried.push(r.id);
       if (r.worked_on > maxDate) maxDate = r.worked_on;
     }
     if (isZero(total) || carried.length === 0) return none;
 
-    const lines: { accountId: string; amount: string; projectId?: string | null; memo?: string }[] = [];
-    for (const [projectId, amt] of byProject) {
-      lines.push({ accountId: settings.accountId!, amount: amt, projectId, memo: "Overhead applied" });
-    }
-    lines.push({ accountId: settings.accountId, amount: neg(total), projectId: null, memo: "Overhead applied — contra" });
-
+    // The kernel owns the pair from here: line-building, contributor
+    // stamping and lineage come from the system rule in force on the posting
+    // date. The advisory pre-read usually resolved it; a mid-flight policy
+    // change falls back to a load (plus one provisioning sync), and a still-
+    // missing rule is a fail-closed inconsistency, never an unstamped post.
     const postingDate = maxDate || await businessToday(orgId);
+    let kernelRule = advisoryRule;
+    if (!kernelRule || kernelRule.version.effectiveFrom > postingDate ||
+        (kernelRule.version.effectiveTo != null && kernelRule.version.effectiveTo < postingDate)) {
+      kernelRule = await ensureOverheadKernelRule(orgId, actorId, settings.accountId, postingDate);
+    }
+    if (!kernelRule) {
+      throw new Error("overhead kernel rule is not in force for the posting date");
+    }
+    const kernelAccount = kernelRule.version.accountScope.kind === "accounts"
+      ? kernelRule.version.accountScope.accountIds[0] ?? null
+      : null;
+    if (kernelAccount !== settings.accountId) {
+      throw new Error("overhead policy changed during posting; retry the approval");
+    }
+    const built = buildNetZeroPairLines({
+      rule: kernelRule,
+      source: { accountId: settings.accountId! },
+      total,
+      targets: [...byProject].map(([projectId, amt]) => ({
+        projectId,
+        amount: amt,
+        entries: entriesByProject.get(projectId) ?? [],
+      })),
+    });
+
     // A released group (reverseOverheadForTime) can be re-applied with the
     // same date and first member, so the entry number must be unique per
     // physical journal under journal_entries_org_number.
@@ -189,7 +256,20 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       entryNumber: `OVH-${postingDate}-${carried[0]!.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       postingDate,
       memo: "Overhead applied with approved hours (net-zero pair)",
-      lines,
+      lines: built.map((leg) => ({
+        accountId: leg.line.accountId,
+        amount: leg.line.amount,
+        projectId: leg.line.projectId,
+        partyId: leg.line.partyId,
+        memo: leg.line.memo,
+        departmentId: leg.line.departmentId,
+        locationId: leg.line.locationId,
+        classId: leg.line.classId,
+        subsidiaryId: leg.line.subsidiaryId,
+        extraDims: leg.line.extraDims,
+        contributorKind: leg.line.contributorKind,
+        contributorRef: leg.line.contributorRef,
+      })),
     });
     if (!entryId) return none;
     const stamped = (await tx.execute<{ id: string }>(sql`
@@ -203,6 +283,30 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
        returning id`));
     if (stamped.rows.length !== carried.length) {
       throw new Error("overhead posting source claim changed before journal stamping");
+    }
+    // Lineage: one row per carried entry against its project leg (the offset
+    // leg is the deterministic mirror — neg(total) of the same rule version —
+    // so it carries no row of its own). Legs post in order, so line numbers
+    // map 1:1 onto the inserted journal lines.
+    const legLineIds = (await tx.execute<{ id: string; line_number: number }>(sql`
+      select id, line_number from journal_lines
+       where org_id = ${orgId} and entry_id = ${entryId}
+       order by line_number`)).rows;
+    for (let index = 0; index < built.length - 1; index += 1) {
+      const leg = built[index]!;
+      const journalLineId = legLineIds[index]?.id;
+      if (!journalLineId) throw new Error("overhead journal leg is missing its inserted line");
+      for (const draft of leg.lineage) {
+        await tx.execute(sql`insert into allocation_lineage
+          (id, org_id, mode, rule_id, version_id, definition_hash, run_id, document_id,
+           journal_entry_id, journal_line_id, source_journal_line_id, source_document_line_id,
+           target_document_line_id, source_time_entry_id, driver_id, driver_value, driver_total,
+           share, amount, residual)
+          values (${randomUUID()}, ${orgId}, ${draft.mode}, ${draft.ruleId}, ${draft.versionId},
+            ${draft.definitionHash}, null, null, ${entryId}, ${journalLineId}, null, null, null,
+            ${draft.sourceTimeEntryId}, ${draft.driverId}, ${draft.driverValue}, ${draft.driverTotal},
+            ${draft.share}, ${draft.amount}, ${draft.residual ?? "0"})`);
+      }
     }
     return { entryId, total, entries: carried.length, projects: byProject.size };
   });
