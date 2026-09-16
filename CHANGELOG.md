@@ -6,6 +6,36 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-09-16
+
+Setup polish for the allocations release, from testing alpha.8 in production.
+
+### Allocations setup workspace
+
+- Rules, Drivers, and Runs tabs now use the same composition as every other
+  setup list: description plus one primary New/Preview action, the shared
+  search toolbar with the show-inactive pill, and a table with a single
+  "Nothing here yet." row when empty. The New rule and New driver actions are
+  visible on an empty tenant.
+- Drawers carry their primary action in the header like the shared setup
+  drawer. The driver drawer gets its own Description field, per-source
+  configuration (account scope, unit, measure, report), and the manual
+  values grid inside the drawer after the driver is saved; loading states
+  use the house skeleton.
+- Rule drawer dimension filters render a proper none-state when a dimension
+  has no values; all copy resolves from the catalog.
+
+### Features page
+
+- Sub-features nest under their parent (indented, secondary type, no icon)
+  and stay hidden until the parent is on, with a quiet "N options once
+  enabled" hint; category counts cover visible rows only. Applies to
+  Projects, Flows, and Allocations children.
+
+### Operator action
+
+- No migrations. No data changes.
+
 ## [0.1.0-alpha.8] - 2026-09-16
 
 Allocations release. One allocation kernel replaces three requests that used
