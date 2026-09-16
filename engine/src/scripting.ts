@@ -1,11 +1,15 @@
 import { newAsyncContext } from "./quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import type { ContributedLine } from "./allocations/types.ts";
+import { db, schema } from "./db.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
+import { featureEnabled, type FeatureState } from "./feature-registry.ts";
+import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 // Named export, NOT the default: under ESM/tsx the default import resolves to
 // the module namespace (no .parse), so computeNextRunAt silently returned
 // null and scheduled scripts never ran. CronExpressionParser.parse works
 // under both CJS and ESM interop.
 import { CronExpressionParser } from "cron-parser";
-import { db, schema } from "./db.ts";
 import { runUserSql } from "./sqlapi.ts";
 import { createScriptJournal } from "./journal-writes.ts";
 import { actorHasPermission } from "./actor-permissions.ts";
@@ -68,6 +72,8 @@ export interface ScriptContext {
   trigger: string;
   document?: Record<string, unknown>;
   lines?: Record<string, unknown>[];
+  /** custom_gl_lines: the posting kernel's own lines, deep-frozen, read-only. */
+  kernelLines?: Record<string, unknown>[];
   /** endpoint scripts: the inbound HTTP request { method, query, body }. */
   request?: Record<string, unknown>;
   org: { id: string; name: string; baseCurrency: string };
@@ -190,10 +196,27 @@ export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
   return result.rows[0]?.enabled === "true";
 }
 
+/**
+ * Per-run sandbox posture beyond the trigger default. Only the triggers that
+ * opt in pay for the stricter semantics, so existing scripts are unaffected.
+ */
+export interface RunScriptOptions {
+  /**
+   * Prepend "use strict" so a write to the deep-frozen context throws instead
+   * of silently doing nothing (custom_gl_lines must prove kernel immutability).
+   */
+  strict?: boolean;
+  /** Refuse ob.journal.create: the trigger answers with a return value. */
+  forbidJournalCreate?: boolean;
+  /** Remove clock and randomness (Date, Math.random) for deterministic triggers. */
+  deterministic?: boolean;
+}
+
 export async function runScript(
   source: string,
   ctx: ScriptContext,
   timeoutMs: number,
+  opts: RunScriptOptions = {},
 ): Promise<Omit<ScriptOutcome, "scriptId" | "name">> {
   const vm = await newAsyncContext();
   const runtime = vm.runtime;
@@ -245,6 +268,16 @@ export async function runScript(
     const journalFn = vm.newAsyncifiedFunction(
       "__journal_create",
       async (inputH, postH) => {
+        // custom_gl_lines contributes lines through its return value; a
+        // direct ledger write from inside the trigger would bypass host
+        // validation (balance, account checks) and the single-entry stamp.
+        if (opts.forbidJournalCreate) {
+          return {
+            error: vm.newError(
+              `journal.create is not available in ${ctx.trigger} (return { lines: [...] } instead)`,
+            ),
+          };
+        }
         const post = vm.dump(postH) === true;
         if (post && ctx.trigger.startsWith("before_")) {
           return {
@@ -295,11 +328,13 @@ export async function runScript(
     obHandle.dispose();
 
     const program = `
+      ${opts.strict ? '"use strict";' : ""}
       ${source}
       ;(() => {
         const ctx = ${JSON.stringify(ctx)};
         const deepFreeze = (o) => { if (o && typeof o === "object") { Object.values(o).forEach(deepFreeze); Object.freeze(o); } return o; };
         deepFreeze(ctx);
+        ${opts.deterministic ? `Date = function () { throw new Error("custom_gl_lines is deterministic: Date is not available"); }; Math.random = function () { throw new Error("custom_gl_lines is deterministic: Math.random is not available"); };` : ""}
 
         ob.runtime = Object.freeze({
           org: ctx.org,
@@ -706,7 +741,7 @@ export interface ScriptRunOptions {
  * name and role keys for ob.runtime — or nothing at all. Same join contract
  * as web/lib/auth.ts session roles.
  */
-async function resolveScriptUser(
+export async function resolveScriptUser(
   orgId: string,
   actorId: string | null,
 ): Promise<NonNullable<ScriptContext["user"]> | null> {
@@ -884,4 +919,383 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
       sql`update user_scripts set next_run_at = ${next} where id = ${s.id} and org_id = ${orgId}`,
     );
   }
+}
+
+// --- custom_gl_lines: allocation-kernel GL plug-in (A6) ----------------------
+// Tenant-authored extra GL lines on a document's own journal entry. The
+// posting seam (engine/src/posting.ts, after rule contributions) calls
+// runCustomGlLineScripts with the kernel lines; each active script's main(ctx)
+// returns { lines: [...] } and the host validates, resolves, and stamps every
+// line. The first refusal throws CustomGlLinesError, which halts posting
+// before the posting transaction opens — never a partial write.
+
+export const CUSTOM_GL_LINES_TRIGGER = "custom_gl_lines";
+export const MAX_CUSTOM_GL_LINES = 200;
+export const CUSTOM_GL_LINES_ERROR_CODE = "custom_gl_lines_error";
+
+/** Typed refusal from the custom_gl_lines host (validation, gates, errors). */
+export class CustomGlLinesError extends Error {
+  readonly code = CUSTOM_GL_LINES_ERROR_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CustomGlLinesError";
+  }
+}
+
+export interface CustomGlLineRunRequest {
+  orgId: string;
+  document: Record<string, unknown>;
+  documentLines: Record<string, unknown>[];
+  /** The posting kernel's own lines (pre-subsidiary), exposed read-only. */
+  kernelLines: Record<string, unknown>[];
+  /** Posting actor; null = system provenance (same rule as ob.journal.create). */
+  actorId: string | null;
+  /** Document id, for script_runs evidence. */
+  targetId: string;
+}
+
+/**
+ * Both halves of the feature gate: the scripts platform AND the allocation
+ * posting mode, resolved through the feature registry so the allocations
+ * parent key governs its binding-moment children (a child can never resolve
+ * enabled while the parent is off). Unknown keys resolve closed.
+ */
+export async function customGlLinesEnabled(orgId: string): Promise<boolean> {
+  const r = (await db.execute<{ features: FeatureState | null }>(sql`
+    select settings->'features' as features
+      from orgs
+     where id = ${orgId}
+  `));
+  const state = r.rows[0]?.features ?? {};
+  return (
+    featureEnabled(state, "scripts") &&
+    featureEnabled(state, "allocationsAtPosting")
+  );
+}
+
+/**
+ * Run every active custom_gl_lines script for the document kind, in
+ * sort_order, and collect their validated contributions. Rule contributions
+ * (A5) run first at the seam; scripts observe them through kernelLines. The
+ * first error — a failed run or a refused line set — throws and halts
+ * posting; script_runs evidence for every script that ran is already recorded.
+ */
+export async function runCustomGlLineScripts(
+  req: CustomGlLineRunRequest,
+): Promise<ContributedLine[]> {
+  if (!(await customGlLinesEnabled(req.orgId))) return [];
+  const docKind = String(
+    (req.document as { kind?: unknown } | null)?.kind ?? "",
+  );
+  const scripts = await db
+    .select()
+    .from(schema.userScripts)
+    .where(
+      and(
+        eq(schema.userScripts.orgId, req.orgId),
+        eq(schema.userScripts.triggerPoint, CUSTOM_GL_LINES_TRIGGER),
+        eq(schema.userScripts.isActive, true),
+        or(
+          isNull(schema.userScripts.documentKind),
+          eq(schema.userScripts.documentKind, docKind),
+        ),
+      ),
+    )
+    .orderBy(asc(schema.userScripts.sortOrder));
+  if (scripts.length === 0) return [];
+
+  // The posting caller needs gl.post, re-resolved live against its roles —
+  // the same pattern as ob.journal.create. The ctx user object is display
+  // data; the tenant authorization below is authoritative. Actor-less runs
+  // keep the documented system-provenance path.
+  const user = await resolveScriptUser(req.orgId, req.actorId);
+  if (
+    user &&
+    !(await actorHasPermission(db, req.orgId, user.id, "gl.post"))
+  ) {
+    throw new CustomGlLinesError(
+      `custom_gl_lines: user "${user.name}" lacks gl.post`,
+    );
+  }
+
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, req.orgId));
+  if (!org) throw new CustomGlLinesError("custom_gl_lines: organization not found");
+
+  const out: ContributedLine[] = [];
+  for (const s of scripts) {
+    const ctx: ScriptContext = {
+      trigger: CUSTOM_GL_LINES_TRIGGER,
+      document: req.document,
+      lines: req.documentLines,
+      kernelLines: req.kernelLines,
+      org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+      ...(user ? { user } : {}),
+    };
+    const res = await runScript(s.source, ctx, s.timeoutMs, {
+      strict: true,
+      forbidJournalCreate: true,
+      deterministic: true,
+    });
+    const outcomeStatus = res.status;
+    await db.insert(schema.scriptRuns).values({
+      orgId: req.orgId,
+      scriptId: s.id,
+      targetKind: docKind || CUSTOM_GL_LINES_TRIGGER,
+      targetId: req.targetId,
+      status: outcomeStatus,
+      logs: res.logs,
+      errorMessage: outcomeStatus === "ok" ? null : res.abortReason,
+      durationMs: res.durationMs,
+      createdBy: user?.id ?? null,
+    });
+    await db.execute(
+      sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${req.orgId}`,
+    );
+    if (outcomeStatus !== "ok") {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${s.name}" ${outcomeStatus}${res.abortReason ? `: ${res.abortReason}` : ""}`,
+      );
+    }
+    out.push(...(await resolveCustomGlLines(req.orgId, s.id, s.name, res.returned)));
+  }
+  return out;
+}
+
+const CUSTOM_GL_LINE_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_CUSTOM_GL_LINE_AMOUNT = "10000000000000.0000";
+
+interface ParsedCustomGlLine {
+  accountId?: string;
+  accountCode?: string;
+  amount: string;
+  departmentId: string | null;
+  projectId: string | null;
+  locationId: string | null;
+  classId: string | null;
+  subsidiaryId: string | null;
+  memo: string | null;
+  bookCode?: string;
+}
+
+function customGlLineId(
+  scriptName: string,
+  index: number,
+  field: string,
+  value: unknown,
+): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !CUSTOM_GL_LINE_UUID_RE.test(value)) {
+    throw new CustomGlLinesError(
+      `custom_gl_lines script "${scriptName}" line ${index + 1}: invalid ${field}`,
+    );
+  }
+  return value;
+}
+
+/**
+ * Validate one script's returned line set and resolve it to stamped
+ * contributions (contributor_kind 'script', contributor_ref = script id).
+ * Lineage is not required for scripts, so no lineage drafts are produced —
+ * the posting seam accepts these lines as-is.
+ */
+export async function resolveCustomGlLines(
+  orgId: string,
+  scriptId: string,
+  scriptName: string,
+  returned: unknown,
+): Promise<ContributedLine[]> {
+  if (returned === null || returned === undefined) return [];
+  if (!isRecord(returned)) {
+    throw new CustomGlLinesError(
+      `custom_gl_lines script "${scriptName}" must return { lines: [...] } or nothing`,
+    );
+  }
+  const raw = returned.lines;
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new CustomGlLinesError(
+      `custom_gl_lines script "${scriptName}" must return { lines: [...] }`,
+    );
+  }
+  if (raw.length > MAX_CUSTOM_GL_LINES) {
+    throw new CustomGlLinesError(
+      `custom_gl_lines script "${scriptName}" returned ${raw.length} lines (max ${MAX_CUSTOM_GL_LINES})`,
+    );
+  }
+  const parsed: ParsedCustomGlLine[] = raw.map((entry, index) => {
+    const lineNo = index + 1;
+    if (!isRecord(entry)) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: must be an object`,
+      );
+    }
+    const exact = canonicalDecimal(entry.amount, 4);
+    if (exact === null) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: amount must be a number with at most 4 decimal places`,
+      );
+    }
+    let amount: string;
+    try {
+      amount = normalizeMoney(exact);
+    } catch {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: amount must be a number with at most 4 decimal places`,
+      );
+    }
+    if (isZero(amount)) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: amount must be nonzero`,
+      );
+    }
+    if (cmp(abs(amount), MAX_CUSTOM_GL_LINE_AMOUNT) > 0) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: amount out of range`,
+      );
+    }
+    const accountId = customGlLineId(scriptName, index, "accountId", entry.accountId);
+    const accountCode =
+      entry.accountCode === undefined || entry.accountCode === null || entry.accountCode === ""
+        ? undefined
+        : String(entry.accountCode);
+    if (!accountId && !accountCode) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${lineNo}: accountId or accountCode required`,
+      );
+    }
+    const bookCode =
+      entry.bookCode === undefined || entry.bookCode === null || entry.bookCode === ""
+        ? undefined
+        : String(entry.bookCode);
+    return {
+      ...(accountId ? { accountId } : {}),
+      ...(accountCode ? { accountCode } : {}),
+      amount,
+      departmentId: customGlLineId(scriptName, index, "departmentId", entry.departmentId),
+      projectId: customGlLineId(scriptName, index, "projectId", entry.projectId),
+      locationId: customGlLineId(scriptName, index, "locationId", entry.locationId),
+      classId: customGlLineId(scriptName, index, "classId", entry.classId),
+      subsidiaryId: customGlLineId(scriptName, index, "subsidiaryId", entry.subsidiaryId),
+      memo: entry.memo === undefined || entry.memo === null || entry.memo === ""
+        ? null
+        : String(entry.memo).slice(0, 500),
+      ...(bookCode ? { bookCode } : {}),
+    };
+  });
+
+  // Resolve accountCode → id (org-scoped, active, non-summary) and prove
+  // every provided accountId/dimension id is org-owned, exactly like the
+  // governed journal write — a well-formed foreign id must never die at the
+  // composite FK as an unhandled storage error.
+  const codes = [...new Set(parsed.filter((l) => !l.accountId).map((l) => l.accountCode!))];
+  const accountIds = [...new Set(parsed.map((l) => l.accountId).filter((x): x is string => typeof x === "string"))];
+  const byCode = new Map<string, string>();
+  if (codes.length > 0) {
+    const r = (await db.execute<{ id: string; number: string }>(sql`
+      select id, number from accounts
+       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`));
+    for (const row of r.rows) byCode.set(String(row.number), String(row.id));
+    for (const line of parsed) {
+      if (!line.accountId && !byCode.has(line.accountCode!)) {
+        const lineNo = parsed.indexOf(line) + 1;
+        throw new CustomGlLinesError(
+          `custom_gl_lines script "${scriptName}" line ${lineNo}: unknown, inactive, or summary account code "${line.accountCode}"`,
+        );
+      }
+    }
+  }
+  if (accountIds.length > 0) {
+    const r = (await db.execute<{ id: string }>(sql`
+      select id from accounts
+       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${accountIds}`));
+    const found = new Set(r.rows.map((x) => String(x.id)));
+    const foreign = parsed.find((l) => l.accountId && !found.has(l.accountId));
+    if (foreign) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${parsed.indexOf(foreign) + 1}: unknown, inactive, or summary accountId "${foreign.accountId}"`,
+      );
+    }
+  }
+  const dimChecks = [
+    ["departmentId", "department", "departments"],
+    ["locationId", "location", "locations"],
+    ["classId", "class", "classes"],
+    ["projectId", "project", "projects"],
+    ["subsidiaryId", "subsidiary", "subsidiaries"],
+  ] as const;
+  for (const [key, label, table] of dimChecks) {
+    const refIds = [
+      ...new Set(
+        parsed.map((l) => l[key]).filter((x): x is string => typeof x === "string"),
+      ),
+    ];
+    if (refIds.length === 0) continue;
+    const r = (await db.execute<{ id: string }>(sql`
+      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`));
+    const found = new Set(r.rows.map((x) => String(x.id)));
+    const foreign = parsed.find((l) => l[key] && !found.has(l[key]!));
+    if (foreign) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" line ${parsed.indexOf(foreign) + 1}: ${label} not found in this organization`,
+      );
+    }
+  }
+
+  // Secondary-book targets arrive with allocation rule support (A5); a script
+  // line pinned to a non-primary book is refused rather than silently posted
+  // to the primary book.
+  const bookCodes = [...new Set(parsed.map((l) => l.bookCode).filter((x): x is string => typeof x === "string"))];
+  if (bookCodes.length > 0) {
+    const books = (await db.execute<{ code: string; isPrimary: boolean }>(sql`
+      select code, is_primary as "isPrimary" from accounting_books where org_id = ${orgId}`));
+    for (const code of bookCodes) {
+      const book = books.rows.find((b) => b.code === code);
+      if (!book) {
+        throw new CustomGlLinesError(
+          `custom_gl_lines script "${scriptName}": unknown book code "${code}"`,
+        );
+      }
+      if (!book.isPrimary) {
+        throw new CustomGlLinesError(
+          `custom_gl_lines script "${scriptName}": book code "${code}" is not the primary posting book`,
+        );
+      }
+    }
+  }
+
+  // The set must balance per subsidiary among itself (null = the document
+  // subsidiary, defaulted at the seam — groups that balance separately still
+  // balance combined). Bigint money, never floats.
+  const bySubsidiary = new Map<string | null, string[]>();
+  for (const line of parsed) {
+    const group = bySubsidiary.get(line.subsidiaryId) ?? [];
+    group.push(line.amount);
+    bySubsidiary.set(line.subsidiaryId, group);
+  }
+  for (const [subsidiaryId, amounts] of bySubsidiary) {
+    const total = sum(amounts);
+    if (!isZero(total)) {
+      throw new CustomGlLinesError(
+        `custom_gl_lines script "${scriptName}" lines do not balance${subsidiaryId ? ` for subsidiary ${subsidiaryId}` : " (the document subsidiary)"} (sum=${total})`,
+      );
+    }
+  }
+
+  return parsed.map((line) => ({
+    accountId: line.accountId ?? byCode.get(line.accountCode!)!,
+    amount: line.amount,
+    subsidiaryId: line.subsidiaryId,
+    departmentId: line.departmentId,
+    projectId: line.projectId,
+    locationId: line.locationId,
+    classId: line.classId,
+    memo: line.memo,
+    contributorKind: "script" as const,
+    contributorRef: scriptId,
+  }));
 }

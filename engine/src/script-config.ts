@@ -1,7 +1,7 @@
 import { computeScheduledScriptNextRunAt, InvalidScheduledScriptCronError, INVALID_SCHEDULED_SCRIPT_CRON_CODE } from "./scripting.ts";
 
 export type ScriptValidationError = { message: string; code?: string; field?: string };
-const TRIGGERS = ["before_submit", "before_post", "after_post", "before_void", "scheduled", "endpoint", "bulk", "client"];
+const TRIGGERS = ["before_submit", "before_post", "after_post", "before_void", "custom_gl_lines", "scheduled", "endpoint", "bulk", "client"];
 const SLUG = /^[a-z][a-z0-9-]*$/;
 
 /** Shared configuration boundary for API edits and reviewed promotions. */
