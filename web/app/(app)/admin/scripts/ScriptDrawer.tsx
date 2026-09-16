@@ -16,6 +16,7 @@ const TRIGGERS: { value: string; labelKey: string }[] = [
   { value: 'before_post', labelKey: 'triggers.beforePost' },
   { value: 'after_post', labelKey: 'triggers.afterPost' },
   { value: 'before_void', labelKey: 'triggers.beforeVoid' },
+  { value: 'custom_gl_lines', labelKey: 'triggers.customGlLines' },
   { value: 'scheduled', labelKey: 'triggers.scheduled' },
   { value: 'endpoint', labelKey: 'triggers.endpoint' },
   { value: 'bulk', labelKey: 'triggers.bulk' },
@@ -92,13 +93,27 @@ function main(ctx) {
 }
 `
 
+const CUSTOM_GL_LINES_TEMPLATE = `// Custom GL lines — extra balanced lines on the document's own journal entry.
+// ctx = { trigger: 'custom_gl_lines', document, lines, kernelLines (frozen), org, user }
+// Return { lines: [{ accountId|accountCode, amount, departmentId?, projectId?,
+// locationId?, classId?, subsidiaryId?, memo?, bookCode? }] }.
+// Amounts are signed (debit +) and must balance per subsidiary (max 200 lines).
+// Needs gl.post; ob.journal.create is unavailable here; no clock or randomness.
+function main(ctx) {
+  var total = Number(ctx.document.total || 0)
+  ob.log('posting', ctx.document.documentNumber, 'total', total)
+  return { lines: [] }
+}
+`
+
 const TEMPLATE_BY_TRIGGER: Record<string, string> = {
+  custom_gl_lines: CUSTOM_GL_LINES_TEMPLATE,
   scheduled: SCHEDULED_TEMPLATE,
   endpoint: ENDPOINT_TEMPLATE,
   bulk: BULK_TEMPLATE,
   client: CLIENT_TEMPLATE,
 }
-const ALL_TEMPLATES = new Set([TEMPLATE, SCHEDULED_TEMPLATE, ENDPOINT_TEMPLATE, BULK_TEMPLATE, CLIENT_TEMPLATE, ''])
+const ALL_TEMPLATES = new Set([TEMPLATE, CUSTOM_GL_LINES_TEMPLATE, SCHEDULED_TEMPLATE, ENDPOINT_TEMPLATE, BULK_TEMPLATE, CLIENT_TEMPLATE, ''])
 
 export function NewScriptButton() {
   const t = useTranslations('admin.scripts')

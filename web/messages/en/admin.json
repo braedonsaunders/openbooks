@@ -462,6 +462,7 @@
       "beforePost": "before post",
       "afterPost": "after post",
       "beforeVoid": "before void",
+      "customGlLines": "custom GL lines",
       "scheduled": "scheduled",
       "endpoint": "endpoint",
       "bulk": "bulk",
