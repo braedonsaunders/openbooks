@@ -38,12 +38,7 @@ import {
   readConversationSummary,
   writeConversationSummary,
 } from "../../../../lib/assistant/conversation-memory";
-import {
-  generateConversationTitle,
-  readTitleState,
-  shouldAttemptAutoTitle,
-  writeAutoTitle,
-} from "../../../../lib/assistant/conversation-title";
+import { scheduleAutoTitle } from "../../../../lib/assistant/conversation-title";
 import { moduleOfTool } from "../../../../lib/assistant/tool-router";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { orgFiscalContext } from "../../../../lib/fiscal";
@@ -312,30 +307,19 @@ export async function POST(req: Request): Promise<Response> {
         } catch (countError) {
           console.warn("[assistant/chat] summary turn count failed", countError);
         }
-        // Best-effort auto title: after the FIRST assistant turn completes,
-        // replace the prompt-slice placeholder with a short generated title.
-        // A user rename always wins; any failure keeps the placeholder.
-        try {
-          if (!aborted && finishReason !== "error") {
-            const turns = await countConversationAssistantTurns(authz, conversationId!);
-            if (shouldAttemptAutoTitle(await readTitleState(authz, conversationId!), turns)) {
-              try {
-                const model = getModel(aiConfig, "fast");
-                if (model) {
-                  const title = await generateConversationTitle({
-                    model,
-                    prompt,
-                    assistantContent: content,
-                  });
-                  if (title) await writeAutoTitle(authz, conversationId!, title);
-                }
-              } catch (titleError) {
-                console.warn("[assistant/chat] auto title failed", titleError);
-              }
-            }
-          }
-        } catch (countError) {
-          console.warn("[assistant/chat] auto title turn count failed", countError);
+        // Fire-and-forget AFTER the stream closes: the answer finishes for
+        // the user the instant the last text chunk flushes — the composer
+        // never waits for the title round-trip (bounded tokens + hard
+        // timeout inside scheduleAutoTitle). The client's end-of-turn
+        // refresh, plus one delayed refresh, picks the title up.
+        if (!aborted && finishReason !== "error") {
+          scheduleAutoTitle({
+            authz,
+            conversationId: conversationId!,
+            prompt,
+            assistantContent: content,
+            model: getModel(aiConfig, "fast"),
+          });
         }
       },
     });

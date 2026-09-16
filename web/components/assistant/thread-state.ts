@@ -27,6 +27,14 @@ export function withLastAssistantParts<T extends ThreadMessage>(
 export const MESSAGE_PAGE_SIZE = 30;
 
 /**
+ * Delay before the post-turn sidebar re-refresh (mirrors TITLE_TIMEOUT_MS in
+ * conversation-title.ts plus margin: the server generates the thread title
+ * after the stream closes, so the end-of-turn refresh usually still shows the
+ * placeholder and this second pass picks the generated title up).
+ */
+export const TITLE_REFRESH_DELAY_MS = 12_000;
+
+/**
  * Restore the reader's position after prepending history: the viewport keeps
  * its exact distance from the old head by the height the new rows added.
  */
