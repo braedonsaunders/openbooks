@@ -1226,6 +1226,44 @@
         "overview": "Aperçu",
         "library": "Bibliothèque",
         "activity": "Activité"
+      },
+      "packs": {
+        "accounting": {
+          "title": "Contrôles comptables",
+          "description": "Mouvements bancaires non rapprochés, rapprochements déséquilibrés et brouillons en souffrance qui empêchent la clôture.",
+          "reads": "Relevés bancaires et rapprochements, pièces comptables ouvertes.",
+          "proposes": "Une liste de révision des points à traiter — il ne comptabilise ni ne modifie jamais d'écritures."
+        },
+        "finance": {
+          "title": "Contrôles financiers",
+          "description": "Budgets approuvés manquants, écarts défavorables et baisses de performance de la période.",
+          "reads": "Scénarios budgétaires approuvés, réalisations et revenus de la période.",
+          "proposes": "Des alertes d'écarts avec les comptes exacts — révision uniquement, aucune écriture."
+        },
+        "collections": {
+          "title": "Recouvrement",
+          "description": "Soldes clients échus avec comportement de paiement, promesses non tenues et candidats au blocage crédit.",
+          "reads": "Créances ouvertes, promesses et historique des paiements.",
+          "proposes": "Des projets de relances et une liste d'appels prioritaire à réviser."
+        },
+        "payables": {
+          "title": "Comptes fournisseurs",
+          "description": "Factures en double, factures dues avant le prochain règlement, escomptes pour paiement anticipé et approbations manquantes.",
+          "reads": "Factures fournisseurs, approbations et calendrier des règlements.",
+          "proposes": "Un lot de règlements comme carte de révision — rien n'est payé automatiquement."
+        },
+        "reconciliation": {
+          "title": "Rapprochement bancaire",
+          "description": "Lignes bancaires non rapprochées avec un candidat fiable, rapprochements en souffrance et comptes jamais rapprochés.",
+          "reads": "Lignes de relevés et état des rapprochements.",
+          "proposes": "Des commandes de rapprochement à confirmer une par une."
+        },
+        "hygiene": {
+          "title": "Hygiène des données",
+          "description": "Incohérences des comptes de contrôle, tiers en double et fiches sans les codes, budgets ou affectations requis.",
+          "reads": "Plan comptable, tiers, articles, projets, budgets et composantes de paie.",
+          "proposes": "Des cartes de correction quand le remède est un paramètre."
+        }
       }
     },
     "fxProvider": {

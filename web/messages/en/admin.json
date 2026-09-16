@@ -1316,6 +1316,44 @@
         "overview": "Overview",
         "library": "Library",
         "activity": "Activity"
+      },
+      "packs": {
+        "accounting": {
+          "title": "Accounting controls",
+          "description": "Unmatched bank activity, out-of-balance reconciliations and stale drafts that keep the books from closing.",
+          "reads": "Bank statements and reconciliations, open accounting documents.",
+          "proposes": "A review list of conditions to clear — it never posts or edits records."
+        },
+        "finance": {
+          "title": "Finance controls",
+          "description": "Missing approved budgets, unfavorable variances and period performance slips.",
+          "reads": "Approved budget scenarios, actuals and period revenue.",
+          "proposes": "Variance callouts with the exact accounts — review only, no writes."
+        },
+        "collections": {
+          "title": "Collections",
+          "description": "Overdue customer balances with payment behaviour, broken promises and credit-hold candidates.",
+          "reads": "Open receivables, promises and payment history.",
+          "proposes": "Reminder drafts and a priority call list for review."
+        },
+        "payables": {
+          "title": "Payables",
+          "description": "Duplicate bills, bills due before the next pay run, early-pay discounts and missing approvals.",
+          "reads": "Vendor bills, approvals and the pay-run calendar.",
+          "proposes": "A pay run as a review card — nothing is paid automatically."
+        },
+        "reconciliation": {
+          "title": "Bank reconciliation",
+          "description": "Unmatched bank lines with a confident match candidate, stale reconciliations and accounts never reconciled.",
+          "reads": "Bank statement lines and reconciliation status.",
+          "proposes": "Match commands to confirm one by one."
+        },
+        "hygiene": {
+          "title": "Data hygiene",
+          "description": "Control-account mismatches, duplicate parties, and records missing the codes, budgets or mappings they need.",
+          "reads": "Chart of accounts, parties, items, projects, budgets and payroll components.",
+          "proposes": "Setup-fix cards where the remedy is a setting."
+        }
       }
     },
     "fxProvider": {
