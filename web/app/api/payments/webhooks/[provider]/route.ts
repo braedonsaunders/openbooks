@@ -5,8 +5,17 @@ import {
   type AcceptanceProvider,
   type ProviderWebhookResult,
 } from "@openbooks/engine/src/payment-acceptance.ts";
+import { readBoundedBodyText } from "../../../../../lib/bounded-body";
 
 export const runtime = "nodejs";
+
+/**
+ * Largest provider delivery accepted. Batched notification deliveries
+ * (thousands of small items in one body) need headroom, but the cap is
+ * enforced on the actual streamed bytes before verification touches them,
+ * so an unbounded body can never be buffered on this sessionless surface.
+ */
+export const WEBHOOK_MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 function webhookResponse(result: ProviderWebhookResult, status = 200) {
   return NextResponse.json(
@@ -32,7 +41,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
   if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
     return NextResponse.json({ error: "unknown provider" }, { status: 404 });
   }
-  const rawBody = await req.text();
+  const bounded = await readBoundedBodyText(req, WEBHOOK_MAX_BODY_BYTES);
+  if (!bounded.ok) {
+    return NextResponse.json(
+      {
+        error:
+          bounded.reason === "too_large"
+            ? "webhook delivery exceeds the 10 MiB size limit"
+            : "malformed webhook delivery",
+      },
+      { status: bounded.reason === "too_large" ? 413 : 400 },
+    );
+  }
+  const rawBody = bounded.text;
   const headers: Record<string, string> = {};
   req.headers.forEach((value, key) => {
     headers[key.toLowerCase()] = value;
