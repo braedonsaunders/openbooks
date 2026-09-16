@@ -25,6 +25,7 @@ function invalid(error: string): NextResponse {
 }
 
 function toCandidate(candidate: RuleInEffect, recommended: boolean): {
+  ruleId: string
   ruleKey: string
   ruleName: string
   applyPolicy: string
@@ -32,6 +33,7 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
   recommended: boolean
 } {
   return {
+    ruleId: candidate.rule.id,
     ruleKey: candidate.rule.key,
     ruleName: candidate.rule.name,
     applyPolicy: candidate.version.applyPolicy,

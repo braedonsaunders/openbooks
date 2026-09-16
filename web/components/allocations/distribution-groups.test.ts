@@ -11,6 +11,7 @@ import {
   menuKeysForRow,
   moneyDiffers,
   reapportionGroupTotal,
+  splitPortionsToAmounts,
   unsplitGroup,
 } from './distribution-groups.ts'
 
@@ -116,6 +117,39 @@ test('each row resolves exactly one distribution affordance', () => {
   assert.deepEqual(chipForRow(row('50'), 3, opts), { kind: 'split' })
   // A blank placeholder row shows nothing at all.
   assert.equal(chipForRow(row(''), 4, opts), null)
+})
+
+test('hand portions convert to exact children that sum to the line', () => {
+  // Fixed + percent + remainder absorb 100.00 with no lost cent.
+  assert.deepEqual(
+    splitPortionsToAmounts(
+      [{ kind: 'fixed', value: '30.00' }, { kind: 'percent', value: 25 }, { kind: 'remainder' }],
+      '100.00',
+    ),
+    ['30.0000', '25.0000', '45.0000'],
+  )
+  // Two remainder lines share the odd unit deterministically.
+  assert.deepEqual(
+    splitPortionsToAmounts([{ kind: 'remainder' }, { kind: 'remainder' }], '100.00'),
+    ['50.0000', '50.0000'],
+  )
+  assert.deepEqual(
+    splitPortionsToAmounts([{ kind: 'remainder' }, { kind: 'remainder' }, { kind: 'remainder' }], '10.00'),
+    ['3.3334', '3.3333', '3.3333'],
+  )
+  // No remainder line demands an exact book.
+  assert.deepEqual(splitPortionsToAmounts([{ kind: 'percent', value: 60 }, { kind: 'percent', value: 40 }], '200'), [
+    '120.0000',
+    '80.0000',
+  ])
+  assert.equal(splitPortionsToAmounts([{ kind: 'percent', value: 60 }], '200'), null)
+  // Over-allocation, malformed fixed, and negative percent all refuse.
+  assert.equal(
+    splitPortionsToAmounts([{ kind: 'fixed', value: '150' }, { kind: 'remainder' }], '100'),
+    null,
+  )
+  assert.equal(splitPortionsToAmounts([{ kind: 'fixed', value: 'junk' }, { kind: 'remainder' }], '100'), null)
+  assert.equal(splitPortionsToAmounts([{ kind: 'percent', value: -5 }, { kind: 'remainder' }], '100'), null)
 })
 
 test('the row menu offers exactly the actions that apply', () => {
