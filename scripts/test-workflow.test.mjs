@@ -125,6 +125,29 @@ test('test workflow propagates tee producer failures and retains its failure gua
   assert.equal(occurrenceCount(restoreDrill, bypass), 1)
 })
 
+test('the restore drill provisions the owned ephemeral fixture marker', () => {
+  // Scratch-org fixtures fail closed without the database-side nonce, so a
+  // restore drill without the marker step trips the interlock instead of
+  // rehearsing anything. The drill owns its throwaway service database, so
+  // it stamps the same authorization every other database job uses.
+  const job = topLevelJob('restore-drill')
+  assert.match(
+    job,
+    /- name: Mark database as the owned ephemeral fixture/,
+    'restore-drill must stamp the owned ephemeral fixture marker before the drill',
+  )
+  assert.match(
+    job,
+    /OPENBOOKS_TEST_DB_MARKER=\$MARKER/,
+    'restore-drill must export the marker to the drill step, not just stamp the catalog',
+  )
+  assert.doesNotMatch(
+    job,
+    /OPENBOOKS_TEST_ALLOW_UNMARKED_DB/,
+    'restore-drill must satisfy the interlock, never opt out of it',
+  )
+})
+
 
 test('CI has no scheduled runs on unchanged source', () => {
   for (const name of ['test.yml', 'trust.yml', 'security.yml']) {
