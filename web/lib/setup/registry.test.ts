@@ -219,3 +219,23 @@ test('deduction protection is offered only where it can legally apply', () => {
     assert.equal(setupFieldVisible(field(key), deduction), true)
   }
 })
+
+test('allocations is a feature-gated custom-page rail entry, never generic CRUD', () => {
+  // The Rules | Drivers | Runs workspace is a custom ModuleView page
+  // (allocation-kernel shard A7); the registry entry only puts the tab on the
+  // setup rail under Accounting, gated by the `allocations` feature.
+  const entry = SETUP_ENTITY_BY_KEY.get('allocations')
+  assert.ok(entry, 'registry must declare the allocations entry')
+  assert.equal(entry.groupKey, 'accounting')
+  assert.equal(entry.featureKey, 'allocations')
+  assert.equal(entry.table, 'allocation_rules')
+  // The static custom page serves /admin/setup/allocations; the generic
+  // [entity] CRUD surface must refuse every write so versioned rule config
+  // only changes through the allocations API.
+  assert.equal(entry.readOnly, true)
+  assert.equal(entry.allowCreate, false)
+  assert.equal(entry.allowDelete, false)
+  // A rail entry, not a nested/rehomed record: it renders in the Accounting group.
+  const rail = (setupEntitiesByGroup().get('accounting') ?? []).map((e) => e.key)
+  assert.ok(rail.includes('allocations'), 'allocations must appear on the setup rail')
+})
