@@ -16,7 +16,14 @@ import {
   sealSecret as sealEmailSecret,
   unsealSecret as unsealEmailSecret,
 } from "@openbooks/emails";
-import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
+import { postDocument } from "./posting.ts";
+import {
+  createPaymentDocument,
+  postPaymentWithApplications,
+  reversePaymentForReturn,
+  updateDraftPayment,
+} from "./payments.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgReporting, orgRowCounts } from "./test-fixtures.ts";
 
 const ENABLED = !!process.env.OPENBOOKS_DB_URL && !!process.env.OPENBOOKS_DATA_KEY && process.env.OPENBOOKS_RESTORE_DRILL === "1";
 
@@ -233,6 +240,208 @@ test("offline drill exports, removes, restores, and revalidates an organization"
   } finally {
     await dropScratchOrgReporting(source.orgId);
     await dropScratchOrgReporting(external.orgId);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("populated ledger exports, restores, and revalidates with nonzero fidelity", { skip: !ENABLED, timeout: 300_000 }, async () => {
+  // The offline drill above restores an org whose ledger is EMPTY: its
+  // posted-ledger balance check passes vacuously and proves nothing about
+  // restore fidelity. This drill posts a real ledger first — invoice,
+  // payment with application, reversal, secondary-book pair, dimensions,
+  // source links, custom fields, attachments with bytes — then demands the
+  // restored tenant match independent totals with NONZERO counts per table.
+  const root = await mkdtemp(join(tmpdir(), "openbooks-restore-ledger-"));
+  const archive = join(root, "org.json.gz");
+  const source = await createScratchOrg();
+  const actorId = await createScratchUser(source.orgId, "Ledger Seed User", "ledger_seed_user");
+  try {
+    // Dimensions live on real registry rows, not free text.
+    const departmentId = randomUUID();
+    const locationId = randomUUID();
+    const classId = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${source.orgId}, 'Drill department')`);
+    await db.execute(sql`insert into locations (id, org_id, name) values (${locationId}, ${source.orgId}, 'Drill location')`);
+    await db.execute(sql`insert into classes (id, org_id, name) values (${classId}, ${source.orgId}, 'Drill class')`);
+
+    // Custom-field definitions for the header and the line.
+    await db.execute(sql`insert into custom_field_defs (org_id, target_table, key, label, field_type)
+      values (${source.orgId}, 'documents', 'drill_origin', 'Drill origin', 'text'),
+             (${source.orgId}, 'document_lines', 'drill_note', 'Drill note', 'text')`);
+
+    // Kernel-posted customer invoice with dimensions + custom values.
+    const invoiceId = randomUUID();
+    const invoiceLineId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, party_id, subsidiary_id,
+         document_date, posting_date, currency, fx_rate, subtotal, tax_total, total,
+         custom, created_by)
+      values (${invoiceId}, ${source.orgId}, 'customer_invoice', 'draft', 'INV-DRILL-1',
+              ${source.customerId}, ${source.subsidiaryId}, ${source.date}, ${source.date},
+              'CAD', '1', '500.0000', '0', '500.0000',
+              '{"drill_origin": "restore-drill"}'::jsonb, ${actorId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount,
+         tax_input_amount, tax_amount, quantity, unit_price,
+         department_id, location_id, class_id, custom)
+      values (${invoiceLineId}, ${source.orgId}, ${invoiceId}, 1, ${source.accounts.revenue}, '500.0000',
+              '500.0000', '0', '1', '500.0000',
+              ${departmentId}, ${locationId}, ${classId}, '{"drill_note": "Drill scope"}'::jsonb)`);
+    await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${source.orgId}`);
+    const invoiceEntryId = await postDocument(invoiceId, {
+      control: { ar: source.accounts.ar, ap: source.accounts.ap, bank: source.accounts.bank },
+    });
+
+    // Kernel payment applied to the invoice's AR line, then reversed.
+    const invoiceArLine = (await db.execute<{ id: string }>(sql`
+      select id from journal_lines where entry_id = ${invoiceEntryId} and account_id = ${source.accounts.ar}`)).rows[0]!.id;
+    const payment = await createPaymentDocument({
+      orgId: source.orgId,
+      kind: "customer_payment",
+      createdBy: actorId,
+      partyId: source.customerId,
+      bankAccountId: source.accounts.bank,
+      subsidiaryId: source.subsidiaryId,
+      documentDate: source.date,
+      currency: "CAD",
+      fxRate: "1",
+    });
+    await updateDraftPayment(payment.id, {
+      allocations: [{
+        openLineId: invoiceArLine,
+        sourceTransactionAmount: "500",
+        targetTransactionAmount: "500",
+        settlementRate: "1",
+        settlementRateSource: "same_currency",
+        settlementRateReference: "DRILL",
+      }],
+      bankAccountId: source.accounts.bank,
+    }, actorId, source.orgId);
+    await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${source.orgId}`);
+    await postPaymentWithApplications(payment.id, undefined, actorId);
+    // The kernel records the payment-settles-invoice source link itself as
+    // part of posting — assert it rather than inserting a duplicate.
+    const paysLinks = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from document_links
+       where org_id = ${source.orgId} and from_document_id = ${payment.id}
+         and to_document_id = ${invoiceId} and link_type = 'pays'`)).rows[0]!.n;
+    assert.ok(paysLinks >= 1, "posting the payment must record the pays source link");
+    await reversePaymentForReturn(payment.id, source.orgId, "Drill return", actorId, source.date);
+
+    // Secondary book with its own balanced posted pair.
+    const secondaryBookId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${secondaryBookId}, ${source.orgId}, 'DRILL-SEC', 'Drill secondary', false, true, true)`);
+    const secondaryEntryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${secondaryEntryId}, ${source.orgId}, ${secondaryBookId}, ${source.subsidiaryId},
+              'DRILL-SEC-1', ${source.date}, ${source.periodId}, 'DRILL-SEC-1', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+      values
+        (${source.orgId}, ${secondaryEntryId}, 1, ${source.accounts.ar}, ${source.subsidiaryId}, '250.0000', 'CAD', '250.0000', '1'),
+        (${source.orgId}, ${secondaryEntryId}, 2, ${source.accounts.ap}, ${source.subsidiaryId}, '-250.0000', 'CAD', '-250.0000', '1')`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${secondaryEntryId}`);
+
+    // Attachment with real bytes on the invoice.
+    const folderId = randomUUID();
+    const fileId = randomUUID();
+    const versionId = randomUUID();
+    const blobBytes = Buffer.from("drill-attachment-bytes", "utf8");
+    await db.execute(sql`insert into folders (id, org_id, name) values (${folderId}, ${source.orgId}, 'Drill evidence')`);
+    await db.execute(sql`
+      insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${source.orgId}, ${folderId}, 'drill.txt', 'text/plain', ${blobBytes.length})`);
+    await db.execute(sql`
+      insert into file_versions (id, file_id, version_number, size_bytes, content_type)
+      values (${versionId}, ${fileId}, 1, ${blobBytes.length}, 'text/plain')`);
+    await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, ${blobBytes})`);
+    await db.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId}`);
+    await db.execute(sql`
+      insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
+      values (${source.orgId}, ${fileId}, 'documents', ${invoiceId}, ${actorId})`);
+
+    // Independent totals BEFORE export: every org-table count plus the
+    // per-book trial balance and the raw blob bytes. The rebuilt aggregates
+    // (gl_month_activity, party_payment_stats) are deliberately excluded from
+    // archives and rebuilt on restore, so they compare by their verify
+    // functions instead of byte counts — the n=0 tombstones the live
+    // triggers leave behind are contract-equivalent to absent rows.
+    const derivedAggregates = new Set(["gl_month_activity", "party_payment_stats"]);
+    const comparableCounts = (counts: Record<string, number>): Record<string, number> =>
+      Object.fromEntries(Object.entries(counts).filter(([name]) => !derivedAggregates.has(name)));
+    const beforeCounts = await orgRowCounts(source.orgId);
+    const trialBalance = async () => (await db.execute<{ book: string; entries: number; balance: string; lines: number }>(sql`
+      select e.book_id as book, count(distinct e.id)::int as entries,
+             coalesce(sum(l.amount), 0)::text as balance, count(l.*)::int as lines
+        from journal_entries e left join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+       where e.org_id = ${source.orgId} and e.status in ('posted', 'reversed')
+       group by e.book_id order by e.book_id`)).rows;
+    const blobBytesHex = async () => (await db.execute<{ version_id: string; hex: string }>(sql`
+      select v.id as version_id, encode(b.bytes, 'hex') as hex
+        from file_blobs b join file_versions v on v.id = b.version_id
+        join files f on f.id = v.file_id
+       where f.org_id = ${source.orgId} order by v.id`)).rows;
+    const reversedBefore = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${source.orgId} and status = 'reversed'`)).rows[0]!.n;
+    const beforeTrial = await trialBalance();
+    const beforeBlobs = await blobBytesHex();
+    assert.ok(reversedBefore >= 1, "the seeded ledger must contain a reversed entry");
+    assert.ok(beforeBlobs.length === 1, "the seeded ledger must contain the attachment bytes");
+
+    const gzip = createGzip({ level: 6 });
+    const completed = pipeline(gzip, createWriteStream(archive, { mode: 0o600 }));
+    const exported = await streamOrgBackup(source.orgId, gzip);
+    await completed;
+    for (const name of ["journal_entries", "journal_lines", "documents", "document_lines", "applications",
+      "accounting_books", "document_links", "custom_field_defs", "folders", "files", "file_versions",
+      "file_blobs", "file_attachments"]) {
+      const table = exported.tables.find((t) => t.name === name);
+      assert.ok((table?.rows ?? 0) > 0, `the archive must carry nonzero ${name} rows`);
+    }
+    for (const name of derivedAggregates) {
+      assert.ok(!exported.tables.some((t) => t.name === name), `${name} travels via rebuild, not archive bytes`);
+    }
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(archive)) hash.update(chunk);
+
+    await dropScratchOrg(source.orgId);
+    const report = await restoreOrgBackup({
+      archivePath: archive,
+      expectedSha256: hash.digest("hex"),
+      expectedOrgId: source.orgId,
+      connectionString: process.env.OPENBOOKS_DB_URL!,
+      // The bootstrap's own org row always remains, so the strict
+      // empty-target gate cannot pass in a bootstrapped database.
+      testOnlyAllowNonemptyTarget: true,
+    });
+    assert.equal(report.validation.postedLedgerBalance, "passed");
+
+    // The restored tenant must match the independent totals exactly, with
+    // nonzero counts everywhere the seeded ledger wrote. Rebuilt aggregates
+    // verify by their own invariant functions.
+    assert.deepEqual(comparableCounts(await orgRowCounts(source.orgId)), comparableCounts(beforeCounts));
+    assert.deepEqual(await trialBalance(), beforeTrial);
+    assert.deepEqual(await blobBytesHex(), beforeBlobs);
+    const statsVerify = (await db.execute(sql`select * from openbooks_party_payment_stats_verify(${source.orgId})`)).rows;
+    assert.deepEqual(statsVerify, [], "rebuilt payment stats must verify against the restored applications");
+    const glVerify = (await db.execute(sql`select * from openbooks_gl_activity_verify(${source.orgId})`)).rows;
+    assert.deepEqual(glVerify, [], "rebuilt GL activity must verify against the restored ledger");
+    for (const name of ["journal_entries", "journal_lines", "documents", "document_lines", "applications",
+      "accounting_books", "document_links", "custom_field_defs", "folders", "files", "file_attachments"]) {
+      assert.ok((beforeCounts[name] ?? 0) > 0, `the seeded ledger must hold nonzero ${name} rows`);
+    }
+    const reversedAfter = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${source.orgId} and status = 'reversed'`)).rows[0]!.n;
+    assert.ok(reversedAfter >= 1, "the reversal must survive the restore");
+  } finally {
+    await dropScratchOrgReporting(source.orgId);
     await rm(root, { recursive: true, force: true });
   }
 });
