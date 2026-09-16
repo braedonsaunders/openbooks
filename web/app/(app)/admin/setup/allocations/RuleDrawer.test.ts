@@ -72,6 +72,12 @@ test('rule drawer edits explicit targets in the shared lines editor', () => {
   assert.ok(drawerSource.includes('/retire'), 'retire posts a reason')
 })
 
+test('rule create carries the primary action in the drawer header (SetupDrawer composition)', () => {
+  assert.match(drawerSource, /headerActions=/)
+  assert.ok(drawerSource.includes(`tc('actions.create')`), 'header Create resolves through actions.*')
+  assert.ok(!drawerSource.includes('drawer.create'), 'no inline create row under the fields')
+})
+
 test('rule drawer create mode posts a head and navigates to the new rule', () => {
   assert.ok(drawerSource.includes(`drawer.newTitle`), 'create mode has a title')
   assert.ok(drawerSource.includes(`?rule=`), 'create navigates to ?rule=<id>')

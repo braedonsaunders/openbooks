@@ -61,7 +61,9 @@
       "noVersion": "No published version",
       "inactive": "Inactive",
       "active": "Active",
-      "searchPlaceholder": "Search rules…"
+      "searchPlaceholder": "Search rules…",
+      "emptyDescription": "Create the first rule to start distributing costs.",
+      "blurb": "Versioned rules that fire at entry, at posting, or as a period sweep."
     },
     "modes": {
       "entry": "At entry",
@@ -115,6 +117,7 @@
       },
       "applicabilityHeading": "Which lines the rule considers",
       "documentKinds": "Document kinds (empty means any)",
+      "documentKindAdd": "Add",
       "accountScope": "Account scope",
       "accountScopes": {
         "any": "Any account",
@@ -318,6 +321,7 @@
     "key": "Key",
     "keyHint": "Lowercase slug, unique per organization",
     "name": "Name",
+    "fieldDescription": "Description",
     "dimension": "Dimension",
     "sourceKind": "Source",
     "unit": "Unit",
@@ -391,7 +395,8 @@
     "deleteFailed": "Could not delete the driver.",
     "previewFailed": "Could not preview the vector.",
     "manualCreateHint": "Save the driver first — its effective-dated values become editable here right after.",
-    "valuesAfterSave": "Driver saved. Add its effective-dated values below."
+    "valuesAfterSave": "Driver saved. Add its effective-dated values below.",
+    "emptyDescription": "Create the first driver to start apportioning costs."
   },
   "runs": {
     "title": "Runs",
@@ -460,7 +465,8 @@
     "loadFailed": "Could not load runs.",
     "detailFailed": "Could not load the run.",
     "pendingApprovalNotice": "This run is waiting for approval and cannot be posted from here.",
-    "viewApproval": "Open the approval"
+    "viewApproval": "Open the approval",
+    "emptyDescription": "Preview a rule to compute one."
   },
   "lineage": {
     "title": "Allocation lineage",

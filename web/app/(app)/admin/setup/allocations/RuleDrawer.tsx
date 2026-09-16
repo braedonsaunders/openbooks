@@ -256,17 +256,12 @@ function TabStrip({ tab, onTab }: { tab: DrawerTab; onTab: (tab: DrawerTab) => v
   )
 }
 
-/** Create mode: head fields, then one POST builds head + initial draft. */
+/**
+ * Create mode: head fields, then one POST builds head + initial draft. The
+ * primary Create action lives in the drawer header — the SetupDrawer
+ * composition, no inline Save/Cancel row under the fields.
+ */
 function RuleCreateDrawer({ closeHref }: { closeHref: string }) {
-  const t = useTranslations('allocations')
-  return (
-    <UrlDrawer open closeHref={closeHref} title={t('rules.drawer.newTitle')} size="lg">
-      <RuleCreateBody closeHref={closeHref} />
-    </UrlDrawer>
-  )
-}
-
-function RuleCreateBody({ closeHref }: { closeHref: string }) {
   const t = useTranslations('allocations')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -299,35 +294,39 @@ function RuleCreateBody({ closeHref }: { closeHref: string }) {
   }
 
   return (
-    <div className="space-y-4 p-1">
-      {error ? <ErrorBox message={error} /> : null}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t('rules.general.key')} hint={t('rules.general.keyHint')}>
-          <Input value={key} onChange={(e) => setKey(e.target.value)} aria-label={t('rules.general.key')} />
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      title={t('rules.drawer.newTitle')}
+      size="lg"
+      headerActions={
+        <Button type="button" onClick={() => void create()} disabled={saving || key === '' || name === ''}>
+          {saving ? tc('actions.saving') : tc('actions.create')}
+        </Button>
+      }
+    >
+      <div className="space-y-4 p-1">
+        {error ? <ErrorBox message={error} /> : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t('rules.general.key')} hint={t('rules.general.keyHint')}>
+            <Input value={key} onChange={(e) => setKey(e.target.value)} aria-label={t('rules.general.key')} />
+          </Field>
+          <Field label={t('rules.general.mode')} hint={t('rules.general.modeHint')}>
+            <Select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} aria-label={t('rules.general.mode')}>
+              <option value="entry">{t('rules.modes.entry')}</option>
+              <option value="post">{t('rules.modes.post')}</option>
+              <option value="period">{t('rules.modes.period')}</option>
+            </Select>
+          </Field>
+        </div>
+        <Field label={t('rules.general.name')}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t('rules.general.name')} />
         </Field>
-        <Field label={t('rules.general.mode')} hint={t('rules.general.modeHint')}>
-          <Select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} aria-label={t('rules.general.mode')}>
-            <option value="entry">{t('rules.modes.entry')}</option>
-            <option value="post">{t('rules.modes.post')}</option>
-            <option value="period">{t('rules.modes.period')}</option>
-          </Select>
+        <Field label={t('rules.general.description')}>
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} aria-label={t('rules.general.description')} />
         </Field>
       </div>
-      <Field label={t('rules.general.name')}>
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
-      <Field label={t('rules.general.description')}>
-        <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-      </Field>
-      <span className="flex gap-2">
-        <Button type="button" onClick={() => void create()} disabled={saving || key === '' || name === ''}>
-          {t('rules.drawer.create')}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.push(closeHref as never)}>
-          {tc('actions.cancel')}
-        </Button>
-      </span>
-    </div>
+    </UrlDrawer>
   )
 }
 
@@ -573,20 +572,29 @@ function DefinitionTab({
     if (versionId === '') return
     const controller = new AbortController()
     let live = true
+    // StrictMode double-invokes effects in dev: the cleanup aborts the first
+    // fetch, so swallow that AbortError — anything else surfaces.
     void fetchJson(
       `/api/allocations/rules/${encodeURIComponent(ruleId)}/versions/${encodeURIComponent(versionId)}`,
       { signal: controller.signal },
-    ).then(({ status, body }) => {
-      if (!live) return
-      if (status !== 200) {
-        setError(apiError(status, body, t('rules.errors.load')).message)
-        return
-      }
-      const payload = body as VersionDetail
-      setLoaded(payload)
-      setForm(definitionFormFromVersion(payload.version))
-      setLines(((payload.targets ?? []) as Parameters<typeof targetToLine>[0][]).map(targetToLine))
-    })
+    ).then(
+      ({ status, body }) => {
+        if (!live) return
+        if (status !== 200) {
+          setError(apiError(status, body, t('rules.errors.load')).message)
+          return
+        }
+        const payload = body as VersionDetail
+        setLoaded(payload)
+        setForm(definitionFormFromVersion(payload.version))
+        setLines(((payload.targets ?? []) as Parameters<typeof targetToLine>[0][]).map(targetToLine))
+      },
+      (fetchError: unknown) => {
+        if (live && !(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
+          setError(fetchError instanceof Error ? fetchError.message : t('rules.errors.load'))
+        }
+      },
+    )
     return () => {
       live = false
       controller.abort()
@@ -768,7 +776,7 @@ function DefinitionTab({
               </div>
               {isDraft ? (
                 <span className="mt-1.5 flex gap-2">
-                  <Input value={docKindInput} onChange={(e) => setDocKindInput(e.target.value)} placeholder={t('rules.definition.documentKinds')} />
+                  <Input value={docKindInput} onChange={(e) => setDocKindInput(e.target.value)} placeholder={t('rules.definition.documentKinds')} aria-label={t('rules.definition.documentKinds')} />
                   <Button
                     type="button"
                     variant="outline"
@@ -779,7 +787,7 @@ function DefinitionTab({
                       setDocKindInput('')
                     }}
                   >
-                    {t('rules.targets.add')}
+                    {t('rules.definition.documentKindAdd')}
                   </Button>
                 </span>
               ) : null}

@@ -1,14 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { History, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Badge,
   Button,
   Drawer,
-  EmptyState,
   Label,
   SearchSelect,
   Select,
@@ -244,10 +243,8 @@ function ComputationView({ computation }: { computation: Computation }) {
  */
 export function RunsTab() {
   const t = useTranslations('allocations.runs')
-  const tc = useTranslations('common')
   const [options, setOptions] = useState<Options | null>(null)
   const [runs, setRuns] = useState<RunRow[] | null>(null)
-  const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [filterRule, setFilterRule] = useState('')
@@ -278,7 +275,6 @@ export function RunsTab() {
         const body = (await runsRes.json()) as { runs: RunRow[]; total: number }
         if (cancelled) return
         setRuns(body.runs)
-        setTotal(body.total)
         const full = (await optionsRes.json()) as Options & Record<string, Option[]>
         setOptions({ rules: full.rules, periods: full.periods, books: full.books, subsidiaries: full.subsidiaries })
       },
@@ -358,9 +354,9 @@ export function RunsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {t('title')}
-        </h2>
+        <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+          {t('description')}
+        </p>
         <Button type="button" onClick={() => { setPreview(null); setPreviewOpen(true) }}>
           <Plus size={15} />
           {t('previewRun')}
@@ -369,8 +365,12 @@ export function RunsTab() {
       {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       {notice ? <p className="text-sm text-slate-500 dark:text-slate-400">{notice}</p> : null}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <Field label={t('filterRule')}>
+      {/* Sibling filter-bar chrome (ListFilterSelect): inline plain labels on
+          compact selects — no above-labels, no `?` icons. The list count
+          lives in the table footer, never as a bare "N · Runs" chip. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <span className="whitespace-nowrap">{t('filterRule')}</span>
           <SearchSelect
             value={filterRule}
             onChange={(v) => setFilterRule(v ?? '')}
@@ -381,8 +381,9 @@ export function RunsTab() {
             clearable
             emptyLabel={t('all')}
           />
-        </Field>
-        <Field label={t('filterPeriod')}>
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <span className="whitespace-nowrap">{t('filterPeriod')}</span>
           <SearchSelect
             value={filterPeriod}
             onChange={(v) => setFilterPeriod(v ?? '')}
@@ -393,8 +394,9 @@ export function RunsTab() {
             clearable
             emptyLabel={t('all')}
           />
-        </Field>
-        <Field label={t('filterStatus')}>
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <span className="whitespace-nowrap">{t('filterStatus')}</span>
           <Select value={filterStatus} aria-label={t('filterStatus')} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">{t('all')}</option>
             {STATUSES.map((s) => (
@@ -403,32 +405,17 @@ export function RunsTab() {
               </option>
             ))}
           </Select>
-        </Field>
-        <span className="pb-2 text-sm text-slate-500 dark:text-slate-400">
-          {total} · {t('title')}
-        </span>
+        </label>
       </div>
 
-      {runs.length === 0 && !filterRule && !filterPeriod && !filterStatus ? (
-        <EmptyState
-          icon={<History aria-hidden />}
-          title={t('emptyTitle')}
-          description={t('empty')}
-          action={
-            <Button type="button" onClick={() => { setPreview(null); setPreviewOpen(true) }}>
-              <Plus size={15} />
-              {t('previewRun')}
-            </Button>
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto">
-          <PagedTable
-            rows={runs}
-            rowKey={(row) => row.id}
-            searchable
-            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
-            onRowClick={(row) => void openDetail(row.id)}
+      <div className="overflow-x-auto">
+        <PagedTable
+          rows={runs}
+          rowKey={(row) => row.id}
+          searchable
+          emptyAsRow
+          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
+          onRowClick={(row) => void openDetail(row.id)}
             columns={[
               { key: 'rule', header: t('columns.rule'), cell: (row) => <span className="font-medium">{row.ruleName ?? row.ruleKey ?? shortId(row.ruleId)}</span>, search: (row) => row.ruleName ?? row.ruleKey ?? '' },
               { key: 'period', header: t('columns.period'), cell: (row) => optionLabel(options.periods, row.periodId) },
@@ -460,26 +447,20 @@ export function RunsTab() {
             ]}
           />
         </div>
-      )}
 
       <Drawer
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         title={t('previewRun')}
         size="xl"
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>
-              {tc('actions.close')}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void runPreview()}
-              disabled={!previewForm.ruleId || !previewForm.periodId || !previewForm.bookId}
-            >
-              {t('previewRun')}
-            </Button>
-          </div>
+        headerActions={
+          <Button
+            type="button"
+            onClick={() => void runPreview()}
+            disabled={!previewForm.ruleId || !previewForm.periodId || !previewForm.bookId}
+          >
+            {t('previewRun')}
+          </Button>
         }
       >
         <div className="space-y-4 p-1">
@@ -537,13 +518,6 @@ export function RunsTab() {
         title={t('runDetail')}
         description={detail ? (detail.ruleName ?? detail.ruleKey ?? shortId(detail.ruleId)) : undefined}
         size="xl"
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setDetail(null)}>
-              {tc('actions.close')}
-            </Button>
-          </div>
-        }
       >
         {detail ? (
           <div className="space-y-3 p-1">

@@ -8,16 +8,20 @@ const tabSource = readFileSync(
   'utf8',
 )
 
-test('drivers header keeps New visible and empty tenants get an EmptyState action', () => {
-  // Braedon verdict: the create form promised manual values "below" while the
-  // grid hid behind a ghost button, and empty tenants had no clear create
-  // path. The New action lives in the section header; the empty slot is the
-  // shared EmptyState with the same New-driver primary action.
-  assert.match(tabSource, /<EmptyState/)
-  assert.match(tabSource, /emptyTitle/)
-  assert.match(tabSource, /drivers\.length === 0/)
-  const creates = tabSource.match(/setEditing\(\{ form: newDriverForm\(\) \}\)/g) ?? []
-  assert.ok(creates.length >= 2, 'header and empty-state actions must both create')
+test('drivers list follows the departments composition', () => {
+  // Blurb + New action row, then the search toolbar with the shared
+  // show-inactive pill, then the table — headers plus one empty row when
+  // there are no drivers, never an EmptyState card.
+  assert.ok(!tabSource.includes('<EmptyState'), 'no EmptyState card')
+  assert.match(tabSource, /emptyAsRow/)
+  assert.match(tabSource, /toolbarAfter/)
+  assert.match(tabSource, /ShowInactivePill/)
+  // The single empty row carries the short empty copy (no card, no echo).
+  assert.ok(tabSource.includes(`{t('empty')}`), 'empty row renders the empty copy')
+  // RatesTab depth: blurb + action, no restated h2.
+  assert.ok(!tabSource.includes('<h2'), 'no section h2 above the list')
+  // The header New action creates through one shared form.
+  assert.ok((tabSource.match(/setEditing\(\{ form: newDriverForm\(\) \}\)/g) ?? []).length >= 1, 'header action creates')
 })
 
 test('manual values live inside the driver drawer, not behind a ghost button', () => {
@@ -46,4 +50,15 @@ test('drivers tab uses shared chrome and namespaced action labels', () => {
     assert.ok(!tabSource.includes(`tc('${key}')`), `no bare tc('${key}')`)
   }
   assert.ok(tabSource.includes(`tc('actions.save')`), 'save resolves through actions.*')
+  // Show-inactive uses the shared toggle pill chrome, never a bare checkbox row.
+  // No body heading restating the drawer title; the description field
+  // carries its own label, never the tab description sentence.
+  assert.ok(!tabSource.includes(`title={t('editDriver')}`), 'no Edit-driver body heading')
+  assert.ok(tabSource.includes(`label={t('fieldDescription')}`), 'description field has its own label')
+  assert.match(tabSource, /headerActions=/)
+  assert.ok(!tabSource.includes('footer={'), 'no inline Save/Cancel footer — the header owns Save')
+  // Show-inactive is the shared pill component (same chrome as the entity
+  // lists), never a bare checkbox row.
+  assert.match(tabSource, /<ShowInactivePill checked=\{showInactive\}/)
+  assert.ok(!tabSource.includes('<Check checked={showInactive}'), 'no bare show-inactive checkbox')
 })
