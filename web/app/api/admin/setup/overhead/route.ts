@@ -16,6 +16,11 @@ import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const dynamic = 'force-dynamic'
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 /** Drizzle/node-postgres may expose the server error directly or as `cause`. */
 function postgresErrorCode(error: unknown): string | undefined {
   let current = error
@@ -67,6 +72,12 @@ export async function POST(req: Request) {
         const exact = canonicalDecimal(r.ratePerHour, 4)
         if (exact === null || compareDecimal(exact, '0') < 0) {
           return NextResponse.json({ error: 'ratePerHour must be a non-negative amount' }, { status: 400 })
+        }
+        // overhead_rates.rate_percent is numeric(19,4): refuse whole-digit
+        // widths the column cannot hold before any write, instead of throwing
+        // the raw overflow out of the publish.
+        if (wholeDigits(exact) > 15) {
+          return NextResponse.json({ error: 'ratePerHour must fit within numeric(19,4)' }, { status: 400 })
         }
         rates.push({ departmentId: r.departmentId, ratePerHour: exact })
       }
