@@ -5,6 +5,7 @@ import {
   CloseError,
   closeModuleForDocument,
   type CloseModule,
+  NON_POSTING_DOCUMENT_KINDS,
 } from "./close.ts";
 import { uuidArray } from "./subsidiaries.ts";
 
@@ -83,6 +84,7 @@ async function loadCandidates(
      where d.org_id = ${orgId}
        and d.status = 'approved'
        and d.posting_period_id is null
+       and d.kind not in (${sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `)})
        ${opts.documentIds !== undefined
          ? opts.documentIds.length > 0
            ? sql`and d.id = any(${uuidArray(opts.documentIds)}::uuid[])`
