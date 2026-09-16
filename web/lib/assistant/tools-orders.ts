@@ -58,13 +58,13 @@ const searchOrders: AssistantToolDef = {
   feature: "orders",
   inputSchema: z.object({
     kind: z.enum(ORDER_KINDS).optional().describe("Default all kinds the caller may see"),
-    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional(),
+    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional().describe("Only orders in this status"),
     partyQuery: z.string().max(100).optional().describe("Match the customer/vendor name"),
     query: z.string().max(100).optional().describe("Match document number or memo"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
-    fulfilment: z.enum(["unfulfilled", "partially_fulfilled", "fulfilled"]).optional(),
-    billing: z.enum(["unbilled", "partially_billed", "billed"]).optional(),
+    fulfilment: z.enum(["unfulfilled", "partially_fulfilled", "fulfilled"]).optional().describe("Only orders at this fulfilment state"),
+    billing: z.enum(["unbilled", "partially_billed", "billed"]).optional().describe("Only orders at this billing state"),
     limit: z.number().int().min(1).max(50).optional().describe("Default 20"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {

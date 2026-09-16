@@ -686,7 +686,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "match_bank_line", title: "Match Bank Line",
     description: "Manually pair one unmatched bank statement line with one or more posted journal lines in a reconciliation session. The journal total must equal the statement line exactly. Returns the session totals (difference must reach zero before sign-off).",
-    inputSchema: z.object({ reconciliationId: UUID, statementLineId: UUID, journalLineIds: z.array(UUID).min(1).max(50), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({
+      reconciliationId: UUID, statementLineId: UUID,
+      journalLineIds: z.array(UUID).min(1).max(50).describe("Posted journal lines whose total must equal the statement line exactly"),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
     execute: async (context, input) => ({ ok: true, ...(await matchStatementLine(context, input)) }),
