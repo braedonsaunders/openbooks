@@ -10,7 +10,9 @@ import {
   normalizeContinuousCloseDetectors,
 } from "./continuous-close-config.ts";
 
-const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
+// The accounting detectors moved byte-identical into the agent-pack registry
+// (agents/accounting.ts); composition guards follow the implementation.
+const accountingSource = readFileSync(new URL("./agents/accounting.ts", import.meta.url), "utf8");
 
 test("unmatched bank activity escalates for age, count, or exact materiality", () => {
   const now = new Date("2026-07-16T12:00:00Z");
@@ -58,7 +60,7 @@ test("unmatched bank activity escalates for age, count, or exact materiality", (
 
 test("unmatched-bank age uses the org business day, not UTC today", () => {
   assert.match(
-    source,
+    accountingSource,
     /const today = await businessToday\(orgId\);[\s\S]*?classifyUnmatchedBankActivity\(\{[\s\S]*?now: parseIsoDate\(today\)/,
   );
 });
@@ -304,11 +306,11 @@ test("custom detector thresholds change inclusion and severity at exact boundari
 });
 
 test("reconciliation detector delegates to the authoritative bank totals", () => {
-  const reconciliationStart = source.indexOf('const reconciliationPolicy = byKey.get("reconciliation_difference")');
-  const staleStart = source.indexOf('const stalePolicy = byKey.get("stale_accounting_documents")', reconciliationStart);
+  const reconciliationStart = accountingSource.indexOf('const reconciliationPolicy = byKey.get("reconciliation_difference")');
+  const staleStart = accountingSource.indexOf('const stalePolicy = byKey.get("stale_accounting_documents")', reconciliationStart);
   assert.notEqual(reconciliationStart, -1, "reconciliation detector exists");
   assert.notEqual(staleStart, -1, "reconciliation detector has a bounded query section");
-  const reconciliationSource = source.slice(reconciliationStart, staleStart);
+  const reconciliationSource = accountingSource.slice(reconciliationStart, staleStart);
 
   // The database regression covers parallel books and the resulting finding.
   // This composition guard prevents a second balance policy from reappearing.
