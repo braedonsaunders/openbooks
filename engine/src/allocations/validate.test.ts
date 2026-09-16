@@ -211,3 +211,25 @@ test("book_scope books needs live posting books and nothing else", () => {
   assert.ok(codes({ ...v, bookIds: ["book-1", "ghost"] }, [tgt()], c).includes("book_scope"));
   assert.deepEqual(codes({ ...v, bookIds: ["book-2", "book-1"] }, [tgt()], c), []);
 });
+
+test("net_zero_pair refuses explicit targets naming an account at publish", () => {
+  const problems = validateRuleVersion(
+    version({ impact: "net_zero_pair" }),
+    [tgt({ sequence: 1, fixedPercent: "100", targetAccountId: "account-1" })],
+    ctx(),
+  );
+  assert.ok(problems.some((p) => p.code === "net_zero_account"), JSON.stringify(problems));
+});
+
+test("net_zero_pair refuses a dynamic targetAccountId at publish", () => {
+  const problems = validateRuleVersion(
+    version({
+      impact: "net_zero_pair",
+      targetKind: "dynamic",
+      dynamicTarget: { dimension: "department", targetAccountId: "account-1" },
+    }),
+    [],
+    ctx(),
+  );
+  assert.ok(problems.some((p) => p.code === "net_zero_account"), JSON.stringify(problems));
+});
