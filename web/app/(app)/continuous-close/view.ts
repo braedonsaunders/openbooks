@@ -27,6 +27,7 @@ import {
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
+import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import type { ContinuousCloseWorkItem } from './WorkItemDrawer'
 
 /**
@@ -83,18 +84,6 @@ type ReportRow = {
   narrative: Record<string, unknown>
   finished_at: string | Date
 }
-type WorkItemDetailRow = WorkItemRow & {
-  dismissal_reason: string | null
-  rating: 'helpful' | 'not_helpful' | null
-}
-type EvidenceRow = {
-  id: string
-  kind: string
-  source_type: string
-  source_id: string
-  data: Record<string, unknown> | null
-}
-
 export interface FindingRow {
   id: string
   title: string
@@ -278,41 +267,7 @@ export async function loadContinuousClose(
   const itemId = pickString(sp.item)
   let selected: ContinuousCloseWorkItem | null = null
   if (itemId && isUuid(itemId)) {
-    const detail = await db.execute<WorkItemDetailRow>(sql`
-      select w.*, f.rating
-        from ai_work_items w
-        left join ai_work_item_feedback f on f.work_item_id = w.id and f.org_id = w.org_id and f.user_id = ${authz.user.id}
-       where w.id = ${itemId} and w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}
-    `)
-    const row = detail.rows[0]
-    if (row) {
-      const evidence = await db.execute<EvidenceRow>(sql`
-        select id, kind, source_type, source_id, data
-          from ai_work_item_evidence where work_item_id = ${itemId} and org_id = ${authz.user.orgId}
-         order by created_at, id
-      `)
-      selected = {
-        id: row.id,
-        agentKey: row.agent_key,
-        findingType: row.finding_type,
-        severity: row.severity,
-        status: row.status,
-        confidence: row.confidence,
-        materiality: row.materiality,
-        summary: row.summary ?? {},
-        firstDetectedAt: new Date(row.first_detected_at).toISOString(),
-        lastDetectedAt: new Date(row.last_detected_at).toISOString(),
-        dismissalReason: row.dismissal_reason,
-        feedback: row.rating ?? null,
-        evidence: evidence.rows.map((e) => ({
-          id: e.id,
-          kind: e.kind,
-          sourceType: e.source_type,
-          sourceId: e.source_id,
-          data: e.data ?? {},
-        })),
-      }
-    }
+    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable)
   }
 
   const reportId = pickString(sp.report)

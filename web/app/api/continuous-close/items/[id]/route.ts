@@ -4,7 +4,13 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
-import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../../../../../lib/continuous-close";
+import { can } from "../../../../../lib/authz";
+import {
+  canReadContinuousCloseAgent,
+  loadWorkItemAccess,
+  readableContinuousCloseAgents,
+} from "../../../../../lib/continuous-close";
+import { loadWorkItemDetail } from "../../../../../lib/agents/work-item";
 
 const ACTION_STATUS = {
   review: "in_review",
@@ -19,6 +25,22 @@ const ALLOWED_ACTIONS = {
   resolved: ["reopen"],
   dismissed: ["reopen"],
 } as const;
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardFeaturePermission("assistant.use", "continuousClose");
+  if (gate instanceof NextResponse) return gate;
+  const authz = gate;
+  const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
+  const item = await loadWorkItemDetail(
+    authz.user.orgId,
+    authz.user.id,
+    id,
+    readableContinuousCloseAgents(authz),
+  );
+  if (!item) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  return NextResponse.json({ ok: true, item, canWrite: can(authz, "assistant.write") });
+}
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission("assistant.write", "continuousClose");
