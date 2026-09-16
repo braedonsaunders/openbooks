@@ -182,6 +182,21 @@ function singleParam(sp: Record<string, string | string[] | undefined>, key: str
   return raw && raw.length > 0 ? raw : undefined
 }
 
+/**
+ * The model often repeats the section title as the markdown's own H1, which
+ * would double the card heading. Strip that duplicated first line in the
+ * loader (loader computes) so the heading + generated-at meta stay the
+ * single title. Only an exact `# {title}` match strips — anything else is
+ * the model's own structure and stays untouched.
+ */
+function stripBriefingTitle(text: string | null, title: string): string | null {
+  if (!text) return null
+  const newline = text.indexOf('\n')
+  const first = (newline === -1 ? text : text.slice(0, newline)).trim()
+  if (first !== `# ${title}`) return text
+  return newline === -1 ? '' : text.slice(newline + 1).replace(/^\n+/, '')
+}
+
 /** Largest fitting unit, always in the past ("3 hours ago", never "in …"). */
 function lastRunAgo(format: Intl.RelativeTimeFormat, startedAt: string): string {
   const minutes = Math.min(-1, Math.round((Date.parse(startedAt) - Date.now()) / 60_000))
@@ -402,7 +417,7 @@ export async function loadAgents(
           ),
         })
       : null,
-    briefingText: briefing.briefing?.text ?? null,
+    briefingText: stripBriefingTitle(briefing.briefing?.text ?? null, t('briefing.title')),
     hasBriefing: briefing.briefing !== null,
     briefingEmpty: briefingMode && briefing.briefing === null,
     briefingEmptyTitle: briefing.aiEnabled ? t('briefing.empty') : t('briefing.noAi'),
