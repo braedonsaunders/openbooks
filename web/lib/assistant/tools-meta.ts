@@ -12,7 +12,9 @@ import type { AssistantToolDef, ToolResult } from "./types";
  * build the model tool set — so "what can you do?" is never hallucinated.
  */
 
-const MAX_BLURB_CHARS = 160;
+const MAX_BLURB_CHARS = 110;
+/** Above this many visible tools the module overview lists names only; ask for one module to get blurbs. */
+const BLURB_OVERVIEW_LIMIT = 40;
 
 /** One line of description; never invents wording, only shortens. */
 function oneLine(description: string): string {
@@ -23,12 +25,15 @@ function oneLine(description: string): string {
 const describeCapabilities: AssistantToolDef = {
   name: "describe_capabilities",
   description:
-    "What this user can do right now: every assistant and application tool visible to them, grouped by module with one-line descriptions, plus the optional features currently off. Call this when the user asks what you can do instead of listing capabilities from memory. Read-only.",
+    "What this user can do right now: every assistant and application tool visible to them, grouped by module, plus the optional features currently off. Without `module` it returns the overview (tool names per module, with one-line blurbs only when the catalog is small); pass `module` (e.g. core, projects, payroll, apps) for that module's tools with descriptions. Call this when the user asks what you can do instead of listing capabilities from memory. Read-only.",
   category: "read",
   // Which tools exist for the caller is not sensitive; every assistant user may ask.
   gate: { mode: "public" },
-  inputSchema: z.object({}),
-  execute: async (_raw, authz: Authz): Promise<ToolResult> => {
+  inputSchema: z.object({
+    module: z.string().max(40).optional().describe("Return only this module's tools, with descriptions (module keys come from the overview)"),
+  }),
+  execute: async (raw, authz: Authz): Promise<ToolResult> => {
+    const { module: onlyModule } = raw as { module?: string };
     // Dynamic import: registry.ts mounts this file, so a static import would cycle.
     const { ASSISTANT_TOOLS, applicationToolVisible } = await import("./registry");
     const features = await resolvedFeatureState(authz.user.orgId);
@@ -52,10 +57,18 @@ const describeCapabilities: AssistantToolDef = {
       list.push({ name: tool.name, blurb: tool.blurb });
       byModule.set(tool.module, list);
     }
+    // Keep the result inside the per-tool budget however large the catalog
+    // grows: the overview carries names only once it is big, and blurbs are
+    // served per module on request.
+    const withBlurbs = onlyModule !== undefined || visible.length <= BLURB_OVERVIEW_LIMIT;
     const groups = [...byModule.entries()]
+      .filter(([module]) => onlyModule === undefined || module === onlyModule)
       .map(([module, tools]) => ({
         module,
-        tools: tools.sort((a, b) => (a.name < b.name ? -1 : 1)),
+        count: tools.length,
+        tools: tools
+          .sort((a, b) => (a.name < b.name ? -1 : 1))
+          .map((tool) => (withBlurbs ? tool : tool.name)),
       }))
       .sort((a, b) =>
         a.module === b.module ? 0 : a.module === "core" ? -1 : b.module === "core" ? 1 : (
@@ -65,10 +78,14 @@ const describeCapabilities: AssistantToolDef = {
     const featuresOff = FEATURES.filter((feature) => !featureEnabled(features, feature.key))
       .map((feature) => feature.key)
       .sort();
+    if (onlyModule !== undefined && groups.length === 0) {
+      return { ok: false, error: `unknown module; use one of: ${[...byModule.keys()].sort().join(", ")}` };
+    }
     return {
       ok: true,
-      data: { groups, featuresOff, totalTools: visible.length },
-      note: "Live catalog for your permissions; tools of disabled modules are hidden. Mutating tools return a review card and change nothing until confirmed.",
+      data: { groups, featuresOff, totalTools: visible.length, detailed: withBlurbs },
+      note: (withBlurbs ? "" : "Overview lists tool names per module; call again with `module` for descriptions. ") +
+        "Live catalog for your permissions; tools of disabled modules are hidden. Mutating tools return a review card and change nothing until confirmed.",
     };
   },
 };
