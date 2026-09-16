@@ -18,6 +18,7 @@ import {
   processAllocationRunOutboxRow,
   runAllocationCloseAction,
 } from "./scheduling.ts";
+import { reverseAllocationRun } from "./period-run.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -250,6 +251,36 @@ test("processing previews and posts through the real engine", { skip: !DB }, asy
       /ruleId, periodId, and bookId/,
     );
 
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a deliberately reversed run is not silently resurrected by the scheduler", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableAllocations(org.orgId);
+    const { ruleId, publishedBy } = await seedPeriodRule(org, { runPolicy: "auto_post" });
+    assert.equal(await ensureAllocationRunOutboxRows(), 1);
+    const row = (await outboxRows(org.orgId))[0]!;
+    const result = await processAllocationRunOutboxRow(row);
+    assert.equal(result.outcome, "ran");
+    assert.equal(await runStatusCount(org.orgId, ruleId, "posted"), 1);
+    const postedId = (await db.execute<{ id: string }>(sql`
+      select id from allocation_runs
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows[0]!.id;
+    await reverseAllocationRun(postedId, publishedBy!, "controller unwinding a bad sweep", {
+      reversalDate: org.date,
+    });
+    assert.equal(await runStatusCount(org.orgId, ruleId, "reversed"), 1);
+    // The worker consumed the first outbox row; the next sweep sees only the
+    // reversed run. The reversal was deliberate: the sweep must not
+    // re-enqueue the occurrence (which auto_post would silently post again).
+    // Re-running after a reversal goes through the explicit rerun path.
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    assert.equal(await ensureAllocationRunOutboxRows(), 0);
+    assert.equal((await outboxRows(org.orgId)).length, 0);
+    assert.equal(await runStatusCount(org.orgId, ruleId, "posted"), 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

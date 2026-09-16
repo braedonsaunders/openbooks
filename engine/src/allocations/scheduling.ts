@@ -116,8 +116,11 @@ type DueCandidate = {
  * Enqueue one `allocation_run` outbox row per due occurrence: every published
  * period-mode version with run_policy != 'manual', for every ended period in
  * its effective window (ended at least run_offset_days ago) and book in its
- * book scope, unless a posted, previewed, or approval-waiting run already
- * covers that (rule, period, book). Orgs with the allocations feature off
+ * book scope, unless a posted, previewed, approval-waiting, or deliberately
+ * reversed run already covers that (rule, period, book). A reversal is an
+ * explicit unwind — the sweep must not silently re-enqueue (and auto-post)
+ * what a controller just unwound; re-running after a reversal goes through
+ * the explicit rerun path. Orgs with the allocations feature off
  * are skipped outright. Returns the number of newly enqueued rows.
  */
 export async function ensureAllocationRunOutboxRows(
@@ -147,7 +150,7 @@ export async function ensureAllocationRunOutboxRows(
          select 1 from allocation_runs run
           where run.org_id = v.org_id and run.rule_id = r.id
             and run.period_id = p.id and run.book_id = b.id
-            and run.status in ('previewed', 'pending_approval', 'posted'))
+            and run.status in ('previewed', 'pending_approval', 'posted', 'reversed'))
   `)).rows;
   let enqueued = 0;
   for (const candidate of due) {
