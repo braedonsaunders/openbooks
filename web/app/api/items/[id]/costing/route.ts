@@ -74,10 +74,17 @@ function accountRef(value: unknown): string | null {
   return value && isUuid(String(value)) ? String(value) : null
 }
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 function moneyOrNull(value: unknown): string | null | 'invalid' {
   if (value === null || value === undefined || String(value).trim() === '') return null
   const exact = canonicalDecimal(value, 4)
-  if (exact === null) return 'invalid'
+  // Costing money columns are numeric(19,4): refuse whole-digit widths the
+  // column cannot hold before any write, instead of leaking the overflow.
+  if (exact === null || wholeDigits(exact) > 15) return 'invalid'
   return normalizeMoney(exact)
 }
 
