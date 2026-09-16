@@ -7,10 +7,26 @@
 // re-exported here so callers have a single import surface for tabular export.
 
 import ExcelJS from 'exceljs'
+import { Writable } from 'node:stream'
 import {
   reportResultToCsv as _reportResultToCsv,
   type ReportRunResult,
 } from '@openbooks/reports'
+
+/**
+ * Escape one CSV cell — intentionally the same five lines as csvEscape in
+ * @openbooks/reports/run.ts (which stays private there). The page-streaming
+ * writer must compose guard+escape per field to stay byte-identical to
+ * reportResultToCsv, and cross-package test topology resolves @openbooks/*
+ * from the pick target, so the writer cannot import a new export until it is
+ * picked. streaming-export.test.ts pins byte-identity against the buffered
+ * builder, so any drift fails loudly.
+ */
+function csvEscape(v: string | number | null | undefined): string {
+  if (v === null || typeof v === 'undefined') return ''
+  const s = String(v)
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
 
 export type { ReportRunResult } from '@openbooks/reports'
 
@@ -24,7 +40,10 @@ export type { ReportRunResult } from '@openbooks/reports'
 const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/
 const PLAIN_NUMBER = /^-?\d+(?:[.,]\d+)?$/
 
-function guardCsvCell<T extends string | number | null | undefined>(v: T): T | string {
+/** Neutralise one CSV cell against formula injection. Exported for the
+ *  page-streaming CSV writer so chunked output guards exactly like
+ *  {@link reportResultToCsv}. */
+export function guardCsvCell<T extends string | number | null | undefined>(v: T): T | string {
   if (typeof v === 'string' && CSV_FORMULA_PREFIX.test(v) && !PLAIN_NUMBER.test(v)) {
     return `'${v}`
   }
@@ -64,6 +83,20 @@ export type ReportExportOptions = {
 const MAX_COL_WIDTH = 56
 const MIN_COL_WIDTH = 10
 const MAX_SHEET_NAME = 31
+
+/** Display length of one export cell for column-width measurement: nulls and
+ *  objects contribute nothing, everything else its string form. Shared by the
+ *  buffered builder (which measures assigned cells) and the streaming writer
+ *  (whose pre-pass measures raw page cells it immediately releases). */
+export function xlsxExportCellLength(v: unknown): number {
+  const s = v === null || v === undefined || typeof v === 'object' ? '' : String(v)
+  return s.length
+}
+
+/** Column width for a measured max length — the one house formula. */
+export function xlsxColumnWidth(maxLen: number): number {
+  return Math.min(Math.max(Math.ceil(maxLen * 1.1) + 2, MIN_COL_WIDTH), MAX_COL_WIDTH)
+}
 
 /**
  * Build an .xlsx workbook from a run result: one sheet per section group,
@@ -128,22 +161,201 @@ export async function reportResultToXlsx(
     const lastData = dataRow - 1
     const sampleEnd = Math.min(lastData, headerRowNum + 400)
     for (let i = 1; i <= group.columns.length; i++) {
-      const headerLen = String(ws.getCell(headerRowNum, i).value ?? '').length
-      let maxLen = headerLen
+      let maxLen = xlsxExportCellLength(ws.getCell(headerRowNum, i).value)
       for (let r = headerRowNum + 1; r <= sampleEnd; r++) {
-        const v = ws.getCell(r, i).value
-        const s = v === null || v === undefined || typeof v === 'object' ? '' : String(v)
-        if (s.length > maxLen) maxLen = s.length
+        const len = xlsxExportCellLength(ws.getCell(r, i).value)
+        if (len > maxLen) maxLen = len
       }
-      ws.getColumn(i).width = Math.min(
-        Math.max(Math.ceil(maxLen * 1.1) + 2, MIN_COL_WIDTH),
-        MAX_COL_WIDTH,
-      )
+      ws.getColumn(i).width = xlsxColumnWidth(maxLen)
     }
   }
 
   const buf = await wb.xlsx.writeBuffer()
   return Buffer.isBuffer(buf) ? buf : Buffer.from(buf as ArrayBuffer)
+}
+
+// --- paged (streaming) export --------------------------------------------------
+// The definitions export route streams paged-entity results page by page so a
+// large export never materialises every row: each page is serialised and then
+// released, and only output bytes accumulate (bounded by the export row cap).
+// Cell handling mirrors the buffered builders exactly — guardCsvCell/csvEscape
+// per CSV field, the same title block/header/number styles, sheet names, and
+// width formula per XLSX sheet — so a small-fixture streamed file matches the
+// old path (byte-identical CSV, content-identical XLSX), proven in
+// index.test.ts. A caller feeds pages in offset order; for CSV the writer
+// files each page group under its caller-assigned merged-order slot and
+// assembles merged order at finish, exactly like mergeReportPages.
+
+export type PagedExportCell = string | number | null | undefined
+
+export type PagedCsvPageGroup = {
+  /** Merged-order slot assigned by the caller (0-based, dense). */
+  slot: number
+  title: string
+  columns: string[]
+  rows: PagedExportCell[][]
+}
+
+export type PagedCsvStream = {
+  /** Serialise one page (offset order); the rows are copied to output lines
+   *  and may be released by the caller afterwards. */
+  pushPage(groups: PagedCsvPageGroup[]): void
+  /** Assemble the file: header, per-slot lines in merged order, footers.
+   *  Footer rows ride in the last slot with its section prefix, exactly like
+   *  exportDataToRunResult appends them to the last group. */
+  finish(footers?: PagedExportCell[][]): string
+}
+
+/** Incremental CSV serialisation with the exact field composition of
+ *  reportResultToCsv (formula guard, then escape). The header's section
+ *  column is decided at finish from the final slot count, so grouped and
+ *  ungrouped exports both stream in a single page pass. */
+export function createPagedCsvStream(opts: { sectionHeader?: string } = {}): PagedCsvStream {
+  const sectionHeader = opts.sectionHeader ?? 'Section'
+  const slots: { title: string; columns: string[]; lines: string[] }[] = []
+  const cell = (v: PagedExportCell): string => csvEscape(guardCsvCell(v))
+  return {
+    pushPage(groups) {
+      for (const group of groups) {
+        let slot = slots[group.slot]
+        if (!slot) {
+          slot = { title: group.title, columns: group.columns, lines: [] }
+          slots[group.slot] = slot
+        }
+        for (const row of group.rows) {
+          slot.lines.push(row.map(cell).join(','))
+        }
+      }
+    },
+    finish(footers = []) {
+      const ordered = slots.filter((slot) => slot !== undefined)
+      const multi = ordered.length > 1
+      const header = [...(multi ? [cell(sectionHeader)] : []), ...(ordered[0]?.columns.map(cell) ?? [])].join(',')
+      const lines = [header]
+      for (const slot of ordered) {
+        const prefix = multi ? `${cell(slot.title)},` : ''
+        for (const line of slot.lines) lines.push(`${prefix}${line}`)
+      }
+      if (footers.length > 0) {
+        const prefix = multi ? `${cell(ordered[ordered.length - 1]!.title)},` : ''
+        for (const footer of footers) lines.push(`${prefix}${footer.map(cell).join(',')}`)
+      }
+      return `${lines.join('\r\n')}\r\n`
+    },
+  }
+}
+
+export type StreamingXlsxGroup = {
+  title: string
+  subtitle?: string
+  columns: string[]
+  /** Pre-measured widths from xlsxColumnWidth (header + first 400 data cells). */
+  widths: number[]
+}
+
+export type StreamingXlsxWriter = {
+  /** Append page rows to one pre-declared sheet (merged-order slot); the rows
+   *  are written to the workbook stream and may be released afterwards. */
+  appendRows(groupIndex: number, rows: PagedExportCell[][]): void
+  finish(): Promise<Buffer>
+}
+
+const XLSX_NUMBER_FORMAT = '#,##0.00;(#,##0.00)'
+const XLSX_HEADER_ROW = 4
+
+/**
+ * Incremental .xlsx twin of reportResultToXlsx over ExcelJS's streaming
+ * writer: one sheet per merged-order group with the same title block, frozen
+ * header, number formats, and pre-measured widths. Groups (with total-count
+ * subtitles and widths) come from the caller's metadata pre-pass; data rows
+ * stream in afterwards page by page.
+ */
+export function createStreamingXlsxExport(opts: {
+  reportName: string
+  dateRangeLabel?: string
+  generatedAt?: Date
+  groups: StreamingXlsxGroup[]
+}): StreamingXlsxWriter {
+  const chunks: Buffer[] = []
+  const sink = new Writable({
+    write(chunk: Buffer, _encoding: string, callback: () => void) {
+      chunks.push(Buffer.from(chunk))
+      callback()
+    },
+  })
+  const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: sink, useStyles: true })
+  wb.creator = 'openbooks'
+  const now = opts.generatedAt ?? new Date()
+  wb.created = now
+  wb.modified = now
+
+  const declared = opts.groups.length > 0
+    ? opts.groups
+    : [{ title: opts.reportName, columns: [] as string[], widths: [] as number[] }]
+  const usedNames = new Set<string>()
+  const sheets = declared.map((group, index) => {
+    const desired = opts.groups.length > 1 ? group.title : opts.reportName
+    const sheetName = uniqueSheetName(truncate(sanitizeSheetName(desired), MAX_SHEET_NAME), usedNames)
+    const ws = wb.addWorksheet(sheetName, {
+      views: [{ state: 'frozen', ySplit: XLSX_HEADER_ROW }],
+    })
+    setStreamingCell(ws, 1, 1, opts.reportName, { bold: true, size: 13 })
+    if (opts.dateRangeLabel) setStreamingCell(ws, 2, 1, opts.dateRangeLabel, { muted: true })
+    if (group.subtitle) setStreamingCell(ws, 3, 1, group.subtitle, { muted: true, italic: true })
+    group.columns.forEach((c, i) => {
+      const cell = ws.getCell(XLSX_HEADER_ROW, i + 1)
+      cell.value = c
+      cell.font = { bold: true, color: { argb: 'ff374151' } }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'fff1f5f9' } }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'ffd1d5db' } } }
+      cell.alignment = { horizontal: 'left' }
+    })
+    group.widths.forEach((width, i) => {
+      ws.getColumn(i + 1).width = width
+    })
+    return { ws, columns: group.columns.length, nextRow: XLSX_HEADER_ROW + 1, index }
+  })
+
+  return {
+    appendRows(groupIndex, rows) {
+      const sheet = sheets[groupIndex]
+      if (!sheet) throw new Error(`Streaming XLSX export has no group ${groupIndex}`)
+      for (const row of rows) {
+        for (let i = 0; i < sheet.columns; i++) {
+          const v = row[i]
+          const cell = sheet.ws.getCell(sheet.nextRow, i + 1)
+          cell.value = v === null || v === undefined ? '' : (v as string | number)
+          if (typeof cell.value === 'number') {
+            cell.alignment = { horizontal: 'right' }
+            cell.numFmt = XLSX_NUMBER_FORMAT
+          }
+        }
+        sheet.nextRow++
+      }
+    },
+    async finish(): Promise<Buffer> {
+      await wb.commit()
+      return Buffer.concat(chunks)
+    },
+  }
+}
+
+/** Title-block cell for the streaming writer — same literals as setCell. */
+function setStreamingCell(
+  ws: { getCell(row: number, col: number): { value: unknown; font: unknown } },
+  row: number,
+  col: number,
+  value: string,
+  fmt: { bold?: boolean; italic?: boolean; muted?: boolean; size?: number },
+): void {
+  const cell = ws.getCell(row, col)
+  cell.value = value
+  cell.font = {
+    bold: fmt.bold,
+    italic: fmt.italic,
+    size: fmt.size,
+    color: fmt.muted ? { argb: 'ff6b7280' } : undefined,
+  }
 }
 
 // --- reading (bulk import) ---------------------------------------------------
