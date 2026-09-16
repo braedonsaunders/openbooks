@@ -3317,6 +3317,7 @@
       "enabled": "{name} enabled",
       "disabled": "{name} disabled",
       "countOn": "{n} of {total} on",
+      "childOptions": "{count, plural, one {# option once enabled} other {# options once enabled}}",
       "blockedReason": "Can't turn off — {items}.",
       "affectsNote": "Turning off hides {items} — the data is kept and returns if you re-enable.",
       "confirmDisable": "Turn off {name}?\n\nThis hides {items}. The data is kept and comes back if you re-enable.",
