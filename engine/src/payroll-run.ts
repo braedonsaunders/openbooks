@@ -3830,6 +3830,19 @@ export async function commitPayRun(input: {
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${documentId}
     `);
+    // Committing authorizes pay: evidence who committed which run computed
+    // from what. The `run` row above is the locked before-image (status +
+    // pinned calculation digest); the stubs and lines it rewrote are
+    // recalculable from that digest, so the run transition is the evidence.
+    const afterRun = (await tx.execute<Record<string, unknown>>(sql`
+      select * from pay_runs where org_id = ${orgId} and document_id = ${documentId}
+    `)).rows[0];
+    if (!afterRun) throw new PayrollError("pay run not found");
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'pay_runs', ${documentId}, 'update',
+              ${JSON.stringify({ operation: 'commit', before: run, after: afterRun })}::jsonb, ${actorId})
+    `);
     return { lines: legs.length };
   }));
 }
