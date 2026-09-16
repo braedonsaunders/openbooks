@@ -153,10 +153,18 @@ function date(value: unknown) {
   // column deep inside the transaction.
   return isIsoCalendarDate(value);
 }
+/** Whole-digit width of a canonical decimal. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
+
 function nonnegativeMoney(value: unknown, nullable = false): string | null | false {
   if ((value == null || value === "") && nullable) return null;
   const exact = canonicalDecimal(value, 4);
   if (exact === null) return false;
+  // Rate columns are numeric(19,4): a wider figure would die in Postgres as a
+  // raw overflow, surfacing the unnamed "save" error. Refuse it named here.
+  if (wholeDigits(exact) > 15) return false;
   try {
     const money = normalizeMoney(exact);
     return cmp(money, "0") >= 0 ? money : false;
@@ -169,6 +177,8 @@ function nonnegativeDecimal(value: unknown, scale: number, nullable = false): st
   if ((value == null || value === "") && nullable) return null;
   const exact = canonicalDecimal(value, scale);
   if (exact === null || compareDecimal(exact, "0") < 0) return false;
+  // Adjustment values are numeric(19,scale): same raw-overflow path as money.
+  if (wholeDigits(exact) > 19 - scale) return false;
   try {
     return normalizeDecimal(exact, scale);
   } catch {
