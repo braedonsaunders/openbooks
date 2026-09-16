@@ -1520,7 +1520,9 @@
         "usersLabel": "Personnes",
         "noTargets": "Aucun",
         "usersTruncatedNote": "Les 200 premières personnes sont affichées.",
-        "deliveryNote": "L'envoi par courriel n'est pas encore branché — ceci enregistre qui doit recevoir quoi. En attendant, les constats paraissent toujours dans Activité des agents."
+        "deliveryNote": "L'envoi par courriel n'est pas encore branché — ceci enregistre qui doit recevoir quoi. En attendant, les constats paraissent toujours dans Activité des agents.",
+        "rolesPlaceholder": "Ajouter un rôle…",
+        "usersPlaceholder": "Ajouter une personne…"
       },
       "activity": {
         "title": "Activité",

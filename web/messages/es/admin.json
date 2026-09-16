@@ -1476,7 +1476,9 @@
         "usersLabel": "Personas",
         "noTargets": "Ninguno",
         "usersTruncatedNote": "Se muestran las primeras 200 personas.",
-        "deliveryNote": "El envío por correo aún no está conectado — esto guarda quién debe recibir qué. Mientras tanto, los hallazgos siempre aparecen en Actividad de agentes."
+        "deliveryNote": "El envío por correo aún no está conectado — esto guarda quién debe recibir qué. Mientras tanto, los hallazgos siempre aparecen en Actividad de agentes.",
+        "rolesPlaceholder": "Añadir un rol…",
+        "usersPlaceholder": "Añadir una persona…"
       },
       "activity": {
         "title": "Actividad",
