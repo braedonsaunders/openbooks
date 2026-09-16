@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { tool, type ToolSet } from "ai";
+import { featureEnabled, type FeatureState } from "@openbooks/engine/src/feature-registry.ts";
 import type { Authz } from "../authz";
 import { can, ForbiddenError } from "../authz";
 import { applicationContextFromSession } from "../application/context";
@@ -51,14 +52,26 @@ function safeErrorMessage(e: unknown): string {
   return safeApplicationToolError(e);
 }
 
+/** An application tool is visible when the actor may see it AND its optional
+ *  feature (if declared) is on for the org. */
+export function applicationToolVisible(
+  definition: { visibleTo: (authz: Authz) => boolean; featureKey?: string },
+  authz: Authz,
+  features?: FeatureState | null,
+): boolean {
+  if (definition.featureKey && features && !featureEnabled(features, definition.featureKey)) return false;
+  return definition.visibleTo(authz);
+}
+
 /** Execute one named tool through the same gates and error contract as AI SDK calls. */
 export async function executeAssistantTool(
   authz: Authz,
   name: string,
   args: unknown,
+  features?: FeatureState | null,
 ): Promise<ToolResult> {
   const definition = ASSISTANT_TOOLS.find((candidate) => candidate.name === name);
-  if (!definition || !canRunTool(authz, definition)) return { ok: false, error: "forbidden" };
+  if (!definition || !canRunTool(authz, definition, features)) return { ok: false, error: "forbidden" };
   try {
     return await definition.execute(args, authz);
   } catch (error) {
@@ -67,12 +80,14 @@ export async function executeAssistantTool(
   }
 }
 
-/** Construct the permission-bound tool set the model may use this turn. */
-export function buildToolRegistry(authz: Authz): ToolSet {
-  const runnable = ASSISTANT_TOOLS.filter((t) => canRunTool(authz, t));
+/** Construct the permission- and feature-bound tool set the model may use this
+ *  turn. `features` is the org's resolved feature state (resolve it once per
+ *  turn with resolvedFeatureState); tools of disabled features are omitted. */
+export function buildToolRegistry(authz: Authz, features?: FeatureState | null): ToolSet {
+  const runnable = ASSISTANT_TOOLS.filter((t) => canRunTool(authz, t, features));
   const entries = runnable.map((t) => {
     // Shared execute wrapper: defensive gate re-check + never-throw contract.
-    const execute = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, t.name, args);
+    const execute = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, t.name, args, features);
     return [
       t.name,
       tool({ description: t.description, inputSchema: t.inputSchema, execute }),
@@ -80,7 +95,7 @@ export function buildToolRegistry(authz: Authz): ToolSet {
   });
   const applicationEntries = APPLICATION_TOOLS
     .filter((definition) =>
-      definition.visibleTo(authz)
+      applicationToolVisible(definition, authz, features)
       && (definition.readOnly || can(authz, "assistant.write")))
     .map((definition) => {
       const execute = async (input: unknown): Promise<ToolResult> => {

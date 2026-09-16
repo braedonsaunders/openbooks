@@ -5,7 +5,7 @@ import test from 'node:test'
 import { SETUP_ENTITY_BY_KEY } from './setup/registry.ts'
 
 const routeSource = readFileSync(
-  new URL('../app/api/admin/setup/[entity]/route.ts', import.meta.url),
+  new URL('./setup/write.ts', import.meta.url),
   'utf8',
 )
 
@@ -23,20 +23,20 @@ test('the shared currency registry stays readable but is not tenant-mutable', ()
 
 test('every setup mutation method rejects a read-only entity before request writes', () => {
   assert.equal(
-    routeSource.match(/if \(entity\.readOnly\) return NextResponse\.json\(\{ error: 'read-only' \}, \{ status: 405 \}\)/g)?.length,
-    3,
-    'POST, PATCH, and DELETE must all have an explicit read-only boundary',
+    routeSource.match(/if \(entity\.readOnly\) return \{ status: 405, body: \{ error: 'read-only' \} \}/g)?.length,
+    4,
+    'the pre-parse preflight plus create, update, and delete must all have an explicit read-only boundary',
   )
 
-  const post = routeSource.slice(routeSource.indexOf('export async function POST('), routeSource.indexOf('export async function PATCH('))
-  const patch = routeSource.slice(routeSource.indexOf('export async function PATCH('), routeSource.indexOf('export async function DELETE('))
-  const del = routeSource.slice(routeSource.indexOf('export async function DELETE('))
+  const post = routeSource.slice(routeSource.indexOf('export async function createSetupRecord('), routeSource.indexOf('export async function updateSetupRecord('))
+  const patch = routeSource.slice(routeSource.indexOf('export async function updateSetupRecord('), routeSource.indexOf('export async function deleteSetupRecord('))
+  const del = routeSource.slice(routeSource.indexOf('export async function deleteSetupRecord('))
   for (const [method, source, requestStart] of [
-    ['POST', post, 'const parsedBody'],
-    ['PATCH', patch, 'const parsedBody2'],
-    ['DELETE', del, 'const url'],
+    ['create', post, 'const body ='],
+    ['update', patch, 'const body ='],
+    ['delete', del, 'const orgFilter'],
   ] as const) {
-    const gate = source.indexOf("if (entity.readOnly) return NextResponse.json({ error: 'read-only' }, { status: 405 })")
+    const gate = source.indexOf("if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }")
     assert.ok(gate >= 0, `${method} must reject read-only entities`)
     assert.ok(gate < source.indexOf(requestStart), `${method} must reject before reading the request body/id`)
 

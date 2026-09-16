@@ -20,7 +20,9 @@ import {
   APPLICATION_TOOLS,
   executeApplicationTool,
 } from "../application/tool-catalog";
-import { ASSISTANT_TOOLS, executeAssistantTool } from "../assistant/registry";
+import { ASSISTANT_TOOLS, applicationToolVisible, executeAssistantTool } from "../assistant/registry";
+import { resolvedFeatureState } from "../features";
+import type { FeatureState } from "@openbooks/engine/src/feature-registry.ts";
 import { canRunTool } from "../assistant/gate";
 import { AssistantToolFailure, mapMcpError, mcpErrorStatus } from "./errors";
 import { MCP_SKILLS } from "./skills";
@@ -65,8 +67,9 @@ function auditHook(requestContext: OpenBooksMcpRequestContext) {
   };
 }
 
-/** The canonical application catalog, adapted 1:1 onto the shared registrar. */
-const applicationCatalog: readonly McpCatalogTool<ApplicationContext>[] =
+/** The canonical application catalog, adapted 1:1 onto the shared registrar.
+ *  Built per request so visibility can honour the org's feature state. */
+const applicationCatalog = (features: FeatureState): readonly McpCatalogTool<ApplicationContext>[] =>
   APPLICATION_TOOLS.map((definition) => ({
     name: definition.name,
     title: definition.title,
@@ -75,7 +78,7 @@ const applicationCatalog: readonly McpCatalogTool<ApplicationContext>[] =
     readOnly: definition.readOnly,
     destructive: definition.destructive,
     openWorld: definition.openWorld,
-    visible: (context) => definition.visibleTo(context.authz),
+    visible: (context) => applicationToolVisible(definition, context.authz, features),
     execute: (context, input) => executeApplicationTool(definition, context, input),
   }));
 
@@ -83,30 +86,33 @@ const applicationCatalog: readonly McpCatalogTool<ApplicationContext>[] =
  * Assistant analysis tools on the same registrar. Failures are thrown as
  * AssistantToolFailure so both catalogs share one failure contract.
  */
-const assistantCatalog: readonly McpCatalogTool<ApplicationContext>[] =
+const assistantCatalog = (features: FeatureState): readonly McpCatalogTool<ApplicationContext>[] =>
   ASSISTANT_TOOLS.map((definition) => ({
     name: definition.name,
     description: definition.description,
     inputSchema: definition.inputSchema,
     readOnly: definition.category !== "write",
-    visible: (context) => canRunTool(context.authz, definition),
+    visible: (context) => canRunTool(context.authz, definition, features),
     summarize: (result) =>
       typeof result.note === "string" ? result.note : undefined,
     execute: async (context, input) => {
-      const result = await executeAssistantTool(context.authz, definition.name, input);
+      const result = await executeAssistantTool(context.authz, definition.name, input, features);
       if (!result.ok) throw new AssistantToolFailure(result.error);
       return result as unknown as Record<string, unknown>;
     },
   }));
 
-export function createOpenBooksMcpServer(
+export async function createOpenBooksMcpServer(
   requestContext: OpenBooksMcpRequestContext,
-): McpServer {
+): Promise<McpServer> {
   const context = applicationContextFromApiKey(
     requestContext.auth,
     "mcp",
     requestContext.requestId,
   );
+  // One feature-state read per request: tools of disabled modules are not
+  // registered at all, so an MCP client sees the same catalog the chat sees.
+  const features = await resolvedFeatureState(context.authz.user.orgId);
   const server = new McpServer(
     { name: "openbooks", version: VERSION },
     { instructions: INSTRUCTIONS },
@@ -118,8 +124,8 @@ export function createOpenBooksMcpServer(
     mapError: mapMcpError,
     errorStatusCode: mcpErrorStatus,
   };
-  registerToolCatalog(server, assistantCatalog, options);
-  registerToolCatalog(server, applicationCatalog, options);
+  registerToolCatalog(server, assistantCatalog(features), options);
+  registerToolCatalog(server, applicationCatalog(features), options);
 
   registerStaticResources(server, [
     {

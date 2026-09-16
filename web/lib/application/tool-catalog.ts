@@ -43,6 +43,16 @@ import {
   validateLayout,
 } from "./page-layouts";
 import { orgVitals } from "./vitals";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
+import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
+import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin";
+import { readCompanySettings, updateCompanySettings } from "../company-settings";
+import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState } from "../setup/registry";
+import { createSetupRecord, deleteSetupRecord, updateSetupRecord } from "../setup/write";
+import { assertApplicationPermission } from "./context";
+import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
+import { executeIdempotent } from "./idempotency";
 
 export type ApplicationToolConfirmation = "never" | "always";
 
@@ -56,6 +66,8 @@ export interface ApplicationToolDefinition {
   openWorld: boolean;
   assistantConfirmation: ApplicationToolConfirmation;
   visibleTo: (authz: Authz) => boolean;
+  /** Optional-feature key; adapters hide the tool while the org has it off. */
+  featureKey?: string;
   execute: (context: ApplicationContext, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
@@ -213,6 +225,39 @@ const paymentPatchSchema = z.object({
 const anyPermission = (...permissions: string[]) => (authz: Authz): boolean =>
   permissions.some((permission) => can(authz, permission));
 const hasPermission = (permission: string) => (authz: Authz): boolean => can(authz, permission);
+
+/**
+ * Map a transport-neutral write outcome ({ status, body }) from the settings
+ * and setup command layers onto the application error contract. 2xx returns
+ * the body; every refusal becomes the same typed ApplicationError the route
+ * would have answered with, so chat and MCP see one failure shape.
+ */
+function settleWrite(result: { status: number; body: Record<string, unknown> }): Record<string, unknown> {
+  if (result.status < 300) return result.body;
+  const message = typeof result.body.message === "string"
+    ? result.body.message
+    : typeof result.body.error === "string" ? result.body.error : "request refused";
+  const details = result.body;
+  switch (result.status) {
+    case 403: throw new ApplicationError("forbidden", "forbidden", 403, details);
+    case 404: throw new ApplicationError("not_found", message, 404, details);
+    case 405: throw new ApplicationError("unsupported_operation", message, 405, details);
+    case 409: throw new ApplicationError("conflict", message, 409, details);
+    default: throw new ApplicationError("invalid_input", message, 422, details);
+  }
+}
+
+const SETUP_ENTITY_KEY = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80)
+  .describe("Setup entity key from list_setup_entities, e.g. tax-codes, departments, payment-terms.");
+const SETUP_BODY = z.record(z.string(), z.unknown())
+  .describe("Field values keyed by the entity's field keys (camelCase, as list_setup_entities describes them).");
+const SETUP_ADMIN = hasPermission("admin.setup.manage");
+const setupActor = (context: ApplicationContext) => ({
+  orgId: context.authz.user.orgId,
+  id: context.authz.user.id,
+  permissions: context.authz.permissions,
+});
+
 const visible = (): boolean => true;
 const documentActor = anyPermission("gl.post", "ap.create", "ap.post", "ar.create", "ar.post", "ap.pay", "ar.pay");
 
@@ -368,6 +413,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "list_app_packages", title: "List Apps",
+    featureKey: "apps",
     description: "List this organization's app packages, their active versions, status, management and workspace links.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -382,6 +428,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "draft_app", title: "Prepare App Draft",
+    featureKey: "apps",
     description: "Save an immutable unpublished app package for this author. No installation, object creation, backend execution or activation occurs. Returns the human review URL, preview URL and exact content hash. A revision is a new draft; keep all intended files and definitions.",
     inputSchema: z.object({ bundle: z.unknown(), reason: z.string().trim().min(1).max(2000) }),
     readOnly: false, destructive: false, openWorld: false,
@@ -390,6 +437,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "get_app_draft", title: "Read App Draft",
+    featureKey: "apps",
     description: "Read this author's exact unpublished package, base version and hash for revision or review. Other authors' drafts are unavailable.",
     inputSchema: z.object({ draftId: UUID }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -397,6 +445,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "get_app_package", title: "Read Installed App Package",
+    featureKey: "apps",
     description: "Read the installed package or one of its historical versions before preparing an upgrade or rollback. Preserve owned object definitions and use a new version label, then draft and review it.",
     inputSchema: z.object({ key: EXTENSION_KEY, versionId: UUID.optional() }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -404,6 +453,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "discard_app_draft", title: "Discard App Draft",
+    featureKey: "apps",
     description: "Discard this author's unpublished draft while preserving its source and audit evidence. Activated versions cannot be discarded.",
     inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
     readOnly: false, destructive: false, openWorld: false,
@@ -412,6 +462,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "activate_app_draft", title: "Activate Reviewed Extension",
+    featureKey: "apps",
     description: "Activate only the exact author-owned draft the human reviewed and explicitly approved. Bind draftId and contentHash. Refuses stale base versions or unavailable permissions. Provisioning, version activation and audit commit atomically.",
     inputSchema: z.object({ draftId: UUID, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
     readOnly: false, destructive: false, openWorld: false,
@@ -530,6 +581,131 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({ documentId: UUID, allocations: z.array(allocationSchema).min(1).max(1000).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
     execute: async (context, input) => ({ ok: true, ...await postPayment(context, input) }),
+  }),
+  definition({
+    name: "get_company_settings", title: "Get Company Settings",
+    description: "Company & Accounting settings as the settings screen shows them: identity (name, legal name, country), default locale, base currency, fiscal-year start month, reporting and tax frameworks, report PDF style, control-account mappings (with account numbers), and the resolved optional-feature switchboard. Read-only.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: anyPermission("admin.users.manage", "admin.setup.manage"),
+    execute: async (context) => {
+      const orgId = context.authz.user.orgId;
+      const view = settleWrite(await readCompanySettings(orgId));
+      const row = (await db.execute<{ base_currency: string; settings: Record<string, unknown> | null }>(sql`
+        select base_currency, settings from orgs where id = ${orgId}`)).rows[0];
+      if (!row) throw notFound("organization");
+      const settings = row.settings ?? {};
+      const control = (settings.controlAccounts ?? {}) as Record<string, string>;
+      const ids = Object.values(control).filter((v): v is string => typeof v === "string" && v.length > 0);
+      const accounts = ids.length
+        ? (await db.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
+            select id, number, name, type from accounts
+             where org_id = ${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)).rows
+        : [];
+      const byId = new Map(accounts.map((a) => [a.id, a]));
+      const features = await resolvedFeatureState(orgId);
+      return {
+        ok: true,
+        ...view,
+        accounting: {
+          baseCurrency: row.base_currency,
+          fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1,
+          reportPdfStyle: settings.reportPdfStyle ?? "modern",
+          fairValueRangePolicy: settings.fairValueRangePolicy ?? null,
+          controlAccounts: Object.fromEntries(Object.entries(control).map(([role, id]) => {
+            const a = byId.get(id);
+            return [role, a ? { id, number: a.number, name: a.name, type: a.type } : { id, missing: true }];
+          })),
+        },
+        features: Object.fromEntries(FEATURES.map((f) => [f.key, featureEnabled(features, f.key)])),
+        href: "/admin/settings",
+      };
+    },
+  }),
+  definition({
+    name: "update_company_settings", title: "Update Company Settings",
+    description: "Change Company & Accounting settings through the same command the settings screen uses: name, legalName, country, baseCurrency, fiscalYearStartMonth, reportingFramework (us_gaap|ifrs), taxFramework (asc740|ias12), defaultLocale, reportPdfStyle (formal|modern), controlAccounts ({ role: accountId | null }), fairValueRangePolicy. Only the keys you pass change. Refuses fiscal-calendar or base-currency changes once postings exist, and invalid control accounts. Audited.",
+    inputSchema: z.object({ changes: z.record(z.string(), z.unknown()), idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "admin.setup.manage");
+      const changes = input.changes as Record<string, unknown>;
+      if (Object.keys(changes).length === 0) throw invalidInput("changes must name at least one setting");
+      const outcome = await executeIdempotent({
+        context, operation: "company_settings.update", idempotencyKey: input.idempotencyKey, request: { changes },
+        execute: async () => settleWrite(await updateCompanySettings(context.authz.user, changes)),
+      });
+      return { ok: true, replayed: outcome.replayed, ...outcome.value };
+    },
+  }),
+  definition({
+    name: "update_features", title: "Update Features",
+    description: "Turn optional modules on or off ({ featureKey: boolean }, keys from list_features) through the same fenced command as Setup → Features: dependency rules are enforced, a module whose data is structurally load-bearing cannot be disabled, enabling installs the module's baseline configuration, and the change is audited. Returns the before/after switchboard.",
+    inputSchema: z.object({ features: z.record(z.string(), z.boolean()), idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "admin.setup.manage");
+      const normalized = normalizeFeatureChanges(input.features);
+      if (!normalized.ok) throw invalidInput(normalized.error, normalized.key ? { key: normalized.key } : undefined);
+      const outcome = await executeIdempotent({
+        context, operation: "features.update", idempotencyKey: input.idempotencyKey, request: { features: normalized.changes },
+        execute: async () => {
+          const result = await applyFeatureChanges(context.authz.user.orgId, context.authz.user.id, normalized.changes);
+          if (!result.ok) {
+            if (result.error === "not-found") throw notFound("organization");
+            const { ok: _ok, error, ...details } = result;
+            throw conflict(error, details);
+          }
+          return { before: result.before, after: result.after };
+        },
+      });
+      return { ok: true, replayed: outcome.replayed, ...outcome.value, href: "/admin/setup/features" };
+    },
+  }),
+  definition({
+    name: "create_setup_record", title: "Create Setup Record",
+    description: "Create one configuration record in a Setup entity (tax codes, departments, classes, locations, payment terms, item rate books, pay components, …) through the same validated, audited command as the Setup screens. Resolve the entity key and its field descriptors with list_setup_entities first; reference fields take the referenced row's id.",
+    inputSchema: z.object({ entityKey: SETUP_ENTITY_KEY, body: SETUP_BODY, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "admin.setup.manage");
+      const outcome = await executeIdempotent({
+        context, operation: "setup_record.create", idempotencyKey: input.idempotencyKey,
+        request: { entityKey: input.entityKey, body: input.body },
+        execute: async () => settleWrite(await createSetupRecord(setupActor(context), input.entityKey, input.body as Record<string, unknown>)),
+      });
+      return { ok: true, replayed: outcome.replayed, entityKey: input.entityKey, ...outcome.value, href: `/admin/setup/${input.entityKey}` };
+    },
+  }),
+  definition({
+    name: "update_setup_record", title: "Update Setup Record",
+    description: "Update one configuration record in a Setup entity by id through the same validated, audited command as the Setup screens. Pass only the fields to change; get ids from list_setup_records. Some entities version instead of overwrite (e.g. effective-dated payroll rules) and some values lock once used by postings — the command reports which.",
+    inputSchema: z.object({ entityKey: SETUP_ENTITY_KEY, id: z.string().min(1).max(120), body: SETUP_BODY, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "admin.setup.manage");
+      const body = { ...(input.body as Record<string, unknown>), id: input.id };
+      const outcome = await executeIdempotent({
+        context, operation: "setup_record.update", idempotencyKey: input.idempotencyKey,
+        request: { entityKey: input.entityKey, body },
+        execute: async () => settleWrite(await updateSetupRecord(setupActor(context), input.entityKey, body)),
+      });
+      return { ok: true, replayed: outcome.replayed, entityKey: input.entityKey, ...outcome.value, href: `/admin/setup/${input.entityKey}` };
+    },
+  }),
+  definition({
+    name: "delete_setup_record", title: "Delete Setup Record",
+    description: "Delete (or archive, where the entity keeps history) one configuration record by id. Refuses records referenced by postings or other configuration (reported as in-use) and shared reference data. Audited.",
+    inputSchema: z.object({ entityKey: SETUP_ENTITY_KEY, id: z.string().min(1).max(120), idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "admin.setup.manage");
+      const outcome = await executeIdempotent({
+        context, operation: "setup_record.delete", idempotencyKey: input.idempotencyKey,
+        request: { entityKey: input.entityKey, id: input.id },
+        execute: async () => settleWrite(await deleteSetupRecord(setupActor(context), input.entityKey, input.id)),
+      });
+      return { ok: true, replayed: outcome.replayed, entityKey: input.entityKey, ...outcome.value };
+    },
   }),
 ];
 

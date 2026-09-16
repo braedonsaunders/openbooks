@@ -11,6 +11,8 @@ import { runBackgroundAgent, type BackgroundAgentResult } from "./agent";
 import { getOrgAiConfig } from "./ai-config";
 import { defaultModel, getModel } from "./client";
 import { buildToolRegistry, executeAssistantTool } from "./registry";
+import { resolvedFeatureState } from "../features";
+import type { FeatureState } from "@openbooks/engine/src/feature-registry.ts";
 import type { ToolResult } from "./types";
 import { validateFinanceNarrative } from "./continuous-close-validation";
 import { fiscalCalendarLine } from "./system-prompt";
@@ -220,11 +222,12 @@ function compactToolData(name: string, result: ToolResult): unknown {
 async function financeEvidence(
   input: ContinuousCloseEnrichmentInput,
   authz: Authz,
+  features: FeatureState,
 ): Promise<EvidencePacket> {
   let calls = 0;
   const run = async (name: string, args: unknown) => {
     calls += 1;
-    return executeAssistantTool(authz, name, args);
+    return executeAssistantTool(authz, name, args, features);
   };
   const periods = await run("financial_periods", { completedOnly: true, limit: 15 });
   const periodRows = dataOf(periods)?.periods;
@@ -312,9 +315,10 @@ export async function enrichContinuousCloseRun(
     return { status: "skipped", analyzedFindings: 0, reason: "ai_not_configured" };
   }
   const authz = systemAuthz(input.orgId, input.agentKey);
-  const tools = buildToolRegistry(authz);
+  const features = await resolvedFeatureState(authz.user.orgId);
+  const tools = buildToolRegistry(authz, features);
   const today = await businessToday(input.orgId);
-  const evidence = input.agentKey === "finance" ? await financeEvidence(input, authz) : null;
+  const evidence = input.agentKey === "finance" ? await financeEvidence(input, authz, features) : null;
   const org = (await db.execute<{ locale: string }>(sql`
     select coalesce(settings->>'defaultLocale', 'en') as locale
       from orgs where id = ${input.orgId}

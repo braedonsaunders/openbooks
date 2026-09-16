@@ -25,6 +25,7 @@ const retainageBalances: AssistantToolDef = {
     "Retainage / holdback balances from the ledger: the org's retainage receivable (held BY customers on our progress invoices) or retainage payable (held FROM subcontractors on their bills) control account as of a date, broken down by party, project, or source document, with the total. Reports whether the control account is configured at all. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "projects.read", "gl.read"] },
+  feature: "projects",
   inputSchema: z.object({
     side: z.enum(["receivable", "payable"]).optional().describe("Default receivable (customer holdbacks)"),
     asOf: dateInput.optional().describe("Default today"),

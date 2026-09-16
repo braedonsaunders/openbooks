@@ -102,7 +102,7 @@ const financialHealthTool: AssistantToolDef = {
     "Financial Health dashboard for a posting-date period: overall health score, ratio scorecard graded vs benchmarks, raw figures, 12-month P&L series, margin waterfall, department/class/location segment performance, revenue and cost drivers, item movers, budget variance, and generated insights. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  inputSchema: periodInput,
+    inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
@@ -363,6 +363,7 @@ const trueCostTool: AssistantToolDef = {
     "True Cost overhead engine for a period: company composite burden rate ($/billable hr), burden categories with rates and classified accounts, department composites, absorption gap, employee labour cost rates, monthly trend and forecast. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
+  feature: "projects",
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) {
@@ -455,6 +456,7 @@ const utilizationTool: AssistantToolDef = {
     "Utilization dashboard for a period: company billable-hours utilization vs target with non-billable cost and alerts, department / service-item / employee breakdowns with prior-period deltas, and the rolling utilization history. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
+  feature: "timeTracking",
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "timeTracking"))) {

@@ -258,7 +258,7 @@ async function startScenario() {
 // --- Structural contract (runs everywhere, no database needed) ---------------
 
 test('disable blockers are evaluated inside the transaction, behind the feature-gate fence', () => {
-  const route = source('../app/api/admin/setup/features/route.ts')
+  const route = source('./features-admin.ts')
   const tx = route.indexOf('withOrgTransaction(')
   const fence = route.indexOf('await acquireFeatureGateLock(')
   const blockers = route.indexOf('featureDisableBlocked(')

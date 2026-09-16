@@ -1823,17 +1823,17 @@ test('the surfaces this test was written for are covered', () => {
     'derived-rule setup must hide the equipment_charge trigger when Equipment is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /isFeatureEnabled\([^,]+, 'equipment'\)/,
     'derived-rule setup must not persist equipment_unit_id when Equipment is off — existing rules stay',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /pay-derived-rules[\s\S]{0,900}return 'not found'/,
     'derived-rule setup must 404 — not persist — equipment_unit_id / equipment_charge when Equipment is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /integrityError === 'not found' \? 404/,
     'derived-rule setup POST must 404 — not persist — equipment_unit_id when Equipment is off',
   )
@@ -1848,12 +1848,12 @@ test('the surfaces this test was written for are covered', () => {
     'time-type setup must hide showOnFieldTicket when Field Tickets is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /time-types[\s\S]{0,200}showOnFieldTicket[\s\S]{0,120}fieldTickets/,
     'time-type setup must not persist showOnFieldTicket when Field Tickets is off — existing flags stay',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /entity\.key === 'time-types'[\s\S]{0,160}return 'not found'/,
     'time-type setup must 404 — not persist — showOnFieldTicket when Field Tickets is off',
   )
@@ -2030,12 +2030,12 @@ test('the surfaces this test was written for are covered', () => {
     'billDueLeaseCharges must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
-    read('app/api/admin/settings/route.ts'),
+    read('lib/company-settings.ts'),
     /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
     'company settings must refuse fairValueRangePolicy when Revenue Recognition is off — existing policy stays',
   )
   assert.match(
-    read('app/api/admin/settings/route.ts'),
+    read('lib/company-settings.ts'),
     /fairValueRangePolicy !== undefined[\s\S]{0,280}status: 404/,
     'company settings must 404 — not persist — fairValueRangePolicy when Revenue Recognition is off',
   )
@@ -2482,12 +2482,12 @@ test('the surfaces this test was written for are covered', () => {
     'the labor-rate-card form must hide the currency control when Multi-currency is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
     'item-rate-book create must refuse currency when Multi-currency is off — stored books stay',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts'),
+    read('lib/setup/write.ts'),
     /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,200}status: 404/,
     'item-rate-book create must 404 — not persist — currency when Multi-currency is off',
   )
@@ -2507,7 +2507,7 @@ test('the surfaces this test was written for are covered', () => {
     'the item-rate-book form must hide the currency control when Multi-currency is off',
   )
   assert.match(
-    read('app/api/admin/setup/[entity]/route.ts').split('export async function PATCH')[1]!,
+    read('lib/setup/write.ts').split('export async function updateSetupRecord')[1]!,
     /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency[\s\S]{0,200}status: 404[\s\S]{0,400}saveSetupBook/,
     'item-rate-book UPDATE must refuse disabled currency before calling the shared book writer',
   )

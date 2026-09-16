@@ -65,6 +65,7 @@ const listPayRuns: AssistantToolDef = {
     "List pay runs (newest pay date first): document number/status, schedule, period, pay date, tax year, run status, gross/net/employer-cost totals, and employee count. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
+  feature: "payroll",
   inputSchema: z.object({ limit: z.number().int().min(1).max(200).optional() }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -92,6 +93,7 @@ const getPayRun: AssistantToolDef = {
     "One pay run's detail: document/schedule/period facts and totals, plus the run's readiness pre-flight (blockers and warnings with stable codes, affected employees, and the in-scope employee count). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
+  feature: "payroll",
   inputSchema: z.object({ documentId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -143,6 +145,7 @@ const payrollYearEnd: AssistantToolDef = {
     "Payroll filings for a tax year, one section per filing declared by the org's installed payroll packs: label, cadence (annual, quarterly, or separation), population rows (capped), totals, whether a per-employee slip and an electronic file are available, and any named population refusal. Annual/quarterly filings live on /payroll/year-end; separation filings (the ROE) are per-employee-event documents on /payroll/separations. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
+  feature: "payroll",
   inputSchema: z.object({ taxYear: z.number().int().min(2000).max(2100) }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -190,6 +193,7 @@ const payrollSetupStatus: AssistantToolDef = {
     "Org-level payroll configuration state: installed payroll country packs and every setup check the run pre-flight verifies (stable code, severity, pass/fail, and where to resolve it), with blocker and warning counts. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.manage"] },
+  feature: "payroll",
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -217,6 +221,7 @@ const listPayrollEmployees: AssistantToolDef = {
     "List employees with a payroll profile, optionally filtered by name: employee, pay schedule, payroll country pack and region, pay basis, active flag, filing account number, stub delivery, and payment method. Withholding elections and government identification numbers are never returned. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["payroll.manage"] },
+  feature: "payroll",
   inputSchema: z.object({
     query: z.string().max(100).optional(),
     limit: z.number().int().min(1).max(200).optional(),
@@ -277,6 +282,7 @@ const payrollEntitlements: AssistantToolDef = {
     "One employee's entitlement plan balances as of a date (default today): per-plan balance in the plan's unit plus the money and hours views at the current wage, limits with over/near-limit flags, and the last movement date. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
+  feature: "payroll",
   inputSchema: z.object({
     employeePartyId: uuidInput,
     asOfDate: dateInput.optional(),
@@ -333,6 +339,7 @@ const payrollRemittances: AssistantToolDef = {
     "Accrued-but-unremitted payroll withholdings and employer contributions by remittance destination for pay dates in a range: per-destination component lines with amounts, filing account, period gross payroll and employee count, and any remittance bills already raised. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
+  feature: "payroll",
   inputSchema: z.object({ fromDate: dateInput, toDate: dateInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {

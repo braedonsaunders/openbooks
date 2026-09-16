@@ -41,7 +41,8 @@ const listSetupEntitiesTool: AssistantToolDef = {
   description:
     "Enumerate every configuration entity in the Setup registry: key, setup-rail group, backing table, whether it is nested under or re-homed onto another surface, its optional-feature gate, and whether it is currently enabled for this org. Read-only.",
   category: "read",
-  gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
+  // Which modules are on is not sensitive; every assistant user may ask.
+  gate: { mode: "public" },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
     const features = await resolvedFeatureState(authz.user.orgId);

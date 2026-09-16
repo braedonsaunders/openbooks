@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
 import { isAiProvider, type AiProvider } from "../../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../../lib/assistant/ai-config";
-import { listModels } from "../../../../../lib/assistant/models";
+import { listModelsCached } from "../../../../../lib/assistant/models";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const gate = await guardPermission("admin.ai.manage");
   if (gate instanceof NextResponse) return gate;
-  let body: { provider?: string; baseUrl?: string; apiKey?: string };
+  let body: { provider?: string; baseUrl?: string; apiKey?: string; refresh?: boolean };
   try {
     const parsedBody = await parseJsonBody(req, jsonObject);
     if (!parsedBody.ok) return parsedBody.response;
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     });
   }
   try {
-    const models = await listModels({ provider, apiKey, baseUrl: baseUrl || null });
+    const models = await listModelsCached({ provider, apiKey, baseUrl: baseUrl || null }, body.refresh === true);
     if (!models.length) {
       return NextResponse.json({
         ok: false,

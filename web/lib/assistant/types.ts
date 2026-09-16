@@ -31,6 +31,11 @@ export type AssistantToolDef = {
   category: ToolCategory;
   inputSchema: ZodTypeAny;
   gate: PermissionRule;
+  /** Optional-feature key (engine feature-registry). When the org has the
+   *  feature off the tool is not exposed to the model at all — it neither
+   *  appears in the catalog nor executes — so the assistant cannot search for
+   *  data a disabled module does not have. */
+  feature?: string;
   /** Write tools set this; the loop NEVER auto-commits a tool that requires it. */
   requiresConfirmation?: boolean;
   /** Per-call handler. Receives the (already schema-validated) args + the
