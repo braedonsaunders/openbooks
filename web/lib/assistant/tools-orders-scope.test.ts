@@ -23,7 +23,7 @@ test("order reads keep the sales/purchase permission split of the _order handler
 });
 
 test("get_order reuses the drawer loader and the exact quantity math", () => {
-  assert.match(tools, /import \{ loadOrder \} from "\.\.\/\.\.\/api\/_order\/lib"/);
+  assert.match(tools, /import \{ loadOrder \} from "\.\.\/\.\.\/app\/api\/_order\/lib"/);
   assert.match(tools, /await loadOrder\(a\.id, authz\.user\.orgId, a\.kind, authz\.allowedSubsidiaryIds\)/);
   assert.match(tools, /billableRemainderQuantityUnits/);
   assert.match(tools, /toQuantityUnits/);
