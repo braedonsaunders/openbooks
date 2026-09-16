@@ -625,7 +625,19 @@
   },
   "sentinel": {
     "title": "Sentinel",
-    "backToHub": "Analytik"
+    "backToHub": "Analytik",
+    "basis": {
+      "note": "Die Erkennung läuft pro Transaktionswährung — eine Rechnung über 100 USD wird niemals mit einer über 100 CAD verglichen. Konsolidierte Beträge stehen in {currency}, jeweils zum eigenen Belegkurs umgerechnet."
+    },
+    "table": {
+      "currency": "Währung",
+      "members": "Belege",
+      "span": "Spanne"
+    },
+    "duplicates": {
+      "sharedReference": "gemeinsame Referenz {reference}",
+      "spanDays": "{days} T."
+    }
   },
   "common": {
     "monthsShort": {

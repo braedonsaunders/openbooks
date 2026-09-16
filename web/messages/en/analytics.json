@@ -1703,9 +1703,12 @@
       "ledger": "complete ledger",
       "stats": "{docs} documents · {amount} · {days} days · in {seconds}s — no caps or date-range limits."
     },
+    "basis": {
+      "note": "Detection runs per transaction currency — a USD 100 bill is never compared with a CAD 100 bill. Consolidated amounts are in {currency}, each translated at its own document rate."
+    },
     "kpi": {
       "flagged": "Flagged",
-      "duplicatePairs": "Duplicate Pairs",
+      "duplicatePairs": "Duplicate Groups",
       "benford": "Benford",
       "shellSignals": "Shell Signals",
       "amountsAnalyzed": "Amounts Analyzed",
@@ -1739,8 +1742,8 @@
       "seeThresholdTrap": "see Threshold Trap",
       "ending99": "ending 99 / 999 / 9999",
       "limitGaming": "potential limit-gaming",
-      "allMatchingPairs": "all matching pairs",
-      "sumPairAmounts": "sum of pair amounts",
+      "allMatchingPairs": "one finding per group",
+      "sumPairAmounts": "excess copies at document rates",
       "documents": "documents",
       "higherRiskWeighting": "higher risk weighting",
       "inPeriod": "in period",
@@ -1776,8 +1779,8 @@
       "spendCalendar": "Spend Calendar",
       "spendCalendarHint": "Daily spend intensity — weekend spikes and unusual clusters stand out",
       "allFlaggedDocs": "All Flagged Documents (top {top} of {total})",
-      "potentialDuplicates": "Potential Duplicate Pairs",
-      "duplicatesHint": "Both documents open in their native module",
+      "potentialDuplicates": "Potential Duplicate Groups",
+      "duplicatesHint": "One finding per matching group — every member opens in its native module",
       "weekendDated": "Weekend-Dated Documents (top 200 by amount)",
       "sequentialRuns": "Sequential Invoice Runs",
       "ghostMatches": "Ghost Vendor Matches ({count})",
@@ -1792,6 +1795,9 @@
       "date": "Date",
       "document": "Document",
       "party": "Party",
+      "currency": "Currency",
+      "members": "Documents",
+      "span": "Span",
       "amount": "Amount",
       "flag": "Flag",
       "reason": "Reason",
@@ -1832,14 +1838,16 @@
     "analysis": {
       "rsfFull": "Relative Size Factor",
       "calendar": "Calendar",
-      "rsfNote": " = amount ÷ the vendor's historical 2nd-largest transaction (36-month baseline, computed in one window-function pass). RSF ≥ 10 means a transaction wildly out of scale for that vendor — a classic error/fraud signal.",
+      "rsfNote": " = amount ÷ the vendor's historical 2nd-largest transaction in the same currency (36-month baseline, computed in one window-function pass). RSF ≥ 10 means a transaction wildly out of scale for that vendor — a classic error/fraud signal.",
       "zscoreWord": "Z-score",
-      "zscoreNote": " measures how many standard deviations a transaction sits from that vendor's own average (per-vendor baselines over 36 months, one aggregate pass). |z| ≥ 3 flags entity-specific outliers that global thresholds miss."
+      "zscoreNote": " measures how many standard deviations a transaction sits from that vendor's own average in the same currency (per-vendor, per-currency baselines over 36 months, one aggregate pass). |z| ≥ 3 flags entity-specific outliers that global thresholds miss."
     },
     "duplicates": {
-      "ruleValue": "≤14 days",
-      "ruleNote": "same vendor + kind + amount, ≥{min}",
-      "sameMemo": "same memo"
+      "ruleValue": "≤{days} days",
+      "ruleNote": "same vendor + kind + currency + amount + reference, ≥{min}",
+      "sameMemo": "same memo",
+      "sharedReference": "shared reference {reference}",
+      "spanDays": "{days}d"
     },
     "weekend": {
       "signalValue": "Doc date",
@@ -1849,7 +1857,7 @@
       "indicatorTitle": "Shell-company indicator:",
       "indicatorNote1": " if a vendor's invoice numbers to you are perfectly sequential over weeks or months, you are likely their ",
       "only": "only",
-      "indicatorNote2": " customer. Legitimate vendors have numbering gaps from invoicing others. Detected by scanning every vendor's reference numbers for unbroken runs.",
+      "indicatorNote2": " customer. Legitimate vendors have numbering gaps from invoicing others. Detected by scanning every vendor's reference numbers per currency for unbroken runs.",
       "runTotal": " — total {total} ({first} → {last})",
       "more": "+{count} more"
     },
@@ -1870,7 +1878,7 @@
       "noAuditEvents": "No high-risk audit events in this period"
     },
     "auditNote": "Native audit log. Most records in this ledger were bulk-migrated, so change history begins at go-live — the trail grows as users work in openbooks.",
-    "trapNote": "Amounts just below round thresholds (ending in 99, 999, or 9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review.",
+    "trapNote": "Amounts just below round thresholds (ending in 99, 999, or 9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review. Traps always read the document amount: a USD 99 flags as a 99-trap even when its converted value is nowhere near a threshold.",
     "vendors": {
       "drillSub": "{flags} flags · {amount} flagged"
     },
@@ -1883,7 +1891,7 @@
       "thresholdTrap": "Threshold Trap"
     },
     "config": {
-      "duplicatesNote": "Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity",
+      "duplicatesNote": "Same vendor, kind, currency, amount and reference within the window; credits excluded; one finding per group",
       "benfordConformity": "Benford conformity",
       "benfordNote": "1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0022/0.0033",
       "rsfNote": "Amount ÷ vendor 2nd-largest over a 36-month baseline ({floor} baseline floor)",
@@ -1920,7 +1928,7 @@
       "rszBold": "Relative size & z-score",
       "rszItem": " — compares each transaction to that vendor’s own history to surface outliers.",
       "sequentialItem": " — catches suspiciously unbroken sequences of vendor reference numbers.",
-      "duplicatesItem": " — compares every pair of transactions to catch repeated or split payments.",
+      "duplicatesItem": " — groups transactions by vendor, kind, currency, amount and reference to catch repeated payments, one finding per group.",
       "outro": "This period: {docs} documents ({amount}) across {days} days, analyzed in {seconds}s. Detail tables show the top matches per check; the counts and distributions always cover everything."
     }
   },

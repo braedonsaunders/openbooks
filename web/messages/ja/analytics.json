@@ -625,7 +625,19 @@
   },
   "sentinel": {
     "title": "Sentinel",
-    "backToHub": "アナリティクス"
+    "backToHub": "アナリティクス",
+    "basis": {
+      "note": "検出は取引通貨ごとに実行されます — 100米ドルの請求書が100カナダドルの請求書と比較されることはありません。連結金額は{currency}建てで、それぞれ自文書のレートで換算されます。"
+    },
+    "table": {
+      "currency": "通貨",
+      "members": "ドキュメント",
+      "span": "期間"
+    },
+    "duplicates": {
+      "sharedReference": "共通の参照 {reference}",
+      "spanDays": "{days}日"
+    }
   },
   "common": {
     "monthsShort": {
