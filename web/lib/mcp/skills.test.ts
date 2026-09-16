@@ -59,6 +59,7 @@ const TOOL_NAMES = toolNamesFrom(
   "../assistant/tools-construction.ts",
   "../assistant/tools-meta.ts",
   "../apps/tools.ts",
+  "../assistant/tools-crm.ts",
 );
 
 // Snake_case terms in playbook prose that are deliberately not tool names.
