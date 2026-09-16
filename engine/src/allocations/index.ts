@@ -24,6 +24,45 @@ export {
   type PlanOptions,
   type StoredEntryGroup,
 } from "./entry.ts";
+export {
+  AllocationApportionError,
+  apportion,
+  fixedPercentWeights,
+  steppedWeights,
+  type SteppedTier,
+} from "./apportion.ts";
+export {
+  definitionHash,
+  validateRuleVersion,
+  type AllocationValidationProblem,
+  type KnownDriver,
+  type PublishedSiblingWindow,
+  type RuleVersionValidationContext,
+} from "./validate.ts";
+// A1 rule service. listRulesInEffectByWindow is the window/book-aware listing;
+// match.ts keeps the entry-oriented loader name pending a coordinator rename.
+export {
+  AllocationRuleError,
+  createDraftVersion,
+  createRule,
+  listRulesInEffect as listRulesInEffectByWindow,
+  loadRuleInEffectByKey,
+  publishVersion,
+  replaceTargets,
+  retireVersion,
+  updateDraftVersion,
+  updateRule,
+  type AllocationAudit,
+  type AllocationOrgScope,
+  type AllocationTargetInput,
+  type CreateRuleInput,
+  type DraftVersionInput,
+  type ListRulesInEffectInput,
+  type ReplaceTargetsInput,
+  type UpdateDraftInput,
+  type UpdateRuleInput,
+  type VersionTransitionInput,
+} from "./rules.ts";
 export type {
   AccountScope,
   AllocationApplyPolicy,
