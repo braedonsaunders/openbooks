@@ -25,6 +25,17 @@ test("agents home loads through the shared inbox resolver", () => {
   assert.match(page, /agentsSpec\(data\)/);
 });
 
+// The proposals lane resolves viewer-signed commands up front and renders
+// the chat's review card inline; unresolvable carriers stay visible with a
+// note instead of a dead Apply.
+test("proposals lane renders governed cards", () => {
+  assert.match(view, /widgetBlock\('tab-nav'/);
+  assert.match(view, /findingProposalCommand\(authz, row\.summary\)/);
+  assert.match(view, /widgetBlock\('proposal-lane-card'/);
+  assert.match(view, /when: f\('showLane'\)/);
+  assert.match(view, /when: f\('laneEmpty'\)/);
+});
+
 // /continuous-close redirects to the workbench, preserving finding deep
 // links; only its reports tab stays until the briefing moves it.
 test("continuous-close redirects to the workbench except reports", () => {
