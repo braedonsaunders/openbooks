@@ -1464,7 +1464,23 @@
         "toggleFailed": "Impossible d'enregistrer le paramètre du pack.",
         "scanComplete": "{count, plural, one {# constat détecté} other {# constats détectés}}",
         "scanFailed": "Le lancement de l'analyse a échoué.",
-        "guideLink": "Guide de configuration"
+        "guideLink": "Guide de configuration",
+        "columns": {
+          "pack": "Module",
+          "status": "Statut",
+          "schedule": "Planification",
+          "lastRun": "Dernière exécution",
+          "findings": "Constats",
+          "policy": "Politique",
+          "actions": "Actions"
+        },
+        "kpis": {
+          "enabled": "Modules activés",
+          "enabledValue": "{count} sur {total}",
+          "openFindings": "Constats ouverts",
+          "runs7d": "Exécutions · 7 j",
+          "failed7d": "Échecs · 7 j"
+        }
       },
       "library": {
         "title": "Bibliothèque",

@@ -1420,7 +1420,23 @@
         "toggleFailed": "No se pudo guardar el ajuste del paquete.",
         "scanComplete": "{count, plural, one {# hallazgo detectado} other {# hallazgos detectados}}",
         "scanFailed": "No se pudo iniciar el análisis.",
-        "guideLink": "Guía de configuración"
+        "guideLink": "Guía de configuración",
+        "columns": {
+          "pack": "Paquete",
+          "status": "Estado",
+          "schedule": "Programación",
+          "lastRun": "Última ejecución",
+          "findings": "Hallazgos",
+          "policy": "Política",
+          "actions": "Acciones"
+        },
+        "kpis": {
+          "enabled": "Paquetes activados",
+          "enabledValue": "{count} de {total}",
+          "openFindings": "Hallazgos abiertos",
+          "runs7d": "Ejecuciones · 7 días",
+          "failed7d": "Fallidas · 7 días"
+        }
       },
       "library": {
         "title": "Biblioteca",

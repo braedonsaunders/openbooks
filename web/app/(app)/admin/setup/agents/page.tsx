@@ -15,6 +15,6 @@ export default async function AgentsOverviewSetup({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadAgentsOverview()
+  const data = await loadAgentsOverview(sp)
   return <ModuleView spec={agentsOverviewSpec(data)} data={data} searchParams={sp} trusted />
 }

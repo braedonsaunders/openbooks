@@ -343,11 +343,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/setup/agents': {
     route: '/admin/setup/agents',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/setup/agents/view')
       return {
-        load: () => m.loadAgentsOverview(),
+        load: (input) => m.loadAgentsOverview(input.searchParams ?? {}),
         spec: (data) => m.agentsOverviewSpec(data as never),
       }
     },

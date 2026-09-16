@@ -169,6 +169,28 @@ export async function getAgentsOverview(orgId: string): Promise<AgentOverviewRow
   }))
 }
 
+export interface AgentRunStats {
+  /** Runs started in the trailing 7 days, any trigger, any pack. */
+  runs7d: number
+  /** Runs finished `failed` in the trailing 7 days. */
+  failed7d: number
+}
+
+/**
+ * Trailing-7-day run counts for the Agents overview KPI strip. One aggregate
+ * row, org-scoped like every other read here.
+ */
+export async function getAgentRunStats(orgId: string): Promise<AgentRunStats> {
+  const res = await db.execute<{ runs7d: number; failed7d: number }>(sql`
+    select count(*)::int as runs7d,
+           count(*) filter (where status = 'failed')::int as failed7d
+      from ai_agent_runs
+     where org_id = ${orgId} and started_at >= now() - interval '7 days'
+  `)
+  const row = res.rows[0]
+  return { runs7d: Number(row?.runs7d ?? 0), failed7d: Number(row?.failed7d ?? 0) }
+}
+
 export interface AgentRunRow extends AgentLastRun {
   agentKey: ContinuousCloseAgentKey
   detectorVersion: string

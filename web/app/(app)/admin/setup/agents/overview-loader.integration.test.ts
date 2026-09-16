@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Loader regression for /admin/setup/agents: the overview configures packs,
-// so its loader must demand `admin.setup.manage` — a holder sees one row per
-// registered pack (defaults when never configured), anyone else is redirected.
-// Auth is scripted; the read model (lib/setup/agents) and Postgres are live.
-const stateKey = Symbol.for("openbooks.agents-overview-loader-test");
+// Loader contract for the rebuilt /admin/setup/agents overview: the spec
+// table sorts server-side from `?sort=`/`?dir=` and the KPI strip reads one
+// aggregate plus the overview rows. Auth is scripted; the read models
+// (lib/setup/agents) and Postgres are live.
+const stateKey = Symbol.for("openbooks.agents-overview-spec-loader-test");
 interface LoaderState {
   user: { orgId: string; id: string } | null;
   permissions: Set<string>;
@@ -16,7 +16,7 @@ const loaderState: LoaderState = { user: null, permissions: new Set() };
 
 const mockAuthz = `
   import { permissionSetCovers } from '@openbooks/engine/src/permissions.ts';
-  const state = globalThis[Symbol.for('openbooks.agents-overview-loader-test')]
+  const state = globalThis[Symbol.for('openbooks.agents-overview-spec-loader-test')]
   export async function requirePermission(permission) {
     if (!state.user) throw new Error('NEXT_REDIRECT:/login');
     if (!permissionSetCovers(state.permissions, permission)) throw new Error('NEXT_REDIRECT:/');
@@ -24,6 +24,9 @@ const mockAuthz = `
   }
 `;
 
+// getTranslations echoes `namespace:key` (ignoring interpolation values) so
+// sort/KPI assertions stay locale-free while still proving the loader routes
+// every display string through the catalog.
 const mockIntl = `
   export async function getTranslations(namespace) {
     return (key, _vars) => namespace + ':' + key;
@@ -37,10 +40,10 @@ const hooks = registerHooks({
     }
     if (context.parentURL?.includes("/admin/setup/agents/view.ts")) {
       if (specifier === "../../../../../lib/authz") {
-        return { url: "mock:agents-overview-authz", shortCircuit: true };
+        return { url: "mock:agents-overview-spec-authz", shortCircuit: true };
       }
       if (specifier === "next-intl/server") {
-        return { url: "mock:agents-overview-intl", shortCircuit: true };
+        return { url: "mock:agents-overview-spec-intl", shortCircuit: true };
       }
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
@@ -49,10 +52,10 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:agents-overview-authz") {
+    if (url === "mock:agents-overview-spec-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
     }
-    if (url === "mock:agents-overview-intl") {
+    if (url === "mock:agents-overview-spec-intl") {
       return { format: "module", source: mockIntl, shortCircuit: true };
     }
     return nextLoad(url, context);
@@ -66,7 +69,6 @@ const { withBypassContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
-const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import("../../../../../lib/setup/agents.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -75,32 +77,57 @@ function asManager(orgId: string) {
   loaderState.permissions = new Set(["admin.setup.manage"]);
 }
 
-test("a setup manager sees one overview row per registered pack", { skip: !DB }, async () => {
+test("the overview resolves KPI labels and one row per pack", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     asManager(org.orgId);
-    const data = await withBypassContext(() => loadAgentsOverview());
+    const data = await withBypassContext(() => loadAgentsOverview({}));
+    assert.equal(data.kpis.length, 4);
     assert.deepEqual(
-      data.rows.map((row) => row.agentKey).sort(),
-      [...CONTINUOUS_CLOSE_AGENT_KEYS].sort(),
+      data.kpis.map((kpi) => kpi.label),
+      [
+        "admin:setup.agents.overview.kpis.enabled",
+        "admin:setup.agents.overview.kpis.openFindings",
+        "admin:setup.agents.overview.kpis.runs7d",
+        "admin:setup.agents.overview.kpis.failed7d",
+      ],
     );
-    assert.equal(data.rows[0]?.featureEnabled, true, "the module switch defaults on");
+    assert.ok(data.rows.length > 0);
     for (const row of data.rows) {
-      assert.equal(row.policy.enabled, false, `${row.agentKey} must default to disabled`);
-      assert.equal(row.lastRunStartedAt, "");
-      assert.equal(row.openFindings, 0);
+      assert.equal(row.id, row.agentKey);
+      assert.ok(row.name.startsWith("admin:setup.agents.packs."));
+      assert.ok(row.configureHref.endsWith(`/${row.agentKey}`));
     }
+    assert.equal(data.sort, "pack");
+    assert.equal(data.dir, "asc");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("without the setup key the overview redirects", { skip: !DB }, async () => {
+test("the overview sorts by findings descending", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
-    loaderState.permissions = new Set(["assistant.use"]);
-    await assert.rejects(withBypassContext(() => loadAgentsOverview()), /NEXT_REDIRECT:\//);
+    asManager(org.orgId);
+    const data = await withBypassContext(() =>
+      loadAgentsOverview({ sort: "findings", dir: "desc" }),
+    );
+    assert.equal(data.sort, "findings");
+    assert.equal(data.dir, "desc");
+    const counts = data.rows.map((row) => row.openFindings);
+    assert.deepEqual([...counts].sort((a, b) => b - a), counts);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an unknown sort falls back to pack ascending", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    asManager(org.orgId);
+    const data = await withBypassContext(() => loadAgentsOverview({ sort: "nope" }));
+    assert.equal(data.sort, "pack");
+    assert.equal(data.dir, "asc");
   } finally {
     await dropScratchOrg(org.orgId);
   }
