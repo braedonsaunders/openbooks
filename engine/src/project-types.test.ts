@@ -78,7 +78,7 @@ test('project cost and selling-value evidence preserve canonical document direct
   )
   assert.match(
     financials,
-    /d\.kind = 'project_charge'\s+then coalesce\(dl\.cost_amount, dl\.amount\)/,
+    /d\.kind = 'project_charge'\s+then round\(coalesce\(dl\.cost_amount, dl\.amount\) \* d\.fx_rate, 4\)/,
   )
   assert.match(
     financials,
