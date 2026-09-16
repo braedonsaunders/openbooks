@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { formatWindow } from './RulesTable.tsx'
+import { formatWindow } from './rule-window.ts'
 
 const tableSource = readFileSync(fileURLToPath(new URL('./RulesTable.tsx', import.meta.url)), 'utf8')
 
@@ -27,4 +27,10 @@ test('rules table is a searchable house list opening the rule drawer', () => {
   assert.match(tableSource, /rules\.modes\.entry/)
   assert.match(tableSource, /rules\.statuses\.published/)
   assert.ok(!/t\(`[^`]*\$\{/.test(tableSource), 'no dynamic i18n keys')
+})
+
+test('rules table scrolls horizontally on narrow viewports (seven columns)', () => {
+  // PagedTable renders a plain table with no overflow of its own, so the
+  // usage owns the narrow-viewport scroll container (tablet floor).
+  assert.match(tableSource, /overflow-x-auto/)
 })
