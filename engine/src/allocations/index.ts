@@ -77,9 +77,9 @@ export {
 export type {
   AccountScope,
   AllocationApplyPolicy,
-  AllocationDriverSourceKind,
   AllocationDimension,
   AllocationDriver,
+  AllocationDriverSourceKind,
   AllocationMode,
   AllocationRuleTarget,
   AllocationRuleVersion,
