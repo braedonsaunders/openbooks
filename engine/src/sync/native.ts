@@ -59,6 +59,16 @@ export interface NativeDocLine {
    * correction has nothing to match on and provenance stops at the header.
    */
   sourceLineRef?: string | null;
+  /**
+   * Source-system cleared evidence for this line (0158): true when the source
+   * reports the line cleared/reconciled, with the source's cleared date when
+   * it states one (ISO YYYY-MM-DD; null when the source states no date).
+   * EVIDENCE ONLY — deliberately excluded from the canonical sync keys, so a
+   * clear-flip never amends or re-posts the document. The mirror stamps it
+   * onto the posted journal lines out of band.
+   */
+  sourceCleared?: boolean;
+  sourceClearedDate?: string | null;
 }
 
 export interface NativeDocument {
