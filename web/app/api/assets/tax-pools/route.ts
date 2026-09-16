@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
@@ -10,7 +11,10 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+/** A year the run window can be built from: the Jan-1 fallback must be a real calendar day. */
+function isRunnableTaxYear(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && isIsoCalendarDate(`${value}-01-01`)
+}
 
 async function primaryBook(orgId: string): Promise<string | null> {
   const r = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`))
@@ -54,10 +58,21 @@ export async function POST(req: Request) {
   if (!regime || !availableRegimes.some((item) => item.code === regime)) {
     return NextResponse.json({ error: 'tax depreciation regime is not enabled for this company country' }, { status: 422 })
   }
-  const taxYear = Number(body.taxYear)
-  if (!Number.isInteger(taxYear)) return NextResponse.json({ error: 'taxYear required' }, { status: 422 })
-  const yearStart = body.yearStart && DATE_RE.test(body.yearStart) ? body.yearStart : `${taxYear}-01-01`
-  const yearEnd = body.yearEnd && DATE_RE.test(body.yearEnd) ? body.yearEnd : `${taxYear}-12-31`
+  // The window ends land in date comparisons inside the run: a shape-valid
+  // non-day would die there with a raw failure the catch can only surface as
+  // driver text. Refuse anything that is not a real calendar day up front.
+  if (!isRunnableTaxYear(body.taxYear)) return NextResponse.json({ error: 'taxYear must be a runnable calendar year' }, { status: 422 })
+  const taxYear = body.taxYear
+  // An omitted end keeps the year boundary; a supplied end that is not a
+  // real calendar day is refused — it must never silently become Jan 1.
+  for (const [label, value] of [['Year start', body.yearStart], ['Year end', body.yearEnd]] as const) {
+    if (value !== undefined && value !== null && value !== '' && !isIsoCalendarDate(value)) {
+      return NextResponse.json({ error: `${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 422 })
+    }
+  }
+  const yearStart = isIsoCalendarDate(body.yearStart) ? body.yearStart : `${taxYear}-01-01`
+  const yearEnd = isIsoCalendarDate(body.yearEnd) ? body.yearEnd : `${taxYear}-12-31`
+  if (yearStart > yearEnd) return NextResponse.json({ error: 'year start must not follow year end' }, { status: 422 })
 
   let bookId: string | null
   if (body.bookId !== undefined) {
