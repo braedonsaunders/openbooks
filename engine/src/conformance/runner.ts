@@ -22,13 +22,13 @@ import type {
   CaseContext,
   CaseResult,
   CaseStatus,
-  ConformanceCase,
   CorpusReport,
   Difference,
   ExpectedEntry,
   LedgerContext,
   Outcome,
   Role,
+  RunnableCase,
 } from "./types.ts";
 
 /** Ledger-exact normalization: "100" and "100.0000" are the same figure. */
@@ -168,7 +168,10 @@ export interface RunOptions {
   filter?: string;
 }
 
-export async function runCase(kase: ConformanceCase, options: RunOptions = {}): Promise<CaseResult> {
+export async function runCase<C extends RunnableCase>(
+  kase: C,
+  options: RunOptions = {},
+): Promise<CaseResult<C>> {
   const started = process.hrtime.bigint();
   const elapsed = (): number => Number(process.hrtime.bigint() - started) / 1e6;
 
@@ -222,19 +225,35 @@ export async function runCase(kase: ConformanceCase, options: RunOptions = {}): 
   }
 }
 
-export async function runCorpus(
-  cases: readonly ConformanceCase[],
+/** Standards a case cites, if any — control cases cite none. */
+function citedStandards(c: RunnableCase): string[] {
+  const citations: unknown = (c as { citations?: unknown }).citations;
+  if (!Array.isArray(citations)) return [];
+  const out: string[] = [];
+  for (const citation of citations) {
+    if (typeof citation === "object" && citation !== null && "standard" in citation) {
+      const standard: unknown = (citation as { standard?: unknown }).standard;
+      if (typeof standard === "string") out.push(standard);
+    }
+  }
+  return out;
+}
+
+export async function runCorpus<C extends RunnableCase>(
+  cases: readonly C[],
   options: RunOptions & { at: string; gitSha?: string | null } = { at: "" },
-): Promise<CorpusReport> {
+): Promise<CorpusReport<C>> {
   const selected = options.filter
     ? cases.filter(
         (c) =>
           c.id.includes(options.filter!) ||
-          c.citations.some((cit) => cit.standard.toLowerCase().includes(options.filter!.toLowerCase())),
+          citedStandards(c).some((standard) =>
+            standard.toLowerCase().includes(options.filter!.toLowerCase()),
+          ),
       )
     : cases;
 
-  const results: CaseResult[] = [];
+  const results: CorpusReport<C>["results"] = [];
   for (const kase of selected) {
     results.push(await runCase(kase, options));
   }

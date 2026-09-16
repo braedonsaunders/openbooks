@@ -225,13 +225,26 @@ export interface LedgerContext {
   items: Record<"fifo" | "movingAvg" | "standard" | "service", string>;
 }
 
-export interface ConformanceCase {
+/**
+ * The runnable core every evidence case shares, standards or internal
+ * controls alike. The runner only reads these fields; audience-facing
+ * metadata (citations vs control mapping, titles, assertions, facts) lives
+ * on the audience-specific extensions below.
+ */
+export interface RunnableCase {
   /** Stable slug; appears in the published matrix. Never renumber. */
   id: string;
-  title: string;
-  citations: Citation[];
   support: Support;
   tier: Tier;
+  /** The expected outcome. Present even for gaps: it is the target. */
+  expected: Outcome;
+  /** Omitted for "not-implemented" cases. */
+  run?: (ctx: CaseContext) => Promise<ActualOutcome> | ActualOutcome;
+}
+
+export interface ConformanceCase extends RunnableCase {
+  title: string;
+  citations: Citation[];
   /**
    * What an accountant learns if this passes. Written for a controller, not an
    * engineer — this text goes straight into the published matrix.
@@ -243,10 +256,6 @@ export interface ConformanceCase {
   limitation?: string;
   /** Required when support is "not-implemented" — what is missing. */
   gap?: string;
-  /** The expected outcome. Present even for gaps: it is the target. */
-  expected: Outcome;
-  /** Omitted for "not-implemented" cases. */
-  run?: (ctx: CaseContext) => Promise<ActualOutcome> | ActualOutcome;
 }
 
 export type CaseStatus = "pass" | "fail" | "gap" | "skipped";
@@ -258,8 +267,8 @@ export interface Difference {
   actual: string;
 }
 
-export interface CaseResult {
-  case: ConformanceCase;
+export interface CaseResult<C extends RunnableCase = ConformanceCase> {
+  case: C;
   status: CaseStatus;
   differences: Difference[];
   /** Set when the case threw. */
@@ -267,11 +276,11 @@ export interface CaseResult {
   ms: number;
 }
 
-export interface CorpusReport {
+export interface CorpusReport<C extends RunnableCase = ConformanceCase> {
   /** Caller-supplied ISO timestamp — the engine never reads the clock itself. */
   at: string;
   gitSha: string | null;
-  results: CaseResult[];
+  results: CaseResult<C>[];
   totals: Record<CaseStatus, number>;
   /** True only when there are zero failures. Gaps do not fail the corpus; they
    *  are published. A gap that regresses to a wrong answer becomes a failure. */
