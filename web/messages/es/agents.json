@@ -63,7 +63,6 @@
     }
   },
   "lane": {
-    "unavailable": "Sin acción aplicable: abre el hallazgo para ver los detalles.",
     "emptyTitle": "Sin propuestas",
     "emptyDescription": "Ningún hallazgo trae una propuesta ahora mismo."
   },

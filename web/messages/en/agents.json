@@ -63,7 +63,6 @@
     }
   },
   "lane": {
-    "unavailable": "No apply action available — open the finding for details.",
     "emptyTitle": "No proposals",
     "emptyDescription": "No findings carry a proposed command right now."
   },

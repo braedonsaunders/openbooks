@@ -58,12 +58,15 @@ test("header binds module-home tabs and the KPI strip", () => {
   assert.doesNotMatch(view, /metric-tile/);
 });
 
-test("proposals lane renders governed cards", () => {
-  assert.match(view, /widget\('module-home-tabs', \{ tabs: data\.tabs \}\)/);
-  assert.match(view, /findingProposalCommand\(authz, row\.summary\)/);
-  assert.match(view, /widgetBlock\('proposal-lane-card'/);
-  assert.match(view, /when: f\('showLane'\)/);
-  assert.match(view, /when: f\('laneEmpty'\)/);
+test("proposals tab reuses the shared table and drawer card", () => {
+  assert.match(view, /when: f\('proposalsEmpty'\)/);
+  assert.match(view, /when: f\('inboxEmpty'\)/);
+  assert.match(view, /findingProposalCommand\(authz, selected\.summary\)/);
+  assert.doesNotMatch(view, /proposal-lane-card/);
+  assert.doesNotMatch(view, /showLane/);
+  assert.doesNotMatch(view, /AgentsLaneCard/);
+  const drawer = read("../continuous-close/WorkItemDrawer.tsx");
+  assert.match(drawer, /ApplicationCommandCard/);
 });
 
 // Assignment & SLA ride the drawer: owner/role with a due date plus a

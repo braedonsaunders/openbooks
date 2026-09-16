@@ -87,7 +87,7 @@ test('briefing tab serves cache state without the inbox', { skip: !process.env.O
       const data = await loadAgents({ briefing: 'true' });
       assert.equal(data.showBriefing, true);
       assert.equal(data.showInbox, false);
-      assert.equal(data.showLane, false);
+      assert.equal(data.showProposals, false);
       assert.equal(data.briefing.briefing, null, 'nothing cached today');
       assert.equal(data.briefing.aiEnabled, false);
       assert.equal(data.tabs.find((tab) => tab.key === 'briefing')?.active, true);
@@ -99,7 +99,7 @@ test('briefing tab serves cache state without the inbox', { skip: !process.env.O
   }
 });
 
-test('proposals lane resolves viewer-signed cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('proposals tab filters carriers and the drawer resolves governed cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
     const UID = '11111111-2222-4333-8444-555555555555';
@@ -110,7 +110,7 @@ test('proposals lane resolves viewer-signed cards', { skip: !process.env.OPENBOO
         label: 'Match to entry',
       },
     });
-    // Assistant-side tool name: visible in the lane, but with no Apply card.
+    // Assistant-side tool name: visible in the tab, but with no Apply card.
     const strangeId = await seedFinding(org.orgId, {
       proposedCommand: { tool: 'draft_journal_entry', input: {}, label: 'Draft' },
     });
@@ -118,22 +118,27 @@ test('proposals lane resolves viewer-signed cards', { skip: !process.env.OPENBOO
     await withOrgContext(org.orgId, async () => {
       const inbox = await loadAgents({});
       assert.equal(inbox.showInbox, true);
-      assert.equal(inbox.showLane, false);
+      assert.equal(inbox.showProposals, false);
       assert.equal(inbox.tabs.find((tab) => tab.key === 'proposals')?.active, false);
 
-      const lane = await loadAgents({ proposals: 'true' });
-      assert.equal(lane.showLane, true);
-      assert.equal(lane.showInbox, false);
-      assert.equal(lane.tabs.find((tab) => tab.key === 'proposals')?.active, true);
-      assert.equal(lane.lane.length, 2);
-      const good = lane.lane.find((card) => card.id === goodId);
-      assert.ok(good?.proposal, 'catalog command resolves to a signed card');
-      assert.equal(good?.proposal?.toolName, 'match_bank_line');
-      assert.ok(good?.proposal?.confirmToken, 'token minted for this viewer');
-      const strange = lane.lane.find((card) => card.id === strangeId);
-      assert.ok(strange, 'unresolvable carrier stays visible');
-      assert.equal(strange?.proposal, null);
-      const spec = agentsSpec(lane);
+      // The tab is the same shared table filtered to carriers — no cards.
+      const proposals = await loadAgents({ proposals: 'true' });
+      assert.equal(proposals.showProposals, true);
+      assert.equal(proposals.showInbox, false);
+      assert.equal(proposals.tabs.find((tab) => tab.key === 'proposals')?.active, true);
+      assert.equal(proposals.total, 2);
+      assert.deepEqual(proposals.rows.map((row) => row.id).sort(), [goodId, strangeId].sort());
+
+      // Each row's drawer resolves the viewer-signed review card in place;
+      // the unresolvable carrier stays visible with no card.
+      const withDrawer = await loadAgents({ proposals: 'true', item: goodId });
+      assert.equal(withDrawer.itemDrawerOpen, true);
+      assert.equal(withDrawer.itemDrawer?.proposal?.toolName, 'match_bank_line');
+      assert.ok(withDrawer.itemDrawer?.proposal?.confirmToken, 'token minted for this viewer');
+      const strangeDrawer = await loadAgents({ proposals: 'true', item: strangeId });
+      assert.equal(strangeDrawer.itemDrawerOpen, true);
+      assert.equal(strangeDrawer.itemDrawer?.proposal, null);
+      const spec = agentsSpec(proposals);
       JSON.stringify(spec);
     });
   } finally {
