@@ -6,7 +6,11 @@
  * so what is asserted here is the arithmetic that reaches the ledger.
  */
 
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../asset-lifecycle.ts";
+import { db } from "../../db.ts";
+import { buildSchedule, runDepreciation } from "../../depreciation.ts";
 import { add } from "../../money.ts";
 import type { ConformanceCase } from "../types.ts";
 
@@ -421,6 +425,97 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
         periodsIn445Year: "12",
         scheduleBuildable: "false",
       },
+    },
+  },
+
+  {
+    id: "ppe-onboarding-continues-from-accumulated",
+    title: "A mid-life asset onboards at original cost plus opening accumulated depreciation and continues from that figure",
+    citations: [
+      {
+        standard: "ASC 360",
+        reference: "360-10-35-4",
+        kind: "requirement",
+        requirement:
+          "The cost of a long-lived asset, less any salvage value, is depreciated in a systematic and rational manner over the asset's useful life.",
+      },
+      {
+        standard: "IAS 16",
+        reference: "IAS 16.60",
+        kind: "requirement",
+        requirement:
+          "The depreciable amount of an asset is allocated on a systematic basis over its useful life.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "A tenant arriving with history onboards the asset at its original cost and in-service date plus the accumulated depreciation already recognised before cutover: pre-cutover months never schedule and are never caught up, only the remaining depreciable amount spreads over the remaining months, and the carrying amount nets the opening figure with the posted charges.",
+    facts: [
+      "A machine costing 12,000.00 with no salvage, a twelve-month life from 2025-02-15: 1,000.00 a month straight line.",
+      "Eleven months sit in the outgoing system, so the asset onboards with opening accumulated depreciation of 11,000.00 measured through 2025-12-31.",
+      "Only January 2026 remains of the life: the schedule holds exactly one line for 1,000.00 — no catch-up of the eleven pre-cutover months.",
+      "Posting January leaves a carrying amount of 0.00 and the asset fully depreciated: 12,000.00 less 11,000.00 opening less 1,000.00 posted.",
+    ],
+    expected: {
+      values: {
+        scheduledMonths: "1",
+        januaryPlanned: "1000.0000",
+        januaryPosted: "1000.0000",
+        statusAfterJanuary: "fully_depreciated",
+      },
+    },
+    run: async (ctx) => {
+      // The conformance tenant opens all twelve months of 2026; only January
+      // falls inside this asset's remaining life, so the run below also
+      // proves February and March stay unscheduled without seeding anything.
+      const ledger = ctx.ledger!;
+      const categoryId = randomUUID();
+      await db.execute(sql`
+        insert into asset_categories
+          (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
+           depreciation_expense_account_id, default_method, default_life_months,
+           default_convention, tax_attributes, is_active)
+        values (${categoryId}, ${ledger.orgId}, 'Onboarded equipment', ${ctx.roles.fixedAsset},
+                ${ctx.roles.accumulatedDepreciation}, ${ctx.roles.impairmentLoss},
+                'straight_line', 12, 'full_month', '{}'::jsonb, true)`);
+      const assetId = randomUUID();
+      await db.execute(sql`
+        insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status,
+           acquired_on, in_service_on, acquisition_cost, salvage_value,
+           depreciation_method, useful_life_months,
+           opening_accumulated_depreciation, opening_accumulated_as_of, custom)
+        values (${assetId}, ${ledger.orgId}, ${ledger.subsidiaryId}, ${categoryId}, 'CONF-ONBOARD-1',
+                'Onboarded machine', 'in_service', '2025-02-15', '2025-02-15',
+                '12000.0000', '0.0000', 'straight_line', 12,
+                '11000.0000', '2025-12-31', '{}'::jsonb)`);
+      await buildSchedule(assetId, ledger.orgId, ledger.actorId, ledger.bookId);
+      const lines = (await db.execute<{ month: string; planned: string }>(sql`
+        select p.starts_on::text as month, l.planned_amount::text as planned
+          from depreciation_schedule_lines l
+          join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+          join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+         where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
+         order by p.starts_on`)).rows;
+      const run = await runDepreciation(ledger.orgId, "2026-01-31", ledger.actorId, assetId);
+      const posted = (await db.execute<{ posted: string }>(sql`
+        select l.posted_amount::text as posted
+          from depreciation_schedule_lines l
+          join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+          join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+         where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
+           and p.starts_on = '2026-01-01'`)).rows[0]!.posted;
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`)).rows[0]!.status;
+      return {
+        values: {
+          scheduledMonths: String(lines.length),
+          januaryPlanned: lines[0]!.planned,
+          januaryPosted: run.posted === 1 ? posted : `${run.posted} posted`,
+          statusAfterJanuary: status,
+        },
+      };
     },
   },
 ];

@@ -623,4 +623,103 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       },
     },
   },
+
+  {
+    id: "lease-onboarding-continues-from-opening",
+    title: "A mid-life lease onboards its opening liability and right-of-use balance and continues from those figures",
+    citations: [
+      {
+        standard: "IFRS 16",
+        reference: "IFRS 16.36",
+        kind: "requirement",
+        requirement:
+          "After commencement the lease liability is increased to reflect interest on the liability and reduced to reflect the lease payments made.",
+      },
+      {
+        standard: "IFRS 16",
+        reference: "IFRS 16.31",
+        kind: "requirement",
+        requirement:
+          "A lessee depreciates the right-of-use asset applying the depreciation requirements for property, plant and equipment.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "A tenant arriving with history onboards the lease at its contractual terms plus the liability and right-of-use carrying amounts measured through cutover: only the remaining periods schedule (original sequence numbering continues), the schedule accretes forward from the stated liability to exactly zero, no commencement journal double-counts the imported balances, and each payment reduces the continued carrying amounts.",
+    facts: [
+      "A twenty-four-month finance lease of 1,000.00 a month at a zero discount rate from 2024-01-01.",
+      "Eighteen months sit in the outgoing system, so the lease onboards with an opening liability and right-of-use carrying amount of 6,000.00 each, measured through 2025-06-30.",
+      "Commencement schedules the six remaining months as sequences 19 to 24, retiring to a zero closing liability, and posts no journal.",
+      "The July 2025 payment posts 1,000.00 of principal, leaving the liability at 5,000.00: the carried schedule's own second-row opening.",
+    ],
+    expected: {
+      values: {
+        remainingPeriods: "6",
+        firstSequence: "19",
+        closingLiability: "0.0000",
+        journalEntriesAtCommencement: "0",
+        postedSchedules: "1",
+        firstPrincipal: "1000.0000",
+        liabilityAfterFirstPayment: "5000.0000",
+      },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      // July 2025 is outside the tenant's 2026 spine, so the payment month is
+      // provisioned the way any operator would provision a new open period.
+      const calendarId = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods
+         where org_id = ${ledger.orgId} limit 1`)).rows[0]!.id;
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${ledger.orgId}, 2025, 7, '2025-07', '2025-07-01', '2025-07-31', false, ${calendarId})`);
+      const { leaseId } = await createLeaseAgreement(ledger.orgId, ledger.actorId, {
+        subsidiaryId: ledger.subsidiaryId,
+        leaseNumber: "CONF-ONBOARD-L1",
+        commencementOn: "2024-01-01",
+        termPeriods: 24,
+        paymentFrequency: "monthly",
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "0",
+        classificationInputs: { transfersOwnership: true },
+        openingBalances: { liability: "6000.0000", rouCarrying: "6000.0000", asOf: "2025-06-30" },
+        accounts: {
+          rouAsset: ctx.roles.rouAsset,
+          leaseLiability: ctx.roles.leaseLiability,
+          interestExpense: ctx.roles.leaseInterestExpense,
+          amortizationExpense: ctx.roles.rouAmortization,
+          leaseExpense: ctx.roles.leaseExpense,
+          payment: ctx.roles.bank,
+        },
+      });
+      await commenceLease(ledger.orgId, leaseId, ledger.actorId);
+      const journals = (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from journal_entries where org_id = ${ledger.orgId}`)).rows[0]!.n;
+      const rows = (await db.execute<{
+        sequence: number;
+        opening: string;
+        principal: string;
+        closing: string;
+      }>(sql`
+        select sequence, opening_liability::text as opening,
+               principal::text as principal, closing_liability::text as closing
+          from lease_agreement_schedule_lines
+         where org_id = ${ledger.orgId} and lease_id = ${leaseId}
+         order by sequence`)).rows;
+      const run = await postDueLeaseSchedules(ledger.orgId, "2025-07-31", ledger.actorId);
+      return {
+        values: {
+          remainingPeriods: String(rows.length),
+          firstSequence: String(rows[0]!.sequence),
+          closingLiability: rows[rows.length - 1]!.closing,
+          journalEntriesAtCommencement: journals,
+          postedSchedules: String(run.posted),
+          firstPrincipal: rows[0]!.principal,
+          liabilityAfterFirstPayment: rows[1]!.opening,
+        },
+      };
+    },
+  },
 ];
