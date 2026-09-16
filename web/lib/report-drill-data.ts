@@ -11,6 +11,8 @@ import { executeReport, loadReportDefinition } from './custom-reports'
 import { loadView } from './views'
 import { agingDetail, transactionDetail } from './reports'
 import { getMoneyFormatter } from './money-server'
+import { flowRates } from './fx-presentation'
+import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
 import type { ReportDrillResponse, ReportDrillTarget } from './report-drill'
 import { reportBookSelection } from './report-books'
 import type { StatementDimFilter } from './statement-matrix'
@@ -466,8 +468,15 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
      group by bs.book_id`)) as unknown as { rows: BudgetScenarioSqlRow[] }
   const row = scenario.rows[0]
   if (!row) throw new Error('scenario_not_found')
+  // The drill ties to the report window the target carries (falling back to
+  // the scenario year for older targets): actuals slice posting dates exactly
+  // and budget counts overlapping periods — the same two predicates the
+  // budget vs actual report applies, so a year-to-date drill shows
+  // year-to-date support.
+  const from = target.from ?? row.from_date
+  const to = target.to ?? row.to_date
   if (target.scope === 'actual') {
-    return ledgerData({ kind: 'ledger', label: target.label, accountIds: target.accountIds, accountTypes: target.accountTypes, from: row.from_date, to: row.to_date, mode: 'flow', dims: target.dims }, authz, page, row.book_id)
+    return ledgerData({ kind: 'ledger', label: target.label, accountIds: target.accountIds, accountTypes: target.accountTypes, from, to, mode: 'flow', dims: target.dims }, authz, page, row.book_id)
   }
   const [tc, tr] = await Promise.all([getTranslations('common'), getTranslations('reports')])
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
@@ -488,32 +497,52 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
                e.posting_date::text as period, e.entry_number,
                a.number, a.name as account, coalesce(l.memo, e.memo) as detail,
                case when a.type in ('income', 'income_other') then -l.amount else l.amount end as amount,
-               e.id as entry_id, d.kind as doc_kind, d.id as doc_id
+               e.id as entry_id, d.kind as doc_kind, d.id as doc_id,
+               sub.base_currency as func, e.posting_date as late
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
           left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+          left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
          where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}
-           and e.posting_date >= ${row.from_date} and e.posting_date <= ${row.to_date}
+           and e.posting_date >= ${from} and e.posting_date <= ${to}
            ${actualAccount} ${actualDims} ${actualSubsidiaryFilter}
         union all
         select 'budget'::text as source, bl.id::text as key, ap.starts_on as sort_date,
                ap.name as period, null::text as entry_number,
                a.number, a.name as account, bl.note as detail,
                case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end as amount,
-               null::uuid as entry_id, null::text as doc_kind, null::uuid as doc_id
+               null::uuid as entry_id, null::text as doc_kind, null::uuid as doc_id,
+               sub.base_currency as func, ap.ends_on as late
           from budget_lines bl
           join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
           join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
+          left join subsidiaries sub on sub.id = bl.subsidiary_id and sub.org_id = bl.org_id
          where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId}
+           and (ap.starts_on <= ${to} and ap.ends_on >= ${from})
            ${account} ${dims} ${subsidiaryFilter}
       )`
+    // Totals translate every supporting leg to the presentation currency per
+    // (source, functional, latest date) — the same second leg the budget vs
+    // actual report applies — because raw functional amounts from different
+    // entities must never be added together. Detail rows stay raw: each row
+    // is one subsidiary's money.
+    const groups = (await db.execute<{ source: string; func: string | null; amt: string; late: string | null }>(sql`${support}
+        select source, func, coalesce(sum(amount), 0) as amt, max(late)::text as late
+          from support group by source, func`))
+    const supportCtx = await flowRates(authz.user.orgId, groups.rows.map((r) => ({
+      func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+    })))
+    let actual = '0'
+    let budget = '0'
+    for (const r of groups.rows) {
+      const date = String(r.late ?? to).slice(0, 10)
+      const translated = mulDecimal(String(r.amt ?? 0), supportCtx.rateAt(r.func ?? null, date))
+      if (r.source === 'actual') actual = add(actual, translated)
+      else budget = add(budget, translated)
+    }
     const [totals, rows] = await Promise.all([
-      db.execute(sql`${support}
-        select count(*)::int as n,
-               coalesce(sum(amount) filter (where source = 'actual'), 0) as actual,
-               coalesce(sum(amount) filter (where source = 'budget'), 0) as budget
-          from support`),
+      db.execute(sql`${support} select count(*)::int as n from support`),
       db.execute(sql`${support}
         select source, key, period, entry_number, number, account, detail, amount,
                entry_id, doc_kind, doc_id
@@ -521,9 +550,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
          order by sort_date, source, number nulls last, key
          limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
     ])
-    const totalRow = totals.rows[0] ?? { n: 0, actual: 0, budget: 0 }
-    const actual = String(totalRow.actual)
-    const budget = String(totalRow.budget)
+    const totalRow = totals.rows[0] ?? { n: 0 }
     return {
       title: target.label,
       description: tr('drillDrawer.supporting'),
@@ -557,13 +584,37 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
       total: Number(totalRow.n),
     }
   }
-  const [count, rows] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(bl.amount), 0) as amount from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims} ${subsidiaryFilter}`),
-    db.execute(sql`
-      select bl.id, ap.name as period, a.number, a.name as account, bl.note, bl.amount
+  // The standalone budget list honors the same window and the same currency
+  // leg as the variance drill and the report: overlapping periods only, and
+  // totals translated per functional instead of added raw. Income legs read
+  // reader-positive like the variance leg, which the old raw sum did not.
+  const listWindow = sql`and (ap.starts_on <= ${to} and ap.ends_on >= ${from})`
+  const listTotalGroups = (await db.execute<{ func: string | null; amt: string; late: string | null }>(sql`
+      select sub.base_currency as func,
+             coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0) as amt,
+             max(ap.ends_on)::text as late
         from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
         join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
-       where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}
+        left join subsidiaries sub on sub.id = bl.subsidiary_id and sub.org_id = bl.org_id
+       where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId}
+         ${listWindow} ${account} ${dims} ${subsidiaryFilter}
+       group by sub.base_currency`))
+  const listCtx = await flowRates(authz.user.orgId, listTotalGroups.rows.map((r) => ({
+    func: r.func ?? null, date: String(r.late ?? to).slice(0, 10),
+  })))
+  let listTotal = '0'
+  for (const r of listTotalGroups.rows) {
+    const date = String(r.late ?? to).slice(0, 10)
+    listTotal = add(listTotal, mulDecimal(String(r.amt ?? 0), listCtx.rateAt(r.func ?? null, date)))
+  }
+  const [count, rows] = await Promise.all([
+    db.execute(sql`select count(*)::int as n from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${listWindow} ${account} ${dims} ${subsidiaryFilter}`),
+    db.execute(sql`
+      select bl.id, ap.name as period, a.number, a.name as account, bl.note,
+             case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end as amount
+        from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+        join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
+       where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${listWindow} ${account} ${dims}
          ${subsidiaryFilter}
        order by ap.starts_on, a.number nulls last, a.name
        limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
@@ -571,7 +622,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
-    summary: [{ label: tc('labels.total'), value: money(String(count.rows[0]?.amount ?? 0)) }],
+    summary: [{ label: tc('labels.total'), value: money(listTotal) }],
     columns: [{ label: tc('labels.period') }, { label: tc('labels.account') }, { label: tc('labels.memo') }, { label: tc('labels.amount'), align: 'right' }],
     rows: (rows.rows as unknown as BudgetLineSqlRow[]).map((item) => ({ key: item.id, cells: [item.period, [item.number, item.account].filter(Boolean).join(' · '), item.note, money(String(item.amount))] })),
     page,
