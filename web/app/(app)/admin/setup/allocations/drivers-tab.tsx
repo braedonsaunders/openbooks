@@ -160,23 +160,33 @@ export function DriversTab() {
   const [values, setValues] = useState<DriverValue[] | null>(null)
   const [valueDraft, setValueDraft] = useState({ dimensionValueId: '', effectiveFrom: '', effectiveTo: '', value: '', note: '' })
 
-  const load = useCallback(async () => {
-    const [driversRes, optionsRes] = await Promise.all([
-      fetch(`/api/allocations/drivers${showInactive ? '?includeInactive=1' : ''}`),
-      fetch('/api/allocations/options'),
-    ])
-    if (!driversRes.ok || !optionsRes.ok) {
-      setError(t('loadFailed'))
-      return
-    }
-    setError(null)
-    setDrivers(((await driversRes.json()) as { drivers: Driver[] }).drivers)
-    setOptions((await optionsRes.json()) as Options)
-  }, [showInactive, t])
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = useCallback(() => setReloadKey((key) => key + 1), [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    Promise.all([
+      fetch(`/api/allocations/drivers${showInactive ? '?includeInactive=1' : ''}`),
+      fetch('/api/allocations/options'),
+    ]).then(
+      async ([driversRes, optionsRes]) => {
+        if (cancelled) return
+        if (!driversRes.ok || !optionsRes.ok) {
+          setError(t('loadFailed'))
+          return
+        }
+        setError(null)
+        setDrivers(((await driversRes.json()) as { drivers: Driver[] }).drivers)
+        setOptions((await optionsRes.json()) as Options)
+      },
+      () => {
+        if (!cancelled) setError(t('loadFailed'))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [showInactive, t, reloadKey])
 
   async function save() {
     if (!editing) return
@@ -200,7 +210,7 @@ export function DriversTab() {
       return
     }
     setEditing(null)
-    await load()
+    reload()
   }
 
   async function remove(driver: Driver) {
@@ -210,7 +220,7 @@ export function DriversTab() {
       setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
       return
     }
-    await load()
+    reload()
   }
 
   async function runPreview() {
