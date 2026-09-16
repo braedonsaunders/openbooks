@@ -15,13 +15,13 @@ import {
 } from "@openbooks/engine/src/flows/index.ts";
 import { decidePaymentRun } from "@openbooks/engine/src/payment-operations.ts";
 import { PaymentError } from "@openbooks/engine/src/payments.ts";
-import { can } from "../authz";
+import { can, type Authz } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { isUuid } from "../list-params";
 import { paymentRunScopeSql } from "../payment-run-access";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, invalidInput, notFound } from "./errors";
+import { ApplicationError, forbidden, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 export type ApprovalWorklistItem =
@@ -31,10 +31,10 @@ export type ApprovalWorklistItem =
 
 type PayDirection = "outbound" | "inbound";
 
-function payApproveDirections(context: ApplicationContext): PayDirection[] {
+function payApproveDirectionsForAuthz(authz: Authz): PayDirection[] {
   const directions: PayDirection[] = [];
-  if (can(context.authz, "ap.approve")) directions.push("outbound");
-  if (can(context.authz, "ar.approve")) directions.push("inbound");
+  if (can(authz, "ap.approve")) directions.push("outbound");
+  if (can(authz, "ar.approve")) directions.push("inbound");
   return directions;
 }
 
@@ -47,17 +47,31 @@ function payApproveDirections(context: ApplicationContext): PayDirection[] {
  * disagree.
  */
 export async function listApprovalWorklist(context: ApplicationContext): Promise<ApprovalWorklistItem[]> {
-  const orgId = context.authz.user.orgId;
+  return approvalWorklistForAuthz(context.authz);
+}
+
+/**
+ * The unified worklist for a bare Authz (no transport context): pending Flows
+ * gates, gateless document-status approvals, and pending payment runs. The
+ * read path only ever touches authz, so surfaces that hold no
+ * ApplicationContext (dashboard metrics, cron summaries) share this exact
+ * reader instead of re-querying one leg of the union. Callers that cannot
+ * approve anything must apply the same doorway as get_vitals (flows.approve,
+ * ap.approve, or ar.approve) and treat the result as empty — the reader
+ * itself throws for a caller with no approve path, mirroring the worklist.
+ */
+export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWorklistItem[]> {
+  const orgId = authz.user.orgId;
   const flowsOn = await isFeatureEnabled(orgId, "flows");
-  const mayFlows = flowsOn && can(context.authz, "flows.approve");
-  const payDirections = payApproveDirections(context);
+  const mayFlows = flowsOn && can(authz, "flows.approve");
+  const payDirections = payApproveDirectionsForAuthz(authz);
   if (!mayFlows && payDirections.length === 0) {
     if (!flowsOn) return [];
-    assertApplicationPermission(context, "flows.approve");
+    throw forbidden("flows.approve");
   }
-  const items = await worklistApprovals(orgId, context.authz.user.id, {
-    roles: context.authz.user.roles.map((role) => role.key),
-    allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+  const items = await worklistApprovals(orgId, authz.user.id, {
+    roles: authz.user.roles.map((role) => role.key),
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     includePayRuns: payDirections.length > 0,
   });
   const out: ApprovalWorklistItem[] = [];
@@ -70,7 +84,7 @@ export async function listApprovalWorklist(context: ApplicationContext): Promise
       select r.id, r.direction from payment_runs r
        where r.org_id = ${orgId}
          and r.id in (select jsonb_array_elements_text(${JSON.stringify(payCandidates.map((item) => item.id))}::jsonb)::uuid)
-         and ${paymentRunScopeSql(context.authz, "r")}`)).rows;
+         and ${paymentRunScopeSql(authz, "r")}`)).rows;
     payAllowed = new Set(
       scoped.filter((row) => payDirections.includes(row.direction as PayDirection)).map((row) => row.id),
     );
