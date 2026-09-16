@@ -300,6 +300,10 @@
       "controlledReopen": {
         "name": "Controlled reopening",
         "description": "Reopens require a reason, independent approval, and an expiry."
+      },
+      "sourceReconciliationEvidence": {
+        "name": "Source-system reconciliation evidence",
+        "description": "The mirror may sign bank accounts off through the source system's reconciled date. Turn off to require imported statements."
       }
     },
     "package": {
