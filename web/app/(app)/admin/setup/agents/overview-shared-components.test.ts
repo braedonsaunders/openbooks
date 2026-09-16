@@ -22,6 +22,14 @@ test("the overview spec binds the shared KPI strip and the spec table", () => {
   assert.match(view, /dateTime/);
 });
 
+test("the findings cell links only above zero, muted text at zero", () => {
+  assert.match(view, /widgetCell\('agents-pack-findings'/);
+  const findings = read("./AgentsPackFindings.tsx");
+  assert.match(findings, /openFindings > 0/);
+  assert.match(findings, /text-slate-500/);
+  assert.match(widgets, /'agents-pack-findings'/);
+});
+
 test("row actions arrive through a small island cell, not a page monolith", () => {
   assert.match(view, /widgetCell\('agents-pack-actions'/);
   // One unlabeled trailing actions column (switch, run-now, configure) —

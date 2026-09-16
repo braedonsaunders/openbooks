@@ -7,7 +7,6 @@ import {
   field,
   grid,
   heading,
-  link,
   page,
   ref,
   table,
@@ -331,7 +330,11 @@ export function agentsOverviewSpec(data: AgentsOverviewData): PageSpec {
               ),
               column(
                 f('colFindings'),
-                link(item('findingsLine'), item('reviewHref'), 'font-medium text-teal-700 underline dark:text-teal-300'),
+                widgetCell('agents-pack-findings', {
+                  openFindings: item('openFindings'),
+                  findingsLine: item('findingsLine'),
+                  reviewHref: item('reviewHref'),
+                }),
                 { sort: 'findings' },
               ),
               column(f('colActions'), widgetCell('agents-pack-actions', {
