@@ -98,6 +98,7 @@ import { ExpensesDashboard } from '../../app/(app)/expenses/ExpensesDashboard'
 import { ContractDrawer } from '../../app/(app)/revenue/ContractDrawer'
 import { RunRecognitionButton } from '../../app/(app)/revenue/RunRecognitionButton'
 import { AssistantApp } from '../assistant/assistant-app'
+import { ChatMarkdown } from '../assistant/markdown'
 import { AccountDrawer as CrmAccountDrawer } from '../../app/(app)/crm/AccountDrawer'
 import { DashboardHeader } from '../../app/(app)/dashboard/_dashboard-header'
 import { DashboardGridSlot } from './dashboard-grid-slot'
@@ -114,7 +115,7 @@ import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/Agent
 import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
 import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
 import { AgentsTriage } from '../../app/(app)/agents/AgentsTriage'
-import { AgentsBriefing } from '../../app/(app)/agents/AgentsBriefing'
+import { AgentsBriefingActions } from '../../app/(app)/agents/AgentsBriefingActions'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
@@ -1349,8 +1350,17 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'agents-kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
-  'agents-briefing': (props) => (
-    <AgentsBriefing {...(props as unknown as ComponentProps<typeof AgentsBriefing>)} />
+  /** The cached narrative's markdown. A widget, not a block, because no spec
+   *  block renders markdown — the loader computed the text, this only binds
+   *  the renderer. Null text renders nothing. */
+  'agents-briefing-body': (props) => {
+    const text = str(props, 'text')
+    if (!text) return null
+    return <ChatMarkdown>{text}</ChatMarkdown>
+  },
+  /** The briefing tab's only interactivity: generate + send buttons. */
+  'agents-briefing-actions': (props) => (
+    <AgentsBriefingActions {...(props as unknown as ComponentProps<typeof AgentsBriefingActions>)} />
   ),
   /** ONE prop. The secret ciphertext never leaves the engine module; only
    *  `hasSecret` crosses into the redacted view the loader reads. */

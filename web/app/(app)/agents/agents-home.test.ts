@@ -104,10 +104,26 @@ test("ask-about-this deep-links chat with the finding handoff", () => {
 
 test("briefing tab serves the cached narrative", () => {
   assert.match(view, /loadBriefing\(authz\)/);
-  assert.match(view, /widgetBlock\('agents-briefing'/);
-  assert.match(view, /when: f\('showBriefing'\)/);
+  assert.match(view, /frame\('card', \[/);
+  assert.match(view, /widgetBlock\('section-heading', \{/);
+  assert.match(view, /widgetBlock\('agents-briefing-body', \{ text: data\.briefingText \}\)/);
+  assert.match(view, /widgetBlock\('agents-briefing-actions', \{ \.\.\.data\.briefingActions \}\)/);
+  assert.match(view, /when: f\('hasBriefing'\)/);
+  assert.match(view, /when: f\('briefingEmpty'\)/);
   assert.match(view, /when: f\('showInboxChrome'\)/);
   assert.match(view, /briefing: 'true'/);
+  assert.doesNotMatch(view, /widgetBlock\('agents-briefing',/);
+});
+
+// The briefing island is actions-only: generate + send over the briefing
+// API, then refresh. No panel chrome, no markdown — those are spec blocks.
+test("briefing actions island triggers and refreshes", () => {
+  const actions = read("./AgentsBriefingActions.tsx");
+  assert.match(actions, /\/api\/agents\/briefing/);
+  assert.match(actions, /method: 'POST'/);
+  assert.match(actions, /router\.refresh\(\)/);
+  assert.doesNotMatch(actions, /ChatMarkdown/);
+  assert.doesNotMatch(actions, /rounded-xl/);
 });
 
 // /continuous-close redirects to the workbench, preserving finding deep

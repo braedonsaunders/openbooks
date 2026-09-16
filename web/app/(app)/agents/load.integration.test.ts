@@ -88,8 +88,10 @@ test('briefing tab serves cache state without the inbox', { skip: !process.env.O
       assert.equal(data.showBriefing, true);
       assert.equal(data.showInbox, false);
       assert.equal(data.showProposals, false);
-      assert.equal(data.briefing.briefing, null, 'nothing cached today');
-      assert.equal(data.briefing.aiEnabled, false);
+      assert.equal(data.hasBriefing, false, 'nothing cached today');
+      assert.equal(data.briefingText, null);
+      assert.equal(data.briefingEmpty, true);
+      assert.equal(data.briefingActions.aiEnabled, false);
       assert.equal(data.tabs.find((tab) => tab.key === 'briefing')?.active, true);
       const spec = agentsSpec(data);
       JSON.stringify(spec);
