@@ -110,6 +110,7 @@ test("ask-about-this deep-links chat with the finding handoff", () => {
 test("briefing tab serves the cached narrative", () => {
   assert.match(view, /loadBriefing\(authz\)/);
   assert.match(view, /frame\('card', \[/);
+  assert.match(view, /stripBriefingTitle\(briefing\.briefing\?\.text/);
   assert.match(view, /widgetBlock\('section-heading', \{/);
   assert.match(view, /widgetBlock\('agents-briefing-body', \{ text: data\.briefingText \}\)/);
   assert.match(view, /widgetBlock\('agents-briefing-actions', \{ \.\.\.data\.briefingActions \}\)/);

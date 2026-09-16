@@ -31,6 +31,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm');
 const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { businessToday } = await import('@openbooks/engine/src/business-date.ts');
 const { loadAgents, agentsSpec } = await import('./view');
 
 async function seedFinding(orgId: string, summary: unknown = {}): Promise<string> {
@@ -93,6 +94,34 @@ test('briefing tab serves cache state without the inbox', { skip: !process.env.O
       assert.equal(data.briefingEmpty, true);
       assert.equal(data.briefingActions.aiEnabled, false);
       assert.equal(data.tabs.find((tab) => tab.key === 'briefing')?.active, true);
+      const spec = agentsSpec(data);
+      JSON.stringify(spec);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test('briefing body strips the duplicated title H1 in the loader', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await seedFinding(org.orgId);
+    await asUser(org.orgId, 'Reader', 'c01_brief_h1', ['assistant.use', 'gl.read']);
+    await withOrgContext(org.orgId, async () => {
+      const today = await businessToday(org.orgId);
+      // The stub translator returns keys, so the loader title is the key
+      // itself — the cached H1 matches it exactly and must strip.
+      const conv = await db.execute<{ id: string }>(sql`insert into ai_conversations
+        (org_id, user_id, scope, title, created_by, updated_by)
+        values (${org.orgId}, ${state.user!.id}, 'briefing', ${`briefing ${today}`}, ${state.user!.id}, ${state.user!.id})
+        returning id`);
+      await db.execute(sql`insert into ai_messages (org_id, conversation_id, role, content, data, created_by, updated_by)
+        values (${org.orgId}, ${conv.rows[0]!.id}, 'assistant', ${'# briefing.title\n\nBody line.'},
+          '{"kind":"briefing"}', ${state.user!.id}, ${state.user!.id})`);
+      const data = await loadAgents({ briefing: 'true' });
+      assert.equal(data.hasBriefing, true);
+      assert.equal(data.briefingText, 'Body line.');
+      assert.equal(data.briefingEmpty, false);
       const spec = agentsSpec(data);
       JSON.stringify(spec);
     });
