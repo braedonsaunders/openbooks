@@ -134,11 +134,16 @@ test("new-pack detector tuning validates like the original packs", () => {
   );
 });
 
-test("unstubbed wave-2 packs stay quiet until their detectors land", async () => {
-  // Collections, payables, and reconciliation landed their detectors (see
-  // their test files); hygiene still returns [] with no DB touched.
-  for (const agentKey of ["hygiene"] as const) {
+test("wave-2 packs stay quiet without touching the DB when nothing is enabled", async () => {
+  // Every pack short-circuits before its loaders when none of its detectors
+  // is enabled, so a fully-disabled agent costs no queries.
+  for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {
     const findings = await AGENT_PACKS[agentKey]("00000000-0000-0000-0000-000000000000", "1000.0000", []);
-    assert.deepEqual(findings, [], `${agentKey} emits nothing before its detectors land`);
+    assert.deepEqual(findings, [], `${agentKey} emits nothing with no detectors enabled`);
+  }
+  for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {
+    const detectors = defaultContinuousCloseDetectors(agentKey).map((detector) => ({ ...detector, enabled: false }));
+    const findings = await AGENT_PACKS[agentKey]("00000000-0000-0000-0000-000000000000", "1000.0000", detectors);
+    assert.deepEqual(findings, [], `${agentKey} emits nothing when all its detectors are off`);
   }
 });

@@ -291,6 +291,9 @@ export async function collectionsFindings(
   detectors: ContinuousCloseDetectorPolicy[],
   loaders: CollectionsLoaders = productionCollectionsLoaders,
 ): Promise<AgentFinding[]> {
+  if (!detectors.some((detector) => detector.enabled && (COLLECTIONS_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey))) {
+    return [];
+  }
   const today = await loaders.today(orgId);
   const findings: AgentFinding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
