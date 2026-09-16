@@ -52,6 +52,9 @@ export async function POST(req: Request) {
     const shares = vectorShares(new Map(result.vector.map((entry) => [entry.key, entry.value] as [string, string])));
     return NextResponse.json({
       driverId,
+      // The temporal contract the vector was measured under (mode, window,
+      // bound column) — null for non-report drivers.
+      temporal: result.temporal,
       // The as-of actually read: the input date itself, or the period end
       // A2 resolves a period to (GL kinds aggregate the month window).
       date: periodId !== undefined ? result.to : date,

@@ -317,7 +317,14 @@ test("report_definition preview runs under the actor via the engine runner", { s
       date: "2026-05-01",
     }));
     assert.equal(ok.status, 200);
-    assert.deepEqual(((await ok.json()) as { rows: unknown[] }).rows, []);
+    const okBody = (await ok.json()) as { rows: unknown[]; temporal: unknown };
+    assert.deepEqual(okBody.rows, []);
+    assert.deepEqual(okBody.temporal, {
+      mode: "balance_as_of",
+      from: null,
+      to: "2026-05-31",
+      field: null,
+    });
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);

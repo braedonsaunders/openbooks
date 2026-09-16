@@ -29,6 +29,7 @@ import type {
   DriverResolveRequest,
   DriverResolver,
   DriverVector,
+  ReportDriverTemporal,
   RunComputation,
   WeightedTarget,
 } from "./types.ts";
@@ -548,7 +549,14 @@ async function resolveDriverVectorForRun(
     actorId: string;
   },
   deps: PeriodRunDeps,
-): Promise<{ driverId: string; driverKey: string; dimension: string; asOf: { periodId: string } | { date: string }; vector: DriverVector }> {
+): Promise<{
+  driverId: string;
+  driverKey: string;
+  dimension: string;
+  asOf: { periodId: string } | { date: string };
+  vector: DriverVector;
+  temporal: ReportDriverTemporal | null;
+}> {
   if (!opts.version.driver_id) throw new Error(`allocation rule ${opts.ruleKey} uses a driver basis but names no driver`);
   const rows = (await tx.execute<{
     id: string; org_id: string; key: string; name: string; unit: string | null;
@@ -602,8 +610,59 @@ async function resolveDriverVectorForRun(
     excludeRuleIds: [opts.ruleId],
     bookId: opts.bookId,
   };
-  const vector = await resolver.resolve(request);
-  return { driverId: driver.id, driverKey: driver.key, dimension: driver.dimension, asOf, vector };
+  // Production resolvers report the temporal contract behind a report
+  // vector; doubles without the method resolve plainly (temporal unknown).
+  const resolved = resolver.resolveWithTemporal
+    ? await resolver.resolveWithTemporal(request)
+    : { vector: await resolver.resolve(request), temporal: null };
+  return {
+    driverId: driver.id,
+    driverKey: driver.key,
+    dimension: driver.dimension,
+    asOf,
+    vector: resolved.vector,
+    temporal: resolved.temporal,
+  };
+}
+
+/**
+ * The stored driver echo: identity, window and weights plus the temporal
+ * contract the vector was measured under. `temporal` is omitted (not nulled)
+ * when unknown so doubles and older readers see the previous shape exactly.
+ */
+function driverPayload(resolved: {
+  driverId: string;
+  driverKey: string;
+  asOf: { periodId: string } | { date: string };
+  vector: DriverVector;
+  temporal: ReportDriverTemporal | null;
+}): {
+  id: string;
+  key: string;
+  asOf: { periodId: string } | { date: string };
+  vector: Array<{ key: string; value: string }>;
+  temporal?: ReportDriverTemporal | null;
+} {
+  return {
+    id: resolved.driverId,
+    key: resolved.driverKey,
+    asOf: resolved.asOf,
+    vector: [...resolved.vector.entries()].map(([key, value]) => ({ key, value })),
+    ...(resolved.temporal ? { temporal: resolved.temporal } : {}),
+  };
+}
+
+/**
+ * The rerun-identity hash of a run computation. The temporal echo is a
+ * policy declaration, not economics: it is hashed as absent so recording
+ * (or later redeclaring) the contract never breaks rerun idempotence —
+ * only pools, vectors and splits move the fingerprint.
+ */
+export function allocationFingerprint(computation: RunComputation): string {
+  const fingerprinted = computation.driver?.temporal
+    ? { ...computation, driver: { ...computation.driver, temporal: undefined } }
+    : computation;
+  return createHash("sha256").update(canonicalJson(fingerprinted)).digest("hex");
 }
 
 async function resolveTargets(
@@ -623,7 +682,13 @@ async function resolveTargets(
 ): Promise<{
   resolved: ResolvedTarget[];
   weights: WeightedTarget[];
-  driver: { id: string; key: string; asOf: { periodId: string } | { date: string }; vector: Array<{ key: string; value: string }> } | null;
+  driver: {
+    id: string;
+    key: string;
+    asOf: { periodId: string } | { date: string };
+    vector: Array<{ key: string; value: string }>;
+    temporal?: ReportDriverTemporal | null;
+  } | null;
 }> {
   if (opts.version.basis_kind === "stepped") {
     throw new Error("stepped allocation basis is not supported by period runs yet");
@@ -677,12 +742,7 @@ async function resolveTargets(
     return {
       resolved: resolvedTargets,
       weights: resolvedTargets.map((target) => ({ key: target.key, weight: target.weight })),
-      driver: {
-        id: resolved.driverId,
-        key: resolved.driverKey,
-        asOf: resolved.asOf,
-        vector: [...resolved.vector.entries()].map(([key, value]) => ({ key, value })),
-      },
+      driver: driverPayload(resolved),
     };
   }
 
@@ -715,12 +775,7 @@ async function resolveTargets(
     return {
       resolved: resolvedTargets,
       weights: resolvedTargets.map((target) => ({ key: target.key, weight: target.weight })),
-      driver: {
-        id: resolved.driverId,
-        key: resolved.driverKey,
-        asOf: resolved.asOf,
-        vector: [...resolved.vector.entries()].map(([key, value]) => ({ key, value })),
-      },
+      driver: driverPayload(resolved),
     };
   }
 
@@ -999,7 +1054,7 @@ async function buildComputation(
     residualPolicy: opts.version.residual_policy,
     impact: opts.version.impact,
   };
-  const fingerprint = createHash("sha256").update(canonicalJson(computation)).digest("hex");
+  const fingerprint = allocationFingerprint(computation);
   const residual = sum(computation.targets.map((target) => target.residual));
   return {
     computation,

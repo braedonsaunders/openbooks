@@ -130,6 +130,12 @@ test("period runs resolve report drivers with no injected deps (production defau
     });
     assert.equal(preview.status, "previewed");
     assert.equal(preview.sourceTotal, "1000.0000");
+    // The stored run echoes the enforced temporal contract (undeclared mode
+    // keeps the current as-of behavior, now visible instead of silent).
+    assert.deepEqual(
+      (preview.computation.driver as unknown as { temporal?: unknown } | null)?.temporal,
+      { mode: "balance_as_of", from: null, to: "2026-07-31", field: null },
+    );
     const vector = sortedVector(preview.computation.driver?.vector ?? []);
     assert.deepEqual(vector, sortedVector([
       { key: s.adjustment, value: "1000.0000" },

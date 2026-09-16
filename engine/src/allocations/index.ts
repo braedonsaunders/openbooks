@@ -98,6 +98,8 @@ export type {
   LineageDraft,
   LineCoordinate,
   MatchResult,
+  ReportDriverTemporal,
+  ReportTemporalMode,
   RuleInEffect,
   UntaggableDimension,
   WeightedTarget,
@@ -106,6 +108,7 @@ export {
   DRIVER_SOURCE_KINDS,
   DriverAdminError,
   NATIVE_MEASURES,
+  REPORT_TEMPORAL_MODES,
   createDriver,
   createDriverValue,
   deleteDriver,
@@ -136,6 +139,7 @@ export {
   type DriverPreviewRequest,
   type DriverResolveOptions,
   type DriverResolverDeps,
+  type ReportDriverEvidence,
   type ReportDriverRow,
   type ReportDriverRunInput,
   type ReportDriverRunner,
@@ -155,6 +159,7 @@ export {
   type RunSummary,
 } from "./run-queries.ts";
 export {
+  allocationFingerprint,
   postAllocationRun,
   previewAllocationRun,
   rerunAllocationRun,

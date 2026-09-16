@@ -18,6 +18,8 @@ import type {
   DriverResolveRequest,
   DriverResolver,
   DriverVector,
+  ReportDriverTemporal,
+  ReportTemporalMode,
 } from "./types.ts";
 
 /**
@@ -217,16 +219,29 @@ export type ReportDriverRunInput = {
   from: string;
   to: string;
   actorId: string;
+  /** The declared temporal contract, normalized by `validateDriverConfig`. */
+  temporalMode: ReportTemporalMode;
+};
+
+/**
+ * What the runner measured, plus the temporal contract it enforced to get
+ * there. Previews and runs echo `temporal` so a vector never presents
+ * period-less weights as period weights.
+ */
+export type ReportDriverEvidence = {
+  rows: ReportDriverRow[];
+  temporal: ReportDriverTemporal;
 };
 
 /**
  * Runs a report definition for a `report_definition` driver. Implemented
  * by the engine (`report-runner.ts`: the saved entity-query definition
- * compiled with the as-of window injected). The implementation owns the
- * report engine's permission checks under `actorId`.
+ * compiled with the declared temporal contract enforced). The
+ * implementation owns the report engine's permission checks under
+ * `actorId`.
  */
 export type ReportDriverRunner = {
-  runReport(input: ReportDriverRunInput): Promise<ReportDriverRow[]>;
+  runReport(input: ReportDriverRunInput): Promise<ReportDriverEvidence>;
 };
 
 export type DriverResolverDeps = {
@@ -569,7 +584,7 @@ async function resolveReport(
   asOf: DriverAsOf,
   actorId: string | null | undefined,
   runner: ReportDriverRunner | undefined,
-): Promise<DriverVector> {
+): Promise<{ vector: DriverVector; temporal: ReportDriverTemporal }> {
   const config = validateDriverConfig("report_definition", driver.config);
   if (!actorId) throw invalid("report_definition drivers require an actorId");
   if (!runner) {
@@ -582,15 +597,19 @@ async function resolveReport(
   const dimensionColumn = config["dimensionColumn"];
   const valueColumn = config["valueColumn"];
   const reportDefinitionId = config["reportDefinitionId"];
+  const temporalMode = config["temporalMode"];
   if (
     typeof dimensionColumn !== "string" ||
     typeof valueColumn !== "string" ||
-    typeof reportDefinitionId !== "string"
+    typeof reportDefinitionId !== "string" ||
+    (temporalMode !== "period_activity" &&
+      temporalMode !== "balance_as_of" &&
+      temporalMode !== "fixed_query")
   ) {
     throw invalid("report_definition driver needs reportDefinitionId, dimensionColumn, valueColumn");
   }
   const params = config["params"];
-  const rows = await runner.runReport({
+  const evidence = await runner.runReport({
     orgId,
     reportDefinitionId,
     dimensionColumn,
@@ -599,9 +618,10 @@ async function resolveReport(
     from: window.from,
     to: window.to,
     actorId,
+    temporalMode,
   });
   const vector: DriverVector = new Map();
-  for (const row of rows) {
+  for (const row of evidence.rows) {
     if (!row.dimension) continue;
     let value: string;
     try {
@@ -611,17 +631,17 @@ async function resolveReport(
     }
     vector.set(row.dimension, value);
   }
-  return vector;
+  return { vector, temporal: evidence.temporal };
 }
 
 // ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
 
-async function resolveDriverVector(
+async function resolveDriverVectorInner(
   request: DriverResolveRequest,
   deps: DriverResolverDeps = {},
-): Promise<DriverVector> {
+): Promise<{ vector: DriverVector; temporal: ReportDriverTemporal | null }> {
   const opts: DriverResolveOptions = request;
   const { orgId, driver, asOf } = request;
   if (!orgId) throw invalid("orgId is required");
@@ -635,6 +655,7 @@ async function resolveDriverVector(
   const excludeRuleIds = opts.excludeRuleIds ?? [];
   const shared = { subsidiaryId: request.subsidiaryId, excludeRuleIds, bookId: opts.bookId ?? null };
   let vector: DriverVector;
+  let temporal: ReportDriverTemporal | null = null;
   switch (driver.sourceKind) {
     case "statistical_journal":
       vector = await resolveStatistical(orgId, driver, await resolveWindow(orgId, asOf), shared);
@@ -651,20 +672,30 @@ async function resolveDriverVector(
     case "native_measure":
       vector = await resolveNative(orgId, driver, asOf, shared);
       break;
-    case "report_definition":
-      vector = await resolveReport(orgId, driver, asOf, request.actorId, deps.reportRunner);
+    case "report_definition": {
+      const reported = await resolveReport(orgId, driver, asOf, request.actorId, deps.reportRunner);
+      vector = reported.vector;
+      temporal = reported.temporal;
       break;
+    }
   }
   const include = request.include ? new Set(request.include) : null;
   const exclude = request.exclude ? new Set(request.exclude) : null;
-  if (!include && !exclude) return vector;
+  if (!include && !exclude) return { vector, temporal };
   const filtered: DriverVector = new Map();
   for (const [key, value] of vector) {
     if (include && !include.has(key)) continue;
     if (exclude?.has(key)) continue;
     filtered.set(key, value);
   }
-  return filtered;
+  return { vector: filtered, temporal };
+}
+
+async function resolveDriverVector(
+  request: DriverResolveRequest,
+  deps: DriverResolverDeps = {},
+): Promise<DriverVector> {
+  return (await resolveDriverVectorInner(request, deps)).vector;
 }
 
 /** Build a `DriverResolver` (types.ts contract) with optional dependencies. */
@@ -672,6 +703,11 @@ export function createDriverResolver(deps: DriverResolverDeps = {}): DriverResol
   return {
     async resolve(request: DriverResolveRequest): Promise<DriverVector> {
       return resolveDriverVector(request, deps);
+    },
+    async resolveWithTemporal(
+      request: DriverResolveRequest,
+    ): Promise<{ vector: DriverVector; temporal: ReportDriverTemporal | null }> {
+      return resolveDriverVectorInner(request, deps);
     },
   };
 }
@@ -701,6 +737,8 @@ export type DriverPreview = {
   to: string;
   vector: Array<{ key: string; value: string }>;
   total: string;
+  /** The enforced temporal contract (report_definition drivers only). */
+  temporal: ReportDriverTemporal | null;
 };
 
 /**
@@ -726,11 +764,11 @@ export async function previewDriverVector(
     excludeRuleIds: request.excludeRuleIds,
     bookId: request.bookId,
   };
-  const vector = await resolveDriverVector(resolveRequest, deps);
+  const { vector, temporal } = await resolveDriverVectorInner(resolveRequest, deps);
   const entries = [...vector.entries()]
     .map(([key, value]) => ({ key, value }))
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   let total = "0.0000";
   for (const entry of entries) total = add(total, entry.value);
-  return { driver, from: window.from, to: window.to, vector: entries, total };
+  return { driver, from: window.from, to: window.to, vector: entries, total, temporal };
 }
