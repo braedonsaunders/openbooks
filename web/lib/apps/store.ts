@@ -19,7 +19,7 @@ import {
 } from '@openbooks/engine/src/apps-invocations.ts'
 import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/journal-writes.ts'
 import { requestHash } from '@/lib/application/idempotency-core'
-import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest'
+import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeFor, type AppManifest } from './manifest'
 import { APP_CAPABILITIES } from './manifest'
 import { projectExtensionPage } from '@openbooks/engine/src/extensions/pages.ts'
 import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/src/extensions/projections.ts'
@@ -127,6 +127,20 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
   // Grant only permissions the manifest actually requested (admin may narrow).
   const requested = new Set(manifest.permissions)
   const granted = (bundle.grantedPermissions ?? manifest.permissions).filter((p) => requested.has(p))
+
+  // App-declared assistant tools ride in the stored manifest, so their
+  // contract is enforced here, before anything is written: tool permissions
+  // against the ADMIN-GRANTED set, and assistant names against the built-in
+  // catalogs. The static names load lazily so the store never joins the
+  // assistant-registry import cycle at module load.
+  const { ASSISTANT_TOOLS } = await import('../assistant/registry')
+  const { APPLICATION_TOOLS } = await import('../application/tool-catalog')
+  const staticNames = new Set([
+    ...ASSISTANT_TOOLS.map((tool) => tool.name),
+    ...APPLICATION_TOOLS.map((tool) => tool.name),
+  ])
+  const toolErrors = validateAppToolsForInstall(manifest, granted, staticNames)
+  if (toolErrors.length) throw new AppError(`invalid app tools: ${toolErrors.join('; ')}`)
 
   // objects/*.json — validate BEFORE the transaction so a bad spec is a clean 400.
   const objects = parseObjectSpecs(bundle.files)
