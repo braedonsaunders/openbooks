@@ -130,7 +130,7 @@ const MATRIX: Entry[] = [
   { prefix: "revenue", uncovered: "no application service: recognition run persists inline" },
   // --- files, data, sync, environments, pdf, email ---------------------------
   { prefix: "file-cabinet", tools: ["list_files", "get_file", "list_folders"], note: "file upload and grant writes have no tool yet (b04 gap fill: upload_file)" },
-  { prefix: "data", uncovered: "gap fill pending: list_data_resources, list_import_runs reuse the data-io resource registry and import_jobs history" },
+  { prefix: "data", tools: ["list_data_resources", "list_import_runs"] },
   { prefix: "sync", uncovered: "gap fill pending: list_sync_connections reuses the platform connections list + sync_runs evidence" },
   { prefix: "platform/connections", uncovered: "gap fill pending: list_sync_connections reuses listConnections + sync_runs evidence" },
   { prefix: "platform", uncovered: "operator console: cross-organization pages, no tenant tool" },
@@ -170,7 +170,7 @@ const MATRIX: Entry[] = [
 ];
 
 /** The allowlist must only shrink: lower this as gap-fill commits land. */
-const UNCOVERED_BUDGET = 41;
+const UNCOVERED_BUDGET = 40;
 
 const REASON_VOCABULARY = [
   "no application service:",
@@ -255,6 +255,7 @@ const TOOL_FILES = [
   "./tools-admin.ts",
   "./tools-payroll.ts",
   "./tools-files.ts",
+  "./tools-ops.ts",
   "./tools-inventory.ts",
   "./tools-orders.ts",
   "./tools-assets.ts",
