@@ -205,6 +205,7 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
   multiCurrency: ["currency", "fx", "forex", "exchange rate", "revalu", "consolidation"],
   multiSubsidiary: ["subsidiary", "subsidiaries", "consolidation", "eliminat"],
   continuousClose: ["continuous close", "close finding", "control finding"],
+  allocations: ["allocation rule", "allocation rules", "cost allocation", "allocation run", "allocation driver", "cost driver", "apportion", "overhead allocation", "allocated cost", "allocation lineage"],
   advancedClose: ["close package"],
   apiAccess: ["api access"],
   bankFeeds: ["bank feed"],
