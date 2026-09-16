@@ -33,7 +33,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'agents-pack-card': { props: ['agentKey', 'checksNote', 'checksTitle', 'configureHref', 'configureLabel', 'description', 'detectors', 'featureEnabled', 'installLabel', 'installPolicy', 'installed', 'installedLabel', 'moduleLine', 'name', 'needsLabel', 'permissions', 'proposes', 'proposesLabel', 'reads', 'readsLabel'] },
   'agents-pack-findings': { props: ['findingsLine', 'openFindings', 'reviewHref'] },
   'agents-pack-last-run': { props: ['dateLine', 'hasRun', 'nextLine', 'statusLabel', 'statusVariant'] },
-  'agents-policy-form': { props: ['description', 'featureEnabled', 'notification', 'pack', 'roles', 'runLine', 'specs', 'statusEnabled', 'statusLabel', 'users', 'usersTruncated'] },
+  'agents-policy-form': { props: ['currency', 'description', 'featureEnabled', 'notification', 'pack', 'roles', 'runLine', 'specs', 'statusEnabled', 'statusLabel', 'users', 'usersTruncated'] },
   'agents-run-actions': { props: ['agentKey', 'findingsHref', 'findingsLabel'] },
   'agents-triage-hint': { props: ['text'] },
   'agents-triage-keys': { props: [], open: true },

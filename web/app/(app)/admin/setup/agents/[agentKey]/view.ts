@@ -6,6 +6,8 @@ import { grid, heading, page, ref, widgetBlock, type PageSpec } from '@braedonsa
 import { detectorSpecsForAgent } from '@openbooks/engine/src/continuous-close-config.ts'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
 import { requirePermission } from '../../../../../../lib/authz'
+import { dateTime } from '../../../../../../lib/format'
+import { getMoneyFormatter } from '../../../../../../lib/money-server'
 import {
   getAgentsOverview,
   getSetupAgentNotification,
@@ -52,6 +54,7 @@ export interface AgentPolicyData {
   statusEnabled: AgentPolicyFormProps['statusEnabled']
   description: AgentPolicyFormProps['description']
   runLine: AgentPolicyFormProps['runLine']
+  currency: AgentPolicyFormProps['currency']
   pack: AgentPolicyFormProps['pack']
   specs: AgentPolicyFormProps['specs']
   notification: AgentPolicyFormProps['notification']
@@ -65,10 +68,11 @@ export async function loadAgentPolicy(agentKey: string): Promise<AgentPolicyData
   if (!isContinuousCloseAgentKey(agentKey)) notFound()
   const authz = await requirePermission('admin.setup.manage')
   const t = await getTranslations('admin')
-  const [rows, notification, targets] = await Promise.all([
+  const [rows, notification, targets, { currency }] = await Promise.all([
     getAgentsOverview(authz.user.orgId),
     getSetupAgentNotification(authz.user.orgId, agentKey),
     listAgentNotificationTargets(authz.user.orgId),
+    getMoneyFormatter(authz.user.orgId),
   ])
   const row = rows.find((entry) => entry.agentKey === agentKey)
   if (!row) notFound()
@@ -87,12 +91,13 @@ export async function loadAgentPolicy(agentKey: string): Promise<AgentPolicyData
     description: t(`setup.agents.packs.${agentKey}.description`),
     runLine: row.lastRun
       ? `${t('setup.agents.overview.lastRun', {
-          date: new Date(row.lastRun.startedAt).toLocaleString(),
-          status: t(`setup.agents.overview.runStatus.${row.lastRun.status}`),
+          date: dateTime(row.lastRun.startedAt),
+          status: t(`setup.agents.runStatuses.${row.lastRun.status}`),
         })} · ${t('setup.agents.overview.openFindings', { count: row.openFindings })}`
       : `${t('setup.agents.overview.neverRun')} · ${t('setup.agents.overview.openFindings', {
           count: row.openFindings,
         })}`,
+    currency,
     pack: {
       agentKey: row.agentKey,
       policy: row.policy,
@@ -145,6 +150,7 @@ export function agentPolicySpec(data: AgentPolicyData): PageSpec {
           statusEnabled: data.statusEnabled,
           description: data.description,
           runLine: data.runLine,
+          currency: data.currency,
           pack: data.pack,
           specs: data.specs,
           notification: data.notification,
