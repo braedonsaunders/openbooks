@@ -103,7 +103,7 @@ test("posting-periods route previews then commits idempotently", { skip: !DB }, 
       insert into documents
         (id, org_id, subsidiary_id, kind, status, document_number, document_date,
          posting_date, currency, subtotal, tax_total, total)
-      values (${doc}, ${org.orgId}, ${org.subsidiaryId}, 'sales_order', 'approved',
+      values (${doc}, ${org.orgId}, ${org.subsidiaryId}, 'journal', 'approved',
               ${doc}, ${org.date}, ${org.date}, 'CAD', '10.0000', '0.0000', '10.0000')`);
 
     const previewRes = await GET(
