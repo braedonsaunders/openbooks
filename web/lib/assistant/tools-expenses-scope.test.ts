@@ -37,8 +37,8 @@ test("expense reads reuse the screen loaders with the route boundaries", () => {
 
 test("expense approvals honor the hub doorway with an empty queue", () => {
   assert.match(source, /!can\(authz, "flows\.approve"\) && !can\(authz, "ap\.approve"\) && !can\(authz, "ar\.approve"\)/);
-  assert.match(source, /item\.docKind === "expense_report"/);
-  assert.match(source, /item\.subjectKind === "expense_report"/);
+  assert.match(source, /item\.docKind !== "expense_report"/);
+  assert.match(source, /item\.subjectKind !== "expense_report"/);
   assert.match(source, /expenses_feature_disabled/);
   assert.match(source, /expense_report_not_found/);
 });
