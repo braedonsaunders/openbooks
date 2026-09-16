@@ -1,4 +1,4 @@
-import type { ToolTier } from "./types";
+import type { ToolResult, ToolTier } from "./types";
 
 /**
  * Context-efficient tool loading: which chat-payload slice each tool belongs
@@ -277,6 +277,26 @@ export function resolveActiveToolNames(
   return catalog
     .filter((tool) => isCoreTier(tool.tier) || active.has(tool.module))
     .map((tool) => tool.name);
+}
+
+/**
+ * The find_tools result shape the chat loop activates on. Kept here (pure)
+ * so the registry can read activation modules without importing the
+ * server-only tool definition it wraps.
+ */
+export type FindToolsData = {
+  tools: { name: string; blurb: string; module: string }[];
+  modules: string[];
+  total: number;
+};
+
+/** Non-core modules a find_tools result activates; empty when it failed. */
+export function findToolsModules(result: ToolResult): string[] {
+  if (!result.ok) return [];
+  const data = result.data as Partial<FindToolsData> | null | undefined;
+  if (!data || !Array.isArray(data.modules)) return [];
+  const modules = data.modules.filter((m): m is string => typeof m === "string" && m !== "core");
+  return [...new Set(modules)];
 }
 
 /**

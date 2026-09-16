@@ -25,3 +25,17 @@ test("the capability playbook and steering prompt name the tool", () => {
   const prompt = read("./system-prompt.ts");
   assert.match(prompt, /describe_capabilities/);
 });
+
+test("find_tools is a public core search tool", () => {
+  const meta = read("./tools-meta.ts");
+  assert.match(meta, /name: "find_tools"/);
+  assert.match(meta, /tier: "core"/);
+  assert.match(meta, /category: "search"/);
+});
+
+test("find_tools is mounted beside describe_capabilities and playbook-named", () => {
+  const meta = read("./tools-meta.ts");
+  assert.match(meta, /export const META_TOOLS: AssistantToolDef\[\] = \[describeCapabilities, findTools\]/);
+  const skills = read("../mcp/skills.ts");
+  assert.match(skills, /find_tools/);
+});

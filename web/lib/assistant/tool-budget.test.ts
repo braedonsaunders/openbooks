@@ -131,10 +131,10 @@ test("core tier is exactly the justified capability list", () => {
   const expected = [
     "aging", "balance_sheet", "cash_position", "create_payment", "describe_capabilities",
     "draft_journal_entry", "financial_periods", "find_accounts", "find_documents",
-    "find_journal_entries", "find_parties", "get_company_settings", "get_document",
-    "get_journal_entry", "list_features", "list_open_items", "list_report_definitions",
-    "post_payment", "profit_and_loss", "project_profitability", "rank_projects",
-    "run_report", "trial_balance", "whoami",
+    "find_journal_entries", "find_parties", "find_tools", "get_company_settings",
+    "get_document", "get_journal_entry", "list_features", "list_open_items",
+    "list_report_definitions", "post_payment", "profit_and_loss", "project_profitability",
+    "rank_projects", "run_report", "trial_balance", "whoami",
   ].sort();
   assert.deepEqual(names, expected);
 });
