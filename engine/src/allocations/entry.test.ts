@@ -620,3 +620,25 @@ test("plan lets an explicit key win over existing group membership with a new gr
   assert.equal(plan.lines[0]!.departmentId, "d8");
   assert.equal(plan.lines[0]!.distributionGroupId, "group-fresh");
 });
+
+test("plan ignores an unsplit request for a line carrying an explicit key", () => {
+  const manual = rule(
+    "manual-split",
+    [target({ departmentId: "d8", fixedPercent: "50.0000" }), target({ departmentId: "d9", fixedPercent: "50.0000" })],
+    { applyPolicy: "manual" },
+  );
+  const plan = planEntryDistributions(
+    doc({ unsplitDistributionGroups: ["group-1"] }),
+    [entryLine({ amount: "30.0000", distributionGroupId: "group-1", distributionKey: "manual-split" })],
+    [manual],
+    {
+      explicitRules: new Map([[manual.rule.key, manual]]),
+      newGroupId: () => "group-fresh",
+    },
+  );
+  // The explicit explode wins; the stale unsplit stamp must neither crash the
+  // collapse pass nor duplicate the line's amount.
+  assert.equal(plan.lines.length, 2);
+  assert.deepEqual(plan.lines.map((l) => l.amount).sort(), ["15.0000", "15.0000"]);
+  assert.deepEqual(plan.lines.map((l) => l.distributionGroupId), ["group-fresh", "group-fresh"]);
+});

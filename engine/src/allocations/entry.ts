@@ -645,8 +645,13 @@ export function planEntryDistributions(
   });
 
   // Collapse requests first: one line per group at the first member's coordinates.
+  // Lines an explicit distributionKey already exploded are not collapse
+  // members (the member indexes above exclude them too): without this guard a
+  // stale unsplit stamp on a keyed line re-collapses an empty member set and
+  // crashes on the missing first member.
   const collapsedGroups = new Set<string>();
   lines.forEach((line, index) => {
+    if (handled[index] === true) return;
     const groupId = line.distributionGroupId;
     if (groupId === null || groupId === undefined || groupId === "" || !unsplit.has(groupId)) return;
     if (collapsedGroups.has(groupId)) {
