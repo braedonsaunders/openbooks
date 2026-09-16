@@ -24,6 +24,7 @@ import { INVENTORY_TOOLS } from "./tools-inventory";
 import { ORDERS_TOOLS } from "./tools-orders";
 import { ASSETS_TOOLS } from "./tools-assets";
 import { EQUIPMENT_TOOLS } from "./tools-equipment";
+import { SUBCONTRACTS_TOOLS } from "./tools-subcontracts";
 import { PAYROLL_TOOLS } from "./tools-payroll";
 import { REPORTING_TOOLS } from "./tools-reports";
 import { SETUP_TOOLS } from "./tools-setup";
@@ -54,6 +55,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...ORDERS_TOOLS,
   ...ASSETS_TOOLS,
   ...EQUIPMENT_TOOLS,
+  ...SUBCONTRACTS_TOOLS,
   ...SETUP_TOOLS,
   ...META_TOOLS,
   ...WRITE_TOOLS,
