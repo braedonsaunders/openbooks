@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**75 passing · 0 failing · 15 gaps · 0 not run**
+**77 passing · 0 failing · 15 gaps · 0 not run**
 
-2026-09-15T22:44:41.814Z
+2026-09-16T04:50:46.919Z
 
 ## AL DOR
 
@@ -22,6 +22,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **The written-down amount becomes the new cost basis for future depreciation**<br><sub>Future depreciation runs off the impaired carrying amount, so the asset is never depreciated back through an amount that has already been written off.</sub> | ASC 360 360-10-35-20<br>IAS 36.63 | PASS | Implemented |
 | **Derecognition removes cost and accumulated depreciation and recognises the gain or loss**<br><sub>On sale, the asset's cost and its accumulated depreciation both leave the balance sheet entirely and the profit or loss recognised is exactly proceeds less carrying amount — a disposal cannot leave a stub balance behind.</sub> | ASC 360 360-10-40-5<br>IAS 16.71<br>IAS 16.68 | PASS | Implemented |
 | **US GAAP prohibits reversing an impairment of a held-and-used asset**<br><sub>The same fair-value recovery after an impairment is refused outright under US GAAP — the impaired amount is the new cost basis — and recognised under IFRS only up to the unreversed impairment, so the carrying amount can never climb back above depreciated historical cost through the remeasurement path. The answer comes from the organisation's configured reporting framework.</sub> | ASC 360 360-10-35-20<br>IAS 36.114<br>IAS 36.117 | PASS | Implemented |
+| **A mid-life asset onboards at original cost plus opening accumulated depreciation and continues from that figure**<br><sub>A tenant arriving with history onboards the asset at its original cost and in-service date plus the accumulated depreciation already recognised before cutover: pre-cutover months never schedule and are never caught up, only the remaining depreciable amount spreads over the remaining months, and the carrying amount nets the opening figure with the posted charges.</sub> | ASC 360 360-10-35-4<br>IAS 16.60 | PASS | Implemented |
 
 ## ASC 606
 
@@ -260,6 +261,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **IFRS applies one lessee model to every lease**<br><sub>The identical lease produces a front-loaded charge under IFRS and a flat charge under US GAAP — the classification step is skipped entirely under IFRS, and a dual-reporting entity gets each framework's answer from the same source data by switching the configured framework.</sub> | IFRS 16.22<br>IFRS 16.31 | PASS | Implemented |
 | **Short-term and low-value leases may be kept off balance sheet**<br><sub>An elected short-term lease recognises no asset or liability at commencement and charges rent straight to expense as paid — and the election is validated against eligibility, so a thirteen-month lease cannot quietly take it.</sub> | IFRS 16.5<br>ASC 842 842-20-25-2 | PASS | Implemented |
 | **A lessor classifies each lease and accounts for it accordingly**<br><sub>A lessor tests each lease against the classification criteria — sales-type, direct financing (selling profit deferred into the net investment), or operating; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term, and the levelling accrual is posted against the property billing pipeline by the levelling service, not left as a manual adjustment.</sub> | IFRS 16.61<br>IFRS 16.81<br>ASC 842 842-30-25-1 | PASS | Implemented |
+| **A mid-life lease onboards its opening liability and right-of-use balance and continues from those figures**<br><sub>A tenant arriving with history onboards the lease at its contractual terms plus the liability and right-of-use carrying amounts measured through cutover: only the remaining periods schedule (original sequence numbering continues), the schedule accretes forward from the stated liability to exactly zero, no commencement journal double-counts the imported balances, and each payment reduces the continued carrying amounts.</sub> | IFRS 16.36<br>IFRS 16.31 | PASS | Implemented |
 
 ## IRS Pub 15
 

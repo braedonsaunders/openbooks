@@ -1,8 +1,8 @@
 {
-  "at": "2026-09-15T22:44:41.814Z",
+  "at": "2026-09-16T04:50:46.919Z",
   "gitSha": null,
   "totals": {
-    "pass": 75,
+    "pass": 77,
     "fail": 0,
     "gap": 15,
     "skipped": 0
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 5118
+      "ms": 77
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 5095
+      "ms": 44
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 1628
+      "ms": 24
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -299,7 +299,7 @@
         "Revenue at inception is 100,000.00; 21,000.00 accretes as interest.",
         "Year one accretes 10,000.00 (10% of 100,000) and year two 11,000.00, carrying the receivable to exactly 121,000.00."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "rev-percent-complete-catch-up",
@@ -403,7 +403,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 452
+      "ms": 6
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -437,7 +437,7 @@
         "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
         "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
       ],
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "lease-operating-single-cost",
@@ -469,7 +469,7 @@
         "Total lease cost is 100,000.00 over five years, 20,000.00 a year straight-line.",
         "Year one: imputed interest is 4,329.4767; the liability unwinds by 15,670.5233 and the right-of-use asset reduces by the same amount, keeping the two aligned."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "lease-ifrs-single-lessee-model",
@@ -534,7 +534,7 @@
         "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
         "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "ms": 2845
+      "ms": 7
     },
     {
       "id": "lease-lessor-classification",
@@ -645,6 +645,38 @@
       "ms": 0
     },
     {
+      "id": "lease-onboarding-continues-from-opening",
+      "title": "A mid-life lease onboards its opening liability and right-of-use balance and continues from those figures",
+      "standards": [
+        "IFRS 16"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.36",
+          "kind": "requirement",
+          "requirement": "After commencement the lease liability is increased to reflect interest on the liability and reduced to reflect the lease payments made."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.31",
+          "kind": "requirement",
+          "requirement": "A lessee depreciates the right-of-use asset applying the depreciation requirements for property, plant and equipment."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A tenant arriving with history onboards the lease at its contractual terms plus the liability and right-of-use carrying amounts measured through cutover: only the remaining periods schedule (original sequence numbering continues), the schedule accretes forward from the stated liability to exactly zero, no commencement journal double-counts the imported balances, and each payment reduces the continued carrying amounts.",
+      "facts": [
+        "A twenty-four-month finance lease of 1,000.00 a month at a zero discount rate from 2024-01-01.",
+        "Eighteen months sit in the outgoing system, so the lease onboards with an opening liability and right-of-use carrying amount of 6,000.00 each, measured through 2025-06-30.",
+        "Commencement schedules the six remaining months as sequences 19 to 24, retiring to a zero closing liability, and posts no journal.",
+        "The July 2025 payment posts 1,000.00 of principal, leaving the liability at 5,000.00: the carried schedule's own second-row opening."
+      ],
+      "ms": 8
+    },
+    {
       "id": "fx-initial-recognition-at-spot",
       "title": "A foreign-currency transaction is recorded at the spot rate on the transaction date",
       "standards": [
@@ -668,7 +700,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 49
+      "ms": 17
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -707,7 +739,7 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "ms": 49
+      "ms": 24
     },
     {
       "id": "fx-long-term-debt-retranslated",
@@ -740,7 +772,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 36
+      "ms": 19
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -822,7 +854,7 @@
         "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
         "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
       ],
-      "ms": 53
+      "ms": 17
     },
     {
       "id": "fx-inverse-rate-statutory-tax-exact",
@@ -848,7 +880,7 @@
         "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
         "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728."
       ],
-      "ms": 62
+      "ms": 19
     },
     {
       "id": "fx-settlement-realized-gain",
@@ -940,7 +972,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "The period-end revaluation posts nothing — the equipment stays at CAD 6,750.00."
       ],
-      "ms": 28
+      "ms": 15
     },
     {
       "id": "fx-net-investment-oci",
@@ -991,7 +1023,7 @@
         "Taxable consideration of $100.00, GST at 5%, tax-exclusive pricing.",
         "Tax is 100.00 × 5% = $5.00; the settlement total is $105.00."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "sales-tax-inclusive-extraction",
@@ -1015,7 +1047,7 @@
         "Advertised tax-included price of $105.00, GST at 5% included.",
         "Net is $100.00 and tax is $5.00; net plus tax equals the entered $105.00 exactly."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "sales-tax-compound-qst-on-gst",
@@ -1116,7 +1148,7 @@
         "Lines 110–112, 205 and 405 are $0.00, so 113A, 113B and 113C are $30.00, $0.00 and $30.00.",
         "Line 114 (refund) is max(−30.00, 0) = $0.00; line 115 (payment) is max(30.00, 0) = $30.00."
       ],
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "sales-tax-gst34-refund",
@@ -1298,7 +1330,7 @@
         "The enhanced-CPP income deduction (F5) is 85.25 × 1.00/5.95 = $14.33, carried wholly against periodic pay.",
         "Annual taxable income is (1,500.00 − 14.33) × 52 = $77,254.84; federal tax on it is $8,869.87 and Saskatchewan tax is $5,938.39, so the period withholding is (8,869.87 + 5,938.39) / 52 = $284.77."
       ],
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "payroll-cpp2-second-tier",
@@ -1503,7 +1535,7 @@
         "Annualized federal tax is 35.19 × 52 = $1,829.88.",
         "Withholding for the period is $29.59 — the booklet's printed figure."
       ],
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "payroll-cumulative-averaging",
@@ -1595,7 +1627,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 224
+      "ms": 74
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -1628,7 +1660,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 144
+      "ms": 60
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -1659,7 +1691,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 146
+      "ms": 41
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -1682,7 +1714,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 104
+      "ms": 22
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -1720,7 +1752,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 45
+      "ms": 33
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -1753,7 +1785,7 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 86
+      "ms": 33
     },
     {
       "id": "inv-landed-cost-capitalized",
@@ -1785,7 +1817,7 @@
         "A freight voucher of 100.00 is allocated on a carrying-value basis.",
         "The whole 100.00 capitalizes: inventory rises to 400.00 (4.00 a unit) and 100 units remain on hand."
       ],
-      "ms": 206
+      "ms": 28
     },
     {
       "id": "inv-partial-disassembly",
@@ -2095,6 +2127,39 @@
       ],
       "gap": "Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.",
       "ms": 0
+    },
+    {
+      "id": "ppe-onboarding-continues-from-accumulated",
+      "title": "A mid-life asset onboards at original cost plus opening accumulated depreciation and continues from that figure",
+      "standards": [
+        "ASC 360",
+        "IAS 16"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 360",
+          "reference": "360-10-35-4",
+          "kind": "requirement",
+          "requirement": "The cost of a long-lived asset, less any salvage value, is depreciated in a systematic and rational manner over the asset's useful life."
+        },
+        {
+          "standard": "IAS 16",
+          "reference": "IAS 16.60",
+          "kind": "requirement",
+          "requirement": "The depreciable amount of an asset is allocated on a systematic basis over its useful life."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A tenant arriving with history onboards the asset at its original cost and in-service date plus the accumulated depreciation already recognised before cutover: pre-cutover months never schedule and are never caught up, only the remaining depreciable amount spreads over the remaining months, and the carrying amount nets the opening figure with the posted charges.",
+      "facts": [
+        "A machine costing 12,000.00 with no salvage, a twelve-month life from 2025-02-15: 1,000.00 a month straight line.",
+        "Eleven months sit in the outgoing system, so the asset onboards with opening accumulated depreciation of 11,000.00 measured through 2025-12-31.",
+        "Only January 2026 remains of the life: the schedule holds exactly one line for 1,000.00 — no catch-up of the eleven pre-cutover months.",
+        "Posting January leaves a carrying amount of 0.00 and the asset fully depreciated: 12,000.00 less 11,000.00 opening less 1,000.00 posted."
+      ],
+      "ms": 16
     },
     {
       "id": "tax-total-expense-is-current-plus-deferred",
@@ -2642,7 +2707,7 @@
         "The subsidiary earns CAD 100.00 after acquisition; the NCI share of profit is 100.00 × 20% = CAD 20.00.",
         "The elimination debits subsidiary equity 800.00, fair-value adjustment 200.00 and goodwill 100.00, credits the investment 900.00 and NCI equity 200.00; the income allocation debits NCI income 20.00 and credits NCI equity 20.00, leaving NCI equity at a 220.00 credit."
       ],
-      "ms": 117
+      "ms": 15
     },
     {
       "id": "consol-intercompany-elimination",
@@ -2675,7 +2740,7 @@
         "The elimination entry credits the receivable 1,000.00 and debits the payable 1,000.00 — balanced, with no residual.",
         "Every source line stays posted on its own entity; only the elimination subsidiary carries the reversal."
       ],
-      "ms": 14
+      "ms": 8
     },
     {
       "id": "consol-equity-method",
@@ -2708,7 +2773,7 @@
         "The associate declares CAD 50.00 of dividends; the investor's 15.00 share credits the investment and eliminates the matching dividend income.",
         "The investment moves by 60.00 − 15.00 = CAD 45.00 debit; equity income shows a 60.00 credit and dividend income a 15.00 debit."
       ],
-      "ms": 21
+      "ms": 11
     },
     {
       "id": "consol-proportionate-owned-share",
@@ -2734,7 +2799,7 @@
         "Goodwill is 550.00 − 500.00 = CAD 50.00; the investment eliminates at CAD 550.00.",
         "No NCI is recognised and no income is allocated: only the owned share is combined."
       ],
-      "ms": 18
+      "ms": 10
     },
     {
       "id": "consol-foreign-sub-translation",
@@ -2767,7 +2832,7 @@
         "Acquisition-date equity of USD 1,000.00 at the policy acquisition rate of 1.30 eliminates at CAD 1,300.00 against a CAD 1,200.00 investment, with fair value of 1,400.00 giving a 100.00 adjustment, NCI of 280.00 and goodwill of 80.00.",
         "Period profit of USD 100.00 at the 1.3750 average is CAD 137.50; NCI income is 137.50 × 20% = CAD 27.50, leaving NCI equity at a 307.50 credit."
       ],
-      "ms": 29
+      "ms": 13
     },
     {
       "id": "consol-loss-of-control",
