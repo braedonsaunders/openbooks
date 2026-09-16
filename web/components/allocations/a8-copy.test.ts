@@ -45,7 +45,8 @@ const RUN_KEYS = [
   'trigger', 'started', 'completed', 'runError', 'post', 'reverse', 'rerun',
   'postReasonPrompt', 'reverseReasonPrompt', 'reasonRequired', 'postFailed',
   'reverseFailed', 'rerunFailed', 'enginePending', 'journalEntry',
-  'reversalEntry', 'loadFailed', 'detailFailed',
+  'reversalEntry', 'loadFailed', 'detailFailed', 'pendingApprovalNotice',
+  'viewApproval',
 ] as const
 
 test('drivers + runs + lineage copy exists and is non-empty', () => {
