@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import {
   badge,
   column,
@@ -17,6 +17,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
+import { dateTime } from '../../../../../lib/format'
 import { pickString } from '../../../../../lib/list-params'
 import { getMoneyFormatter } from '../../../../../lib/money-server'
 import { getAgentRunStats, getAgentsOverview } from '../../../../../lib/setup/agents'
@@ -49,6 +50,14 @@ import { getAgentRunStats, getAgentsOverview } from '../../../../../lib/setup/ag
 const OVERVIEW_SORTS = ['pack', 'status', 'findings', 'lastRun'] as const
 export type AgentsOverviewSort = (typeof OVERVIEW_SORTS)[number]
 
+export interface AgentsOverviewLastRun {
+  hasRun: boolean
+  statusLabel: string
+  statusVariant: 'success' | 'destructive' | 'secondary' | 'outline'
+  dateLine: string
+  nextLine: string | null
+}
+
 export interface AgentsOverviewRow {
   id: string
   agentKey: string
@@ -61,7 +70,7 @@ export interface AgentsOverviewRow {
   statusVariant: 'success' | 'secondary'
   cadenceLabel: string
   detectorsLine: string
-  lastRunLine: string
+  lastRun: AgentsOverviewLastRun
   lastRunStartedAt: string
   findingsLine: string
   openFindings: number
@@ -111,6 +120,8 @@ export async function loadAgentsOverview(
     ? (rawSort as AgentsOverviewSort)
     : 'pack'
   const dir = pickString(sp.dir) === 'desc' ? 'desc' : 'asc'
+  const locale = await getLocale()
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
   const [rows, stats, { money: formatMoney }] = await Promise.all([
     getAgentsOverview(authz.user.orgId),
     getAgentRunStats(authz.user.orgId),
@@ -120,18 +131,32 @@ export async function loadAgentsOverview(
   const mapped: AgentsOverviewRow[] = rows.map((row) => {
     const name = t(`setup.agents.packs.${row.agentKey}.title`)
     const activeDetectors = row.policy.detectors.filter((detector) => detector.enabled).length
-    const lastRunLine = row.lastRun
-      ? t('setup.agents.overview.lastRun', {
-          date: new Date(row.lastRun.startedAt).toLocaleString(),
-          status: t(`setup.agents.overview.runStatus.${row.lastRun.status}`),
-        })
-      : t('setup.agents.overview.neverRun')
-    const nextRunLine =
+    const nextLine =
       row.policy.nextRunAt && featureEnabled && row.policy.enabled && row.policy.automaticRuns
-        ? ` · ${t('setup.agents.overview.nextRun', {
-            date: new Date(row.policy.nextRunAt).toLocaleString(),
-          })}`
-        : ''
+        ? t('setup.agents.overview.nextRun', { date: dateTime(row.policy.nextRunAt) })
+        : null
+    const lastRun: AgentsOverviewLastRun = row.lastRun
+      ? {
+          hasRun: true,
+          statusLabel: t(`setup.agents.runStatuses.${row.lastRun.status}`),
+          statusVariant:
+            row.lastRun.status === 'completed'
+              ? 'success'
+              : row.lastRun.status === 'failed'
+                ? 'destructive'
+                : row.lastRun.status === 'skipped'
+                  ? 'secondary'
+                  : 'outline',
+          dateLine: lastRunAgo(relative, row.lastRun.startedAt),
+          nextLine,
+        }
+      : {
+          hasRun: false,
+          statusLabel: '',
+          statusVariant: 'secondary',
+          dateLine: t('setup.agents.overview.neverRun'),
+          nextLine,
+        }
     return {
       id: row.agentKey,
       agentKey: row.agentKey,
@@ -151,7 +176,7 @@ export async function loadAgentsOverview(
       })} · ${t('setup.agents.overview.materialitySummary', {
         amount: formatMoney(row.policy.materialityThreshold),
       })}`,
-      lastRunLine: `${lastRunLine}${nextRunLine}`,
+      lastRun,
       lastRunStartedAt: row.lastRun?.startedAt ?? '',
       findingsLine: t('setup.agents.overview.openFindings', { count: row.openFindings }),
       openFindings: row.openFindings,
@@ -224,6 +249,18 @@ export async function loadAgentsOverview(
   }
 }
 
+/**
+ * Largest fitting unit, always in the past ("3 hours ago", never "in …").
+ * `numeric: 'auto'` renders same-day runs as "today" (the inbox idiom).
+ */
+function lastRunAgo(format: Intl.RelativeTimeFormat, startedAt: string): string {
+  const minutes = Math.min(-1, Math.round((Date.parse(startedAt) - Date.now()) / 60_000))
+  if (minutes > -60) return format.format(minutes, 'minute')
+  const hours = Math.ceil(minutes / 60)
+  if (hours > -48) return format.format(hours, 'hour')
+  return format.format(Math.ceil(hours / 24), 'day')
+}
+
 const f = ref<AgentsOverviewData>()
 const item = field
 
@@ -283,7 +320,17 @@ export function agentsOverviewSpec(data: AgentsOverviewData): PageSpec {
                 sort: 'status',
               }),
               column(f('colSchedule'), text(item('cadenceLabel'), { suffix: { field: item('detectorsLine'), className: 'mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400' } })),
-              column(f('colLastRun'), text(item('lastRunLine')), { sort: 'lastRun' }),
+              column(
+                f('colLastRun'),
+                widgetCell('agents-pack-last-run', {
+                  hasRun: item('lastRun.hasRun'),
+                  statusLabel: item('lastRun.statusLabel'),
+                  statusVariant: item('lastRun.statusVariant'),
+                  dateLine: item('lastRun.dateLine'),
+                  nextLine: item('lastRun.nextLine'),
+                }),
+                { sort: 'lastRun' },
+              ),
               column(
                 f('colFindings'),
                 link(item('findingsLine'), item('reviewHref'), 'font-medium text-teal-700 underline dark:text-teal-300'),

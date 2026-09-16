@@ -1572,6 +1572,12 @@
           "reads": "Saldos bancarios, cuentas por cobrar y por pagar abiertas, y la previsión de efectivo.",
           "proposes": "Enlaces de revisión bancaria — solo revisión, sin escrituras."
         }
+      },
+      "runStatuses": {
+        "completed": "Completada",
+        "failed": "Fallida",
+        "skipped": "Omitida",
+        "running": "En curso"
       }
     },
     "fxProvider": {

@@ -37,6 +37,9 @@ const mockIntl = `
       return out;
     };
   }
+  export async function getLocale() {
+    return 'en';
+  }
 `;
 
 const hooks = registerHooks({
@@ -72,8 +75,11 @@ const { loadAgentsOverview } = await import("./view.ts");
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
+);
+const { runSetupAgentNow, saveSetupAgentPolicy } = await import(
+  "../../../../../lib/setup/agents.ts"
 );
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -125,6 +131,36 @@ test("the overview sorts by findings descending", { skip: !DB }, async () => {
     assert.equal(data.dir, "desc");
     const counts = data.rows.map((row) => row.openFindings);
     assert.deepEqual([...counts].sort((a, b) => b - a), counts);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Overview Admin", "admin");
+    asManager(org.orgId);
+    await withBypassContext(() =>
+      saveSetupAgentPolicy(org.orgId, userId, "accounting", {
+        agentKey: "accounting",
+        enabled: true,
+        automaticRuns: false,
+        cadence: "daily",
+        materialityThreshold: "1000",
+        detectors: [],
+      }),
+    );
+    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting"));
+    const data = await withBypassContext(() => loadAgentsOverview({}));
+    const row = data.rows.find((entry) => entry.agentKey === "accounting")!;
+    assert.equal(row.lastRun.hasRun, true);
+    assert.equal(row.lastRun.statusLabel, "admin:setup.agents.runStatuses.completed");
+    assert.equal(row.lastRun.statusVariant, "success");
+    assert.match(row.lastRun.dateLine, /ago|today|yesterday/i);
+    const idle = data.rows.find((entry) => entry.agentKey === "finance")!;
+    assert.equal(idle.lastRun.hasRun, false);
+    assert.ok(idle.lastRun.dateLine.startsWith("admin:setup.agents.overview.neverRun"));
   } finally {
     await dropScratchOrg(org.orgId);
   }

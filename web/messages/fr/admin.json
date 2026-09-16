@@ -1616,6 +1616,12 @@
           "reads": "Soldes bancaires, créances et dettes ouvertes, et la prévision de trésorerie.",
           "proposes": "Liens de révision bancaire — révision uniquement, aucune écriture."
         }
+      },
+      "runStatuses": {
+        "completed": "Terminée",
+        "failed": "Échouée",
+        "skipped": "Ignorée",
+        "running": "En cours"
       }
     },
     "fxProvider": {
