@@ -14,7 +14,7 @@ import {
   summarizeSettlement,
   type PspProvider,
 } from "@openbooks/engine/src/psp-settlement.ts";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -175,6 +175,15 @@ export async function POST(req: Request) {
             { error: "reversalDate required" },
             { status: 422 },
           );
+        // The reversal looks the date's open period up with ::date
+        // comparisons: a non-calendar day would otherwise die in Postgres
+        // with a raw driver failure, so require a real calendar date first.
+        if (!isIsoCalendarDate(body.reversalDate)) {
+          return NextResponse.json(
+            { error: "reversalDate must be a real calendar date (YYYY-MM-DD)" },
+            { status: 422 },
+          );
+        }
         if (!body.reason)
           return NextResponse.json(
             { error: "reason required" },
