@@ -384,7 +384,85 @@
   "cashflow": {
     "title": "Cashflow",
     "backToHub": "Analytik",
-    "asOf": "Stand: {date}"
+    "asOf": "Stand: {date}",
+    "tabs": {
+      "overview": "Überblick",
+      "category": "Kategorieanalyse"
+    },
+    "kpi": {
+      "currentCash": "Aktueller Bestand",
+      "projectedEnd": "Prognostizierter Endstand",
+      "lowestPoint": "Tiefststand",
+      "inflows": "Zuflüsse",
+      "outflows": "Abflüsse",
+      "netSub": "{change} netto"
+    },
+    "vitals": {
+      "burnRate": "Cash-Burn-Rate",
+      "burnHint": "Ø wöchentlicher Abfluss",
+      "burnBadge": "Wöchentlich",
+      "arCoverage": "AR-Abdeckung",
+      "arHint": "(Cash + AR) / AP",
+      "cashCycle": "Cash-Zyklus",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Nettofluss der Periode",
+      "netFlowHint": "Zuflüsse - Abflüsse",
+      "runway": "Cash-Reichweite",
+      "runwayCritical": "Kritisch",
+      "runwayCaution": "Achtung",
+      "runwayHealthy": "Gesund"
+    },
+    "panels": {
+      "bridge": "Cash-Brücke",
+      "forecast": "Cash-Prognose",
+      "ar": "Forderungen",
+      "ap": "Verbindlichkeiten",
+      "forecastCategories": "Prognosekategorien",
+      "forecastCatHint": "Nicht-AR/AP-Flüsse werden im Konfigurations-Tab gepflegt",
+      "agingHint": "{amount} · {pct} aktuell"
+    },
+    "series": {
+      "endingCash": "Endbestand"
+    },
+    "catTable": {
+      "category": "Kategorie",
+      "method": "Methode",
+      "logic": "Prognoselogik",
+      "perWeek": "Pro Woche (Ø)",
+      "horizonTotal": "Horizont gesamt"
+    },
+    "toggle": {
+      "outflowsAp": "Abflüsse (AP)",
+      "inflowsAr": "Zuflüsse (AR)"
+    },
+    "footnote": {
+      "text": "Prognostizierte {flow} über den {weeks}-Wochen-Horizont, gruppiert nach Partner. Jeder Betrag wird in die Woche seines vorhergesagten Datums eingeplant.",
+      "flowAp": "Zahlungen an Lieferanten",
+      "flowAr": "Einzüge von Kunden"
+    },
+    "partyPanel": {
+      "byParty": "{side} nach Partner",
+      "payables": "Verbindlichkeiten",
+      "receivables": "Forderungen"
+    },
+    "partyTable": {
+      "party": "Partner",
+      "items": "Positionen",
+      "amount": "Betrag",
+      "share": "Anteil"
+    },
+    "footer": {
+      "pre": "Arbeiten Sie mit diesen Zahlen im",
+      "cashCockpit": "Cash-Cockpit",
+      "mid": "(Wochendrill + Prognosekonfiguration) und im",
+      "apCockpit": "AP-Cockpit",
+      "post": "(Zahllaufplaner + Auswahlregel)."
+    },
+    "horizon": {
+      "label": "Horizont",
+      "aria": "Prognosehorizont",
+      "weeks": "{count, plural, one {# Woche} other {# Wochen}}"
+    }
   },
   "trueCost": {
     "title": "Echte Kosten",

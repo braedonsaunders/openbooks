@@ -384,7 +384,85 @@
   "cashflow": {
     "title": "Fluxo de caixa",
     "backToHub": "Análises",
-    "asOf": "em {date}"
+    "asOf": "em {date}",
+    "tabs": {
+      "overview": "Visão geral",
+      "category": "Análise por categoria"
+    },
+    "kpi": {
+      "currentCash": "Caixa atual",
+      "projectedEnd": "Saldo projetado",
+      "lowestPoint": "Ponto mínimo",
+      "inflows": "Entradas",
+      "outflows": "Saídas",
+      "netSub": "{change} líquido"
+    },
+    "vitals": {
+      "burnRate": "Taxa de consumo",
+      "burnHint": "Saída semanal média",
+      "burnBadge": "Semanal",
+      "arCoverage": "Cobertura AR",
+      "arHint": "(Caixa + AR) / AP",
+      "cashCycle": "Ciclo de caixa",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Fluxo líquido do período",
+      "netFlowHint": "Entradas - Saídas",
+      "runway": "Autonomia de caixa",
+      "runwayCritical": "Crítica",
+      "runwayCaution": "Atenção",
+      "runwayHealthy": "Saudável"
+    },
+    "panels": {
+      "bridge": "Ponte de caixa",
+      "forecast": "Previsão de caixa",
+      "ar": "Contas a receber",
+      "ap": "Contas a pagar",
+      "forecastCategories": "Categorias de previsão",
+      "forecastCatHint": "Fluxos não AR/AP configurados na aba Configuração",
+      "agingHint": "{amount} · {pct} em dia"
+    },
+    "series": {
+      "endingCash": "Caixa final"
+    },
+    "catTable": {
+      "category": "Categoria",
+      "method": "Método",
+      "logic": "Lógica de previsão",
+      "perWeek": "Por semana (méd.)",
+      "horizonTotal": "Total do horizonte"
+    },
+    "toggle": {
+      "outflowsAp": "Saídas (AP)",
+      "inflowsAr": "Entradas (AR)"
+    },
+    "footnote": {
+      "text": "{flow} previstos no horizonte de {weeks} semanas, agrupados por contraparte. Cada valor é alocado na semana de sua data prevista.",
+      "flowAp": "pagamentos a fornecedores",
+      "flowAr": "recebimentos de clientes"
+    },
+    "partyPanel": {
+      "byParty": "{side} por contraparte",
+      "payables": "A pagar",
+      "receivables": "A receber"
+    },
+    "partyTable": {
+      "party": "Contraparte",
+      "items": "Itens",
+      "amount": "Valor",
+      "share": "Parcela"
+    },
+    "footer": {
+      "pre": "Aja sobre esses números no",
+      "cashCockpit": "Cockpit de caixa",
+      "mid": "(detalhe semanal + config de previsão) e no",
+      "apCockpit": "cockpit AP",
+      "post": "(planejador de pagamentos + regra de seleção)."
+    },
+    "horizon": {
+      "label": "Horizonte",
+      "aria": "Horizonte de previsão",
+      "weeks": "{count, plural, one {# semana} other {# semanas}}"
+    }
   },
   "trueCost": {
     "title": "Custo real",

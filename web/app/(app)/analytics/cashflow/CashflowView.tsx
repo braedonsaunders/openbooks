@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useMemo, useState } from 'react'
 import {
   University,
@@ -33,31 +33,35 @@ import { formatExactPercent, formatExactRatio, toChartNumber, useAnalyticsMoney 
 // categories to Banking → Cash, the AP pay-selection rule to the AP cockpit.
 const TABS = ['overview', 'category'] as const
 type Tab = (typeof TABS)[number]
-const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', category: 'Category Analysis' }
+// Bucket colours key off the cash-core bucket codes (Current, 1-30, …),
+// which travel with the data and never localize.
 const BUCKET_COLORS: Record<string, string> = { Current: '#10b981', '1-30': '#14b8a6', '31-60': '#0ea5e9', '61-90': '#f59e0b', '90+': '#ef4444' }
 
 export function CashflowView({ data }: { data: CashflowData }) {
+  const t = useTranslations('analytics.cashflow')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const s = data.summary
+  const lowestWeek = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(s.lowestWeek + 'T00:00:00Z'))
 
   return (
     <div className="space-y-5">
       {/* KPI row: Current Cash / Projected End / Lowest Point / Inflows / Outflows */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Kpi icon={University} accent="slate" label="Current Cash" value={money(s.startingCash)} tone={compareMoney(s.startingCash, '0.0000') < 0 ? 'neg' : undefined} />
-        <Kpi icon={Wallet} accent="sky" label="Projected End" value={money(s.projectedEnd)} sub={`${compareMoney(s.netChange, '0.0000') >= 0 ? '+' : ''}${money(s.netChange)} net`} tone={compareMoney(s.netChange, '0.0000') >= 0 ? 'pos' : 'neg'} />
-        <Kpi icon={TriangleAlert} accent={compareMoney(s.lowestCash, '0.0000') < 0 ? 'red' : 'amber'} label="Lowest Point" value={money(s.lowestCash)} sub={new Date(s.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} tone={compareMoney(s.lowestCash, '0.0000') < 0 ? 'neg' : undefined} />
-        <Kpi icon={ArrowDown} accent="emerald" label="Inflows" value={money(s.totalInflows)} tone="pos" />
-        <Kpi icon={ArrowUp} accent="red" label="Outflows" value={money(s.totalOutflows)} tone="neg" />
+        <Kpi icon={University} accent="slate" label={t('kpi.currentCash')} value={money(s.startingCash)} tone={compareMoney(s.startingCash, '0.0000') < 0 ? 'neg' : undefined} />
+        <Kpi icon={Wallet} accent="sky" label={t('kpi.projectedEnd')} value={money(s.projectedEnd)} sub={t('kpi.netSub', { change: `${compareMoney(s.netChange, '0.0000') >= 0 ? '+' : ''}${money(s.netChange)}` })} tone={compareMoney(s.netChange, '0.0000') >= 0 ? 'pos' : 'neg'} />
+        <Kpi icon={TriangleAlert} accent={compareMoney(s.lowestCash, '0.0000') < 0 ? 'red' : 'amber'} label={t('kpi.lowestPoint')} value={money(s.lowestCash)} sub={lowestWeek} tone={compareMoney(s.lowestCash, '0.0000') < 0 ? 'neg' : undefined} />
+        <Kpi icon={ArrowDown} accent="emerald" label={t('kpi.inflows')} value={money(s.totalInflows)} tone="pos" />
+        <Kpi icon={ArrowUp} accent="red" label={t('kpi.outflows')} value={money(s.totalOutflows)} tone="neg" />
       </div>
 
       <div className="-mx-1 overflow-x-auto">
         <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
           {TABS.map((k) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={cn('-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === k ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-              {TAB_LABEL[k]}
+              {t(`tabs.${k}`)}
             </button>
           ))}
         </div>
@@ -69,15 +73,15 @@ export function CashflowView({ data }: { data: CashflowData }) {
       </div>
 
       <p className="flex items-center justify-center gap-1 text-center text-xs text-slate-400 dark:text-slate-500">
-        Act on these numbers in the
+        {t('footer.pre')}
         <Link href={('/banking/cash')} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
-          Cash cockpit <ArrowUpRight size={12} />
+          {t('footer.cashCockpit')} <ArrowUpRight size={12} />
         </Link>
-        (weekly drill + forecast config) and the
+        {t('footer.mid')}
         <Link href={('/ap')} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
-          AP cockpit <ArrowUpRight size={12} />
+          {t('footer.apCockpit')} <ArrowUpRight size={12} />
         </Link>
-        (pay-run planner + selection rule).
+        {t('footer.post')}
       </p>
     </div>
   )
@@ -85,6 +89,7 @@ export function CashflowView({ data }: { data: CashflowData }) {
 
 /* ---------------------------------------------------------------- Overview */
 function OverviewTab({ data }: { data: CashflowData }) {
+  const t = useTranslations('analytics.cashflow')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const tCharts = useTranslations('analytics.charts')
@@ -101,36 +106,37 @@ function OverviewTab({ data }: { data: CashflowData }) {
     <div className="space-y-5">
       {/* Vitals hero */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-        <Vital icon={Flame} ring="from-violet-500 to-fuchsia-500" label="Cash Burn Rate" value={money(s.burnRate)} hint="Avg weekly outflow" badge="Weekly" />
-        <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label="AR Coverage" value={s.arCoverage === null ? '—' : `${formatExactRatio(s.arCoverage)}×`} hint="(Cash + AR) / AP" />
-        <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label="Cash Cycle" value={`${s.dso ?? '—'} / ${s.dpo ?? '—'}`} hint="DSO / DPO" split />
-        <Vital icon={ArrowLeftRight} ring={compareMoney(s.netChange, '0.0000') >= 0 ? 'from-emerald-500 to-teal-500' : 'from-red-500 to-orange-500'} label="Net Period Flow" value={money(s.netChange)} hint="Inflows − Outflows" />
-        <Vital icon={Route} ring="from-indigo-500 to-violet-500" label="Cash Runway" value={s.runwayWeeks === null ? '∞' : `${formatExactRatio(s.runwayWeeks, 1)}w`} hint={s.runwayStatus === 'critical' ? 'Critical' : s.runwayStatus === 'caution' ? 'Caution' : 'Healthy'} status={s.runwayStatus} />
+        <Vital icon={Flame} ring="from-violet-500 to-fuchsia-500" label={t('vitals.burnRate')} value={money(s.burnRate)} hint={t('vitals.burnHint')} badge={t('vitals.burnBadge')} />
+        <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label={t('vitals.arCoverage')} value={s.arCoverage === null ? '—' : `${formatExactRatio(s.arCoverage)}×`} hint={t('vitals.arHint')} />
+        <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label={t('vitals.cashCycle')} value={`${s.dso ?? '—'} / ${s.dpo ?? '—'}`} hint={t('vitals.cashCycleHint')} split />
+        <Vital icon={ArrowLeftRight} ring={compareMoney(s.netChange, '0.0000') >= 0 ? 'from-emerald-500 to-teal-500' : 'from-red-500 to-orange-500'} label={t('vitals.netFlow')} value={money(s.netChange)} hint={t('vitals.netFlowHint')} />
+        <Vital icon={Route} ring="from-indigo-500 to-violet-500" label={t('vitals.runway')} value={s.runwayWeeks === null ? '∞' : `${formatExactRatio(s.runwayWeeks, 1)}w`} hint={s.runwayStatus === 'critical' ? t('vitals.runwayCritical') : s.runwayStatus === 'caution' ? t('vitals.runwayCaution') : t('vitals.runwayHealthy')} status={s.runwayStatus} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title="Cash Flow Bridge" icon={Waypoints}>
+        <Panel title={t('panels.bridge')} icon={Waypoints}>
           <Chart option={bridgeOption} height={260} />
         </Panel>
-        <Panel title="Cash Position Forecast" icon={AreaChart}>
-          <TrendChart labels={data.weeks.map((w) => w.label.split(' – ')[0]!)} area height={260} series={[{ name: 'Ending cash', data: data.weeks.map((w) => toChartNumber(w.endingCash)), color: '#0d9488' }]} />
+        <Panel title={t('panels.forecast')} icon={AreaChart}>
+          <TrendChart labels={data.weeks.map((w) => w.label.split(' – ')[0]!)} area height={260} series={[{ name: t('series.endingCash'), data: data.weeks.map((w) => toChartNumber(w.endingCash)), color: '#0d9488' }]} />
         </Panel>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <AgingPanel title="Accounts Receivable" side={data.ar} accent="text-sky-600 dark:text-sky-400" />
-        <AgingPanel title="Accounts Payable" side={data.ap} accent="text-red-600 dark:text-red-400" />
+        <AgingPanel title={t('panels.ar')} side={data.ar} accent="text-sky-600 dark:text-sky-400" />
+        <AgingPanel title={t('panels.ap')} side={data.ap} accent="text-red-600 dark:text-red-400" />
       </div>
     </div>
   )
 }
 
 function AgingPanel({ title, side, accent }: { title: string; side: SideSummary; accent: string }) {
+  const t = useTranslations('analytics.cashflow')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const total = compareMoney(side.outstanding, '0.0000') > 0 ? side.outstanding : '1.0000'
   return (
-    <Panel title={title} icon={ListOrdered} hint={`${money(side.outstanding)} · ${formatExactPercent(side.pctCurrent)} current`}>
+    <Panel title={title} icon={ListOrdered} hint={t('panels.agingHint', { amount: money(side.outstanding), pct: formatExactPercent(side.pctCurrent) })}>
       <div className="space-y-2">
         {side.buckets.map((b) => (
           <div key={b.label}>
@@ -153,6 +159,7 @@ function AgingPanel({ title, side, accent }: { title: string; side: SideSummary;
 
 /* --------------------------------------------------------- Category Analysis */
 function CategoryTab({ data }: { data: CashflowData }) {
+  const t = useTranslations('analytics.cashflow')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [side, setSide] = useState<'ar' | 'ap'>('ap')
@@ -164,15 +171,15 @@ function CategoryTab({ data }: { data: CashflowData }) {
   return (
     <div className="space-y-4">
       {data.categories.length ? (
-        <Panel title="Forecast Categories" icon={SlidersHorizontal} hint="Non-AR/AP flows configured in the Configuration tab" bodyClassName="p-0">
+        <Panel title={t('panels.forecastCategories')} icon={SlidersHorizontal} hint={t('panels.forecastCatHint')} bodyClassName="p-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Category</th>
-                <th className="px-4 py-2 text-left font-medium">Method</th>
-                <th className="px-4 py-2 text-left font-medium">Forecast Logic</th>
-                <th className="px-4 py-2 text-right font-medium">Per Week (avg)</th>
-                <th className="px-4 py-2 text-right font-medium">Horizon Total</th>
+                <th className="px-4 py-2 text-left font-medium">{t('catTable.category')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('catTable.method')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('catTable.logic')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('catTable.perWeek')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('catTable.horizonTotal')}</th>
               </tr>
             </thead>
             <tbody>
@@ -196,24 +203,24 @@ function CategoryTab({ data }: { data: CashflowData }) {
         <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/60">
           {(['ap', 'ar'] as const).map((s) => (
             <button key={s} type="button" onClick={() => setSide(s)} className={cn('rounded-md px-3 py-1 text-sm font-medium transition-colors', side === s ? 'bg-white text-teal-600 shadow-sm dark:bg-slate-700 dark:text-teal-300' : 'text-slate-500 dark:text-slate-400')}>
-              {s === 'ap' ? 'Outflows (AP)' : 'Inflows (AR)'}
+              {s === 'ap' ? t('toggle.outflowsAp') : t('toggle.inflowsAr')}
             </button>
           ))}
         </div>
         <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmtMoney(total)}</span>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Predicted {side === 'ap' ? 'payments to vendors' : 'collections from customers'} over the {data.horizonWeeks}-week horizon, grouped by party. Each amount is scheduled into the week its collection/payment date is predicted.
+        {t('footnote.text', { flow: side === 'ap' ? t('footnote.flowAp') : t('footnote.flowAr'), weeks: data.horizonWeeks })}
       </p>
-      <Panel title={`${side === 'ap' ? 'Payables' : 'Receivables'} by Party`} icon={ListOrdered} bodyClassName="p-0">
+      <Panel title={t('partyPanel.byParty', { side: side === 'ap' ? t('partyPanel.payables') : t('partyPanel.receivables') })} icon={ListOrdered} bodyClassName="p-0">
         <div className="max-h-[30rem] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Party</th>
-                <th className="px-4 py-2 text-right font-medium">Items</th>
-                <th className="px-4 py-2 text-right font-medium">Amount</th>
-                <th className="px-4 py-2 text-right font-medium">Share</th>
+                <th className="px-4 py-2 text-left font-medium">{t('partyTable.party')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('partyTable.items')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('partyTable.amount')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('partyTable.share')}</th>
               </tr>
             </thead>
             <tbody>

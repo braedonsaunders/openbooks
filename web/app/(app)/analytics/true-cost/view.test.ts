@@ -44,7 +44,7 @@ const PERIOD_STUB = `{ from: ${JSON.stringify(PERIOD.from)}, to: ${JSON.stringif
 
 const stubs: Record<string, string> = {
   'server-only': 'export {}',
-  'next-intl/server': 'export async function getTranslations(){ return (key) => key }',
+  'next-intl/server': 'export async function getTranslations(){ return (key) => key } export async function getLocale(){ return "en" }',
   '../../../../lib/authz':
     `export async function requirePermission(perm){
        const s = globalThis.__tcState; s.permArgs.push(perm);

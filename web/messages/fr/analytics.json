@@ -384,7 +384,85 @@
   "cashflow": {
     "title": "Trésorerie",
     "backToHub": "Analyses",
-    "asOf": "en date du {date}"
+    "asOf": "en date du {date}",
+    "tabs": {
+      "overview": "Aperçu",
+      "category": "Analyse par catégorie"
+    },
+    "kpi": {
+      "currentCash": "Trésorerie actuelle",
+      "projectedEnd": "Solde projeté",
+      "lowestPoint": "Point bas",
+      "inflows": "Entrées",
+      "outflows": "Sorties",
+      "netSub": "{change} net"
+    },
+    "vitals": {
+      "burnRate": "Taux de consommation",
+      "burnHint": "Sortie hebdo moyenne",
+      "burnBadge": "Hebdo",
+      "arCoverage": "Couverture AR",
+      "arHint": "(Tréso + AR) / AP",
+      "cashCycle": "Cycle de trésorerie",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Flux net période",
+      "netFlowHint": "Entrées - Sorties",
+      "runway": "Autonomie de trésorerie",
+      "runwayCritical": "Critique",
+      "runwayCaution": "Vigilance",
+      "runwayHealthy": "Saine"
+    },
+    "panels": {
+      "bridge": "Pont de trésorerie",
+      "forecast": "Prévision de trésorerie",
+      "ar": "Créances clients",
+      "ap": "Dettes fournisseurs",
+      "forecastCategories": "Catégories prévisionnelles",
+      "forecastCatHint": "Flux hors AR/AP configurés dans l'onglet Configuration",
+      "agingHint": "{amount} · {pct} courant"
+    },
+    "series": {
+      "endingCash": "Trésorerie finale"
+    },
+    "catTable": {
+      "category": "Catégorie",
+      "method": "Méthode",
+      "logic": "Logique prévisionnelle",
+      "perWeek": "Par semaine (moy.)",
+      "horizonTotal": "Total horizon"
+    },
+    "toggle": {
+      "outflowsAp": "Sorties (AP)",
+      "inflowsAr": "Entrées (AR)"
+    },
+    "footnote": {
+      "text": "Prévisions de {flow} sur {weeks} semaines, par tiers. Chaque montant est rattaché à la semaine de sa date prévue.",
+      "flowAp": "paiements aux fournisseurs",
+      "flowAr": "encaissements clients"
+    },
+    "partyPanel": {
+      "byParty": "{side} par tiers",
+      "payables": "Dettes",
+      "receivables": "Créances"
+    },
+    "partyTable": {
+      "party": "Tiers",
+      "items": "Éléments",
+      "amount": "Montant",
+      "share": "Part"
+    },
+    "footer": {
+      "pre": "Agissez sur ces chiffres dans le",
+      "cashCockpit": "Cockpit de trésorerie",
+      "mid": "(détail hebdo + config prévisionnelle) et le",
+      "apCockpit": "cockpit AP",
+      "post": "(plan de paiement + règle de sélection)."
+    },
+    "horizon": {
+      "label": "Horizon",
+      "aria": "Horizon de prévision",
+      "weeks": "{count, plural, one {# semaine} other {# semaines}}"
+    }
   },
   "trueCost": {
     "title": "Coût réel",

@@ -384,7 +384,85 @@
   "cashflow": {
     "title": "现金流",
     "backToHub": "分析",
-    "asOf": "截至 {date}"
+    "asOf": "截至 {date}",
+    "tabs": {
+      "overview": "概览",
+      "category": "分类分析"
+    },
+    "kpi": {
+      "currentCash": "当前现金",
+      "projectedEnd": "期末预测",
+      "lowestPoint": "最低点",
+      "inflows": "流入",
+      "outflows": "流出",
+      "netSub": "{change} 净额"
+    },
+    "vitals": {
+      "burnRate": "消耗率",
+      "burnHint": "周平均流出",
+      "burnBadge": "每周",
+      "arCoverage": "应收覆盖率",
+      "arHint": "(现金 + 应收) / 应付",
+      "cashCycle": "现金周期",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "期间净流量",
+      "netFlowHint": "流入 - 流出",
+      "runway": "现金跑道",
+      "runwayCritical": "严重",
+      "runwayCaution": "注意",
+      "runwayHealthy": "健康"
+    },
+    "panels": {
+      "bridge": "现金桥",
+      "forecast": "现金预测",
+      "ar": "应收账款",
+      "ap": "应付账款",
+      "forecastCategories": "预测分类",
+      "forecastCatHint": "非应收/应付流量在配置选项卡中设置",
+      "agingHint": "{amount} · {pct} 正常"
+    },
+    "series": {
+      "endingCash": "期末现金"
+    },
+    "catTable": {
+      "category": "分类",
+      "method": "方法",
+      "logic": "预测逻辑",
+      "perWeek": "每周(平均)",
+      "horizonTotal": "期合计"
+    },
+    "toggle": {
+      "outflowsAp": "流出 (AP)",
+      "inflowsAr": "流入 (AR)"
+    },
+    "footnote": {
+      "text": "按往来方分组的 {weeks} 周预测{flow}。每笔金额按其预测收付日期计入相应周。",
+      "flowAp": "对供应商付款",
+      "flowAr": "从客户收款"
+    },
+    "partyPanel": {
+      "byParty": "按往来方的{side}",
+      "payables": "应付",
+      "receivables": "应收"
+    },
+    "partyTable": {
+      "party": "往来方",
+      "items": "笔数",
+      "amount": "金额",
+      "share": "占比"
+    },
+    "footer": {
+      "pre": "请在以下位置处理这些数字：",
+      "cashCockpit": "资金驾驶舱",
+      "mid": "(按周下钻 + 预测配置)和",
+      "apCockpit": "应付驾驶舱",
+      "post": "(付款计划 + 选择规则)。"
+    },
+    "horizon": {
+      "label": "期限",
+      "aria": "预测期限",
+      "weeks": "{count, plural, one {# 周} other {# 周}}"
+    }
   },
   "trueCost": {
     "title": "真实成本",

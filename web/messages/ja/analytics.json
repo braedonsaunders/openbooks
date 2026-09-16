@@ -384,7 +384,85 @@
   "cashflow": {
     "title": "キャッシュフロー",
     "backToHub": "アナリティクス",
-    "asOf": "{date} 時点"
+    "asOf": "{date} 時点",
+    "tabs": {
+      "overview": "概要",
+      "category": "カテゴリ分析"
+    },
+    "kpi": {
+      "currentCash": "現在の現金",
+      "projectedEnd": "期末予測",
+      "lowestPoint": "最低残高",
+      "inflows": "流入",
+      "outflows": "流出",
+      "netSub": "{change} ネット"
+    },
+    "vitals": {
+      "burnRate": "消費率",
+      "burnHint": "週平均流出",
+      "burnBadge": "週間",
+      "arCoverage": "売掛カバレッジ",
+      "arHint": "(現金 + 売掛) / 買掛",
+      "cashCycle": "資金循環",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "期間純フロー",
+      "netFlowHint": "流入 - 流出",
+      "runway": "資金繰り余裕",
+      "runwayCritical": "危険",
+      "runwayCaution": "注意",
+      "runwayHealthy": "健全"
+    },
+    "panels": {
+      "bridge": "資金ブリッジ",
+      "forecast": "資金予測",
+      "ar": "売掛金",
+      "ap": "買掛金",
+      "forecastCategories": "予測カテゴリ",
+      "forecastCatHint": "AR/AP以外のフローは設定タブで構成",
+      "agingHint": "{amount} · {pct} 正常"
+    },
+    "series": {
+      "endingCash": "期末現金"
+    },
+    "catTable": {
+      "category": "カテゴリ",
+      "method": "方式",
+      "logic": "予測ロジック",
+      "perWeek": "週平均",
+      "horizonTotal": "期間合計"
+    },
+    "toggle": {
+      "outflowsAp": "流出 (AP)",
+      "inflowsAr": "流入 (AR)"
+    },
+    "footnote": {
+      "text": "相手先ごとにグループ化した {weeks} 週間の予測{flow}。各金額は予測日に基づき該当週に計上されます。",
+      "flowAp": "仕入先への支払",
+      "flowAr": "顧客からの回収"
+    },
+    "partyPanel": {
+      "byParty": "相手先別{side}",
+      "payables": "買掛",
+      "receivables": "売掛"
+    },
+    "partyTable": {
+      "party": "相手先",
+      "items": "件数",
+      "amount": "金額",
+      "share": "割合"
+    },
+    "footer": {
+      "pre": "これらの数値に対するアクションは",
+      "cashCockpit": "資金コックピット",
+      "mid": "(週次内訳 + 予測設定) および",
+      "apCockpit": "APコックピット",
+      "post": "(支払計画 + 選択ルール) で行ってください。"
+    },
+    "horizon": {
+      "label": "期間",
+      "aria": "予測期間",
+      "weeks": "{count, plural, one {# 週間} other {# 週間}}"
+    }
   },
   "trueCost": {
     "title": "真のコスト",
