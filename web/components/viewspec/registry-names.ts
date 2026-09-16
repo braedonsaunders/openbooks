@@ -34,6 +34,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'agents-kpi-strip',
   'agents-pack-actions',
   'agents-pack-card',
+  'agents-pack-findings',
   'agents-pack-last-run',
   'agents-policy-form',
   'agents-run-actions',

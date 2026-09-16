@@ -112,6 +112,7 @@ import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
 import { AgentsLastRunCell } from '../../app/(app)/admin/setup/agents/AgentsLastRunCell'
 import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
+import { AgentsPackFindings } from '../../app/(app)/admin/setup/agents/AgentsPackFindings'
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
 import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
 import { AgentsRunActions } from '../../app/(app)/admin/setup/agents/activity/AgentsRunActions'
@@ -1307,6 +1308,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       }
       dateLine={str(props, 'dateLine') ?? ''}
       nextLine={str(props, 'nextLine') ?? null}
+    />
+  ),
+  /** One pack's open-findings cell: link when above zero, muted text at zero. */
+  'agents-pack-findings': (props) => (
+    <AgentsPackFindings
+      openFindings={typeof props.openFindings === 'number' ? props.openFindings : 0}
+      findingsLine={str(props, 'findingsLine') ?? ''}
+      reviewHref={str(props, 'reviewHref') ?? ''}
     />
   ),
   /** One pack's fenced enable switch + run-now for the Agents overview table. */
