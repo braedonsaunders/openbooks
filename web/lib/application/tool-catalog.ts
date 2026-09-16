@@ -660,7 +660,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...await correctPostedDocument(context, input) }),
   }),
   definition({
-    name: "create_payment", title: "Create Payment",
+    name: "create_payment", title: "Create Payment", tier: "core",
     description: "Create a governed vendor-payment or customer-receipt draft with exact currency and subsidiary context.",
     inputSchema: z.object({
       kind: z.enum(["vendor_payment", "customer_payment"]).describe("Draft kind: vendor_payment pays a vendor, customer_payment records a receipt"),
@@ -685,7 +685,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...await updatePayment(context, input) }),
   }),
   definition({
-    name: "post_payment", title: "Post Payment",
+    name: "post_payment", title: "Post Payment", tier: "core",
     description: "Submit and post a payment or receipt with open-item applications atomically; may return pending approval.",
     inputSchema: z.object({
       documentId: UUID,
@@ -766,7 +766,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...(await updateBudgetCells(context, input)) }),
   }),
   definition({
-    name: "get_company_settings", title: "Get Company Settings",
+    name: "get_company_settings", title: "Get Company Settings", tier: "core",
     description: "Company & Accounting settings as the settings screen shows them: identity (name, legal name, country), default locale, base currency, fiscal-year start month, reporting and tax frameworks, report PDF style, control-account mappings (with account numbers), and the resolved optional-feature switchboard. Read-only.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: anyPermission("admin.users.manage", "admin.setup.manage"),

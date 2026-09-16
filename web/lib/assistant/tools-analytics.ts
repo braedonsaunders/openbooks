@@ -813,6 +813,7 @@ const arPositionTool: AssistantToolDef = {
 
 const cashPositionTool: AssistantToolDef = {
   name: "cash_position",
+  tier: "core",
   description:
     "Company-wide cash position (the Banking cash cockpit, consolidated — no subsidiary filter): bank balances rolled through a 1–26 week forecast timeline (default 8; use 13 for a standard 13-week forecast) of predicted AR, capacity-scheduled AP, and recurring category flows, with projected end, lowest-cash week, burn rate, runway, and AR/AP coverage. Read-only.",
   category: "read",
