@@ -732,8 +732,9 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     name: "update_budget_cells", title: "Update Budget Cells",
     description: "Write planning cells into a draft budget scenario through the same revision-checked command as the budget worksheet: amounts are exact decimal strings, cells are keyed by account, period, subsidiary and dimensions, and expectedRevision (from get_budget_workspace) must match or the write is refused. Approved, pending or archived scenarios refuse. Audited with before/after evidence.",
     inputSchema: z.object({
-      scenarioId: UUID,
-      expectedRevision: z.number().int().min(1),
+      scenarioId: UUID.describe("Budget scenario id from get_budget_workspace or budget_vs_actual"),
+      expectedRevision: z.number().int().min(1)
+        .describe("Scenario revision from get_budget_workspace; the write is refused when it no longer matches"),
       cells: z.array(z.object({
         accountId: UUID,
         periodId: UUID,
@@ -744,7 +745,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         classId: UUID.nullable().optional(),
         amount: SIGNED_MONEY,
         note: z.string().max(2000).nullable().optional(),
-      })).min(1).max(1000),
+      })).min(1).max(1000)
+        .describe("Planning cells to write, keyed by account, period, subsidiary, and dimensions; at most 1000 per call"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
