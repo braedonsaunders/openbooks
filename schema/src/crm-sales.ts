@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -103,6 +104,8 @@ export const crmOpportunities = pgTable(
     closedAt: timestamp("closed_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
     custom: jsonb("custom").notNull().default({}),
+    /** Strictly increasing OCC counter, see documents.revisionSeq (migration 0167). */
+    revisionSeq: bigint("revision_seq", { mode: "number" }).notNull().default(0),
     ...auditColumns,
   },
   (t) => [

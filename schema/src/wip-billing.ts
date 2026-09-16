@@ -1,4 +1,5 @@
 import {
+  bigint,
   date,
   index,
   integer,
@@ -94,6 +95,8 @@ export const wipPrebillLines = pgTable(
     /** Effective project policy and direct/overhead pricing evidence frozen with the line. */
     pricingSnapshot: jsonb("pricing_snapshot").notNull().default({}),
     disposition: text("disposition", { enum: ["bill", "hold"] }).notNull().default("bill"),
+    /** Strictly increasing OCC counter, see documents.revisionSeq (migration 0167). */
+    revisionSeq: bigint("revision_seq", { mode: "number" }).notNull().default(0),
     ...auditColumns,
   },
   (t) => [

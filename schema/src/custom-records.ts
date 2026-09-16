@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -109,6 +110,8 @@ export const customRecords = pgTable(
      * from pickers until reactivated.
      */
     status: text("status", { enum: CUSTOM_RECORD_STATUSES }).notNull().default("draft"),
+    /** Strictly increasing OCC counter, see documents.revisionSeq (migration 0167). */
+    revisionSeq: bigint("revision_seq", { mode: "number" }).notNull().default(0),
     ...auditColumns, // includes created_by / updated_by
   },
   (t) => [

@@ -94,7 +94,7 @@ async function seedSalesOrder(
     `);
   }
   const updated = (await db.execute<{ updated_at: string }>(sql`
-    select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
+    select (revision_seq)::text as updated_at
       from documents
      where id = ${id} and org_id = ${org.orgId}
   `)).rows[0]!;

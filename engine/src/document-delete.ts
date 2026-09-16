@@ -1,6 +1,6 @@
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
-import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "./document-revision.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -25,7 +25,7 @@ export async function deleteDocument(
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
     const [doc] = await tx
-      .select({ ...getTableColumns(schema.documents), revision: documentRevisionSql(sql`${schema.documents.updatedAt}`) })
+      .select({ ...getTableColumns(schema.documents), revision: documentRevisionCounterSql(sql`revision_seq`) })
       .from(schema.documents)
       .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
       .for("update");

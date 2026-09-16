@@ -2147,7 +2147,7 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
 
     const revision = async () => withOrgContext(org.orgId, async () =>
       (await db.execute<{ updatedAt: string }>(sql`
-        select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+        select (revision_seq)::text as "updatedAt"
           from documents where id = ${payment.id} and org_id = ${org.orgId}
       `)).rows[0]!.updatedAt);
 
