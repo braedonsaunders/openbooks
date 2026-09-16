@@ -1,0 +1,26 @@
+{
+  "entry": {
+    "distributionColumn": "Distribution",
+    "split": "Split…",
+    "unSplit": "Un-split",
+    "lockGroup": "Lock group",
+    "unlockGroup": "Unlock group",
+    "groupLockedHint": "Locked — hand-edited lines keep their amounts",
+    "groupTotalLabel": "Group total",
+    "groupTotalAria": "Distribution group total",
+    "suggestSplit": "Split by {rule}?",
+    "pendingRule": "Splits by {rule} on save",
+    "applyAutomatic": "Apply distributions",
+    "splitTitle": "Split line {amount}",
+    "ruleLabel": "Distribution rule",
+    "rulePlaceholder": "Choose a rule…",
+    "handEditHeading": "Or split by hand",
+    "handEditHint": "Hand-entered children are locked against re-explosion.",
+    "childrenTotalError": "Children total {total}; the line is {expected}",
+    "dialogApply": "Apply",
+    "dialogCancel": "Cancel",
+    "noCandidates": "No entry rules match this line.",
+    "candidatesFailed": "Could not load distribution rules.",
+    "groupActionsAria": "Distribution actions for line {number}"
+  }
+}
