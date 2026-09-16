@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { toUnits as moneyToUnits } from '@openbooks/engine/src/money.ts'
 import {
   decimalAdd,
   decimalCmp,
@@ -55,4 +56,30 @@ test('margin ratios scale exactly once to percent units for presentation', () =>
   assert.equal(marginRatioToPercent('0.0000'), '0.0000')
   assert.equal(marginRatioToPercent('-0.2500'), '-25.0000')
   assert.equal(marginRatioToPercent('1.0000'), '100.0000')
+})
+
+test('decimal parsing agrees with the shared money primitive on every exponent case', () => {
+  // statement-format used to parse scientific exponents unbounded while
+  // engine money.ts bounds them (±10000) against input-amplified growth.
+  // money.ts is authoritative: the two must agree, value or throw, on each.
+  const throwing = ['1e10001', '1e-10001', '1e1000000000', '1E-1000000000', '1e99999999999999999', '1.23456', 'abc']
+  for (const input of throwing) {
+    assert.throws(() => toDecimalUnits(input), Error, `expected throw for ${input}`)
+    assert.throws(() => moneyToUnits(input), Error, `money must also throw for ${input}`)
+  }
+  const values: Array<[string | number, bigint]> = [
+    ['12.3456', 123456n],
+    ['-0.0001', -1n],
+    ['.5', 5000n],
+    [123, 1230000n],
+    ['1.2355303E7', 123553030000n],
+    ['1e4', 100000000n],
+    ['1e+5', 1000000000n],
+    ['1.5e1', 150000n],
+    ['1e10000', 10n ** 10004n],
+  ]
+  for (const [input, expected] of values) {
+    assert.equal(toDecimalUnits(input), expected, `value mismatch for ${input}`)
+    assert.equal(moneyToUnits(input), expected, `money mismatch for ${input}`)
+  }
 })
