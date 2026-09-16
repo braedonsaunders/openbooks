@@ -89,6 +89,11 @@ export {
   closeRunsFlowAdapter,
   closeRunSubjectProfile,
 } from "./close-runs-adapter.ts";
+export {
+  ALLOCATION_RUN_SUBJECT_KIND,
+  allocationRunsFlowAdapter,
+  allocationRunSubjectProfile,
+} from "./allocation-runs-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
   BUILT_IN_ROLE_NAMES,

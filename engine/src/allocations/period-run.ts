@@ -83,6 +83,19 @@ export interface AllocationRunRecord {
   supersededByRunId: string | null;
   computation: RunComputation;
   fingerprint: string | null;
+  /** The approval flow run this run is waiting on (pending_approval only). */
+  flowRunId: string | null;
+}
+
+/**
+ * Posting options. `viaApproval` marks the approval engine's completion
+ * callback: the version's approval flow already approved, so post directly.
+ * `eventSource` records where an approval request came from for flow
+ * conditions (scheduler and close automation pass their own source).
+ */
+export interface PostAllocationRunOptions {
+  viaApproval?: boolean;
+  eventSource?: "api" | "schedule" | "close_automation";
 }
 
 export interface RerunAllocationRunResult {
@@ -147,6 +160,7 @@ type VersionRow = {
   offset_account_id: string | null;
   residual_policy: AllocationResidualPolicy;
   residual_target_id: string | null;
+  approval_flow_id: string | null;
   memo_template: string | null;
   line_description_template: string | null;
   definition_hash: string | null;
@@ -200,7 +214,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Pro
       select id, org_id, rule_id, status, effective_from::text, effective_to::text,
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
              basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
-             offset_account_id, residual_policy, residual_target_id,
+             offset_account_id, residual_policy, residual_target_id, approval_flow_id,
              memo_template, line_description_template, definition_hash
         from allocation_rule_versions
        where id = ${id} and org_id = ${rule.org_id} for share`)).rows[0];
@@ -215,7 +229,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Pro
     select id, org_id, rule_id, status, effective_from::text, effective_to::text,
            book_scope, book_ids, account_scope, dimension_filters, source_measure,
            basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
-           offset_account_id, residual_policy, residual_target_id,
+           offset_account_id, residual_policy, residual_target_id, approval_flow_id,
            memo_template, line_description_template, definition_hash
       from allocation_rule_versions
      where org_id = ${rule.org_id} and rule_id = ${rule.id} and status = 'published'
@@ -1000,6 +1014,7 @@ type RunRow = {
   superseded_by_run_id: string | null;
   computation: RunComputation;
   fingerprint: string | null;
+  flow_run_id: string | null;
 };
 
 function toRecord(row: RunRow): AllocationRunRecord {
@@ -1023,6 +1038,7 @@ function toRecord(row: RunRow): AllocationRunRecord {
     supersededByRunId: row.superseded_by_run_id,
     computation: row.computation,
     fingerprint: row.fingerprint,
+    flowRunId: row.flow_run_id,
   };
 }
 
@@ -1031,7 +1047,7 @@ const RUN_COLUMNS = sql`
   subsidiary_id, status, trigger_kind,
   source_total::text, allocated_total::text, residual::text,
   journal_entry_id, reversal_entry_id, reverses_run_id, superseded_by_run_id,
-  computation, fingerprint`;
+  computation, fingerprint, flow_run_id`;
 
 async function insertRunRow(
   tx: Tx,
@@ -1358,26 +1374,139 @@ async function loadRuleKey(tx: Tx, orgId: string, ruleId: string): Promise<strin
 }
 
 /**
+ * Open the version's approval flow for a previewed run: validate the
+ * configured flow, dispatch the run's `on_submit` flows, and park the run in
+ * `pending_approval` with `flow_run_id` stamped. NO journal is written here —
+ * the flow engine's release posts it (actor = approver) or records the
+ * rejection. Fails closed when the configured flow is missing, disabled,
+ * for another subject kind, or produces no gate: the run stays previewed.
+ */
+async function openRunApproval(
+  tx: Tx,
+  opts: {
+    orgId: string;
+    run: RunRow;
+    ruleKey: string;
+    actorId: string;
+    reason: string;
+    approvalFlowId: string;
+    eventSource: "api" | "schedule" | "close_automation";
+  },
+): Promise<AllocationRunRecord> {
+  const { orgId, run } = opts;
+  const flow = (await tx.execute<{ id: string; subject_kind: string; enabled: boolean }>(sql`
+    select id, subject_kind, enabled from flows
+     where id = ${opts.approvalFlowId} and org_id = ${orgId} for share`)).rows[0];
+  if (!flow) {
+    throw new Error(`allocation approval flow ${opts.approvalFlowId} is not configured for this organization`);
+  }
+  if (flow.subject_kind !== "allocation_run") {
+    throw new Error(`allocation approval flow ${opts.approvalFlowId} is not an allocation_run flow`);
+  }
+  if (!flow.enabled) {
+    throw new Error(`allocation approval flow ${opts.approvalFlowId} is not enabled`);
+  }
+  // Break the static import cycle (the allocation adapter calls back into
+  // postAllocationRun on release).
+  const { runRecordFlows } = await import("../flows/index.ts");
+  const dispatched = await runRecordFlows(
+    { kind: "on_submit", source: opts.eventSource },
+    "allocation_run",
+    run.id,
+    { orgId, userId: opts.actorId },
+  );
+  const gated = dispatched.runs.find(
+    (item) => item.flowId === opts.approvalFlowId && item.gatesCreated > 0,
+  );
+  if (!gated) {
+    // Fail closed like close approval: cancel anything the dispatch opened
+    // so a half-routed approval cannot linger, then refuse — the run stays
+    // previewed and no journal exists.
+    const openedIds = dispatched.runs.map((item) => item.runId);
+    if (openedIds.length > 0) {
+      await tx.execute(sql`
+        update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${opts.actorId}
+         where run_id in (select jsonb_array_elements_text(${JSON.stringify(openedIds)}::jsonb)::uuid)
+           and org_id = ${orgId} and status in ('pending', 'escalated')`);
+      await tx.execute(sql`
+        update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now(), updated_by = ${opts.actorId}
+         where id in (select jsonb_array_elements_text(${JSON.stringify(openedIds)}::jsonb)::uuid)
+           and org_id = ${orgId} and status in ('running', 'waiting')`);
+    }
+    throw new Error(
+      dispatched.failed
+        ? "allocation approval routing failed"
+        : `allocation approval flow ${opts.approvalFlowId} produced no approval gate`,
+    );
+  }
+  await tx.execute(sql`
+    update allocation_runs
+       set status = 'pending_approval', flow_run_id = ${gated.runId},
+           requested_by = ${opts.actorId}, error = null,
+           completed_at = null, updated_at = now(), updated_by = ${opts.actorId}
+     where id = ${run.id} and org_id = ${orgId}`);
+  await writeAudit(tx, orgId, run.id, opts.actorId, {
+    mode: "allocation_run_approval_requested",
+    reason: opts.reason,
+    approvalFlowId: opts.approvalFlowId,
+    flowRunId: gated.runId,
+  });
+  return toRecord({ ...run, status: "pending_approval", flow_run_id: gated.runId });
+}
+
+/**
  * Post a previewed run: in ONE transaction, re-check the period/book/closed
  * module (same checks as depreciation), write the origin='allocation' journal
  * from the STORED computation, stamp lineage, and flip previewed→posted.
  * At most one posted run per (rule, period, book, subsidiary).
+ *
+ * When the run's version names an approval_flow_id (and this call is not the
+ * approval engine's release), the run is NOT posted: the approval flow opens
+ * and the run waits in pending_approval instead.
  */
 export async function postAllocationRun(
   runId: string,
   actorId: string,
   reason: string,
+  opts: PostAllocationRunOptions = {},
 ): Promise<AllocationRunRecord> {
   requireActor(actorId);
   const cleanReason = requireReason(reason, "posting");
   return inDbTransaction(async (tx) => {
     const run = await lockRun(tx, runId);
-    if (run.status !== "previewed") {
+    if (opts.viaApproval) {
+      // The approval engine's release: the run waited in pending_approval
+      // for exactly this call. Anything else is a double-release or a
+      // lifecycle violation — never post it.
+      if (run.status !== "pending_approval") {
+        throw new Error(`allocation run ${runId} is ${run.status} and cannot be released from approval`);
+      }
+    } else if (run.status !== "previewed") {
       throw new Error(`allocation run ${runId} is ${run.status} and cannot be posted`);
     }
     const orgId = run.org_id;
     const period = await loadPeriod(tx, orgId, run.period_id);
     const ruleKey = await loadRuleKey(tx, orgId, run.rule_id);
+    const version = (await tx.execute<VersionRow>(sql`
+      select id, org_id, rule_id, status, effective_from::text, effective_to::text,
+             book_scope, book_ids, account_scope, dimension_filters, source_measure,
+             basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
+             offset_account_id, residual_policy, residual_target_id, approval_flow_id,
+             memo_template, line_description_template, definition_hash
+        from allocation_rule_versions
+       where id = ${run.version_id} and org_id = ${orgId} for share`)).rows[0];
+    const approvalFlowId = version?.approval_flow_id ?? null;
+    if (approvalFlowId && !opts.viaApproval) {
+      return openRunApproval(tx, {
+        orgId,
+        run,
+        ruleKey,
+        actorId,
+        reason: cleanReason,
+        approvalFlowId,
+        eventSource: opts.eventSource ?? "api",
+      });
+    }
     let journalEntryId: string | null = null;
     try {
       journalEntryId = await postStoredJournal(tx, {
@@ -1571,6 +1700,33 @@ export async function rerunAllocationRun(
            set status = 'superseded', superseded_by_run_id = ${fresh.id},
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
+    }
+    // A re-run under a flow-governed version needs fresh approval: the new
+    // run waits in pending_approval instead of posting (same path as post).
+    if (version.approval_flow_id) {
+      const waiting = await openRunApproval(tx, {
+        orgId,
+        run: fresh,
+        ruleKey: rule.key,
+        actorId,
+        reason: cleanReason,
+        approvalFlowId: version.approval_flow_id,
+        eventSource: "api",
+      });
+      await tx.execute(sql`
+        update allocation_runs
+           set reverses_run_id = ${run.id}
+         where id = ${fresh.id} and org_id = ${orgId}`);
+      await writeAudit(tx, orgId, fresh.id, actorId, {
+        mode: "allocation_run_rerun",
+        reason: cleanReason,
+        reversesRunId: run.id,
+        flowRunId: waiting.flowRunId,
+      });
+      return {
+        run: { ...waiting, reversesRunId: run.id },
+        idempotent: false,
+      };
     }
     let journalEntryId: string | null = null;
     try {
