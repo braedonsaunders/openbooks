@@ -1102,6 +1102,11 @@
         "description": "Controles continuos de contabilidad y preparación del cierre.",
         "coverage": "Comprueba actividad bancaria sin conciliar, diferencias de conciliación y documentos contables en borrador o pendientes."
       },
+      "collections": {
+        "title": "Agente de cobros",
+        "description": "Controles continuos de cuentas por cobrar.",
+        "coverage": "Comprueba saldos vencidos de clientes con comportamiento de pago, promesas de pago incumplidas y candidatos a retención de crédito."
+      },
       "finance": {
         "title": "Agente financiero",
         "description": "Controles continuos de desviaciones y rendimiento.",
@@ -1112,6 +1117,16 @@
         "description": "Controles continuos de anomalías en el gasto.",
         "coverage": "Comprueba publicaciones en fin de semana, cifras redondas, importes justo bajo el límite y facturas duplicadas."
       },
+      "hygiene": {
+        "title": "Agente de higiene de datos",
+        "description": "Controles continuos de datos maestros.",
+        "coverage": "Comprueba cuentas de control mal tipificadas, terceros duplicados y registros sin los códigos, presupuestos o asignaciones que necesitan."
+      },
+      "payables": {
+        "title": "Agente de pagos",
+        "description": "Controles continuos de cuentas por pagar.",
+        "coverage": "Comprueba facturas duplicadas, facturas que vencen antes del próximo pago, descuentos por pronto pago y aprobaciones faltantes."
+      },
       "tax": {
         "title": "Agente fiscal",
         "description": "Controles continuos de preparación de declaraciones.",
@@ -1121,6 +1136,11 @@
         "title": "Agente de nómina",
         "description": "Controles continuos de cumplimiento de nómina.",
         "coverage": "Comprueba vencimientos de remesas, cuentas desconocidas, elecciones faltantes y brechas de cierre."
+      },
+      "reconciliation": {
+        "title": "Agente de conciliación",
+        "description": "Controles continuos de conciliación bancaria.",
+        "coverage": "Comprueba líneas bancarias sin conciliar con candidato de coincidencia, conciliaciones obsoletas y cuentas nunca conciliadas."
       },
       "lastRun": "Última ejecución: {date} · {status}",
       "nextRun": "Próxima ejecución programada: {date}",

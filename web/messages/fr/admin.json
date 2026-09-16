@@ -1146,6 +1146,11 @@
         "description": "Contrôles continus de tenue de livres et de préparation à la clôture.",
         "coverage": "Vérifie l’activité bancaire non appariée, les écarts de rapprochement et les documents comptables brouillons ou en attente."
       },
+      "collections": {
+        "title": "Agent de recouvrement",
+        "description": "Contrôles continus des créances clients.",
+        "coverage": "Vérifie les soldes clients échus avec le comportement de paiement, les promesses non tenues et les candidats au blocage de crédit."
+      },
       "finance": {
         "title": "Agent financier",
         "description": "Contrôles continus des écarts et du rendement.",
@@ -1156,6 +1161,16 @@
         "description": "Contrôles continus des anomalies de dépenses.",
         "coverage": "Vérifie les comptabilisations du week-end, les chiffres ronds, les montants juste sous les seuils et les factures en double."
       },
+      "hygiene": {
+        "title": "Agent d’hygiène des données",
+        "description": "Contrôles continus des données de référence.",
+        "coverage": "Vérifie les comptes de contrôle mal typés, les tiers en double et les fiches sans les codes, budgets ou affectations requis."
+      },
+      "payables": {
+        "title": "Agent des dettes fournisseurs",
+        "description": "Contrôles continus des dettes fournisseurs.",
+        "coverage": "Vérifie les factures en double, les factures dues avant le prochain paiement, les escomptes et les approbations manquantes."
+      },
       "tax": {
         "title": "Agent fiscal",
         "description": "Contrôles continus de préparation des déclarations.",
@@ -1165,6 +1180,11 @@
         "title": "Agent de paie",
         "description": "Contrôles continus de conformité de la paie.",
         "coverage": "Vérifie les versements dus, les comptes inconnus, les choix manquants et les manques de fin d’année."
+      },
+      "reconciliation": {
+        "title": "Agent de rapprochement",
+        "description": "Contrôles continus du rapprochement bancaire.",
+        "coverage": "Vérifie les lignes bancaires non appariées avec un appariement probable, les rapprochements périmés et les comptes jamais rapprochés."
       },
       "lastRun": "Dernière exécution : {date} · {status}",
       "nextRun": "Prochaine exécution planifiée : {date}",
