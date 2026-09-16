@@ -12,7 +12,7 @@ import {
   type ContinuousCloseDetectorPolicy,
 } from "./continuous-close-config.ts";
 import { AGENT_PACKS } from "./agents/registry.ts";
-import type { AgentFinding } from "./agents/types.ts";
+import type { AgentFinding, AgentFindingProposal } from "./agents/types.ts";
 
 export {
   CONTINUOUS_CLOSE_AGENT_KEYS,
@@ -125,7 +125,24 @@ export async function getContinuousClosePolicies(orgId: string): Promise<Continu
 }
 
 
+/**
+ * A pack's proposed command travels inside the persisted summary (no schema
+ * change) so the Agent Workbench can render the same governed review card the
+ * chat uses. The token is minted per viewer at render time — never stored.
+ */
+export function findingSummaryWithProposal(
+  summary: Record<string, unknown>,
+  proposal: AgentFindingProposal | null | undefined,
+): Record<string, unknown> {
+  if (!proposal) return summary;
+  return {
+    ...summary,
+    proposedCommand: { tool: proposal.tool, input: proposal.input, label: proposal.label },
+  };
+}
+
 async function persistFinding(orgId: string, runId: string, finding: AgentFinding): Promise<string> {
+  const summary = findingSummaryWithProposal(finding.summary, finding.proposal);
   const result = (await db.execute<{ id: string }>(sql`
     insert into ai_work_items (
       org_id, agent_key, finding_type, detector_version, fingerprint, severity,
@@ -134,7 +151,7 @@ async function persistFinding(orgId: string, runId: string, finding: AgentFindin
     ) values (
       ${orgId}, ${finding.agentKey}, ${finding.findingType}, ${CONTINUOUS_CLOSE_DETECTOR_VERSION},
       ${finding.fingerprint}, ${finding.severity}, ${finding.confidence}, ${finding.materiality},
-      ${finding.subjectType ?? null}, ${finding.subjectId ?? null}, ${JSON.stringify(finding.summary)}::jsonb,
+      ${finding.subjectType ?? null}, ${finding.subjectId ?? null}, ${JSON.stringify(summary)}::jsonb,
       ${runId}, null, null
     )
     on conflict (org_id, agent_key, fingerprint) do update set
