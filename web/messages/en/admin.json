@@ -1340,6 +1340,38 @@
         "library": "Library",
         "activity": "Activity"
       },
+      "overview": {
+        "title": "Agents",
+        "description": "Background agents that watch the books and propose reviewable next steps. They never post or edit records on their own.",
+        "configure": "Configure",
+        "runNow": "Run now",
+        "enabled": "On",
+        "disabled": "Off",
+        "controlsEnabled": "{count} of {total} checks on",
+        "manualOnly": "Manual runs only",
+        "cadences": {
+          "daily": "Daily",
+          "weekly": "Weekly"
+        },
+        "materialitySummary": "Materiality {amount}",
+        "lastRun": "Last run {date} · {status}",
+        "runStatus": {
+          "completed": "completed",
+          "failed": "failed",
+          "skipped": "skipped",
+          "running": "running"
+        },
+        "neverRun": "Never run",
+        "nextRun": "Next {date}",
+        "openFindings": "{count, plural, one {# open finding} other {# open findings}}",
+        "reviewWork": "Review work",
+        "featureOff": "The Continuous Close module is off, so packs cannot be enabled or run.",
+        "enableModule": "Turn it on in Features",
+        "featureOffError": "Turn on the Continuous Close module before enabling a pack.",
+        "toggleFailed": "Couldn't save the pack setting.",
+        "scanComplete": "{count, plural, one {# finding} other {# findings}} detected",
+        "scanFailed": "The scan failed to start."
+      },
       "packs": {
         "accounting": {
           "title": "Accounting controls",

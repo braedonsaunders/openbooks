@@ -1250,6 +1250,38 @@
         "library": "Bibliothèque",
         "activity": "Activité"
       },
+      "overview": {
+        "title": "Agents",
+        "description": "Des agents en arrière-plan qui surveillent les livres et proposent des prochaines étapes révisables. Ils ne comptabilisent ni ne modifient jamais d'écritures seuls.",
+        "configure": "Configurer",
+        "runNow": "Lancer",
+        "enabled": "Activé",
+        "disabled": "Désactivé",
+        "controlsEnabled": "{count} contrôles actifs sur {total}",
+        "manualOnly": "Lancements manuels uniquement",
+        "cadences": {
+          "daily": "Quotidien",
+          "weekly": "Hebdomadaire"
+        },
+        "materialitySummary": "Seuil {amount}",
+        "lastRun": "Dernier lancement {date} · {status}",
+        "runStatus": {
+          "completed": "terminé",
+          "failed": "échoué",
+          "skipped": "ignoré",
+          "running": "en cours"
+        },
+        "neverRun": "Jamais lancé",
+        "nextRun": "Prochain {date}",
+        "openFindings": "{count, plural, one {# constat ouvert} other {# constats ouverts}}",
+        "reviewWork": "Réviser le travail",
+        "featureOff": "Le module de Clôture continue est désactivé : les packs ne peuvent être ni activés ni lancés.",
+        "enableModule": "L'activer dans Fonctionnalités",
+        "featureOffError": "Activez le module de Clôture continue avant d'activer un pack.",
+        "toggleFailed": "Impossible d'enregistrer le paramètre du pack.",
+        "scanComplete": "{count, plural, one {# constat détecté} other {# constats détectés}}",
+        "scanFailed": "Le lancement de l'analyse a échoué."
+      },
       "packs": {
         "accounting": {
           "title": "Contrôles comptables",
