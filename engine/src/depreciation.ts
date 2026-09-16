@@ -447,9 +447,14 @@ export async function unimpairedAssetCarryingValue(
   bookId: string,
   asOfDate: string,
 ): Promise<string> {
-  const { asset, calendarId, method, depreciationMethodId, unitsTotal, plan } =
+  const { asset, calendarId, method, depreciationMethodId, unitsTotal, plan, opening } =
     await loadUnremeasuredAssetPlan(runner, assetId, orgId, bookId);
-  let depreciation = "0";
+  // Continue-from-accumulated (migration 0156): the IAS 36 counterfactual
+  // depreciates the ORIGINAL cost from the in-service date, but the opening
+  // figure is pre-cutover depreciation already recognised — the ceiling nets
+  // it exactly like the carrying amount does.
+  const openingAmount = opening ? opening.amount : "0";
+  let depreciation = openingAmount;
   if (!depreciationMethodId && (method === "manual" || method === "units_of_production")) {
     const evidence = (await runner.execute<{ manual_amount: string | null; production_units: string | null }>(sql`
       select input.manual_amount::text, input.production_units::text
@@ -486,6 +491,10 @@ export async function unimpairedAssetCarryingValue(
     `)).rows;
     for (const line of plan) {
       if (line.periodMonth > asOfDate) continue;
+      // Continue-from-accumulated (migration 0156): pre-cutover months have
+      // no accounting periods in the new books — they are covered by the
+      // opening figure already seeded into the total above, not by the plan.
+      if (opening && cmp(openingAmount, "0") > 0 && line.periodMonth <= opening.asOf) continue;
       const period = periods.find(period => period.starts_on <= line.periodMonth && period.ends_on >= line.periodMonth);
       if (!period) throw new Error(`accounting period missing for restoration ceiling (${line.periodMonth})`);
       if (period.ends_on <= asOfDate) {
@@ -849,12 +858,14 @@ export async function recordDepreciationInput(
         salvage_value: string;
         status: string;
         in_service_on: string;
+        opening_accumulated_depreciation: string | null;
         period_id: string;
         period_name: string;
         period_closed: boolean;
       }>(sql`
       select s.id, s.method, s.units_total, s.book_id,
              a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
+             a.opening_accumulated_depreciation::text as opening_accumulated_depreciation,
              p.id as period_id, p.name as period_name,
              (period_module_is_closed(${args.orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
                or period_module_is_closed(${args.orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
@@ -902,7 +913,12 @@ export async function recordDepreciationInput(
          ${priorLine.rows[0] ? sql`and l.id <> ${priorLine.rows[0].id}` : sql``}`));
     const basis = toUnits(row.acquisition_cost) - toUnits(row.salvage_value);
     if (basis < 0n) throw new Error("salvage value cannot exceed acquisition cost");
-    const alreadyPlanned = totals.rows[0]?.planned ?? "0";
+    // Continue-from-accumulated (migration 0156): evidence caps run against
+    // the REMAINING basis — the opening figure already consumed part of it.
+    const alreadyPlanned = add(
+      totals.rows[0]?.planned ?? "0",
+      row.opening_accumulated_depreciation ?? "0",
+    );
     let plannedAmount: string;
     if (args.kind === "manual") {
       if (cmp(value, "0") === 0) throw new Error("manual depreciation must be non-zero");
@@ -1021,7 +1037,7 @@ export async function reconcileAssetDepreciationStatusWithRunner(
                select sum(line.posted_amount) from depreciation_schedules schedule
                  join depreciation_schedule_lines line on line.schedule_id = schedule.id and line.org_id = schedule.org_id
                 where schedule.org_id = a.org_id and schedule.asset_id = a.id and schedule.book_id = book.id
-             ), 0) as amount,
+             ), 0) - coalesce(a.opening_accumulated_depreciation, 0) as amount,
              a.salvage_value
         from fixed_assets a
         join accounting_books book on book.org_id = a.org_id and book.is_primary and book.is_active and book.posts_gl
