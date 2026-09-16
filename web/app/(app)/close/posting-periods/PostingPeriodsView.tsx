@@ -33,18 +33,18 @@ type CommitResult = {
   refused: { documentId: string; reason: string }[]
 }
 
-export function PostingPeriodsView({ bookId, runId }: { bookId: string; runId: string | null }) {
+export function PostingPeriodsView({ bookId, runId }: { bookId: string | null; runId: string | null }) {
   const t = useTranslations('close')
   const [rows, setRows] = useState<Candidate[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CommitResult | null>(null)
 
   useEffect(() => {
+    if (!bookId) return
+    const url = `/api/close/posting-periods?bookId=${encodeURIComponent(bookId)}`
     let cancelled = false
     async function load() {
-      const response = await fetch(
-        `/api/close/posting-periods?bookId=${encodeURIComponent(bookId)}`,
-      )
+      const response = await fetch(url)
       if (!response.ok) {
         toast.error(t('postingPeriods.previewFailed'))
         return
@@ -89,6 +89,29 @@ export function PostingPeriodsView({ bookId, runId }: { bookId: string; runId: s
     } finally {
       setBusy(false)
     }
+  }
+
+  // No book context (bookmark, manual navigation): a neutral empty state with
+  // a way back, never a throw into the route error boundary. The page is
+  // normally opened from a close run, which always supplies ?book=.
+  if (!bookId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title={t('postingPeriods.title')}
+          description={t('postingPeriods.description')}
+        />
+        <Card>
+          <CardContent>
+            <p className="text-sm text-slate-500">{t('postingPeriods.needsBook')}</p>
+            <Link href="/close" className="mt-2 inline-flex items-center gap-1 text-sm">
+              <ArrowLeft size={14} />
+              {t('postingPeriods.backToClose')}
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

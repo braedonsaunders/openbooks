@@ -12,6 +12,5 @@ export default async function PostingPeriodsPage({
   const run = sp.run
   const bookId = Array.isArray(book) ? book[0] : book
   const runId = Array.isArray(run) ? run[0] : run
-  if (!bookId) throw new Error('book is required')
-  return <PostingPeriodsView bookId={bookId} runId={runId ?? null} />
+  return <PostingPeriodsView bookId={bookId ?? null} runId={runId ?? null} />
 }
