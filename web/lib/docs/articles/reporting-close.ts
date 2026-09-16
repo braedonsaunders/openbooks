@@ -159,7 +159,8 @@ These reports should be the basis of formal close and external reporting.
 Use **Analytics** for focused operating and risk views such as cash flow,
 financial health, customer intelligence, spend velocity, utilization, vendor
 performance, true cost, and anomaly monitoring. Each view should be read in the
-context of its filters and configured thresholds.
+context of its filters and configured thresholds. Insight sentences, labels,
+and month names render in your UI language, the same way statements do.
 
 ## Sentinel document forensics
 
