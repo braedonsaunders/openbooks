@@ -367,11 +367,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/setup/agents/activity': {
     route: '/admin/setup/agents/activity',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/setup/agents/activity/view')
       return {
-        load: () => m.loadAgentsActivity(),
+        load: (input) => m.loadAgentsActivity(input.searchParams ?? {}),
         spec: (data) => m.agentsActivitySpec(data as never),
       }
     },

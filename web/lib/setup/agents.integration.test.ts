@@ -166,6 +166,52 @@ test(
 )
 
 test(
+  'the activity list contract pages and sorts server-side',
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg()
+    try {
+      const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+      await withBypassContext(() =>
+        saveSetupAgentPolicy(org.orgId, userId, 'accounting', ENABLE_ACCOUNTING),
+      )
+      for (let i = 0; i < 3; i++) {
+        await withBypassContext(() => runSetupAgentNow(org.orgId, userId, 'accounting'))
+      }
+      const first = await withBypassContext(() => listAgentRuns(org.orgId, { limit: 2 }))
+      assert.equal(first.total, 3)
+      assert.equal(first.truncated, true)
+      assert.equal(first.runs.length, 2)
+
+      const second = await withBypassContext(() => listAgentRuns(org.orgId, { limit: 2, offset: 2 }))
+      assert.equal(second.total, 3)
+      assert.equal(second.truncated, false)
+      assert.equal(second.runs.length, 1)
+      assert.ok(!first.runs.some((run) => run.id === second.runs[0]!.id), 'pages must not overlap')
+
+      const desc = await withBypassContext(() => listAgentRuns(org.orgId, {}))
+      const asc = await withBypassContext(() => listAgentRuns(org.orgId, { sort: 'started', dir: 'asc' }))
+      assert.deepEqual(
+        asc.runs.map((run) => run.id),
+        [...desc.runs.map((run) => run.id)].reverse(),
+        'started asc must reverse started desc',
+      )
+
+      const fallback = await withBypassContext(() =>
+        listAgentRuns(org.orgId, { sort: 'nope' as never }),
+      )
+      assert.deepEqual(
+        fallback.runs.map((run) => run.id),
+        desc.runs.map((run) => run.id),
+        'an unknown sort falls back to started desc',
+      )
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
   'enabling a pack while the module is off is refused',
   { skip: !DB },
   async (t) => {

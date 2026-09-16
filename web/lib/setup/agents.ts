@@ -199,15 +199,45 @@ export interface AgentRunRow extends AgentLastRun {
 
 const MAX_ACTIVITY_ROWS = 200
 
+const ACTIVITY_SORTS = ['started', 'status', 'pack'] as const
+export type AgentActivitySort = (typeof ACTIVITY_SORTS)[number]
+
 /**
- * Run envelopes across packs, newest first — the Activity page read model.
- * `total` counts all matching runs; `truncated` says the list was capped.
+ * Run envelopes across packs — the Activity page read model and its list
+ * contract: the `?agent=` filter, server `limit`/`offset` paging and a
+ * whitelisted `sort`/`dir` order. `total` counts all matching runs;
+ * `truncated` says more rows exist past this window (it stays for the JSON
+ * API's show-more shape; the page drives the `pagination` block from total).
  */
 export async function listAgentRuns(
   orgId: string,
-  options: { agentKey?: string; limit?: number } = {},
+  options: {
+    agentKey?: string
+    limit?: number
+    offset?: number
+    sort?: AgentActivitySort
+    dir?: 'asc' | 'desc'
+  } = {},
 ): Promise<{ runs: AgentRunRow[]; total: number; truncated: boolean }> {
   const limit = Math.min(Math.max(Math.floor(options.limit ?? 50), 1), MAX_ACTIVITY_ROWS)
+  const offset = Math.max(Math.floor(options.offset ?? 0), 0)
+  const sort: AgentActivitySort = ACTIVITY_SORTS.includes(options.sort as AgentActivitySort)
+    ? (options.sort as AgentActivitySort)
+    : 'started'
+  const dir = options.dir === 'asc' ? 'asc' : 'desc'
+  // Sort fragments are whitelisted above — never interpolated from input.
+  const order =
+    sort === 'pack'
+      ? dir === 'asc'
+        ? sql`agent_key asc, started_at desc, id desc`
+        : sql`agent_key desc, started_at desc, id desc`
+      : sort === 'status'
+        ? dir === 'asc'
+          ? sql`status asc, started_at desc, id desc`
+          : sql`status desc, started_at desc, id desc`
+        : dir === 'asc'
+          ? sql`started_at asc, id asc`
+          : sql`started_at desc, id desc`
   const agentFilter =
     options.agentKey && isContinuousCloseAgentKey(options.agentKey)
       ? sql`and agent_key = ${options.agentKey}`
@@ -222,8 +252,8 @@ export async function listAgentRuns(
              stats, detector_version, error_code
         from ai_agent_runs
        where org_id = ${orgId} ${agentFilter}
-       order by started_at desc, id desc
-       limit ${limit + 1}
+       order by ${order}
+       limit ${limit + 1} offset ${offset}
     `),
   ])
   const total = Number(totalRes.rows[0]?.n ?? 0)
