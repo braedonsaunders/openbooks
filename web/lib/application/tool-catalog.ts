@@ -156,14 +156,26 @@ const updateRecordSchema = z.object({
   body: RECORD_UPDATE_BODY,
   idempotencyKey: IDEMPOTENCY_KEY,
 }).superRefine((input, context) => {
+  const writerKind = RECORD_TYPE_BY_KEY.get(input.typeKey)?.writer.kind;
   if (
-    RECORD_TYPE_BY_KEY.get(input.typeKey)?.writer.kind === "document"
+    writerKind === "document"
     && input.body.expectedUpdatedAt === undefined
   ) {
     context.addIssue({
       code: "custom",
       path: ["body", "expectedUpdatedAt"],
       message: "required for document updates; copy the exact updated_at returned by a read",
+    });
+  }
+  if (
+    writerKind === "custom_record"
+    && (input.body as { data?: unknown }).data !== undefined
+    && input.body.expectedUpdatedAt === undefined
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["body", "expectedUpdatedAt"],
+      message: "required for custom-record data updates; copy the exact updated_at returned by a read",
     });
   }
 }).meta({
@@ -238,14 +250,14 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "list_records", title: "List Records",
-    description: "List one authorized record type with tenant, search, pagination, and subsidiary restrictions enforced. Document updated_at values retain their exact persisted revision.",
+    description: "List one authorized record type with tenant, search, pagination, and subsidiary restrictions enforced. Document and custom-record updated_at values retain their exact persisted revision.",
     inputSchema: z.object({ typeKey: TYPE_KEY, query: z.string().max(200).optional(), page: z.number().int().min(1).max(10_000).optional(), perPage: z.number().int().min(5).max(100).optional(), subsidiaryId: UUID.optional() }),
     readOnly: true, destructive: false, openWorld: false, assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await listRecords(context, input) }),
   }),
   definition({
     name: "get_record", title: "Get Record",
-    description: "Get one authorized record by stable UUID with tenant, type, and subsidiary controls enforced. Copy a document's exact updated_at verbatim when updating it.",
+    description: "Get one authorized record by stable UUID with tenant, type, and subsidiary controls enforced. Copy a document's (or a custom record's, when replacing data) exact updated_at verbatim when updating it.",
     inputSchema: z.object({ typeKey: TYPE_KEY, id: UUID }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, record: await getRecord(context, input) }),
@@ -259,7 +271,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_record", title: "Update Record",
-    description: "Update an authorized record through its authoritative domain writer. Document bodies require expectedUpdatedAt copied verbatim from the persisted updated_at returned by get_record; never generate or reformat it.",
+    description: "Update an authorized record through its authoritative domain writer. Document bodies require expectedUpdatedAt copied verbatim from the persisted updated_at returned by get_record; custom-record bodies that replace data require it too; never generate or reformat it.",
     inputSchema: updateRecordSchema,
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await updateApplicationRecord(context, input) }),

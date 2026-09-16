@@ -75,9 +75,12 @@ export async function disabledDocKinds(orgId: string): Promise<string[]> {
 
 const DOCUMENT_REVISION_ALIAS = '__documentRevision'
 
-/** Add the exact revision sidecar only to reads backed by the documents table. */
+/** Tables whose updated_at doubles as the optimistic-concurrency revision. */
+const REVISION_TABLES = new Set(['documents', 'custom_records'])
+
+/** Add the exact revision sidecar to reads backed by a revisioned table. */
 export function documentRevisionProjection(table: string): SQL {
-  return table === 'documents'
+  return REVISION_TABLES.has(table)
     ? sql`, ${documentRevisionSql(sql.raw('updated_at'))} as "__documentRevision"`
     : sql``
 }
@@ -85,13 +88,13 @@ export function documentRevisionProjection(table: string): SQL {
 /**
  * Replace the driver's noncanonical timestamp value with the exact persisted
  * wire revision, preserving the established updated_at response field.
- * Non-document records pass through untouched.
+ * Non-revisioned records pass through untouched.
  */
 export function normalizeDocumentRecordRevisions(
   table: string,
   rows: Record<string, unknown>[],
 ): Record<string, unknown>[] {
-  if (table !== 'documents') return rows
+  if (!REVISION_TABLES.has(table)) return rows
   return rows.map((row) => {
     const revision = row[DOCUMENT_REVISION_ALIAS]
     if (!isDocumentRevisionToken(revision)) {

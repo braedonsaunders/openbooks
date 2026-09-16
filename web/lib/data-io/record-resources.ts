@@ -267,10 +267,15 @@ async function writeRecords(
       const searchText = await buildSearchText(sections, computed, recNo || '')
       if (existingId) {
         if (!ctx.dryRun) {
+          // Bulk rows carry no revision token, so imports cannot join the
+          // compare-and-swap; they still advance the revision monotonically,
+          // so any concurrent drawer or API tab fails closed (409) on its
+          // next save instead of silently winning or losing.
           await db.execute(sql`
             update custom_records
                set data = ${JSON.stringify(computed)}::jsonb, search_text = ${searchText},
-                   status = 'active', updated_at = now()
+                   status = 'active',
+                   updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')
              where id = ${existingId} and org_id = ${orgId}`)
         }
         outcome.updated++

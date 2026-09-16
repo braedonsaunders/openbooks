@@ -39,7 +39,7 @@ export function RecordDrawer({
   typeKey: string
   typeName: string
   sections: FormSection[]
-  record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
+  record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus; updatedAt: string }
   canEdit: boolean
   preview?: boolean
   closeHref?: string
@@ -49,6 +49,11 @@ export function RecordDrawer({
   const tc = useTranslations('common')
   const tp = useTranslations('admin.extensions.native')
   const [status, setStatus] = useState<RecordStatus>(record.status)
+  // Opaque optimistic-concurrency token: the record's canonical revision when
+  // this drawer opened. Every data save sends it; a 409 keeps the user's
+  // edits dirty (never silently adopts the winner's token) so the next save
+  // cannot overwrite unseen work. Same contract as the capture review drawer.
+  const [revision, setRevision] = useState(record.updatedAt)
   const [values, setValues] = useState<FieldValueMap>(record.data ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
@@ -87,13 +92,14 @@ export function RecordDrawer({
     const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: values }),
+      body: JSON.stringify({ data: values, expectedUpdatedAt: revision }),
     })
     const data = await res.json()
     if (res.ok) {
       setErrors({})
       setSaveState('saved')
       setMode('view')
+      if (typeof data.record?.updated_at === 'string') setRevision(data.record.updated_at)
       router.refresh()
     } else {
       setSaveState('dirty')
@@ -113,12 +119,14 @@ export function RecordDrawer({
   async function transition(next: 'active' | 'inactive') {
     if (preview) return
     setBusy(true)
+    const withValues = next === 'active' && editable
     const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       // Send the latest values with an activation so a just-typed required
-      // field counts even if its debounce hadn't fired yet.
-      body: JSON.stringify(next === 'active' && editable ? { data: values, status: next } : { status: next }),
+      // field counts even if its debounce hadn't fired yet. A data-bearing
+      // activation carries the revision token like any other data save.
+      body: JSON.stringify(withValues ? { data: values, status: next, expectedUpdatedAt: revision } : { status: next }),
     })
     const data = await res.json()
     if (!res.ok) {
@@ -127,6 +135,9 @@ export function RecordDrawer({
     } else {
       setErrors({})
       setStatus(next)
+      // Every committed write advances the revision — including lifecycle-only
+      // transitions — so adopt it to keep follow-up data saves conflict-free.
+      if (typeof data.record?.updated_at === 'string') setRevision(data.record.updated_at)
       setSaveState('saved')
       toast.success(
         next === 'active'

@@ -49,6 +49,7 @@ import {
   type DocumentEditInput,
 } from "../documents";
 import { isFeatureEnabled } from "../features";
+import { isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts";
 import { validateEntityBody } from "./validate";
 import { ITEM_EQUIPMENT_KINDS } from "./registry-data";
 import {
@@ -102,8 +103,10 @@ async function loadCustomScope(user: SessionUser, typeKey: string) {
 }
 
 /** Apply a `{ data?, status? }` mutation to an existing custom record. Mirrors
- *  the interactive autosave path (validate → compute formulas → triggers →
- *  persist), so API and UI writes are byte-identical. */
+ *  the interactive save path (lock → revision check → validate → compute
+ *  formulas → triggers → persist), so API and UI writes are byte-identical.
+ *  Data-bearing saves require the caller's read revision (expectedUpdatedAt);
+ *  lifecycle-only transitions stay on their status machine. */
 async function applyCustomRecord(
   user: SessionUser,
   typeKey: string,
@@ -112,13 +115,34 @@ async function applyCustomRecord(
     ReturnType<typeof lintRecordFields>,
     { success: true }
   >["sections"],
-  body: { data?: unknown; status?: string },
+  body: { data?: unknown; status?: string; expectedUpdatedAt?: unknown },
   allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
-  const record = await loadRecord(user.orgId, typeKey, id);
-  if (!record) return err(404, "not found");
+  if (body.data !== undefined && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return err(409, "A current record revision is required; reload the record and try again");
+  }
+  // The lock, revision compare, mutation, and read-back all share the
+  // caller's transaction (updateRecord/createRecord wrap in
+  // withOrgTransaction), so a concurrent editor serializes here and the
+  // loser compares against the winner's committed revision.
+  const locked = (await db.execute(sql`
+    select *, ${documentRevisionSql(sql`updated_at`)} as revision from custom_records
+     where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
+     for update`)).rows[0] as
+    | (Record<string, unknown> & { revision?: unknown })
+    | undefined;
+  if (!locked) return err(404, "not found");
+  const record = {
+    id: String(locked.id),
+    record_number: String(locked.record_number),
+    data: locked.data as FieldValueMap,
+    status: locked.status as RecordStatus,
+  };
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   if (!recordSubsidiaryScopeAllows(sections, record.data, allowed)) return err(404, "not found");
+  if (body.data !== undefined && locked.revision !== body.expectedUpdatedAt) {
+    return err(409, "This record changed after you opened it; reload the record and reapply your changes");
+  }
 
   let nextStatus: RecordStatus | undefined;
   if (body.status !== undefined) {
@@ -213,7 +237,7 @@ async function applyCustomRecord(
       data = coalesce(${nextData !== undefined ? JSON.stringify(nextData) : null}::jsonb, data),
       search_text = coalesce(${searchText ?? null}, search_text),
       status = coalesce(${nextStatus ?? null}, status),
-      updated_at = now(), updated_by = ${user.id}
+      updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
   `);
 
@@ -281,9 +305,22 @@ async function createCustomRecordAttempt(
   `);
   const id = r.rows[0]!.id;
 
-  // If the caller sent data/status, apply it on top of the seeded draft.
+  // If the caller sent data/status, apply it on top of the seeded draft. The
+  // seeded row was just inserted by this same command, so no concurrent
+  // writer could have touched it: seed the revision evidence from the
+  // persisted row instead of demanding a token the creator never read.
   if (body.data !== undefined || body.status !== undefined) {
-    const applied = await applyCustomRecord(user, typeKey, id, sections, body, allowedScope);
+    const fresh = (await db.execute<{ revision: string }>(sql`
+      select ${documentRevisionSql(sql`updated_at`)} as revision from custom_records
+       where id = ${id} and org_id = ${user.orgId}`)).rows[0];
+    const applied = await applyCustomRecord(
+      user,
+      typeKey,
+      id,
+      sections,
+      { ...body, expectedUpdatedAt: fresh?.revision },
+      allowedScope,
+    );
     if (applied.status >= 400) return applied;
     return { status: 201, body: applied.body };
   }
@@ -336,7 +373,7 @@ async function updateCustomRecord(
   user: SessionUser,
   typeKey: string,
   id: string,
-  body: { data?: unknown; status?: string },
+  body: { data?: unknown; status?: string; expectedUpdatedAt?: unknown },
   allowedScope?: ReadonlySet<string> | null,
 ): Promise<WriteResult> {
   const scope = await loadCustomScope(user, typeKey);

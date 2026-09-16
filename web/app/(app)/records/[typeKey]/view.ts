@@ -125,7 +125,7 @@ export interface RecordModuleData {
     typeKey: string
     typeName: string
     sections: FormSection[]
-    record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus }
+    record: { id: string; recordNumber: string; data: FieldValueMap; status: RecordStatus; updatedAt: string }
     canEdit: boolean
     preview?: boolean
     closeHref: string
@@ -343,6 +343,7 @@ export async function loadRecordWorkspace(
             recordNumber: openRecord.record_number,
             data: openRecord.data,
             status: openRecord.status,
+            updatedAt: openRecord.updated_at,
           },
           canEdit: canCreate,
           closeHref: basePath,

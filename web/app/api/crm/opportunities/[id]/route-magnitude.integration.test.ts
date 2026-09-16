@@ -61,13 +61,23 @@ async function fixture() {
   return { org, statusId, itemId, oppId }
 }
 
-async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
+async function revision(id: string): Promise<string> {
+  const row = (await db.execute<{ revision: string }>(sql`
+    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+      from crm_opportunities where id = ${id}`)).rows[0]!
+  return row.revision
+}
+
+async function patch(id: string, body: Record<string, unknown>): Promise<{ status: number; json: unknown }> {
   try {
+    // Saves speak the revision contract: attach the live token so the
+    // magnitude assertions exercise validation, not the 409 guard.
+    const expectedUpdatedAt = await revision(id)
     const response = await withOrgContext(state.orgId, () => PATCH(
       new Request(`http://crm.test/api/crm/opportunities/${id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, expectedUpdatedAt }),
       }),
       { params: Promise.resolve({ id }) },
     ))

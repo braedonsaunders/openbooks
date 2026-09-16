@@ -12,6 +12,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
 import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 
 export const runtime = 'nodejs'
@@ -23,6 +24,11 @@ class OpportunityDisappeared extends Error {}
 class OpportunityContactMismatch extends Error {}
 class OpportunityValidationError extends Error {}
 class OpportunityNotFound extends Error {}
+class OpportunityRevisionError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
 class OpportunityPermissionDenied extends Error {
   constructor(readonly response: NextResponse) {
     super('permission denied')
@@ -41,6 +47,7 @@ function wholeDigits(canonical: string): number {
 type QueryExecutor = Pick<typeof db, 'execute'>
 
 type LockedOpportunityRow = {
+  revision?: unknown
   party_id: string | null
   primary_contact_id: string | null
   owner_user_id: string | null
@@ -98,7 +105,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data)
+  const body = parsedBody.data as typeof parsedBody.data & { expectedUpdatedAt?: unknown }
+  // Mandatory optimistic-concurrency evidence (same contract as document,
+  // payment, prebill-line, capture, and custom-record edits): the drawer
+  // always saves a full-replace payload (header scalars + lines + team), so
+  // two tabs must 409 instead of silently replacing each other. Checked after
+  // the existence gate so a missing token never leaks opportunity existence.
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'A current opportunity revision is required; reload the opportunity and try again' }, { status: 409 })
+  }
   let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
   let contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
   let ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
@@ -235,7 +250,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // gone stale while validation was running; using it here would let a later
     // save restore fields changed by an earlier concurrent save.
     const lockedResult = (await tx.execute<LockedOpportunityRow>(sql`
-      select o.*, s.is_closed, s.is_won, s.probability as status_probability,
+      select o.*, ${documentRevisionSql(sql`o.updated_at`)} as revision,
+             s.is_closed, s.is_won, s.probability as status_probability,
              s.default_forecast_category as status_default_forecast_category
         from crm_opportunities o
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
@@ -243,6 +259,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
        for update of o`))
     current = lockedResult.rows[0]
     if (!current) throw new OpportunityDisappeared()
+    // Compared against the row locked by this write transaction, never the
+    // preflight snapshot (which may have gone stale during validation).
+    if (current.revision !== body.expectedUpdatedAt) {
+      throw new OpportunityRevisionError('This opportunity changed after you opened it; reload the opportunity and reapply your changes')
+    }
 
     partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
     contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
@@ -425,6 +446,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         weighted = computeOpportunityTotals([{ quantity: '1', unitPrice: String(current.projected_amount) }], probability).weightedAmount
       }
     }
+    // Monotonic revision advance (same idiom as document and prebill-line
+    // writers): every committed update moves the token forward, so equal
+    // strings really do mean "nothing changed since you read it".
     await tx.execute(sql`
       update crm_opportunities set
         title = ${title}, party_id = ${partyId}, primary_contact_id = ${contactId}, owner_user_id = ${ownerUserId},
@@ -440,7 +464,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         win_loss_reason = ${winLossReason}, description = ${body.description !== undefined ? textOrNull(body.description) : sql`description`},
         closed_at = case when ${nextStatus.is_closed} then coalesce(closed_at, now()) else null end,
         is_active = ${willBeActive},
-        updated_at = now(), updated_by = ${user.id}
+        updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}`)
     if (statusId !== current.status_id || probability !== Number(current.probability) || category !== current.forecast_category) {
       await tx.execute(sql`
@@ -458,6 +482,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (error) {
     if (error instanceof OpportunityDisappeared) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof OpportunityRevisionError) return NextResponse.json({ error: error.message }, { status: 409 })
     if (error instanceof OpportunityNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (error instanceof OpportunityContactMismatch) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
     if (error instanceof OpportunityValidationError) return NextResponse.json({ error: error.message }, { status: 422 })

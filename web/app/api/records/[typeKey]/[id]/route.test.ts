@@ -51,6 +51,8 @@ interface RouteState {
   transactionOrgs: string[]
 }
 
+const REVISION = '2026-08-28T12:00:00.000000Z'
+
 const initialRecord = (): StoredRecord => ({
   id: RECORD_ID,
   type_id: TYPE_ID,
@@ -60,7 +62,7 @@ const initialRecord = (): StoredRecord => ({
   status: 'draft',
   created_at: '2026-08-28T12:00:00.000Z',
   created_by: USER_ID,
-  updated_at: '2026-08-28T12:00:00.000Z',
+  updated_at: REVISION,
   updated_by: USER_ID,
   search_text: 'cer-000001 original certification',
 })
@@ -109,6 +111,12 @@ const mockSources = new Map<string, string>([
       const execute = async (query) => {
         const text = sqlText(query)
         state.calls.push({ transaction: state.inTransaction, text })
+        if (text.includes('as revision') && text.includes('from custom_records') && text.includes('for update')) {
+          // The locked revision is the canonical token of the row this
+          // transaction will actually compare — the pending (already
+          // serialized) image, exactly like the real to_char projection.
+          return { rows: state.pendingRecord ? [{ ...copy(state.pendingRecord), revision: state.pendingRecord.updated_at }] : [] }
+        }
         if (text.includes('select * from custom_records') && text.includes('for update')) {
           return { rows: state.pendingRecord ? [copy(state.pendingRecord)] : [] }
         }
@@ -123,7 +131,7 @@ const mockSources = new Map<string, string>([
           if (status) state.pendingRecord.status = status
           state.sequence += 1
           state.pendingRecord.updated_by = '00000000-0000-4000-8000-00000000c002'
-          state.pendingRecord.updated_at = '2026-08-28T12:00:00.' + String(state.sequence).padStart(3, '0') + 'Z'
+          state.pendingRecord.updated_at = '2026-08-28T12:00:00.' + String(state.sequence).padStart(6, '0') + 'Z'
           const search = text.match(/search_text = coalesce\\(([^,]*), search_text\\)/)?.[1]?.trim()
           if (search) state.pendingRecord.search_text = search
           return { rows: [copy(state.pendingRecord)] }
@@ -303,7 +311,7 @@ function audit(action: string): AuditCall {
 test('PATCH updates data and lifecycle status with a complete immutable before/after audit', async () => {
   reset()
 
-  const response = await patch({ data: { name: 'Renewed certification' }, status: 'active', reason: 'annual renewal' })
+  const response = await patch({ data: { name: 'Renewed certification' }, status: 'active', reason: 'annual renewal', expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 200)
   assert.equal(state.record?.status, 'active')
@@ -324,11 +332,22 @@ test('PATCH updates data and lifecycle status with a complete immutable before/a
   assert.equal((event.changes.after as StoredRecord).status, 'active')
 })
 
+test('a data save without a revision token refuses before touching the row', async () => {
+  reset()
+
+  const response = await patch({ data: { name: 'Tokenless writer' }, reason: 'no token' })
+
+  assert.equal(response.status, 409)
+  assert.deepEqual(state.record, initialRecord(), 'no write was attempted')
+  assert.equal(state.audits.length, 0)
+  assert.ok(!state.calls.some((call) => call.text.includes('update custom_records')), 'the mutation never reached storage')
+})
+
 test('audit failure rolls back a data update and lifecycle transition', async () => {
   reset()
   state.failAudit = true
 
-  await assert.rejects(() => patch({ data: { name: 'Must not persist' }, status: 'active', reason: 'failed audit' }), /forced audit failure/)
+  await assert.rejects(() => patch({ data: { name: 'Must not persist' }, status: 'active', reason: 'failed audit', expectedUpdatedAt: REVISION }), /forced audit failure/)
 
   assert.deepEqual(state.record, initialRecord(), 'the row remains unchanged when its evidence cannot be written')
   assert.equal(state.audits.length, 0, 'no orphan audit event committed')
@@ -345,21 +364,22 @@ test('audit failure rolls back deactivation without changing the active record',
   assert.equal(state.audits.length, 0)
 })
 
-test('concurrent PATCH calls serialize before-images behind the row lock', async () => {
+test('concurrent PATCH calls serialize behind the row lock and the stale loser refuses', async () => {
   reset({ ...initialRecord(), status: 'active' })
 
-  const first = patch({ data: { name: 'First writer' }, reason: 'first' })
-  const second = patch({ data: { name: 'Second writer' }, reason: 'second' })
+  // Both tabs read the same revision before either saves. The row lock still
+  // serializes the two writes; the loser now compares against the winner's
+  // committed revision and refuses loudly instead of silently overwriting it.
+  const first = patch({ data: { name: 'First writer' }, reason: 'first', expectedUpdatedAt: REVISION })
+  const second = patch({ data: { name: 'Second writer' }, reason: 'second', expectedUpdatedAt: REVISION })
   const responses = await Promise.all([first, second])
 
-  assert.deepEqual(responses.map((response) => response.status), [200, 200])
-  assert.equal(state.audits.length, 2)
-  const [firstAudit, secondAudit] = state.audits
+  assert.deepEqual(responses.map((response) => response.status), [200, 409])
+  assert.equal(state.audits.length, 1)
+  const [firstAudit] = state.audits
   assert.deepEqual((firstAudit!.changes.before as StoredRecord).data, { name: 'Original certification' })
   assert.deepEqual((firstAudit!.changes.after as StoredRecord).data, { name: 'First writer' })
-  assert.deepEqual((secondAudit!.changes.before as StoredRecord).data, { name: 'First writer' })
-  assert.deepEqual((secondAudit!.changes.after as StoredRecord).data, { name: 'Second writer' })
-  assert.equal(state.record?.data.name, 'Second writer')
+  assert.equal(state.record?.data.name, 'First writer')
 })
 
 test('DELETE captures the locked draft before-image and reason atomically', async () => {
