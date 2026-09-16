@@ -238,8 +238,12 @@ export async function loadAssetWithRunner(
   `))
 
   const cost = toUnits(String(asset.acquisition_cost ?? '0'))
+  // Continue-from-accumulated (migration 0156): the running schedule starts
+  // after cutover, so every line's accumulated and NBV carries the opening
+  // figure the legacy system recognised before the first scheduled month.
+  const opening = toUnits(String(asset.opening_accumulated_depreciation ?? '0'))
   const schedule = linesRes.rows.map((l) => {
-    const accumulated = String(l.accumulated ?? '0')
+    const accumulated = fromUnits(toUnits(String(l.accumulated ?? '0')) + opening)
     const valuation = lifecycleValue(lifecycle, String(l.book_id), String(l.period_ends_on))
     return {
       id: l.id as string,
@@ -270,8 +274,8 @@ export async function loadAssetWithRunner(
   const plannedTotal = String(primaryTotals.rows[0]?.planned ?? '0')
   const valuation = lifecycleValue(lifecycle)
   const disposed = valuation.disposed || asset.status === 'disposed' || asset.status === 'written_off'
-  const accumulated = disposed ? '0.0000' : fromUnits(toUnits(postedTotal) - valuation.delta)
-  const netBookValue = disposed ? '0.0000' : fromUnits(cost + valuation.delta - toUnits(postedTotal))
+  const accumulated = disposed ? '0.0000' : fromUnits(toUnits(postedTotal) + opening - valuation.delta)
+  const netBookValue = disposed ? '0.0000' : fromUnits(cost + valuation.delta - toUnits(postedTotal) - opening)
 
   return {
     asset,
