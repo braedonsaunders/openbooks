@@ -30,3 +30,7 @@ test('password/MFA navigation and OIDC start links share the validated destinati
   assert.match(pageSource, /router\.push\(nextPath\)/)
   assert.match(pageSource, /encodeURIComponent\(nextPath\)/)
 })
+
+test('no local redirect helper shadows the shared validator', () => {
+  assert.doesNotMatch(pageSource, /function safeNext\s*\(/)
+})
