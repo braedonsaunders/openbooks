@@ -376,11 +376,15 @@
   },
   "vendor": {
     "title": "供应商绩效",
-    "backToHub": "分析"
+    "backToHub": "分析",
+    "labels": {
+      "unknownVendor": "未知"
+    }
   },
   "cashflow": {
     "title": "现金流",
-    "backToHub": "分析"
+    "backToHub": "分析",
+    "asOf": "截至 {date}"
   },
   "trueCost": {
     "title": "真实成本",
@@ -770,7 +774,15 @@
   },
   "utilization": {
     "title": "利用率",
-    "backToHub": "分析"
+    "backToHub": "分析",
+    "alerts": {
+      "belowTarget": "可计费率低于 {target}% 的目标",
+      "costSpike": "不可计费成本激增 {amount}"
+    },
+    "labels": {
+      "noTitle": "无标题",
+      "unknownName": "未知"
+    }
   },
   "spendVelocity": {
     "title": "支出速率",

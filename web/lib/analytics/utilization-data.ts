@@ -6,6 +6,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
+import { englishUtilizationStrings, type UtilizationStrings } from "./utilization-strings";
 import { getMoneyFormatter } from '../money-server'
 
 /**
@@ -196,7 +197,7 @@ const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBi
 type Key = "department" | "item" | "employee";
 
 /** Build current/prior utilization groups for one reporting dimension. */
-function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number): UGroupRow[] {
+function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number, strings: UtilizationStrings = englishUtilizationStrings): UGroupRow[] {
   const deptName = new Map<string, string>();
   for (const r of curr) if (r.department && r.department_name) deptName.set(r.department, r.department_name);
 
@@ -210,7 +211,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       let g = groups.get(id);
       if (!g) {
         const name = key === "department" ? r.department_name : key === "item" ? r.item_name : r.employee_name;
-        g = { name: name ?? "Unknown", deptHours: new Map(), department: r.department, hours: 0, billable: 0, cost: 0 };
+        g = { name: strings.displayGroupName(name), deptHours: new Map(), department: r.department, hours: 0, billable: 0, cost: 0 };
         groups.set(id, g);
       }
       g.hours += r.total_hours;
@@ -244,13 +245,13 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       meetsMinHours: range.hours >= minHours,
     };
     if (key === "employee") {
-      row.title = titleByEmp.get(id) ?? "No Title";
+      row.title = strings.displayEmployeeTitle(titleByEmp.get(id) ?? null);
       row.departmentId = c.department ?? undefined;
-      row.departmentName = (c.department && deptName.get(c.department)) || "Unknown";
+      row.departmentName = strings.displayDepartmentName((c.department && deptName.get(c.department)) || null);
     }
     if (key === "item") {
       row.departmentId = c.department ?? undefined;
-      row.departmentName = (c.department && deptName.get(c.department)) || "Unknown";
+      row.departmentName = strings.displayDepartmentName((c.department && deptName.get(c.department)) || null);
     }
     if (key === "department") row.noBillable = noBillDepts.has(id);
     rows.push(row);
@@ -259,7 +260,12 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
   return rows.sort((a, b) => b.range.nonBillableCost - a.range.nonBillableCost);
 }
 
-export async function utilizationData(orgId: string, period: { from: string; to: string; label: string }, allowed: ReadonlySet<string> | null): Promise<UtilizationData> {
+export async function utilizationData(
+  orgId: string,
+  period: { from: string; to: string; label: string },
+  allowed: ReadonlySet<string> | null,
+  strings: UtilizationStrings = englishUtilizationStrings,
+): Promise<UtilizationData> {
   if (!(await isFeatureEnabled(orgId, "timeTracking"))) throw new Error("time tracking feature is disabled");
   const { money } = await getMoneyFormatter(orgId)
   const cfg = await analyticsConfig(orgId, "utilization");
@@ -285,7 +291,8 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   for (let i = 1; i <= 5; i++) {
     const pEnd = new Date(Date.UTC(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - i * periodMonths + 1, 0));
     const pStart = new Date(Date.UTC(pEnd.getUTCFullYear(), pEnd.getUTCMonth() - periodMonths + 1, 1));
-    const label = `${pEnd.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })} '${String(pEnd.getUTCFullYear()).slice(2)}`;
+    const ym = `${pEnd.getUTCFullYear()}-${String(pEnd.getUTCMonth() + 1).padStart(2, "0")}`;
+    const label = strings.monthLabel(ym);
     if (seen.has(label)) continue;
     seen.add(label);
     histPlans.push({ start: ymd(pStart), end: ymd(pEnd), label });
@@ -344,12 +351,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
 
   const alerts: UAlert[] = [];
   if (cCompany.percentBilled < targetBillablePct)
-    alerts.push({ type: "warning", message: `Billable % below ${targetBillablePct}% target` });
+    alerts.push(strings.alertBelowTarget(targetBillablePct));
   if (cCompany.nonBillableCost - pCompany.nonBillableCost > costSpikeThreshold)
-    alerts.push({
-      type: "danger",
-      message: `Non-billable cost spiked by ${money(cCompany.nonBillableCost - pCompany.nonBillableCost, { maximumFractionDigits: 0 })}`,
-    });
+    alerts.push(strings.alertCostSpike(money(cCompany.nonBillableCost - pCompany.nonBillableCost, { maximumFractionDigits: 0 })));
 
   // Rolling history: company % (excl. noBill depts) + per-dept % (all depts).
   const periods: UHistoryPeriod[] = histPlans.map((plan, i) => {
@@ -382,9 +386,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
       },
       alerts,
     },
-    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours),
-    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours),
-    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours),
+    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours, strings),
+    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours, strings),
+    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours, strings),
     history: { periodMonths, periods },
   };
 }

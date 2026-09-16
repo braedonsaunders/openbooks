@@ -1,11 +1,12 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { vendorData } from '../../../../lib/analytics/vendor-data'
+import { vendorStrings } from '../../../../lib/analytics/vendor-strings'
 import type { VendorView } from './VendorView'
 
 /**
@@ -42,7 +43,11 @@ export async function loadVendorPerformance(sp: Record<string, string | undefine
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
 
-  const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds)
+  // Insight sentences resolve through the analytics catalog in the request
+  // locale — the same locale the statements use.
+  const [tc, locale] = await Promise.all([getTranslations('analytics'), getLocale()])
+  const strings = vendorStrings((key, values) => tc(key, values), locale)
+  const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, strings)
 
   return {
     title: t('title'),

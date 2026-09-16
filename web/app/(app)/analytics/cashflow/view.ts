@@ -53,7 +53,7 @@ export async function loadCashflow(sp: Record<string, string | undefined>): Prom
     title: t('title'),
     backLabel: t('backToHub'),
     // The native header interpolates this literally, outside next-intl.
-    periodLabel: `as of ${data.asOf}`,
+    periodLabel: t('asOf', { date: data.asOf }),
     horizon,
     data,
   }
