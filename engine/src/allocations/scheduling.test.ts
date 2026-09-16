@@ -5,6 +5,7 @@ import {
   ALLOCATION_RUN_OUTBOX_KIND,
   allocationRunOccurrenceKey,
   parseRunAllocationConfig,
+  previewInputFor,
 } from "./scheduling.ts";
 
 test("allocation run occurrences key on rule, period, and book", () => {
@@ -43,6 +44,30 @@ test("run_allocation config fails closed on shape", () => {
   ]) {
     assert.throws(() => parseRunAllocationConfig(bad), Error, JSON.stringify(bad));
   }
+});
+
+test("unattended preview input runs as the version publisher", () => {
+  const input = previewInputFor({
+    orgId: "org-1",
+    ruleId: "rule-1",
+    periodId: "period-1",
+    bookId: "book-1",
+    triggerKind: "scheduled",
+    publishedBy: "publisher-1",
+  });
+  assert.equal(input.actorId, "publisher-1");
+  assert.equal(input.trigger, "scheduled");
+  assert.throws(
+    () => previewInputFor({
+      orgId: "org-1",
+      ruleId: "rule-1",
+      periodId: "period-1",
+      bookId: "book-1",
+      triggerKind: "close_automation",
+      publishedBy: "  ",
+    }),
+    /no publisher/,
+  );
 });
 
 test("scheduler outbox enqueues and processes the allocation_run kind", () => {

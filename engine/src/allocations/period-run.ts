@@ -6,6 +6,7 @@ import { businessToday } from "../business-date.ts";
 import { db, inDbTransaction } from "../db.ts";
 import { add, cmp, isZero, neg, sum } from "../money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
+import { driverResolver as defaultDriverResolver, type DriverResolveOptions } from "./drivers.ts";
 import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
@@ -15,6 +16,7 @@ import { uuidArray } from "../subsidiaries.ts";
 import type {
   AccountScope,
   AllocationDimension,
+  AllocationDriver,
   AllocationImpact,
   AllocationResidualPolicy,
   AllocationRunStatus,
@@ -42,9 +44,9 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
  *
  * Apportionment is A1's canonical `./apportion.ts` (`apportion` plus
  * `fixedPercentWeights`): exact bigint money, floors plus a single residual
- * absorber, Σ(amounts) === total always. Likewise the driver vector arrives
- * through the injected `DriverResolver` contract from types.ts until A2's
- * `drivers.ts` lands — pass A2's resolver in `PeriodRunDeps`.
+ * absorber, Σ(amounts) === total always. Likewise the driver vector resolves
+ * through A2's `./drivers.ts` dispatcher by default (test doubles still plug
+ * in through `PeriodRunDeps`).
  */
 
 export interface PeriodRunDeps {
@@ -522,26 +524,32 @@ async function resolveDriverVectorForRun(
   opts: {
     orgId: string;
     version: VersionRow;
+    ruleId: string;
     ruleKey: string;
     period: PeriodRow;
+    bookId: string;
     subsidiaryId: string | null;
     actorId: string;
   },
   deps: PeriodRunDeps,
 ): Promise<{ driverId: string; driverKey: string; dimension: string; asOf: { periodId: string } | { date: string }; vector: DriverVector }> {
   if (!opts.version.driver_id) throw new Error(`allocation rule ${opts.ruleKey} uses a driver basis but names no driver`);
-  const rows = (await tx.execute<{ id: string; org_id: string; key: string; dimension: string; is_active: boolean }>(sql`
-    select id, org_id, key, dimension, is_active from allocation_drivers
+  const rows = (await tx.execute<{
+    id: string; org_id: string; key: string; name: string; unit: string | null;
+    dimension: string; source_kind: AllocationDriver["sourceKind"]; config: Record<string, unknown>;
+    is_active: boolean;
+  }>(sql`
+    select id, org_id, key, name, unit, dimension, source_kind, config, is_active
+      from allocation_drivers
      where id = ${opts.version.driver_id} for share`)).rows;
   const driver = rows[0];
   if (!driver || driver.org_id !== opts.orgId) {
     throw new Error(`allocation driver ${opts.version.driver_id} does not belong to this organization`);
   }
   if (!driver.is_active) throw new Error(`allocation driver ${driver.key} is not active`);
-  const resolver = deps.driverResolver;
-  if (!resolver) {
-    throw new Error("no DriverResolver is available for driver-basis allocation runs");
-  }
+  // A2's dispatcher covers every source_kind (report_definition needs a
+  // runner, injected via deps); callers may still inject a test double.
+  const resolver = deps.driverResolver ?? defaultDriverResolver;
   let asOf: { periodId: string } | { date: string };
   if (opts.version.driver_as_of === "prior_period") {
     const prior = (await tx.execute<{ id: string }>(sql`
@@ -555,22 +563,29 @@ async function resolveDriverVectorForRun(
   } else {
     asOf = { periodId: opts.period.id };
   }
-  const vector = await resolver.resolve({
+  // A2 honors these knobs when present: this rule's own lines stay out of
+  // GL-backed driver vectors (idempotent re-runs) and the vector follows the
+  // run's book. Plain DriverResolver doubles ignore the extra fields.
+  const request: DriverResolveOptions = {
     orgId: opts.orgId,
     driver: {
       id: driver.id,
       orgId: opts.orgId,
       key: driver.key,
-      name: driver.key,
+      name: driver.name,
+      unit: driver.unit,
       dimension: driver.dimension as AllocationDimension,
-      sourceKind: "manual",
-      config: {},
+      sourceKind: driver.source_kind,
+      config: driver.config ?? {},
       isActive: driver.is_active,
     },
     asOf,
     subsidiaryId: opts.subsidiaryId,
     actorId: opts.actorId,
-  });
+    excludeRuleIds: [opts.ruleId],
+    bookId: opts.bookId,
+  };
+  const vector = await resolver.resolve(request);
   return { driverId: driver.id, driverKey: driver.key, dimension: driver.dimension, asOf, vector };
 }
 
@@ -579,8 +594,10 @@ async function resolveTargets(
   opts: {
     orgId: string;
     version: VersionRow;
+    ruleId: string;
     ruleKey: string;
     period: PeriodRow;
+    bookId: string;
     subsidiaryId: string | null;
     actorId: string;
     targets: TargetRow[];
@@ -785,8 +802,10 @@ async function buildComputation(
     {
       orgId: opts.orgId,
       version: opts.version,
+      ruleId: opts.rule.id,
       ruleKey: opts.rule.key,
       period: opts.period,
+      bookId: opts.bookId,
       subsidiaryId: opts.subsidiaryId,
       actorId: opts.actorId,
       targets: opts.targets,
@@ -829,7 +848,14 @@ async function buildComputation(
       targetLabel: label,
     });
 
-  if (opts.version.impact !== "report_only") {
+  if (opts.version.impact === "report_only") {
+    // No journal lines — but the statistical targets still carry the
+    // apportioned amounts so reports and the fingerprint see the split.
+    for (const apportioned of display.targets) {
+      targetAmounts.set(apportioned.key, apportioned.amount);
+      targetResiduals.set(apportioned.key, apportioned.residual);
+    }
+  } else {
     for (const source of pool.sources) {
       const split = apportion(source.amount, targetSet.weights, opts.version.residual_policy, residualKey);
       const creditAccount = opts.version.impact === "reclass"
@@ -1470,7 +1496,7 @@ export async function rerunAllocationRun(
   }
   return inDbTransaction(async (tx) => {
     const run = await lockRun(tx, runId);
-    if (run.status !== "posted" && run.status !== "previewed") {
+    if (run.status !== "posted" && run.status !== "previewed" && run.status !== "reversed") {
       throw new Error(`allocation run ${runId} is ${run.status} and cannot be re-run`);
     }
     const orgId = run.org_id;
@@ -1530,6 +1556,13 @@ export async function rerunAllocationRun(
         update allocation_runs
            set status = 'reversed', reversal_entry_id = ${reversalEntryId},
                superseded_by_run_id = ${fresh.id},
+               completed_at = now(), updated_at = now(), updated_by = ${actorId}
+         where id = ${run.id} and org_id = ${orgId}`);
+    } else if (run.status === "reversed") {
+      // Already unwound (reversal_entry_id kept): just chain forward.
+      await tx.execute(sql`
+        update allocation_runs
+           set superseded_by_run_id = ${fresh.id},
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
     } else {

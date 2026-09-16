@@ -5,8 +5,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // A8 runs + lineage API: list filters, detail scoping, preview/post/
-// reverse/rerun wiring against a fake period-run engine (the default
-// binding is pending on A3 → 503), reason enforcement, lineage anchors.
+// reverse/rerun wiring against the real period-run engine, reason
+// enforcement, lineage anchors.
 
 const stateKey = Symbol.for("openbooks.alloc-runs-route-test");
 interface RouteState {
@@ -74,8 +74,8 @@ const { db } = await import("../../../../../engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "../../../../../engine/src/test-fixtures.ts"
 );
-const { pendingPeriodRunEngine, setPeriodRunEngine } = await import(
-  "../../../../../engine/src/allocations/a8-shims.ts"
+const { postProjectGlEntry } = await import(
+  "../../../../../engine/src/project-recognition.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -107,11 +107,13 @@ interface Setup {
   periodId: string;
   bookId: string;
   subsidiaryId: string;
+  postingDate: string;
 }
 
 async function setup(): Promise<Setup> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const postingDate = org.date;
   await enableAllocations(org.orgId);
   const ruleId = randomUUID();
   const versionId = randomUUID();
@@ -119,11 +121,41 @@ async function setup(): Promise<Setup> {
   await db.execute(sql`
     insert into allocation_rules (id, org_id, key, name, mode, created_by, updated_by)
     values (${ruleId}, ${org.orgId}, 'route-sweep', 'Route sweep', 'period', ${actorId}, ${actorId})`);
+  // Targets are immutable once published: draft → targets → publish.
   await db.execute(sql`
     insert into allocation_rule_versions
-      (id, org_id, rule_id, version_no, status, effective_from, definition_hash, created_by, updated_by)
+      (id, org_id, rule_id, version_no, status, effective_from, account_scope, created_by, updated_by)
     values
-      (${versionId}, ${org.orgId}, ${ruleId}, 1, 'published', '2026-01-01', 'hash-r', ${actorId}, ${actorId})`);
+      (${versionId}, ${org.orgId}, ${ruleId}, 1, 'draft', '2026-01-01',
+       ${JSON.stringify({ kind: "accounts", accountIds: [org.accounts.adjustment] })}::jsonb,
+       ${actorId}, ${actorId})`);
+  // A real sweep target plus a real source pool for the engine-backed tests.
+  const deptId = randomUUID();
+  await db.execute(sql`
+    insert into departments (id, org_id, name, is_active, custom)
+    values (${deptId}, ${org.orgId}, 'Route Dept', true, '{}'::jsonb)`);
+  await db.execute(sql`
+    insert into allocation_rule_targets
+      (id, org_id, version_id, sequence, department_id, fixed_percent, is_remainder, label, custom)
+    values (${randomUUID()}, ${org.orgId}, ${versionId}, 1, ${deptId}, '100.0000', false, 'Route Dept', '{}'::jsonb)`);
+  await db.execute(sql`
+    update allocation_rule_versions
+       set status = 'published', definition_hash = 'hash-r', published_at = now()
+     where id = ${versionId} and org_id = ${org.orgId}`);
+  await postProjectGlEntry({
+    orgId: org.orgId,
+    actorId,
+    origin: "manual",
+    entryNumber: `ROUTE-SEED-${randomUUID()}`,
+    postingDate: org.date,
+    memo: "Route sweep pool",
+    subsidiaryId: org.subsidiaryId,
+    currency: "CAD",
+    lines: [
+      { accountId: org.accounts.adjustment, amount: "100.0000" },
+      { accountId: org.accounts.bank, amount: "-100.0000" },
+    ],
+  });
   await db.execute(sql`
     insert into allocation_runs
       (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
@@ -136,7 +168,7 @@ async function setup(): Promise<Setup> {
       (org_id, mode, rule_id, version_id, definition_hash, run_id, amount, share)
     values
       (${org.orgId}, 'period', ${ruleId}, ${versionId}, 'hash-r', ${runId}, '10.00', '1.0')`);
-  return { orgId: org.orgId, actorId, ruleId, runId, periodId: org.periodId, bookId: org.bookId, subsidiaryId: org.subsidiaryId };
+  return { orgId: org.orgId, actorId, ruleId, runId, periodId: org.periodId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, postingDate };
 }
 
 test("runs list filters + detail subsidiary scoping", { skip: !DB }, async () => {
@@ -173,31 +205,16 @@ test("runs list filters + detail subsidiary scoping", { skip: !DB }, async () =>
   }
 });
 
-test("preview wires the engine; pending by default", { skip: !DB }, async () => {
+test("preview runs the real engine", { skip: !DB }, async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.run"]);
     const body = { ruleId: s.ruleId, periodId: s.periodId, bookId: s.bookId };
 
-    const pending = await previewRoute.POST(jsonRequest("/api/allocations/runs/preview", "POST", body));
-    assert.equal(pending.status, 503);
-    assert.equal(((await pending.json()) as { errorCode: string }).errorCode, "engine_pending");
-
-    const seen: unknown[] = [];
-    setPeriodRunEngine({
-      preview: async (input) => { seen.push(input); return { ruleId: s.ruleId } as never; },
-      post: async () => { throw new Error("unused"); },
-      reverse: async () => { throw new Error("unused"); },
-      rerun: async () => { throw new Error("unused"); },
-    });
-    try {
-      const ok = await previewRoute.POST(jsonRequest("/api/allocations/runs/preview", "POST", body));
-      assert.equal(ok.status, 200);
-      assert.equal(seen.length, 1);
-      assert.match(JSON.stringify(seen[0]), /manual/);
-    } finally {
-      setPeriodRunEngine(pendingPeriodRunEngine);
-    }
+    const ok = await previewRoute.POST(jsonRequest("/api/allocations/runs/preview", "POST", body));
+    assert.equal(ok.status, 200);
+    const computation = ((await ok.json()) as { computation: { sourceTotal: string } }).computation;
+    assert.equal(computation.sourceTotal, "100.0000");
 
     authenticate(s.orgId, s.actorId, ["allocations.run"], []);
     const scoped = await previewRoute.POST(jsonRequest("/api/allocations/runs/preview", "POST", {
@@ -211,7 +228,7 @@ test("preview wires the engine; pending by default", { skip: !DB }, async () => 
   }
 });
 
-test("post/reverse/rerun need gl.post + reason; pending on A3", { skip: !DB }, async () => {
+test("post/reverse/rerun need gl.post + reason and run the real engine", { skip: !DB }, async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.run"]);
@@ -221,41 +238,53 @@ test("post/reverse/rerun need gl.post + reason; pending on A3", { skip: !DB }, a
     );
     assert.equal(noGl.status, 403);
 
-    authenticate(s.orgId, s.actorId, ["allocations.run", "gl.post"]);
+    authenticate(s.orgId, s.actorId, ["allocations.run", "gl.post", "allocations.read"]);
     const noReason = await postRoute.POST(
       jsonRequest(`/api/allocations/runs/${s.runId}/post`, "POST", { reason: "" }),
       { params: Promise.resolve({ id: s.runId }) },
     );
     assert.equal(noReason.status, 400);
 
-    const calls: { kind: string; input: unknown }[] = [];
-    setPeriodRunEngine({
-      preview: async () => { throw new Error("unused"); },
-      post: async (input) => { calls.push({ kind: "post", input }); return { runId: s.runId, journalEntryId: null }; },
-      reverse: async (input) => { calls.push({ kind: "reverse", input }); return { reversalEntryId: null }; },
-      rerun: async (input) => { calls.push({ kind: "rerun", input }); return { runId: randomUUID() }; },
-    });
-    try {
-      const posted = await postRoute.POST(
-        jsonRequest(`/api/allocations/runs/${s.runId}/post`, "POST", { reason: "month-end" }),
-        { params: Promise.resolve({ id: s.runId }) },
-      );
-      assert.equal(posted.status, 200);
-      const reversed = await reverseRoute.POST(
-        jsonRequest(`/api/allocations/runs/${s.runId}/reverse`, "POST", { reason: "correction" }),
-        { params: Promise.resolve({ id: s.runId }) },
-      );
-      assert.equal(reversed.status, 200);
-      const reran = await rerunRoute.POST(
-        jsonRequest(`/api/allocations/runs/${s.runId}/rerun`, "POST"),
-        { params: Promise.resolve({ id: s.runId }) },
-      );
-      assert.equal(reran.status, 200);
-      assert.deepEqual(calls.map((c) => c.kind), ["post", "reverse", "rerun"]);
-      assert.match(JSON.stringify(calls[0]?.input), /month-end/);
-    } finally {
-      setPeriodRunEngine(pendingPeriodRunEngine);
-    }
+    // A real preview first: the seeded run row carries no computation.
+    const previewed = await previewRoute.POST(
+      jsonRequest("/api/allocations/runs/preview", "POST", {
+        ruleId: s.ruleId,
+        periodId: s.periodId,
+        bookId: s.bookId,
+      }),
+    );
+    assert.equal(previewed.status, 200);
+    const listed = await listRoute.GET(
+      jsonRequest(`/api/allocations/runs?ruleId=${s.ruleId}&status=previewed`, "GET"),
+    );
+    const previewId = ((await listed.json()) as { runs: { id: string }[] }).runs[0]?.id;
+    assert.ok(previewId);
+
+    const posted = await postRoute.POST(
+      jsonRequest(`/api/allocations/runs/${previewId}/post`, "POST", { reason: "month-end" }),
+      { params: Promise.resolve({ id: previewId }) },
+    );
+    assert.equal(posted.status, 200);
+    assert.ok(((await posted.json()) as { journalEntryId: string }).journalEntryId);
+
+    const reversed = await reverseRoute.POST(
+      jsonRequest(`/api/allocations/runs/${previewId}/reverse`, "POST", {
+        reason: "correction",
+        reversalDate: s.postingDate,
+      }),
+      { params: Promise.resolve({ id: previewId }) },
+    );
+    assert.equal(reversed.status, 200);
+    assert.ok(((await reversed.json()) as { reversalEntryId: string }).reversalEntryId);
+
+    // Nothing changed since the reversal: the re-run is idempotent and posts
+    // nothing new — same run id back.
+    const reran = await rerunRoute.POST(
+      jsonRequest(`/api/allocations/runs/${previewId}/rerun`, "POST"),
+      { params: Promise.resolve({ id: previewId }) },
+    );
+    assert.equal(reran.status, 200);
+    assert.equal(((await reran.json()) as { runId: string }).runId, previewId);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(s.orgId);
