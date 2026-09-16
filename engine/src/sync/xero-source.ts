@@ -267,14 +267,22 @@ export class XeroSource implements MigrationSource {
     }
     const pays = await this.client.listAll<XeroDoc & { Amount?: number; CurrencyRate?: number }>("Payments", "Payments");
     for (const p of pays) {
-      if ((p.Status ?? "") === "DELETED" || !p.Invoice?.InvoiceID || !(p.Amount && p.Amount > 0)) continue;
+      // Xero payment legs are unsigned magnitudes on both sides of the books:
+      // the published Accounting API contract (XeroAPI/xero-openapi
+      // `xero_accounting.yaml`, components/schemas/Payment) defines `Amount`
+      // as "The amount of the payment. Must be less than or equal to the
+      // outstanding amount owing on the invoice", with a PaymentType enum
+      // covering ACCRECPAYMENT (sales invoices) and ACCPAYPAYMENT (bills).
+      // Normalize defensively with abs(); only zero/missing legs are skipped.
+      const magnitude = Math.abs(p.Amount ?? 0);
+      if ((p.Status ?? "") === "DELETED" || !p.Invoice?.InvoiceID || !(magnitude > 0)) continue;
       const inv = invFx.get(p.Invoice.InvoiceID);
       const producerRate =
         typeof p.CurrencyRate === "number" && p.CurrencyRate > 0 ? String(p.CurrencyRate) : null;
       applications.push({
         paymentRef: `Payment:${p.PaymentID}`,
         appliedRef: `Invoice:${p.Invoice.InvoiceID}`,
-        amount: String(p.Amount),
+        amount: String(magnitude),
         // Xero payments price in the invoice's currency (Amount is capped by
         // the invoice outstanding). The producer rate is the payment's own
         // Xero rate (home-per-invoice-ccy). A missing invoice code means a
@@ -289,22 +297,24 @@ export class XeroSource implements MigrationSource {
     for (const c of credits) {
       if (!["AUTHORISED", "PAID"].includes(c.Status ?? "")) continue;
       for (const a of c.Allocations ?? []) {
-        if (!a.Invoice?.InvoiceID || !(a.Amount && a.Amount > 0)) continue;
+        // Credit-note allocation legs are unsigned magnitudes, exactly like
+        // payments: the published Accounting API contract (XeroAPI/xero-openapi
+        // `xero_accounting.yaml`, components/schemas/Allocation) defines the
+        // ONE shared allocation schema — serving CreditNote, Prepayment AND
+        // Overpayment allocations — with `Amount` as "the amount being applied
+        // to the invoice". Normalize defensively with abs(); only zero/missing
+        // legs are skipped, so a signed leg settles instead of being dropped.
+        const magnitude = Math.abs(a.Amount ?? 0);
+        if (!a.Invoice?.InvoiceID || !(magnitude > 0)) continue;
         const inv = invFx.get(a.Invoice.InvoiceID);
         applications.push({
           paymentRef: `CreditNote:${c.CreditNoteID}`,
           appliedRef: `Invoice:${a.Invoice.InvoiceID}`,
-          amount: String(a.Amount),
+          amount: String(magnitude),
           // Allocation.Amount prices in the invoice's currency, so the
           // producer rate is the INVOICE's own Xero rate (same-currency
           // allocations — the Xero norm — make this identical to the
           // credit-note rate the old code used).
-          // Published gap: the sign convention of credit-note Allocation
-          // amounts on the wire is unproven (no live multi-currency tenant
-          // observed) — the positive-amount guard above assumes applications
-          // arrive unsigned, matching the payment leg. If Xero ever signs
-          // them, the guard silently drops the leg and the invoice stays
-          // open (visible), rather than settling backwards.
           currency: inv?.currency ?? "",
           rate: inv?.rate ?? null,
         });

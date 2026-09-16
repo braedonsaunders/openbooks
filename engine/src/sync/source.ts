@@ -61,8 +61,15 @@ export interface EntityStream {
  *   that payment's currency to home).
  * - Xero payment/allocation `Amount` must not exceed the invoice outstanding,
  *   i.e. it is denominated in the invoice's `CurrencyCode`, at the
- *   payment's/credit's own `CurrencyRate` (Xero: rate "only used for
- *   non-base-currency invoices").
+ *   payment's/credit's own `CurrencyRate` (Xero Accounting API:
+ *   `Payment.CurrencyRate` is the "Exchange rate when payment is received.
+ *   Only used for non base currency invoices and credit notes"). Every leg is
+ *   an UNSIGNED magnitude on both sides: the shared `Allocation` schema
+ *   (`Amount`: "the amount being applied to the invoice") serves CreditNote,
+ *   Prepayment AND Overpayment allocations, and `Payment.Amount` is "The
+ *   amount of the payment" with a PaymentType enum covering ACCRECPAYMENT and
+ *   ACCPAYPAYMENT — so the adapter normalizes with abs() and skips only
+ *   zero/missing legs.
  * - Odoo `account.partial.reconcile.amount` is company currency (Odoo:
  *   reconciliation matches "the invoice price in the invoice currency and
  *   the ... amount in your company currency").
