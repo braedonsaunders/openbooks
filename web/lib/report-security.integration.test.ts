@@ -29,7 +29,9 @@ registerHooks({
         url:
           'data:text/javascript,' +
           encodeURIComponent(
-            'export async function currentUser(){return globalThis.__reviewState.user;}',
+            'export async function currentUser(){return globalThis.__reviewState.user;}' +
+              'export const SESSION_COOKIE="ob_session";' +
+              'export async function validateSessionToken(){return null;}',
           ),
       }
     if (s.startsWith('@/')) return next(root + 'web/' + s.slice(2) + '.ts', c)
