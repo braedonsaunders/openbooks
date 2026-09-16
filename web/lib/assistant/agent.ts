@@ -12,6 +12,7 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { AIDisabledError, getModel, type AiConfig, type ModelTier } from "./client";
+import { withModelCompaction } from "./result-compaction";
 
 /**
  * Agentic, multi-step tool-using turn. The caller passes a permission-bound ToolSet plus
@@ -92,7 +93,8 @@ export async function runBackgroundAgent(
     model,
     system: args.system,
     prompt: args.prompt,
-    tools: args.tools,
+    // Full outputs still stream to the caller; the model sees compacted copies.
+    tools: withModelCompaction(args.tools),
     stopWhen: stepCountIs(maxSteps),
     prepareStep: finalStepMustAnswer(maxSteps),
     temperature: args.temperature ?? 0.2,
@@ -118,11 +120,13 @@ export function runAgentTurn(config: AiConfig | null | undefined, args: RunAgent
   if (!model) throw new AIDisabledError();
   const maxSteps = Math.max(2, args.maxSteps ?? DEFAULT_MAX_STEPS);
 
+  // Compacted only on the model path — the streamed/persisted parts keep full outputs.
+  const tools = withModelCompaction(args.tools);
   const result = streamText({
     model,
     system: args.system,
     messages: args.messages,
-    tools: args.tools,
+    tools,
     // CRITICAL: the SDK default is stepCountIs(1) — without raising it the model
     // calls a single tool and stops before ever using the result. THIS is the
     // line that makes the loop genuinely agentic.

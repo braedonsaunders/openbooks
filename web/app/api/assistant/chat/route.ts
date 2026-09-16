@@ -8,6 +8,7 @@ import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { NO_ANSWER_MESSAGE, runAgentTurn } from "../../../../lib/assistant/agent";
 import { buildToolRegistry } from "../../../../lib/assistant/registry";
+import { withModelCompaction } from "../../../../lib/assistant/result-compaction";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { orgFiscalContext } from "../../../../lib/fiscal";
@@ -99,7 +100,9 @@ export async function POST(req: Request): Promise<Response> {
 
   const today = await businessToday(authz.user.orgId);
   const features = await resolvedFeatureState(authz.user.orgId);
-  const tools = buildToolRegistry(authz, features);
+  // Model-facing tool outputs are compacted (history conversion and live
+  // steps); the streamed and persisted parts keep the full results.
+  const tools = withModelCompaction(buildToolRegistry(authz, features));
   const system = assistantSystemPrompt({
     orgName: aiConfig?.org?.name ?? null,
     baseCurrency: org.rows[0]?.base_currency ?? null,
