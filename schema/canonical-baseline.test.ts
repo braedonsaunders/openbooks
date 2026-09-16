@@ -245,6 +245,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0149_payment_pending_clawbacks.sql",
     "0150_applications_org_line_indexes.sql",
     "0151_continuous_close_agent_packs.sql",
+    "0152_ai_conversation_memory.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
