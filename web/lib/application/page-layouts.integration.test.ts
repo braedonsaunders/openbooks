@@ -213,12 +213,31 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     )
     assert.equal(Number(rows.rows[0]!.n), 5, 'every stored layout survives as an inactive row')
 
-    const audit = await db.execute<{ action: string }>(
-      sql`select action from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`,
+    // Each save/restore/clear is ONE transaction, so its audit rows share the
+    // same `at` (transaction now()); the order of the rows inside such a pair
+    // is not defined, so compare per-transaction groups with their actions
+    // sorted rather than one flat sequence — the flat form was order-flaky
+    // under the pooled runner.
+    const audit = await db.execute<{ action: string; at: string }>(
+      sql`select action, at::text as at from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`,
     )
+    const groups: string[][] = []
+    let lastAt: string | null = null
+    for (const row of audit.rows) {
+      if (row.at !== lastAt) { groups.push([]); lastAt = row.at }
+      groups[groups.length - 1]!.push(row.action)
+    }
     assert.deepEqual(
-      audit.rows.map((r) => r.action),
-      ['insert', 'update', 'insert', 'update', 'insert', 'update', 'insert', 'insert', 'update', 'update'],
+      groups.map((group) => [...group].sort()),
+      [
+        ['insert'],           // first save
+        ['insert', 'update'], // replacing save supersedes the previous row
+        ['insert', 'update'], // second replacing save
+        ['insert', 'update'], // restore appends and supersedes
+        ['insert'],           // personal layout
+        ['update'],           // personal clear
+        ['update'],           // org clear
+      ],
       'every save, every restore and every clear is recorded, with its supersession',
     )
   })
