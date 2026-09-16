@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db.ts";
-import { fromUnits, isZero, neg, sum, toUnits } from "../money.ts";
+import { fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnits } from "../money.ts";
 import { resolveAccountGroups } from "../account-groups.ts";
 import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
 import { selectRule, type AccountGroupResolver } from "./match.ts";
@@ -780,6 +780,211 @@ function percentWeightsForRule(rule: RuleInEffect): WeightedTarget[] {
     }
     throw error;
   }
+}
+
+/**
+ * Event-bound net-zero pairs (A11 overhead fold) — additive hook; post.ts
+ * document semantics below are untouched.
+ *
+ * Some post-mode allocations fire on an event, not on a document line: the
+ * overhead net-zero pair fires on time approval with pre-apportioned project
+ * totals (hours × the published department rate). This builder shapes those
+ * totals into kernel lines — DR each project leg, CR the same account
+ * untagged — stamped contributor_kind 'rule' with per-entry lineage, so the
+ * event path carries the same evidence as a document contribution. Amounts
+ * are exact: legs must sum to the total and entries to their leg, or the
+ * build refuses rather than inventing or losing a cent.
+ */
+
+/** One pre-apportioned project leg with the source entries composing it. */
+export interface NetZeroPairLegTarget {
+  projectId: string;
+  subsidiaryId?: string | null;
+  /** Signed exact money (debit +); zero legs write no line. */
+  amount: string;
+  /** Carried sources; their amounts must sum exactly to the leg amount. */
+  entries: Array<{ id: string; amount: string }>;
+}
+
+export interface NetZeroPairSource {
+  accountId: string;
+  subsidiaryId?: string | null;
+  departmentId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
+  partyId?: string | null;
+  extraDims?: Record<string, string>;
+}
+
+/** One journal-ready line with its lineage drafts (journal ids stamped later). */
+export interface NetZeroPairLine {
+  line: ContributedLine;
+  lineage: LineageDraft[];
+}
+
+const SHARE_SCALE = 10_000_000_000n;
+
+/** Exact 10dp share of value in total (both exact money, total non-zero). */
+function share10(value: string, total: string): string {
+  const quanta = roundDiv(toUnits(value) * SHARE_SCALE, toUnits(total));
+  return `${(quanta / SHARE_SCALE).toString()}.${(quanta % SHARE_SCALE).toString().padStart(10, "0")}`;
+}
+
+export function buildNetZeroPairLines(args: {
+  rule: RuleInEffect;
+  currency: string;
+  source: NetZeroPairSource;
+  total: string;
+  targets: NetZeroPairLegTarget[];
+}): NetZeroPairLine[] {
+  const { rule, currency, source, targets } = args;
+  const version = rule.version;
+  if (version.impact !== "net_zero_pair") {
+    throw new PostAllocationError(`rule ${rule.rule.key} is not a net_zero_pair rule`);
+  }
+  const hash = version.definitionHash;
+  if (!hash) {
+    throw new PostAllocationError(`rule ${rule.rule.key} has a published version without a definition hash`);
+  }
+  if (isZero(args.total)) {
+    throw new PostAllocationError(`rule ${rule.rule.key} has nothing to pair (zero total)`);
+  }
+  const total = normalizeMoney(args.total);
+  const legSum = sum(targets.map((t) => t.amount));
+  if (toUnits(legSum) !== toUnits(total)) {
+    throw new PostAllocationError(
+      `rule ${rule.rule.key} leg amounts sum to ${legSum} which does not equal the leg total ${total}`,
+    );
+  }
+  const memoFor = (label: string, amount: string): string =>
+    renderTemplate(version.lineDescriptionTemplate ?? version.memoTemplate, {
+      rule: { name: rule.rule.name, key: rule.rule.key },
+      target: { label },
+      amount,
+    }) ?? rule.rule.name;
+
+  const out: NetZeroPairLine[] = [];
+  for (const target of targets) {
+    if (isZero(target.amount)) continue;
+    const entrySum = sum(target.entries.map((e) => e.amount));
+    if (toUnits(entrySum) !== toUnits(target.amount)) {
+      throw new PostAllocationError(
+        `rule ${rule.rule.key} entries do not sum to the leg amount for project ${target.projectId}`,
+      );
+    }
+    out.push({
+      line: {
+        accountId: source.accountId,
+        subsidiaryId: target.subsidiaryId ?? source.subsidiaryId ?? null,
+        departmentId: source.departmentId ?? null,
+        locationId: source.locationId ?? null,
+        classId: source.classId ?? null,
+        projectId: target.projectId,
+        partyId: source.partyId ?? null,
+        extraDims: { ...(source.extraDims ?? {}) },
+        amount: normalizeMoney(target.amount),
+        currency,
+        memo: memoFor(target.projectId, target.amount),
+        contributorKind: "rule",
+        contributorRef: version.id,
+        lineage: {
+          mode: "post",
+          ruleId: rule.rule.id,
+          versionId: version.id,
+          definitionHash: hash,
+          runId: null,
+          documentId: null,
+          sourceJournalLineId: null,
+          sourceDocumentLineId: null,
+          targetDocumentLineId: null,
+          driverId: version.driverId ?? null,
+          driverValue: null,
+          driverTotal: total,
+          share: null,
+          amount: normalizeMoney(target.amount),
+          residual: "0",
+        },
+      },
+      lineage: target.entries.map((entry) => ({
+        mode: "post" as const,
+        ruleId: rule.rule.id,
+        versionId: version.id,
+        definitionHash: hash,
+        runId: null,
+        documentId: null,
+        sourceJournalLineId: null,
+        sourceDocumentLineId: null,
+        targetDocumentLineId: null,
+        sourceTimeEntryId: entry.id,
+        driverId: version.driverId ?? null,
+        driverValue: normalizeMoney(entry.amount),
+        driverTotal: total,
+        share: share10(entry.amount, total),
+        amount: normalizeMoney(entry.amount),
+        residual: "0",
+      })),
+    });
+  }
+  const offsetTotal = neg(total);
+  out.push({
+    line: {
+      accountId: source.accountId,
+      subsidiaryId: source.subsidiaryId ?? null,
+      departmentId: source.departmentId ?? null,
+      locationId: source.locationId ?? null,
+      classId: source.classId ?? null,
+      projectId: null,
+      partyId: source.partyId ?? null,
+      extraDims: { ...(source.extraDims ?? {}) },
+      amount: offsetTotal,
+      currency,
+      // The offset leg keeps a distinct memo from the same template — the
+      // kernel's event-pair convention, mirroring the "offset" label the
+      // document path renders through its own templates.
+      memo: `${memoFor("offset", offsetTotal)} — contra`,
+      contributorKind: "rule",
+      contributorRef: version.id,
+      lineage: {
+        mode: "post",
+        ruleId: rule.rule.id,
+        versionId: version.id,
+        definitionHash: hash,
+        runId: null,
+        documentId: null,
+        sourceJournalLineId: null,
+        sourceDocumentLineId: null,
+        targetDocumentLineId: null,
+        driverId: version.driverId ?? null,
+        driverValue: null,
+        driverTotal: total,
+        share: null,
+        amount: offsetTotal,
+        residual: "0",
+      },
+    },
+    lineage: [
+      {
+        mode: "post",
+        ruleId: rule.rule.id,
+        versionId: version.id,
+        definitionHash: hash,
+        runId: null,
+        documentId: null,
+        sourceJournalLineId: null,
+        sourceDocumentLineId: null,
+        targetDocumentLineId: null,
+        sourceTimeEntryId: null,
+        driverId: version.driverId ?? null,
+        driverValue: null,
+        driverTotal: total,
+        share: null,
+        amount: offsetTotal,
+        residual: "0",
+      },
+    ],
+  });
+  assertContributorBalance(out.map((b) => b.line));
+  return out;
 }
 
 /** Test seam: pure per-impact line building without config loading. */
