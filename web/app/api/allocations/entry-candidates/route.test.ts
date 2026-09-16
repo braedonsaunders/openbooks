@@ -98,7 +98,7 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:match",
-    `export async function listRulesInEffect(request) {
+    `export async function listEntryRulesInEffect(request) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
        state.lastListRequest = { ...request }
        return state.rules.map((canned) => ({

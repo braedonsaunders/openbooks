@@ -1,31 +1,34 @@
 import { randomUUID } from "node:crypto";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money.ts";
+import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { listRulesInEffect, selectRule } from "./match.ts";
+import { listEntryRulesInEffect, selectRule } from "./match.ts";
 import type {
   AllocationMode,
   AllocationRuleTarget,
   AllocationRuleVersion,
+  ApportionResult,
   DriverVector,
   LineCoordinate,
   RuleInEffect,
+  WeightedTarget,
 } from "./types.ts";
 
 /**
  * Allocation kernel, entry mode (shard A4).
  *
  * `explodeDocumentLine` turns one entered line into child drafts; pure and
- * exact (bigint money, never floats). `planEntryDistributions` decides, per
- * submitted line, whether to explode (explicit key or automatic match),
- * regenerate an edited group, keep a locked/unchanged group, or collapse an
- * un-split request. Both are pure: the web save path (and the import writer)
- * does the rule loading and lineage persistence around them.
+ * exact (A1's bigint apportionment, never floats). `planEntryDistributions`
+ * decides, per submitted line, whether to explode (explicit key or automatic
+ * match), regenerate an edited group, keep a locked/unchanged group, or
+ * collapse an un-split request. Both are pure: the web save path (and the
+ * import writer) does the rule loading and lineage persistence around them.
  *
- * Amount apportionment here is a local exact fallback until A1's
- * `apportion()` lands; its contract (relative weights, rounding residual to
- * the residual-policy target) intentionally mirrors the kernel design so the
- * swap is mechanical.
+ * Quantity apportionment keeps a small local exact helper: quantities are
+ * commercial decimals (8dp), not ledger money, so A1's money apportionment
+ * does not cover them. Kernel errors surface as EntryAllocationError so the
+ * planner's automatic path keeps its fail-open contract.
  */
 
 export type EntryAllocationErrorCode =
@@ -208,14 +211,13 @@ export async function loadEntryRuleByKey(
   ).rows[0];
   if (!head) return { status: "not_found" };
   if (head.mode !== "entry") return { status: "wrong_mode", mode: head.mode as AllocationMode };
-  const rules = await listRulesInEffect({ orgId, mode: "entry", asOf });
+  const rules = await listEntryRulesInEffect({ orgId, mode: "entry", asOf });
   const rule = rules.find((candidate) => candidate.rule.key === key) ?? null;
   if (rule === null) return { status: "inactive" };
   return { status: "ok", rule };
 }
 
 const WEIGHT_SCALE = 10_000_000_000n;
-const SHARE_SCALE = 10_000_000_000n;
 
 function parseWeight(value: string, what: string): bigint {
   let normalized: string;
@@ -239,24 +241,43 @@ function formatScaled(units: bigint, places: number): string {
 }
 
 /**
- * Exact apportionment of one total across relative weights: every share is
- * rounded half-away-from-zero and the rounding remainder lands on the
- * residual-policy target, so the parts always sum to the total.
+ * Exact apportionment of integer units across relative weights for
+ * non-money decimals (quantities): every part is rounded half-away-from-zero
+ * and the rounding remainder lands on the money absorber's index, so the
+ * parts always sum to the total.
  */
-function apportionExact(
+function apportionExactUnits(
   totalUnits: bigint,
   weights: bigint[],
   residualIndex: number,
-): { amounts: bigint[]; residual: bigint } {
+): bigint[] {
   const weightTotal = weights.reduce((acc, w) => acc + w, 0n);
   if (weightTotal <= 0n) {
     throw new EntryAllocationError("no_driver_weight", "allocation weights sum to zero — nothing to apportion to");
   }
   const amounts = weights.map((w) => roundDiv(totalUnits * w, weightTotal));
   const placed = amounts.reduce((acc, a) => acc + a, 0n);
-  const residual = totalUnits - placed;
-  amounts[residualIndex]! += residual;
-  return { amounts, residual };
+  amounts[residualIndex]! += totalUnits - placed;
+  return amounts;
+}
+
+/** Route kernel apportionment failures into the entry error contract. */
+function apportionMoney(
+  total: string,
+  weights: WeightedTarget[],
+  version: AllocationRuleVersion,
+): ApportionResult {
+  try {
+    return apportion(total, weights, version.residualPolicy, version.residualTargetId ?? null);
+  } catch (error) {
+    if (error instanceof AllocationApportionError) {
+      if (error.code === "total_invalid") {
+        throw new EntryAllocationError("invalid_line", error.message);
+      }
+      throw new EntryAllocationError("misconfigured_rule", error.message);
+    }
+    throw error;
+  }
 }
 
 function moneyUnits(amount: string): bigint {
@@ -296,55 +317,41 @@ function targetValueInDimension(target: AllocationRuleTarget, dimension: string)
   }
 }
 
-interface WeightedTarget {
-  target: AllocationRuleTarget;
-  weight: bigint;
-}
-
-function fixedPercentWeights(targets: AllocationRuleTarget[]): WeightedTarget[] {
-  const remainders = targets.filter((t) => t.isRemainder);
-  if (remainders.length > 1) {
-    throw new EntryAllocationError("misconfigured_rule", "at most one target may take the remainder");
-  }
-  const explicit = targets.filter((t) => !t.isRemainder);
-  const weighted = explicit.map((t) => {
-    if (t.fixedPercent === null || t.fixedPercent === undefined) {
-      throw new EntryAllocationError(
-        "misconfigured_rule",
-        `target "${t.label ?? t.id}" needs a fixed percent or the remainder flag`,
-      );
-    }
-    return { target: t, weight: parseWeight(t.fixedPercent, "fixed percent") };
-  });
-  const explicitTotal = weighted.reduce((acc, w) => acc + w.weight, 0n);
-  if (explicitTotal > 100n * WEIGHT_SCALE) {
-    throw new EntryAllocationError("misconfigured_rule", "fixed percents sum to more than 100");
-  }
-  if (remainders.length === 1) {
-    return [...weighted, { target: remainders[0]!, weight: 100n * WEIGHT_SCALE - explicitTotal }];
-  }
-  if (explicitTotal === 0n) {
-    throw new EntryAllocationError("misconfigured_rule", "fixed percents sum to zero — nothing to apportion to");
-  }
-  // No remainder and under 100: weights are relative, so the children still
-  // sum to the entered amount (the entry-mode no-lost-cent invariant).
-  return weighted;
-}
-
+/**
+ * Driver-basis weights: an explicit manual weight wins, else the driver
+ * vector value for the target's value in the driver's dimension. An
+ * all-zero vector carries no information, so entry mode refuses to explode
+ * rather than fabricate attribution (fail closed; the automatic path leaves
+ * the line plain).
+ */
 function driverWeights(
+  ruleKey: string,
   targets: AllocationRuleTarget[],
   opts: ExplodeOptions,
-): { weighted: WeightedTarget[]; driverTotal: string | null } {
+): { weighted: WeightedTarget[]; units: bigint[]; driverTotal: string | null } {
   const vector = opts.driverVector;
-  const weighted = targets.map((t) => {
+  const weighted: WeightedTarget[] = [];
+  const units: bigint[] = [];
+  for (const t of targets) {
     let weight = "0";
     if (t.weight !== null && t.weight !== undefined) {
       weight = t.weight;
     } else if (vector && opts.driverDimension) {
       weight = vector.get(targetValueInDimension(t, opts.driverDimension) ?? "") ?? "0";
     }
-    return { target: t, weight: parseWeight(weight, "driver weight") };
-  });
+    units.push(parseWeight(weight, "driver weight"));
+    weighted.push({
+      key: t.id ?? `sequence:${t.sequence}`,
+      weight,
+      isRemainder: t.isRemainder === true,
+    });
+  }
+  if (units.every((u) => u === 0n)) {
+    throw new EntryAllocationError(
+      "no_driver_weight",
+      `rule "${ruleKey}" resolved to no driver weight — nothing to apportion to`,
+    );
+  }
   let driverTotal: string | null = null;
   if (vector) {
     try {
@@ -355,33 +362,7 @@ function driverWeights(
       driverTotal = null;
     }
   }
-  return { weighted, driverTotal };
-}
-
-function residualIndexFor(targets: AllocationRuleTarget[], weights: bigint[], version: AllocationRuleVersion): number {
-  switch (version.residualPolicy) {
-    case "first_target":
-      return 0;
-    case "last_target":
-      return targets.length - 1;
-    case "explicit_target": {
-      const index = targets.findIndex((t) => t.id === version.residualTargetId);
-      if (index === -1) {
-        throw new EntryAllocationError(
-          "misconfigured_rule",
-          "the residual target does not name one of this version's targets",
-        );
-      }
-      return index;
-    }
-    case "largest_share": {
-      let best = 0;
-      for (let i = 1; i < weights.length; i++) {
-        if (weights[i]! > weights[best]!) best = i;
-      }
-      return best;
-    }
-  }
+  return { weighted, units, driverTotal };
 }
 
 /** Minimal mustache-style renderer for entry presentation templates. */
@@ -445,37 +426,43 @@ export function explodeDocumentLine(
   }
 
   let weighted: WeightedTarget[];
+  let weightUnits: bigint[];
   let driverTotal: string | null = null;
   if (version.basisKind === "driver") {
-    const resolved = driverWeights(
-      version.targetKind === "dynamic"
-        ? targets.map((t) => ({ ...t, weight: t.weight ?? "0" }))
-        : targets,
-      opts,
-    );
+    const resolved = driverWeights(ruleInEffect.rule.key, targets, opts);
     weighted = resolved.weighted;
+    weightUnits = resolved.units;
     driverTotal = resolved.driverTotal;
   } else {
-    weighted = fixedPercentWeights(targets);
+    try {
+      weighted = fixedPercentWeights(targets);
+    } catch (error) {
+      if (error instanceof AllocationApportionError) {
+        throw new EntryAllocationError("misconfigured_rule", error.message);
+      }
+      throw error;
+    }
+    weightUnits = weighted.map((w) => parseWeight(w.weight, "fixed percent"));
   }
 
-  const weights = weighted.map((w) => w.weight);
-  const ordered = weighted.map((w) => w.target);
-  const residualIdx = residualIndexFor(ordered, weights, version);
-
-  const totalUnits = moneyUnits(line.amount);
-  const { amounts, residual } = apportionExact(totalUnits, weights, residualIdx);
+  const ordered = targets;
+  const apportioned = apportionMoney(line.amount, weighted, version);
+  const amounts = apportioned.targets.map((t) => t.amount);
+  const residualIdx = Math.max(
+    0,
+    weighted.findIndex((w) => w.key === apportioned.residualKey),
+  );
 
   let quantities: bigint[] | null = null;
   if (line.quantity !== null && line.quantity !== undefined) {
     const qtyUnits = parseQuantity(line.quantity);
-    quantities = apportionExact(qtyUnits, weights, residualIdx).amounts;
+    quantities = apportionExactUnits(qtyUnits, weightUnits, residualIdx);
   }
 
   const groupId = opts.groupId ?? randomUUID();
   const children: PlannedEntryLine[] = ordered.map((t, i) => ({
     accountId: t.targetAccountId ?? line.accountId,
-    amount: fromUnits(amounts[i]!),
+    amount: amounts[i]!,
     quantity: quantities === null ? null : formatScaled(quantities[i]!, 8),
     unit: line.unit ?? null,
     unitPrice: line.unitPrice ?? null,
@@ -506,17 +493,11 @@ export function explodeDocumentLine(
   }));
 
   const isDriverBasis = version.basisKind === "driver";
-  const apportionments = ordered.map((_, i) => ({
-    share:
-      totalUnits === 0n
-        ? "0.0000000000"
-        : formatScaled(
-            roundDiv((amounts[i]! < 0n ? -amounts[i]! : amounts[i]!) * SHARE_SCALE, totalUnits < 0n ? -totalUnits : totalUnits),
-            10,
-          ),
-    amount: fromUnits(amounts[i]!),
-    residual: i === residualIdx ? fromUnits(residual) : "0.0000",
-    driverValue: isDriverBasis ? formatScaled(weights[i]! / (WEIGHT_SCALE / 10000n), 4) : null,
+  const apportionments = apportioned.targets.map((t, i) => ({
+    share: t.share,
+    amount: t.amount,
+    residual: t.residual,
+    driverValue: isDriverBasis ? formatScaled(weightUnits[i]! / (WEIGHT_SCALE / 10000n), 4) : null,
   }));
 
   return { children, apportionments, driverTotal };

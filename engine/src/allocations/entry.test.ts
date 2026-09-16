@@ -295,6 +295,11 @@ test("explode rejects misconfigured fixed_percent rules", () => {
   assert.throws(() => explodeDocumentLine(entryLine(), missingPercent, { groupId: "g" }), EntryAllocationError);
 });
 
+test("explode refuses a fixed grid under 100 with no remainder target", () => {
+  const r = rule("short", [target({ fixedPercent: "60" }), target({ fixedPercent: "30" })]);
+  assert.throws(() => explodeDocumentLine(entryLine(), r, { groupId: "g" }), EntryAllocationError);
+});
+
 test("explode rejects stepped basis and dynamic targets without a resolver", () => {
   const stepped = rule("step", [target({ fixedPercent: "100" })], { basisKind: "stepped" });
   assert.throws(() => explodeDocumentLine(entryLine(), stepped, { groupId: "g" }), EntryAllocationError);
