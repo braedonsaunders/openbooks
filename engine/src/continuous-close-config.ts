@@ -10,6 +10,7 @@ export const CONTINUOUS_CLOSE_AGENT_KEYS = [
   "forensics",
   "tax",
   "payroll",
+  "projects",
 ] as const;
 export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 
@@ -625,6 +626,59 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
     agentKey: "payroll",
     supportsMateriality: false,
     parameters: [],
+  },
+  {
+    detectorKey: "project_negative_margin",
+    agentKey: "projects",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "project_budget_overrun",
+    agentKey: "projects",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "project_stale_unbilled",
+    agentKey: "projects",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "unbilledDays",
+        defaultValue: 30,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
   },
   {
     detectorKey: "missing_approved_budget",

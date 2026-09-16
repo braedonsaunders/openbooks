@@ -927,6 +927,7 @@
         "lookbackDays": "Ventana de revisión",
         "duplicateDays": "Ventana de duplicados",
         "dueWithinDays": "Vence en",
+        "unbilledDays": "Sin facturar después de",
         "minimumVariancePercent": "Desviación desfavorable mínima",
         "criticalVariancePercent": "Desviación desfavorable crítica",
         "minimumDeclinePercent": "Disminución mínima de ingresos",
@@ -1005,6 +1006,18 @@
         "payroll_yearend_gaps": {
           "title": "Brechas de cierre anual",
           "description": "Marca SIN faltantes y tasas legales sin configurar que los comprobantes necesitan."
+        },
+        "project_negative_margin": {
+          "title": "Margen de proyecto negativo",
+          "description": "Marca proyectos activos con margen publicado negativo, señalando un cambio desde la última ejecución."
+        },
+        "project_budget_overrun": {
+          "title": "Exceso de presupuesto del proyecto",
+          "description": "Marca proyectos donde el costo publicado más los compromisos abiertos superó el presupuesto aprobado."
+        },
+        "project_stale_unbilled": {
+          "title": "Trabajo sin facturar antiguo",
+          "description": "Marca trabajo facturable aprobado aún sin facturar después del umbral de antigüedad."
         },
         "missing_approved_budget": {
           "title": "Falta un presupuesto aprobado",
@@ -1131,6 +1144,11 @@
         "title": "Agente de conciliación",
         "description": "Controles continuos de conciliación bancaria.",
         "coverage": "Comprueba líneas bancarias sin conciliar con candidato de coincidencia, conciliaciones obsoletas y cuentas nunca conciliadas."
+      },
+      "projects": {
+        "title": "Agente de proyectos",
+        "description": "Controles continuos del margen de proyectos.",
+        "coverage": "Comprueba márgenes negativos, excesos de presupuesto y trabajo sin facturar antiguo."
       },
       "lastRun": "Última ejecución: {date} · {status}",
       "nextRun": "Próxima ejecución programada: {date}",
@@ -1503,6 +1521,12 @@
           "description": "Vencimientos de remesas, cuentas desconocidas, elecciones faltantes y brechas de cierre.",
           "reads": "Liquidaciones confirmadas, grupos de remesas, perfiles de empleados y tasas legales.",
           "proposes": "Enlaces de revisión de remesas y empleados — solo revisión, sin escrituras."
+        },
+        "projects": {
+          "title": "Proyectos",
+          "description": "Márgenes negativos, excesos de presupuesto y trabajo sin facturar antiguo.",
+          "reads": "Costos e ingresos publicados, presupuestos aprobados, compromisos abiertos y trabajo sin facturar.",
+          "proposes": "Enlaces de revisión de proyectos — solo revisión, sin escrituras."
         }
       }
     },

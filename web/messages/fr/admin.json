@@ -971,6 +971,7 @@
         "lookbackDays": "Fenêtre de révision",
         "duplicateDays": "Fenêtre de doublons",
         "dueWithinDays": "Échéance sous",
+        "unbilledDays": "Non facturé après",
         "minimumVariancePercent": "Écart défavorable minimal",
         "criticalVariancePercent": "Écart défavorable critique",
         "minimumDeclinePercent": "Baisse minimale du chiffre d’affaires",
@@ -1049,6 +1050,18 @@
         "payroll_yearend_gaps": {
           "title": "Manques de fin d’année",
           "description": "Signale les NAS manquants et les taux légaux non configurés requis pour les feuillets."
+        },
+        "project_negative_margin": {
+          "title": "Marge de projet négative",
+          "description": "Signale les projets actifs dont la marge publiée est négative, en notant un basculement depuis la dernière exécution."
+        },
+        "project_budget_overrun": {
+          "title": "Dépassement de budget du projet",
+          "description": "Signale les projets où le coût publié plus les engagements ouverts a dépassé le budget approuvé."
+        },
+        "project_stale_unbilled": {
+          "title": "Travail non facturé ancien",
+          "description": "Signale le travail facturable approuvé toujours non facturé après le seuil d’ancienneté."
         },
         "missing_approved_budget": {
           "title": "Budget approuvé manquant",
@@ -1175,6 +1188,11 @@
         "title": "Agent de rapprochement",
         "description": "Contrôles continus du rapprochement bancaire.",
         "coverage": "Vérifie les lignes bancaires non appariées avec un appariement probable, les rapprochements périmés et les comptes jamais rapprochés."
+      },
+      "projects": {
+        "title": "Agent de projets",
+        "description": "Contrôles continus de la marge des projets.",
+        "coverage": "Vérifie les marges négatives, les dépassements de budget et le travail non facturé ancien."
       },
       "lastRun": "Dernière exécution : {date} · {status}",
       "nextRun": "Prochaine exécution planifiée : {date}",
@@ -1547,6 +1565,12 @@
           "description": "Versements dus, comptes inconnus, choix manquants et manques de fin d’année.",
           "reads": "Paies validées, groupes de versements, dossiers d’employés et taux légaux.",
           "proposes": "Liens de révision des versements et des employés — révision uniquement, aucune écriture."
+        },
+        "projects": {
+          "title": "Projets",
+          "description": "Marges négatives, dépassements de budget et travail non facturé ancien.",
+          "reads": "Coûts et revenus publiés, budgets approuvés, engagements ouverts et travail non facturé.",
+          "proposes": "Liens de révision des projets — révision uniquement, aucune écriture."
         }
       }
     },

@@ -1016,6 +1016,7 @@
         "lookbackDays": "Lookback",
         "duplicateDays": "Duplicate window",
         "dueWithinDays": "Due within",
+        "unbilledDays": "Unbilled after",
         "minimumVariancePercent": "Minimum unfavorable variance",
         "criticalVariancePercent": "Critical unfavorable variance",
         "minimumDeclinePercent": "Minimum revenue decline",
@@ -1094,6 +1095,18 @@
         "payroll_yearend_gaps": {
           "title": "Year-end filing gaps",
           "description": "Flags missing SINs and unconfigured statutory rates the slips need."
+        },
+        "project_negative_margin": {
+          "title": "Negative project margin",
+          "description": "Flags active projects whose posted margin is negative, noting a flip from the last run."
+        },
+        "project_budget_overrun": {
+          "title": "Project budget overrun",
+          "description": "Flags projects where posted cost plus open commitments passed the approved budget."
+        },
+        "project_stale_unbilled": {
+          "title": "Stale unbilled work",
+          "description": "Flags approved billable work still uninvoiced past the ageing cutoff."
         },
         "missing_approved_budget": {
           "title": "Missing approved budget",
@@ -1220,6 +1233,11 @@
         "title": "Reconciliation agent",
         "description": "Continuous bank reconciliation controls.",
         "coverage": "Checks unmatched bank lines with a confident match candidate, stale reconciliations, and accounts never reconciled."
+      },
+      "projects": {
+        "title": "Projects agent",
+        "description": "Continuous project-margin controls.",
+        "coverage": "Checks negative margins, budget overruns, and stale unbilled work."
       },
       "lastRun": "Last run: {date} · {status}",
       "nextRun": "Next scheduled run: {date}",
@@ -1637,6 +1655,12 @@
           "description": "Remittance dues, unknown accounts, missing elections and year-end gaps.",
           "reads": "Committed pay runs, remittance groups, employee profiles and statutory rates.",
           "proposes": "Remittance and employee review links — review only, no writes."
+        },
+        "projects": {
+          "title": "Projects",
+          "description": "Negative margins, budget overruns and stale unbilled work.",
+          "reads": "Posted project costs and revenue, approved budgets, open commitments and unbilled work.",
+          "proposes": "Project review links — review only, no writes."
         }
       }
     },

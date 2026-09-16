@@ -57,6 +57,7 @@ const AGENT_PACK_READ_PERMISSIONS: Partial<Record<ContinuousCloseAgentKey, strin
   forensics: ['gl.read', 'ap.read', 'ar.read', 'expenses.read'],
   tax: ['gl.read', 'close.read', 'ap.read', 'ar.read', 'expenses.read'],
   payroll: ['payroll.read', 'close.read'],
+  projects: ['gl.read', 'projects.read', 'close.read'],
 }
 
 /** The registry keys as THIS setup lib sees them — one import point so pages
