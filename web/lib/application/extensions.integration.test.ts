@@ -245,6 +245,6 @@ test('library publication and withdrawal preserve package evidence and reject an
     assert.ok(evidence.every(row=>row.actor_id===context.authz.user.id))
     assert.equal(evidence[0]!.changes.event,'app_listing_published')
     assert.equal(evidence[1]!.changes.event,'app_listing_withdrawn')
-    assert.equal(((evidence[0]!.changes.after as {files:unknown[]}).files).length,3)
+    assert.equal(((evidence[0]!.changes.after as {files:unknown[]}).files).length,bundle.files.length)
   } finally { await dropScratchOrg(foreign.org.orgId); await dropScratchOrg(org.orgId) }
 }))
