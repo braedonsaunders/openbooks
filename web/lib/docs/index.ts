@@ -31,6 +31,7 @@ import { recordCustomization } from './articles/record-customization'
 import { customizationArticles } from './articles/customization'
 import { platformArticles } from './articles/platform'
 import { quickStart, navigationAndRecords, glossary } from './articles/getting-started'
+import { assistantChat } from './articles/assistant-chat'
 import {
   accountingModel,
   transactionLifecycle,
@@ -158,6 +159,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'quick-start': 'getting-started-first-steps',
   'navigation-and-records': 'getting-started-using-openbooks',
   glossary: 'getting-started-using-openbooks',
+  'assistant-chat': 'getting-started-using-openbooks',
   'switching-from-small-business-systems': 'switching-small-business',
   'switching-from-enterprise-systems': 'switching-erp',
   'accounting-model': 'accounting-ledger',
@@ -220,6 +222,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   quickStart,
   navigationAndRecords,
   glossary,
+  assistantChat,
   ...switchingArticles,
   accountingModel,
   transactionLifecycle,
