@@ -29,14 +29,15 @@ export function PageHeader({
           className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
         />
       ) : null}
-      {/* One row at every breakpoint: title on the left (truncates to make
-          room), actions pinned right. Phones drop the description to keep the
-          header to a single line; sm+ shows it below. Actions TOP-align to
-          the (single-line) title so their position never depends on whether
-          the description wraps — route-tab strips must not move between
-          sibling pages. */}
-      <header className="flex items-center justify-between gap-3 sm:items-start sm:gap-4">
-        <div className="min-w-0 space-y-1">
+      {/* Title on the left (truncates to make room), actions pinned right.
+          Phones drop the description to keep the header to a single line and
+          let a wide action strip (route tabs + a button) wrap UNDER the title
+          instead of squeezing it to one letter — the title keeps a 10rem
+          floor. sm+ stays one row and actions TOP-align to the (single-line)
+          title so their position never depends on whether the description
+          wraps — route-tab strips must not move between sibling pages. */}
+      <header className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:items-start sm:gap-4">
+        <div className="min-w-0 flex-1 basis-40 space-y-1">
           <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">
             {title}
           </h1>
@@ -50,7 +51,7 @@ export function PageHeader({
             different implementations (for example, a client create button on
             one tab and an asChild link on another). */}
         {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 [&_[data-slot=button][data-variant=default]]:h-10 [&_[data-slot=button][data-variant=default]]:px-4">
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 sm:shrink-0 [&_[data-slot=button][data-variant=default]]:h-10 [&_[data-slot=button][data-variant=default]]:px-4">
             {actions}
           </div>
         ) : null}

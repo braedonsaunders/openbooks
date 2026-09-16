@@ -97,7 +97,7 @@ export function arCockpitSpec(data: ArCockpitData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
           widget(
             'new-document',

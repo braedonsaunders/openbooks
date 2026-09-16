@@ -88,7 +88,7 @@ export function apCockpitSpec(data: ApCockpitData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
           // ONE widget, not two side by side: the native header nests the
           // capture link and the create menu in their own `gap-2` row inside
