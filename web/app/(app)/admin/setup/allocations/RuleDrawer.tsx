@@ -252,6 +252,16 @@ function RuleCreateBody({ closeHref }: { closeHref: string }) {
   )
 }
 
+interface PartyOption extends Option {
+  roles?: string[]
+}
+
+interface SegmentOption {
+  key: string
+  label: string
+  values: Option[]
+}
+
 interface PickerOptions {
   accounts: Option[]
   departments: Option[]
@@ -261,6 +271,9 @@ interface PickerOptions {
   subsidiaries: Option[]
   books: Option[]
   periods: Option[]
+  parties: PartyOption[]
+  items: Option[]
+  segments: SegmentOption[]
 }
 
 /** Edit mode: loads head + versions + pickers once, then one tab body at a time. */
@@ -294,6 +307,8 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       }
       setDetail(detailRes.body as RuleDetail)
       const payload = optionsRes.body as Record<string, Option[]>
+      const rawParties = (payload['parties'] ?? []) as (Option & { roles?: unknown })[]
+      const rawSegments = (payload['segments'] ?? []) as unknown as SegmentOption[]
       setOptions({
         accounts: payload['accounts'] ?? [],
         departments: payload['departments'] ?? [],
@@ -303,6 +318,16 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
         subsidiaries: payload['subsidiaries'] ?? [],
         books: payload['books'] ?? [],
         periods: payload['periods'] ?? [],
+        parties: rawParties.map((party) => ({
+          ...party,
+          roles: Array.isArray(party.roles) ? party.roles.filter((role): role is string => typeof role === 'string') : [],
+        })),
+        items: payload['items'] ?? [],
+        segments: rawSegments.map((segment) => ({
+          key: typeof segment?.key === 'string' ? segment.key : '',
+          label: typeof segment?.label === 'string' ? segment.label : '',
+          values: Array.isArray(segment?.values) ? segment.values : [],
+        })).filter((segment) => segment.key !== ''),
       })
       if (driversRes.status === 200) {
         setDrivers((driversRes.body as { drivers?: typeof drivers })?.drivers ?? [])
@@ -537,6 +562,14 @@ function DefinitionTab({
     class: t('rules.definition.filters.class'),
     project: t('rules.definition.filters.project'),
     subsidiary: t('rules.definition.filters.subsidiary'),
+    party: t('rules.definition.filters.party'),
+    item: t('rules.definition.filters.item'),
+  }
+  const partyRoleLabels: Record<string, string> = {
+    vendor: t('rules.definition.partyRoles.vendor'),
+    customer: t('rules.definition.partyRoles.customer'),
+    employee: t('rules.definition.partyRoles.employee'),
+    other: t('rules.definition.partyRoles.other'),
   }
   const accountOptions = options.accounts.map((account) => ({ value: account.id, label: account.label }))
   const driverOptions = [
@@ -545,11 +578,22 @@ function DefinitionTab({
       ? [{ value: form.driverId, label: form.driverId }]
       : []),
   ]
-  const filters = (loaded?.version?.dimensionFilters ?? {}) as Record<string, unknown>
-  const readonlyFilters =
-    (Array.isArray(filters['partyIds']) && filters['partyIds'].length > 0)
-    || (Array.isArray(filters['itemIds']) && filters['itemIds'].length > 0)
-    || (typeof filters['extraDims'] === 'object' && filters['extraDims'] !== null && Object.keys(filters['extraDims']).length > 0)
+  /** Parties grouped under their primary role (vendor → customer → employee, else other). */
+  const partyGroups: { role: string; label: string; parties: PartyOption[] }[] = ((): { role: string; label: string; parties: PartyOption[] }[] => {
+    const order = ['vendor', 'customer', 'employee']
+    const buckets = new Map<string, PartyOption[]>()
+    for (const party of options.parties) {
+      const primary = order.find((role) => party.roles?.includes(role)) ?? 'other'
+      const bucket = buckets.get(primary) ?? []
+      bucket.push(party)
+      buckets.set(primary, bucket)
+    }
+    return [...buckets.entries()].map(([role, group]) => ({
+      role,
+      label: partyRoleLabels[role] ?? role,
+      parties: group,
+    }))
+  })()
   const dynamicDimOptions = ((): { value: string; label: string }[] => {
     const dims: { value: string; label: string }[] = [
       { value: 'department', label: t('rules.test.department') },
@@ -704,6 +748,50 @@ function DefinitionTab({
                   )
                 })}
               </div>
+              <div>
+                <Label>{filterLabels['party']}</Label>
+                <div className="space-y-2">
+                  {partyGroups.map((group) => (
+                    <div key={group.role}>
+                      <Label>{group.label}</Label>
+                      <MultiCheck
+                        ariaLabel={group.label}
+                        options={group.parties.map((item) => ({ value: item.id, label: item.label }))}
+                        values={form.filterPartyIds}
+                        onChange={(next) => set('filterPartyIds', next)}
+                      />
+                    </div>
+                  ))}
+                  {partyGroups.length === 0 ? (
+                    <MultiCheck
+                      ariaLabel={filterLabels['party'] ?? 'party'}
+                      options={[]}
+                      values={form.filterPartyIds}
+                      onChange={(next) => set('filterPartyIds', next)}
+                    />
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <Label>{filterLabels['item']}</Label>
+                <MultiCheck
+                  ariaLabel={filterLabels['item'] ?? 'item'}
+                  options={options.items.map((item) => ({ value: item.id, label: item.label }))}
+                  values={form.filterItemIds}
+                  onChange={(next) => set('filterItemIds', next)}
+                />
+              </div>
+              {options.segments.map((segment) => (
+                <div key={segment.key}>
+                  <Label>{segment.label}</Label>
+                  <MultiCheck
+                    ariaLabel={segment.label}
+                    options={segment.values.map((item) => ({ value: item.id, label: item.label }))}
+                    values={form.filterExtraDims[segment.key] ?? []}
+                    onChange={(next) => set('filterExtraDims', { ...form.filterExtraDims, [segment.key]: next })}
+                  />
+                </div>
+              ))}
               <div className="mt-2 space-y-1">
                 <Label>{t('rules.definition.filtersUntagged')}</Label>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('rules.definition.filtersUntaggedHint')}</p>
@@ -726,9 +814,6 @@ function DefinitionTab({
                   </label>
                 ))}
               </div>
-              {readonlyFilters ? (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('rules.definition.filtersReadonly')}</p>
-              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('rules.definition.applyPolicy')}>
@@ -1197,6 +1282,8 @@ function TestTab({
     { key: 'classId', label: t('rules.test.class'), values: options.classes },
     { key: 'projectId', label: t('rules.test.project'), values: options.projects },
     { key: 'subsidiaryId', label: t('rules.test.subsidiary'), values: options.subsidiaries },
+    { key: 'partyId', label: t('rules.test.party'), values: options.parties },
+    { key: 'itemId', label: t('rules.test.item'), values: options.items },
   ]
 
   const run = async () => {

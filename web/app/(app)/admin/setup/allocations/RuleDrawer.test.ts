@@ -50,3 +50,24 @@ test('rule drawer create mode posts a head and navigates to the new rule', () =>
   assert.ok(drawerSource.includes(`drawer.newTitle`), 'create mode has a title')
   assert.ok(drawerSource.includes(`?rule=`), 'create navigates to ?rule=<id>')
 })
+
+test('rule drawer edits party, item and custom-segment filters from the options payload', () => {
+  // Options carry the three picker lists; the drawer maps each with an
+  // empty fallback so a missing key never breaks the definition tab.
+  for (const key of [`payload['parties']`, `payload['items']`, `payload['segments']`]) {
+    assert.ok(drawerSource.includes(key), `${key} must be mapped from the options payload`)
+  }
+  // Parties group under their primary role; items and each custom segment
+  // render a MultiCheck bound to the definition form.
+  for (const fragment of ['filterPartyIds', 'filterItemIds', 'filterExtraDims', 'partyGroups', 'definition.partyRoles']) {
+    assert.ok(drawerSource.includes(fragment), `${fragment} must be wired`)
+  }
+  assert.ok(drawerSource.includes('definition.filters.party'), 'party filter label comes from the catalog')
+  assert.ok(drawerSource.includes('definition.filters.item'), 'item filter label comes from the catalog')
+  // Nothing stays read-only: the form round-trips all three through the
+  // version PATCH and the test tab can sample party/item lines.
+  assert.ok(!drawerSource.includes('filtersReadonly'), 'no filter stays read-only')
+  assert.ok(!drawerSource.includes('readonlyFilters'), 'read-only filter branch is gone')
+  assert.ok(drawerSource.includes(`key: 'partyId'`), 'test tab samples party lines')
+  assert.ok(drawerSource.includes(`key: 'itemId'`), 'test tab samples item lines')
+})
