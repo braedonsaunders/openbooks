@@ -296,7 +296,9 @@ test("container verification runs the deployment workflow contract test", () => 
 test("publisher reuses proven merge checks without omitting release policies", () => {
   const scripts = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts;
   const checks = scripts["verify:release:checks"].split(" && ");
-  assert.deepEqual(checks, scripts["verify:release"].split(" && ").filter(command =>
+  // verify:release is the full gate (it runs `npm test`); the suite-free
+  // policy subset it must track is verify:release:quick.
+  assert.deepEqual(checks, scripts["verify:release:quick"].split(" && ").filter(command =>
     command !== "npm run typecheck --workspaces --if-present" && command !== "npm -w web run build"));
   const merge = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
   assert.match(merge, /npm run typecheck --workspaces --if-present/);

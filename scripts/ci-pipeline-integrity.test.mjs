@@ -534,10 +534,20 @@ test('the release job does not re-run the suite, and fails closed without a gree
   const verify = topLevelBlock(publish.slice(publish.indexOf('\njobs:')), 'verify')
 
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
-  assert.doesNotMatch(
+  // Owner decision (audit finding 7.6): the documented `verify:release` gate
+  // runs the full suite; the suite-free fast path is `verify:release:quick`.
+  // The release JOB still never re-runs the suite — it runs
+  // `verify:release:checks` plus the merge-gate check pinned below — so the
+  // ~35-minute concern that motivated the old fast-default stands.
+  assert.match(
     scripts['verify:release'],
     /npm test\b/,
-    'verify:release must not run the suite; the merge gate proves it for this commit',
+    'verify:release must run the suite; the documented gate is the full gate',
+  )
+  assert.doesNotMatch(
+    scripts['verify:release:quick'],
+    /npm test\b/,
+    'verify:release:quick must stay suite-free for the fast path',
   )
   assert.match(
     scripts['verify:release:full'],
