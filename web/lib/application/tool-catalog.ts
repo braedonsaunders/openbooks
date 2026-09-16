@@ -15,6 +15,7 @@ import {
   startReconciliationSession,
   unmatchStatementLineAction,
 } from "./banking";
+import { updateBudgetCells } from "./budgets";
 import {
   advanceCloseRun,
   createReopenRequest,
@@ -718,6 +719,29 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
     execute: async (context, input) => ({ ok: true, ...(await signOffReconciliation(context, input)) }),
+  }),
+  definition({
+    name: "update_budget_cells", title: "Update Budget Cells",
+    description: "Write planning cells into a draft budget scenario through the same revision-checked command as the budget worksheet: amounts are exact decimal strings, cells are keyed by account, period, subsidiary and dimensions, and expectedRevision (from get_budget_workspace) must match or the write is refused. Approved, pending or archived scenarios refuse. Audited with before/after evidence.",
+    inputSchema: z.object({
+      scenarioId: UUID,
+      expectedRevision: z.number().int().min(1),
+      cells: z.array(z.object({
+        accountId: UUID,
+        periodId: UUID,
+        subsidiaryId: UUID.nullable().optional(),
+        departmentId: UUID.nullable().optional(),
+        projectId: UUID.nullable().optional(),
+        locationId: UUID.nullable().optional(),
+        classId: UUID.nullable().optional(),
+        amount: SIGNED_MONEY,
+        note: z.string().max(2000).nullable().optional(),
+      })).min(1).max(1000),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("budgets.manage"), featureKey: "budgets",
+    execute: async (context, input) => ({ ok: true, ...(await updateBudgetCells(context, input)) }),
   }),
   definition({
     name: "get_company_settings", title: "Get Company Settings",
