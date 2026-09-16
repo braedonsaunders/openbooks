@@ -14,8 +14,9 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { healthStrings } = await import('./health-strings.ts')
+const { healthStrings, localizedRatioDefs } = await import('./health-strings.ts')
 const { healthData } = await import('./health-data.ts')
+const { RATIO_DEFS } = await import('./financial-health.ts')
 
 function catalogTranslator(locale: string) {
   const analytics = JSON.parse(
@@ -71,5 +72,33 @@ test('health findings and labels render in the request locale', { skip: !env.OPE
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * The ratio-defs catalog must stay in lockstep with the static RATIO_DEFS
+ * table (still served to surfaces outside the analytics dashboards): same 16
+ * ids, same English copy — and a real translation in every other locale.
+ */
+test('the ratio-defs catalog matches the static table and translates every locale', () => {
+  assert.deepEqual(localizedRatioDefs(catalogTranslator('en')), RATIO_DEFS)
+  assert.equal(localizedRatioDefs(catalogTranslator('fr')).gross_margin?.label, 'Marge brute')
+  for (const locale of ['fr', 'es', 'de', 'pt-BR', 'ja', 'zh']) {
+    const defs = localizedRatioDefs(catalogTranslator(locale))
+    assert.deepEqual(Object.keys(defs).sort(), Object.keys(RATIO_DEFS).sort(), `${locale} needs all 16 ratio defs`)
+    const enTable = RATIO_DEFS as Record<string, Record<string, string>>
+    for (const [id, def] of Object.entries(defs)) {
+      const enDef = enTable[id]
+      assert.ok(enDef, `${locale} ${id} must exist in the static table`)
+      for (const field of ['label', 'formula', 'desc', 'interpret'] as const) {
+        assert.ok(def[field].trim().length > 0, `${locale} ${id}.${field} must resolve`)
+        assert.ok(!def[field].includes('financialHealth.ratios'), `${locale} ${id}.${field} must resolve a catalog key`)
+      }
+      // Prose must translate; names/formulas may legitimately coincide
+      // across languages ("Rule of 40", "NOPAT", symbols).
+      for (const field of ['desc', 'interpret'] as const) {
+        assert.notEqual(def[field], enDef[field], `${locale} ${id}.${field} must not be English fallback`)
+      }
+    }
   }
 })

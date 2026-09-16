@@ -220,6 +220,111 @@
     },
     "labels": {
       "unassignedSegment": "Unassigned"
+    },
+    "ratios": {
+      "gross_margin": {
+        "label": "Gross Margin",
+        "formula": "Gross Profit / Revenue",
+        "desc": "Share of revenue left after the direct cost of delivery.",
+        "interpret": "Higher is better. Services firms typically target 35–50%."
+      },
+      "operating_margin": {
+        "label": "Operating Margin",
+        "formula": "Operating Income / Revenue",
+        "desc": "Profitability from core operations, before interest and non-operating items.",
+        "interpret": "Above 15% is strong for most operating businesses."
+      },
+      "ebitda_margin": {
+        "label": "EBITDA Margin",
+        "formula": "(Operating Income + Depreciation + Amortization) / Revenue",
+        "desc": "Operating profitability before non-cash charges and financing.",
+        "interpret": "Above 20% is healthy; useful for comparing capital structures."
+      },
+      "net_margin": {
+        "label": "Net Profit Margin",
+        "formula": "Net Income / Revenue",
+        "desc": "Bottom-line profit as a share of revenue, after everything.",
+        "interpret": "Above 10% is healthy for most industries."
+      },
+      "roa": {
+        "label": "Return on Assets",
+        "formula": "Net Income / Total Assets",
+        "desc": "How efficiently the asset base generates profit.",
+        "interpret": "Above 8% indicates efficient asset use."
+      },
+      "roe": {
+        "label": "Return on Equity",
+        "formula": "Net Income / Total Equity",
+        "desc": "Return generated on shareholders' equity.",
+        "interpret": "Above 15% is generally considered strong."
+      },
+      "roic": {
+        "label": "Return on Invested Capital",
+        "formula": "NOPAT / Invested Capital",
+        "desc": "Return on all capital invested. NOPAT = Operating Income × (1 − 25% assumed tax). Invested Capital = Equity + Long-term Debt.",
+        "interpret": "Above your cost of capital (typically 8–12%) creates value."
+      },
+      "roce": {
+        "label": "Return on Capital Employed",
+        "formula": "Operating Income / Invested Capital",
+        "desc": "Pre-tax operating return on capital employed.",
+        "interpret": "Above 15% signals efficient capital deployment."
+      },
+      "rev_per_employee": {
+        "label": "Revenue per Employee",
+        "formula": "Revenue / Period-end Headcount",
+        "desc": "Top-line productivity of the workforce.",
+        "interpret": "Benchmarks vary materially by industry, geography, and reporting currency."
+      },
+      "gp_per_employee": {
+        "label": "Gross Profit per Employee",
+        "formula": "Gross Profit / Period-end Headcount",
+        "desc": "Value each employee contributes after direct costs.",
+        "interpret": "A cleaner productivity signal than revenue per head."
+      },
+      "asset_turnover": {
+        "label": "Asset Turnover",
+        "formula": "Revenue / Total Assets",
+        "desc": "Revenue generated per dollar of assets.",
+        "interpret": "Above 1.0x means assets turn over faster than once a year."
+      },
+      "cogs_ratio": {
+        "label": "COGS Ratio",
+        "formula": "COGS / Revenue",
+        "desc": "Direct cost of delivery as a share of revenue. Lower is better.",
+        "interpret": "The inverse of gross margin — keep it below your target."
+      },
+      "opex_ratio": {
+        "label": "OpEx Ratio",
+        "formula": "Operating Expenses / Revenue",
+        "desc": "Overhead as a share of revenue. Lower is better.",
+        "interpret": "Controlling this is the lever between gross and operating margin."
+      },
+      "operating_leverage": {
+        "label": "Operating Leverage",
+        "formula": "Δ Operating Income % / Δ Revenue %",
+        "desc": "How much operating income moves for a given revenue change.",
+        "interpret": "Above 1.0x means profits scale faster than revenue."
+      },
+      "interest_coverage": {
+        "label": "Interest Coverage",
+        "formula": "Operating Income / Other Expense",
+        "desc": "How many times operating income covers non-operating (interest) expense.",
+        "interpret": "Above 5x is comfortable; below 1.5x is a red flag."
+      },
+      "rule_of_40": {
+        "label": "Rule of 40",
+        "formula": "Revenue Growth % + Operating Margin %",
+        "desc": "Balances growth against profitability in a single number.",
+        "interpret": "40 or above is excellent — trade growth for margin or vice versa."
+      }
+    },
+    "ratioNotes": {
+      "noDA": "No depreciation/amortization accounts found",
+      "noBalanceSheet": "No balance sheet data",
+      "noHeadcount": "No active employee records",
+      "noInterestExpense": "No interest expense",
+      "perEmployees": "{revenue} / {count, plural, one {# employee} other {# employees}}"
     }
   },
   "customer": {

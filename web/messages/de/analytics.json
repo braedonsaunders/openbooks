@@ -206,6 +206,111 @@
     },
     "labels": {
       "unassignedSegment": "Nicht zugeordnet"
+    },
+    "ratios": {
+      "gross_margin": {
+        "label": "Bruttomarge",
+        "formula": "Bruttoergebnis / Umsatz",
+        "desc": "Anteil des Umsatzes nach direkten Lieferkosten.",
+        "interpret": "Höher ist besser. Dienstleister zielen typisch auf 35–50 %."
+      },
+      "operating_margin": {
+        "label": "Operative Marge",
+        "formula": "Betriebsergebnis / Umsatz",
+        "desc": "Rentabilität des Kerngeschäfts vor Zinsen und sonstigen Posten.",
+        "interpret": "Über 15 % ist stark für die meisten Unternehmen."
+      },
+      "ebitda_margin": {
+        "label": "EBITDA-Marge",
+        "formula": "(Betriebsergebnis + Abschreibungen) / Umsatz",
+        "desc": "Operative Rentabilität vor nicht zahlungswirksamen Posten und Finanzierung.",
+        "interpret": "Über 20 % ist gesund; nützlich zum Vergleich von Kapitalstrukturen."
+      },
+      "net_margin": {
+        "label": "Nettomarge",
+        "formula": "Nettoergebnis / Umsatz",
+        "desc": "Endergebnis als Anteil des Umsatzes, nach allem.",
+        "interpret": "Über 10 % ist in den meisten Branchen gesund."
+      },
+      "roa": {
+        "label": "Gesamtkapitalrendite",
+        "formula": "Nettoergebnis / Gesamtvermögen",
+        "desc": "Effizienz, mit der das Vermögen Gewinn erwirtschaftet.",
+        "interpret": "Über 8 % zeigt effizienten Vermögeneinsatz."
+      },
+      "roe": {
+        "label": "Eigenkapitalrendite",
+        "formula": "Nettoergebnis / Eigenkapital",
+        "desc": "Rendite auf das Eigenkapital der Anteilseigner.",
+        "interpret": "Über 15 % gilt allgemein als stark."
+      },
+      "roic": {
+        "label": "Rendite auf investiertes Kapital",
+        "formula": "NOPAT / Investiertes Kapital",
+        "desc": "Rendite auf das gesamte investierte Kapital. NOPAT = Betriebsergebnis × (1 − 25 % angenommene Steuer). Investiertes Kapital = Eigenkapital + langfristige Schulden.",
+        "interpret": "Über den Kapitalkosten (typisch 8–12 %) schafft Wert."
+      },
+      "roce": {
+        "label": "Rendite auf eingesetztes Kapital",
+        "formula": "Betriebsergebnis / Investiertes Kapital",
+        "desc": "Operative Vorsteuerrendite des eingesetzten Kapitals.",
+        "interpret": "Über 15 % signalisiert effizienten Kapitaleinsatz."
+      },
+      "rev_per_employee": {
+        "label": "Umsatz pro Mitarbeiter",
+        "formula": "Umsatz / Mitarbeiterzahl am Periodenende",
+        "desc": "Vertriebsproduktivität der Belegschaft.",
+        "interpret": "Benchmarks variieren stark nach Branche, Region und Währung."
+      },
+      "gp_per_employee": {
+        "label": "Bruttoergebnis pro Mitarbeiter",
+        "formula": "Bruttoergebnis / Mitarbeiterzahl am Periodenende",
+        "desc": "Wertbeitrag jedes Mitarbeiters nach direkten Kosten.",
+        "interpret": "Ein reineres Produktivitätssignal als Umsatz pro Kopf."
+      },
+      "asset_turnover": {
+        "label": "Vermögensumschlag",
+        "formula": "Umsatz / Gesamtvermögen",
+        "desc": "Umsatz pro Euro Vermögen.",
+        "interpret": "Über 1,0x schlägt das Vermögen mehr als einmal pro Jahr um."
+      },
+      "cogs_ratio": {
+        "label": "COGS-Quote",
+        "formula": "COGS / Umsatz",
+        "desc": "Direkte Lieferkosten als Umsatzanteil. Niedriger ist besser.",
+        "interpret": "Das Gegenstück der Bruttomarge — unter dem Ziel halten."
+      },
+      "opex_ratio": {
+        "label": "OpEx-Quote",
+        "formula": "Betriebsausgaben / Umsatz",
+        "desc": "Overhead als Umsatzanteil. Niedriger ist besser.",
+        "interpret": "Dessen Steuerung ist der Hebel zwischen Brutto- und operativer Marge."
+      },
+      "operating_leverage": {
+        "label": "Operativer Hebel",
+        "formula": "Δ Betriebsergebnis % / Δ Umsatz %",
+        "desc": "Wie stark sich das Betriebsergebnis bei Umsatzänderungen bewegt.",
+        "interpret": "Über 1,0x skalieren Gewinne schneller als der Umsatz."
+      },
+      "interest_coverage": {
+        "label": "Zinsdeckung",
+        "formula": "Betriebsergebnis / Sonstiger Aufwand",
+        "desc": "Wie oft das Betriebsergebnis den nicht operativen (Zins-)Aufwand deckt.",
+        "interpret": "Über 5x ist komfortabel; unter 1,5x ist ein Warnsignal."
+      },
+      "rule_of_40": {
+        "label": "Rule of 40",
+        "formula": "Umsatzwachstum % + operative Marge %",
+        "desc": "Balanciert Wachstum und Rentabilität in einer Zahl.",
+        "interpret": "40 oder mehr ist exzellent — Wachstum gegen Marge tauschen oder umgekehrt."
+      }
+    },
+    "ratioNotes": {
+      "noDA": "Keine Abschreibungskonten gefunden",
+      "noBalanceSheet": "Keine Bilanzdaten",
+      "noHeadcount": "Keine aktiven Mitarbeiter",
+      "noInterestExpense": "Kein Zinsaufwand",
+      "perEmployees": "{revenue} / {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}"
     }
   },
   "customer": {

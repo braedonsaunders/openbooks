@@ -206,6 +206,111 @@
     },
     "labels": {
       "unassignedSegment": "未分配"
+    },
+    "ratios": {
+      "gross_margin": {
+        "label": "毛利率",
+        "formula": "毛利润 / 营收",
+        "desc": "扣除直接成本后剩余的营收份额。",
+        "interpret": "越高越好，服务型企业通常目标为35–50%。"
+      },
+      "operating_margin": {
+        "label": "营业利润率",
+        "formula": "营业利润 / 营收",
+        "desc": "核心业务盈利能力，扣除利息和非经营项目之前。",
+        "interpret": "超过15%对多数经营性企业已属强劲。"
+      },
+      "ebitda_margin": {
+        "label": "EBITDA利润率",
+        "formula": "（营业利润＋折旧＋摊销）/ 营收",
+        "desc": "扣除非现金费用和融资之前的经营盈利能力。",
+        "interpret": "超过20%属健康，便于比较不同资本结构。"
+      },
+      "net_margin": {
+        "label": "净利润率",
+        "formula": "净利润 / 营收",
+        "desc": "扣除一切之后的底线利润占营收份额。",
+        "interpret": "多数行业超过10%属健康。"
+      },
+      "roa": {
+        "label": "总资产收益率",
+        "formula": "净利润 / 总资产",
+        "desc": "资产创造利润的效率。",
+        "interpret": "超过8%表明资产利用高效。"
+      },
+      "roe": {
+        "label": "净资产收益率",
+        "formula": "净利润 / 净资产",
+        "desc": "股东权益产生的回报。",
+        "interpret": "超过15%通常视为强劲。"
+      },
+      "roic": {
+        "label": "投入资本回报率",
+        "formula": "NOPAT / 投入资本",
+        "desc": "全部投入资本的回报。NOPAT＝营业利润×（1−25%假设税率）。投入资本＝净资产＋长期负债。",
+        "interpret": "超过资本成本（通常8–12%）即创造价值。"
+      },
+      "roce": {
+        "label": "已动用资本回报率",
+        "formula": "营业利润 / 投入资本",
+        "desc": "已动用资本的税前经营回报。",
+        "interpret": "超过15%表明资本配置高效。"
+      },
+      "rev_per_employee": {
+        "label": "人均营收",
+        "formula": "营收 / 期末人数",
+        "desc": "员工的销售生产力。",
+        "interpret": "基准因行业、地域和币种差异很大。"
+      },
+      "gp_per_employee": {
+        "label": "人均毛利",
+        "formula": "毛利润 / 期末人数",
+        "desc": "扣除直接成本后每位员工贡献的价值。",
+        "interpret": "比人均营收更纯粹的生产力信号。"
+      },
+      "asset_turnover": {
+        "label": "资产周转率",
+        "formula": "营收 / 总资产",
+        "desc": "每单位资产产生的营收。",
+        "interpret": "超过1.0倍意味着资产年周转超过一次。"
+      },
+      "cogs_ratio": {
+        "label": "销售成本率",
+        "formula": "销售成本 / 营收",
+        "desc": "直接成本占营收份额，越低越好。",
+        "interpret": "毛利率的反面——请保持在目标以下。"
+      },
+      "opex_ratio": {
+        "label": "运营费用率",
+        "formula": "营业费用 / 营收",
+        "desc": "间接费用占营收份额，越低越好。",
+        "interpret": "控制它是连接毛利率与营业利润率的杠杆。"
+      },
+      "operating_leverage": {
+        "label": "经营杠杆",
+        "formula": "Δ营业利润% / Δ营收%",
+        "desc": "营收变化时营业利润的变动幅度。",
+        "interpret": "超过1.0倍意味着利润增速快于营收。"
+      },
+      "interest_coverage": {
+        "label": "利息保障倍数",
+        "formula": "营业利润 / 其他费用",
+        "desc": "营业利润覆盖非经营（利息）费用的倍数。",
+        "interpret": "超过5倍较从容，低于1.5倍是危险信号。"
+      },
+      "rule_of_40": {
+        "label": "40法则",
+        "formula": "营收增长率% ＋ 营业利润率%",
+        "desc": "用一个数字平衡增长与盈利。",
+        "interpret": "40及以上为优秀——在增长与利润率之间取舍。"
+      }
+    },
+    "ratioNotes": {
+      "noDA": "未找到折旧/摊销科目",
+      "noBalanceSheet": "无资产负债表数据",
+      "noHeadcount": "无在职员工记录",
+      "noInterestExpense": "无利息费用",
+      "perEmployees": "{revenue} / {count, plural, one {# 人} other {# 人}}"
     }
   },
   "customer": {

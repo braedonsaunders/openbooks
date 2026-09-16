@@ -10,6 +10,7 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+import { englishFinancialHealthNotes, type FinancialHealthNotes } from "./health-strings";
 import { decimalSum, type ExactDecimal } from '../statement-format'
 
 /**
@@ -320,6 +321,7 @@ export async function financialHealth(
   benchmarks: HealthBenchmarks = DEFAULT_BENCHMARKS,
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  notes: FinancialHealthNotes = englishFinancialHealthNotes,
 ): Promise<FinancialHealth> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const resolvedOrgId = await resolveOrgId(orgId);
@@ -410,25 +412,25 @@ export async function financialHealth(
   const profitability: RatioResult[] = [
     mk("gross_margin", grossMarginPct, "pct", b.grossMargin, false, `${M(grossProfit)} / ${M(revenue)}`),
     mk("operating_margin", operatingMargin, "pct", b.operatingMargin, false, `${M(operatingIncome)} / ${M(revenue)}`),
-    mk("ebitda_margin", ebitdaMargin, "pct", b.ebitdaMargin, false, `${M(ebitda)} / ${M(revenue)}`, !hasDA, "No depreciation/amortization accounts found"),
+    mk("ebitda_margin", ebitdaMargin, "pct", b.ebitdaMargin, false, `${M(ebitda)} / ${M(revenue)}`, !hasDA, notes.noDA),
     mk("net_margin", revenue > 0 ? netIncome / revenue : 0, "pct", b.netMargin, false, `${M(netIncome)} / ${M(revenue)}`),
-    mk("roa", roa, "pct", b.roa, false, roa !== null ? `${M(netIncome)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
-    mk("roe", roe, "pct", b.roe, false, roe !== null ? `${M(netIncome)} / ${M(totalEquity)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
-    mk("roic", roic, "pct", b.roic, false, roic !== null ? `${M(nopat)} (NOPAT) / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
-    mk("roce", roce, "pct", 0.15, false, roce !== null ? `${M(operatingIncome)} / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
+    mk("roa", roa, "pct", b.roa, false, roa !== null ? `${M(netIncome)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, notes.noBalanceSheet),
+    mk("roe", roe, "pct", b.roe, false, roe !== null ? `${M(netIncome)} / ${M(totalEquity)}` : "N/A", !hasBalanceSheet, notes.noBalanceSheet),
+    mk("roic", roic, "pct", b.roic, false, roic !== null ? `${M(nopat)} (NOPAT) / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, notes.noBalanceSheet),
+    mk("roce", roce, "pct", 0.15, false, roce !== null ? `${M(operatingIncome)} / ${M(investedCapital)}` : "N/A", !hasBalanceSheet, notes.noBalanceSheet),
   ];
 
   const efficiency: RatioResult[] = [
-    mk("rev_per_employee", hasHeadcount ? revenue / headcount : null, "money", b.revenuePerEmployee, false, hasHeadcount ? `${M(revenue)} / ${headcount} employees` : "N/A", !hasHeadcount, "No active employee records"),
-    mk("gp_per_employee", hasHeadcount ? grossProfit / headcount : null, "money", b.gpPerEmployee, false, hasHeadcount ? `${M(grossProfit)} / ${headcount} employees` : "N/A", !hasHeadcount, "No active employee records"),
-    mk("asset_turnover", assetTurnover, "num", 1.0, false, assetTurnover !== null ? `${M(revenue)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, "No balance sheet data"),
+    mk("rev_per_employee", hasHeadcount ? revenue / headcount : null, "money", b.revenuePerEmployee, false, hasHeadcount ? notes.perEmployees(M(revenue), headcount) : "N/A", !hasHeadcount, notes.noHeadcount),
+    mk("gp_per_employee", hasHeadcount ? grossProfit / headcount : null, "money", b.gpPerEmployee, false, hasHeadcount ? notes.perEmployees(M(grossProfit), headcount) : "N/A", !hasHeadcount, notes.noHeadcount),
+    mk("asset_turnover", assetTurnover, "num", 1.0, false, assetTurnover !== null ? `${M(revenue)} / ${M(totalAssets)}` : "N/A", !hasBalanceSheet, notes.noBalanceSheet),
   ];
 
   const operating: RatioResult[] = [
     mk("cogs_ratio", revenue > 0 ? cogs / revenue : 0, "pct", 0.6, true, `${M(cogs)} / ${M(revenue)}`),
     mk("opex_ratio", revenue > 0 ? opex / revenue : 0, "pct", 0.25, true, `${M(opex)} / ${M(revenue)}`),
     mk("operating_leverage", operatingLeverage, "num", 1.5, false, `${fmtPct(opIncGrowth)} / ${fmtPct(revenueGrowth)}`),
-    mk("interest_coverage", otherExpense > 0 ? operatingIncome / otherExpense : null, "num", 5.0, false, otherExpense > 0 ? `${M(operatingIncome)} / ${M(otherExpense)}` : "No interest expense", otherExpense <= 0, "No interest expense"),
+    mk("interest_coverage", otherExpense > 0 ? operatingIncome / otherExpense : null, "num", 5.0, false, otherExpense > 0 ? `${M(operatingIncome)} / ${M(otherExpense)}` : notes.noInterestExpense, otherExpense <= 0, notes.noInterestExpense),
     mk("rule_of_40", rule40, "raw", 40, false, `${fmtPct(revenueGrowth)} + ${fmtPct(operatingMargin)}`),
   ];
 

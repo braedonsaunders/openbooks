@@ -712,8 +712,8 @@ export async function healthData(
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
 
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
-    financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds),
-    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId, allowedSubsidiaryIds),
+    financialHealth(period, benchmarks, orgId, allowedSubsidiaryIds, strings),
+    financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId, allowedSubsidiaryIds, strings),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
     segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, strings),
     segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, strings),

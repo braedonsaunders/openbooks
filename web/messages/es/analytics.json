@@ -206,6 +206,111 @@
     },
     "labels": {
       "unassignedSegment": "Sin asignar"
+    },
+    "ratios": {
+      "gross_margin": {
+        "label": "Margen bruto",
+        "formula": "Utilidad bruta / Ingresos",
+        "desc": "Parte de los ingresos que queda tras el costo directo.",
+        "interpret": "Más alto es mejor. Las empresas de servicios suelen apuntar a 35–50 %."
+      },
+      "operating_margin": {
+        "label": "Margen operativo",
+        "formula": "Resultado operativo / Ingresos",
+        "desc": "Rentabilidad de la operación central, antes de intereses y partidas no operativas.",
+        "interpret": "Por encima del 15 % es sólido para la mayoría de los negocios."
+      },
+      "ebitda_margin": {
+        "label": "Margen EBITDA",
+        "formula": "(Resultado operativo + Depreciación + Amortización) / Ingresos",
+        "desc": "Rentabilidad operativa antes de cargos no monetarios y financiación.",
+        "interpret": "Por encima del 20 % es saludable; útil para comparar estructuras de capital."
+      },
+      "net_margin": {
+        "label": "Margen neto",
+        "formula": "Resultado neto / Ingresos",
+        "desc": "Utilidad final como parte de los ingresos, después de todo.",
+        "interpret": "Por encima del 10 % es saludable en la mayoría de los sectores."
+      },
+      "roa": {
+        "label": "Rentabilidad sobre activos",
+        "formula": "Resultado neto / Activos totales",
+        "desc": "Eficiencia con la que los activos generan utilidad.",
+        "interpret": "Por encima del 8 % indica un buen uso de los activos."
+      },
+      "roe": {
+        "label": "Rentabilidad sobre patrimonio",
+        "formula": "Resultado neto / Patrimonio total",
+        "desc": "Rendimiento generado sobre el patrimonio de los accionistas.",
+        "interpret": "Por encima del 15 % generalmente se considera sólido."
+      },
+      "roic": {
+        "label": "Rentabilidad sobre capital invertido",
+        "formula": "NOPAT / Capital invertido",
+        "desc": "Rendimiento de todo el capital invertido. NOPAT = Resultado operativo × (1 − 25 % de impuesto supuesto). Capital invertido = Patrimonio + Deuda a largo plazo.",
+        "interpret": "Por encima del costo de capital (típicamente 8–12 %) crea valor."
+      },
+      "roce": {
+        "label": "Rentabilidad sobre capital empleado",
+        "formula": "Resultado operativo / Capital invertido",
+        "desc": "Rendimiento operativo antes de impuestos del capital empleado.",
+        "interpret": "Por encima del 15 % indica un despliegue eficiente del capital."
+      },
+      "rev_per_employee": {
+        "label": "Ingresos por empleado",
+        "formula": "Ingresos / Plantilla al cierre del período",
+        "desc": "Productividad comercial de la plantilla.",
+        "interpret": "Los referentes varían mucho según sector, geografía y moneda."
+      },
+      "gp_per_employee": {
+        "label": "Utilidad bruta por empleado",
+        "formula": "Utilidad bruta / Plantilla al cierre del período",
+        "desc": "Valor que aporta cada empleado tras los costos directos.",
+        "interpret": "Una señal de productividad más limpia que los ingresos por cabeza."
+      },
+      "asset_turnover": {
+        "label": "Rotación de activos",
+        "formula": "Ingresos / Activos totales",
+        "desc": "Ingresos generados por cada unidad monetaria de activos.",
+        "interpret": "Por encima de 1,0x, los activos rotan más de una vez al año."
+      },
+      "cogs_ratio": {
+        "label": "Ratio de costo de ventas",
+        "formula": "Costo de ventas / Ingresos",
+        "desc": "Costo directo como parte de los ingresos. Más bajo es mejor.",
+        "interpret": "El inverso del margen bruto — mantenerlo bajo el objetivo."
+      },
+      "opex_ratio": {
+        "label": "Ratio de gastos operativos",
+        "formula": "Gastos operativos / Ingresos",
+        "desc": "Estructura como parte de los ingresos. Más bajo es mejor.",
+        "interpret": "Controlarlo es la palanca entre el margen bruto y el operativo."
+      },
+      "operating_leverage": {
+        "label": "Apalancamiento operativo",
+        "formula": "Δ Resultado operativo % / Δ Ingresos %",
+        "desc": "Cuánto se mueve el resultado operativo ante un cambio en los ingresos.",
+        "interpret": "Por encima de 1,0x, las utilidades crecen más rápido que los ingresos."
+      },
+      "interest_coverage": {
+        "label": "Cobertura de intereses",
+        "formula": "Resultado operativo / Otros gastos",
+        "desc": "Veces que el resultado operativo cubre los gastos no operativos (intereses).",
+        "interpret": "Por encima de 5x es holgado; por debajo de 1,5x es una alerta."
+      },
+      "rule_of_40": {
+        "label": "Regla del 40",
+        "formula": "Crecimiento de ingresos % + Margen operativo %",
+        "desc": "Equilibra crecimiento y rentabilidad en un solo número.",
+        "interpret": "40 o más es excelente — intercambie crecimiento por margen o viceversa."
+      }
+    },
+    "ratioNotes": {
+      "noDA": "No se encontraron cuentas de depreciación/amortización",
+      "noBalanceSheet": "Sin datos de balance",
+      "noHeadcount": "Sin empleados activos",
+      "noInterestExpense": "Sin gastos por intereses",
+      "perEmployees": "{revenue} / {count, plural, one {# empleado} other {# empleados}}"
     }
   },
   "customer": {

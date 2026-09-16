@@ -206,6 +206,111 @@
     },
     "labels": {
       "unassignedSegment": "Non affecté"
+    },
+    "ratios": {
+      "gross_margin": {
+        "label": "Marge brute",
+        "formula": "Marge brute / Chiffre d'affaires",
+        "desc": "Part du chiffre d'affaires restante après le coût direct de production.",
+        "interpret": "Plus c'est élevé, mieux c'est. Les sociétés de services visent typiquement 35–50 %."
+      },
+      "operating_margin": {
+        "label": "Marge d'exploitation",
+        "formula": "Résultat d'exploitation / Chiffre d'affaires",
+        "desc": "Rentabilité des opérations courantes, avant intérêts et éléments non opérationnels.",
+        "interpret": "Au-dessus de 15 %, c'est solide pour la plupart des entreprises."
+      },
+      "ebitda_margin": {
+        "label": "Marge d'EBITDA",
+        "formula": "(Résultat d'exploitation + Dotations aux amortissements) / Chiffre d'affaires",
+        "desc": "Rentabilité opérationnelle avant charges non cash et financement.",
+        "interpret": "Au-dessus de 20 %, c'est sain ; utile pour comparer les structures de capital."
+      },
+      "net_margin": {
+        "label": "Marge nette",
+        "formula": "Résultat net / Chiffre d'affaires",
+        "desc": "Profit net en part du chiffre d'affaires, après tout.",
+        "interpret": "Au-dessus de 10 %, c'est sain dans la plupart des secteurs."
+      },
+      "roa": {
+        "label": "Rentabilité des actifs",
+        "formula": "Résultat net / Total des actifs",
+        "desc": "Efficacité avec laquelle les actifs génèrent du profit.",
+        "interpret": "Au-dessus de 8 %, les actifs sont bien utilisés."
+      },
+      "roe": {
+        "label": "Rentabilité des capitaux propres",
+        "formula": "Résultat net / Capitaux propres",
+        "desc": "Rendement généré sur les capitaux propres.",
+        "interpret": "Au-dessus de 15 %, c'est généralement solide."
+      },
+      "roic": {
+        "label": "Rentabilité des capitaux investis",
+        "formula": "NOPAT / Capitaux investis",
+        "desc": "Rendement de tout le capital investi. NOPAT = Résultat d'exploitation × (1 − 25 % d'impôt supposé). Capitaux investis = Capitaux propres + Dette long terme.",
+        "interpret": "Au-dessus du coût du capital (typiquement 8–12 %), cela crée de la valeur."
+      },
+      "roce": {
+        "label": "Rentabilité des capitaux employés",
+        "formula": "Résultat d'exploitation / Capitaux investis",
+        "desc": "Rendement opérationnel avant impôt des capitaux employés.",
+        "interpret": "Au-dessus de 15 %, le capital est déployé efficacement."
+      },
+      "rev_per_employee": {
+        "label": "Chiffre d'affaires par salarié",
+        "formula": "Chiffre d'affaires / Effectif en fin de période",
+        "desc": "Productivité commerciale des effectifs.",
+        "interpret": "Les benchmarks varient fortement selon le secteur, la géographie et la devise."
+      },
+      "gp_per_employee": {
+        "label": "Marge brute par salarié",
+        "formula": "Marge brute / Effectif en fin de période",
+        "desc": "Valeur apportée par chaque salarié après coûts directs.",
+        "interpret": "Un signal de productivité plus pur que le chiffre d'affaires par tête."
+      },
+      "asset_turnover": {
+        "label": "Rotation des actifs",
+        "formula": "Chiffre d'affaires / Total des actifs",
+        "desc": "Chiffre d'affaires généré par euro d'actif.",
+        "interpret": "Au-dessus de 1,0x, les actifs tournent plus d'une fois par an."
+      },
+      "cogs_ratio": {
+        "label": "Ratio du coût des ventes",
+        "formula": "Coût des ventes / Chiffre d'affaires",
+        "desc": "Coût direct de production en part du chiffre d'affaires. Plus c'est bas, mieux c'est.",
+        "interpret": "L'inverse de la marge brute — à maintenir sous l'objectif."
+      },
+      "opex_ratio": {
+        "label": "Ratio des charges d'exploitation",
+        "formula": "Charges d'exploitation / Chiffre d'affaires",
+        "desc": "Frais généraux en part du chiffre d'affaires. Plus c'est bas, mieux c'est.",
+        "interpret": "C'est le levier entre la marge brute et la marge d'exploitation."
+      },
+      "operating_leverage": {
+        "label": "Levier opérationnel",
+        "formula": "Δ Résultat d'exploitation % / Δ Chiffre d'affaires %",
+        "desc": "Sensibilité du résultat d'exploitation aux variations du chiffre d'affaires.",
+        "interpret": "Au-dessus de 1,0x, les profits croissent plus vite que le chiffre d'affaires."
+      },
+      "interest_coverage": {
+        "label": "Couverture des intérêts",
+        "formula": "Résultat d'exploitation / Autres charges",
+        "desc": "Nombre de fois que le résultat d'exploitation couvre les charges non opérationnelles (intérêts).",
+        "interpret": "Au-dessus de 5x, c'est confortable ; sous 1,5x, c'est un signal d'alerte."
+      },
+      "rule_of_40": {
+        "label": "Règle des 40",
+        "formula": "Croissance du chiffre d'affaires % + Marge d'exploitation %",
+        "desc": "Équilibre croissance et rentabilité en un seul chiffre.",
+        "interpret": "40 ou plus, c'est excellent — arbitrez entre croissance et marge."
+      }
+    },
+    "ratioNotes": {
+      "noDA": "Aucun compte de dotations aux amortissements trouvé",
+      "noBalanceSheet": "Aucune donnée de bilan",
+      "noHeadcount": "Aucun salarié actif",
+      "noInterestExpense": "Aucune charge d'intérêts",
+      "perEmployees": "{revenue} / {count, plural, one {# salarié} other {# salariés}}"
     }
   },
   "customer": {
