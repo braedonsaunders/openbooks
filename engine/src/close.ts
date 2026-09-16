@@ -1266,7 +1266,9 @@ async function readinessChecks(
         from documents d
        where d.org_id = ${orgId}
          and d.status in ('draft','pending_approval','approved','posted')
-         and d.posting_period_id is null and ${documentScope}`),
+         and d.posting_period_id is null
+         and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}
+         and ${documentScope}`),
       db.execute(sql`
       select count(*) as count
         from accounts a
