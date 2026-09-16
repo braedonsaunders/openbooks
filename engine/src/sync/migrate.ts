@@ -81,12 +81,31 @@ const str = (v: unknown): string | null => {
   return t.trim() === "" ? null : t;
 };
 const migrationErrorMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "object" && error !== null && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message) return message;
+  // Database failures arrive wrapped (drizzle names the failed query; the
+  // driver error behind `.cause` carries the SQLSTATE and the reason). The
+  // run summary must keep both: a bare "Failed query: …" once hid a 42702
+  // behind weeks of green-looking runs.
+  const head =
+    error instanceof Error && error.message
+      ? error.message.replace(/\s+/g, " ").trim()
+      : typeof error === "object" && error !== null && "message" in error &&
+          typeof (error as { message?: unknown }).message === "string"
+        ? ((error as { message: string }).message.replace(/\s+/g, " ").trim() ||
+          "write failed")
+        : "write failed";
+  let cause: unknown =
+    error instanceof Error
+      ? (error as Error & { cause?: unknown }).cause
+      : undefined;
+  for (let depth = 0; depth < 3 && cause instanceof Error; depth++) {
+    const detail = cause.message.replace(/\s+/g, " ").trim();
+    const code = (cause as { code?: unknown }).code;
+    const suffix =
+      typeof code === "string" && code ? `${detail} (SQLSTATE ${code})` : detail;
+    if (suffix && suffix !== head) return `${head} — caused by: ${suffix}`.slice(0, 1000);
+    cause = (cause as Error & { cause?: unknown }).cause;
   }
-  return "write failed";
+  return head.slice(0, 1000);
 };
 const moneyOrNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
