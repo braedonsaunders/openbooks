@@ -58,12 +58,21 @@ export async function recognitionAccounts(
   return recognitionAccountsFrom(runner, orgId);
 }
 
-interface GlLine {
+export interface GlLine {
   accountId: string;
   amount: string; // signed: debit +, credit −
   projectId?: string | null;
   partyId?: string | null;
   memo?: string | null;
+  departmentId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
+  /** Legal entity for this leg; defaults to the entry header subsidiary. */
+  subsidiaryId?: string | null;
+  extraDims?: Record<string, string> | null;
+  contributorKind?: "rule" | "script" | "app" | "intercompany" | null;
+  /** Rule version / script / app id that contributed this line. */
+  contributorRef?: string | null;
 }
 
 /**
@@ -81,6 +90,8 @@ export async function postProjectGlEntry(opts: {
   subsidiaryId?: string | null;
   /** Functional currency of line amounts when already resolved by the caller. */
   currency?: string;
+  /** Target GL book; defaults to the active primary posting book. */
+  bookId?: string | null;
   lines: GlLine[];
 }): Promise<string | null> {
   return inDbTransaction((tx) => postProjectGlEntryWithinTransaction(tx, opts));
@@ -106,11 +117,20 @@ export async function postProjectGlEntryWithinTransaction(
   const bal = sum(lines.map((l) => l.amount));
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
 
-  const book = (await tx.execute<{ id: string }>(sql`
-    select id from accounting_books
-     where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1 for share`));
-  const bookId = book.rows[0]?.id;
+  let bookId = opts.bookId ?? null;
+  if (bookId) {
+    const override = (await tx.execute<{ id: string }>(sql`
+      select id from accounting_books
+       where org_id = ${orgId} and id = ${bookId} and is_active and posts_gl
+       limit 1 for share`));
+    if (!override.rows[0]) throw new Error("project GL posting requires an active posting book");
+  } else {
+    const book = (await tx.execute<{ id: string }>(sql`
+      select id from accounting_books
+       where org_id = ${orgId} and is_primary and is_active and posts_gl
+       limit 1 for share`));
+    bookId = book.rows[0]?.id ?? null;
+  }
   if (!bookId) throw new Error("no active primary GL book");
   await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
   // journal_entries.subsidiary_id is NOT NULL. When the source row carries no
@@ -123,12 +143,23 @@ export async function postProjectGlEntryWithinTransaction(
     subId = s.rows[0]?.id ?? null;
   }
   if (!subId) throw new Error("project GL posting requires an active root subsidiary");
-  const subsidiary = (await tx.execute<{ base_currency: string | null }>(sql`
-    select nullif(trim(base_currency), '') as base_currency
-      from subsidiaries where org_id = ${orgId} and id = ${subId} and is_active
+  const lineSubIds = [...new Set([subId, ...lines.map((l) => l.subsidiaryId).filter((id): id is string => !!id)])];
+  const currencies = (await tx.execute<{ id: string; base_currency: string | null }>(sql`
+    select id, nullif(trim(base_currency), '') as base_currency
+      from subsidiaries
+     where org_id = ${orgId} and id = any(${uuidArray(lineSubIds)}::uuid[]) and is_active
   `));
-  const functionalCurrency = subsidiary.rows[0]?.base_currency;
-  if (!functionalCurrency) throw new Error(`subsidiary ${subId} has no configured functional currency`);
+  const currencyBySub = new Map(currencies.rows.map((row) => [row.id, row.base_currency]));
+  for (const lineSubId of lineSubIds) {
+    if (!currencyBySub.get(lineSubId)) {
+      throw new Error(`subsidiary ${lineSubId} has no configured functional currency`);
+    }
+  }
+  const functionalCurrencies = new Set(lineSubIds.map((lineSubId) => currencyBySub.get(lineSubId)));
+  if (functionalCurrencies.size > 1) {
+    throw new Error("project GL posting requires one functional currency across all line subsidiaries");
+  }
+  const functionalCurrency = [...functionalCurrencies][0]!;
   if (opts.currency && opts.currency !== functionalCurrency) {
     throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
   }
@@ -151,16 +182,53 @@ export async function postProjectGlEntryWithinTransaction(
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
   await tx.execute(sql`select id from accounts where org_id=${orgId}
     and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
-  const projectIds = [...new Set(lines.map((line) => line.projectId).filter((id): id is string => !!id))];
-  if (projectIds.length) {
+  const dimensionLocks: Array<{ table: "departments" | "projects" | "locations" | "classes"; id: string }> = [];
+  for (const line of lines) {
+    if (line.departmentId) dimensionLocks.push({ table: "departments", id: line.departmentId });
+    if (line.locationId) dimensionLocks.push({ table: "locations", id: line.locationId });
+    if (line.projectId) dimensionLocks.push({ table: "projects", id: line.projectId });
+    if (line.classId) dimensionLocks.push({ table: "classes", id: line.classId });
+  }
+  const lockProjectIds = [...new Set(dimensionLocks.filter((d) => d.table === "projects").map((d) => d.id))];
+  if (lockProjectIds.length) {
     await tx.execute(sql`select id from projects where org_id=${orgId}
-      and id=any(${uuidArray(projectIds)}::uuid[]) order by id for share`);
+      and id=any(${uuidArray(lockProjectIds)}::uuid[]) order by id for share`);
+  }
+  const lockDepartmentIds = [...new Set(dimensionLocks.filter((d) => d.table === "departments").map((d) => d.id))];
+  if (lockDepartmentIds.length) {
+    await tx.execute(sql`select id from departments where org_id=${orgId}
+      and id=any(${uuidArray(lockDepartmentIds)}::uuid[]) order by id for share`);
+  }
+  const lockLocationIds = [...new Set(dimensionLocks.filter((d) => d.table === "locations").map((d) => d.id))];
+  if (lockLocationIds.length) {
+    await tx.execute(sql`select id from locations where org_id=${orgId}
+      and id=any(${uuidArray(lockLocationIds)}::uuid[]) order by id for share`);
+  }
+  const lockClassIds = [...new Set(dimensionLocks.filter((d) => d.table === "classes").map((d) => d.id))];
+  if (lockClassIds.length) {
+    await tx.execute(sql`select id from classes where org_id=${orgId}
+      and id=any(${uuidArray(lockClassIds)}::uuid[]) order by id for share`);
   }
   const postingSubsidiaryId = subId;
+  const restrictedLines = lines.map((line) => ({ ...line, subsidiaryId: line.subsidiaryId ?? postingSubsidiaryId }));
   await validateSubsidiaryRestrictions(tx, {
     orgId, ctx: await loadSubsidiaryContext(tx, orgId), docSubsidiaryId: postingSubsidiaryId,
-    lines: lines.map((line) => ({ ...line, subsidiaryId: postingSubsidiaryId })),
+    lines: restrictedLines,
   });
+  // Every legal entity's books balance on their own (the kernel enforces the
+  // same per-subsidiary boundary at the deferred-constraint level).
+  const bySubsidiary = new Map<string, string[]>();
+  for (const line of restrictedLines) {
+    const amounts = bySubsidiary.get(line.subsidiaryId) ?? [];
+    amounts.push(line.amount);
+    bySubsidiary.set(line.subsidiaryId, amounts);
+  }
+  for (const [lineSubId, amounts] of bySubsidiary) {
+    const subtotal = sum(amounts);
+    if (!isZero(subtotal)) {
+      throw new Error(`unbalanced project GL entry for subsidiary ${lineSubId} (${subtotal})`);
+    }
+  }
   const entry = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -171,12 +239,17 @@ export async function postProjectGlEntryWithinTransaction(
   const eid = entry.id;
   let n = 1;
   for (const l of lines) {
+    const lineSubId = l.subsidiaryId ?? subId;
     await tx.execute(sql`
       insert into journal_lines
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-         project_id, party_id, memo)
-      values (${orgId}, ${eid}, ${n}, ${l.accountId}, ${subId}, ${l.amount}, ${currency}, ${l.amount}, 1,
-              ${l.projectId ?? null}, ${l.partyId ?? null}, ${l.memo ?? memo})`);
+         project_id, party_id, department_id, location_id, class_id, extra_dims,
+         contributor_kind, contributor_ref, memo)
+      values (${orgId}, ${eid}, ${n}, ${l.accountId}, ${lineSubId}, ${l.amount}, ${currency}, ${l.amount}, 1,
+              ${l.projectId ?? null}, ${l.partyId ?? null},
+              ${l.departmentId ?? null}, ${l.locationId ?? null}, ${l.classId ?? null},
+              ${JSON.stringify(l.extraDims ?? {})}::jsonb,
+              ${l.contributorKind ?? null}, ${l.contributorRef ?? null}, ${l.memo ?? memo})`);
     n++;
   }
   await tx.execute(sql`
