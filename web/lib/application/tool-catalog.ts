@@ -29,6 +29,7 @@ import type { ApplicationContext } from "./context";
 import {
   advanceDocumentLifecycle,
   correctPostedDocument,
+  postJournalDocument,
   voidDocument,
 } from "./documents";
 import { createPayment, postPayment, updatePayment } from "./payments";
@@ -624,6 +625,14 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
     execute: async (context, input) => ({ ok: true, ...await advanceDocumentLifecycle(context, { ...input, action }) }),
   })),
+  definition({
+    name: "post_journal", title: "Post Journal",
+    description: "Submit (if draft) and post a manual journal through the accounting kernel; a draft may return pending approval. Journals are not in the generic document lifecycle — this is their governed post path, twin of the journal workspace action.",
+    inputSchema: z.object({ documentId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
+    visibleTo: hasPermission("gl.post"),
+    execute: async (context, input) => ({ ok: true, ...(await postJournalDocument(context, input)) }),
+  }),
   definition({
     name: "void_document", title: "Void Document",
     description: "Request a controlled void; posted documents reverse through the kernel and retained evidence is preserved.",

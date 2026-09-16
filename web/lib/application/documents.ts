@@ -183,6 +183,77 @@ export async function advanceDocumentLifecycle(
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
+/**
+ * Post a manual journal: the application-layer twin of POST
+ * /api/journals/actions. Journal documents are not in DOC_KINDS, so the
+ * generic submit/post lifecycle refuses them ("dedicated lifecycle"); this
+ * command runs the same services the route calls — submitAndReleaseIfUngated
+ * for drafts, then engine postDocument — under gl.post with the same
+ * journal-kind ownership and subsidiary checks. Like the other application
+ * lifecycle commands the post effects commit atomically inside the
+ * idempotent command instead of deferring past commit.
+ */
+export async function postJournalDocument(
+  context: ApplicationContext,
+  input: {
+    documentId: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: unknown }> {
+  const header = await documentHeader(context, input.documentId);
+  // The route 404s anything that is not a journal of this org.
+  if (header.kind !== "journal") throw notFound("journal");
+  assertApplicationPermission(context, "gl.post");
+  const outcome = await executeIdempotent({
+    context,
+    operation: "documents.journal.post",
+    idempotencyKey: input.idempotencyKey,
+    request: { documentId: input.documentId },
+    execute: async () => {
+      try {
+        let currentStatus = header.status;
+        if (currentStatus === "draft") {
+          const submission = await submitAndReleaseIfUngated(
+            "journal",
+            input.documentId,
+            context.authz.user.id,
+          );
+          if (submission.flowError) {
+            throw new ApplicationError(
+              "invalid_input",
+              `approval could not be routed: ${submission.flowError}`,
+              422,
+            );
+          }
+          if (submission.gated) {
+            return {
+              status: "pending_approval",
+              requestId: submission.runId,
+            };
+          }
+          currentStatus = "approved";
+        }
+        if (currentStatus !== "approved") {
+          throw new ApplicationError(
+            "invalid_input",
+            `journal is ${currentStatus}; only an approved journal can be posted`,
+            422,
+          );
+        }
+        const entryId = await postDocument(
+          input.documentId,
+          await controlDeps(context.authz.user.orgId),
+          { audit: { actorId: context.authz.user.id, source: context.source } },
+        );
+        return { status: "posted", entryId };
+      } catch (error) {
+        domainFailure(error);
+      }
+    },
+  });
+  return { replayed: outcome.replayed, result: outcome.value };
+}
+
 export async function voidDocument(
   context: ApplicationContext,
   input: {
