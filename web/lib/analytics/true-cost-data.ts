@@ -4,6 +4,8 @@ import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
 import {
   type AllocationBase,
@@ -200,14 +202,34 @@ interface EmployeeRateSqlRow {
   title: string;
   rate: TrueCostSqlNumeric;
   hours: TrueCostSqlNumeric;
+  func: string | null;
+  late: string | null;
+  cost: TrueCostSqlNumeric;
+  rated_hours: TrueCostSqlNumeric;
 }
 
 interface HoursSqlRow {
   department_id: string | null;
   month: string;
+  func: string | null;
+  late: string | null;
   billed_hours: TrueCostSqlNumeric;
   total_hours: TrueCostSqlNumeric;
   nonbill_cost: TrueCostSqlNumeric;
+}
+
+/**
+ * Translate one consolidated leg to presentation, skipping the rate lookup
+ * for zero money so an empty window never demands coverage. Nonzero money
+ * without coverage still fails closed in rateAt.
+ */
+function translateLeg(
+  amount: string,
+  func: string | null,
+  date: string,
+  rateAt: (func: string | null, date: string) => string,
+): string {
+  return Number(amount) === 0 ? "0" : mulDecimal(amount, rateAt(func, date));
 }
 
 interface DepartmentSqlRow {
@@ -222,13 +244,16 @@ interface BurdenAccountSqlRow {
   amount: TrueCostSqlNumeric;
   department_id: string | null;
   month: string;
+  func: string | null;
+  late: string | null;
 }
 
 interface PriorBurdenSqlRow {
   account_id: string;
+  func: string | null;
+  late: string | null;
   amount: TrueCostSqlNumeric;
   billed_hours: TrueCostSqlNumeric;
-  nonbill_cost: TrueCostSqlNumeric;
 }
 
 function monthLabel(ym: string): string {
@@ -300,22 +325,26 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
 
   const monthCount = Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth()) + 1);
 
-  const [cfg, burdenGroups, poolGroups, acctRows, hoursRows, empRows, priorRows, appliedRows, deptRows, baseRows] = await Promise.all([
+  const [cfg, burdenGroups, poolGroups, acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, deptRows, baseRows] = await Promise.all([
     loadTrueCostConfig(orgId),
     resolveAccountGroups("burden", orgId),
     resolveAccountGroups("cost_pool", orgId),
-    // Expense account totals per account × department × month.
+    // Expense account totals per account × department × month × functional —
+    // journal legs arrive stamped in their line entity's functional and
+    // translate to presentation before the burden math ever sees them.
     db.execute(sql`
       select l.account_id, a.number, a.name, to_char(e.posting_date, 'YYYY-MM') as month,
-        l.department_id, sum(l.amount) as amount
+        l.department_id, sub.base_currency as func, max(e.posting_date)::text as late,
+        sum(l.amount) as amount
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} ${ledgerScope}
         and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false
         and e.posting_date >= ${from} and e.posting_date <= ${to}
-      group by 1, 2, 3, 4, 5
+      group by 1, 2, 3, 4, 5, 6
     `),
     // Labour hours per department × month (billed = is_billable). Non-billable
     // labour cost (Σ hours × cost rate on non-billable time) is a native burden
@@ -323,23 +352,34 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     // on billable hours (the unbilled-labour / time category).
     db.execute(sql`
       select t.department_id, to_char(t.worked_on, 'YYYY-MM') as month,
+        coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+        max(t.worked_on)::text as late,
         sum(t.hours) as total_hours,
         coalesce(sum(t.hours) filter (where t.is_billable), 0) as billed_hours,
         coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
       from time_entries t
+      left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
+      join orgs o on o.id = t.org_id
       where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
-      group by 1, 2
+      group by 1, 2, 3
     `),
-    // Per-employee weighted labour rate + dominant dept/labour class.
+    // Per-employee weighted labour rate + dominant dept/labour class. Cost
+    // legs arrive per (employee, functional) so the rate translates before
+    // the division — a cross-currency average of raw rates is meaningless.
     db.execute(sql`
       with per_emp as (
         select t.employee_party_id, coalesce(p.display_name, 'Unknown') as name,
+          coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+          max(t.worked_on)::text as late,
           sum(t.hours) as hours,
-          sum(coalesce(t.cost_rate, 0) * t.hours) / nullif(sum(t.hours) filter (where t.cost_rate > 0), 0) as rate
+          sum(coalesce(t.cost_rate, 0) * t.hours) as cost,
+          sum(t.hours) filter (where t.cost_rate > 0) as rated_hours
         from time_entries t
         left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
+        left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
+        join orgs o on o.id = t.org_id
         where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${from} and t.worked_on <= ${to}
-        group by 1, 2
+        group by 1, 2, 3
       ), dom_dept as (
         select distinct on (employee_party_id) employee_party_id, department_id
         from (select employee_party_id, department_id, sum(hours) h from time_entries t
@@ -352,7 +392,8 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         join items i on i.id = x.item_id and i.org_id = ${orgId}
         order by x.employee_party_id, x.h desc
       )
-      select pe.employee_party_id as id, pe.name, pe.hours, coalesce(pe.rate, 0) as rate,
+      select pe.employee_party_id as id, pe.name, pe.func, pe.late,
+        pe.hours, pe.cost, pe.rated_hours,
         dd.department_id as dept_id, coalesce(d.name, '—') as dept_name, coalesce(di.title, '—') as title
       from per_emp pe
       left join dom_dept dd on dd.employee_party_id = pe.employee_party_id
@@ -362,30 +403,45 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     `),
     // Prior equal window: per-account expense (classified below) + billed hours.
     db.execute(sql`
-      select l.account_id, sum(l.amount) as amount,
+      select l.account_id, sub.base_currency as func, max(e.posting_date)::text as late,
+        sum(l.amount) as amount,
         (select coalesce(sum(t.hours) filter (where t.is_billable), 0) from time_entries t
-          where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as billed_hours,
-        (select coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) from time_entries t
-          where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as nonbill_cost
+          where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as billed_hours
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} ${ledgerScope} and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
+      group by 1, 2
+    `),
+    // Prior-window non-billable labour cost per functional: the scalar
+    // subselect above cannot carry legs, so it travels on its own query.
+    db.execute(sql`
+      select coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
+        max(t.worked_on)::text as late,
+        coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
+      from time_entries t
+      left join subsidiaries crs on crs.id = t.cost_rate_subsidiary_id and crs.org_id = t.org_id
+      join orgs o on o.id = t.org_id
+      where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}
       group by 1
     `),
     // Does the "burden applied" GL mechanism carry postings in the period?
     db.execute(sql`
-      select coalesce(-sum(l.amount), 0) as applied, count(*) as lines
+      select sub.base_currency as func, max(e.posting_date)::text as late,
+        coalesce(-sum(l.amount), 0) as applied, count(*) as lines
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} ${ledgerScope} and a.name ~* 'burden applied|overhead burden'
         and e.posting_date >= ${from} and e.posting_date <= ${to}
+      group by 1
     `),
     db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`),
     // Allocation bases by department (): labour $,
-    // headcount, revenue, direct cost. Hours come from hoursRows above.
+    // headcount, revenue, direct cost. Hours come from the time legs above.
     // One grouped pass per source instead of a correlated GL subquery per
     // department per basis — that shape re-scanned the window's ledger three
     // times for every department on the page.
@@ -395,7 +451,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     // the window.
     db.execute(sql`
       with gl as (
-        select l.department_id,
+        select l.department_id, sub.base_currency as func, max(e.posting_date)::text as late,
                coalesce(sum(l.amount) filter (where l.account_id in (
                  select id from accounts where org_id = ${orgId}
                    and type in ('expense','expense_other','expense_deferred','cogs')
@@ -407,9 +463,10 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
                  select id from accounts where org_id = ${orgId} and type = 'cogs')), 0) as direct_cost
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
          where l.org_id = ${orgId} ${ledgerScope} and l.department_id is not null
            and l.posting_date >= ${from} and l.posting_date <= ${to}
-         group by l.department_id
+         group by l.department_id, sub.base_currency
       ),
       hc as (
         select t.department_id, count(distinct t.employee_party_id) as headcount
@@ -418,18 +475,128 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
            and t.worked_on >= ${from} and t.worked_on <= ${to}
          group by t.department_id
       )
-      select d.id as dept_id,
-             coalesce(gl.labor_dollars, 0) as labor_dollars,
-             coalesce(hc.headcount, 0) as headcount,
-             coalesce(gl.revenue, 0) as revenue,
-             coalesce(gl.direct_cost, 0) as direct_cost
+      select d.id as dept_id, gl.func as func, max(gl.late) as late,
+             coalesce(max(gl.labor_dollars), 0) as labor_dollars,
+             coalesce(max(hc.headcount), 0) as headcount,
+             coalesce(max(gl.revenue), 0) as revenue,
+             coalesce(max(gl.direct_cost), 0) as direct_cost
         from departments d
         left join gl on gl.department_id = d.id
         left join hc on hc.department_id = d.id
        where d.org_id = ${orgId}
+       group by d.id, gl.func
     `),
   ]);
   const profile = cfg.profile;
+
+  // ---- presentation translation ---------------------------------------------
+  // Every money-bearing scan above arrives per (group, functional). One
+  // shared flow context translates each leg at its latest date; the merges
+  // below restore the exact row shapes the burden math expects. Hours,
+  // headcounts and line counts are currency-blind and re-add exactly.
+  const acctLegs = acctRows.rows as unknown as BurdenAccountSqlRow[];
+  const hourLegs = hoursRows.rows as unknown as HoursSqlRow[];
+  const empLegs = empRows.rows as unknown as EmployeeRateSqlRow[];
+  const priorLegs = priorRows.rows as unknown as PriorBurdenSqlRow[];
+  const priorTimeLegs = priorTimeRows.rows as unknown as { func: string | null; late: string | null; nonbill_cost: TrueCostSqlNumeric }[];
+  const appliedLegs = appliedRows.rows as unknown as { func: string | null; late: string | null; applied: TrueCostSqlNumeric; lines: string | number }[];
+  const baseLegs = baseRows.rows as unknown as { dept_id: string; func: string | null; late: string | null; labor_dollars: TrueCostSqlNumeric; headcount: string | number; revenue: TrueCostSqlNumeric; direct_cost: TrueCostSqlNumeric }[];
+  const tcCtx = await flowRates(orgId, [
+    ...acctLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...hourLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...empLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...priorLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? priorTo).slice(0, 10) })),
+    ...priorTimeLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? priorTo).slice(0, 10) })),
+    ...appliedLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...baseLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+  ]);
+  const tcRateAt = (func: string | null, date: string) => tcCtx.rateAt(func, date);
+  // Expense legs merged back to (account, month, department) presentation rows.
+  const acctTranslated: BurdenAccountSqlRow[] = [];
+  {
+    const byKey = new Map<string, BurdenAccountSqlRow & { amount: string }>();
+    for (const r of acctLegs) {
+      const key = JSON.stringify([r.account_id, r.month, r.department_id]);
+      const prev = byKey.get(key) ?? { ...r, amount: "0" };
+      prev.amount = add(String(prev.amount), translateLeg(String(r.amount ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+      byKey.set(key, prev);
+    }
+    for (const v of byKey.values()) acctTranslated.push(v);
+  }
+  // Time legs merged back to (department, month) rows; hours re-added.
+  const hourTranslated: HoursSqlRow[] = [];
+  {
+    const byKey = new Map<string, HoursSqlRow & { billed: number; total: number; nonbill: string }>();
+    for (const r of hourLegs) {
+      const key = JSON.stringify([r.department_id, r.month]);
+      const prev = byKey.get(key) ?? { ...r, billed: 0, total: 0, nonbill: "0" };
+      prev.billed += Number(r.billed_hours ?? 0);
+      prev.total += Number(r.total_hours ?? 0);
+      prev.nonbill = add(String(prev.nonbill), translateLeg(String(r.nonbill_cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+      byKey.set(key, prev);
+    }
+    for (const v of byKey.values()) {
+      hourTranslated.push({ ...v, billed_hours: v.billed, total_hours: v.total, nonbill_cost: v.nonbill });
+    }
+  }
+  // Employee legs merged to one presentation row each: the rate is
+  // translated cost over rated hours, never an average of raw rates.
+  const empTranslated: EmployeeRateSqlRow[] = [];
+  {
+    const byId = new Map<string, { base: EmployeeRateSqlRow; hours: number; cost: string; rated: number }>();
+    for (const r of empLegs) {
+      const prev = byId.get(r.id) ?? { base: r, hours: 0, cost: "0", rated: 0 };
+      prev.hours += Number(r.hours ?? 0);
+      prev.rated += Number(r.rated_hours ?? 0);
+      prev.cost = add(String(prev.cost), translateLeg(String(r.cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+      byId.set(r.id, prev);
+    }
+    for (const v of byId.values()) {
+      empTranslated.push({
+        ...v.base,
+        hours: v.hours,
+        cost: v.cost,
+        rated_hours: v.rated,
+        rate: v.rated > 0 ? Number(v.cost) / v.rated : 0,
+      });
+    }
+  }
+  // Prior-window expense merged per account; prior non-billable cost summed.
+  const priorTranslated: PriorBurdenSqlRow[] = [];
+  let priorBilledHours = 0;
+  {
+    const byAccount = new Map<string, PriorBurdenSqlRow & { amount: string }>();
+    for (const r of priorLegs) {
+      priorBilledHours = Number(r.billed_hours ?? 0);
+      const prev = byAccount.get(r.account_id) ?? { ...r, amount: "0" };
+      prev.amount = add(String(prev.amount), translateLeg(String(r.amount ?? 0), r.func ?? null, String(r.late ?? priorTo).slice(0, 10), tcRateAt));
+      byAccount.set(r.account_id, prev);
+    }
+    for (const v of byAccount.values()) priorTranslated.push(v);
+  }
+  let priorNonbillCost = "0";
+  for (const r of priorTimeLegs) {
+    priorNonbillCost = add(priorNonbillCost, translateLeg(String(r.nonbill_cost ?? 0), r.func ?? null, String(r.late ?? priorTo).slice(0, 10), tcRateAt));
+  }
+  // Burden-applied mechanism merged to one presentation total; lines re-added.
+  let appliedTotal = "0";
+  let appliedLines = 0;
+  for (const r of appliedLegs) {
+    appliedLines += Number(r.lines ?? 0);
+    appliedTotal = add(appliedTotal, translateLeg(String(r.applied ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+  }
+  // Allocation bases merged per department; headcount re-added.
+  type BaseCell = { labor_dollars: string; headcount: number; revenue: string; direct_cost: string };
+  const baseTranslated = new Map<string, BaseCell>();
+  for (const r of baseLegs) {
+    const prev = baseTranslated.get(r.dept_id) ?? { labor_dollars: "0", headcount: 0, revenue: "0", direct_cost: "0" };
+    const date = String(r.late ?? to).slice(0, 10);
+    prev.labor_dollars = add(prev.labor_dollars, translateLeg(String(r.labor_dollars ?? 0), r.func ?? null, date, tcRateAt));
+    prev.revenue = add(prev.revenue, translateLeg(String(r.revenue ?? 0), r.func ?? null, date, tcRateAt));
+    prev.direct_cost = add(prev.direct_cost, translateLeg(String(r.direct_cost ?? 0), r.func ?? null, date, tcRateAt));
+    prev.headcount += Number(r.headcount ?? 0);
+    baseTranslated.set(r.dept_id, prev);
+  }
 
   // ---- hours by department --------------------------------------------------
   const deptHours = new Map<string, { billed: number; total: number }>();
@@ -440,7 +607,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const nonbillCostByMonth = new Map<string, number>();
   const nonbillCostByDeptMonth = new Map<string, number>(); // `${dept}|${month}`
   let billedHours = 0, totalHours = 0, nonbillCostTotal = 0;
-  for (const r of hoursRows.rows as unknown as HoursSqlRow[]) {
+  for (const r of hourTranslated) {
     const dept = r.department_id ?? "none";
     const billed = Number(r.billed_hours ?? 0);
     const total = Number(r.total_hours ?? 0);
@@ -468,9 +635,10 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
 
   // ---- allocation-base bundle () -----------------
   const deptIds = departmentsBase.map((d) => d.id);
-  const baseMap = new Map((baseRows.rows).map((r) => [r.dept_id as string, r]));
-  const sumBase = (field: string) => deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
-  const byDeptBase = (field: string): Record<string, number> => Object.fromEntries(deptIds.map((id) => [id, Number(baseMap.get(id)?.[field] ?? 0)]));
+  const baseMap = baseTranslated;
+  const sumBase = (field: keyof BaseCell) => deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
+  const byDeptBase = (field: keyof BaseCell): Record<string, number> =>
+    Object.fromEntries(deptIds.map((id) => [id, Number(baseMap.get(id)?.[field] ?? 0)]));
   const bases: AllocationBaseBundle = {
     hours: {
       total: totalHours,
@@ -509,7 +677,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const monthCatRate = new Map<string, Map<string, number>>(); // month → cat key → amount
   const monthDeptBurden = new Map<string, Map<string, number>>(); // month → dept → amount
 
-  for (const r of acctRows.rows as unknown as BurdenAccountSqlRow[]) {
+  for (const r of acctTranslated) {
     if (directLabor.has(r.account_id)) continue; // direct labour is not burden
     const amount = Number(r.amount ?? 0);
     if (amount === 0) continue;
@@ -663,7 +831,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
 
   // ---- composite rate via the configured method () ---
-  const typedEmployeeRows = empRows.rows as unknown as EmployeeRateSqlRow[];
+  const typedEmployeeRows = empTranslated;
   const laborHoursSumForComposite = employeesWeightedRate(typedEmployeeRows);
   const compositeCats: CompositeCategory[] = categories.map((c) => ({
     id: c.id, rateValue: c.rate, totalExpense: c.totalAmount, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite,
@@ -682,21 +850,21 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   });
 
   // ---- absorption (utilization-recovery model unless the GL mechanism is live) --
-  const glApplied = Number(appliedRows.rows[0]?.applied ?? 0);
-  const hasBurdenGL = Number(appliedRows.rows[0]?.lines ?? 0) > 0 && Math.abs(glApplied) > 0;
+  const glApplied = Number(appliedTotal);
+  const hasBurdenGL = appliedLines > 0 && Math.abs(glApplied) > 0;
   const utilization = totalHours > 0 ? billedHours / totalHours : 0;
   const burdenApplied = hasBurdenGL ? glApplied : totalOverhead * utilization;
   const gap = burdenApplied - totalOverhead;
 
   // ---- prior-window composite for the change chip (same classification) -----------
-  const priorBilled = Number(priorRows.rows[0]?.billed_hours ?? 0);
+  const priorBilled = priorBilledHours;
   let priorBurden = 0;
-  const typedPriorRows = priorRows.rows as unknown as PriorBurdenSqlRow[];
+  const typedPriorRows = priorTranslated;
   for (const r of typedPriorRows) {
     if (directLabor.has(r.account_id)) continue;
     if (burdenGroups.byAccount.has(r.account_id)) priorBurden += Number(r.amount ?? 0);
   }
-  priorBurden += Number(priorRows.rows[0]?.nonbill_cost ?? 0); // native time category
+  priorBurden += Number(priorNonbillCost); // native time category
   const priorComposite = priorBilled > 0 ? priorBurden / priorBilled : 0;
   const compositeRateChangePct = priorComposite > 0 ? ((compositeRate - priorComposite) / priorComposite) * 100 : null;
 
