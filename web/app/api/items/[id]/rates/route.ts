@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
@@ -13,6 +14,11 @@ export const runtime = 'nodejs'
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const POLICIES = ['capped_ladder', 'lowest_cost'] as const
 const PRESENTATIONS = ['summary', 'rate_components'] as const
+
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.read', 'projects')
@@ -89,7 +95,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     rateBookId?: string | null; effectiveFrom?: string; baseUnit?: string;
     pricingPolicy?: string; invoicePresentation?: string; tiers?: TierInput[]
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(body.effectiveFrom ?? '')) return NextResponse.json({ error: 'Effective date is required' }, { status: 422 })
+  if (!isIsoCalendarDate(body.effectiveFrom)) return NextResponse.json({ error: 'Effective date must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
   if (!body.baseUnit?.trim()) return NextResponse.json({ error: 'Base unit is required' }, { status: 422 })
   if (!POLICIES.includes(body.pricingPolicy as unknown as "capped_ladder" | "lowest_cost")) return NextResponse.json({ error: 'Invalid pricing policy' }, { status: 422 })
   if (!PRESENTATIONS.includes((body.invoicePresentation ?? 'rate_components') as unknown as "summary" | "rate_components")) return NextResponse.json({ error: 'Invalid invoice presentation' }, { status: 422 })
@@ -107,6 +113,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const billRate = canonicalDecimal(tier.billRate, 4)
     if (baseQuantity === null || costRate === null || billRate === null) {
       return NextResponse.json({ error: 'Quantities must be positive and rates must be non-negative numbers' }, { status: 422 })
+    }
+    // item_rate_lines stores quantity/cost/bill as numeric(19,4): refuse
+    // whole-digit widths the column cannot hold before any write.
+    if ([baseQuantity, costRate, billRate].some((v) => wholeDigits(v) > 15)) {
+      return NextResponse.json({ error: 'Rate amounts must fit within numeric(19,4)' }, { status: 422 })
     }
     try {
       if (cmp(baseQuantity, '0') <= 0) throw new Error()
