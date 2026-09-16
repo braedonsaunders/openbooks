@@ -7,7 +7,8 @@ import {
   dashboardFinancialMetricsQuery,
   type DashboardFinancialMetricsRow,
 } from '@openbooks/engine/src/dashboard-reporting.ts'
-import type { Authz } from '@/lib/authz'
+import { type Authz, can } from '@/lib/authz'
+import { approvalWorklistForAuthz } from '@/lib/application/approvals'
 import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 
 export type DashboardMetrics = {
@@ -68,7 +69,13 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   const userId = authz.user.id
   const today = await businessToday(orgId)
 
-  const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments] = await Promise.all([
+  // The tile links to /approvals?tab=all, so its number is the unified
+  // worklist (Flows gates + gateless document approvals + pending pay runs),
+  // counted through the same reader as the worklist page and get_vitals —
+  // never a gates-only subquery. Same doorway as get_vitals: a caller who
+  // cannot approve anything has no work awaiting them.
+  const mayApprove = can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve')
+  const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments, unifiedApprovals] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -77,10 +84,6 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
         (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = ${today}) as entries_today,
-        (select count(*) from flow_gates g
-          left join documents d on d.id = g.subject_id and d.org_id = g.org_id
-         where g.org_id = ${orgId} and g.status = 'pending'
-           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}) as pending_approvals,
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
     `),
     db.execute(dashboardFinancialMetricsQuery(orgId, today)),
@@ -123,6 +126,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
        order by updated_at desc
        limit 5
     `),
+    mayApprove ? approvalWorklistForAuthz(authz) : Promise.resolve([]),
   ])
 
   const t = (totals as any).rows[0]
@@ -132,7 +136,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     journalLineCount: Number(t.journal_lines),
     accountCount: Number(t.accounts),
     entriesToday: Number(t.entries_today),
-    pendingApprovals: Number(t.pending_approvals),
+    pendingApprovals: unifiedApprovals.length,
     ledgerSum: t.ledger_sum,
     cashBalance: financial.cash_balance,
     openReceivables: financial.open_receivables,
