@@ -47,40 +47,53 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
       party_id: string | null; party_name: string | null;
       current: string; b1: string; b2: string; b3: string; b4: string; total: string;
     }>(sql`
-    with open_items as (
-      select d.party_id,
+    -- The open is reconstructed AS OF the report date — gross open-item
+    -- lines minus applications dated on/before it — never the live cached
+    -- balance: a later settlement must not rewrite a past aging (or
+    -- month-end history would never reproduce).
+    -- Scale shape: per-document gross/applied laterals used to run once per
+    -- posted document (hundreds of thousands of index-probe loops into
+    -- applications). Each side is aggregated once, in bulk, instead.
+    with doc_lines as (
+      select d.id as doc_id, d.party_id, d.kind, d.fx_rate,
+             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days,
+             jl.id as line_id, abs(jl.txn_amount) as line_gross
+        from documents d
+        join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+       where d.org_id = ${resolvedOrgId}
+         and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+         and coalesce(d.posting_date, d.document_date) <= ${asOf}
+         and ${dimWhere(dims, sql`d`)}
+    ),
+    applied_lines as (
+      select s.line_id, sum(s.amt) as applied from (
+        select dl.line_id, a.source_transaction_amount as amt
+          from doc_lines dl
+          join applications a on a.from_line_id = dl.line_id
+           and a.org_id = ${resolvedOrgId}
+           and a.applied_on <= ${asOf}
+           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+        union all
+        select dl.line_id, a.target_transaction_amount as amt
+          from doc_lines dl
+          join applications a on a.to_line_id = dl.line_id
+           and a.org_id = ${resolvedOrgId}
+           and a.applied_on <= ${asOf}
+           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+      ) s group by s.line_id
+    ),
+    open_items as (
+      select dl.party_id,
              -- Ledger scale is 4dp but the translation carries up to 14; round
              -- once here so bucket sums and the JS exact-decimal rollup below
              -- agree (unrounded values throw past 4dp) and always tie.
-             -- The open is reconstructed AS OF the report date — gross
-             -- open-item lines minus applications dated on/before it — never
-             -- the live cached balance: a later settlement must not rewrite a
-             -- past aging (or month-end history would never reproduce).
-             round((case when d.kind = ${creditKind} then -1 else 1 end)
-               * (gross.gross - coalesce(applied.applied, 0)) * d.fx_rate, 4) as open,
-             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days
-        from documents d
-        left join lateral (
-          select coalesce(sum(abs(jl.txn_amount)), 0) as gross
-            from journal_lines jl
-           where jl.entry_id = d.posted_entry_id and jl.is_open_item
-        ) gross on true
-        left join lateral (
-          select sum(case when a.from_line_id = jl.id
-                          then a.source_transaction_amount
-                          else a.target_transaction_amount end) as applied
-            from journal_lines jl
-            join applications a on a.org_id = ${resolvedOrgId}
-              and (a.from_line_id = jl.id or a.to_line_id = jl.id)
-           where jl.entry_id = d.posted_entry_id and jl.is_open_item
-             and a.applied_on <= ${asOf}
-             and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
-        ) applied on true
-       where d.org_id = ${resolvedOrgId}
-         and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and (gross.gross - coalesce(applied.applied, 0)) > 0
-         and coalesce(d.posting_date, d.document_date) <= ${asOf}
-         and ${dimWhere(dims, sql`d`)}
+             round((case when dl.kind = ${creditKind} then -1 else 1 end)
+               * (sum(dl.line_gross) - coalesce(sum(al.applied), 0)) * dl.fx_rate, 4) as open,
+             dl.age_days
+        from doc_lines dl
+        left join applied_lines al on al.line_id = dl.line_id
+       group by dl.doc_id, dl.party_id, dl.kind, dl.fx_rate, dl.age_days
+      having (sum(dl.line_gross) - coalesce(sum(al.applied), 0)) > 0
     )
     select oi.party_id, p.display_name as party_name,
            coalesce(sum(oi.open) filter (where oi.age_days <= 0), 0) as current,
@@ -164,38 +177,48 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
       party_id: string | null; party_name: string | null; reference: string | null
       due_date: string | null; age_days: number; open: string
     }>(sql`
-    with open_items as (
-      select d.id, d.kind, d.party_id, d.document_number,
+    -- Same bulk-aggregated as-of reconstruction as the summary: per-document
+    -- laterals into applications do not survive hundreds of thousands of
+    -- posted documents.
+    with doc_lines as (
+      select d.id as doc_id, d.kind, d.party_id, d.document_number,
              coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
-             -- Same 4dp ledger-scale rounding as the summary so detail rows
-             -- never carry precision the exact-decimal rollup cannot hold, and
-             -- the same as-of reconstruction: gross lines minus applications
-             -- dated on/before the report date, never the live cached balance.
-             round((case when d.kind = ${creditKind} then -1 else 1 end)
-               * (gross.gross - coalesce(applied.applied, 0)) * d.fx_rate, 4) as open,
-             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days
+             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days,
+             d.fx_rate, jl.id as line_id, abs(jl.txn_amount) as line_gross
         from documents d
-        left join lateral (
-          select coalesce(sum(abs(jl.txn_amount)), 0) as gross
-            from journal_lines jl
-           where jl.entry_id = d.posted_entry_id and jl.is_open_item
-        ) gross on true
-        left join lateral (
-          select sum(case when a.from_line_id = jl.id
-                          then a.source_transaction_amount
-                          else a.target_transaction_amount end) as applied
-            from journal_lines jl
-            join applications a on a.org_id = ${resolvedOrgId}
-              and (a.from_line_id = jl.id or a.to_line_id = jl.id)
-           where jl.entry_id = d.posted_entry_id and jl.is_open_item
-             and a.applied_on <= ${asOf}
-             and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
-        ) applied on true
+        join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
        where d.org_id = ${resolvedOrgId}
          and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and (gross.gross - coalesce(applied.applied, 0)) > 0
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
+    ),
+    applied_lines as (
+      select s.line_id, sum(s.amt) as applied from (
+        select dl.line_id, a.source_transaction_amount as amt
+          from doc_lines dl
+          join applications a on a.from_line_id = dl.line_id
+           and a.org_id = ${resolvedOrgId}
+           and a.applied_on <= ${asOf}
+           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+        union all
+        select dl.line_id, a.target_transaction_amount as amt
+          from doc_lines dl
+          join applications a on a.to_line_id = dl.line_id
+           and a.org_id = ${resolvedOrgId}
+           and a.applied_on <= ${asOf}
+           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+      ) s group by s.line_id
+    ),
+    open_items as (
+      select dl.doc_id as id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days,
+             -- Same 4dp ledger-scale rounding as the summary so detail rows
+             -- never carry precision the exact-decimal rollup cannot hold.
+             round((case when dl.kind = ${creditKind} then -1 else 1 end)
+               * (sum(dl.line_gross) - coalesce(sum(al.applied), 0)) * dl.fx_rate, 4) as open
+        from doc_lines dl
+        left join applied_lines al on al.line_id = dl.line_id
+       group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days, dl.fx_rate
+      having (sum(dl.line_gross) - coalesce(sum(al.applied), 0)) > 0
     )
     select oi.id, oi.kind, oi.party_id, p.display_name as party_name, oi.document_number as reference,
            oi.due as due_date, oi.age_days, oi.open
