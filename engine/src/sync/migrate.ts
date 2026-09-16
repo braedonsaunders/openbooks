@@ -1081,11 +1081,15 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
   const colList = keys.map((k) => sql.raw(k));
   const valList = keys.map((k) => sql`${cols[k]}`);
   const setList = keys.map((k) => sql`${sql.raw(k)} = ${cols[k]}`);
+  // The conflict-target WHERE sees both the stored row and the proposed
+  // (excluded) row, so a bare org_id is ambiguous (42702) and every role
+  // write fails. Qualify to the stored row: the guard keeps 5c54bd4d1's
+  // intent (never overwrite another tenant's role on a party_id hit).
   await db.execute(sql`
     insert into ${sql.raw(table)} (org_id, party_id, ${sql.join(colList, sql`, `)})
     values (${orgId}, ${partyId}, ${sql.join(valList, sql`, `)})
     on conflict (party_id) do update set ${sql.join(setList, sql`, `)}
-    where org_id = ${orgId}`);
+    where ${sql.raw(table)}.org_id = ${orgId}`);
 }
 
 async function auditTimeBillingChange(
