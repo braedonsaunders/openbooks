@@ -12,7 +12,11 @@
     "proposal": "Proposition",
     "all": "Tous",
     "withProposal": "Avec proposition",
-    "unresolved": "Sans filiale liée"
+    "unresolved": "Sans filiale liée",
+    "assignment": "Assignation",
+    "assignedToMe": "Assignés à moi",
+    "unassigned": "Non assignés",
+    "overdue": "En retard"
   },
   "subsidiaryHelp": "La filiale est déduite des constats liés à un compte ; les autres restent non rattachés.",
   "lastVisit": "Nouveautés depuis le {date}",
@@ -63,6 +67,31 @@
   },
   "drawer": {
     "askAboutThis": "Poser une question",
-    "askAboutThisHint": "Ouvrir la discussion avec les pièces de ce constat"
+    "askAboutThisHint": "Ouvrir la discussion avec les pièces de ce constat",
+    "assignment": {
+      "title": "Assignation",
+      "unassigned": "Non assigné — choisissez un responsable ou une équipe.",
+      "owner": "Responsable",
+      "team": "Équipe",
+      "nobody": "Personne",
+      "noTeam": "Aucune équipe",
+      "due": "Échéance",
+      "overdue": "En retard",
+      "save": "Enregistrer",
+      "clear": "Effacer",
+      "saved": "Assignation mise à jour.",
+      "saveFailed": "Impossible de mettre à jour l'assignation."
+    },
+    "notes": {
+      "title": "Notes",
+      "empty": "Aucune note pour le moment.",
+      "placeholder": "Ajouter une note…",
+      "add": "Ajouter",
+      "added": "Note ajoutée.",
+      "addFailed": "Impossible d'ajouter la note."
+    }
+  },
+  "assignment": {
+    "unassigned": "Non assigné"
   }
 }

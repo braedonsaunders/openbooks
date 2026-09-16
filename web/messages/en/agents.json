@@ -12,7 +12,11 @@
     "proposal": "Proposal",
     "all": "All",
     "withProposal": "With proposal",
-    "unresolved": "No subsidiary link"
+    "unresolved": "No subsidiary link",
+    "assignment": "Assignment",
+    "assignedToMe": "Assigned to me",
+    "unassigned": "Unassigned",
+    "overdue": "Overdue"
   },
   "subsidiaryHelp": "Subsidiary resolves through account-linked findings; every other finding buckets as unresolved.",
   "lastVisit": "New since {date}",
@@ -63,6 +67,31 @@
   },
   "drawer": {
     "askAboutThis": "Ask about this",
-    "askAboutThisHint": "Open chat with this finding's evidence attached"
+    "askAboutThisHint": "Open chat with this finding's evidence attached",
+    "assignment": {
+      "title": "Assignment",
+      "unassigned": "Unassigned — pick an owner or team below.",
+      "owner": "Owner",
+      "team": "Team",
+      "nobody": "Nobody",
+      "noTeam": "No team",
+      "due": "Due",
+      "overdue": "Overdue",
+      "save": "Save",
+      "clear": "Clear",
+      "saved": "Assignment updated.",
+      "saveFailed": "Couldn't update the assignment."
+    },
+    "notes": {
+      "title": "Notes",
+      "empty": "No notes yet.",
+      "placeholder": "Add a note…",
+      "add": "Add note",
+      "added": "Note added.",
+      "addFailed": "Couldn't add the note."
+    }
+  },
+  "assignment": {
+    "unassigned": "Unassigned"
   }
 }

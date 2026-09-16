@@ -30,6 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const q = one("q");
   const hasProposal = one("hasProposal");
   const subsidiary = one("subsidiary");
+  const assigned = one("assigned");
   const since = one("since");
   const limit = Number.parseInt(one("limit") ?? "", 10);
   const offset = Number.parseInt(one("offset") ?? "", 10);
@@ -46,6 +47,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     ...(hasProposal === "true" ? { hasProposal: true as const } : {}),
     ...(hasProposal === "false" ? { hasProposal: false as const } : {}),
     ...(subsidiary && isUuid(subsidiary) ? { subsidiaryId: subsidiary } : {}),
+    ...(assigned === "mine" ? { assignedToMe: true as const } : {}),
+    ...(assigned === "unassigned" ? { unassignedOnly: true as const } : {}),
+    ...(assigned === "overdue" ? { overdueOnly: true as const } : {}),
     ...(since ? { since } : {}),
     ...(Number.isSafeInteger(limit) ? { limit } : {}),
     ...(Number.isSafeInteger(offset) ? { offset } : {}),

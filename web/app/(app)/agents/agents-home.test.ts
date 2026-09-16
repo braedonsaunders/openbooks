@@ -36,6 +36,25 @@ test("proposals lane renders governed cards", () => {
   assert.match(view, /when: f\('laneEmpty'\)/);
 });
 
+// Assignment & SLA ride the drawer: owner/role with a due date plus a
+// comment thread, surfaced in the inbox as an assignee column and an
+// assignment chip group. Writes reuse the item PATCH route — no second path.
+test("drawer carries assignment and notes", () => {
+  assert.match(view, /loadWorkItemAssignment\(authz, itemId\)/);
+  assert.match(view, /listWorkItemNotes\(authz, itemId\)/);
+  assert.match(view, /listAgentNotificationTargets\(authz\.user\.orgId\)/);
+  assert.match(view, /paramKey: 'assigned'/);
+  assert.match(view, /assignedToMe: true as const/);
+  assert.match(view, /column\(f\('columnAssignee'\)/);
+  const drawer = read("../continuous-close/WorkItemDrawer.tsx");
+  assert.match(drawer, /action: 'assign'/);
+  assert.match(drawer, /action: 'note'/);
+  assert.match(drawer, /ta\('drawer\.assignment\.title'\)/);
+  assert.match(drawer, /ta\('drawer\.notes\.title'\)/);
+  const feed = read("../../api/agents/inbox/route.ts");
+  assert.match(feed, /assigned === "mine"/);
+});
+
 test("ask-about-this deep-links chat with the finding handoff", () => {
   const drawer = read("../continuous-close/WorkItemDrawer.tsx");
   assert.match(drawer, /query: \{ finding: item\.id \}/);

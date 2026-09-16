@@ -30,9 +30,16 @@ import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { loadAgentInbox } from '../../../lib/agents/inbox'
 import { loadBriefing, type CachedBriefing } from '../../../lib/agents/briefing'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
+import { listWorkItemNotes, loadWorkItemAssignment } from '../../../lib/agents/assignments'
+import { listAgentNotificationTargets } from '../../../lib/setup/agents'
 import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
 import { findingSummaryLine } from '../../../lib/agents/summary'
-import type { ContinuousCloseWorkItem } from '../continuous-close/WorkItemDrawer'
+import type {
+  ContinuousCloseWorkItem,
+  WorkItemAssigneeOptions,
+  WorkItemAssignmentView,
+  WorkItemNoteView,
+} from '../continuous-close/WorkItemDrawer'
 
 /**
  * The Agent Workbench home, split into a loader and a spec.
@@ -70,6 +77,7 @@ export interface AgentsInboxRow {
   statusVariant: (typeof STATUS_VARIANT)[keyof typeof STATUS_VARIANT]
   proposalBadge: string
   detected: string
+  assigneeLabel: string
 }
 
 export interface AgentsTriageRow {
@@ -109,11 +117,13 @@ export interface AgentsData {
   subsidiaryLabel: string
   subsidiaryHelp: string
   proposalLabel: string
+  assignmentLabel: string
   packOptions: { value: string; label: string; count: number }[]
   statusOptions: { value: string; label: string; count: number }[]
   severityOptions: { value: string; label: string; count: number }[]
   subsidiaryOptions: { value: string; label: string; count: number }[]
   proposalOptions: { value: string; label: string; count: number }[]
+  assignmentOptions: { value: string; label: string; count: number }[]
   columnFinding: string
   columnPack: string
   columnSeverity: string
@@ -121,6 +131,7 @@ export interface AgentsData {
   columnStatus: string
   columnDetected: string
   columnProposal: string
+  columnAssignee: string
   rows: AgentsInboxRow[]
   total: number
   currentPage: number
@@ -150,6 +161,9 @@ export interface AgentsData {
     closeHref: string
     canWrite: boolean
     proposal: FindingProposalCommand | null
+    assignment: WorkItemAssignmentView | null
+    notes: WorkItemNoteView[]
+    assignees: WorkItemAssigneeOptions | null
   } | null
 }
 
@@ -186,6 +200,7 @@ export async function loadAgents(
   const subsidiary = singleParam(sp, 'subsidiary')
   const proposalsOnly = singleParam(sp, 'proposals') === 'true'
   const briefingMode = singleParam(sp, 'briefing') === 'true'
+  const assignedFilter = singleParam(sp, 'assigned')
 
   const inbox = await loadAgentInbox(authz, {
     limit: briefingMode ? 1 : params.perPage,
@@ -200,6 +215,9 @@ export async function loadAgents(
     ...(params.q ? { query: params.q } : {}),
     ...(proposalsOnly ? { hasProposal: true as const } : {}),
     ...(subsidiary && isUuid(subsidiary) ? { subsidiaryId: subsidiary } : {}),
+    ...(assignedFilter === 'mine' ? { assignedToMe: true as const } : {}),
+    ...(assignedFilter === 'unassigned' ? { unassignedOnly: true as const } : {}),
+    ...(assignedFilter === 'overdue' ? { overdueOnly: true as const } : {}),
   })
 
   const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
@@ -210,8 +228,25 @@ export async function loadAgents(
 
   const itemId = singleParam(sp, 'item')
   let selected: ContinuousCloseWorkItem | null = null
+  let selectedAssignment: WorkItemAssignmentView | null = null
+  let selectedNotes: WorkItemNoteView[] = []
   if (itemId && isUuid(itemId)) {
     selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable)
+    if (selected) {
+      const [assignment, notes] = await Promise.all([
+        loadWorkItemAssignment(authz, itemId),
+        listWorkItemNotes(authz, itemId),
+      ])
+      selectedAssignment = assignment
+      selectedNotes = notes
+    }
+  }
+  // Owner/role candidates stay behind the write gate: readers see names, not
+  // the org directory.
+  let assigneeOptions: WorkItemAssigneeOptions | null = null
+  if (selected && canWrite) {
+    const targets = await listAgentNotificationTargets(authz.user.orgId)
+    assigneeOptions = { users: targets.users, roles: targets.roles }
   }
   const closeHref = mergeHref('/agents', sp, { item: undefined })
   const briefing = briefingMode ? await loadBriefing(authz) : { briefing: null, aiEnabled: false }
@@ -262,6 +297,7 @@ export async function loadAgents(
     subsidiaryLabel: t('facets.subsidiary'),
     subsidiaryHelp: t('subsidiaryHelp'),
     proposalLabel: t('facets.proposal'),
+    assignmentLabel: t('facets.assignment'),
     packOptions: inbox.facets.packs.map((row) => ({
       value: row.key,
       label: tc(`agents.${row.key}`),
@@ -285,6 +321,11 @@ export async function loadAgents(
     proposalOptions: [
       { value: 'true', label: t('facets.withProposal'), count: inbox.facets.withProposals },
     ],
+    assignmentOptions: [
+      { value: 'mine', label: t('facets.assignedToMe'), count: inbox.facets.assignedToMe },
+      { value: 'unassigned', label: t('facets.unassigned'), count: inbox.facets.unassigned },
+      { value: 'overdue', label: t('facets.overdue'), count: inbox.facets.overdue },
+    ],
     columnFinding: tc('table.finding'),
     columnPack: t('facets.pack'),
     columnSeverity: tc('table.severity'),
@@ -292,6 +333,7 @@ export async function loadAgents(
     columnStatus: tcc('labels.status'),
     columnDetected: tc('table.detected'),
     columnProposal: t('proposal.badge'),
+    columnAssignee: t('facets.assignment'),
     rows: inbox.rows.map((row) => ({
       id: row.id,
       title: tc(`findings.${row.findingType}.title`),
@@ -305,6 +347,11 @@ export async function loadAgents(
       statusVariant: STATUS_VARIANT[row.status],
       proposalBadge: row.hasProposal ? t('proposal.badge') : '',
       detected: dateOnly.format(new Date(row.lastDetectedAt)),
+      assigneeLabel: row.assignee
+        ? row.dueAt
+          ? `${row.assignee.name} · ${row.overdue ? t('facets.overdue') : dateOnly.format(new Date(row.dueAt))}`
+          : row.assignee.name
+        : t('assignment.unassigned'),
     })),
     total: inbox.total,
     currentPage: params.page,
@@ -363,6 +410,9 @@ export async function loadAgents(
           closeHref,
           canWrite,
           proposal: canWrite ? findingProposalCommand(authz, selected.summary) : null,
+          assignment: selectedAssignment,
+          notes: selectedNotes,
+          assignees: assigneeOptions,
         }
       : null,
   }
@@ -457,6 +507,13 @@ export function agentsSpec(data: AgentsData): PageSpec {
           label: data.proposalLabel,
           options: data.proposalOptions,
         }),
+        widgetBlock('filter-chips', {
+          basePath: '/agents',
+          currentParams: data.currentParams,
+          paramKey: 'assigned',
+          label: data.assignmentLabel,
+          options: data.assignmentOptions,
+        }),
         ]),
         when: f('showInboxChrome'),
       },
@@ -520,6 +577,9 @@ export function agentsSpec(data: AgentsData): PageSpec {
             }),
             column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
             column(f('columnProposal'), text(item('proposalBadge'))),
+            column(f('columnAssignee'), text(item('assigneeLabel')), {
+              className: 'text-sm text-slate-500',
+            }),
             column(f('columnDetected'), text(item('detected')), {
               className: 'text-sm text-slate-500',
             }),
