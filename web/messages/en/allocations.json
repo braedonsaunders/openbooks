@@ -322,8 +322,10 @@
     "sourceKind": "Source",
     "unit": "Unit",
     "active": "Active",
+    "inactive": "Inactive",
     "showInactive": "Show inactive",
     "empty": "No drivers yet.",
+    "emptyTitle": "No drivers yet",
     "deleteConfirm": "Delete driver {name}? Manual values go with it.",
     "sourceKinds": {
       "statistical_journal": "Statistical journal",
@@ -338,7 +340,7 @@
       "gl_activity": "Signed posted activity per dimension value in the period.",
       "gl_balance": "Period-end balance per dimension value.",
       "native_measure": "Headcount, hours, revenue and other built-in measures.",
-      "manual": "Hand-maintained effective-dated values below.",
+      "manual": "Hand-maintained effective-dated values, edited in this drawer.",
       "report_definition": "A saved report run with the period injected."
     },
     "dimensions": {
@@ -387,7 +389,9 @@
     "loadFailed": "Could not load drivers.",
     "saveFailed": "Could not save the driver.",
     "deleteFailed": "Could not delete the driver.",
-    "previewFailed": "Could not preview the vector."
+    "previewFailed": "Could not preview the vector.",
+    "manualCreateHint": "Save the driver first — its effective-dated values become editable here right after.",
+    "valuesAfterSave": "Driver saved. Add its effective-dated values below."
   },
   "runs": {
     "title": "Runs",
@@ -397,6 +401,7 @@
     "filterStatus": "Status",
     "all": "All",
     "empty": "No runs yet. Preview a rule to compute one.",
+    "emptyTitle": "No runs yet",
     "columns": {
       "rule": "Rule",
       "period": "Period",
@@ -421,6 +426,7 @@
     },
     "previewRun": "Preview run",
     "runDetail": "Run detail",
+    "summary": "Summary",
     "sources": "Sources",
     "driverVector": "Driver vector",
     "targets": "Targets",

@@ -324,7 +324,7 @@ function RuleCreateBody({ closeHref }: { closeHref: string }) {
           {t('rules.drawer.create')}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.push(closeHref as never)}>
-          {tc('cancel')}
+          {tc('actions.cancel')}
         </Button>
       </span>
     </div>
@@ -533,7 +533,7 @@ function GeneralTab({
         </div>
       </div>
       <Button type="button" onClick={() => void save()} disabled={saving || form.name.trim() === ''}>
-        {tc('save')}
+        {tc('actions.save')}
       </Button>
     </div>
   )
@@ -756,7 +756,7 @@ function DefinitionTab({
                     {isDraft ? (
                       <button
                         type="button"
-                        aria-label={`${tc('delete')} ${kind}`}
+                        aria-label={`${tc('actions.delete')} ${kind}`}
                         className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
                         onClick={() => set('documentKinds', form.documentKinds.filter((k) => k !== kind))}
                       >
@@ -1194,7 +1194,7 @@ function DefinitionTab({
           {isDraft ? (
             <span className="flex items-center gap-2">
               <Button type="button" onClick={() => void save()} disabled={saving}>
-                {tc('save')}
+                {tc('actions.save')}
               </Button>
               {saved ? <span className="text-sm text-teal-700 dark:text-teal-300">{t('rules.targets.saved')}</span> : null}
             </span>
