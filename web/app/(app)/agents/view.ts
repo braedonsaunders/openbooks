@@ -28,6 +28,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import { loadAgentInbox } from '../../../lib/agents/inbox'
+import { loadBriefing, type CachedBriefing } from '../../../lib/agents/briefing'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
 import { findingSummaryLine } from '../../../lib/agents/summary'
@@ -127,8 +128,12 @@ export interface AgentsData {
   tabsAriaLabel: string
   tabs: { key: string; href: string; label: string; active: boolean }[]
   proposalsOnly: boolean
+  briefingMode: boolean
   showInbox: boolean
   showLane: boolean
+  showBriefing: boolean
+  showInboxChrome: boolean
+  briefing: { briefing: CachedBriefing | null; aiEnabled: boolean }
   lane: AgentsLaneCard[]
   laneEmpty: boolean
   laneEmptyTitle: string
@@ -180,8 +185,11 @@ export async function loadAgents(
   const status = singleParam(sp, 'status')
   const subsidiary = singleParam(sp, 'subsidiary')
   const proposalsOnly = singleParam(sp, 'proposals') === 'true'
+  const briefingMode = singleParam(sp, 'briefing') === 'true'
 
   const inbox = await loadAgentInbox(authz, {
+    limit: briefingMode ? 1 : params.perPage,
+    offset: briefingMode ? 0 : (params.page - 1) * params.perPage,
     ...(requestedPacks && requestedPacks.length > 0 ? { packs: requestedPacks } : {}),
     ...(severity === 'info' || severity === 'warning' || severity === 'critical'
       ? { severities: [severity] }
@@ -192,8 +200,6 @@ export async function loadAgents(
     ...(params.q ? { query: params.q } : {}),
     ...(proposalsOnly ? { hasProposal: true as const } : {}),
     ...(subsidiary && isUuid(subsidiary) ? { subsidiaryId: subsidiary } : {}),
-    limit: params.perPage,
-    offset: (params.page - 1) * params.perPage,
   })
 
   const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
@@ -208,6 +214,7 @@ export async function loadAgents(
     selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable)
   }
   const closeHref = mergeHref('/agents', sp, { item: undefined })
+  const briefing = briefingMode ? await loadBriefing(authz) : { briefing: null, aiEnabled: false }
 
   // Proposals lane: every carrier row resolves its viewer-signed command up
   // front, so Apply needs no drawer round-trip. Unresolvable carriers stay
@@ -306,26 +313,36 @@ export async function loadAgents(
     tabs: [
       {
         key: 'inbox',
-        href: mergeHref('/agents', sp, { proposals: undefined, item: undefined }),
+        href: mergeHref('/agents', sp, { proposals: undefined, briefing: undefined, item: undefined }),
         label: t('tabs.inbox'),
-        active: !proposalsOnly,
+        active: !proposalsOnly && !briefingMode,
       },
       {
         key: 'proposals',
-        href: mergeHref('/agents', sp, { proposals: 'true', item: undefined }),
+        href: mergeHref('/agents', sp, { proposals: 'true', briefing: undefined, item: undefined }),
         label: t('tabs.proposals'),
-        active: proposalsOnly,
+        active: proposalsOnly && !briefingMode,
+      },
+      {
+        key: 'briefing',
+        href: mergeHref('/agents', sp, { proposals: undefined, briefing: 'true', item: undefined }),
+        label: t('tabs.briefing'),
+        active: briefingMode,
       },
     ],
     proposalsOnly,
-    showInbox: !proposalsOnly,
-    showLane: proposalsOnly,
+    briefingMode,
+    showInbox: !proposalsOnly && !briefingMode,
+    showLane: proposalsOnly && !briefingMode,
+    showBriefing: briefingMode,
+    showInboxChrome: !briefingMode,
+    briefing: { briefing: briefing.briefing, aiEnabled: briefing.aiEnabled },
     lane,
-    laneEmpty: proposalsOnly && inbox.total === 0,
+    laneEmpty: proposalsOnly && !briefingMode && inbox.total === 0,
     laneEmptyTitle: t('lane.emptyTitle'),
     laneEmptyDescription: t('lane.emptyDescription'),
-    findingsEmpty: !proposalsOnly && inbox.total === 0,
-    findingsPresent: !proposalsOnly && inbox.total > 0,
+    findingsEmpty: !proposalsOnly && !briefingMode && inbox.total === 0,
+    findingsPresent: !proposalsOnly && !briefingMode && inbox.total > 0,
     emptyTitle: t('empty.title'),
     emptyDescription: t('empty.description'),
     emptyAction: t('empty.action'),
@@ -373,23 +390,37 @@ export function agentsSpec(data: AgentsData): PageSpec {
     ],
     body: [
       widgetBlock('tab-nav', { ariaLabel: data.tabsAriaLabel, tabs: data.tabs }),
-      widgetBlock('agents-triage', {
-        rows: data.triage.rows,
-        canWrite: data.triage.canWrite,
-        orgId: data.triage.orgId,
-      }),
-      grid(
-        'grid grid-cols-2 gap-2 sm:grid-cols-3',
-        data.metrics.map((metric) =>
-          widgetBlock('metric-tile', {
-            label: metric.label,
-            value: metric.value,
-            locale: data.locale,
-            ...(metric.tone ? { tone: metric.tone } : {}),
-          }),
+      {
+        ...widgetBlock('agents-triage', {
+          rows: data.triage.rows,
+          canWrite: data.triage.canWrite,
+          orgId: data.triage.orgId,
+        }),
+        when: f('showInboxChrome'),
+      },
+      {
+        ...widgetBlock('agents-briefing', {
+          briefing: data.briefing.briefing,
+          aiEnabled: data.briefing.aiEnabled,
+        }),
+        when: f('showBriefing'),
+      },
+      {
+        ...grid(
+          'grid grid-cols-2 gap-2 sm:grid-cols-3',
+          data.metrics.map((metric) =>
+            widgetBlock('metric-tile', {
+              label: metric.label,
+              value: metric.value,
+              locale: data.locale,
+              ...(metric.tone ? { tone: metric.tone } : {}),
+            }),
+          ),
         ),
-      ),
-      grid('flex flex-wrap items-center gap-2', [
+        when: f('showInboxChrome'),
+      },
+      {
+        ...grid('flex flex-wrap items-center gap-2', [
         widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
         widgetBlock('filter-chips', {
           basePath: '/agents',
@@ -426,7 +457,9 @@ export function agentsSpec(data: AgentsData): PageSpec {
           label: data.proposalLabel,
           options: data.proposalOptions,
         }),
-      ]),
+        ]),
+        when: f('showInboxChrome'),
+      },
       {
         ...widgetBlock('empty-state', {
           icon: 'activity',

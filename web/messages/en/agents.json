@@ -35,7 +35,26 @@
   "tabs": {
     "ariaLabel": "Agent workbench sections",
     "inbox": "Inbox",
-    "proposals": "Proposals"
+    "proposals": "Proposals",
+    "briefing": "Briefing"
+  },
+  "briefing": {
+    "generate": "Generate briefing",
+    "generating": "Generating…",
+    "send": "Send as email",
+    "sent": "Briefing sent.",
+    "sendFailed": "Email couldn't be queued.",
+    "empty": "No briefing yet today.",
+    "noAi": "Briefing needs a configured AI model.",
+    "generatedAt": "Generated {date}",
+    "errors": {
+      "failed": "Couldn't complete that action.",
+      "ai_not_configured": "AI isn't configured for this organization.",
+      "briefing_empty": "The model returned an empty briefing.",
+      "briefing_failed": "Briefing generation failed.",
+      "no_briefing": "There's no briefing to send yet.",
+      "invalid_action": "Unknown action."
+    }
   },
   "lane": {
     "unavailable": "No apply action available — open the finding for details.",

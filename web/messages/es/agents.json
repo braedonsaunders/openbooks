@@ -35,7 +35,26 @@
   "tabs": {
     "ariaLabel": "Secciones de agentes",
     "inbox": "Bandeja",
-    "proposals": "Propuestas"
+    "proposals": "Propuestas",
+    "briefing": "Resumen"
+  },
+  "briefing": {
+    "generate": "Generar resumen",
+    "generating": "Generando…",
+    "send": "Enviar por correo",
+    "sent": "Resumen enviado.",
+    "sendFailed": "No se pudo encolar el correo.",
+    "empty": "Aún no hay resumen hoy.",
+    "noAi": "El resumen necesita un modelo de IA configurado.",
+    "generatedAt": "Generado el {date}",
+    "errors": {
+      "failed": "No se pudo completar la acción.",
+      "ai_not_configured": "La IA no está configurada para esta organización.",
+      "briefing_empty": "El modelo devolvió un resumen vacío.",
+      "briefing_failed": "Falló la generación del resumen.",
+      "no_briefing": "Aún no hay resumen para enviar.",
+      "invalid_action": "Acción desconocida."
+    }
   },
   "lane": {
     "unavailable": "Sin acción aplicable: abre el hallazgo para ver los detalles.",

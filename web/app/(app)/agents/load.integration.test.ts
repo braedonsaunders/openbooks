@@ -78,6 +78,27 @@ test('agents home serves the ranked snapshot with facets', { skip: !process.env.
   }
 });
 
+test('briefing tab serves cache state without the inbox', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await seedFinding(org.orgId);
+    await asUser(org.orgId, 'Reader', 'b06_brief_tab', ['assistant.use', 'gl.read']);
+    await withOrgContext(org.orgId, async () => {
+      const data = await loadAgents({ briefing: 'true' });
+      assert.equal(data.showBriefing, true);
+      assert.equal(data.showInbox, false);
+      assert.equal(data.showLane, false);
+      assert.equal(data.briefing.briefing, null, 'nothing cached today');
+      assert.equal(data.briefing.aiEnabled, false);
+      assert.equal(data.tabs.find((tab) => tab.key === 'briefing')?.active, true);
+      const spec = agentsSpec(data);
+      JSON.stringify(spec);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('proposals lane resolves viewer-signed cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {

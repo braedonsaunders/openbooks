@@ -35,7 +35,26 @@
   "tabs": {
     "ariaLabel": "Sections des agents",
     "inbox": "Boîte",
-    "proposals": "Propositions"
+    "proposals": "Propositions",
+    "briefing": "Briefing"
+  },
+  "briefing": {
+    "generate": "Générer le briefing",
+    "generating": "Génération…",
+    "send": "Envoyer par e-mail",
+    "sent": "Briefing envoyé.",
+    "sendFailed": "Échec de la mise en file de l'e-mail.",
+    "empty": "Pas encore de briefing aujourd'hui.",
+    "noAi": "Le briefing nécessite un modèle d'IA configuré.",
+    "generatedAt": "Généré le {date}",
+    "errors": {
+      "failed": "Impossible de terminer cette action.",
+      "ai_not_configured": "L'IA n'est pas configurée pour cette organisation.",
+      "briefing_empty": "Le modèle a renvoyé un briefing vide.",
+      "briefing_failed": "La génération du briefing a échoué.",
+      "no_briefing": "Aucun briefing à envoyer pour le moment.",
+      "invalid_action": "Action inconnue."
+    }
   },
   "lane": {
     "unavailable": "Aucune action applicable — ouvrez le constat pour le détail.",

@@ -36,6 +36,14 @@ test("proposals lane renders governed cards", () => {
   assert.match(view, /when: f\('laneEmpty'\)/);
 });
 
+test("briefing tab serves the cached narrative", () => {
+  assert.match(view, /loadBriefing\(authz\)/);
+  assert.match(view, /widgetBlock\('agents-briefing'/);
+  assert.match(view, /when: f\('showBriefing'\)/);
+  assert.match(view, /when: f\('showInboxChrome'\)/);
+  assert.match(view, /briefing: 'true'/);
+});
+
 // /continuous-close redirects to the workbench, preserving finding deep
 // links; only its reports tab stays until the briefing moves it.
 test("continuous-close redirects to the workbench except reports", () => {
