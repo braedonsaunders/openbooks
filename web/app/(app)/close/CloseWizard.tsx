@@ -420,7 +420,7 @@ function ReadinessStage(
             ) : (
               <div className="space-y-2">
                 {open.map((item) => (
-                  <ExceptionRow key={item.id} item={item} />
+                  <ExceptionRow key={item.id} item={item} run={props.run} />
                 ))}
               </div>
             )}
@@ -431,10 +431,10 @@ function ReadinessStage(
   );
 }
 
-function ExceptionRow({ item }: { item: Row }) {
+function ExceptionRow({ item, run }: { item: Row; run: Props["run"] }) {
   const t = useTranslations("close");
   const critical = ["critical", "error"].includes(item.severity);
-  const actionHref = closeExceptionActionHref(item.code);
+  const actionHref = closeExceptionActionHref(item.code, run);
   const values = { count: Number(item.details?.count ?? 0) };
   const title = item.title?.startsWith("close.")
     ? t((item.title.slice(6)), values)
@@ -480,10 +480,12 @@ function ExceptionRow({ item }: { item: Row }) {
   );
 }
 
-function closeExceptionActionHref(code: string): string | null {
+function closeExceptionActionHref(code: string, run: Props["run"]): string | null {
+  if (code === "posting-period-missing") {
+    return `/close/posting-periods?run=${encodeURIComponent(run.id)}&book=${encodeURIComponent(run.book_id)}`;
+  }
   const actions: Record<string, string> = {
     "drafts-open": "/journal",
-    "posting-period-missing": "/journal",
     "bank-unreconciled": "/banking",
     "depreciation-unposted": "/assets",
     "recognition-unposted": "/revenue",
@@ -673,7 +675,7 @@ function TaskCard(props: Props & { task: Row }) {
             })}
           </p>
         ) : null}
-        {openException ? <ExceptionRow item={openException} /> : null}
+        {openException ? <ExceptionRow item={openException} run={props.run} /> : null}
         {taskEvidence.length ? (
           <div className="flex flex-wrap gap-2">
             {taskEvidence.map((item) => (

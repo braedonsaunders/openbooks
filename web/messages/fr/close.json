@@ -592,5 +592,26 @@
       "actionFailed": "La modification n’a pas pu être enregistrée",
       "invalidConfiguration": "La configuration doit être valide et complète"
     }
+  },
+  "postingPeriods": {
+      "title": "Affecter les périodes comptables",
+      "description": "Documents approuvés sans période comptable, déduite de la date d'effet de chaque document. Vérifiez l'aperçu, puis affectez.",
+      "backToClose": "Retour à la clôture",
+      "previewTitle": "{count, plural, one {# document} other {# documents}}",
+      "previewDescription": "Seuls les documents affectables sont validés. Les documents bloqués conservent leur motif et ne sont jamais forcés.",
+      "loading": "Chargement de l'aperçu…",
+      "empty": "Aucun document approuvé ne manque de période comptable.",
+      "document": "Document",
+      "kind": "Type",
+      "effectiveDate": "Date d'effet",
+      "period": "Période",
+      "status": "Statut",
+      "assignable": "Affectable",
+      "assign": "Affecter {count, plural, one {# période} other {# périodes}}",
+      "blockedNote": "{count, plural, one {# document est} other {# documents sont}} bloqué(s) et sera(ont) ignoré(s).",
+      "refusedNote": "{count, plural, one {# document a été} other {# documents ont été}} refusé(s) à la validation.",
+      "previewFailed": "Impossible de charger l'aperçu.",
+      "commitFailed": "Impossible d'affecter les périodes comptables.",
+      "committed": "{count, plural, one {# période comptable affectée} other {# périodes comptables affectées}}."
   }
 }
