@@ -483,6 +483,10 @@ export function agentsSpec(data: AgentsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
+        // Narrow: the tab strip is ~340px, so the configure action stacks
+        // under the tabs instead of clipping off the row; single row on
+        // desktop.
+        actionsClassName: 'flex flex-col items-end gap-2 sm:flex-row sm:items-center',
         actions: [
           widget('module-home-tabs', { tabs: data.tabs }),
           widget(

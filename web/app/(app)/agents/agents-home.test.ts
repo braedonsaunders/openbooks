@@ -60,6 +60,9 @@ test("inbox table binds the list source sort and shared filters", () => {
 // dead Apply.
 test("header binds module-home tabs and the KPI strip", () => {
   assert.match(view, /widget\('module-home-tabs', \{ tabs: data\.tabs \}\)/);
+  // Narrow: the configure action stacks under the tab strip instead of
+  // clipping off the row.
+  assert.match(view, /actionsClassName: 'flex flex-col items-end gap-2 sm:flex-row sm:items-center'/);
   assert.match(view, /href: '\/admin\/setup\/agents\/activity'/);
   assert.match(view, /widgetBlock\('agents-kpi-strip', \{ items: data\.kpis \}\)/);
   assert.match(view, /listAgentRuns\(authz\.user\.orgId, \{ limit: 1 \}\)/);
