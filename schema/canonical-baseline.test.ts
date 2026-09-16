@@ -243,6 +243,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0147_gst34_box_basis_heal.sql",
     "0148_replay_before_parent_lookup.sql",
     "0149_payment_pending_clawbacks.sql",
+    "0150_applications_org_line_indexes.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
