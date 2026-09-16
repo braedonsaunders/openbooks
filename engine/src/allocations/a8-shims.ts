@@ -152,7 +152,10 @@ export interface PreviewRunInput {
   triggerKind?: AllocationRunTrigger;
 }
 
-export interface PostRunInput extends PreviewRunInput {
+export interface PostRunInput {
+  orgId: string;
+  actorId: string;
+  runId: string;
   reason: string;
 }
 
