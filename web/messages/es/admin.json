@@ -955,6 +955,22 @@
           "title": "Facturas duplicadas",
           "description": "Detecta documentos a pagar con el mismo proveedor, tipo e importe contabilizados dentro de la ventana de duplicados."
         },
+        "tax_missing_codes": {
+          "title": "Documentos sin código fiscal",
+          "description": "Encuentra documentos publicados con líneas sin impuesto que la declaración no verá."
+        },
+        "tax_missing_registration": {
+          "title": "Registro fiscal faltante",
+          "description": "Marca formularios activos sin número de registro archivado."
+        },
+        "tax_return_blocked": {
+          "title": "Declaración bloqueada",
+          "description": "Marca declaraciones configuradas que el motor fiscal no puede calcular."
+        },
+        "tax_unlocked_period": {
+          "title": "Período fiscal sin bloquear",
+          "description": "Marca el último período completado sin bloqueo fiscal cerrado."
+        },
         "missing_approved_budget": {
           "title": "Falta un presupuesto aprobado",
           "description": "Confirma que un presupuesto aprobado cubra el período operativo actual antes de ejecutar el análisis de desviaciones."
@@ -1066,6 +1082,11 @@
         "title": "Agente forense",
         "description": "Controles continuos de anomalías en el gasto.",
         "coverage": "Comprueba publicaciones en fin de semana, cifras redondas, importes justo bajo el límite y facturas duplicadas."
+      },
+      "tax": {
+        "title": "Agente fiscal",
+        "description": "Controles continuos de preparación de declaraciones.",
+        "coverage": "Comprueba códigos fiscales faltantes, registros, declaraciones calculables y bloqueos de período."
       },
       "lastRun": "Última ejecución: {date} · {status}",
       "nextRun": "Próxima ejecución programada: {date}",
@@ -1376,6 +1397,12 @@
           "description": "Publicaciones en fin de semana, cifras redondas, importes justo bajo el límite y facturas duplicadas.",
           "reads": "Documentos de gasto y el panel centinela.",
           "proposes": "Enlaces de revisión al panel centinela en cada hallazgo — solo revisión, sin escrituras."
+        },
+        "tax": {
+          "title": "Fiscal",
+          "description": "Códigos fiscales faltantes, formularios sin registro, declaraciones no calculables y períodos sin bloquear.",
+          "reads": "Documentos publicados, formularios, registros y bloqueos de período.",
+          "proposes": "Enlaces de revisión de la declaración en cada hallazgo — solo revisión, sin escrituras."
         }
       }
     },

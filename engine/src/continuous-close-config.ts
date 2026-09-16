@@ -8,6 +8,7 @@ export const CONTINUOUS_CLOSE_AGENT_KEYS = [
   "reconciliation",
   "hygiene",
   "forensics",
+  "tax",
 ] as const;
 export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 
@@ -524,6 +525,56 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
         unit: "multiple",
       },
     ],
+  },
+  {
+    detectorKey: "tax_missing_codes",
+    agentKey: "tax",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 31,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "tax_missing_registration",
+    agentKey: "tax",
+    supportsMateriality: false,
+    parameters: [],
+  },
+  {
+    detectorKey: "tax_return_blocked",
+    agentKey: "tax",
+    supportsMateriality: false,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 31,
+        min: 1,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+    ],
+  },
+  {
+    detectorKey: "tax_unlocked_period",
+    agentKey: "tax",
+    supportsMateriality: false,
+    parameters: [],
   },
   {
     detectorKey: "missing_approved_budget",

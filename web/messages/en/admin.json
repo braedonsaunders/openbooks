@@ -1044,6 +1044,22 @@
           "title": "Duplicate bills",
           "description": "Flags payable documents with the same party, kind, and amount posted within the duplicate window."
         },
+        "tax_missing_codes": {
+          "title": "Documents missing tax codes",
+          "description": "Finds posted documents with untaxed lines the return will not see."
+        },
+        "tax_missing_registration": {
+          "title": "Missing tax registration",
+          "description": "Flags active return forms with no registration number on file."
+        },
+        "tax_return_blocked": {
+          "title": "Blocked tax return",
+          "description": "Flags configured returns the filing engine cannot compute."
+        },
+        "tax_unlocked_period": {
+          "title": "Unlocked tax period",
+          "description": "Flags the latest completed period with no closed tax lock."
+        },
         "missing_approved_budget": {
           "title": "Missing approved budget",
           "description": "Confirms that an approved budget covers the current operating period before variance analysis runs."
@@ -1155,6 +1171,11 @@
         "title": "Forensics agent",
         "description": "Continuous spend-anomaly controls.",
         "coverage": "Checks weekend postings, round-dollar spend, just-below-limit amounts, and duplicate bills."
+      },
+      "tax": {
+        "title": "Tax agent",
+        "description": "Continuous filing-readiness controls.",
+        "coverage": "Checks missing tax codes, registrations, computable returns, and period locks."
       },
       "lastRun": "Last run: {date} · {status}",
       "nextRun": "Next scheduled run: {date}",
@@ -1510,6 +1531,12 @@
           "description": "Weekend postings, round-dollar spend, just-below-limit amounts and duplicate bills.",
           "reads": "Spend documents and the sentinel dashboard.",
           "proposes": "Sentinel review links on every finding — review only, no writes."
+        },
+        "tax": {
+          "title": "Tax",
+          "description": "Missing tax codes, unregistered forms, uncomputable returns and unlocked filing periods.",
+          "reads": "Posted documents, return forms, registrations and period locks.",
+          "proposes": "Filing-review links on every finding — review only, no writes."
         }
       }
     },

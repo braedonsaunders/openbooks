@@ -20,7 +20,7 @@ export type WorkItemAccess = {
  * forensics watches the spend-document screens (bills, credits, expenses,
  * journals) its sentinel-diff items come from.
  */
-const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]> = {
+export const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]> = {
   accounting: ["banking.read", "gl.read", "close.read"],
   finance: ["reports.read", "budgets.read"],
   collections: ["ar.read"],
@@ -28,6 +28,7 @@ const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]> = {
   reconciliation: ["banking.read", "banking.reconcile"],
   hygiene: ["gl.read", "close.read"],
   forensics: ["gl.read", "ap.read", "ar.read", "expenses.read"],
+  tax: ["gl.read", "close.read", "ap.read", "ar.read", "expenses.read"],
 };
 
 /** The read grants that make one agent pack's findings visible. */

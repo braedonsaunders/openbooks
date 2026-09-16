@@ -113,6 +113,24 @@ test("the forensics pack registers its detectors and defaults on", () => {
   );
 });
 
+test("the tax pack registers its detectors and defaults on", () => {
+  assert.deepEqual(
+    detectorSpecsForAgent("tax").map((spec) => spec.detectorKey),
+    [
+      "tax_missing_codes",
+      "tax_missing_registration",
+      "tax_return_blocked",
+      "tax_unlocked_period",
+    ],
+  );
+  const defaults = defaultContinuousCloseDetectors("tax");
+  assert.deepEqual(
+    enabledDetectorKeys(defaults),
+    defaults.map((detector) => detector.detectorKey),
+    "tax controls all default on",
+  );
+});
+
 test("new-pack detector tuning validates like the original packs", () => {
   const configured = normalizeContinuousCloseDetectors("collections", {
     overdue_customer_balance: {
