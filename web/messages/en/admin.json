@@ -1006,7 +1006,8 @@
         "count": "items",
         "percent": "%",
         "multiple": "× materiality",
-        "points": "percentage points"
+        "points": "percentage points",
+        "weeks": "weeks"
       },
       "parameters": {
         "criticalAgeDays": "Critical after",
@@ -1017,6 +1018,8 @@
         "duplicateDays": "Duplicate window",
         "dueWithinDays": "Due within",
         "unbilledDays": "Unbilled after",
+        "dueWithinDays": "Due within",
+        "forecastWeeks": "Forecast horizon",
         "minimumVariancePercent": "Minimum unfavorable variance",
         "criticalVariancePercent": "Critical unfavorable variance",
         "minimumDeclinePercent": "Minimum revenue decline",
@@ -1107,6 +1110,18 @@
         "project_stale_unbilled": {
           "title": "Stale unbilled work",
           "description": "Flags approved billable work still uninvoiced past the ageing cutoff."
+        },
+        "cash_low_balance": {
+          "title": "Low cash balance",
+          "description": "Flags bank cash under the floor, with the shortfall."
+        },
+        "cash_bill_crunch": {
+          "title": "Bill crunch",
+          "description": "Flags payables due inside the window that outrun cash on hand."
+        },
+        "cash_forecast_shortfall": {
+          "title": "Forecast shortfall",
+          "description": "Flags the forecast timeline dipping below zero inside the horizon."
         },
         "missing_approved_budget": {
           "title": "Missing approved budget",
@@ -1238,6 +1253,11 @@
         "title": "Projects agent",
         "description": "Continuous project-margin controls.",
         "coverage": "Checks negative margins, budget overruns, and stale unbilled work."
+      },
+      "cash": {
+        "title": "Cash agent",
+        "description": "Continuous cash-liquidity controls.",
+        "coverage": "Checks low balances, bill crunches, and forecast shortfalls."
       },
       "lastRun": "Last run: {date} · {status}",
       "nextRun": "Next scheduled run: {date}",
@@ -1661,6 +1681,12 @@
           "description": "Negative margins, budget overruns and stale unbilled work.",
           "reads": "Posted project costs and revenue, approved budgets, open commitments and unbilled work.",
           "proposes": "Project review links — review only, no writes."
+        },
+        "cash": {
+          "title": "Cash",
+          "description": "Low balances, bill crunches and forecast shortfalls.",
+          "reads": "Bank balances, open receivables and payables, and the cash forecast.",
+          "proposes": "Banking review links — review only, no writes."
         }
       }
     },

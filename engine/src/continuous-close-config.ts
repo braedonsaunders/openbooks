@@ -11,6 +11,7 @@ export const CONTINUOUS_CLOSE_AGENT_KEYS = [
   "tax",
   "payroll",
   "projects",
+  "cash",
 ] as const;
 export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 
@@ -63,7 +64,7 @@ export type DetectorParameterSpec = {
   min: number;
   max: number;
   step: number;
-  unit: "days" | "count" | "percent" | "multiple" | "points";
+  unit: "days" | "count" | "percent" | "multiple" | "points" | "weeks";
 };
 
 export type ContinuousCloseDetectorSpec = {
@@ -669,6 +670,67 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
         max: 365,
         step: 1,
         unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "cash_low_balance",
+    agentKey: "cash",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "cash_bill_crunch",
+    agentKey: "cash",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "dueWithinDays",
+        defaultValue: 14,
+        min: 1,
+        max: 90,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "cash_forecast_shortfall",
+    agentKey: "cash",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "forecastWeeks",
+        defaultValue: 13,
+        min: 1,
+        max: 52,
+        step: 1,
+        unit: "weeks",
       },
       {
         key: "criticalMaterialityMultiple",

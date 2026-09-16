@@ -917,7 +917,8 @@
         "count": "elementos",
         "percent": "%",
         "multiple": "× materialidad",
-        "points": "puntos porcentuales"
+        "points": "puntos porcentuales",
+        "weeks": "semanas"
       },
       "parameters": {
         "criticalAgeDays": "Crítico después de",
@@ -928,6 +929,8 @@
         "duplicateDays": "Ventana de duplicados",
         "dueWithinDays": "Vence en",
         "unbilledDays": "Sin facturar después de",
+        "dueWithinDays": "Vence en",
+        "forecastWeeks": "Horizonte de previsión",
         "minimumVariancePercent": "Desviación desfavorable mínima",
         "criticalVariancePercent": "Desviación desfavorable crítica",
         "minimumDeclinePercent": "Disminución mínima de ingresos",
@@ -1018,6 +1021,18 @@
         "project_stale_unbilled": {
           "title": "Trabajo sin facturar antiguo",
           "description": "Marca trabajo facturable aprobado aún sin facturar después del umbral de antigüedad."
+        },
+        "cash_low_balance": {
+          "title": "Efectivo bajo",
+          "description": "Marca el efectivo bancario por debajo del mínimo, con el faltante."
+        },
+        "cash_bill_crunch": {
+          "title": "Avalancha de facturas",
+          "description": "Marca cuentas por pagar con vencimiento próximo que superan el efectivo disponible."
+        },
+        "cash_forecast_shortfall": {
+          "title": "Faltante previsto",
+          "description": "Marca la previsión de efectivo cayendo bajo cero dentro del horizonte."
         },
         "missing_approved_budget": {
           "title": "Falta un presupuesto aprobado",
@@ -1149,6 +1164,11 @@
         "title": "Agente de proyectos",
         "description": "Controles continuos del margen de proyectos.",
         "coverage": "Comprueba márgenes negativos, excesos de presupuesto y trabajo sin facturar antiguo."
+      },
+      "cash": {
+        "title": "Agente de efectivo",
+        "description": "Controles continuos de la liquidez del efectivo.",
+        "coverage": "Comprueba saldos bajos, avalanchas de facturas y faltantes previstos."
       },
       "lastRun": "Última ejecución: {date} · {status}",
       "nextRun": "Próxima ejecución programada: {date}",
@@ -1527,6 +1547,12 @@
           "description": "Márgenes negativos, excesos de presupuesto y trabajo sin facturar antiguo.",
           "reads": "Costos e ingresos publicados, presupuestos aprobados, compromisos abiertos y trabajo sin facturar.",
           "proposes": "Enlaces de revisión de proyectos — solo revisión, sin escrituras."
+        },
+        "cash": {
+          "title": "Efectivo",
+          "description": "Saldos bajos, avalanchas de facturas y faltantes previstos.",
+          "reads": "Saldos bancarios, cuentas por cobrar y por pagar abiertas, y la previsión de efectivo.",
+          "proposes": "Enlaces de revisión bancaria — solo revisión, sin escrituras."
         }
       }
     },
