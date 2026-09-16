@@ -19,6 +19,7 @@ export * from "./banking";
 export * from "./bank-feeds";
 export * from "./payment-operations";
 export * from "./planning";
+export * from "./allocations";
 export * from "./scheduling";
 export * from "./time";
 export * from "./field-tickets";

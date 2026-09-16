@@ -24,6 +24,7 @@ export const SCHEDULER_OUTBOX_KINDS = [
   "fx_providers",
   "approval_escalation",
   "flow_email",
+  "allocation_run",
 ] as const;
 export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "dunning",
@@ -79,7 +80,7 @@ export const schedulerOutbox = pgTable(
       .where(sql`${t.terminalFailedAt} is not null`),
     check(
       "scheduler_outbox_kind",
-      sql`${t.kind} in ('dunning','subscription_billing','property_billing','fx_providers','approval_escalation','flow_email')`,
+      sql`${t.kind} in ('dunning','subscription_billing','property_billing','fx_providers','approval_escalation','flow_email','allocation_run')`,
     ),
     check("scheduler_outbox_status", sql`${t.status} in ('pending','running','succeeded','failed')`),
     check("scheduler_outbox_nonnegative_attempts", sql`${t.attemptCount} >= 0`),

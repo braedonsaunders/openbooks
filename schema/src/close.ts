@@ -240,6 +240,7 @@ export const closeAutomationRules = pgTable(
         "create_task",
         "generate_report",
         "start_flow",
+        "run_allocation",
       ],
     }).notNull(),
     conditions: jsonb("conditions").notNull().default({}),
