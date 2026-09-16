@@ -2384,6 +2384,27 @@ export async function runSync(
       })
       .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);
 
+    // Entity-load failures must not hide behind a green run: the mirror is
+    // knowingly incomplete (a role, address, or held party did not land) and
+    // the controller has to look. This is not a verification failure — the
+    // financial gates above already passed, the cursor advances, and the next
+    // run retries the failed rows — only the reported status changes.
+    // Raw SQL (not the drizzle model): fleet worktrees resolve
+    // @openbooks/schema from main until this commit is picked, and the
+    // widened status union ships in this same commit.
+    const entityFailures = Object.values(entityStats ?? {}).reduce(
+      (total, stats) => total + (stats?.failed ?? 0),
+      0,
+    );
+    if (entityFailures > 0) {
+      const summary =
+        `${entityFailures} master-data record${entityFailures === 1 ? "" : "s"}` +
+        " failed to load; see stats.entities for the named rows";
+      await db.execute(sql`
+        update sync_runs set status = 'ok_with_errors', error_message = ${summary}
+         where id = ${run!.id} and org_id = ${org.id}`);
+    }
+
     if (connectionId && !targetedRefs) {
       await db.execute(sql`
         update connections

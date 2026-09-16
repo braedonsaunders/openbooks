@@ -52,6 +52,7 @@
     },
     "status": {
       "ok": "成功",
+      "ok_with_errors": "OK（エラーあり）",
       "failed": "失敗",
       "running": "実行中"
     },

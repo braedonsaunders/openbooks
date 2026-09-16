@@ -65,6 +65,7 @@
     },
     "status": {
       "ok": "Succeeded",
+      "ok_with_errors": "OK with errors",
       "failed": "Failed",
       "running": "Running"
     },
