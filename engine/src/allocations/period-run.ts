@@ -811,6 +811,15 @@ async function buildComputation(
     dimensionFilters: opts.version.dimension_filters,
     sourceMeasure: opts.version.source_measure,
   });
+  // An empty pool apportions to exact zeros and would post a journal-less
+  // "posted" run with no lineage that consumes the one-posted-run slot, so a
+  // later period with real data cannot post. Fail closed: run when there is
+  // something to allocate.
+  if (pool.sources.length === 0) {
+    throw new Error(
+      `allocation rule ${opts.rule.key} found no source lines for period ${opts.period.name}; refusing to post an empty run`,
+    );
+  }
   const targetSet = await resolveTargets(
     tx,
     {
