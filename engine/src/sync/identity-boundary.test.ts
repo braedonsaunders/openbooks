@@ -24,9 +24,11 @@ test("connector identity is adapter-scoped and has no cross-source fallback", ()
 });
 
 test("role upserts pin the known tenant on the party_id conflict write", () => {
+  // The guard must qualify the stored row: a bare org_id is also a column of
+  // the proposed (excluded) row, so PostgreSQL rejects the write with 42702.
   assert.match(
     loader,
-    /on conflict \(party_id\) do update set[\s\S]*?where org_id = \$\{orgId\}/,
+    /on conflict \(party_id\) do update set[\s\S]*?where \$\{sql\.raw\(table\)\}\.org_id = \$\{orgId\}/,
   );
 });
 
