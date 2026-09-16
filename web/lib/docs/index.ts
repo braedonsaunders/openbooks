@@ -3,6 +3,7 @@
 // JS output (see ./types.ts for why and for the authoring conventions).
 
 import type { DocArticle, DocCategory, DocSection } from './types'
+import { allocations } from './articles/allocations'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
@@ -168,6 +169,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'parties-items-and-projects': 'accounting-master-data',
   'revenue-recognition': 'accounting-advanced',
   'fixed-assets-depreciation': 'accounting-advanced',
+  'allocations': 'accounting-advanced',
   'sales-workflow': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
@@ -230,6 +232,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   partiesItemsAndProjects,
   revenueRecognition,
   fixedAssetsDepreciation,
+  allocations,
   salesWorkflow,
   purchasingWorkflow,
   paymentsAndApplications,
