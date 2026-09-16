@@ -23,16 +23,24 @@ const mockAuthz = `
   }
 `;
 
+const mockIntl = `
+  export async function getTranslations(namespace) {
+    return (key, _vars) => namespace + ':' + key;
+  }
+`;
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (
-      context.parentURL?.includes("/admin/setup/agents/activity/view.ts") &&
-      specifier === "../../../../../../lib/authz"
-    ) {
-      return { url: "mock:agents-activity-authz", shortCircuit: true };
+    if (context.parentURL?.includes("/admin/setup/agents/activity/view.ts")) {
+      if (specifier === "../../../../../../lib/authz") {
+        return { url: "mock:agents-activity-authz", shortCircuit: true };
+      }
+      if (specifier === "next-intl/server") {
+        return { url: "mock:agents-activity-intl", shortCircuit: true };
+      }
     }
     if (context.parentURL?.startsWith("mock:") && specifier.startsWith("@openbooks/")) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
@@ -42,6 +50,9 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:agents-activity-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
+    }
+    if (url === "mock:agents-activity-intl") {
+      return { format: "module", source: mockIntl, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -69,29 +80,44 @@ const ENABLE_ACCOUNTING = {
   analysis: { rootCauseAnalysis: false, recommendations: false, narrative: false, modelTier: "fast", maxToolSteps: 4 },
 };
 
-test("a setup manager sees runs, packs and totals", { skip: !DB }, async () => {
+test("a setup manager sees runs, the pack filter and paging", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Activity Admin", "admin");
     loaderState.user = { orgId: org.orgId, id: userId };
     loaderState.permissions = new Set(["admin.setup.manage"]);
-    const empty = await withBypassContext(() => loadAgentsActivity());
-    assert.deepEqual(empty.runs, []);
+    const empty = await withBypassContext(() => loadAgentsActivity({}));
+    assert.deepEqual(empty.rows, []);
     assert.equal(empty.total, 0);
-    assert.equal(empty.truncated, false);
-    assert.deepEqual([...empty.packs].sort(), [...CONTINUOUS_CLOSE_AGENT_KEYS].sort());
+    assert.equal(empty.empty, true);
+    assert.equal(empty.hasRows, false);
+    assert.deepEqual(
+      empty.filterOptions.map((option) => option.value).sort(),
+      [...CONTINUOUS_CLOSE_AGENT_KEYS].sort(),
+    );
 
     await withBypassContext(() =>
       saveSetupAgentPolicy(org.orgId, userId, "accounting", ENABLE_ACCOUNTING),
     );
     await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting"));
-    const data = await withBypassContext(() => loadAgentsActivity());
+    const data = await withBypassContext(() => loadAgentsActivity({}));
     assert.equal(data.total, 1);
-    assert.equal(data.runs.length, 1);
-    assert.equal(data.runs[0]!.agentKey, "accounting");
-    assert.equal(data.runs[0]!.trigger, "manual");
-    assert.equal(data.runs[0]!.status, "completed");
-    assert.equal(typeof data.runs[0]!.detectorVersion, "string");
+    assert.equal(data.rows.length, 1);
+    assert.equal(data.rows[0]!.agentKey, "accounting");
+    assert.ok(data.rows[0]!.packName.startsWith("admin:setup.agents.packs."));
+    assert.equal(data.rows[0]!.triggerLabel, "admin:setup.agents.activity.triggers.manual");
+    assert.equal(data.currentPage, 1);
+
+    const filtered = await withBypassContext(() => loadAgentsActivity({ agent: "finance" }));
+    assert.equal(filtered.total, 0);
+    assert.deepEqual(filtered.rows, []);
+
+    const unknown = await withBypassContext(() => loadAgentsActivity({ agent: "nope" }));
+    assert.equal(unknown.total, 1, "an unknown pack filter degrades to unfiltered");
+
+    const beyond = await withBypassContext(() => loadAgentsActivity({ page: "2" }));
+    assert.equal(beyond.total, 1);
+    assert.deepEqual(beyond.rows, [], "page 2 of 1 total is empty, not an error");
   } finally {
     await dropScratchOrg(org.orgId);
   }

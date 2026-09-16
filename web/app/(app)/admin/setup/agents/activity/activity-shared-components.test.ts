@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import test from "node:test";
+
+// Wave-4 UI consistency (shard c02): the Agents activity must be the shared
+// filter + table + server pagination composition (the [entity] setup
+// precedent — `filter-chips` with URL state, a card-wrapped spec `table` with
+// shared sort headers, the `pagination` block, the shared `empty-state`) with
+// re-run as one small row island, instead of the monolithic
+// `agents-activity-workspace` island that hand-rolled its select filter,
+// table, show-more paging and empty note with raw primitives and client
+// fetches.
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const view = read("./view.ts");
+const widgets = read("../../../../../../components/viewspec/widgets.tsx");
+const lib = read("../../../../../../lib/setup/agents.ts");
+
+test("the activity spec binds shared filter, table, paging and empty state", () => {
+  assert.match(view, /widgetBlock\('filter-chips'/);
+  assert.match(view, /table\(\{/);
+  assert.match(view, /variant: 'app'/);
+  assert.match(view, /pagination\(\{/);
+  assert.match(view, /widgetBlock\('empty-state'/);
+  assert.match(view, /widgetCell\('agents-run-actions'/);
+  assert.doesNotMatch(view, /agents-activity-workspace/);
+  assert.equal(
+    existsSync(new URL("./AgentsActivityWorkspace.tsx", import.meta.url)),
+    false,
+    "the monolithic activity island must be retired",
+  );
+});
+
+test("the registry exposes the run-actions island and drops the workspace", () => {
+  assert.match(widgets, /'agents-run-actions'/);
+  assert.doesNotMatch(widgets, /agents-activity-workspace/);
+});
+
+test("the list contract pages and sorts server-side", () => {
+  assert.match(view, /parseListParams/);
+  assert.match(lib, /offset/);
+  assert.match(lib, /sort/);
+});

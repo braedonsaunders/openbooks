@@ -113,7 +113,7 @@ import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/Features
 import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
 import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
-import { AgentsActivityWorkspace } from '../../app/(app)/admin/setup/agents/activity/AgentsActivityWorkspace'
+import { AgentsRunActions } from '../../app/(app)/admin/setup/agents/activity/AgentsRunActions'
 import { AgentsTriageKeys } from '../../app/(app)/agents/AgentsTriageKeys'
 import { AgentsBriefingActions } from '../../app/(app)/agents/AgentsBriefingActions'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
@@ -1338,9 +1338,13 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       featureEnabled={props.featureEnabled === true}
     />
   ),
-  /** Whole props bag — the activity island owns its filterable runs table. */
-  'agents-activity-workspace': (props) => (
-    <AgentsActivityWorkspace {...(props as unknown as ComponentProps<typeof AgentsActivityWorkspace>)} />
+  /** One run's findings link + re-run for the Agents activity table. */
+  'agents-run-actions': (props) => (
+    <AgentsRunActions
+      agentKey={str(props, 'agentKey') ?? ''}
+      findingsHref={str(props, 'findingsHref') ?? ''}
+      findingsLabel={str(props, 'findingsLabel') ?? ''}
+    />
   ),
   /** Keyboard + bulk selection over the inbox's row links — the shared list
    *  cannot host ephemeral selection or global key handling. */

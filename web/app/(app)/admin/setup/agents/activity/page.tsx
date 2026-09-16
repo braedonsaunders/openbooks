@@ -13,6 +13,6 @@ export default async function AgentsActivitySetup({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadAgentsActivity()
+  const data = await loadAgentsActivity(sp)
   return <ModuleView spec={agentsActivitySpec(data)} data={data} searchParams={sp} trusted />
 }
