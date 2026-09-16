@@ -57,6 +57,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     maxSize: { w: 6, h: 4 },
     rolesShown: ['admin', 'controller', 'approver'],
   },
+  'kpi-agent-findings': {
+    id: 'kpi-agent-findings',
+    category: 'kpi',
+    labelKey: 'widgets.agentFindings',
+    descriptionKey: 'catalog.agentFindings',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
   'kpi-ledger-balance': {
     id: 'kpi-ledger-balance',
     category: 'kpi',

@@ -23,14 +23,18 @@
     "openReceivables": "Cuentas por cobrar abiertas",
     "overdueReceivables": "Cuentas por cobrar vencidas",
     "openPayables": "Cuentas por pagar abiertas",
-    "overduePayables": "Cuentas por pagar vencidas"
+    "overduePayables": "Cuentas por pagar vencidas",
+    "agentFindings": "Hallazgos de agentes"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
     "awaitingDecision": "En espera de una decisión",
     "baseCurrency": "Moneda base · {currency}",
     "outstanding": "Pendiente",
-    "pastDue": "Vencido"
+    "pastDue": "Vencido",
+    "agentProposals": "{count} con propuestas",
+    "agentLastRun": "última ejecución {date}",
+    "agentClear": "Sin pendientes"
   },
   "categories": {
     "kpi": "Indicadores clave",
@@ -55,7 +59,8 @@
     "openReceivables": "Facturas de clientes sin pagar en moneda base.",
     "overdueReceivables": "Facturas de clientes vencidas en moneda base.",
     "openPayables": "Facturas de proveedores sin pagar en moneda base.",
-    "overduePayables": "Facturas de proveedores vencidas en moneda base."
+    "overduePayables": "Facturas de proveedores vencidas en moneda base.",
+    "agentFindings": "Hallazgos abiertos de agentes en segundo plano: ir al panel."
   },
   "grid": {
     "customizing": "Personalizando tu panel",

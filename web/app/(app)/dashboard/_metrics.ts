@@ -10,6 +10,7 @@ import {
 import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz } from '@/lib/application/approvals'
 import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
+import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -17,6 +18,12 @@ export type DashboardMetrics = {
   accountCount: number
   entriesToday: number
   pendingApprovals: number
+  /** Open (open/in_review) findings over the caller's readable agent packs. */
+  agentFindingsOpen: number
+  /** ...of which carry a proposed command. */
+  agentFindingsProposals: number
+  /** Latest detection instant across readable packs (the tile's "last run"). */
+  agentFindingsLastRun: string | null
   ledgerSum: string
   cashBalance: string
   openReceivables: string
@@ -75,7 +82,11 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   // never a gates-only subquery. Same doorway as get_vitals: a caller who
   // cannot approve anything has no work awaiting them.
   const mayApprove = can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve')
-  const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments, unifiedApprovals] = await Promise.all([
+  // Pack visibility IS the doorway: without assistant.use (plus a module
+  // grant per pack) the readable set is empty and the tile counts zero.
+  const agentPacks = readableContinuousCloseAgents(authz)
+  const agentPackList = sql.join(agentPacks.map((pack) => sql`${pack}`), sql`, `)
+  const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -127,16 +138,32 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
        limit 5
     `),
     mayApprove ? approvalWorklistForAuthz(authz) : Promise.resolve([]),
+    // One row, three numbers: open findings, open findings with a proposal,
+    // and the latest detection across readable packs. Same scope as the
+    // workbench inbox, never a parallel count.
+    agentPacks.length > 0
+      ? db.execute(sql`
+          select (count(*) filter (where status in ('open', 'in_review')))::int as open,
+                 (count(*) filter (where status in ('open', 'in_review') and summary ? 'proposedCommand'))::int as proposals,
+                 max(last_detected_at) as last_run
+            from ai_work_items
+           where org_id = ${orgId} and agent_key in (${agentPackList})
+        `)
+      : Promise.resolve({ rows: [{ open: 0, proposals: 0, last_run: null }] }),
   ])
 
   const t = (totals as any).rows[0]
   const financial = (financials as unknown as { rows: DashboardFinancialMetricsRow[] }).rows[0]!
+  const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   return {
     baseCurrency: financial.base_currency,
     journalLineCount: Number(t.journal_lines),
     accountCount: Number(t.accounts),
     entriesToday: Number(t.entries_today),
     pendingApprovals: unifiedApprovals.length,
+    agentFindingsOpen: Number(agent.open),
+    agentFindingsProposals: Number(agent.proposals),
+    agentFindingsLastRun: agent.last_run ? new Date(agent.last_run).toISOString() : null,
     ledgerSum: t.ledger_sum,
     cashBalance: financial.cash_balance,
     openReceivables: financial.open_receivables,
@@ -186,6 +213,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-accounts-active': ['accountCount'],
   'kpi-entries-today': ['entriesToday'],
   'kpi-pending-approvals': ['pendingApprovals'],
+  'kpi-agent-findings': ['agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun'],
   'kpi-ledger-balance': ['ledgerSum'],
   'kpi-cash-balance': ['baseCurrency', 'cashBalance'],
   'kpi-open-receivables': ['baseCurrency', 'openReceivables'],
@@ -205,6 +233,9 @@ const EMPTY_METRICS: DashboardMetrics = {
   accountCount: 0,
   entriesToday: 0,
   pendingApprovals: 0,
+  agentFindingsOpen: 0,
+  agentFindingsProposals: 0,
+  agentFindingsLastRun: null,
   ledgerSum: '0',
   cashBalance: '0',
   openReceivables: '0',

@@ -19,6 +19,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-open-payables': ['ap.read'],
   'kpi-overdue-payables': ['ap.read'],
   'kpi-pending-approvals': AP,
+  'kpi-agent-findings': ['assistant.use'],
   'list-recent-entries': GL,
   'list-pending-approvals': AP,
   'personal-inbox': AP,

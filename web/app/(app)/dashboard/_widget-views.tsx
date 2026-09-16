@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   ArrowUpRight,
   AlertTriangle,
@@ -15,6 +15,7 @@ import {
   NotebookPen,
   Receipt,
   Scale,
+  Sparkles,
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
 import type { DashboardMetrics } from './_metrics'
@@ -28,6 +29,7 @@ export function WidgetCard({
 }) {
   const { money } = useMoney()
   const t = useTranslations('dashboard')
+  const locale = useLocale()
 
   switch (widgetId) {
     case 'kpi-journal-lines':
@@ -38,6 +40,25 @@ export function WidgetCard({
       return <MetricTile icon={<FileText size={15} />} label={t('widgets.entriesToday')} value={String(data.entriesToday)} href="/journal" tone="teal" hint={t('metricContext.today')} />
     case 'kpi-pending-approvals':
       return <MetricTile icon={<ClipboardList size={15} />} label={t('widgets.pendingApprovals')} value={String(data.pendingApprovals)} href="/approvals?tab=all" tone="amber" hint={t('metricContext.awaitingDecision')} />
+    case 'kpi-agent-findings': {
+      const parts: string[] = []
+      if (data.agentFindingsProposals > 0) parts.push(t('metricContext.agentProposals', { count: data.agentFindingsProposals }))
+      if (data.agentFindingsLastRun) {
+        parts.push(t('metricContext.agentLastRun', {
+          date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(data.agentFindingsLastRun)),
+        }))
+      }
+      return (
+        <MetricTile
+          icon={<Sparkles size={15} />}
+          label={t('widgets.agentFindings')}
+          value={String(data.agentFindingsOpen)}
+          href="/agents"
+          tone="violet"
+          hint={parts.length > 0 ? parts.join(' · ') : t('metricContext.agentClear')}
+        />
+      )
+    }
     case 'kpi-ledger-balance':
       return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, { currency: data.baseCurrency })} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
