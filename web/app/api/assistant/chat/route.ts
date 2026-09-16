@@ -267,6 +267,21 @@ export async function POST(req: Request): Promise<Response> {
             parts: persistedParts,
           },
         });
+        // Fire-and-forget AFTER the stream closes: the answer finishes for
+        // the user the instant the last text chunk flushes — the composer
+        // never waits for the title round-trip (bounded tokens + hard
+        // timeout inside scheduleAutoTitle). The client's end-of-turn
+        // refresh, plus one delayed refresh, picks the title up. Scheduled
+        // BEFORE the summary block below, whose early return must not skip it.
+        if (!aborted && finishReason !== "error") {
+          scheduleAutoTitle({
+            authz,
+            conversationId: conversationId!,
+            prompt,
+            assistantContent: content,
+            model: getModel(aiConfig, "fast"),
+          });
+        }
         // Best-effort rolling summary: refresh every K turns, but never fail
         // a completed turn for memory.
         try {
@@ -306,20 +321,6 @@ export async function POST(req: Request): Promise<Response> {
           }
         } catch (countError) {
           console.warn("[assistant/chat] summary turn count failed", countError);
-        }
-        // Fire-and-forget AFTER the stream closes: the answer finishes for
-        // the user the instant the last text chunk flushes — the composer
-        // never waits for the title round-trip (bounded tokens + hard
-        // timeout inside scheduleAutoTitle). The client's end-of-turn
-        // refresh, plus one delayed refresh, picks the title up.
-        if (!aborted && finishReason !== "error") {
-          scheduleAutoTitle({
-            authz,
-            conversationId: conversationId!,
-            prompt,
-            assistantContent: content,
-            model: getModel(aiConfig, "fast"),
-          });
         }
       },
     });
