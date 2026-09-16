@@ -121,6 +121,26 @@ test('readiness ignores non-posting order kinds for drafts and missing posting p
   } finally {await dropScratchOrg(org.orgId);}
 });
 
+test('a computed task stays open while any of its checks has an open exception', {skip:!enabled}, async () => {
+  const {org,actor}=await setup();
+  try {
+    // An approved bill already assigned to the period: drafts-open counts it,
+    // posting-period-missing does not — both feed the drafts-cleared task.
+    const bill = randomUUID();
+    await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,posting_period_id,currency,subtotal,tax_total,total)
+      values (${bill},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${bill},${org.date},${org.periodId},'CAD',10,0,10)`);
+    const runId=await run(org,actor);
+    const got=await counts(org.orgId,runId);
+    assert.equal(got['drafts-open'],1);
+    assert.equal(got['posting-period-missing']??0,0);
+    const task=(await db.execute<{status:string; result:{count:number; checks:Record<string,number>}}>(sql`
+      select status, result from close_run_tasks where run_id=${runId} and key='drafts-cleared'`)).rows[0]!;
+    assert.equal(task.status,'ready','the task must not be complete while drafts-open is red');
+    assert.equal(task.result.count,1);
+    assert.equal(task.result.checks['drafts-open'],1);
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
 test('material variances cannot cancel between entities with unlike functional currencies', {skip:!enabled}, async () => {
   const {org,actor,other}=await setup();
   try {

@@ -1674,18 +1674,31 @@ export async function refreshCloseRun(
                  resolution = 'close.diagnostics.autoResolved', updated_at = now()
            where run_id = ${runId} and org_id = ${orgId} and code = ${check.code} and status = 'open'`);
       }
-      if (taskId) {
-        const status = check.count === 0 ? "complete" : "ready";
-        await tx.execute(sql`
-          update close_run_tasks
-             set status = ${status},
-                 completed_at = ${check.count === 0 ? sql`now()` : sql`null`},
-                 completed_by = ${check.count === 0 ? (actorId ?? null) : null},
-                 data_fingerprint = ${fingerprint},
-                 result = ${JSON.stringify({ count: check.count, checkedAt: new Date().toISOString() })}::jsonb,
-                 updated_at = now(), updated_by = ${actorId ?? null}
-           where id = ${taskId} and org_id = ${orgId} and completion_mode = 'computed'`);
-      }
+    }
+    // A computed task is complete only when EVERY check that feeds it is
+    // clean. Several checks share a task (drafts-open and
+    // posting-period-missing both feed drafts-cleared): folding them one by
+    // one let the last clean check mark the task complete while an earlier
+    // check still had an open critical exception — a false-green task beside
+    // a red exception.
+    const byTask = new Map<string, { count: number; checks: Record<string, number> }>();
+    for (const check of checks) {
+      const agg = byTask.get(check.taskKey) ?? { count: 0, checks: {} };
+      agg.count += check.count;
+      agg.checks[check.code] = check.count;
+      byTask.set(check.taskKey, agg);
+    }
+    for (const [taskKey, agg] of byTask) {
+      const clean = agg.count === 0;
+      await tx.execute(sql`
+        update close_run_tasks
+           set status = ${clean ? "complete" : "ready"},
+               completed_at = ${clean ? sql`now()` : sql`null`},
+               completed_by = ${clean ? (actorId ?? null) : null},
+               data_fingerprint = ${fingerprint},
+               result = ${JSON.stringify({ count: agg.count, checks: agg.checks, checkedAt: new Date().toISOString() })}::jsonb,
+               updated_at = now(), updated_by = ${actorId ?? null}
+         where run_id = ${runId} and org_id = ${orgId} and key = ${taskKey} and completion_mode = 'computed'`);
     }
 
     await resolveTaskDependenciesTx(tx, orgId, runId);
