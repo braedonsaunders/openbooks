@@ -41,7 +41,7 @@ import {
 import { cn } from '@openbooks/ui'
 import type { IndustryDef } from '@/lib/industries'
 import { countryOptions } from '@/lib/countries'
-import { ISO_CURRENCIES } from '@/lib/iso-currencies'
+import { currencyOptions } from '@/lib/iso-currencies'
 import {
   recommendWorkspaceFeatures,
   type ComplexityLevel,
@@ -130,6 +130,7 @@ export function SetupWizard(props: {
   const [includeSampleCompany, setIncludeSampleCompany] = useState(false)
   const [payrollPack, setPayrollPack] = useState<PayrollPack>('CA')
   const countries = useMemo(() => countryOptions(locale), [locale])
+  const currencies = useMemo(() => currencyOptions(locale), [locale])
 
   // The Payroll step only exists when the module is switched on — it is an
   // optional module step, inserted after Operations where it was enabled.
@@ -407,6 +408,7 @@ export function SetupWizard(props: {
           currency={currency}
           fiscalMonth={fiscalMonth}
           countries={countries}
+          currencies={currencies}
           setName={setName}
           setLegalName={setLegalName}
           setCountry={setCountry}
@@ -553,13 +555,14 @@ function CompanyStep(props: {
   currency: string
   fiscalMonth: number
   countries: { value: string; label: string }[]
+  currencies: { value: string; label: string }[]
   setName: (v: string) => void
   setLegalName: (v: string) => void
   setCountry: (v: string) => void
   setCurrency: (v: string) => void
   setFiscalMonth: (v: number) => void
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, countries } = props
+  const { t, name, legalName, country, currency, fiscalMonth, countries, currencies } = props
   return (
     <div className="space-y-6">
       <div>
@@ -620,7 +623,7 @@ function CompanyStep(props: {
               onChange={(e) => props.setCurrency(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm uppercase text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
-              {ISO_CURRENCIES.map((option) => <option key={option.code} value={option.code}>{option.code} · {option.name}</option>)}
+              {currencies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
         </div>

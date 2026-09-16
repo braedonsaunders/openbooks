@@ -32,7 +32,7 @@ import {
   TabContent,
   cn,
 } from '@openbooks/ui'
-import { ISO_CURRENCIES } from '../../../lib/iso-currencies'
+import { currencyDisplayName, currencyOptions } from '../../../lib/iso-currencies'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { CustomFieldInput } from '../../../components/custom-field-input'
@@ -644,6 +644,7 @@ export function PartyDrawer({
     { value: 'true', label: tc('labels.yes') },
   ], [tc])
   const countries = useMemo(() => countryOptions(locale), [locale])
+  const currencies = useMemo(() => currencyOptions(locale), [locale])
   const addressColumns = useMemo<LineGridColumn<AddressRow>[]>(() => [
     { key: 'label', label: t('addressLabel'), type: 'text', width: '140px', placeholder: t('addressLabelPlaceholder') },
     { key: 'line1', label: t('line1'), type: 'text', width: 'minmax(190px, 2fr)' },
@@ -699,8 +700,7 @@ export function PartyDrawer({
       case 'currency': {
         if (!multiCurrency) return null
         const value = recordType === 'vendor' ? vendor.currency : customer.currency
-        const currency = ISO_CURRENCIES.find((item) => item.code === value)
-        return <><Label>{label(placement, tc('labels.currency'))}</Label>{editable ? <Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })}>{!value && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select> : partyValue(currency ? `${currency.code} · ${currency.name}` : value)}</>
+        return <><Label>{label(placement, tc('labels.currency'))}</Label>{editable ? <Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })}>{!value && <option value="">—</option>}{currencies.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</Select> : partyValue(value ? `${value} · ${currencyDisplayName(value, locale)}` : value)}</>
       }
       case 'ar_account_id': return <><Label>{label(placement, t('receivableAccount'))}</Label>{editable ? <Select value={customer.arAccountId} onChange={(event) => setCustomer({ ...customer, arAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'asset_receivable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, customer.arAccountId))}</>
       case 'sales_rep_id': return <><Label>{label(placement, t('salesRepresentative'))}</Label>{editable ? <Select value={customer.salesRepId} onChange={(event) => setCustomer({ ...customer, salesRepId: event.target.value })}><option value="">—</option>{salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}</Select> : partyValue(optionName(salesReps, customer.salesRepId))}</>
@@ -1707,6 +1707,7 @@ function BankAccountsPanel({
   const [busy, setBusy] = useState(false)
   const perPage = 10
   const countries = useMemo(() => countryOptions(locale), [locale])
+  const currencies = useMemo(() => currencyOptions(locale), [locale])
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLocaleLowerCase()
@@ -1860,7 +1861,7 @@ function BankAccountsPanel({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}><Label>{t('bankName')}</Label><Input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></div>
             <div className={field}><Label>{t('country')}</Label><SearchSelect value={draft.country} onChange={(country) => setDraft({ ...draft, country })} options={countries} sheetTitle={t('country')} clearable ariaLabel={t('country')} /></div>
-            {multiCurrency ? <div className={field}><Label>{tc('labels.currency')}</Label><Select value={draft.currency ?? ''} onChange={(event) => setDraft({ ...draft, currency: event.target.value })}>{!draft.currency && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></div> : null}
+            {multiCurrency ? <div className={field}><Label>{tc('labels.currency')}</Label><Select value={draft.currency ?? ''} onChange={(event) => setDraft({ ...draft, currency: event.target.value })}>{!draft.currency && <option value="">—</option>}{currencies.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</Select></div> : null}
             <div className={field}><Label>{t('routingNumber')}</Label><Input className="font-mono" value={draft.routingNumber} onChange={(event) => setDraft({ ...draft, routingNumber: event.target.value })} /></div>
             <div className={field}><Label>{t('branchNumber')}</Label><Input className="font-mono" value={draft.branchNumber} onChange={(event) => setDraft({ ...draft, branchNumber: event.target.value })} /></div>
             <div className={field}>
