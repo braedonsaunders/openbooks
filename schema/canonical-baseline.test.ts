@@ -91,6 +91,8 @@ const payrollOpeningBalanceSecondOrderMigrationPath =
   "schema/migrations/generated/0141_payroll_opening_balance_second_order_ytd.sql";
 const allocationQueryCatalogMigrationPath =
   "schema/migrations/generated/0161_allocation_query_catalog.sql";
+const allocationOutboxScopeMigrationPath =
+  "schema/migrations/generated/0162_scheduler_outbox_allocation_scope.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -177,6 +179,28 @@ test("allocation query catalog widens safe relations and repins the stamped view
   assert.match(migration, /distribution_rule_id/);
   assert.match(migration, /distribution_version_id/);
   assert.match(migration, /distribution_locked/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("allocation outbox scope admits the allocation_run kind", () => {
+  // 0160 added 'allocation_run' to the kind check but not to the scope
+  // check, so every occurrence insert failed it. 0162 adds the branch in
+  // the flow_email shape (org + subject + payload required).
+  const migration = readFileSync(allocationOutboxScopeMigrationPath, "utf8");
+  assert.match(migration, /DROP CONSTRAINT scheduler_outbox_scope/);
+  assert.match(migration, /ADD CONSTRAINT scheduler_outbox_scope/);
+  const added = migration.match(
+    /ADD CONSTRAINT scheduler_outbox_scope CHECK \(\(\n([\s\S]*?)\n    \)\);/,
+  )?.[1];
+  assert.ok(added, "0162 scope constraint body not found");
+  assert.match(added, /\(kind = 'allocation_run'\)/);
+  assert.match(added, /\(org_id IS NOT NULL\)/);
+  assert.match(added, /\(subject_id IS NOT NULL\)/);
+  assert.match(added, /\(payload IS NOT NULL\)/);
+  // The pre-existing branches ride along unchanged.
+  assert.match(added, /\(kind = 'approval_escalation'\)/);
+  assert.match(added, /\(kind = 'flow_email'\)/);
   assert.match(migration, /[^\n]\n$/);
   assert.doesNotMatch(migration, /\n\n$/);
 });
@@ -321,6 +345,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0159_jl_guard_tenant_coherence.sql",
     "0160_allocation_kernel.sql",
     "0161_allocation_query_catalog.sql",
+    "0162_scheduler_outbox_allocation_scope.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
