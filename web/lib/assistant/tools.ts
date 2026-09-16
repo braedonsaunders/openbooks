@@ -19,6 +19,7 @@ import { openItems } from "../cash/open-items";
 import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { dateInput, num, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
+import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/continuous-close-config.ts";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
@@ -1071,12 +1072,12 @@ const projectProfitability: AssistantToolDef = {
 const continuousCloseFindings: AssistantToolDef = {
   name: "continuous_close_findings",
   description:
-    "List evidence-backed Accounting or Finance continuous-close findings. Defaults to active findings and returns exact materiality, detector summary, evidence count, and a link to review each item. Read-only.",
+    "List evidence-backed continuous-close agent findings. Defaults to active findings with exact materiality, detector summary, evidence count, and review links. Read-only.",
   category: "search",
-  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
+  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read"] },
   feature: "continuousClose",
   inputSchema: z.object({
-    agent: z.enum(["accounting", "finance"]).optional().describe("Only findings from this close agent"),
+    agent: z.enum(CONTINUOUS_CLOSE_AGENT_KEYS).optional().describe("Only findings from this agent pack"),
     status: z.enum(["open", "in_review", "resolved", "dismissed"]).optional().describe("Only findings in this status (default open and in_review)"),
     severity: z.enum(["info", "warning", "critical"]).optional().describe("Only findings at this severity"),
     query: z.string().max(100).optional().describe("Match finding type or summary"),
@@ -1087,7 +1088,7 @@ const continuousCloseFindings: AssistantToolDef = {
       return { ok: false, error: "continuous_close_feature_disabled" };
     }
     const a = raw as {
-      agent?: "accounting" | "finance";
+      agent?: (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
       status?: "open" | "in_review" | "resolved" | "dismissed";
       severity?: "info" | "warning" | "critical";
       query?: string;
@@ -1144,7 +1145,7 @@ const getContinuousCloseFinding: AssistantToolDef = {
   description:
     "Load one continuous-close finding with its exact detector summary and complete evidence packet. Use this before explaining root cause or recommending action. Read-only.",
   category: "read",
-  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
+  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read"] },
   feature: "continuousClose",
   inputSchema: z.object({ findingId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -1161,7 +1162,7 @@ const getContinuousCloseFinding: AssistantToolDef = {
     `));
     const row = item.rows[0];
     if (!row) return { ok: false, error: "finding_not_found" };
-    if (!readableContinuousCloseAgents(authz).includes(row.agent_key as "accounting" | "finance")) {
+    if (typeof row.agent_key !== "string" || !(readableContinuousCloseAgents(authz) as readonly string[]).includes(row.agent_key)) {
       return { ok: false, error: "forbidden" };
     }
     const evidence = (await db.execute<Record<string, unknown>>(sql`
