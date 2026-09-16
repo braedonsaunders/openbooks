@@ -1308,7 +1308,15 @@
       "revenue": "Revenue",
       "inventory": "Inventory",
       "projects": "Projects",
-      "compliance": "Compliance"
+      "compliance": "Compliance",
+      "agents": "Agents"
+    },
+    "agents": {
+      "nav": {
+        "overview": "Overview",
+        "library": "Library",
+        "activity": "Activity"
+      }
     },
     "fxProvider": {
       "title": "Exchange rate provider",

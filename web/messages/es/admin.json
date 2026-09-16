@@ -1174,7 +1174,15 @@
       "revenue": "Ingresos",
       "inventory": "Inventario",
       "projects": "Proyectos",
-      "compliance": "Cumplimiento"
+      "compliance": "Cumplimiento",
+      "agents": "Agentes"
+    },
+    "agents": {
+      "nav": {
+        "overview": "Resumen",
+        "library": "Biblioteca",
+        "activity": "Actividad"
+      }
     },
     "fxProvider": {
       "title": "Proveedor de tipos de cambio",

@@ -227,6 +227,12 @@ export function SetupNav({
                     { href: '/admin/setup/tax-depreciation', label: t('taxDepreciationSetup.navTitle'), iconKey: 'landmark' },
                   ]
                 : []
+              : group.key === 'agents'
+              ? [
+                  { href: '/admin/setup/agents', label: t('agents.nav.overview'), iconKey: 'sparkles' },
+                  { href: '/admin/setup/agents/library', label: t('agents.nav.library'), iconKey: 'book-open' },
+                  { href: '/admin/setup/agents/activity', label: t('agents.nav.activity'), iconKey: 'history' },
+                ]
               : (byGroup.get(group.key) ?? []).map((e) => ({
                   href: `/admin/setup/${e.key}`,
                   label: t(`entities.${e.key}.title`),
