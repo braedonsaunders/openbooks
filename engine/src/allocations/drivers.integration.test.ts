@@ -60,16 +60,18 @@ async function postBalanced(
   lines: SeedLine[],
   label: string,
   date?: string,
+  bookId?: string,
 ): Promise<string> {
   const entryId = randomUUID();
   // One transaction: the deferred per-entry balance trigger checks at
   // commit, so entry + lines + post must land atomically.
+  const book = bookId ?? org.bookId;
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
       values
-        (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+        (${entryId}, ${org.orgId}, ${book}, ${org.subsidiaryId},
          ${`ALLOC-A2-${label}-${entryId.slice(0, 8)}`}, ${date ?? org.date}, ${org.periodId},
          ${`alloc a2 ${label}`}, 'draft', 'manual')
     `);
@@ -124,6 +126,78 @@ test("drivers: statistical_journal sums quantity by department for the period", 
       asOf: { periodId: org.periodId },
     });
     assert.deepEqual(vectorObject(vector), { [deptA]: "10.0000", [deptB]: "30.0000" });
+    const filtered = await resolver.resolve({
+      orgId: org.orgId,
+      driver: makeDriver(org.orgId, { sourceKind: "statistical_journal", config: { unit: "hours" } }),
+      asOf: { periodId: org.periodId },
+      exclude: [deptA],
+    });
+    assert.deepEqual(vectorObject(filtered), { [deptB]: "30.0000" });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("drivers: gl_activity defaults to the primary book unless given", async () => {
+  const org = await createScratchOrg();
+  try {
+    const taxBookId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, posts_gl, is_active)
+      values (${taxBookId}, ${org.orgId}, 'tax', 'Tax book', false, true, true)
+    `);
+    const deptA = await makeDept(org.orgId, "Dept A");
+    await postBalanced(org, [
+      { accountId: org.accounts.adjustment, amount: "100", departmentId: deptA },
+      { accountId: org.accounts.clearing, amount: "-100", departmentId: deptA },
+    ], "gl-primary");
+    await postBalanced(org, [
+      { accountId: org.accounts.adjustment, amount: "999", departmentId: deptA },
+      { accountId: org.accounts.clearing, amount: "-999", departmentId: deptA },
+    ], "gl-tax", undefined, taxBookId);
+    const resolver = createDriverResolver();
+    const scope = { accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] } };
+    const primary = await resolver.resolve({
+      orgId: org.orgId,
+      driver: makeDriver(org.orgId, { sourceKind: "gl_activity", config: scope }),
+      asOf: { periodId: org.periodId },
+    });
+    assert.deepEqual(vectorObject(primary), { [deptA]: "100.0000" });
+    const taxRequest: DriverResolveOptions = {
+      orgId: org.orgId,
+      driver: makeDriver(org.orgId, { sourceKind: "gl_activity", config: scope }),
+      asOf: { periodId: org.periodId },
+      bookId: taxBookId,
+    };
+    const tax = await resolver.resolve(taxRequest);
+    assert.deepEqual(vectorObject(tax), { [deptA]: "999.0000" });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("drivers: gl_balance aggregates by subsidiary through the month rollup", async () => {
+  const org = await createScratchOrg();
+  try {
+    await postBalanced(org, [
+      { accountId: org.accounts.adjustment, amount: "1000" },
+      { accountId: org.accounts.clearing, amount: "-1000" },
+    ], "gl-bal-june", "2026-06-10");
+    await postBalanced(org, [
+      { accountId: org.accounts.adjustment, amount: "100" },
+      { accountId: org.accounts.clearing, amount: "-100" },
+    ], "gl-bal-july");
+    const resolver = createDriverResolver();
+    const vector = await resolver.resolve({
+      orgId: org.orgId,
+      driver: makeDriver(org.orgId, {
+        dimension: "subsidiary",
+        sourceKind: "gl_balance",
+        config: { accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] } },
+      }),
+      asOf: { periodId: org.periodId },
+    });
+    assert.deepEqual(vectorObject(vector), { [org.subsidiaryId]: "1100.0000" });
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
