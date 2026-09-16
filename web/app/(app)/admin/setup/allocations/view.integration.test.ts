@@ -15,6 +15,13 @@ const viewState: ViewState = { orgId: null }
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.alloc-setup-view-test')]
+  export async function getAuthz() {
+    if (!state.orgId) return null
+    return { user: { orgId: state.orgId, id: 'actor-1' }, permissions: new Set(['admin.setup.manage']), allowedSubsidiaryIds: null }
+  }
+  export function can(authz, permission) {
+    return authz.permissions.has('*') || authz.permissions.has(permission)
+  }
   export async function requirePermission(permission) {
     if (!state.orgId) throw new Error('NEXT_REDIRECT:/login')
     return { user: { orgId: state.orgId, id: 'actor-1' }, permissions: new Set([permission]), allowedSubsidiaryIds: null }
