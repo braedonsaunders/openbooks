@@ -4,9 +4,9 @@ Each row is one executable check of an OpenBooks financial control from AUDIT-CO
 
 These rows are the system's own controls, not requirements of a published accounting standard: they cite control ids, never standard paragraphs, and they are published here — never in the standards conformance matrix.
 
-**7 passing · 0 failing · 0 gaps · 0 not run**
+**8 passing · 0 failing · 0 gaps · 0 not run**
 
-2026-09-16T15:55:03.569Z
+2026-09-16T23:45:33.151Z
 
 ## Control A12
 
@@ -19,6 +19,12 @@ These rows are the system's own controls, not requirements of a published accoun
 | **Posting refuses an unbalanced contributor set**<br><sub>A contributor line set whose subsidiary totals do not net to zero is refused before it can join the kernel union — posting throws instead of writing a partial entry.</sub> | A12 | PASS | Implemented |
 | **A net-zero pair leaves every account total unchanged**<br><sub>A 1,000.00 net-zero sweep onto three departments posts 600.00, 300.00, and 100.00 of dimensional attribution while the account total stays exactly 1,000.00 — company profit and loss cannot move.</sub> | A12 | PASS | Implemented |
 | **A published rule version is frozen**<br><sub>Once published, a version refuses definition edits, target replacement, and re-publication — and its definition hash is byte-identical afterwards, so posted runs stay explainable.</sub> | A12 | PASS | Implemented |
+
+## Control E9
+
+| Check | Control | Status | Conformance |
+| --- | --- | --- | --- |
+| **Reversing a posted entry restores every balance**<br><sub>Posting a 1,000.00 project cost moves 1,000.00 onto the cost account, reversing mirrors every leg through a posted reversal entry, and the ledger afterwards equals the pre-cost ledger on every account.</sub> | E9 | PASS | Implemented |
 
 ## Reproducing this
 
