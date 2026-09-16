@@ -263,17 +263,21 @@ export function DriversTab() {
     await loadValues(valuesFor)
   }
 
-  async function endValue(row: DriverValue, effectiveTo: string) {
+  async function patchValue(row: DriverValue, patch: Record<string, unknown>) {
     const res = await fetch(`/api/allocations/driver-values/${row.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ effectiveTo: effectiveTo || null }),
+      body: JSON.stringify(patch),
     })
     if (!res.ok) {
       setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
       return
     }
     if (valuesFor) await loadValues(valuesFor)
+  }
+
+  function endValue(row: DriverValue, effectiveTo: string) {
+    return patchValue(row, { effectiveTo: effectiveTo || null })
   }
 
   async function removeValue(row: DriverValue) {
@@ -618,7 +622,39 @@ export function DriversTab() {
                 },
                 { key: 'from', header: t('effectiveFrom'), cell: (row) => row.effectiveFrom },
                 { key: 'to', header: t('effectiveTo'), cell: (row) => row.effectiveTo ?? t('openEnded') },
-                { key: 'amount', header: t('value'), align: 'right', cell: (row) => <span className="tabular-nums">{row.value}</span> },
+                {
+                  key: 'amount',
+                  header: t('value'),
+                  align: 'right',
+                  cell: (row) => (
+                    <Input
+                      className="h-8 w-28 text-right tabular-nums"
+                      inputMode="decimal"
+                      defaultValue={row.value}
+                      key={`${row.id}-${row.value}`}
+                      aria-label={t('value')}
+                      onBlur={(e) => {
+                        if (e.target.value.trim() !== row.value) void patchValue(row, { value: e.target.value.trim() })
+                      }}
+                    />
+                  ),
+                },
+                {
+                  key: 'note',
+                  header: t('note'),
+                  cell: (row) => (
+                    <Input
+                      className="h-8 w-32"
+                      defaultValue={row.note ?? ''}
+                      key={`${row.id}-${row.note ?? ''}`}
+                      aria-label={t('note')}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim() || null
+                        if (next !== row.note) void patchValue(row, { note: next })
+                      }}
+                    />
+                  ),
+                },
                 {
                   key: 'actions',
                   header: '',

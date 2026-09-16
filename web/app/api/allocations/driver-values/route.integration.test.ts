@@ -132,6 +132,15 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", { skip:
     );
     assert.equal(ended.status, 200);
 
+    const corrected = await itemRoute.PATCH(
+      jsonRequest(`/api/allocations/driver-values/${valueId}`, "PATCH", { value: "2.75", note: "recount" }),
+      { params: Promise.resolve({ id: valueId }) },
+    );
+    assert.equal(corrected.status, 200);
+    const correctedBody = (await corrected.json()) as { value: { value: string; note: string | null } };
+    assert.equal(correctedBody.value.value, "2.7500");
+    assert.equal(correctedBody.value.note, "recount");
+
     const second = await collectionRoute.POST(
       jsonRequest("/api/allocations/driver-values", "POST", { ...base, effectiveFrom: "2026-07-01", value: "4" }),
     );
@@ -143,7 +152,7 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", { skip:
     assert.equal(spring.status, 200);
     assert.deepEqual(
       ((await spring.json()) as { values: { value: string }[] }).values.map((v) => v.value),
-      ["2.5000"],
+      ["2.7500"],
     );
     const autumn = await collectionRoute.GET(
       jsonRequest(`/api/allocations/driver-values?driverId=${s.driverId}&onDate=2026-09-01`, "GET"),
