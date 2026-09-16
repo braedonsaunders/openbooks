@@ -199,6 +199,7 @@ import {
 } from '../../app/(app)/admin/setup/overhead/sections'
 import {
   AllocationsDriversTabSlot,
+  AllocationsRuleDrawerSlot,
   AllocationsRulesTabSlot,
   AllocationsRunsTabSlot,
   AllocationsSetupHeader,
@@ -2091,6 +2092,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     <AllocationsRulesTabSlot {...(props as ComponentProps<typeof AllocationsRulesTabSlot>)} />
   ),
   'allocations-drivers-tab': () => <AllocationsDriversTabSlot />,
+  'allocations-rule-drawer': (props) => (
+    <AllocationsRuleDrawerSlot {...(props as ComponentProps<typeof AllocationsRuleDrawerSlot>)} />
+  ),
   'allocations-runs-tab': () => <AllocationsRunsTabSlot />,
 
   /* --- setup readiness -------------------------------------------------------- */

@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 import { listRuleHeads } from '../../../../../../engine/src/allocations/index.ts'
 import { getAuthz } from '../../../../../lib/authz'
+import { mergeHref } from '../../../../../lib/list-params'
 import { RulesTable } from './RulesTable'
+import { RuleDrawerHost } from './RuleDrawer'
 import { DriversTab } from './drivers-tab'
 import { RunsTab } from './runs-tab'
 
@@ -64,6 +66,22 @@ export async function AllocationsRulesTabSlot({
   if (!authz) return null
   const rules = await listRuleHeads(authz.user.orgId)
   return <RulesTable rules={rules} currentParams={sp} />
+}
+
+/**
+ * Rule drawer slot: mounted on every tab (Rules rows and the Runs period
+ * deep-link both address `?rule=`). Without the param it renders nothing;
+ * with it the host owns the UrlDrawer and fetches behind the API gates, so
+ * the slot itself needs no session read.
+ */
+export function AllocationsRuleDrawerSlot({
+  sp,
+}: {
+  sp: Record<string, string | string[] | undefined>
+}) {
+  const rule = typeof sp.rule === 'string' && sp.rule !== '' ? sp.rule : null
+  if (rule === null) return null
+  return <RuleDrawerHost ruleParam={rule} closeHref={mergeHref('/admin/setup/allocations', sp, { rule: undefined })} />
 }
 
 /**

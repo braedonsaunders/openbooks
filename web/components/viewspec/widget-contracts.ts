@@ -41,6 +41,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'aging-strip': { props: ['cells', 'total', 'totalDrill', 'totalLabel'] },
   'ai-settings-form': { props: ['initial', 'specs'] },
   'allocations-drivers-tab': { props: [] },
+  'allocations-rule-drawer': { props: [], open: true },
   'allocations-rules-tab': { props: [], open: true },
   'allocations-runs-tab': { props: [] },
   'allocations-setup-header': { props: [], open: true },

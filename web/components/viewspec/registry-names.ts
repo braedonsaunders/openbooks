@@ -27,6 +27,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'acting-cell',
   'activity-drawer',
   'allocations-drivers-tab',
+  'allocations-rule-drawer',
   'allocations-rules-tab',
   'allocations-runs-tab',
   'allocations-setup-header',
