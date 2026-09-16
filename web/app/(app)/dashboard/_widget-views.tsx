@@ -4,6 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
+  ArrowUpRight,
   AlertTriangle,
   BookOpen,
   CircleDollarSign,
@@ -97,17 +98,23 @@ function CardShell({
 
 type MetricTone = 'teal' | 'sky' | 'emerald' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
 
-const METRIC_TONES: Record<MetricTone, { rail: string; icon: string; glow: string }> = {
-  teal: { rail: 'bg-teal-500', icon: 'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/60 dark:text-teal-300 dark:ring-teal-900', glow: 'bg-teal-400/10 dark:bg-teal-500/5' },
-  sky: { rail: 'bg-sky-500', icon: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/60 dark:text-sky-300 dark:ring-sky-900', glow: 'bg-sky-400/10 dark:bg-sky-500/5' },
-  emerald: { rail: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-900', glow: 'bg-emerald-400/10 dark:bg-emerald-500/5' },
-  amber: { rail: 'bg-amber-500', icon: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-900', glow: 'bg-amber-400/10 dark:bg-amber-500/5' },
-  orange: { rail: 'bg-orange-500', icon: 'bg-orange-50 text-orange-700 ring-orange-100 dark:bg-orange-950/60 dark:text-orange-300 dark:ring-orange-900', glow: 'bg-orange-400/10 dark:bg-orange-500/5' },
-  rose: { rail: 'bg-rose-500', icon: 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-900', glow: 'bg-rose-400/10 dark:bg-rose-500/5' },
-  violet: { rail: 'bg-violet-500', icon: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/60 dark:text-violet-300 dark:ring-violet-900', glow: 'bg-violet-400/10 dark:bg-violet-500/5' },
-  slate: { rail: 'bg-slate-400', icon: 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700', glow: 'bg-slate-400/10 dark:bg-slate-400/5' },
+const METRIC_TONES: Record<MetricTone, { icon: string; accent: string; wash: string; hover: string; dot: string }> = {
+  teal: { icon: 'bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300', accent: 'from-teal-500 to-cyan-400', wash: 'from-teal-500/[0.07]', hover: 'hover:border-teal-300/80 dark:hover:border-teal-700/70', dot: 'bg-teal-500' },
+  sky: { icon: 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/10 dark:text-sky-300', accent: 'from-sky-500 to-indigo-400', wash: 'from-sky-500/[0.07]', hover: 'hover:border-sky-300/80 dark:hover:border-sky-700/70', dot: 'bg-sky-500' },
+  emerald: { icon: 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300', accent: 'from-emerald-500 to-teal-400', wash: 'from-emerald-500/[0.07]', hover: 'hover:border-emerald-300/80 dark:hover:border-emerald-700/70', dot: 'bg-emerald-500' },
+  amber: { icon: 'bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300', accent: 'from-amber-500 to-yellow-400', wash: 'from-amber-500/[0.08]', hover: 'hover:border-amber-300/80 dark:hover:border-amber-700/70', dot: 'bg-amber-500' },
+  orange: { icon: 'bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300', accent: 'from-orange-500 to-amber-400', wash: 'from-orange-500/[0.08]', hover: 'hover:border-orange-300/80 dark:hover:border-orange-700/70', dot: 'bg-orange-500' },
+  rose: { icon: 'bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300', accent: 'from-rose-500 to-pink-400', wash: 'from-rose-500/[0.07]', hover: 'hover:border-rose-300/80 dark:hover:border-rose-700/70', dot: 'bg-rose-500' },
+  violet: { icon: 'bg-violet-500/10 text-violet-700 dark:bg-violet-400/10 dark:text-violet-300', accent: 'from-violet-500 to-fuchsia-400', wash: 'from-violet-500/[0.07]', hover: 'hover:border-violet-300/80 dark:hover:border-violet-700/70', dot: 'bg-violet-500' },
+  slate: { icon: 'bg-slate-500/10 text-slate-700 dark:bg-slate-400/10 dark:text-slate-300', accent: 'from-slate-500 to-slate-300', wash: 'from-slate-500/[0.06]', hover: 'hover:border-slate-300 dark:hover:border-slate-600', dot: 'bg-slate-400' },
 }
 
+/**
+ * KPI card. The tone lives INSIDE the rounded shape: a soft corner wash
+ * behind the number, a tinted icon, and a short gradient accent stroke under
+ * the value. No edge rails — a rail drawn on an absolutely positioned strip
+ * cannot follow a rounded corner and reads as a print artifact.
+ */
 function MetricTile({
   icon,
   label,
@@ -125,35 +132,46 @@ function MetricTile({
 }) {
   const colors = METRIC_TONES[tone]
   const inner = (
-    <div className="relative flex h-full flex-col justify-between overflow-hidden p-4 pl-5">
-      <span className={`absolute inset-y-0 left-0 w-1 ${colors.rail}`} />
-      <span className={`pointer-events-none absolute -top-12 -right-10 h-28 w-28 rounded-full blur-2xl ${colors.glow}`} />
-      <div className="relative flex items-start justify-between gap-3">
-        <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</span>
-        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ${colors.icon}`}>
+    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl">
+      <span
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent ${colors.wash}`}
+      />
+      <div className="relative flex items-center gap-2.5 px-4 pt-4">
+        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colors.icon}`}>
           {icon}
         </span>
+        <span className="min-w-0 truncate text-[12.5px] font-medium tracking-tight text-slate-600 dark:text-slate-300">
+          {label}
+        </span>
+        {href ? (
+          <span className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-300 opacity-0 transition-all duration-200 group-hover:opacity-100 dark:text-slate-600">
+            <ArrowUpRight size={14} />
+          </span>
+        ) : null}
       </div>
-      <div className="relative min-w-0">
-        <div className="truncate text-2xl font-bold tracking-tight text-slate-950 tabular-nums dark:text-white">
+      <div className="relative mt-auto min-w-0 px-4 pb-4 pt-3">
+        <div className="truncate text-[26px] leading-none font-semibold tracking-tight text-slate-950 tabular-nums dark:text-white">
           {value}
         </div>
-        {hint ? <div className="mt-0.5 truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">{hint}</div> : null}
+        <div className="mt-2.5 flex items-center gap-2">
+          <span aria-hidden className={`h-[3px] w-8 rounded-full bg-gradient-to-r ${colors.accent}`} />
+          {hint ? (
+            <span className="truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">{hint}</span>
+          ) : null}
+        </div>
       </div>
     </div>
   )
+  const shell = `group block h-full rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 dark:border-slate-800 dark:bg-slate-900`
   if (href) {
     return (
-      <Link href={href} className="block h-full rounded-xl border border-slate-200 bg-white shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800/60">
+      <Link href={href} className={`${shell} hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] ${colors.hover}`}>
         {inner}
       </Link>
     )
   }
-  return (
-    <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      {inner}
-    </div>
-  )
+  return <div className={shell}>{inner}</div>
 }
 
 function EmptyRow() {

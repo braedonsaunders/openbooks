@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, Settings2, Zap } from 'lucide-react'
@@ -33,6 +33,8 @@ export function QuickActions({
   )
   const [editorOpen, setEditorOpen] = useState(false)
   const visibleItems = visibleQuickActions(items, hidden)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const vertical = useIsPortrait(bodyRef, visibleItems.length)
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -72,10 +74,16 @@ export function QuickActions({
           </div>
         ) : (
           <div
-            className="grid h-full min-h-0 auto-rows-fr grid-cols-2 gap-2 p-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+            ref={bodyRef}
+            data-orientation={vertical ? 'vertical' : 'grid'}
+            className={
+              vertical
+                ? 'flex h-full min-h-0 flex-col gap-1.5 overflow-y-auto p-2.5'
+                : 'grid h-full min-h-0 auto-rows-fr grid-cols-2 gap-2 p-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
+            }
           >
             {visibleItems.map((a, i) => (
-              <ActionTile key={a.id} action={a} index={i} />
+              <ActionTile key={a.id} action={a} index={i} vertical={vertical} />
             ))}
           </div>
         )}
@@ -93,7 +101,30 @@ export function QuickActions({
   )
 }
 
-function ActionTile({ action, index }: { action: QuickAction; index: number }) {
+/**
+ * A widget that is taller than it is wide (a narrow column on the grid)
+ * reads better as a plain vertical list than as a grid of squat tiles.
+ * Measured from the rendered box so it follows the user's resize, not the
+ * viewport.
+ */
+function useIsPortrait(ref: React.RefObject<HTMLElement | null>, deps: number) {
+  const [portrait, setPortrait] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect()
+      if (width > 0 && height > 0) setPortrait(height > width)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref, deps])
+  return portrait
+}
+
+function ActionTile({ action, index, vertical }: { action: QuickAction; index: number; vertical?: boolean }) {
   const t = useTranslations('dashboard')
   const tone = toneOf(action.tone)
   const Icon = QUICK_ACTION_ICONS[action.iconKey] ?? FALLBACK_ICON
@@ -118,11 +149,11 @@ function ActionTile({ action, index }: { action: QuickAction; index: number }) {
     </>
   )
 
-  const className = `group flex h-full min-h-0 w-full items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-1.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900 ${tone.tile}`
+  const className = `group flex ${vertical ? 'min-h-10' : 'h-full min-h-0'} w-full items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-1.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900 ${tone.tile}`
 
   return (
     <motion.div
-      className="min-h-0"
+      className={vertical ? 'shrink-0' : 'min-h-0'}
       initial={{ y: 8 }}
       animate={{ y: 0 }}
       transition={{ delay: 0.04 + index * 0.035, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
