@@ -6,6 +6,14 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-09-15
+
+Defect-remediation release: ~300 atomic fixes from a third audit fleet
+(persona attacks, real-data replay, mutation survivors, standards
+conformance, boundary sweeps), each with a red-then-green regression test
+and an independent review. Highlights below; every commit carries its own
+defect / root cause / fix / verification record.
+
 ### Integrations
 
 - Chargebee settlement imports now receipt what was actually collected.
@@ -41,6 +49,94 @@ changes; each release documents required operator action.
   worker service running (it already runs in `compose.yaml` and the HA
   reference). Single-process installs that run web without a worker: set
   `OPENBOOKS_RUN_SCHEDULER=1` on web.
+
+### Ledger and close
+
+- Posted journal entries can no longer be flipped back to draft through the
+  kernel guard (migration 0146, `je_guard` v3: posted exits only to
+  reversed). Tax amounts without calculation evidence fail closed instead of
+  silently dropping at posting. Account-parent cycles no longer hang every
+  statement. Direct inventory postings stamp the GL location dimension.
+- Close readiness scopes the posting-period check to the run period, goes red
+  on unrecognized deferred revenue, and re-publishing after a reopen versions
+  the binder (original retained, restatement note required). Consolidation,
+  elimination, lease, asset and FX-revaluation writes into closed periods
+  refuse with named errors instead of raw storage failures. Depreciation
+  catches up skipped months and allocates 4-4-5 calendars; secondary books
+  revalue; asset disposal refuses while a begun stub period is unposted.
+- New admin remediation paths: bulk assign-posting-period from the readiness
+  blocker, and duplicate-project detection with an audited merge.
+
+### Cash, receivables and payables
+
+- Open items net unapplied credit memos (cash forecast, cash position,
+  vitals and assistant tools now tie to aging to the cent); as-of agings and
+  forecasts reconstruct settlement timing instead of reading live balances;
+  day-90 items age into the 90+ bucket; quiet parties keep their balance on
+  statements. Consolidated open items, bank balances, cockpit tiles and the
+  analytics hubs translate every functional currency to the presentation
+  currency at the correct spot and fail closed on missing rates.
+- Ad-hoc vendor payments honour subcontractor compliance blocks. Early-payment
+  discounts round to the bill currency's minor units. Refund-first PSP
+  webhooks park as pending clawbacks and settle exactly once (migration
+  0149). Void versus application races no longer deadlock.
+
+### Tax, payroll and standards
+
+- GST34 packs installed by the pre-split seed are healed to the collected /
+  paid / taxable bases (migration 0147; a real tenant filed net tax at double
+  the true amount). Codeless source tax is refused upstream with the source
+  reference. The payroll remittance summary survives a run with an unknown
+  filing account and statutory payable remappings return a typed warning.
+- Conformance matrix republished at 75 passing cases and 15 declared gaps
+  (partial disposal, intercompany asset transfer, lease early termination,
+  4-4-5 depreciation, partial disassembly, loss of control, …).
+
+### Integrity, contracts and concurrency
+
+- Reference ownership is fenced on every write path (records API, documents
+  and lines, journals, expenses, items, parties, assets, timesheets, rate
+  cards, property, custom records, scripts, Flows actions and imports):
+  foreign-org ids are refused with tenant-opaque 404s instead of storage
+  errors. Dozens of routes refuse magnitudes wider than their numeric columns
+  and dates that are not real calendar days with typed 4xx responses.
+- Revision tokens on prebill lines, AP-capture reviews, custom records and
+  opportunities; compare-and-swap on percent-complete overrides; sorted
+  advisory locks for inventory reversals; repeatable-read sandbox clones with
+  per-sandbox refresh serialization; sandboxes holding posted documents can
+  be created, refreshed and deleted (migration 0148). Audit rows now carry
+  actor and before/after for the v1 writer, imports, Flows mutations,
+  pay-run commits and mirror-posted documents.
+- The approvals worklist and the pending-approvals count unify Flows gates,
+  document-status approvals and pay runs. KPI definitions are single-sourced
+  (DSO across all six surfaces). Paginated lists carry a unique tiebreaker and
+  malformed filters fail closed to empty. Budget vs actual and the dashboard
+  cash tile bind to the resolved period.
+
+### Imports and integrations
+
+- Every registered data resource round-trips export → import into a fresh
+  org and re-imports idempotently (matrix test committed). Settlement links
+  state their currency on all six connectors and the reconciler converts or
+  refuses. Source subsidiary functional-currency changes are held for review.
+  The QuickBooks Desktop Web Connector SOAP route is reachable through the
+  edge and password guessing is bounded.
+
+### Dashboard
+
+- Saving Quick Actions on a never-customized dashboard no longer wipes the
+  widget grid; malformed or empty stored layouts fall back to the default and
+  self-heal on the next view. The greeting follows the viewer's clock.
+- Performance: the indirect cash flow's outer scans are bounded by the window
+  (138 s → ~10 s on a multi-million-line tenant); capped detail exports
+  disclose the cap in every format.
+
+### Operator action
+
+- Migrations 0146–0149 apply automatically on deploy (forward-only,
+  idempotent). 0147 rewrites installed CA_GST34 pack rows for lines 101 /
+  103 / 106 on every org that installed the pre-split seed; re-run affected
+  returns after upgrading.
 
 ## [0.1.0-alpha.5] - 2026-09-15
 

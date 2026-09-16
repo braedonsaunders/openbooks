@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.5` image digest in
+2. resolves and records the official `0.1.0-alpha.6` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -711,12 +711,14 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.5` is the current community preview. It is a hardening release:
-about 350 atomic defect fixes across posting, payments, payroll, tax, banking,
-reporting, subsidiary scoping, and API validation, produced by a multi-agent
-audit with a red-then-green regression test for every fix, plus three additive
-payroll migrations (opening-balance history and retro quantification snapshots).
-See the changelog for the areas touched and the operator notes.
+`v0.1.0-alpha.6` is the current community preview. It is a second hardening
+release: about 300 more atomic defect fixes across the posting kernel, close,
+cash and open items, tax, payroll, standards conformance, reference-ownership
+fences on every write path, concurrency (revision tokens, advisory locks,
+refund-first clawbacks), imports and connectors, plus the dashboard layout
+recovery — each with a red-then-green regression test and an independent
+review, and four forward migrations (0146–0149). See the changelog for the
+areas touched and the operator notes.
 
 Good uses today:
 
