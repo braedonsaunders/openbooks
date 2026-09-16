@@ -6,6 +6,7 @@ import { loadWorkSchedules } from '@openbooks/engine/src/work-schedules.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { parseCycleDays } from '../../../lib/work-schedule-days'
+import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,6 @@ export const dynamic = 'force-dynamic'
  * they are gated on admin.setup.manage exactly as wages are.
  */
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_CYCLE_DAYS = 366
 
 const bad = (error: string) => NextResponse.json({ error }, { status: 422 })
@@ -129,9 +129,14 @@ export async function POST(request: Request) {
       + 'a department, a subsidiary, or the organization. Choose one')
   }
 
+  // All three dates land in date columns and the save maps any failure to a
+  // conflict message, so a shape-valid non-day would surface the raw driver
+  // failure. Refuse anything that is not a real calendar day up front.
   const effectiveFrom = String(body.effectiveFrom ?? '')
-  if (!DATE_RE.test(effectiveFrom)) return bad('a start date is required')
-  const effectiveTo = DATE_RE.test(String(body.effectiveTo ?? '')) ? String(body.effectiveTo) : null
+  if (!isIsoCalendarDate(effectiveFrom)) return bad('a start date is required')
+  const effectiveToRaw = body.effectiveTo === undefined || body.effectiveTo === null || body.effectiveTo === '' ? null : String(body.effectiveTo)
+  if (effectiveToRaw !== null && !isIsoCalendarDate(effectiveToRaw)) return bad('the end date must be a real calendar date (YYYY-MM-DD)')
+  const effectiveTo = effectiveToRaw
   if (effectiveTo && effectiveTo < effectiveFrom) {
     return bad('the end date cannot precede the start date')
   }
@@ -147,7 +152,7 @@ export async function POST(request: Request) {
       return bad(`the cycle must be between 1 and ${MAX_CYCLE_DAYS} days long`)
     }
     cycleAnchor = String(body.cycleAnchor ?? '')
-    if (!DATE_RE.test(cycleAnchor)) return bad('the cycle needs a first day to count from')
+    if (!isIsoCalendarDate(cycleAnchor)) return bad('the cycle needs a first day to count from')
     const supplied = Array.isArray(body.days) ? body.days : []
     // A row the server cannot place refuses the save: silently dropping a
     // day would store a pattern nobody wrote, and it would go on paying
