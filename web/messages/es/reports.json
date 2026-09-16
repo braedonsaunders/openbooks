@@ -534,6 +534,14 @@
       "entitlement_service_milestones": {
         "label": "Hitos de antigüedad",
         "description": "Cuándo alcanza cada empleado un nivel de derechos por antigüedad y qué nivel rige hoy. Requiere el permiso de nómina."
+      },
+      "allocation_runs": {
+        "label": "Repartos",
+        "description": "Una fila por cálculo o contabilización de reparto periódico — regla, versión, período, libro, totales de origen y repartidos, residual y estado. Requiere el permiso de reparto."
+      },
+      "allocation_lineage": {
+        "label": "Trazabilidad de repartos",
+        "description": "Cada línea repartida vinculada a su versión de regla, período fuente, cuenta y dimensiones, con participación del inductor e importe. Requiere el permiso de reparto."
       }
     },
     "columns": {
@@ -956,6 +964,42 @@
         "billable_value": "Valor facturable",
         "billed_revenue": "Ingresos facturados",
         "created_at": "Fecha de creación"
+      },
+      "allocation_runs": {
+        "rule_name": "Regla",
+        "rule_key": "Clave de regla",
+        "rule_mode": "Modo de regla",
+        "version_no": "Versión n.º",
+        "period": "Período",
+        "period_start": "Inicio del período",
+        "period_end": "Fin del período",
+        "book": "Libro contable",
+        "book_id": "Libro contable (id)",
+        "subsidiary": "Entidad",
+        "status": "Estado",
+        "trigger_kind": "Origen",
+        "source_total": "Total origen",
+        "allocated_total": "Repartido",
+        "residual": "Residual",
+        "started_at": "Iniciado el",
+        "run_id": "Ejecución (id)"
+      },
+      "allocation_lineage": {
+        "rule_name": "Regla",
+        "mode": "Modo",
+        "period": "Período",
+        "book": "Libro contable",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "department": "Departamento",
+        "location": "Ubicación",
+        "class": "Clase",
+        "project": "Proyecto",
+        "share": "Participación",
+        "driver_value": "Valor del inductor",
+        "amount": "Importe",
+        "residual": "Residual",
+        "created_at": "Creado el"
       }
     },
     "enumValues": {

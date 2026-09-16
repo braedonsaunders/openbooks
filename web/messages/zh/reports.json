@@ -534,6 +534,14 @@
       "entitlement_service_milestones": {
         "label": "服务年限里程碑",
         "description": "每位员工何时达到基于服务年限的福利档位，以及当前生效的档位。需要薪酬权限。"
+      },
+      "allocation_runs": {
+        "label": "分摊运行",
+        "description": "每次期间分摊计算或过账一行 — 规则、版本、期间、账簿、来源总额、已分摊额、残差及状态。需要分摊权限。"
+      },
+      "allocation_lineage": {
+        "label": "分摊溯源",
+        "description": "将每个分摊行追溯至规则版本、来源期间、科目及维度，并列示动因份额与金额。需要分摊权限。"
       }
     },
     "columns": {
@@ -955,6 +963,42 @@
         "cost_recovery": "成本回收",
         "billable_value": "可计费价值",
         "billed_revenue": "已开票收入",
+        "created_at": "创建时间"
+      },
+      "allocation_runs": {
+        "rule_name": "规则",
+        "rule_key": "规则键",
+        "rule_mode": "规则模式",
+        "version_no": "版本号",
+        "period": "期间",
+        "period_start": "期间开始",
+        "period_end": "期间结束",
+        "book": "会计账簿",
+        "book_id": "会计账簿（ID）",
+        "subsidiary": "实体",
+        "status": "状态",
+        "trigger_kind": "触发方式",
+        "source_total": "来源总额",
+        "allocated_total": "已分摊额",
+        "residual": "残差",
+        "started_at": "开始时间",
+        "run_id": "运行（ID）"
+      },
+      "allocation_lineage": {
+        "rule_name": "规则",
+        "mode": "模式",
+        "period": "期间",
+        "book": "会计账簿",
+        "account_number": "科目编号",
+        "account_name": "科目",
+        "department": "部门",
+        "location": "地点",
+        "class": "类别",
+        "project": "项目",
+        "share": "份额",
+        "driver_value": "动因值",
+        "amount": "金额",
+        "residual": "残差",
         "created_at": "创建时间"
       }
     },

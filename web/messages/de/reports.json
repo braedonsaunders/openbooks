@@ -534,6 +534,14 @@
       "entitlement_service_milestones": {
         "label": "Dienstjubiläen",
         "description": "Wann jeder Mitarbeiter eine dienstbezogene Anspruchsstufe erreicht und welche Stufe heute gilt. Erfordert die Lohnabrechnungs-Berechtigung."
+      },
+      "allocation_runs": {
+        "label": "Umlageläufe",
+        "description": "Je ein Datensatz pro berechnetem oder gebuchtem periodenbezogenem Umlagelauf — Regel, Version, Periode, Buch, Quellen- und Umlagesummen, Restbetrag und Status. Erfordert die Umlageberechtigung."
+      },
+      "allocation_lineage": {
+        "label": "Umlageherkunft",
+        "description": "Jede umgelegte Zeile, rückverfolgt auf Regelversion, Quellperiode, Konto und Dimensionen, mit Treiberanteil und Betrag. Erfordert die Umlageberechtigung."
       }
     },
     "columns": {
@@ -955,6 +963,42 @@
         "cost_recovery": "Kostendeckung",
         "billable_value": "Abrechenbarer Wert",
         "billed_revenue": "Fakturierte Erlöse",
+        "created_at": "Erstellt am"
+      },
+      "allocation_runs": {
+        "rule_name": "Regel",
+        "rule_key": "Regelschlüssel",
+        "rule_mode": "Regelmodus",
+        "version_no": "Version Nr.",
+        "period": "Periode",
+        "period_start": "Periodenbeginn",
+        "period_end": "Periodenende",
+        "book": "Rechnungslegungsbuch",
+        "book_id": "Rechnungslegungsbuch (ID)",
+        "subsidiary": "Gesellschaft",
+        "status": "Status",
+        "trigger_kind": "Auslöser",
+        "source_total": "Quellensumme",
+        "allocated_total": "Umlagesumme",
+        "residual": "Restbetrag",
+        "started_at": "Gestartet am",
+        "run_id": "Lauf (ID)"
+      },
+      "allocation_lineage": {
+        "rule_name": "Regel",
+        "mode": "Modus",
+        "period": "Periode",
+        "book": "Rechnungslegungsbuch",
+        "account_number": "Konto Nr.",
+        "account_name": "Konto",
+        "department": "Abteilung",
+        "location": "Standort",
+        "class": "Klasse",
+        "project": "Projekt",
+        "share": "Anteil",
+        "driver_value": "Treiberwert",
+        "amount": "Betrag",
+        "residual": "Restbetrag",
         "created_at": "Erstellt am"
       }
     },

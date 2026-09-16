@@ -61,6 +61,34 @@ describe('built-in report definitions', () => {
     }
   })
 
+  it('defines allocation summary and lineage as valid allocations-gated built-ins', () => {
+    const summary = BUILT_IN_REPORT_DEFINITION_MAP['allocation-summary']
+    assert.ok(summary)
+    assert.equal(summary.query.entity, 'allocation_runs')
+    assert.doesNotThrow(() => validateCustomQuery(summary.query))
+    assert.equal(REPORT_ENTITY_MAP[summary.query.entity]?.requiredPermission, 'allocations.read')
+    assert.equal(REPORT_ENTITY_MAP[summary.query.entity]?.featureKey, 'allocations')
+    const breakouts = (summary.query.breakouts ?? []).map((b) => b.column)
+    for (const column of ['rule_name', 'period', 'status']) {
+      assert.ok(breakouts.includes(column), `summary breaks out by ${column}`)
+    }
+    const measures = (summary.query.measures ?? []).map((m) => `${m.fn}:${m.column}`)
+    for (const measure of ['sum:source_total', 'sum:allocated_total', 'sum:residual', 'count:']) {
+      assert.ok(
+        measures.some((m) => m.startsWith(measure)),
+        `summary measures ${measure}*`,
+      )
+    }
+
+    const lineage = BUILT_IN_REPORT_DEFINITION_MAP['allocation-lineage']
+    assert.ok(lineage)
+    assert.equal(lineage.query.entity, 'allocation_lineage')
+    assert.equal(lineage.query.mode, 'rows')
+    assert.doesNotThrow(() => validateCustomQuery(lineage.query))
+    assert.equal(REPORT_ENTITY_MAP[lineage.query.entity]?.requiredPermission, 'allocations.read')
+    assert.equal(REPORT_ENTITY_MAP[lineage.query.entity]?.featureKey, 'allocations')
+  })
+
   it('defines lot recall as a valid, stably sorted inventory query without an implicit period', () => {
     const def = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']
     assert.ok(def)

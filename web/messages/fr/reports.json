@@ -534,6 +534,14 @@
       "entitlement_service_milestones": {
         "label": "Jalons d’ancienneté",
         "description": "Quand chaque employé atteint un palier de droits fondé sur le service et quel palier est en vigueur aujourd’hui. Requiert l’autorisation paie."
+      },
+      "allocation_runs": {
+        "label": "Répartitions",
+        "description": "Une ligne par calcul ou comptabilisation de répartition périodique — règle, version, période, livre, totaux source et répartis, écart résiduel et statut. Requiert la permission de répartition."
+      },
+      "allocation_lineage": {
+        "label": "Traçabilité des répartitions",
+        "description": "Chaque ligne répartie rattachée à sa version de règle, période source, compte et dimensions, avec part de l’inducteur et montant. Requiert la permission de répartition."
       }
     },
     "columns": {
@@ -955,6 +963,42 @@
         "cost_recovery": "Récupération des coûts",
         "billable_value": "Valeur facturable",
         "billed_revenue": "Revenus facturés",
+        "created_at": "Créé le"
+      },
+      "allocation_runs": {
+        "rule_name": "Règle",
+        "rule_key": "Clé de règle",
+        "rule_mode": "Mode de règle",
+        "version_no": "Version n°",
+        "period": "Période",
+        "period_start": "Début de période",
+        "period_end": "Fin de période",
+        "book": "Livre comptable",
+        "book_id": "Livre comptable (id)",
+        "subsidiary": "Entité",
+        "status": "Statut",
+        "trigger_kind": "Déclencheur",
+        "source_total": "Total source",
+        "allocated_total": "Réparti",
+        "residual": "Écart résiduel",
+        "started_at": "Démarré le",
+        "run_id": "Exécution (id)"
+      },
+      "allocation_lineage": {
+        "rule_name": "Règle",
+        "mode": "Mode",
+        "period": "Période",
+        "book": "Livre comptable",
+        "account_number": "N° de compte",
+        "account_name": "Compte",
+        "department": "Département",
+        "location": "Emplacement",
+        "class": "Classe",
+        "project": "Projet",
+        "share": "Part",
+        "driver_value": "Valeur d’inducteur",
+        "amount": "Montant",
+        "residual": "Écart résiduel",
         "created_at": "Créé le"
       }
     },
