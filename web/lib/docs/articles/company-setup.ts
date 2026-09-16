@@ -413,7 +413,7 @@ export const setupCurrencyGroup: DocArticle = {
   category: 'administration',
   order: 19,
   summary: 'Currencies, an exchange-rate provider, dated FX rates, and consolidation rates.',
-  updated: '2026-07-21',
+  updated: '2026-09-16',
   keywords: ['currency', 'exchange rate', 'FX', 'fx provider', 'consolidation', 'multi-currency', 'revaluation'],
   related: ['setup-company-group', 'setup-accounting-group', 'financial-reports'],
   body: `# Setup: Currency
@@ -445,6 +445,14 @@ manual.
 
 **Currencies** is the shared reference of currency codes and their minor units
 (decimal places). It is the one setup table that is not organization-scoped.
+It covers every transactable active ISO 4217 currency — 0-decimal currencies
+such as the yen, 2-decimal currencies such as the dollar and euro, 3-decimal
+currencies such as the dinar, and the 4-decimal funds codes — each with its
+official minor units. Amounts round to the transaction currency's own minor
+units (whole yen, whole fils) while the ledger keeps exact four-decimal
+precision underneath; pickers show each currency's name in your UI language.
+Entries without an ISO minor unit (supranational units, test codes) cannot be
+transacted and stay out of the list.
 `,
 }
 
