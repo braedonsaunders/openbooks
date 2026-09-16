@@ -9,6 +9,7 @@ export const CONTINUOUS_CLOSE_AGENT_KEYS = [
   "hygiene",
   "forensics",
   "tax",
+  "payroll",
 ] as const;
 export type ContinuousCloseAgentKey = (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number];
 
@@ -573,6 +574,55 @@ export const CONTINUOUS_CLOSE_DETECTOR_SPECS = [
   {
     detectorKey: "tax_unlocked_period",
     agentKey: "tax",
+    supportsMateriality: false,
+    parameters: [],
+  },
+  {
+    detectorKey: "payroll_remittance_due",
+    agentKey: "payroll",
+    supportsMateriality: true,
+    parameters: [
+      {
+        key: "lookbackDays",
+        defaultValue: 90,
+        min: 7,
+        max: 365,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "dueWithinDays",
+        defaultValue: 14,
+        min: 1,
+        max: 90,
+        step: 1,
+        unit: "days",
+      },
+      {
+        key: "criticalMaterialityMultiple",
+        defaultValue: 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "multiple",
+      },
+    ],
+  },
+  {
+    detectorKey: "payroll_unknown_accounts",
+    agentKey: "payroll",
+    supportsMateriality: false,
+    parameters: [],
+  },
+  {
+    detectorKey: "payroll_missing_elections",
+    agentKey: "payroll",
+    supportsMateriality: false,
+    parameters: [],
+  },
+  {
+    detectorKey: "payroll_yearend_gaps",
+    agentKey: "payroll",
     supportsMateriality: false,
     parameters: [],
   },

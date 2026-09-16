@@ -131,6 +131,24 @@ test("the tax pack registers its detectors and defaults on", () => {
   );
 });
 
+test("the payroll pack registers its detectors and defaults on", () => {
+  assert.deepEqual(
+    detectorSpecsForAgent("payroll").map((spec) => spec.detectorKey),
+    [
+      "payroll_remittance_due",
+      "payroll_unknown_accounts",
+      "payroll_missing_elections",
+      "payroll_yearend_gaps",
+    ],
+  );
+  const defaults = defaultContinuousCloseDetectors("payroll");
+  assert.deepEqual(
+    enabledDetectorKeys(defaults),
+    defaults.map((detector) => detector.detectorKey),
+    "payroll controls all default on",
+  );
+});
+
 test("new-pack detector tuning validates like the original packs", () => {
   const configured = normalizeContinuousCloseDetectors("collections", {
     overdue_customer_balance: {

@@ -1008,6 +1008,7 @@
         "staleAfterDays": "Stale after",
         "lookbackDays": "Look back",
         "duplicateDays": "Duplicate window",
+        "dueWithinDays": "Due within",
         "minimumVariancePercent": "Minimum unfavorable variance",
         "criticalVariancePercent": "Critical unfavorable variance",
         "minimumDeclinePercent": "Minimum revenue decline",
@@ -1071,6 +1072,22 @@
         "tax_unlocked_period": {
           "title": "Unlocked tax period",
           "description": "Flags the latest completed period with no closed tax lock."
+        },
+        "payroll_remittance_due": {
+          "title": "Remittance due",
+          "description": "Flags accrued withholding with a due date inside the horizon that no bill covers."
+        },
+        "payroll_unknown_accounts": {
+          "title": "Unknown payroll accounts",
+          "description": "Flags committed runs whose stubs were never attributed to a filing or liability account."
+        },
+        "payroll_missing_elections": {
+          "title": "Missing statutory elections",
+          "description": "Flags active employees with no TD1 or W-4 claim elections on file."
+        },
+        "payroll_yearend_gaps": {
+          "title": "Year-end filing gaps",
+          "description": "Flags missing SINs and unconfigured statutory rates the slips need."
         },
         "missing_approved_budget": {
           "title": "Missing approved budget",
@@ -1188,6 +1205,11 @@
         "title": "Tax agent",
         "description": "Continuous filing-readiness controls.",
         "coverage": "Checks missing tax codes, registrations, computable returns, and period locks."
+      },
+      "payroll": {
+        "title": "Payroll agent",
+        "description": "Continuous payroll-compliance controls.",
+        "coverage": "Checks remittance dues, unknown accounts, missing elections, and year-end gaps."
       },
       "lastRun": "Last run: {date} · {status}",
       "nextRun": "Next scheduled run: {date}",
@@ -1598,6 +1620,12 @@
           "description": "Missing tax codes, unregistered forms, uncomputable returns and unlocked filing periods.",
           "reads": "Posted documents, return forms, registrations and period locks.",
           "proposes": "Filing-review links on every finding — review only, no writes."
+        },
+        "payroll": {
+          "title": "Payroll",
+          "description": "Remittance dues, unknown accounts, missing elections and year-end gaps.",
+          "reads": "Committed pay runs, remittance groups, employee profiles and statutory rates.",
+          "proposes": "Remittance and employee review links — review only, no writes."
         }
       }
     },
