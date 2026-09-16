@@ -15,7 +15,7 @@
       "invoice": "Factura",
       "bill": "Factura de proveedor"
     },
-    "docKind": "{kind, select, quote {Cotización} sales_order {Orden de venta} purchase_order {Orden de compra} customer_invoice {Factura} vendor_bill {Factura de proveedor} other {{kind}}}",
+    "docKind": "{kind, select, quote {Cotización} sales_order {Orden de venta} purchase_order {Orden de compra} customer_invoice {Factura} vendor_bill {Factura de proveedor} purchase_receipt {Recibo de mercancías} sales_fulfillment {Envío} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Proveedor} other {Cliente}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Seleccionar proveedor…} other {Seleccionar cliente…}}",
     "dateLabel": "{kind, select, quote {Fecha de la cotización} other {Fecha de la orden}}",

@@ -15,7 +15,7 @@
       "invoice": "Fatura",
       "bill": "Conta a pagar"
     },
-    "docKind": "{kind, select, quote {Orçamento} sales_order {Pedido de venda} purchase_order {Pedido de compra} customer_invoice {Fatura} vendor_bill {Conta a pagar} other {{kind}}}",
+    "docKind": "{kind, select, quote {Orçamento} sales_order {Pedido de venda} purchase_order {Pedido de compra} customer_invoice {Fatura} vendor_bill {Conta a pagar} purchase_receipt {Receita de mercadorias} sales_fulfillment {Envio} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Fornecedor} other {Cliente}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Selecionar fornecedor…} other {Selecionar cliente…}}",
     "dateLabel": "{kind, select, quote {Data do orçamento} other {Data do pedido}}",

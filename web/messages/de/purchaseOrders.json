@@ -15,7 +15,7 @@
       "invoice": "Rechnung",
       "bill": "Eingangsrechnung"
     },
-    "docKind": "{kind, select, quote {Angebot} sales_order {Kundenauftrag} purchase_order {Bestellung} customer_invoice {Ausgangsrechnung} vendor_bill {Eingangsrechnung} other {{kind}}}",
+    "docKind": "{kind, select, quote {Angebot} sales_order {Kundenauftrag} purchase_order {Bestellung} customer_invoice {Ausgangsrechnung} vendor_bill {Eingangsrechnung} purchase_receipt {Wareneingang} sales_fulfillment {Versand} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Lieferant} other {Kunde}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Lieferant auswählen…} other {Kunde auswählen…}}",
     "dateLabel": "{kind, select, quote {Angebotsdatum} other {Bestelldatum}}",

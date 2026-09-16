@@ -15,7 +15,7 @@
       "invoice": "发票",
       "bill": "应付账单"
     },
-    "docKind": "{kind, select, quote {报价单} sales_order {销售订单} purchase_order {采购订单} customer_invoice {发票} vendor_bill {应付账单} other {{kind}}}",
+    "docKind": "{kind, select, quote {报价单} sales_order {销售订单} purchase_order {采购订单} customer_invoice {发票} vendor_bill {应付账单} purchase_receipt {收货单} sales_fulfillment {发货} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {供应商} other {客户}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {选择供应商……} other {选择客户……}}",
     "dateLabel": "{kind, select, quote {报价日期} other {订单日期}}",
