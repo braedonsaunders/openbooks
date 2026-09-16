@@ -7,6 +7,7 @@ import {
   recentMessages,
   renameConversation,
 } from "../../../../../lib/ai-conversations";
+import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const renamed = await renameConversation(gate, id, SCOPE, body.title);
   if (!renamed) return NextResponse.json({ error: "not found" }, { status: 404 });
+  // A user rename wins forever: record the source so a later turn never
+  // overwrites it with a generated title. Best-effort, never throws.
+  await markTitleRenamed(gate, id);
   return NextResponse.json({ ok: true });
 }
 

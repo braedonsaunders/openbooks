@@ -61,7 +61,8 @@ export async function countConversationAssistantTurns(
  * missing column degrades to "no memory" instead of failing the whole turn.
  */
 let warnedMissingMetadata = false;
-function isMissingMetadataColumn(error: unknown): boolean {
+/** Shared with conversation-title.ts: the `metadata` column may predate the reader. */
+export function isMissingMetadataColumn(error: unknown): boolean {
   const cause = (error as { cause?: { code?: string; message?: string } })?.cause;
   const code = cause?.code ?? (error as { code?: string })?.code;
   const message = String(cause?.message ?? (error as Error)?.message ?? "");
