@@ -701,6 +701,19 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     const variant = str(props, 'variant') as ComponentProps<typeof Badge>['variant']
     return <Badge variant={variant}>{label}</Badge>
   },
+  /** Due-date cell: the formatted date plus a red Overdue pill when past
+   *  due — the house date-plus-flag arrangement, one cell. */
+  'agents-due-cell': (props) => {
+    const date = str(props, 'date')
+    const overdueLabel = str(props, 'overdueLabel')
+    if (!date && !overdueLabel) return null
+    return (
+      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+        {date ? <span>{date}</span> : null}
+        {overdueLabel ? <Badge variant="destructive">{overdueLabel}</Badge> : null}
+      </span>
+    )
+  },
   'new-dashboard': () => <NewDashboardButton />,
   'new-card': () => <NewCardButton />,
   'new-record-type': () => <NewTypeButton />,

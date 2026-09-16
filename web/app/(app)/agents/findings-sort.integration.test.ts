@@ -30,6 +30,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { getAuthz } = await import('../../../lib/authz');
 const { loadAgentInbox } = await import('../../../lib/agents/inbox');
 const { parseAgentFindingsParams } = await import('../../../lib/list/agent-findings');
+const { dateTime } = await import('../../../lib/format');
 const { loadAgents, agentsSpec } = await import('./view');
 
 const FIRST = new Date(Date.now() - 10 * 86_400_000).toISOString();
@@ -122,7 +123,9 @@ test('workbench loader serves the list source sort, filters, and row shape', { s
       assert.ok((ranked.rows[0]?.age ?? '').length > 0, 'age renders a relative label');
       assert.equal(ranked.rows[0]?.assigneeLabel, 'assignment.unassigned');
       assert.equal(ranked.rows[0]?.due, '');
-      assert.equal(ranked.rows.find((r) => r.id === lateId)?.due, 'facets.overdue');
+      assert.equal(ranked.rows.find((r) => r.id === lateId)?.dueOverdueLabel, 'facets.overdue');
+      assert.equal(ranked.rows.find((r) => r.id === lateId)?.due, dateTime(new Date(moment - 86_400_000).toISOString()));
+      assert.equal(ranked.rows[0]?.dueOverdueLabel, '');
       assert.deepEqual(ranked.sinceOptions.map((o) => o.value), ['day', 'week']);
       assert.equal(ranked.triageHint, 'triage.hint');
       // Header KPIs: open count, proposals, overdue with the bad tone, and

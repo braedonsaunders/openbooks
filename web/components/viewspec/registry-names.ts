@@ -31,6 +31,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'admin-users-table',
   'agents-briefing-actions',
   'agents-briefing-body',
+  'agents-due-cell',
   'agents-kpi-strip',
   'agents-pack-actions',
   'agents-pack-card',
