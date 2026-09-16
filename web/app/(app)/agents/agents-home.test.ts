@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 const view = read("./view.ts");
 const page = read("./page.tsx");
 const layout = read("./layout.tsx");
-const island = read("./AgentsTriage.tsx");
+const island = read("./AgentsTriageKeys.tsx");
 const listSource = read("../../../lib/list/agent-findings.ts");
 const ccPage = read("../continuous-close/page.tsx");
 const nav = read("../../../../engine/src/modules/nav-registry.ts");
@@ -20,7 +20,8 @@ test("agents home loads through the shared inbox resolver", () => {
   assert.match(view, /parseAgentFindingsParams\(sp\)/);
   assert.match(view, /loadAgentInbox\(authz, \{/);
   assert.match(view, /\.\.\.findings\.filters,/);
-  assert.match(view, /widgetBlock\('agents-triage'/);
+  assert.match(view, /widgetBlock\('agents-triage-keys'/);
+  assert.doesNotMatch(view, /widgetBlock\('agents-triage',/);
   assert.match(view, /widgetBlock\('work-item-drawer'/);
   assert.match(view, /findingProposalCommand\(authz, selected\.summary\)/);
   assert.match(view, /findingSummaryLine\(/);

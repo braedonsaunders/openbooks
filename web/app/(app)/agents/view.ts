@@ -478,7 +478,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
     ],
     body: [
       {
-        ...widgetBlock('agents-triage', {
+        ...widgetBlock('agents-triage-keys', {
           rows: data.triage.rows,
           canWrite: data.triage.canWrite,
           orgId: data.triage.orgId,
