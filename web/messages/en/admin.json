@@ -2246,7 +2246,13 @@
           "autoHint": "Overhead applies automatically: when hours are approved, each entry's share (hours × the published department rate on the worked day) posts with the same approval — no month-end step, and it never waits for payroll.",
           "backfillPrompt": "{entries} approved entries (~{hours}h) predate this mode and aren't carrying overhead yet.",
           "backfill": "Apply to past hours",
-          "backfilled": "Applied ${total} of overhead across {entries} past entries"
+          "backfilled": "Applied ${total} of overhead across {entries} past entries",
+          "systemRule": {
+            "title": "Allocation kernel rule",
+            "body": "Each posting above is built by the engine-owned allocation rule {key} (version {version}, effective {date}, definition {hash}). It mirrors this policy and the published rate card, so it cannot be edited or deleted here — change the policy or publish new rates instead.",
+            "noVersion": "No rule version is in force: the policy is not an active net-zero pair or the hourly rate card is empty. Postings resume through the kernel once both hold.",
+            "viewRule": "View in Allocations"
+          }
         },
         "lifecycle": {
           "title": "Rate lifecycle",

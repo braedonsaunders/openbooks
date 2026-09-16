@@ -77,5 +77,17 @@ effective date range.
 
 The method is set per **project type**, so different classes of work can carry
 overhead differently.
+
+## The allocation kernel rule
+
+When the ledger application mode is the net-zero pair, every posting is
+built by an engine-owned allocation rule (**overhead-net-zero-pair**) that
+mirrors this policy and the published rate card: each approval stamps its
+lines with the rule version in force on the worked day and records one
+lineage row per carried time entry, so any overhead amount traces back to
+its hours, its rate, and the exact definition that produced it. The rule is
+read-only evidence on the Ledger application tab — it can never be edited
+or deleted there; changing the policy or publishing new rates derives a new
+version automatically, and prior periods keep the version that priced them.
 `,
 }

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { trueCostData } from './analytics/true-cost-data'
 
 /**
@@ -63,6 +64,10 @@ export async function publishOverheadRates(
       values (${orgId}, 'overhead_rates', ${orgId}, 'insert',
               ${JSON.stringify({ publish: { effectiveFrom, rates: toPublish, actor: actorId ?? 'scheduler' } })}, ${actorId})`)
   })
+  // Derive the kernel's system rule from the committed card (after the
+  // transaction, so the sync reads the new generation; the time-approval
+  // path lazy-syncs anyway, so a failure here converges on next apply).
+  await syncOverheadSystemRule(orgId, actorId)
   return { published: toPublish.length }
 }
 

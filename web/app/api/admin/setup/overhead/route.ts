@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile } from '@openbooks/schema'
 import { backfillOverhead } from '@openbooks/engine/src/overhead-apply.ts'
+import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
 import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/project-financial-profile-versions.ts'
 import { isUuid } from '../../../../../lib/list-params'
@@ -266,6 +267,9 @@ export async function POST(req: Request) {
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'orgs', ${orgId}, 'update',
                 ${JSON.stringify({ overheadApplication: { before, after } })}, ${gate.user.id})`)
+      // The kernel's system rule mirrors this policy: derive it in the same
+      // transaction (this block already runs inside the org boundary).
+      await syncOverheadSystemRule(orgId, gate.user.id)
       return null
     })
     if (applicationDenied) return applicationDenied
