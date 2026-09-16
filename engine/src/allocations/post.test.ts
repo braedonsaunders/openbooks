@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  apportionExact,
   assertContributorBalance,
   collectPostContributions,
-  fixedPercentWeights,
   resolveRuleBooks,
   __testBuildContributedLines,
   type PostableDocument,
@@ -141,72 +139,8 @@ function weights(keys: string[], values: string[]): WeightedTarget[] {
   return keys.map((key, i) => ({ key, weight: values[i]! }));
 }
 
-// ---------------------------------------------------------------------------
-// apportionExact
-// ---------------------------------------------------------------------------
-
-test("apportionExact splits exactly with no lost cent", () => {
-  const result = apportionExact("100.0000", weights(["a", "b", "c"], ["1", "1", "1"]), "largest_share");
-  assert.equal(
-    result.targets.map((t) => t.amount).reduce((a, b) => a + Number(b.replace(".", "")), 0),
-    1000000,
-  );
-  const ones = result.targets.filter((t) => t.amount === "33.3334").length;
-  const zeros = result.targets.filter((t) => t.amount === "33.3333").length;
-  assert.equal(ones, 1);
-  assert.equal(zeros, 2);
-});
-
-test("apportionExact residual policies place the leftover deterministically", () => {
-  const w = weights(["a", "b"], ["1", "1"]);
-  const first = apportionExact("100.0001", w, "first_target");
-  assert.deepEqual(first.targets.map((t) => t.amount), ["50.0001", "50.0000"]);
-  assert.equal(first.residualKey, "a");
-  const last = apportionExact("100.0001", w, "last_target");
-  assert.deepEqual(last.targets.map((t) => t.amount), ["50.0000", "50.0001"]);
-  assert.equal(last.residualKey, "b");
-  const explicit = apportionExact("100.0001", w, "explicit_target", "b");
-  assert.deepEqual(explicit.targets.map((t) => t.amount), ["50.0000", "50.0001"]);
-  assert.equal(explicit.residualKey, "b");
-  assert.throws(() => apportionExact("10", w, "explicit_target", "zzz"), /explicit residual target/);
-});
-
-test("apportionExact handles negative totals and refuses zero weights", () => {
-  const result = apportionExact("-100.0000", weights(["a", "b"], ["60", "40"]), "largest_share");
-  assert.deepEqual(result.targets.map((t) => t.amount), ["-60.0000", "-40.0000"]);
-  assert.throws(() => apportionExact("10", weights(["a"], ["0"]), "largest_share"), /weights sum to zero/);
-  assert.throws(() => apportionExact("10", [], "largest_share"), /at least one target/);
-});
-
-test("apportionExact reports 10dp shares", () => {
-  const result = apportionExact("100", weights(["a", "b"], ["1", "3"]), "largest_share");
-  assert.deepEqual(result.targets.map((t) => t.share), ["0.2500000000", "0.7500000000"]);
-});
-
-// ---------------------------------------------------------------------------
-// fixedPercentWeights
-// ---------------------------------------------------------------------------
-
-test("fixedPercentWeights gives the remainder target the difference to 100", () => {
-  const out = fixedPercentWeights([
-    target({ sequence: 1, fixedPercent: "60.0000" }),
-    target({ sequence: 2, isRemainder: true }),
-  ]);
-  assert.equal(out[1]!.weight, "40.0000");
-  assert.throws(
-    () => fixedPercentWeights([target({ sequence: 1, fixedPercent: "60" }), target({ sequence: 2, fixedPercent: "50" })]),
-    /above 100/,
-  );
-  assert.throws(
-    () =>
-      fixedPercentWeights([
-        target({ sequence: 1, isRemainder: true }),
-        target({ sequence: 2, isRemainder: true }),
-      ]),
-    /at most one remainder/,
-  );
-});
-
+// Exactness and percent validation belong to A1's apportion.ts (tested
+// there); post-mode pins impacts, balance, books, and wiring.
 // ---------------------------------------------------------------------------
 // assertContributorBalance
 // ---------------------------------------------------------------------------
