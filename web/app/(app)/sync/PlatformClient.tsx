@@ -124,6 +124,8 @@ interface Run {
     unchangedDocuments?: number;
     sourceUnbuildable?: number;
     actionableSourceDeletions?: unknown[];
+    partyMerges?: { absorbedRef?: string; survivorRef?: string }[];
+    partyHolds?: string[];
     ledgerContext?: { bookRef?: string; bookKind?: string } | null;
     financialVerification?: {
       tb?: { matches?: number; accounts?: number; mismatches?: unknown[] };
@@ -313,6 +315,12 @@ export function PlatformClient() {
       parts.push(
         t("runs.stats.applied", { count: s.applications?.inserted ?? 0 }),
       );
+    if ((s.partyMerges?.length ?? 0) > 0)
+      parts.push(
+        t("runs.stats.partyMerges", { count: s.partyMerges?.length ?? 0 }),
+      );
+    if ((s.partyHolds?.length ?? 0) > 0)
+      parts.push(t("runs.stats.partyHolds", { count: s.partyHolds?.length ?? 0 }));
     let tb = t("runs.stats.tb", {
       matches: s.tb?.matches ?? 0,
       accounts: s.tb?.accounts ?? 0,

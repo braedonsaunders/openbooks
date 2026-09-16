@@ -63,6 +63,8 @@
       "projectFinancials": "{projects} 个源项目（{projectChanges} 个变更）· {source} 条源工时记录 · {exact} 条精确 · {changed} 个计费状态已核对",
       "docs": "+{new} 份单据 · {amended} 份修订 · {unchanged} 份未变",
       "applied": "已应用 {count}",
+      "partyMerges": "已合并 {count} 个业务伙伴",
+      "partyHolds": "已暂挂 {count} 个待复核业务伙伴",
       "tb": "试算平衡 {matches}/{accounts}",
       "tbOff": "（{count} 项不符）",
       "openItems": "未结项 {matches}/{checked}",

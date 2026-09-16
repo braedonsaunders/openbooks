@@ -63,6 +63,8 @@
       "projectFinancials": "ソースプロジェクト {projects} 件（変更 {projectChanges} 件）· ソース時間エントリ {source} 件 · 完全一致 {exact} 件 · 請求状態調整 {changed} 件",
       "docs": "+{new} 件のドキュメント · {amended} 件修正 · {unchanged} 件変更なし",
       "applied": "{count} 件適用",
+      "partyMerges": "取引先 {count} 件を統合",
+      "partyHolds": "要確認の取引先 {count} 件を保留",
       "tb": "試算表 {matches}/{accounts}",
       "tbOff": "({count} 件不一致)",
       "openItems": "未決済項目 {matches}/{checked}",

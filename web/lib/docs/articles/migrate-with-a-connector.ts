@@ -7,7 +7,7 @@ export const migrateWithAConnector: DocArticle = {
   order: 0,
   summary:
     'Connect an existing accounting system, migrate its history, and mirror daily activity for parallel validation before cutover.',
-  updated: '2026-07-21',
+  updated: '2026-09-16',
   keywords: [
     'migration',
     'connector',
@@ -115,6 +115,21 @@ A run advances its **synced-through** cursor only when every proof agrees:
 If any proof fails, the connection stays on its previous successful cursor and
 keeps the diagnostics, so the next run can be corrected and safely replayed — a
 retry recognizes the same source records instead of creating duplicates.
+
+## Source merges and disappearances
+
+Customers, vendors, and employees sometimes merge in the source system — two
+records become one. Where the source reports which record survived, the mirror
+re-points that party's documents, open balances, applications, and references
+to the survivor in one audited step: history is kept, the absorbed record is
+deactivated (never deleted), and the run summary counts the merge.
+
+Where the source reports no survivor and a previously mirrored party simply
+stops appearing, the mirror never guesses. If the missing party is still
+referenced, the run **holds** it for controller review as a named row failure —
+the record stays live and untouched until you resolve the merge or deletion in
+the source system, then mirror again. Parties with no remaining references are
+left as they are.
 
 ## Reconcile and cut over
 

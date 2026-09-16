@@ -76,6 +76,8 @@
       "projectFinancials": "{projects} source projects ({projectChanges} changed) · {source} source time entries · {exact} exact · {changed} billing states reconciled",
       "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
       "applied": "{count} applied",
+      "partyMerges": "{count} parties merged",
+      "partyHolds": "{count} parties held for review",
       "tb": "TB {matches}/{accounts}",
       "tbOff": "({count} off)",
       "openItems": "open items {matches}/{checked}",

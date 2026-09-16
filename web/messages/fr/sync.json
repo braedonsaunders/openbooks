@@ -63,6 +63,8 @@
       "projectFinancials": "{projects} projets source ({projectChanges} modifiés) · {source} écritures de temps source · {exact} exactes · {changed} états de facturation rapprochés",
       "docs": "+{new} docs · {amended} modifiés · {unchanged} inchangés",
       "applied": "{count} lettrés",
+      "partyMerges": "{count} tiers fusionnés",
+      "partyHolds": "{count} tiers en attente de contrôle",
       "tb": "BV {matches}/{accounts}",
       "tbOff": "({count} en écart)",
       "openItems": "postes ouverts {matches}/{checked}",
