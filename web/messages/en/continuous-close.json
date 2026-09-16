@@ -14,7 +14,9 @@
     "hygiene": "Data hygiene",
     "tax": "Tax",
     "payroll": "Payroll",
-    "projects": "Projects"
+    "projects": "Projects",
+    "projects": "Projects",
+    "cash": "Cash"
   },
   "metrics": {
     "active": "Active",
@@ -121,6 +123,18 @@
     "project_stale_unbilled": {
       "title": "Stale unbilled work",
       "description": "Billable work is still uninvoiced past the cutoff."
+    },
+    "cash_low_balance": {
+      "title": "Low cash balance",
+      "description": "Bank cash is under the floor."
+    },
+    "cash_bill_crunch": {
+      "title": "Bill crunch",
+      "description": "Bills due soon outrun cash on hand."
+    },
+    "cash_forecast_shortfall": {
+      "title": "Forecast shortfall",
+      "description": "The cash forecast dips below zero."
     },
     "missing_approved_budget": {
       "title": "No approved budget",

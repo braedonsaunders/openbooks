@@ -166,6 +166,23 @@ test("the projects pack registers its detectors and defaults on", () => {
   );
 });
 
+test("the cash pack registers its detectors and defaults on", () => {
+  assert.deepEqual(
+    detectorSpecsForAgent("cash").map((spec) => spec.detectorKey),
+    [
+      "cash_low_balance",
+      "cash_bill_crunch",
+      "cash_forecast_shortfall",
+    ],
+  );
+  const defaults = defaultContinuousCloseDetectors("cash");
+  assert.deepEqual(
+    enabledDetectorKeys(defaults),
+    defaults.map((detector) => detector.detectorKey),
+    "cash controls all default on",
+  );
+});
+
 test("new-pack detector tuning validates like the original packs", () => {
   const configured = normalizeContinuousCloseDetectors("collections", {
     overdue_customer_balance: {

@@ -961,7 +961,8 @@
         "count": "éléments",
         "percent": "%",
         "multiple": "× importance relative",
-        "points": "points de pourcentage"
+        "points": "points de pourcentage",
+        "weeks": "semaines"
       },
       "parameters": {
         "criticalAgeDays": "Critique après",
@@ -972,6 +973,8 @@
         "duplicateDays": "Fenêtre de doublons",
         "dueWithinDays": "Échéance sous",
         "unbilledDays": "Non facturé après",
+        "dueWithinDays": "Échéance sous",
+        "forecastWeeks": "Horizon de prévision",
         "minimumVariancePercent": "Écart défavorable minimal",
         "criticalVariancePercent": "Écart défavorable critique",
         "minimumDeclinePercent": "Baisse minimale du chiffre d’affaires",
@@ -1062,6 +1065,18 @@
         "project_stale_unbilled": {
           "title": "Travail non facturé ancien",
           "description": "Signale le travail facturable approuvé toujours non facturé après le seuil d’ancienneté."
+        },
+        "cash_low_balance": {
+          "title": "Trésorerie basse",
+          "description": "Signale la trésorerie bancaire sous le plancher, avec le manque."
+        },
+        "cash_bill_crunch": {
+          "title": "Vague de factures",
+          "description": "Signale les dettes à échéance proche qui dépassent la trésorerie disponible."
+        },
+        "cash_forecast_shortfall": {
+          "title": "Manque prévu",
+          "description": "Signale la prévision de trésorerie passant sous zéro dans l’horizon."
         },
         "missing_approved_budget": {
           "title": "Budget approuvé manquant",
@@ -1193,6 +1208,11 @@
         "title": "Agent de projets",
         "description": "Contrôles continus de la marge des projets.",
         "coverage": "Vérifie les marges négatives, les dépassements de budget et le travail non facturé ancien."
+      },
+      "cash": {
+        "title": "Agent de trésorerie",
+        "description": "Contrôles continus de la liquidité de trésorerie.",
+        "coverage": "Vérifie les soldes bas, les vagues de factures et les manques prévus."
       },
       "lastRun": "Dernière exécution : {date} · {status}",
       "nextRun": "Prochaine exécution planifiée : {date}",
@@ -1571,6 +1591,12 @@
           "description": "Marges négatives, dépassements de budget et travail non facturé ancien.",
           "reads": "Coûts et revenus publiés, budgets approuvés, engagements ouverts et travail non facturé.",
           "proposes": "Liens de révision des projets — révision uniquement, aucune écriture."
+        },
+        "cash": {
+          "title": "Trésorerie",
+          "description": "Soldes bas, vagues de factures et manques prévus.",
+          "reads": "Soldes bancaires, créances et dettes ouvertes, et la prévision de trésorerie.",
+          "proposes": "Liens de révision bancaire — révision uniquement, aucune écriture."
         }
       }
     },

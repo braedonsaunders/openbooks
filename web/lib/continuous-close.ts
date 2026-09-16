@@ -31,6 +31,7 @@ export const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]
   tax: ["gl.read", "close.read", "ap.read", "ar.read", "expenses.read"],
   payroll: ["payroll.read", "close.read"],
   projects: ["gl.read", "projects.read", "close.read"],
+  cash: ["banking.read", "gl.read", "close.read"],
 };
 
 /** The read grants that make one agent pack's findings visible. */
