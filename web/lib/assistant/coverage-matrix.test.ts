@@ -131,8 +131,8 @@ const MATRIX: Entry[] = [
   // --- files, data, sync, environments, pdf, email ---------------------------
   { prefix: "file-cabinet", tools: ["list_files", "get_file", "list_folders"], note: "file upload and grant writes have no tool yet (b04 gap fill: upload_file)" },
   { prefix: "data", tools: ["list_data_resources", "list_import_runs"] },
-  { prefix: "sync", uncovered: "gap fill pending: list_sync_connections reuses the platform connections list + sync_runs evidence" },
-  { prefix: "platform/connections", uncovered: "gap fill pending: list_sync_connections reuses listConnections + sync_runs evidence" },
+  { prefix: "sync", tools: ["list_sync_connections"] },
+  { prefix: "platform/connections", tools: ["list_sync_connections"] },
   { prefix: "platform", uncovered: "operator console: cross-organization pages, no tenant tool" },
   { prefix: "admin/sandboxes", uncovered: "gap fill pending: list_environments reuses listSandboxes" },
   { prefix: "pdf-templates", uncovered: "gap fill pending: list_pdf_templates and get_pdf_template reuse the pdf-templates store" },
@@ -170,7 +170,7 @@ const MATRIX: Entry[] = [
 ];
 
 /** The allowlist must only shrink: lower this as gap-fill commits land. */
-const UNCOVERED_BUDGET = 40;
+const UNCOVERED_BUDGET = 38;
 
 const REASON_VOCABULARY = [
   "no application service:",
