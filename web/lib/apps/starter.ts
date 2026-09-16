@@ -1,6 +1,10 @@
 import type { EditableAppPackage } from './package-files'
 
-/** A small editable starting point using either supported renderer. No grants or live objects. */
+/**
+ * A small editable starting point using either supported renderer. No grants
+ * or live objects. Ships one sample read-only assistant tool (served by the
+ * sample backend endpoint) so the New-app flow demonstrates declared tools.
+ */
 export function createAppStarter(
   renderer: 'native' | 'sandbox',
 ): EditableAppPackage {
@@ -15,10 +19,25 @@ export function createAppStarter(
         entry:
           renderer === 'native' ? 'frontend/ui.json' : 'frontend/index.html',
       },
-      endpoints: [],
+      endpoints: [{ name: 'sample-tool', file: 'backend/sample-tool.js' }],
+      tools: [
+        {
+          key: 'sample-tool',
+          title: 'Sample tool',
+          description: 'Echoes a short query back; replace with a real capability.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              q: { type: 'string', description: 'Text to echo', maxLength: 200 },
+            },
+            required: ['q'],
+          },
+          handler: 'sample-tool',
+        },
+      ],
     },
-    files:
-      renderer === 'native'
+    files: [
+      ...(renderer === 'native'
         ? [
             {
               path: 'frontend/ui.json',
@@ -61,6 +80,12 @@ export function createAppStarter(
               content:
                 '// Use the OpenBooks bridge for governed records, actions, and app storage.\n',
             },
-          ],
+          ]),
+      {
+        path: 'backend/sample-tool.js',
+        content:
+          '// Sample backend for the starter assistant tool: echo a bounded query.\nfunction handler(req) {\n  const body = req.body && typeof req.body === "object" ? req.body : {}\n  const q = typeof body.q === "string" ? body.q : ""\n  return { status: 200, body: { echo: q.slice(0, 200) } }\n}\n',
+      },
+    ],
   }
 }

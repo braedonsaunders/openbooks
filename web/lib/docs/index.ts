@@ -21,6 +21,7 @@ import { extensions } from './articles/extensions'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
 import { appApiReference } from './articles/app-api-reference'
+import { appAssistantTools } from './articles/app-assistant-tools'
 import { mcpControl } from './articles/mcp-control'
 import { scriptingEngine, scriptingApiReference } from './articles/scripting'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
@@ -201,6 +202,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   apps: 'apps-build',
   'app-builder': 'apps-build',
   'app-api-reference': 'apps-build',
+  'app-assistant-tools': 'apps-build',
   'scripting-engine': 'apps-build',
   'scripting-api-reference': 'apps-build',
   flows: 'apps-automation',
@@ -241,6 +243,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   appBuilder,
   extensions,
   appApiReference,
+  appAssistantTools,
   mcpControl,
   scriptingEngine,
   scriptingApiReference,
