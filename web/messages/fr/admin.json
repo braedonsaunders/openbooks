@@ -1218,7 +1218,15 @@
       "revenue": "Revenus",
       "inventory": "Stocks",
       "projects": "Projets",
-      "compliance": "Conformité"
+      "compliance": "Conformité",
+      "agents": "Agents"
+    },
+    "agents": {
+      "nav": {
+        "overview": "Aperçu",
+        "library": "Bibliothèque",
+        "activity": "Activité"
+      }
     },
     "fxProvider": {
       "title": "Fournisseur de taux de change",

@@ -263,6 +263,7 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'workforce', iconKey: 'users' },
   { key: 'assets', iconKey: 'landmark' },
   { key: 'currency', iconKey: 'coins' },
+  { key: 'agents', iconKey: 'sparkles' },
 ]
 
 const APPLIES_TO = [

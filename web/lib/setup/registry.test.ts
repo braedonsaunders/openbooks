@@ -3,11 +3,23 @@ import assert from 'node:assert/strict'
 import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/src/information-returns.ts'
 import {
   SETUP_ENTITY_BY_KEY,
+  SETUP_GROUPS,
   setupEntitiesByGroup,
   setupEntityForFeatureState,
   setupFieldVisible,
   type SetupField,
 } from './registry.ts'
+
+test('agents is a first-party setup group served by custom pages, not generic entities', () => {
+  const agents = SETUP_GROUPS.find((group) => group.key === 'agents')
+  assert.ok(agents, 'SETUP_GROUPS must list the agents category')
+  assert.equal(agents.iconKey, 'sparkles')
+  // The agents area (overview, library, policy, activity) is custom pages
+  // under /admin/setup/agents/** — no generic CRUD entity may claim the
+  // group, or the rail would render a second copy of the surface.
+  const claimed = setupEntitiesByGroup().get('agents') ?? []
+  assert.deepEqual(claimed.map((entity) => entity.key), [])
+})
 
 test('tax rates and return boxes are nested under their owning records', () => {
   const taxRates = SETUP_ENTITY_BY_KEY.get('tax-rates')
