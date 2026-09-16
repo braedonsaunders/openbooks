@@ -59,7 +59,12 @@ export async function POST(req: Request) {
   }
   const money = (raw: unknown): string | null => {
     const exact = canonicalDecimal(raw, 4);
-    return exact === null ? null : normalizeMoney(exact);
+    if (exact === null) return null;
+    // Provision results persist to numeric(19,4) columns and the engine
+    // measures in unbounded bigint units, so a wider figure would die in
+    // Postgres as a raw storage failure (HTTP 500). Refuse it here.
+    if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return null;
+    return normalizeMoney(exact);
   };
   const permanentDifferences: PermanentDifference[] = [];
   if (Array.isArray(body.permanentDifferences)) {
