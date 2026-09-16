@@ -97,6 +97,16 @@ test("every declared assistant feature key exists in the feature registry", () =
 });
 
 const catalog = read("../application/tool-catalog.ts");
+
+/** Slice one definition: the next `definition({` or spread `...([` ends it —
+ *  `}),` also matches empty `z.object({}),` schemas, so it cannot. */
+function catalogBlock(source: string, at: number): string {
+  const ends = ["\n  definition({", "\n  ...(["]
+    .map((marker) => source.indexOf(marker, at + 1))
+    .filter((index) => index > at);
+  assert.ok(ends.length > 0, "definition block does not terminate");
+  return source.slice(at, Math.min(...ends));
+}
 const closeService = read("../application/close.ts");
 const approvalsService = read("../application/approvals.ts");
 
@@ -118,7 +128,7 @@ test("app-package tools declare the apps feature key", () => {
   for (const name of appToolNames) {
     const at = catalog.indexOf(`name: "${name}"`);
     assert.ok(at >= 0, `${name} missing from the application catalog`);
-    const block = catalog.slice(at, catalog.indexOf("}),", at));
+    const block = catalogBlock(catalog, at);
     assert.match(block, /featureKey: "apps"/, `${name} must declare featureKey "apps"`);
   }
 });
@@ -131,6 +141,6 @@ test("approvals tools stay ungated because the service degrades softly without f
   for (const name of ["list_approvals", "decide_approval"]) {
     const at = catalog.indexOf(`name: "${name}"`);
     assert.ok(at >= 0, `${name} missing from the application catalog`);
-    assert.doesNotMatch(catalog.slice(at, catalog.indexOf("}),", at)), /featureKey/);
+    assert.doesNotMatch(catalogBlock(catalog, at), /featureKey/);
   }
 });
