@@ -53,16 +53,42 @@ export async function countConversationAssistantTurns(
 }
 
 /** Owner-only read; null when no summary exists yet or it fails validation. */
+
+/**
+ * `metadata` arrives with migration 0152. A web process can serve requests
+ * before a deployment's migrations have run (or against a database that has
+ * not taken the release yet); conversation memory is an optimisation, so a
+ * missing column degrades to "no memory" instead of failing the whole turn.
+ */
+let warnedMissingMetadata = false;
+function isMissingMetadataColumn(error: unknown): boolean {
+  const cause = (error as { cause?: { code?: string; message?: string } })?.cause;
+  const code = cause?.code ?? (error as { code?: string })?.code;
+  const message = String(cause?.message ?? (error as Error)?.message ?? "");
+  const missing = code === "42703" && /\bmetadata\b/.test(message);
+  if (missing && !warnedMissingMetadata) {
+    warnedMissingMetadata = true;
+    console.warn("[assistant/memory] ai_conversations.metadata is missing (migration 0152 not applied); conversation memory disabled until it is");
+  }
+  return missing;
+}
+
 export async function readConversationSummary(
   authz: Authz,
   conversationId: string,
 ): Promise<ConversationSummary | null> {
-  const r = await db.execute<{ summary: unknown }>(sql`
-    select c.metadata -> 'summary' as summary
-      from ai_conversations c
-     where c.id = ${conversationId}
-       and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-  `);
+  let r: { rows: { summary: unknown }[] };
+  try {
+    r = await db.execute<{ summary: unknown }>(sql`
+      select c.metadata -> 'summary' as summary
+        from ai_conversations c
+       where c.id = ${conversationId}
+         and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
+    `);
+  } catch (error) {
+    if (isMissingMetadataColumn(error)) return null;
+    throw error;
+  }
   if (r.rows.length === 0) return null;
   return cleanSummaryRow(r.rows[0]!.summary);
 }
@@ -83,11 +109,17 @@ export async function writeConversationSummary(
     turnsCovered: Math.max(0, Math.floor(input.turnsCovered)),
     updatedAt: new Date().toISOString(),
   });
-  const result = await db.execute(sql`
-    update ai_conversations
-       set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('summary', ${payload}::jsonb)
-     where id = ${conversationId}
-       and org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
-  `);
-  return Number((result as unknown as { rowCount?: number }).rowCount ?? 0) > 0;
+  let result: unknown;
+  try {
+    result = await db.execute(sql`
+      update ai_conversations
+         set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('summary', ${payload}::jsonb)
+       where id = ${conversationId}
+         and org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
+    `);
+  } catch (error) {
+    if (isMissingMetadataColumn(error)) return false;
+    throw error;
+  }
+  return Number((result as { rowCount?: number }).rowCount ?? 0) > 0;
 }
