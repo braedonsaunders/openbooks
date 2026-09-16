@@ -173,6 +173,8 @@ export interface AllocationDriver {
   key: string;
   name: string;
   description?: string | null;
+  /** Revision token for updates (ISO timestamp of the row). */
+  updatedAt?: string | null;
   unit?: string | null;
   dimension: AllocationDimension;
   sourceKind: AllocationDriverSourceKind;

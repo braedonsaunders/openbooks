@@ -259,6 +259,7 @@ function mapDriver(row: Record<string, unknown>): AllocationDriver {
     key: String(row.key),
     name: String(row.name),
     description: (row.description as string | null) ?? null,
+    updatedAt: row.updated_at == null ? null : new Date(String(row.updated_at)).toISOString(),
     unit: (row.unit as string | null) ?? null,
     dimension: String(row.dimension) as AllocationDimension,
     sourceKind: String(row.source_kind) as AllocationDriverSourceKind,
