@@ -2,13 +2,17 @@
 /**
  * Publish the trust corpus.
  *
- * Reads the two evidence artifacts produced by CI —
+ * Reads the three evidence artifacts produced by CI —
  *   - the standards conformance report (engine/src/conformance/cli.ts report)
+ *   - the internal-controls evidence set (cli.ts controls report)
  *   - the golden-harness checkpoint (engine/src/harness/cli.ts)
  * — and writes the published surface under docs/trust/:
  *
- *   conformance-matrix.md     the accountant-readable matrix
- *   conformance.json          the machine-readable case results
+ *   conformance-matrix.md     the accountant-readable standards matrix
+ *   conformance.json          the machine-readable standards case results
+ *   controls-matrix.md        the accountant-readable controls matrix
+ *   controls.json             the machine-readable controls case results
+ *                             (kind "internal-controls", never a standard)
  *   checkpoint.json           the diffable ledger checkpoint
  *   badge-conformance.json    shields.io endpoint
  *   badge-invariants.json     shields.io endpoint
@@ -17,11 +21,12 @@
  * Usage:
  *   node scripts/publish-trust.mjs \
  *     --conformance .local/conformance \
+ *     --controls .local/controls \
  *     --checkpoint engine/harness-checkpoints \
  *     [--out docs/trust] [--sha <git sha>]
  *
- * Missing inputs are tolerated: a run that could only produce one half still
- * publishes that half and records the other as unavailable. What is NOT
+ * Missing inputs are tolerated: a run that could only produce one part still
+ * publishes that part and records the others as unavailable. What is NOT
  * tolerated is publishing a stale artifact as if it were current — an absent
  * input becomes an explicit "unavailable", never a carried-forward value.
  */
@@ -35,6 +40,7 @@ function flag(name, fallback = null) {
 }
 
 const conformanceDir = flag("conformance", ".local/conformance");
+const controlsDir = flag("controls", ".local/controls");
 const checkpointDir = flag("checkpoint", "engine/harness-checkpoints");
 const outDir = flag("out", "docs/trust");
 const sha = flag("sha", process.env.GITHUB_SHA ?? null);
@@ -62,6 +68,10 @@ const conformance = readJson(join(conformanceDir, "conformance.json"));
 const matrixMarkdown = existsSync(join(conformanceDir, "conformance-matrix.md"))
   ? readFileSync(join(conformanceDir, "conformance-matrix.md"), "utf8")
   : null;
+const controls = readJson(join(controlsDir, "controls.json"));
+const controlsMarkdown = existsSync(join(controlsDir, "controls-matrix.md"))
+  ? readFileSync(join(controlsDir, "controls-matrix.md"), "utf8")
+  : null;
 const checkpoint = latestCheckpoint(checkpointDir);
 
 // Anti-false-green: every ledger invariant passes trivially on an empty company.
@@ -76,11 +86,11 @@ if (checkpoint && !(checkpoint.counts?.postedEntries > 0)) {
   process.exit(1);
 }
 
-// Fail loudly if BOTH inputs are missing — that means the workflow is broken,
+// Fail loudly if ALL inputs are missing — that means the workflow is broken,
 // and publishing an all-grey page as if it were a result would be misleading.
 // Keep this guard before creating or mutating the output directory so a failed
 // publication cannot overwrite the last trustworthy evidence.
-if (!conformance && !checkpoint) {
+if (!conformance && !controls && !checkpoint) {
   console.error("no evidence artifacts found — refusing to publish an empty trust page");
   process.exit(1);
 }
@@ -120,8 +130,12 @@ writeFileSync(join(outDir, "badge-conformance.json"), `${JSON.stringify(conforma
 writeFileSync(join(outDir, "badge-invariants.json"), `${JSON.stringify(invariantBadge(), null, 2)}\n`);
 
 // -- published artifacts ----------------------------------------------------
+// The controls set is published with its distinct kind intact: nothing here
+// re-labels a control row as a standards citation.
 if (matrixMarkdown) writeFileSync(join(outDir, "conformance-matrix.md"), matrixMarkdown);
 if (conformance) writeFileSync(join(outDir, "conformance.json"), `${JSON.stringify(conformance, null, 2)}\n`);
+if (controlsMarkdown) writeFileSync(join(outDir, "controls-matrix.md"), controlsMarkdown);
+if (controls) writeFileSync(join(outDir, "controls.json"), `${JSON.stringify(controls, null, 2)}\n`);
 if (checkpoint) writeFileSync(join(outDir, "checkpoint.json"), `${JSON.stringify(checkpoint, null, 2)}\n`);
 
 // -- append-only history ----------------------------------------------------
@@ -140,6 +154,15 @@ const record = {
         pass: conformance.pass,
         gaps: conformance.cases.filter((c) => c.status === "gap").map((c) => c.id),
         failures: conformance.cases.filter((c) => c.status === "fail").map((c) => c.id),
+      }
+    : null,
+  controls: controls
+    ? {
+        kind: controls.kind ?? "internal-controls",
+        totals: controls.totals,
+        pass: controls.pass,
+        gaps: controls.cases.filter((c) => c.status === "gap").map((c) => c.id),
+        failures: controls.cases.filter((c) => c.status === "fail").map((c) => c.id),
       }
     : null,
   invariants: checkpoint
@@ -167,6 +190,9 @@ const lines = [
   conformance
     ? `  conformance: ${conformance.totals.pass} passing, ${conformance.totals.fail} failing, ${conformance.totals.gap} gaps`
     : "  conformance: unavailable",
+  controls
+    ? `  controls:    ${controls.totals.pass} passing, ${controls.totals.fail} failing, ${controls.totals.gap} gaps`
+    : "  controls:    unavailable",
   checkpoint
     ? `  invariants:  ${(checkpoint.checks ?? []).filter((c) => c.ok).length}/${(checkpoint.checks ?? []).length} passing on ${checkpoint.orgName}`
     : "  invariants:  unavailable",

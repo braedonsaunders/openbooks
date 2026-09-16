@@ -1,9 +1,10 @@
 name: trust
 
 # The public evidence pipeline. The conformance job produces the
-# accounting-standards corpus (ASC/IFRS) against a real kernel; the publish
-# job combines it with the ledger checkpoint emitted by the SOLE golden
-# harness run in test.yml's integration job.
+# accounting-standards corpus (ASC/IFRS) and the internal-controls evidence
+# set against a real kernel; the publish job combines them with the ledger
+# checkpoint emitted by the SOLE golden harness run in test.yml's
+# integration job.
 #
 # test.yml is the single owner of that checkpoint; this workflow consumes it
 # via workflow_run and never produces simulation evidence of its own, so the
@@ -87,21 +88,33 @@ jobs:
           node --import tsx --import ./engine/src/test-database-bypass.ts \
             engine/src/conformance/cli.ts report --out .local/conformance
 
+      - name: Run the internal-controls evidence set
+        # Same runner as the conformance corpus, own matrix: executable checks
+        # of the system's own financial controls (AUDIT-CONTROLS.md ids, never
+        # standard paragraphs). A failing control case is a red build, exactly
+        # like a failing conformance case.
+        run: |
+          node --import tsx --import ./engine/src/test-database-bypass.ts \
+            engine/src/conformance/cli.ts controls report --out .local/controls
+
       - name: Ledger-tier canary
         # A corpus that silently degraded to computation-only would still be
-        # green. Fail unless ledger-tier cases actually executed.
+        # green. Fail unless ledger-tier cases actually executed, in both the
+        # standards corpus and the internal-controls evidence set.
         run: |
           node -e '
-            const r = require("./.local/conformance/conformance.json");
-            const ledger = r.cases.filter(c => c.tier === "ledger" && c.support !== "not-implemented");
-            const notRun = ledger.filter(c => c.status === "skipped");
-            if (ledger.length === 0) { console.error("FATAL: no ledger-tier cases in the corpus"); process.exit(1); }
-            if (notRun.length > 0) {
-              console.error("FATAL: ledger-tier cases did not run — database wiring is broken:");
-              for (const c of notRun) console.error("  - " + c.id);
-              process.exit(1);
+            for (const [file, label] of [["./.local/conformance/conformance.json", "standards"], ["./.local/controls/controls.json", "controls"]]) {
+              const r = require(file);
+              const ledger = r.cases.filter(c => c.tier === "ledger" && c.support !== "not-implemented");
+              const notRun = ledger.filter(c => c.status === "skipped");
+              if (ledger.length === 0) { console.error("FATAL: no ledger-tier cases in the " + label + " corpus"); process.exit(1); }
+              if (notRun.length > 0) {
+                console.error("FATAL: " + label + " ledger-tier cases did not run — database wiring is broken:");
+                for (const c of notRun) console.error("  - " + c.id);
+                process.exit(1);
+              }
+              console.log("canary ok: " + ledger.length + " " + label + " ledger-tier cases executed against the kernel");
             }
-            console.log("canary ok: " + ledger.length + " ledger-tier cases executed against the kernel");
           '
 
       - name: Summary
@@ -118,6 +131,13 @@ jobs:
         with:
           name: conformance
           path: .local/conformance/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: controls-evidence
+          path: .local/controls/
           if-no-files-found: error
 
   publish:
@@ -148,6 +168,11 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          name: controls-evidence
+          path: .local/controls
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
           name: checkpoint
           path: engine/harness-checkpoints
           run-id: ${{ github.event.workflow_run.id }}
@@ -160,6 +185,7 @@ jobs:
         run: |
           node scripts/publish-trust.mjs \
             --conformance .local/conformance \
+            --controls .local/controls \
             --checkpoint engine/harness-checkpoints \
             --out docs/trust \
             --sha "${{ github.event.workflow_run.head_sha }}"
