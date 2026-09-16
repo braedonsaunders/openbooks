@@ -43,6 +43,7 @@ context object.
 | **before_post** | Immediately before a document posts to the ledger | Validate posting requirements and reject a noncompliant transaction |
 | **after_post** | After a document has posted | Side effects — logging, notifications, follow-on data |
 | **before_void** | Before a document is voided | Validate whether the document may be voided |
+| **custom_gl_lines** | While a document posts, after the kernel lines are built | Contribute extra balanced GL lines to the same journal entry |
 | **scheduled** | On a cron schedule | Recurring maintenance and reports |
 | **endpoint** | On an HTTP call to /api/scripts/e/&lt;slug&gt; | Expose a scoped custom endpoint |
 | **bulk** | On demand via Run now | One-off batch processing |
@@ -58,7 +59,9 @@ errors**.
 For trigger scripts, **ctx** carries **trigger**, the **document** and its
 **lines**, and read-only **org** and **user** information. Endpoint scripts also
 receive **request** (method, query, body). Scheduled and bulk scripts are
-document-less — they get **trigger** and **org** only. The context is frozen, so
+document-less — they get **trigger** and **org** only. **custom_gl_lines**
+scripts additionally receive the posting kernel's own lines as frozen
+**kernelLines**. The context is frozen, so
 scripts read it and describe their intended changes rather than mutating it
 directly.
 
@@ -79,6 +82,40 @@ Only a whitelist of fields may be set: **memo**, **internalNotes**,
 **projectId**, **locationId**, **classId**, and **custom**. Attempting to set any
 other field fails the run. To reject the operation, call **ob.abort(reason)**.
 The submit, post, or void action is rejected and the reason is recorded.
+
+## Custom GL lines
+
+A **custom_gl_lines** script contributes extra lines to the posting document's
+own journal entry — tenant-authored attribution the kernel cannot derive
+itself. It runs after the kernel lines are built (and after allocation rule
+contributions), in configured order, and the first failure stops the posting
+with nothing written.
+
+~~~js
+function main(ctx) {
+  // ctx.kernelLines is frozen: read it, never mutate it.
+  return { lines: [
+    { accountCode: '6100', amount: 42.50, departmentId: ctx.document.departmentId, memo: 'Program share' },
+    { accountCode: '1199', amount: -42.50, memo: 'Program share offset' },
+  ] }
+}
+~~~
+
+The contract: return **{ lines: [...] }** (or nothing, to contribute nothing).
+Each line carries **accountId** or **accountCode**, a signed **amount**
+(debit +), and optional **departmentId**, **projectId**, **locationId**,
+**classId**, **subsidiaryId**, **memo**, and **bookCode**. The host validates
+the set before anything posts: at most 200 lines, accounts resolve to active
+non-summary accounts in the organization, every id is organization-owned, and
+the lines must **balance per subsidiary among themselves**. Refusals are typed
+errors and halt the posting with no partial write. Contributed lines land on
+the same entry stamped as script lines; standard lines stay locked.
+
+Gates: the caller needs **gl.post** (re-resolved live, exactly like a journal
+write), and both the **scripts** feature and the allocation posting mode must
+be on. **ob.journal.create** is unavailable inside this trigger — return lines
+instead. The sandbox exposes no clock or randomness here, so contributions are
+deterministic: two runs over the same document produce the same lines.
 
 ## Client script execution
 
@@ -178,7 +215,9 @@ function main(ctx) {
 ~~~
 
 Return values by kind: **before_** triggers may return **{ set: {...} }** (see the
-field whitelist in **Scripting Engine**); **endpoint** scripts return any
+field whitelist in **Scripting Engine**); **custom_gl_lines** scripts return
+**{ lines: [...] }** (see **Custom GL lines** in **Scripting Engine**);
+**endpoint** scripts return any
 JSON-serializable value, which becomes the response body; **after_post**,
 **scheduled**, and **bulk** returns are logged but otherwise ignored. Call
 **ob.abort(reason)** to reject a **before_** operation.
@@ -221,7 +260,9 @@ must **sum to zero**; there must be between 2 and 200 lines; accounts resolve to
 active, non-summary accounts in your organization. When **post** is true the entry
 runs through the posting engine and every posting invariant (balance, open period,
 account validity) applies. Posting is refused from inside a **before_** trigger —
-create the draft there and post it from **after_post** or a later run. A sandbox
+create the draft there and post it from **after_post** or a later run.
+**ob.journal.create** is entirely unavailable inside **custom_gl_lines**, which
+contributes through its **{ lines }** return value instead. A sandbox
 can never write ledger tables directly.
 
 The acting user needs **gl.post** for both draft and post requests — endpoint
