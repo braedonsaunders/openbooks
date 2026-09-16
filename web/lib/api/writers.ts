@@ -13,7 +13,11 @@ import {
   deleteDocument,
   DeleteError,
 } from "@openbooks/engine/src/document-delete.ts";
-import { resolveDefaultValue, type FieldValueMap } from "@openbooks/forms-core";
+import {
+  resolveDefaultValue,
+  type FieldValueMap,
+  type FormSection,
+} from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
 import { nextDocumentNumber } from "../bills";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -191,6 +195,34 @@ async function applyCustomRecord(
         ? "Fill every required field before activating"
         : errors[0]!.message;
     return err(422, msg, { errors });
+  }
+  // Picker values are uuid-SHAPED at this point but nothing proves the
+  // referenced row belongs to the caller: refuse foreign or dangling ids with
+  // a tenant-opaque 404 instead of persisting a cross-tenant pointer.
+  // Ownership applies to newly supplied references only: the effective bag may
+  // carry legacy values written before this fence existed, and an unrelated
+  // edit must not lock the record on those.
+  if (
+    nextData !== undefined &&
+    typeof body.data === "object" &&
+    body.data !== null &&
+    !Array.isArray(body.data)
+  ) {
+    const supplied: FieldValueMap = {};
+    for (const key of Object.keys(body.data as FieldValueMap)) {
+      if (nextData[key] !== undefined) supplied[key] = nextData[key];
+    }
+    const unownedRecordRefs = await findUnownedRecordReferences(
+      user.orgId,
+      sections,
+      supplied,
+    );
+    if (unownedRecordRefs.length > 0) {
+      const field = unownedRecordRefs[0]!;
+      return err(404, `${field} not found in this organization`, {
+        fieldErrors: [{ field, message: "not found in this organization" }],
+      });
+    }
   }
 
   // before_submit user scripts gate the save exactly as they do in the UI.
@@ -517,6 +549,72 @@ function unownedEntityReferenceResult(column: string): WriteResult {
   return err(404, `${column} not found in this organization`, {
     fieldErrors: [{ field: column, message: "not found in this organization" }],
   });
+}
+
+/**
+ * Record-field pickers (`party` → parties.id, `gl_account` → accounts.id)
+ * backed by their native tables. `validateRecordData` proves uuid SHAPE only,
+ * so without an ownership check a caller can persist another org's row id (or
+ * a dangling uuid) blind into tenant jsonb — the entity and document writers
+ * fence the same gap with a batched per-table check and refuse with a
+ * tenant-opaque 404. Keys mirror the picker value contract; columns of any
+ * other field type are never reference columns.
+ */
+const RECORD_REFERENCE_TABLES: Record<string, string> = {
+  party: "parties",
+  gl_account: "accounts",
+};
+
+const RECORD_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Field ids in `data` whose picker value is not owned by `orgId` (callers map to a tenant-opaque 404). */
+async function findUnownedRecordReferences(
+  orgId: string,
+  sections: FormSection[],
+  data: FieldValueMap,
+): Promise<string[]> {
+  const wanted = new Map<string, { field: string; value: string }[]>();
+  const collect = (fieldId: string, fieldType: string, raw: unknown) => {
+    const refTable = RECORD_REFERENCE_TABLES[fieldType];
+    // Empty clears the field; shape-invalid values are refused upstream by
+    // validateRecordData — only well-formed present values need an owner.
+    if (!refTable || typeof raw !== "string" || !RECORD_UUID_RE.test(raw)) return;
+    const list = wanted.get(refTable) ?? [];
+    list.push({ field: fieldId, value: raw });
+    wanted.set(refTable, list);
+  };
+  for (const section of sections) {
+    if (section.repeating) {
+      const rows = data[section.id];
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+        for (const field of section.fields) {
+          collect(field.id, field.type, (row as FieldValueMap)[field.id]);
+        }
+      }
+      continue;
+    }
+    for (const field of section.fields) {
+      collect(field.id, field.type, data[field.id]);
+    }
+  }
+  const unowned: string[] = [];
+  for (const [refTable, entries] of wanted) {
+    const ids = [...new Set(entries.map((e) => e.value))];
+    const owned = new Set(
+      (
+        await db.execute<{ id: string }>(sql`
+          select id from ${sql.raw(`"${refTable}"`)}
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)
+      ).rows.map((r) => r.id),
+    );
+    for (const entry of entries) {
+      if (!owned.has(entry.value)) unowned.push(entry.field);
+    }
+  }
+  return unowned;
 }
 
 const ENTITY_SUBSIDIARY_TABLES = new Set([
