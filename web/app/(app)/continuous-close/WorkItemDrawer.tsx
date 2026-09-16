@@ -1,5 +1,6 @@
 'use client'
 
+import type { ContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close-config.ts'
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -18,7 +19,7 @@ type Evidence = {
 
 export type ContinuousCloseWorkItem = {
   id: string
-  agentKey: 'accounting' | 'finance'
+  agentKey: ContinuousCloseAgentKey
   findingType: string
   severity: 'info' | 'warning' | 'critical'
   status: 'open' | 'in_review' | 'resolved' | 'dismissed'

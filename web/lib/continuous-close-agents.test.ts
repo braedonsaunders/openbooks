@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/continuous-close-config.ts";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const lib = read("./continuous-close.ts");
 const tools = read("./assistant/tools.ts");
+// Pack keys from the WORKTREE engine source (not the linked package, which
+// tracks main and may know packs this worktree does not yet).
+const engineSource = read("../../engine/src/continuous-close-config.ts");
+const keyBlock = engineSource.slice(
+  engineSource.indexOf("CONTINUOUS_CLOSE_AGENT_KEYS = ["),
+  engineSource.indexOf("] as const"),
+);
+const CONTINUOUS_CLOSE_AGENT_KEYS = [...keyBlock.matchAll(/"([a-z_]+)"/g)].map((m) => m[1] as string);
 
 // Agent visibility must follow the engine pack registry (b02: six packs and
 // growing), never a hardcoded accounting|finance pair — otherwise new packs
@@ -23,9 +30,11 @@ test("agent read access is registry-driven, not a hardcoded pair", () => {
 });
 
 // Unknown agent keys fail closed: a future pack (or a forged row) is never
-// readable until the registry knows it.
+// readable until the registry knows it — and a pack the linked engine knows
+// but this revision's grant table does not is denied, never a crash.
 test("unknown agent keys fail closed", () => {
   assert.match(lib, /\(CONTINUOUS_CLOSE_AGENT_KEYS as readonly string\[\]\)\.includes\(agentKey\)/);
+  assert.match(lib, /if \(!perms\) return false/);
 });
 
 // Every registered pack declares the read grants that mirror the screen its

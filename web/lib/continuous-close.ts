@@ -36,7 +36,11 @@ export function agentReadPerms(agentKey: ContinuousCloseAgentKey): readonly stri
 export function canReadContinuousCloseAgent(authz: Authz, agentKey: string): boolean {
   if (!can(authz, "assistant.use")) return false;
   if (!(CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(agentKey)) return false;
-  return AGENT_READ_PERMS[agentKey as ContinuousCloseAgentKey].some((perm) => can(authz, perm));
+  // Fail closed at runtime: the linked engine may know packs this revision's
+  // table does not (fleet shards land packs concurrently) — deny, never crash.
+  const perms: readonly string[] | undefined = AGENT_READ_PERMS[agentKey as ContinuousCloseAgentKey];
+  if (!perms) return false;
+  return perms.some((perm) => can(authz, perm));
 }
 
 export function readableContinuousCloseAgents(authz: Authz): ContinuousCloseAgentKey[] {
