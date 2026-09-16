@@ -245,7 +245,13 @@ begin
 end $$;
 
 -- 5. The governed SELECT-only view carries the new evidence columns. ---------
-CREATE OR REPLACE VIEW openbooks_query.journal_lines WITH (security_barrier='true') AS
+-- Re-create rather than replace: an installation whose view gained
+-- posting_date by a later ALTER lists its columns in a different order than a
+-- fresh bootstrap, and CREATE OR REPLACE VIEW refuses to reorder columns
+-- ("cannot change name of view column"). Nothing depends on this view, and
+-- the read role's grant is restored explicitly below.
+DROP VIEW IF EXISTS openbooks_query.journal_lines;
+CREATE VIEW openbooks_query.journal_lines WITH (security_barrier='true') AS
  SELECT id,
     org_id,
     entry_id,
@@ -278,3 +284,4 @@ CREATE OR REPLACE VIEW openbooks_query.journal_lines WITH (security_barrier='tru
     source_cleared_connector
    FROM public.journal_lines
   WHERE (org_id = public.openbooks_query_org_id());
+GRANT SELECT ON openbooks_query.journal_lines TO openbooks_read;
