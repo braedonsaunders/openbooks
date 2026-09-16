@@ -539,6 +539,14 @@
       "entitlement_service_milestones": {
         "label": "Service milestones",
         "description": "When each employee reaches a service-based entitlement tier, and which tier is in force today. Requires the payroll permission."
+      },
+      "allocation_runs": {
+        "label": "Allocation runs",
+        "description": "One row per computed or posted period-mode allocation run — rule, version, period, book, source and allocated totals, residual, and status. Requires the allocations permission."
+      },
+      "allocation_lineage": {
+        "label": "Allocation lineage",
+        "description": "Every allocated line traced to its rule version, source period, account, and dimensions, with driver share and amount. Requires the allocations permission."
       }
     },
     "columns": {
@@ -929,6 +937,42 @@
         "billable_value": "Billable value",
         "billed_revenue": "Billed revenue",
         "created_at": "Created"
+      },
+      "allocation_runs": {
+        "rule_name": "Rule",
+        "rule_key": "Rule key",
+        "rule_mode": "Rule mode",
+        "version_no": "Version #",
+        "period": "Period",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "book": "Book",
+        "book_id": "Book (id)",
+        "subsidiary": "Subsidiary",
+        "status": "Status",
+        "trigger_kind": "Trigger",
+        "source_total": "Source total",
+        "allocated_total": "Allocated",
+        "residual": "Residual",
+        "started_at": "Started at",
+        "run_id": "Run (id)"
+      },
+      "allocation_lineage": {
+        "rule_name": "Rule",
+        "mode": "Mode",
+        "period": "Period",
+        "book": "Book",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "department": "Department",
+        "location": "Location",
+        "class": "Class",
+        "project": "Project",
+        "share": "Share",
+        "driver_value": "Driver value",
+        "amount": "Amount",
+        "residual": "Residual",
+        "created_at": "Created at"
       }
     },
     "enumValues": {

@@ -534,6 +534,14 @@
       "entitlement_service_milestones": {
         "label": "Marcos de tempo de serviço",
         "description": "Quando cada funcionário atinge uma faixa de direitos por tempo de serviço e qual faixa está em vigor hoje. Requer a permissão de folha de pagamento."
+      },
+      "allocation_runs": {
+        "label": "Rateios",
+        "description": "Uma linha por cálculo ou lançamento de rateio periódico — regra, versão, período, livro, totais de origem e rateados, resíduo e status. Requer a permissão de rateio."
+      },
+      "allocation_lineage": {
+        "label": "Rastreabilidade de rateios",
+        "description": "Cada linha rateada vinculada à sua versão de regra, período de origem, conta e dimensões, com participação do direcionador e valor. Requer a permissão de rateio."
       }
     },
     "columns": {
@@ -955,6 +963,42 @@
         "cost_recovery": "Recuperação de custo",
         "billable_value": "Valor faturável",
         "billed_revenue": "Receita faturada",
+        "created_at": "Criado em"
+      },
+      "allocation_runs": {
+        "rule_name": "Regra",
+        "rule_key": "Chave da regra",
+        "rule_mode": "Modo da regra",
+        "version_no": "Versão nº",
+        "period": "Período",
+        "period_start": "Início do período",
+        "period_end": "Fim do período",
+        "book": "Livro contábil",
+        "book_id": "Livro contábil (id)",
+        "subsidiary": "Entidade",
+        "status": "Status",
+        "trigger_kind": "Gatilho",
+        "source_total": "Total de origem",
+        "allocated_total": "Rateado",
+        "residual": "Resíduo",
+        "started_at": "Iniciado em",
+        "run_id": "Execução (id)"
+      },
+      "allocation_lineage": {
+        "rule_name": "Regra",
+        "mode": "Modo",
+        "period": "Período",
+        "book": "Livro contábil",
+        "account_number": "Nº da conta",
+        "account_name": "Conta",
+        "department": "Departamento",
+        "location": "Local",
+        "class": "Classe",
+        "project": "Projeto",
+        "share": "Participação",
+        "driver_value": "Valor do direcionador",
+        "amount": "Valor",
+        "residual": "Resíduo",
         "created_at": "Criado em"
       }
     },

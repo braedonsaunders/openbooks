@@ -534,6 +534,14 @@
       "entitlement_service_milestones": {
         "label": "勤続マイルストーン",
         "description": "各従業員が勤続に基づく付与段階に到達する時期と、今日適用される段階。給与権限が必要です。"
+      },
+      "allocation_runs": {
+        "label": "配賦実行",
+        "description": "期間配賦の計算・転記ごとに1行 — ルール、バージョン、期間、帳簿、配賦元合計、配賦合計、残差、ステータス。配賦権限が必要です。"
+      },
+      "allocation_lineage": {
+        "label": "配賦系統",
+        "description": "配賦された各行をルールバージョン、配賦元期間、勘定、分析軸にひも付け、ドライバー按分率と金額を示します。配賦権限が必要です。"
       }
     },
     "columns": {
@@ -955,6 +963,42 @@
         "cost_recovery": "原価回収",
         "billable_value": "請求可能額",
         "billed_revenue": "請求済み収益",
+        "created_at": "作成日時"
+      },
+      "allocation_runs": {
+        "rule_name": "ルール",
+        "rule_key": "ルールキー",
+        "rule_mode": "ルールモード",
+        "version_no": "バージョン番号",
+        "period": "期間",
+        "period_start": "期間開始",
+        "period_end": "期間終了",
+        "book": "会計帳簿",
+        "book_id": "会計帳簿（ID）",
+        "subsidiary": "法人",
+        "status": "ステータス",
+        "trigger_kind": "実行契機",
+        "source_total": "配賦元合計",
+        "allocated_total": "配賦合計",
+        "residual": "残差",
+        "started_at": "開始日時",
+        "run_id": "実行（ID）"
+      },
+      "allocation_lineage": {
+        "rule_name": "ルール",
+        "mode": "モード",
+        "period": "期間",
+        "book": "会計帳簿",
+        "account_number": "勘定番号",
+        "account_name": "勘定",
+        "department": "部門",
+        "location": "拠点",
+        "class": "クラス",
+        "project": "プロジェクト",
+        "share": "按分率",
+        "driver_value": "ドライバー値",
+        "amount": "金額",
+        "residual": "残差",
         "created_at": "作成日時"
       }
     },

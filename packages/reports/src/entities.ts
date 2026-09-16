@@ -1071,6 +1071,108 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'milestone_date', direction: 'asc' },
   },
+  {
+    key: 'allocation_runs',
+    label: 'Allocation runs',
+    category: 'general_ledger',
+    description:
+      'One row per computed or posted period-mode allocation run — rule, version, period, book, source and allocated totals, residual, and status. Requires the allocations permission.',
+    from: `allocation_runs r
+      JOIN allocation_rules rule ON rule.id = r.rule_id AND rule.org_id = r.org_id
+      JOIN allocation_rule_versions v ON v.id = r.version_id AND v.org_id = r.org_id
+      JOIN accounting_periods p ON p.id = r.period_id AND p.org_id = r.org_id
+      JOIN accounting_books b ON b.id = r.book_id AND b.org_id = r.org_id
+      LEFT JOIN subsidiaries sub ON sub.id = r.subsidiary_id AND sub.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    // A null run subsidiary means every subsidiary in scope: scoped readers
+    // keep org-wide runs alongside their own entities.
+    subsidiaryScope: { column: 'r.subsidiary_id', sharedNull: true },
+    // Runs are per-book: the standard omitted-book contract clamps to the
+    // primary book unless the plan scopes or partitions by a book column.
+    bookScope: { column: 'r.book_id' },
+    requiredPermission: 'allocations.read',
+    featureKey: 'allocations',
+    columns: [
+      { key: 'rule_name', label: 'Rule', kind: 'text', expr: 'rule.name' },
+      { key: 'rule_key', label: 'Rule key', kind: 'text', expr: 'rule.key' },
+      {
+        key: 'rule_mode', label: 'Rule mode', kind: 'enum', expr: 'rule.mode',
+        options: ['entry', 'post', 'period'],
+      },
+      { key: 'version_no', label: 'Version #', kind: 'number', expr: 'v.version_no' },
+      { key: 'period', label: 'Period', kind: 'text', expr: 'p.name' },
+      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'p.starts_on' },
+      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'p.ends_on' },
+      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
+      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      {
+        key: 'status', label: 'Status', kind: 'enum', expr: 'r.status',
+        options: ['previewed', 'pending_approval', 'posted', 'reversed', 'failed', 'superseded'],
+      },
+      {
+        key: 'trigger_kind', label: 'Trigger', kind: 'enum', expr: 'r.trigger_kind',
+        options: ['manual', 'scheduled', 'close_automation', 'rerun'],
+      },
+      { key: 'source_total', label: 'Source total', kind: 'money', expr: 'r.source_total' },
+      { key: 'allocated_total', label: 'Allocated', kind: 'money', expr: 'r.allocated_total' },
+      { key: 'residual', label: 'Residual', kind: 'money', expr: 'r.residual' },
+      { key: 'started_at', label: 'Started at', kind: 'timestamp', expr: 'r.started_at' },
+      { key: 'run_id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'period_end', direction: 'desc' },
+  },
+  {
+    key: 'allocation_lineage',
+    label: 'Allocation lineage',
+    category: 'general_ledger',
+    description:
+      'Every allocated line traced to its rule version, source period, account, and dimensions, with driver share and amount. Entry and report-only rows have no journal line; only period runs carry period and book context. Requires the allocations permission.',
+    from: `allocation_lineage l
+      JOIN allocation_rules rule ON rule.id = l.rule_id AND rule.org_id = l.org_id
+      JOIN allocation_rule_versions v ON v.id = l.version_id AND v.org_id = l.org_id
+      LEFT JOIN allocation_runs r ON r.id = l.run_id AND r.org_id = l.org_id
+      LEFT JOIN accounting_periods p ON p.id = r.period_id AND p.org_id = l.org_id
+      LEFT JOIN accounting_books b ON b.id = r.book_id AND b.org_id = l.org_id
+      LEFT JOIN journal_lines jl ON jl.id = l.journal_line_id AND jl.org_id = l.org_id
+      LEFT JOIN accounts a ON a.id = jl.account_id AND a.org_id = l.org_id
+      LEFT JOIN departments dep ON dep.id = jl.department_id AND dep.org_id = l.org_id
+      LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = l.org_id
+      LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = l.org_id
+      LEFT JOIN projects prj ON prj.id = jl.project_id AND prj.org_id = l.org_id`,
+    orgColumn: 'l.org_id',
+    // Rows without a journal line (entry distributions, report-only runs)
+    // carry no subsidiary attribution: scoped readers keep those alongside
+    // their own entities' GL lineage.
+    subsidiaryScope: { column: 'jl.subsidiary_id', sharedNull: true },
+    requiredPermission: 'allocations.read',
+    featureKey: 'allocations',
+    // Traceability history, not a fiscal window: the viewer must not acquire
+    // an implicit period the way ledger entities do (lot-recall precedent).
+    defaultPeriodField: null,
+    pagination: { defaultPageSize: 100, maxPageSize: 500 },
+    columns: [
+      { key: 'rule_name', label: 'Rule', kind: 'text', expr: 'rule.name' },
+      {
+        key: 'mode', label: 'Mode', kind: 'enum', expr: 'l.mode',
+        options: ['entry', 'post', 'period'],
+      },
+      { key: 'period', label: 'Period', kind: 'text', expr: 'p.name' },
+      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
+      { key: 'account_number', label: 'Account #', kind: 'text', expr: 'a.number' },
+      { key: 'account_name', label: 'Account', kind: 'text', expr: 'a.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
+      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'share', label: 'Share', kind: 'number', expr: 'l.share' },
+      { key: 'driver_value', label: 'Driver value', kind: 'number', expr: 'l.driver_value' },
+      { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount' },
+      { key: 'residual', label: 'Residual', kind: 'money', expr: 'l.residual' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'l.created_at' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(

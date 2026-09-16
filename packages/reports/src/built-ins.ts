@@ -420,6 +420,47 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     },
   },
   {
+    slug: 'allocation-summary',
+    name: 'Allocation summary',
+    description:
+      'One row per rule, period, and run status: pooled source, allocated total, residual, and run count. Requires the allocations permission.',
+    query: {
+      entity: 'allocation_runs',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'rule_name' }, { column: 'period' }, { column: 'status' }],
+      measures: [
+        { fn: 'sum', column: 'source_total', label: 'Source total' },
+        { fn: 'sum', column: 'allocated_total', label: 'Allocated' },
+        { fn: 'sum', column: 'residual', label: 'Residual' },
+        { fn: 'count', label: 'Runs' },
+      ],
+      filters: null,
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+  {
+    slug: 'allocation-lineage',
+    name: 'Allocation lineage',
+    description:
+      'Every allocated line traced to its rule, source period, account, and dimensions, with driver share and amount, sectioned by rule. Requires the allocations permission.',
+    query: {
+      entity: 'allocation_lineage',
+      mode: 'rows',
+      columns: [
+        'rule_name', 'mode', 'period', 'account_number', 'account_name',
+        'department', 'share', 'amount', 'residual', 'created_at',
+      ],
+      breakouts: [],
+      measures: [],
+      filters: null,
+      groupBy: 'rule_name',
+      sorts: [{ column: 'created_at', direction: 'desc' }],
+      limit: 5000,
+    },
+  },
+  {
     slug: 'entitlement-service-milestones',
     name: 'Service milestones reached',
     description:
