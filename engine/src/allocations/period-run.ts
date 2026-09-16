@@ -6,7 +6,8 @@ import { businessToday } from "../business-date.ts";
 import { db, inDbTransaction } from "../db.ts";
 import { add, cmp, isZero, neg, sum } from "../money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
-import { driverResolver as defaultDriverResolver, type DriverResolveOptions } from "./drivers.ts";
+import type { DriverResolveOptions } from "./drivers.ts";
+import { allocationServiceDeps } from "./service.ts";
 import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
@@ -562,9 +563,10 @@ async function resolveDriverVectorForRun(
     throw new Error(`allocation driver ${opts.version.driver_id} does not belong to this organization`);
   }
   if (!driver.is_active) throw new Error(`allocation driver ${driver.key} is not active`);
-  // A2's dispatcher covers every source_kind (report_definition needs a
-  // runner, injected via deps); callers may still inject a test double.
-  const resolver = deps.driverResolver ?? defaultDriverResolver;
+  // A2's dispatcher covers every source_kind; report_definition needs the
+  // production runner, which the single service factory provides by default.
+  // Callers may still inject a test double through deps.
+  const resolver = deps.driverResolver ?? allocationServiceDeps().driverResolver;
   let asOf: { periodId: string } | { date: string };
   if (opts.version.driver_as_of === "prior_period") {
     const prior = (await tx.execute<{ id: string }>(sql`

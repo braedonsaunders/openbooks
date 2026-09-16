@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { previewAllocationRun } from "../../../../../../engine/src/allocations/period-run.ts";
+import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
 
 export const runtime = "nodejs";
 
@@ -26,14 +27,19 @@ export async function POST(req: Request) {
   if (data.subsidiaryId != null && gate.allowedSubsidiaryIds !== null && !gate.allowedSubsidiaryIds.has(data.subsidiaryId)) {
     return NextResponse.json({ error: "subsidiary outside the caller's scope" }, { status: 403 });
   }
-  const run = await previewAllocationRun({
-    orgId: gate.user.orgId,
-    ruleId: data.ruleId,
-    periodId: data.periodId,
-    bookId: data.bookId,
-    subsidiaryId: data.subsidiaryId,
-    actorId: gate.user.id,
-    trigger: "manual",
-  });
+  // The production driver composition (report runner included), so
+  // report_definition rules preview the same numbers a run would post.
+  const run = await previewAllocationRun(
+    {
+      orgId: gate.user.orgId,
+      ruleId: data.ruleId,
+      periodId: data.periodId,
+      bookId: data.bookId,
+      subsidiaryId: data.subsidiaryId,
+      actorId: gate.user.id,
+      trigger: "manual",
+    },
+    allocationServiceDeps(),
+  );
   return NextResponse.json({ computation: run.computation });
 }
