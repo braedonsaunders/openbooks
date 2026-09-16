@@ -102,7 +102,6 @@ export interface AgentsOverviewData {
   colSchedule: string
   colLastRun: string
   colFindings: string
-  colPolicy: string
   colActions: string
   actionsLabel: string
   sort: AgentsOverviewSort
@@ -240,7 +239,6 @@ export async function loadAgentsOverview(
     colSchedule: t('setup.agents.overview.columns.schedule'),
     colLastRun: t('setup.agents.overview.columns.lastRun'),
     colFindings: t('setup.agents.overview.columns.findings'),
-    colPolicy: t('setup.agents.overview.columns.policy'),
     colActions: t('setup.agents.overview.columns.actions'),
     actionsLabel: t('setup.agents.overview.columns.actions'),
     sort,
@@ -336,13 +334,14 @@ export function agentsOverviewSpec(data: AgentsOverviewData): PageSpec {
                 link(item('findingsLine'), item('reviewHref'), 'font-medium text-teal-700 underline dark:text-teal-300'),
                 { sort: 'findings' },
               ),
-              column(f('colPolicy'), link(item('configureLabel'), item('configureHref'), 'font-medium text-teal-700 underline dark:text-teal-300')),
               column(f('colActions'), widgetCell('agents-pack-actions', {
                 agentKey: item('agentKey'),
                 policy: item('policy'),
                 packTitle: item('name'),
                 enabled: item('enabled'),
                 featureEnabled: item('featureEnabled'),
+                configureHref: item('configureHref'),
+                configureLabel: item('configureLabel'),
               }), { srOnlyHeader: true }),
             ],
           }),

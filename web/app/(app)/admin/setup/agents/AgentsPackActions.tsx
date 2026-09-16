@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -8,13 +9,13 @@ import { toast } from 'sonner'
 import { Button, cn } from '@openbooks/ui'
 
 /**
- * One pack's row actions for the Agents overview spec table: the fenced
- * enable switch (the Features fenced-toggle precedent — enabling while the
- * module is off is refused client-side exactly as the server refuses it with
- * 409 `feature_disabled`) and run-now. The switch round-trips the FULL policy
- * the loader hands over, so a quick toggle never resets detector controls.
- * Copy resolves here via hooks on the existing `setup.agents.overview` keys,
- * so the spec invents no message key.
+ * One pack's trailing actions for the Agents overview spec table — switch,
+ * run-now, configure (the Features row order). The switch is fenced: enabling
+ * while the module is off is refused client-side exactly as the server
+ * refuses it with 409 `feature_disabled`. The switch round-trips the FULL
+ * policy the loader hands over, so a quick toggle never resets detector
+ * controls. Copy resolves here via hooks on the existing
+ * `setup.agents.overview` keys, so the spec invents no message key.
  */
 export function AgentsPackActions({
   agentKey,
@@ -22,12 +23,16 @@ export function AgentsPackActions({
   packTitle,
   enabled,
   featureEnabled,
+  configureHref,
+  configureLabel,
 }: {
   agentKey: string
   policy: Record<string, unknown>
   packTitle: string
   enabled: boolean
   featureEnabled: boolean
+  configureHref: string
+  configureLabel: string
 }) {
   const t = useTranslations('admin')
   const router = useRouter()
@@ -84,16 +89,6 @@ export function AgentsPackActions({
 
   return (
     <span className="flex items-center justify-end gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!featureEnabled || !on || pending || running}
-        onClick={() => void runNow()}
-      >
-        {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-        {t('setup.agents.overview.runNow')}
-      </Button>
       <button
         type="button"
         role="switch"
@@ -114,6 +109,19 @@ export function AgentsPackActions({
           )}
         />
       </button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!featureEnabled || !on || pending || running}
+        onClick={() => void runNow()}
+      >
+        {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+        {t('setup.agents.overview.runNow')}
+      </Button>
+      <Link href={configureHref} className="shrink-0 text-xs font-medium text-teal-700 underline dark:text-teal-300">
+        {configureLabel}
+      </Link>
     </span>
   )
 }

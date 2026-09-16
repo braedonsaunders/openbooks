@@ -1427,7 +1427,6 @@
           "schedule": "Programación",
           "lastRun": "Última ejecución",
           "findings": "Hallazgos",
-          "policy": "Política",
           "actions": "Acciones"
         },
         "kpis": {

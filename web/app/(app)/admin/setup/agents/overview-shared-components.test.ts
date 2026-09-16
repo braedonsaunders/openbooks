@@ -9,6 +9,7 @@ import test from "node:test";
 // switches and layout with raw primitives.
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const view = read("./view.ts");
+const actions = read("./AgentsPackActions.tsx");
 const widgets = read("../../../../../components/viewspec/widgets.tsx");
 const lib = read("../../../../../lib/setup/agents.ts");
 
@@ -23,6 +24,10 @@ test("the overview spec binds the shared KPI strip and the spec table", () => {
 
 test("row actions arrive through a small island cell, not a page monolith", () => {
   assert.match(view, /widgetCell\('agents-pack-actions'/);
+  // One unlabeled trailing actions column (switch, run-now, configure) —
+  // no separate Policy column.
+  assert.doesNotMatch(view, /column\(f\('colPolicy'\)/);
+  assert.match(actions, /configureHref/);
   assert.doesNotMatch(view, /agents-overview-workspace/);
   assert.equal(
     existsSync(new URL("./AgentsOverviewWorkspace.tsx", import.meta.url)),

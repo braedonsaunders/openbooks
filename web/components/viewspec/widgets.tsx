@@ -1317,6 +1317,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       packTitle={str(props, 'packTitle') ?? ''}
       enabled={props.enabled === true}
       featureEnabled={props.featureEnabled === true}
+      configureHref={str(props, 'configureHref') ?? ''}
+      configureLabel={str(props, 'configureLabel') ?? ''}
     />
   ),
   /** One agent-pack marketplace card: medallion, reads/proposes, checks, install/configure footer. */
