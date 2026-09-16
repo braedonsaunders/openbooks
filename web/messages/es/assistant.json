@@ -11,6 +11,7 @@
   "welcomeTitle": "¿Cómo puedo ayudar con los libros?",
   "welcome": "Pregunte sobre sus libros: saldos, estados financieros, antigüedad, facturas o asientos concretos. El asistente solo ve lo que sus permisos permiten.",
   "placeholder": "Pregunte sobre sus cuentas, transacciones o informes…",
+  "context": { "attached": "Contexto del hallazgo adjunto", "remove": "Quitar el contexto" },
   "send": "Enviar",
   "stop": "Detener",
   "writeHint": "El asistente puede redactar asientos de diario, pero nada se guarda hasta que haga clic en Aplicar — y los borradores aún deben ser contabilizados por usted.",

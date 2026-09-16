@@ -12,6 +12,7 @@
   "welcome": "Ask about your books — balances, statements, aging, specific bills or entries. The assistant only sees what your permissions allow.",
   "notConfiguredTitle": "Assistant not set up yet",
   "placeholder": "Ask about your accounts, transactions, or reports…",
+  "context": { "attached": "Finding context attached", "remove": "Remove finding context" },
   "send": "Send",
   "stop": "Stop",
   "writeHint": "The assistant can draft journal entries, but nothing is saved until you click Apply — and drafts still need to be posted by you.",

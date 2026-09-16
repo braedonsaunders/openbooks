@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { useState } from 'react'
-import { Check, ExternalLink, RotateCcw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { Check, ExternalLink, MessageCircle, RotateCcw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
 import { ApplicationCommandCard } from '@/components/assistant/application-command-card'
@@ -109,6 +109,13 @@ export function WorkItemDrawer({
       size="lg"
       title={t(`findings.${item.findingType}.title` as never)}
       description={t(`findings.${item.findingType}.description` as never)}
+      headerActions={(
+        <Button variant="outline" size="sm" asChild title={ta('drawer.askAboutThisHint')}>
+          <Link href={{ pathname: '/assistant', query: { finding: item.id } }}>
+            <MessageCircle size={13} />{ta('drawer.askAboutThis')}
+          </Link>
+        </Button>
+      )}
       footer={canWrite ? (
         <div className="flex w-full flex-wrap justify-end gap-2">
           {item.status === 'open' ? <Button variant="outline" disabled={busy} onClick={() => void mutate('review')}>{t('actions.startReview')}</Button> : null}

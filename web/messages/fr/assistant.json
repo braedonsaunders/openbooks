@@ -11,6 +11,7 @@
   "welcomeTitle": "Comment puis-je aider avec les livres ?",
   "welcome": "Interrogez vos livres — soldes, états financiers, chronologie, factures ou écritures précises. L'assistant ne voit que ce que vos permissions autorisent.",
   "placeholder": "Posez une question sur vos comptes, transactions ou rapports…",
+  "context": { "attached": "Contexte du constat joint", "remove": "Retirer le contexte" },
   "send": "Envoyer",
   "stop": "Arrêter",
   "writeHint": "L'assistant peut préparer des écritures de journal, mais rien n'est enregistré avant que vous cliquiez sur Appliquer — et les brouillons doivent encore être comptabilisés par vous.",

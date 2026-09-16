@@ -60,5 +60,9 @@
     "unavailable": "Aucune action applicable — ouvrez le constat pour le détail.",
     "emptyTitle": "Aucune proposition",
     "emptyDescription": "Aucun constat ne porte de proposition pour le moment."
+  },
+  "drawer": {
+    "askAboutThis": "Poser une question",
+    "askAboutThisHint": "Ouvrir la discussion avec les pièces de ce constat"
   }
 }

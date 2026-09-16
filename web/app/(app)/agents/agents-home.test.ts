@@ -36,6 +36,18 @@ test("proposals lane renders governed cards", () => {
   assert.match(view, /when: f\('laneEmpty'\)/);
 });
 
+test("ask-about-this deep-links chat with the finding handoff", () => {
+  const drawer = read("../continuous-close/WorkItemDrawer.tsx");
+  assert.match(drawer, /query: \{ finding: item\.id \}/);
+  assert.match(drawer, /ta\('drawer\.askAboutThis'\)/);
+  const assistantView = read("../assistant/view.ts");
+  assert.match(assistantView, /isUuid\(finding\)/);
+  assert.match(assistantView, /initialFindingId/);
+  const app = read("../../../components/assistant/assistant-app.tsx");
+  assert.match(app, /findingId \? \{ findingId \} : \{\}/);
+  assert.match(app, /t\('context\.attached'\)/);
+});
+
 test("briefing tab serves the cached narrative", () => {
   assert.match(view, /loadBriefing\(authz\)/);
   assert.match(view, /widgetBlock\('agents-briefing'/);

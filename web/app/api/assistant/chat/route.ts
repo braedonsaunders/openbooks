@@ -48,6 +48,7 @@ import {
   ownsConversation,
   recentMessages,
 } from "../../../../lib/ai-conversations";
+import { loadFindingContext } from "../../../../lib/agents/finding-context";
 
 /**
  * The agentic turn endpoint.
@@ -92,7 +93,17 @@ export async function POST(req: Request): Promise<Response> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return new Response("Bad request", { status: 400 });
   }
-  const input = body as { conversationId?: unknown; prompt?: unknown };
+  const input = body as { conversationId?: unknown; prompt?: unknown; findingId?: unknown };
+  // "Ask about this" handoff (b06): an optional workbench finding whose
+  // evidence rides the memorySections seam as untrusted data. Absent or
+  // unreadable findings change nothing about the turn.
+  let findingId: string | null = null;
+  if (input.findingId !== undefined && input.findingId !== null) {
+    if (typeof input.findingId !== "string" || !UUID_RE.test(input.findingId)) {
+      return new Response("Bad request", { status: 400 });
+    }
+    findingId = input.findingId;
+  }
   if (
     input.conversationId !== undefined &&
     input.conversationId !== null &&
@@ -173,6 +184,7 @@ export async function POST(req: Request): Promise<Response> {
     const priorNames = collectPriorToolNames(historyView);
     const maxSteps = resolveStepBudget(prompt, priorNames, resolveModule);
 
+    const findingContext = findingId ? await loadFindingContext(authz, findingId) : null;
     const system = assistantSystemPrompt({
       orgName: aiConfig?.org?.name ?? null,
       baseCurrency: org.rows[0]?.base_currency ?? null,
@@ -185,6 +197,7 @@ export async function POST(req: Request): Promise<Response> {
       memorySections: [
         buildSummarySection(storedSummary),
         renderPinsSection(windowPins, hasAnaphor(prompt)),
+        findingContext?.section ?? "",
       ],
     });
 

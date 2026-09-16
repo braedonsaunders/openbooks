@@ -60,5 +60,9 @@
     "unavailable": "Sin acción aplicable: abre el hallazgo para ver los detalles.",
     "emptyTitle": "Sin propuestas",
     "emptyDescription": "Ningún hallazgo trae una propuesta ahora mismo."
+  },
+  "drawer": {
+    "askAboutThis": "Preguntar sobre esto",
+    "askAboutThisHint": "Abrir el chat con la evidencia de este hallazgo adjunta"
   }
 }
