@@ -137,6 +137,9 @@ export function DistributionDialog({
             accountOptions={accountOptions}
             codings={codings}
             showDescription
+            // Entry splits price into amounts: weights name no amount (they
+            // fail closed in splitPortionsToAmounts), so never offer them.
+            portionKinds={['remainder', 'percent', 'fixed']}
             labels={{
               account: t('entry.editor.account'),
               accountPlaceholder: t('entry.editor.accountPlaceholder'),
