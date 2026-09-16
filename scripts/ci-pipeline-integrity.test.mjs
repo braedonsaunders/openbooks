@@ -524,6 +524,28 @@ test('the trust workflow consumes the checkpoint but never produces simulation e
   )
 })
 
+test('the trust conformance producer checks out the tested commit', () => {
+  // The published corpus is labelled with the triggering test run's SHA, so
+  // the conformance job must PRODUCE from that commit — otherwise the
+  // artifacts describe a different checkout than the label claims. On
+  // workflow_run the checkout must pin to the triggering head SHA; on
+  // push/pull_request it must stay on the event commit. And because
+  // GITHUB_SHA still names the trust workflow's own tip on workflow_run,
+  // the job must pass the true source to the producers explicitly.
+  const source = readFileSync(join(WORKFLOW_DIR, 'trust.yml'), 'utf8')
+  const conformance = topLevelBlock(source, 'conformance')
+  assert.match(
+    conformance,
+    /ref:\s*\$\{\{\s*github\.event_name\s*==\s*'workflow_run'\s*&&\s*github\.event\.workflow_run\.head_sha\s*\|\|\s*github\.sha\s*\}\}/,
+    'conformance checkout must pin to the triggering test SHA on workflow_run, else the event commit',
+  )
+  assert.match(
+    conformance,
+    /OPENBOOKS_SOURCE_SHA:\s*\$\{\{\s*github\.event_name\s*==\s*'workflow_run'\s*&&\s*github\.event\.workflow_run\.head_sha\s*\|\|\s*github\.sha\s*\}\}/,
+    'conformance producers must receive the true source SHA explicitly: GITHUB_SHA is the trust tip on workflow_run',
+  )
+})
+
 test('the release job does not re-run the suite, and fails closed without a green merge gate', () => {
   // The suite ran ~35 minutes inside publish-container's verify job to
   // reproduce a result test.yml had already produced for the same commit

@@ -56,8 +56,15 @@ jobs:
       OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
       PGPASSWORD: openbooks
+      # The published corpus is labelled with the triggering test run's SHA:
+      # produce from that commit. On workflow_run the default checkout is the
+      # trust branch tip, not the tested commit. GITHUB_SHA is that tip too,
+      # so the true source rides along explicitly for the evidence producers.
+      OPENBOOKS_SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24

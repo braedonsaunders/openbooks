@@ -19,6 +19,7 @@
  */
 
 import { toUnits } from "../money.ts";
+import { caseDigest } from "../provenance.ts";
 import type { CaseResult, CorpusReport, RunnableCase } from "./types.ts";
 import { ALLOCATION_CONTROL_CASES } from "./cases/allocations.ts";
 import { CORRECTION_CONTROL_CASES } from "./cases/corrections.ts";
@@ -235,28 +236,31 @@ export function renderControlsMarkdown(report: CorpusReport<ControlCase>): strin
 }
 
 export function renderControlsJson(report: CorpusReport<ControlCase>): string {
+  const cases = report.results.map((result) => ({
+    id: result.case.id,
+    title: result.case.title,
+    control: result.case.control,
+    support: result.case.support,
+    tier: result.case.tier,
+    status: result.status,
+    assertion: result.case.assertion,
+    facts: result.case.facts,
+    ...(result.case.limitation ? { limitation: result.case.limitation } : {}),
+    ...(result.case.gap ? { gap: result.case.gap } : {}),
+    ...(result.differences.length > 0 ? { differences: result.differences } : {}),
+    ...(result.error ? { error: result.error } : {}),
+    ms: Math.round(result.ms),
+  }));
   return JSON.stringify(
     {
       kind: "internal-controls",
       at: report.at,
       gitSha: report.gitSha,
+      runId: report.runId,
+      casesSha256: caseDigest(cases),
       totals: report.totals,
       pass: report.pass,
-      cases: report.results.map((result) => ({
-        id: result.case.id,
-        title: result.case.title,
-        control: result.case.control,
-        support: result.case.support,
-        tier: result.case.tier,
-        status: result.status,
-        assertion: result.case.assertion,
-        facts: result.case.facts,
-        ...(result.case.limitation ? { limitation: result.case.limitation } : {}),
-        ...(result.case.gap ? { gap: result.case.gap } : {}),
-        ...(result.differences.length > 0 ? { differences: result.differences } : {}),
-        ...(result.error ? { error: result.error } : {}),
-        ms: Math.round(result.ms),
-      })),
+      cases,
     },
     null,
     2,

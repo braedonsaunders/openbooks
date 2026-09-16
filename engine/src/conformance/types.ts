@@ -280,6 +280,8 @@ export interface CorpusReport<C extends RunnableCase = ConformanceCase> {
   /** Caller-supplied ISO timestamp — the engine never reads the clock itself. */
   at: string;
   gitSha: string | null;
+  /** CI run that produced this report, for cross-artifact traceability. */
+  runId: string | null;
   results: CaseResult<C>[];
   totals: Record<CaseStatus, number>;
   /** True only when there are zero failures. Gaps do not fail the corpus; they

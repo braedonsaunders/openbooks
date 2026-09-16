@@ -1,8 +1,8 @@
-import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../db.ts";
+import { runId, sourceSha } from "../provenance.ts";
 import { runScenario } from "./scenario.ts";
 
 /**
@@ -17,11 +17,11 @@ const argOrg = process.argv[2];
 const orgId = argOrg ?? ((await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`))).rows[0]?.id;
 if (!orgId) { console.error("no org"); process.exit(1); }
 
-let gitSha: string | null = null;
-try { gitSha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim(); } catch { /* not a git checkout */ }
+const gitSha = sourceSha();
+const producerRunId = runId();
 
 const at = new Date().toISOString();
-const cp = await runScenario(orgId, { at, gitSha });
+const cp = await runScenario(orgId, { at, gitSha, runId: producerRunId });
 
 const pad = (s: string, n: number) => s.padEnd(n);
 console.log(`\n=== Golden fixture: ${cp.orgName} (${cp.orgId}) ===`);

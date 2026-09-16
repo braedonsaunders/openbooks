@@ -32,6 +32,8 @@ export interface Checkpoint {
   /** Caller-supplied ISO timestamp (engine has Date; keep it explicit anyway). */
   at: string;
   gitSha: string | null;
+  /** CI run that produced this checkpoint, for cross-artifact traceability. */
+  runId: string | null;
   /** Balance-mode checks are AS-OF this date (last closed period end). */
   cutoff: string;
   cutoffSource: string;
@@ -55,7 +57,10 @@ async function all<T extends Record<string, unknown> = Record<string, unknown>>(
 }
 
 /** Run the non-destructive fixture verification for one org. */
-export async function runScenario(orgId: string, opts: { at: string; gitSha?: string | null } = { at: "" }): Promise<Checkpoint> {
+export async function runScenario(
+  orgId: string,
+  opts: { at: string; gitSha?: string | null; runId?: string | null } = { at: "" },
+): Promise<Checkpoint> {
   const org = await one<{ name: string }>(sql`select name from orgs where id = ${orgId}`);
   const checks: Check[] = [];
   const timings: ReportTiming[] = [];
@@ -361,7 +366,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
 
   const pass = checks.every((c) => c.ok);
   return {
-    orgId, orgName: org.name, at: opts.at, gitSha: opts.gitSha ?? null,
+    orgId, orgName: org.name, at: opts.at, gitSha: opts.gitSha ?? null, runId: opts.runId ?? null,
     cutoff, cutoffSource,
     counts,
     trialBalance: { debits: tb.debits, credits: tb.credits, accounts: Number(tb.accounts) },

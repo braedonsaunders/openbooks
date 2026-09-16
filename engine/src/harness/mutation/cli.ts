@@ -132,6 +132,8 @@ export interface CheckedInTarget {
 export interface CheckedInReport {
   readonly version: 1;
   readonly gitSha: string | null;
+  // Optional: ratified files predate provenance embedding; new runs carry it.
+  readonly runId?: string | null;
   readonly at: string;
   readonly mode: "unit" | "db";
   readonly targets: readonly CheckedInTarget[];
@@ -142,6 +144,7 @@ export function toCheckedInReport(report: MutationReport): CheckedInReport {
   return {
     version: 1,
     gitSha: report.gitSha,
+    runId: report.runId,
     at: report.at,
     mode: report.mode,
     targets: report.targets.map((t) => ({
