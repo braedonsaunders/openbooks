@@ -44,6 +44,7 @@ const AGENT_PACK_READ_PERMISSIONS: Record<ContinuousCloseAgentKey, string[]> = {
   payables: ['ap.read'],
   reconciliation: ['banking.read'],
   hygiene: ['admin.setup.manage'],
+  forensics: ['gl.read', 'close.read'],
 }
 
 export interface AgentPackMeta {
