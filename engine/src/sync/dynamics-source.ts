@@ -237,15 +237,27 @@ export class DynamicsSource implements MigrationSource {
 
         // Reconstruct the settlement BC baked into the invoice GL: a payment for
         // (total − remaining), applied to the invoice, so AR aging matches.
+        // `remainingAmount` is denominated in the invoice's `currencyCode`
+        // (Microsoft Learn, Business Central v2.0 `salesInvoice` resource,
+        // §Properties: `remainingAmount` "The amount including VAT" sits among
+        // the document totals, with `currencyCode` "The default currency code
+        // for the sales invoice"; no LCY-denominated property exists on the
+        // resource, so blank means LCY = the company base). The v2.0
+        // `purchaseInvoice` resource exposes NO `remainingAmount` property (its
+        // §Properties table runs discountAppliedBeforeTax → totals → status),
+        // so reconstruction is gated on the field being present: purchase
+        // settlement rides the vendor-payment journal legs below, and a
+        // missing field must never invent a full payment via `?? 0`.
         const isSales = entity === "salesInvoice", isPurch = entity === "purchaseInvoice";
-        if ((isSales || isPurch) && t.number) {
+        const remaining = t.remainingAmount;
+        if ((isSales || isPurch) && t.number && typeof remaining === "number" && Number.isFinite(remaining)) {
           // Settle against OUR posted AR (per-line ex-tax + tax) rather than BC's
           // rounded document total, so the invoice closes to the exact penny.
           const arTotal = (lines ?? []).reduce(
             (total, line) => total + toUnits(String(line.amountExcludingTax ?? 0)) + toUnits(String(line.totalTaxAmount ?? 0)),
             0n,
           );
-          const settled = arTotal - toUnits(String(t.remainingAmount ?? 0));
+          const settled = arTotal - toUnits(String(remaining));
           const bank = docBank.get(t.number) ?? ctx.control.bank ?? null;
           if (settled > 0n && bank) {
             const settledAmount = formatMoney(fromUnits(settled), 2);
@@ -257,10 +269,11 @@ export class DynamicsSource implements MigrationSource {
               lines: [{ accountId: bank, itemId: null, amount: settledAmount, taxAmount: "0", taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: "Payment", lineNumber: 1 }],
             });
             // Both legs come from this one invoice object, so the settled
-            // delta shares its currencyCode (blank = LCY = base). BC exposes
-            // no settlement FX rate here: no producer rate is stated, so a
-            // foreign link resolves through the books' own line rates and
-            // refuses loudly on any mismatch.
+            // delta shares its currencyCode (blank = LCY = base). No v2.0
+            // invoice, payment-journal or applied-entry resource exposes an
+            // FX-rate property, so no producer rate is stated: a foreign link
+            // resolves through the books' own line rates and refuses loudly
+            // on any mismatch.
             applications.push({
               paymentRef: `${entity}Payment:${t.id}`,
               appliedRef: `${entity}:${t.id}`,
@@ -284,11 +297,13 @@ export class DynamicsSource implements MigrationSource {
         else documents.push(built);
         if (p.appliesToInvoiceId && p.amount) {
           const invEntity = entity === "customerPayment" ? "salesInvoice" : "purchaseInvoice";
-          // Published gap: the denomination of standalone payment-journal
-          // `amount`s is unproven (see the adapter note in source.ts). State
-          // the payment's own currencyCode when present — otherwise the
-          // company base — with no rate, so any mismatch resolves through
-          // the books' own line rates or refuses loudly.
+          // The v2.0 `customerPayment` / `vendorPayment` resources expose NO
+          // currency property (Microsoft Learn, §Properties: 15-field tables
+          // with `amount` but no currency), so the journal amount's
+          // denomination is unstated by the API: state the payment's own
+          // currencyCode when present — otherwise the company base — with no
+          // rate, so any mismatch resolves through the books' own line rates
+          // or refuses loudly.
           applications.push({
             paymentRef: `${entity}:${p.id}`,
             appliedRef: `${invEntity}:${p.appliesToInvoiceId}`,
@@ -337,12 +352,34 @@ export class DynamicsSource implements MigrationSource {
 
   async openItems(): Promise<SourceOpenItem[]> {
     const out: SourceOpenItem[] = [];
-    for (const [path, entity] of [["salesInvoices", "salesInvoice"], ["purchaseInvoices", "purchaseInvoice"]] as const) {
-      const rows = await this.client.list<{ id: string; remainingAmount?: number; status?: string }>(path);
-      for (const r of rows) {
-        if (r.status === "Draft" || r.status === "Canceled") continue;
-        out.push({ ref: `${entity}:${r.id}`, unpaid: formatMoney(String(r.remainingAmount ?? 0), 2) });
+    const sales = await this.client.list<{ id: string; remainingAmount?: number; status?: string }>("salesInvoices");
+    for (const r of sales) {
+      if (r.status === "Draft" || r.status === "Canceled") continue;
+      out.push({ ref: `salesInvoice:${r.id}`, unpaid: formatMoney(String(r.remainingAmount ?? 0), 2) });
+    }
+    // Purchase open-item truth: the v2.0 `purchaseInvoice` resource exposes NO
+    // `remainingAmount` (Microsoft Learn, §Properties), so per-bill remaining
+    // is status-driven with journal evidence — status Paid means settled in
+    // full, otherwise the bill total less the vendor-payment journal amounts
+    // applied to it in this same pull (capped at zero for over-application).
+    // A Paid bill with no journal evidence reads 0 against our open balance
+    // and fails honestly instead of inventing agreement.
+    const applied = new Map<string, bigint>();
+    const journals = await this.client.list<{ id: string; appliesToInvoiceId?: string; amount?: number }>("vendorPayments");
+    for (const p of journals) {
+      if (!p.appliesToInvoiceId) continue;
+      const magnitude = toUnits(String(p.amount ?? 0));
+      applied.set(p.appliesToInvoiceId, (applied.get(p.appliesToInvoiceId) ?? 0n) + (magnitude < 0n ? -magnitude : magnitude));
+    }
+    const bills = await this.client.list<{ id: string; status?: string; totalAmountIncludingTax?: number }>("purchaseInvoices");
+    for (const r of bills) {
+      if (r.status === "Draft" || r.status === "Canceled") continue;
+      if (r.status === "Paid") {
+        out.push({ ref: `purchaseInvoice:${r.id}`, unpaid: formatMoney("0", 2) });
+        continue;
       }
+      const unpaid = toUnits(String(r.totalAmountIncludingTax ?? 0)) - (applied.get(r.id) ?? 0n);
+      out.push({ ref: `purchaseInvoice:${r.id}`, unpaid: formatMoney(fromUnits(unpaid < 0n ? 0n : unpaid), 2) });
     }
     return out;
   }
