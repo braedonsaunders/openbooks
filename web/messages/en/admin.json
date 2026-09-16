@@ -1712,6 +1712,12 @@
           "reads": "Bank balances, open receivables and payables, and the cash forecast.",
           "proposes": "Banking review links — review only, no writes."
         }
+      },
+      "runStatuses": {
+        "completed": "Completed",
+        "failed": "Failed",
+        "skipped": "Skipped",
+        "running": "Running"
       }
     },
     "fxProvider": {

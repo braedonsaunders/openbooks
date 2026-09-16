@@ -31,6 +31,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'agents-kpi-strip': { props: ['items'] },
   'agents-pack-actions': { props: ['agentKey', 'enabled', 'featureEnabled', 'packTitle', 'policy'] },
   'agents-pack-card': { props: ['agentKey', 'checksNote', 'checksTitle', 'configureHref', 'configureLabel', 'description', 'detectors', 'featureEnabled', 'installLabel', 'installPolicy', 'installed', 'installedLabel', 'moduleLine', 'name', 'needsLabel', 'permissions', 'proposes', 'proposesLabel', 'reads', 'readsLabel'] },
+  'agents-pack-last-run': { props: ['dateLine', 'hasRun', 'nextLine', 'statusLabel', 'statusVariant'] },
   'agents-policy-form': { props: ['description', 'featureEnabled', 'notification', 'pack', 'roles', 'runLine', 'specs', 'statusEnabled', 'statusLabel', 'users', 'usersTruncated'] },
   'agents-run-actions': { props: ['agentKey', 'findingsHref', 'findingsLabel'] },
   'agents-triage-hint': { props: ['text'] },

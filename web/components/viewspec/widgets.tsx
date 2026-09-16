@@ -110,6 +110,7 @@ import { RemittanceApNote, RemittancesView } from '../../app/(app)/payroll/remit
 import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
+import { AgentsLastRunCell } from '../../app/(app)/admin/setup/agents/AgentsLastRunCell'
 import { AgentsPackActions } from '../../app/(app)/admin/setup/agents/AgentsPackActions'
 import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/AgentsPackCard'
 import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
@@ -1295,6 +1296,18 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   /** THREE FLAT props, no wrapper bag — the bank-feeds division. */
   'features-workspace': (props) => (
     <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
+  ),
+  /** One pack's last-run cell: run-status badge, relative instant, muted next run. */
+  'agents-pack-last-run': (props) => (
+    <AgentsLastRunCell
+      hasRun={props.hasRun === true}
+      statusLabel={str(props, 'statusLabel') ?? ''}
+      statusVariant={
+        (props.statusVariant as ComponentProps<typeof AgentsLastRunCell>['statusVariant']) ?? 'secondary'
+      }
+      dateLine={str(props, 'dateLine') ?? ''}
+      nextLine={str(props, 'nextLine') ?? null}
+    />
   ),
   /** One pack's fenced enable switch + run-now for the Agents overview table. */
   'agents-pack-actions': (props) => (

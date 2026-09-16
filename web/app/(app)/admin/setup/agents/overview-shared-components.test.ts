@@ -17,6 +17,8 @@ test("the overview spec binds the shared KPI strip and the spec table", () => {
   assert.match(view, /table\(\{/);
   assert.match(view, /variant: 'app'/);
   assert.match(view, /sorting: \{ basePath: '\/admin\/setup\/agents'/);
+  assert.match(view, /widgetCell\('agents-pack-last-run'/);
+  assert.match(view, /dateTime/);
 });
 
 test("row actions arrive through a small island cell, not a page monolith", () => {
