@@ -80,6 +80,32 @@ test('customer intelligence translates every revenue functional to presentation'
   }
 })
 
+/**
+ * A document rate that never terminates (USD→CAD 1.3333333333) must round
+ * its functional first leg to ledger precision — never throw a precision
+ * error out of the dashboard.
+ */
+test('customer revenue rounds a non-terminating document rate instead of throwing', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Customer Controller', 'admin'))
+    await withBypass(async () => {
+      await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
+      await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+        values (${scratch.orgId},'USD','CAD',${scratch.date}::date,'spot',1.3333333333,'manual')`)
+      const accts = { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank, revenue: scratch.accounts.revenue }
+      await invoice(scratch.orgId, actor, scratch.subsidiaryId, scratch.customerId, '100', 'USD', '1.3333333333', scratch.date, accts)
+    })
+    await pinClock('2026-07-15', async () => {
+      const data = await customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, scratch.orgId, null)
+      const byName = new Map(data.rows.map((r) => [r.name, r]))
+      assert.equal(byName.get('Acme Customer')?.revenue, 133.3333)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
+
 test('customer intelligence fails closed when a functional has no spot coverage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
