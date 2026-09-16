@@ -308,7 +308,7 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[], includeNull = 
  * global average weighted by data point (globalSum/globalCount over all payments,
  * not an average of per-party averages), and 45-day default when no history exists.
  */
-export async function paymentStats(side: Side, asOfIso: string, subIds?: string[]): Promise<PaymentStats> {
+export async function paymentStats(side: Side, asOfIso: string, subIds?: string[], orgId?: string): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   // Settlement behaviour comes from party_payment_stats, the rollup maintained
   // at the settlement event (see 0001_baseline.sql). It stores sufficient
@@ -317,14 +317,16 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
   // population standard deviation are reconstructed here without touching the
   // ledger. Deriving them from applications meant four joins over every
   // settlement in the tenant on every cockpit render.
-  const orgId = await resolveOrgId();
+  // Explicit orgId lets org-parameterized callers (analytics hubs) thread
+  // their tenant through; ambient resolution keeps every existing caller.
+  const resolvedOrgId = await resolveOrgId(orgId);
   // The company rollup intentionally has no entity dimension. Restricted
   // readers reconstruct the same sufficient statistics from visible source
   // and target lines, so another entity cannot influence their forecast.
   const source = subIds === undefined ? sql`
     select party_id, settled_on, n, sum_days, sum_days_sq
       from party_payment_stats
-     where org_id = ${orgId} and account_type = ${acctType}
+     where org_id = ${resolvedOrgId} and account_type = ${acctType}
        and settled_on >= ${asOfIso}::date - 365
        and settled_on <= ${asOfIso}::date
   ` : sql`
@@ -332,10 +334,10 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
            sum((pl.posting_date - bl.posting_date)::numeric) as sum_days,
            sum(((pl.posting_date - bl.posting_date)::numeric)^2) as sum_days_sq
       from applications x
-      join journal_lines bl on bl.id = x.to_line_id and bl.org_id = ${orgId}
-      join journal_lines pl on pl.id = x.from_line_id and pl.org_id = ${orgId}
-      join accounts a on a.id = bl.account_id and a.org_id = ${orgId}
-     where x.org_id = ${orgId} and x.unapplied_at is null
+      join journal_lines bl on bl.id = x.to_line_id and bl.org_id = ${resolvedOrgId}
+      join journal_lines pl on pl.id = x.from_line_id and pl.org_id = ${resolvedOrgId}
+      join accounts a on a.id = bl.account_id and a.org_id = ${resolvedOrgId}
+     where x.org_id = ${resolvedOrgId} and x.unapplied_at is null
        and bl.party_id is not null and bl.posting_date is not null
        and a.type = ${acctType}
        and pl.posting_date >= ${asOfIso}::date - 365
