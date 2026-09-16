@@ -3682,6 +3682,26 @@ export async function runCloseAutomations(
           throw new CloseError("flow automation matched no enabled flow");
         if (result.runs.some((item) => item.status === "failed"))
           throw new CloseError("one or more started flows failed");
+      } else if (rule.action === "run_allocation") {
+        // Allocation runs preview for the close run's period/book and post
+        // when the action config asks for it. Each rule's effects commit
+        // under a per-rule stage checkpoint, so a crash mid-fan-out resumes
+        // with finished rules skipped instead of re-fired.
+        const { runAllocationCloseAction } = await import("./allocations/scheduling.ts");
+        await runAllocationCloseAction({
+          orgId: context.orgId,
+          runId: context.runId,
+          actorId: context.actorId,
+          config,
+          commitStage: (stageKey, effect) =>
+            commitCloseEffectStage({
+              orgId: context.orgId,
+              executionId,
+              leaseToken: claim.leaseToken,
+              stageKey,
+              effect,
+            }),
+        });
       } else {
         throw new CloseError(
           `unsupported close automation action: ${rule.action}`,

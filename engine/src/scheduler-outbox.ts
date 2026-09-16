@@ -1,5 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { EmailJobData, EnqueueEmailData } from "@openbooks/jobs";
+import {
+  ALLOCATION_RUN_OUTBOX_KIND,
+  ensureAllocationRunOutboxRows,
+  processAllocationRunOutboxRow,
+} from "./allocations/scheduling.ts";
 import { db, type SqlExecutor, withBypassContext } from "./db.ts";
 import {
   logTerminalFailure,
@@ -71,7 +76,8 @@ export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[numbe
 export type SchedulerOutboxKind =
   | SchedulerOutboxScanKind
   | "approval_escalation"
-  | "flow_email";
+  | "flow_email"
+  | "allocation_run";
 
 export const MAX_SCHEDULER_OUTBOX_ATTEMPTS = 8;
 export const STALE_SCHEDULER_OUTBOX_MS = 15 * 60_000;
@@ -335,6 +341,9 @@ export async function ensureScanOutboxRows(): Promise<void> {
       on conflict (kind, occurrence_key) do nothing
     `);
   }
+  // Allocation occurrences are per (rule, period, book), not singleton
+  // scans: one row per due occurrence, idempotent on the occurrence key.
+  await ensureAllocationRunOutboxRows();
 }
 
 /** Persist a due approval escalation so a crash cannot drop it. */
@@ -444,15 +453,28 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
     await runDueFxProviders();
     return;
   }
+  if (row.kind === ALLOCATION_RUN_OUTBOX_KIND) {
+    // Occurrences always preview; auto_post versions post (or wait on their
+    // approval flow inside period-run). Until A3 lands, the default engine
+    // throws EnginePendingError and the row fails visibly with backoff.
+    await processAllocationRunOutboxRow(row);
+    return;
+  }
   if (!row.subject_id) throw new Error("approval escalation is missing its gate");
   const { escalateDueGate } = await import("./flows/gates.ts");
   await escalateDueGate(row.subject_id);
 }
 
 async function markSucceeded(row: OutboxRow, now: Date): Promise<void> {
-  // Escalations and flow emails are one-shot work: a delivered send is
-  // terminal, never re-armed by a later tick.
-  if (row.kind === "approval_escalation" || row.kind === "flow_email") {
+  // Escalations, flow emails, and allocation occurrences are one-shot work:
+  // a delivered send or a fired occurrence is terminal, never re-armed by a
+  // later tick. (A later schedule for the same rule/period/book is a new
+  // occurrence row, not a re-armed one.)
+  if (
+    row.kind === "approval_escalation" ||
+    row.kind === "flow_email" ||
+    row.kind === ALLOCATION_RUN_OUTBOX_KIND
+  ) {
     const completed = await db.execute(sql`
       update scheduler_outbox
          set status='succeeded', error=null, locked_at=null, lease_token=null, finished_at=${now},

@@ -400,6 +400,7 @@ async function saveAutomation(orgId: string, actorId: string, body: Body) {
       "create_task",
       "generate_report",
       "start_flow",
+      "run_allocation",
     ].includes(action)
   )
     throw new CloseError("invalid automation action");

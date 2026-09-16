@@ -558,7 +558,8 @@
       "complete_task": "Completar tarea",
       "create_task": "Crear tarea",
       "generate_report": "Generar informe",
-      "start_flow": "Iniciar flujo"
+      "start_flow": "Iniciar flujo",
+      "run_allocation": "Ejecutar reparto"
     },
     "reports": {
       "balance-sheet": "Balance general",

@@ -550,7 +550,8 @@
       "complete_task": "Concluir tarefa",
       "create_task": "Criar tarefa",
       "generate_report": "Gerar relatório",
-      "start_flow": "Iniciar flow"
+      "start_flow": "Iniciar flow",
+      "run_allocation": "Executar rateio"
     },
     "reports": {
       "balance-sheet": "Balanço patrimonial",

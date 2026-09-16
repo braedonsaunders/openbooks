@@ -620,7 +620,8 @@
       "complete_task": "Complete task",
       "create_task": "Create task",
       "generate_report": "Generate report",
-      "start_flow": "Start flow"
+      "start_flow": "Start flow",
+      "run_allocation": "Run allocation"
     },
     "reports": {
       "balance-sheet": "Balance sheet",
@@ -711,6 +712,11 @@
       "subjectId": "Run the flow against",
       "buttonId": "Flow button id",
       "none": "This action needs no extra configuration.",
+      "allocHint": "Preview every selected period-mode rule for this run's period and book. Posting also books the computed lines.",
+      "allocAllRules": "All active period rules",
+      "allocRuleIds": "Rule ids",
+      "allocRuleIdsHint": "Comma-separated allocation rule UUIDs. Used only when “All active period rules” is off.",
+      "allocPost": "Post the computed runs (otherwise preview only)",
       "sectionConditions": "When (conditions)",
       "sectionConfig": "Then (configuration)"
     },

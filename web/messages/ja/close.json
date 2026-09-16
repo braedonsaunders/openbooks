@@ -550,7 +550,8 @@
       "complete_task": "タスクを完了",
       "create_task": "タスクを作成",
       "generate_report": "レポートを生成",
-      "start_flow": "フローを開始"
+      "start_flow": "フローを開始",
+      "run_allocation": "配賦を実行"
     },
     "reports": {
       "balance-sheet": "貸借対照表",

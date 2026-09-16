@@ -398,7 +398,7 @@ function AutomationDrawer({ row, props }: { row?: Row; props: Props }) {
       <Field label={t("fields.name")}><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("fields.trigger")}><Select value={draft.trigger} onChange={(e) => setDraft({ ...draft, trigger: e.target.value })}>{["run_started", "task_ready", "exception_opened", "deadline_approaching", "run_closed"].map((value) => <option key={value} value={value}>{t(`automationTriggers.${value}`)}</option>)}</Select></Field>
-        <Field label={t("fields.action")}><Select value={draft.automationAction} onChange={(e) => setDraft({ ...draft, automationAction: e.target.value })}>{["notify", "assign", "run_check", "complete_task", "create_task", "generate_report", "start_flow"].map((value) => <option key={value} value={value}>{t(`automationActions.${value}`)}</option>)}</Select></Field>
+        <Field label={t("fields.action")}><Select value={draft.automationAction} onChange={(e) => setDraft({ ...draft, automationAction: e.target.value, config: e.target.value === "run_allocation" && Object.keys(config).length === 0 ? { ruleIds: "all", post: false } : draft.config })}>{["notify", "assign", "run_check", "complete_task", "create_task", "generate_report", "start_flow", "run_allocation"].map((value) => <option key={value} value={value}>{t(`automationActions.${value}`)}</option>)}</Select></Field>
       </div>
       <div className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
         <div><h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t("automationConfig.sectionConditions")}</h4><p className="text-xs text-slate-500 dark:text-slate-400">{t("conditions.intro")}</p></div>
@@ -450,6 +450,12 @@ function AutomationDrawer({ row, props }: { row?: Row; props: Props }) {
             <Field label={t("automationConfig.subjectId")}><Select value={config.subjectId ?? "$run"} onChange={(e) => setConfig({ subjectId: e.target.value })}>{["$run", "$task"].map((value) => <option key={value} value={value}>{t(`subjectRefs.${value}`)}</option>)}</Select></Field>
           </div>
           <Field label={t("automationConfig.buttonId")}><Input value={config.buttonId ?? ""} onChange={(e) => setConfig({ buttonId: e.target.value })} /></Field>
+        </> : null}
+        {action === "run_allocation" ? <>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("automationConfig.allocHint")}</p>
+          <Check checked={config.ruleIds === "all"} onChange={(value) => setConfig(value ? { ruleIds: "all" } : { ruleIds: [] })}>{t("automationConfig.allocAllRules")}</Check>
+          {config.ruleIds !== "all" ? <Field label={t("automationConfig.allocRuleIds")} hint={t("automationConfig.allocRuleIdsHint")}><Textarea className="font-mono text-xs" rows={2} value={(Array.isArray(config.ruleIds) ? config.ruleIds : []).join(", ")} onChange={(e) => setConfig({ ruleIds: e.target.value.split(",").map((v) => v.trim()).filter(Boolean) })} /></Field> : null}
+          <Check checked={config.post === true} onChange={(value) => setConfig({ post: value })}>{t("automationConfig.allocPost")}</Check>
         </> : null}
         {action === "run_check" || action === "complete_task" ? <p className="text-sm text-slate-500 dark:text-slate-400">{t("automationConfig.none")}</p> : null}
       </div>
