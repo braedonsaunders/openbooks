@@ -75,6 +75,8 @@ test("pre-router: bench questions route to the module that answers them", () => 
   assert.ok(preRouteModules("Give me budget vs actual by department.").includes("budgets"));
   assert.ok(preRouteModules("Show my open sales orders.").includes("orders"));
   assert.ok(preRouteModules("List employees missing statutory elections.").includes("payroll"));
+  assert.ok(preRouteModules("Which allocation rules apportion overhead to jobs?").includes("allocations"));
+  assert.ok(!preRouteModules("Apply the payment allocations to the open invoices.").includes("allocations"));
 });
 
 test("pre-router: capability questions stay core-only", () => {
