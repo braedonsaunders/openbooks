@@ -77,12 +77,22 @@ export interface EntityStream {
  *   account currency (ERPNext docs: "Allocate the invoice in its account
  *   currency"). The per-reference `exchange_rate` direction is unproven, so
  *   no producer rate is stated — foreign links price from the books or refuse.
- * - Dynamics states the invoice's `currencyCode` (Microsoft Learn: "the
- *   currency code for the invoice"); both link legs come from that one
- *   invoice object, so the settled delta shares it. The denomination of
- *   standalone payment-journal `amount`s is NOT established — see the adapter
- *   note — so those links resolve through the books' own line rates and
- *   refuse loudly on any mismatch.
+ * - Dynamics states the invoice's `currencyCode` (Microsoft Learn, Business
+ *   Central v2.0 `salesInvoice` resource, §Properties: `remainingAmount` "The
+ *   amount including VAT" among the document totals, `currencyCode` "The
+ *   default currency code for the sales invoice"; no LCY-denominated property
+ *   exists, so blank means LCY = the company base). The v2.0
+ *   `purchaseInvoice` resource exposes NO `remainingAmount`, so purchase
+ *   settlement is never invented — it rides evidenced vendor-payment journal
+ *   legs, and purchase open-item truth is status-driven (Paid → 0, otherwise
+ *   total − journal-applied). The v2.0 `customerPayment` / `vendorPayment`
+ *   resources expose NO currency property, so standalone journal amounts state
+ *   the company base. The v2.0 `applyVendorEntry` resource carries
+ *   `remainingAmount` but NO applied-amount, currency or rate property — no
+ *   settlement-rate field exists on applied-entry detail — and no v2.0
+ *   invoice, payment-journal or applied-entry resource exposes an FX-rate
+ *   property, so Dynamics links never state a producer rate: they resolve
+ *   through the books' own line rates and refuse loudly on any mismatch.
  */
 export interface SourceApplicationLink {
   paymentRef: string;
