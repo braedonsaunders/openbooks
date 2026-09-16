@@ -924,7 +924,7 @@
         "criticalItemCount": "Cantidad crítica de elementos",
         "criticalMaterialityMultiple": "Múltiplo crítico de materialidad",
         "staleAfterDays": "Obsoleto después de",
-        "lookbackDays": "Período de búsqueda",
+        "lookbackDays": "Ventana de revisión",
         "duplicateDays": "Ventana de duplicados",
         "dueWithinDays": "Vence en",
         "minimumVariancePercent": "Desviación desfavorable mínima",
@@ -943,8 +943,7 @@
         "payRunHorizonDays": "Horizonte de pagos",
         "minimumDiscountPercent": "Descuento mínimo",
         "matchWindowDays": "Ventana de coincidencia",
-        "minimumConfidencePercent": "Confianza mínima",
-        "lookbackDays": "Ventana de revisión"
+        "minimumConfidencePercent": "Confianza mínima"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -960,20 +959,20 @@
           "description": "Encuentra facturas, créditos, gastos y asientos en borrador o pendientes que superaron la antigüedad configurada."
         },
         "forensic_weekend_postings": {
-          "title": "Gastos publicados en fin de semana",
-          "description": "Detecta documentos de gasto con fecha de fin de semana dentro del período de búsqueda, una señal clásica de malversación."
+          "title": "Contabilizaciones en fin de semana",
+          "description": "Asientos con fecha de fin de semana dentro de la ventana de revisión."
         },
         "forensic_round_dollar": {
-          "title": "Gastos en cifras redondas",
-          "description": "Detecta documentos de gasto por miles exactos por encima del umbral dentro del período de búsqueda."
+          "title": "Contabilizaciones en cifras redondas",
+          "description": "Asientos sospechosamente redondos dentro de la ventana de revisión."
         },
         "forensic_threshold_trap": {
-          "title": "Importes justo bajo el límite",
-          "description": "Detecta documentos de gasto con precios justo por debajo de un límite de aprobación redondo (importes terminados en 99)."
+          "title": "Trampas de umbral",
+          "description": "Importes estacionados justo por debajo de los umbrales de aprobación."
         },
         "forensic_duplicate_bills": {
-          "title": "Facturas duplicadas",
-          "description": "Detecta documentos a pagar con el mismo proveedor, tipo e importe contabilizados dentro de la ventana de duplicados."
+          "title": "Facturas duplicadas forenses",
+          "description": "Facturas casi duplicadas que los controles de pagos pudieron pasar por alto."
         },
         "tax_missing_codes": {
           "title": "Documentos sin código fiscal",
@@ -1086,22 +1085,6 @@
         "unmapped_payroll_component": {
           "title": "Componentes de nómina sin asignar",
           "description": "Componentes de nómina sin asignación de contabilización."
-        },
-        "forensic_weekend_postings": {
-          "title": "Contabilizaciones en fin de semana",
-          "description": "Asientos con fecha de fin de semana dentro de la ventana de revisión."
-        },
-        "forensic_round_dollar": {
-          "title": "Contabilizaciones en cifras redondas",
-          "description": "Asientos sospechosamente redondos dentro de la ventana de revisión."
-        },
-        "forensic_threshold_trap": {
-          "title": "Trampas de umbral",
-          "description": "Importes estacionados justo por debajo de los umbrales de aprobación."
-        },
-        "forensic_duplicate_bills": {
-          "title": "Facturas duplicadas forenses",
-          "description": "Facturas casi duplicadas que los controles de pagos pudieron pasar por alto."
         }
       },
       "accounting": {

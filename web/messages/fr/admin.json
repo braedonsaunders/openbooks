@@ -968,7 +968,7 @@
         "criticalItemCount": "Nombre critique d’éléments",
         "criticalMaterialityMultiple": "Multiple critique d’importance relative",
         "staleAfterDays": "Périmé après",
-        "lookbackDays": "Période de recherche",
+        "lookbackDays": "Fenêtre de révision",
         "duplicateDays": "Fenêtre de doublons",
         "dueWithinDays": "Échéance sous",
         "minimumVariancePercent": "Écart défavorable minimal",
@@ -987,8 +987,7 @@
         "payRunHorizonDays": "Horizon de règlement",
         "minimumDiscountPercent": "Remise minimale",
         "matchWindowDays": "Fenêtre de rapprochement",
-        "minimumConfidencePercent": "Confiance minimale",
-        "lookbackDays": "Fenêtre de révision"
+        "minimumConfidencePercent": "Confiance minimale"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -1004,20 +1003,20 @@
           "description": "Repère les factures, crédits, dépenses et écritures brouillons ou en attente qui dépassent l’âge configuré."
         },
         "forensic_weekend_postings": {
-          "title": "Dépenses comptabilisées le week-end",
-          "description": "Repère les documents de dépenses datés d’un week-end dans la période de recherche, un signal classique de détournement."
+          "title": "Écritures de fin de semaine",
+          "description": "Écritures datées d'une fin de semaine dans la fenêtre de révision."
         },
         "forensic_round_dollar": {
-          "title": "Dépenses en chiffres ronds",
-          "description": "Repère les documents de dépenses en milliers ronds au-dessus du seuil dans la période de recherche."
+          "title": "Écritures en chiffres ronds",
+          "description": "Écritures rondes suspectes dans la fenêtre de révision."
         },
         "forensic_threshold_trap": {
-          "title": "Montants juste sous le seuil",
-          "description": "Repère les documents de dépenses tarifés juste sous un seuil d’approbation rond (montants se terminant par 99)."
+          "title": "Pièges de seuils",
+          "description": "Montants placés juste sous les seuils d'approbation."
         },
         "forensic_duplicate_bills": {
-          "title": "Factures en double",
-          "description": "Repère les documents fournisseurs avec le même tiers, la même nature et le même montant comptabilisés dans la fenêtre de doublons."
+          "title": "Factures en double forensiques",
+          "description": "Factures quasi identiques que les contrôles fournisseurs ont pu manquer."
         },
         "tax_missing_codes": {
           "title": "Documents sans code fiscal",
@@ -1130,22 +1129,6 @@
         "unmapped_payroll_component": {
           "title": "Composantes de paie non affectées",
           "description": "Composantes de paie sans affectation comptable."
-        },
-        "forensic_weekend_postings": {
-          "title": "Écritures de fin de semaine",
-          "description": "Écritures datées d'une fin de semaine dans la fenêtre de révision."
-        },
-        "forensic_round_dollar": {
-          "title": "Écritures en chiffres ronds",
-          "description": "Écritures rondes suspectes dans la fenêtre de révision."
-        },
-        "forensic_threshold_trap": {
-          "title": "Pièges de seuils",
-          "description": "Montants placés juste sous les seuils d'approbation."
-        },
-        "forensic_duplicate_bills": {
-          "title": "Factures en double forensiques",
-          "description": "Factures quasi identiques que les contrôles fournisseurs ont pu manquer."
         }
       },
       "accounting": {
