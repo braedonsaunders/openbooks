@@ -20,6 +20,13 @@ import {
   type ScriptContext,
 } from "./scripting.ts";
 import type { ContributedLine } from "./allocations/types.ts";
+import {
+  assertContributorBalance,
+  collectPostContributions,
+  PostAllocationError,
+  type ContributedLineWithSource,
+  type PostContributionResult,
+} from "./allocations/post.ts";
 import { assertDocumentMutationRefsOwned } from "./document-mutation-refs.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
@@ -1914,13 +1921,49 @@ export async function postDocument(
     );
   }
 
+  // -- allocation kernel: post-mode RULE contributions (A5) ----------------
+  // Rules in effect on the posting date contribute dimensional-attribution /
+  // reclass legs to the transaction's own entry. Each contributor's set must
+  // balance per subsidiary on its own; the union then flows through
+  // applySubsidiaries / assertFinalKernelBalance / validateRequiredDimensions
+  // unchanged. Migration replay and automation-suppressed runs never
+  // contribute; a closed gate contributes nothing.
+  let postContrib: PostContributionResult = { lines: [], reportOnly: [] };
+  try {
+    postContrib = await collectPostContributions(
+      db,
+      {
+        id: effectiveDoc.id,
+        orgId: effectiveDoc.orgId,
+        kind: effectiveDoc.kind,
+        postingDate: effectiveDoc.postingDate,
+        documentDate: effectiveDoc.documentDate,
+        currency: effectiveDoc.currency,
+        subsidiaryId: effectiveDoc.subsidiaryId,
+      },
+      kernelLines,
+      { migration: deps.migration, suppressAutomation: options.suppressAutomation },
+      { postingDate: effectiveDoc.postingDate ?? effectiveDoc.documentDate },
+    );
+  } catch (error) {
+    if (error instanceof PostAllocationError) throw new PostingError(error.message);
+    throw error;
+  }
+  assertContributorBalance(postContrib.lines);
+  const primaryContrib = postContrib.lines.filter((l) => l.bookId === undefined);
+  // applySubsidiaries stamps in order and appends intercompany legs after,
+  // so stamped[i] corresponds to unionLines[i] below for the contributor
+  // stamps and lineage mapping at insert time.
+  const unionLines: (KernelLine & {
+    contributorKind?: string | null;
+    contributorRef?: string | null;
+  })[] = [...kernelLines, ...primaryContrib];
+
   // -- allocation kernel: custom_gl_lines user scripts (A6) -----------------
-  // Post-mode RULE contributions (A5 contributePostingAllocations) run at this
-  // same seam, first, and their lines join kernelLines; until A5 lands the
-  // kernel lines are the whole script-visible input. Scripts observe the
-  // kernel read-only and return extra balanced lines. A refusal throws before
-  // the posting transaction opens, so a refused script set leaves no partial
-  // write behind. Suppressed for replay/migration like other automation.
+  // Scripts observe the kernel read-only (kernel lines plus the rule
+  // contributions above) and return extra balanced lines. A refusal throws
+  // before the posting transaction opens, so a refused script set leaves no
+  // partial write behind. Suppressed for replay/migration like automation.
   let customGlLines: ContributedLine[] = [];
   if (!options.suppressAutomation && !deps.migration) {
     try {
@@ -1928,7 +1971,7 @@ export async function postDocument(
         orgId: doc.orgId,
         document: effectiveDoc as unknown as Record<string, unknown>,
         documentLines: postingLines as unknown as Record<string, unknown>[],
-        kernelLines: kernelLines as unknown as Record<string, unknown>[],
+        kernelLines: unionLines as unknown as Record<string, unknown>[],
         actorId: options.audit?.actorId ?? null,
         targetId: doc.id,
       });
@@ -1999,7 +2042,7 @@ export async function postDocument(
   }
 
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
-  const subApplied = await applySubsidiaries(db, effectiveDoc, kernelLines);
+  const subApplied = await applySubsidiaries(db, effectiveDoc, unionLines);
   assertFinalKernelBalance(subApplied.lines);
   // Script contributions translate through the same subsidiary/FX kernel
   // (defaults, spot rates, restriction checks). The host proved they balance
@@ -2188,7 +2231,7 @@ export async function postDocument(
       throw error;
     }
 
-    await tx.insert(schema.journalLines).values([
+    const insertedLines = await tx.insert(schema.journalLines).values([
       ...subApplied.lines.map((l, i) => ({
         orgId: doc.orgId,
         entryId: entry.id,
@@ -2211,6 +2254,10 @@ export async function postDocument(
         memo: l.memo ?? null,
         dueDate: l.dueDate ?? null,
         isOpenItem: l.isOpenItem ?? false,
+        // Kernel lines carry no contributor (null); rule contributions ride
+        // at unionLines[kernelLines.length + j] by the order contract above.
+        contributorKind: unionLines[i]?.contributorKind ?? null,
+        contributorRef: unionLines[i]?.contributorRef ?? null,
       })),
       // Allocation-kernel script contributions (A6): same entry, stamped so
       // the GL impact view can lock standard lines and show these separately.
@@ -2240,7 +2287,8 @@ export async function postDocument(
         contributorKind: l.contributorKind,
         contributorRef: l.contributorRef,
       })),
-    ]);
+    ])
+      .returning({ id: schema.journalLines.id });
 
     await tx
       .update(schema.journalEntries)
@@ -2289,6 +2337,177 @@ export async function postDocument(
       throw new PostingError(
         `document ${doc.documentNumber} was already posted or voided`,
       );
+    }
+
+    // -- allocation lineage + secondary-book entries (same transaction) ----
+    // Kernel lines keep numbers 1..N with rule contributions following in
+    // rule order; script lines come last and write no lineage (A6).
+    const kernelLineIds = insertedLines
+      .slice(0, kernelLines.length)
+      .map((r) => r.id);
+    const contribLineIds = insertedLines
+      .slice(kernelLines.length, kernelLines.length + primaryContrib.length)
+      .map((r) => r.id);
+    const lineageOf = (
+      line: ContributedLineWithSource,
+      journalEntryId: string,
+      journalLineId: string | null,
+    ): typeof schema.allocationLineage.$inferInsert => {
+      const draft = line.lineage;
+      if (!draft) throw new PostingError("allocation contribution is missing its lineage draft");
+      const sourceId = kernelLineIds[line.sourceKernelIndex];
+      if (!sourceId) throw new PostingError("allocation contribution points at an unknown kernel line");
+      return {
+        orgId: doc.orgId,
+        mode: "post",
+        ruleId: draft.ruleId,
+        versionId: draft.versionId,
+        definitionHash: draft.definitionHash,
+        runId: null,
+        documentId: doc.id,
+        journalEntryId,
+        journalLineId,
+        sourceJournalLineId: sourceId,
+        sourceDocumentLineId: null,
+        targetDocumentLineId: null,
+        driverId: draft.driverId,
+        driverValue: draft.driverValue,
+        driverTotal: draft.driverTotal,
+        share: draft.share,
+        amount: draft.amount,
+        residual: draft.residual ?? "0.0000",
+      };
+    };
+    const lineageRows: (typeof schema.allocationLineage.$inferInsert)[] = [];
+    primaryContrib.forEach((line, j) => {
+      const journalLineId = contribLineIds[j];
+      if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");
+      lineageRows.push(lineageOf(line, entry.id, journalLineId));
+    });
+    for (const draft of postContrib.reportOnly) {
+      const sourceId = kernelLineIds[draft.sourceKernelIndex];
+      if (!sourceId) throw new PostingError("allocation contribution points at an unknown kernel line");
+      lineageRows.push({
+        orgId: doc.orgId,
+        mode: "post",
+        ruleId: draft.ruleId,
+        versionId: draft.versionId,
+        definitionHash: draft.definitionHash,
+        runId: null,
+        documentId: doc.id,
+        journalEntryId: entry.id,
+        journalLineId: null,
+        sourceJournalLineId: sourceId,
+        sourceDocumentLineId: null,
+        targetDocumentLineId: null,
+        driverId: draft.driverId,
+        driverValue: draft.driverValue,
+        driverTotal: draft.driverTotal,
+        share: draft.share,
+        amount: draft.amount,
+        residual: draft.residual ?? "0.0000",
+      });
+    }
+    // Secondary books: one origin='allocation' entry per book with that
+    // book's contributed lines, balanced and period-checked like the main
+    // entry. Lineage sources still point at the primary entry's kernel line.
+    const secondaryByBook = new Map<string, ContributedLineWithSource[]>();
+    for (const line of postContrib.lines) {
+      if (line.bookId === undefined) continue;
+      const list = secondaryByBook.get(line.bookId) ?? [];
+      list.push(line);
+      secondaryByBook.set(line.bookId, list);
+    }
+    if (secondaryByBook.size > 0) {
+      // Revalidate under the org lock: a book deactivated after contribution
+      // planning refuses instead of posting into a dead book.
+      const bookRows = (await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean }>(sql`
+        select id, code, is_active, posts_gl from accounting_books
+         where org_id = ${doc.orgId} and id = any(${`{${[...secondaryByBook.keys()].join(",")}}`}::uuid[])`)).rows;
+      const bookById = new Map(bookRows.map((b) => [b.id, b]));
+      for (const [bookId, bookLines] of secondaryByBook) {
+        const book = bookById.get(bookId);
+        if (!book || !book.is_active || !book.posts_gl) {
+          throw new PostingError("allocation target book is not an active posting book");
+        }
+        const secApplied = await applySubsidiaries(tx, effectiveDoc, bookLines);
+        assertFinalKernelBalance(secApplied.lines);
+        await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);
+        try {
+          await assertPeriodModulesOpen(tx, {
+            orgId: doc.orgId,
+            periodId: period.id,
+            bookId,
+            subsidiaryIds: secApplied.lines.map((line) => line.subsidiaryId),
+            modules: [closeModuleForDocument(doc.kind)],
+            allowImportedLocks: deps.migration,
+          });
+        } catch (error) {
+          if (error instanceof CloseError) throw new PostingError(error.message);
+          throw error;
+        }
+        const secEntry = (await tx
+          .insert(schema.journalEntries)
+          .values({
+            orgId: doc.orgId,
+            bookId,
+            subsidiaryId: subApplied.docSubId,
+            entryNumber: await nextFreeEntryNumber(
+              tx,
+              doc.orgId,
+              `${effectiveDoc.documentNumber}-ALLOC-${book.code}`,
+            ),
+            postingDate,
+            periodId: period.id,
+            memo: `Allocations for ${effectiveDoc.documentNumber} (${book.code})`,
+            status: "draft",
+            sourceDocumentId: doc.id,
+            origin: "allocation",
+          })
+          .returning({ id: schema.journalEntries.id }))[0]!;
+        const secInserted = await tx
+          .insert(schema.journalLines)
+          .values(
+            secApplied.lines.map((l, i) => ({
+              orgId: doc.orgId,
+              entryId: secEntry.id,
+              lineNumber: i + 1,
+              accountId: l.accountId,
+              subsidiaryId: l.subsidiaryId,
+              amount: l.amount,
+              currency: l.currency,
+              txnAmount: l.txnAmount,
+              fxRate: l.fxRate,
+              partyId: l.partyId ?? null,
+              departmentId: l.departmentId ?? null,
+              projectId: l.projectId ?? null,
+              locationId: l.locationId ?? null,
+              classId: l.classId ?? null,
+              equipmentUnitId: l.equipmentUnitId ?? null,
+              extraDims: l.extraDims ?? {},
+              paymentCardId: l.paymentCardId ?? null,
+              taxCodeId: l.taxCodeId ?? null,
+              memo: l.memo ?? null,
+              dueDate: l.dueDate ?? null,
+              isOpenItem: l.isOpenItem ?? false,
+              contributorKind: bookLines[i]?.contributorKind ?? null,
+              contributorRef: bookLines[i]?.contributorRef ?? null,
+            })),
+          )
+          .returning({ id: schema.journalLines.id });
+        await tx
+          .update(schema.journalEntries)
+          .set({ status: "posted", postedAt: new Date() })
+          .where(and(eq(schema.journalEntries.id, secEntry.id), eq(schema.journalEntries.orgId, doc.orgId)));
+        bookLines.forEach((line, j) => {
+          const journalLineId = secInserted[j]?.id;
+          if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");
+          lineageRows.push(lineageOf(line, secEntry.id, journalLineId));
+        });
+      }
+    }
+    if (lineageRows.length > 0) {
+      await tx.insert(schema.allocationLineage).values(lineageRows);
     }
 
     if (options.audit && auditBefore) {
