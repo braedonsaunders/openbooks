@@ -1731,6 +1731,9 @@ export async function runSync(
               await postDocument(row!.id, deps, {
                 deferEffects: true,
                 suppressAutomation: true,
+                // No user posts a mirror run: actor null, source system
+                // explicit — the same envelope every other post leaves.
+                audit: { actorId: null, source: source.name },
               });
               await refreshDocumentHeaderTotals(row!.id, org.id);
             }
@@ -1814,6 +1817,9 @@ export async function runSync(
             await postDocument(have.id, deps, {
               deferEffects: true,
               suppressAutomation: true,
+              // No user posts a mirror run: actor null, source system
+              // explicit — the same envelope every other post leaves.
+              audit: { actorId: null, source: source.name },
             });
             await refreshDocumentHeaderTotals(have.id, org.id);
           });
