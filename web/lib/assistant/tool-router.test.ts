@@ -10,6 +10,7 @@ import {
   MODULE_KEYWORDS,
   moduleOfTool,
   preRouteModules,
+  priorToolNames,
   resolveActiveToolNames,
 } from "./tool-router";
 
@@ -140,6 +141,30 @@ test("matchTools ranks name hits above blurb hits and respects the limit", () =>
   assert.deepEqual(matchTools(catalog, "inventory", 1).map((h) => h.name), ["inventory_levels"]);
   assert.deepEqual(matchTools(catalog, "", 8), []);
   assert.deepEqual(matchTools(catalog, "zzz-no-such-capability", 8), []);
+});
+
+test("priorToolNames reads static and dynamic tool parts off assistant turns", () => {
+  const messages = [
+    { role: "user", parts: [{ type: "text", text: "hi" }] },
+    {
+      role: "assistant",
+      parts: [
+        { type: "text", text: "checking" },
+        { type: "tool-inventory_levels", toolCallId: "a" },
+        { type: "dynamic-tool", toolName: "get_pay_run", toolCallId: "b" },
+        { type: "tool-inventory_levels", toolCallId: "c" },
+        { type: "tool-approval-request", toolCallId: "d" },
+      ],
+    },
+    { role: "assistant", parts: [{ type: "text", text: "done" }] },
+    { role: "assistant" },
+  ];
+  assert.deepEqual(priorToolNames(messages), ["inventory_levels", "get_pay_run"]);
+});
+
+test("priorToolNames ignores malformed parts instead of throwing", () => {
+  assert.deepEqual(priorToolNames([{ role: "assistant", parts: [null, "x", 42, {}] }]), []);
+  assert.deepEqual(priorToolNames([]), []);
 });
 
 test("findToolsModules reads activation modules off success results only", () => {

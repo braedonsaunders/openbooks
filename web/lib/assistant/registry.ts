@@ -10,7 +10,15 @@ import {
   executeApplicationTool,
 } from "../application/tool-catalog";
 import { canRunTool } from "./gate";
-import { findToolsModules } from "./tool-router";
+import {
+  activateTurnModules,
+  createTurnScope,
+  findToolsModules,
+  moduleOfTool,
+  preRouteModules,
+  resolveActiveToolNames,
+  type TurnScope,
+} from "./tool-router";
 import { listAppToolViews, toAssistantToolDef } from "../apps/tools";
 import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
@@ -40,7 +48,7 @@ import { REPORTING_TOOLS } from "./tools-reports";
 import { SETUP_TOOLS } from "./tools-setup";
 import { META_TOOLS } from "./tools-meta";
 import { WRITE_TOOLS } from "./tools-write";
-import type { AssistantToolDef, ToolResult } from "./types";
+import type { AssistantToolDef, ToolResult, ToolTier } from "./types";
 import { safeApplicationToolError } from "./tool-errors";
 
 /**
@@ -138,8 +146,12 @@ export async function executeAssistantTool(
  *  tool name is skipped — installs reject collisions, so a skip only fires
  *  for an app installed before a built-in tool took its name, and the
  *  built-in keeps the slot. */
-export async function buildToolRegistryAsync(authz: Authz, features?: FeatureState | null): Promise<ToolSet> {
-  const base = buildToolRegistry(authz, features);
+export async function buildToolRegistryAsync(
+  authz: Authz,
+  features?: FeatureState | null,
+  hooks?: ChatToolHooks,
+): Promise<ToolSet> {
+  const base = buildToolRegistry(authz, features, hooks);
   if (features && !featureEnabled(features, "apps")) return base;
   const taken = new Set(Object.keys(base));
   const views = await listAppToolViews(authz.user.orgId, authz, features);
@@ -231,4 +243,83 @@ export function buildToolRegistry(authz: Authz, features?: FeatureState | null, 
       ] as const;
     });
   return Object.fromEntries([...entries, ...applicationEntries]);
+}
+
+/** Feature flag (if any) behind one catalog tool, for module resolution. */
+function featureOfTool(name: string): string | undefined {
+  const assistant = ASSISTANT_TOOLS.find((t) => t.name === name);
+  if (assistant) return assistant.feature;
+  return APPLICATION_TOOLS.find((t) => t.name === name)?.featureKey;
+}
+
+export type ChatCatalogEntry = { name: string; tier: ToolTier; module: string };
+
+let cachedChatCatalog: ChatCatalogEntry[] | null = null;
+
+/** Static tier/module snapshot of the full catalog. Visibility always comes
+ *  from the built ToolSet — the SDK ignores activeTools names it was never
+ *  registered with, so over-naming here is safe and under-naming impossible
+ *  for static tools. */
+export function chatCatalogTiers(): ChatCatalogEntry[] {
+  cachedChatCatalog ??= [
+    ...ASSISTANT_TOOLS.map((t) => ({
+      name: t.name,
+      tier: t.tier ?? "module",
+      module: moduleOfTool(t.name, t.feature),
+    })),
+    ...APPLICATION_TOOLS.map((t) => ({
+      name: t.name,
+      tier: t.tier ?? "module",
+      module: moduleOfTool(t.name, t.featureKey),
+    })),
+  ];
+  return cachedChatCatalog;
+}
+
+export type ChatTurn = {
+  /** Full visible catalog (registration — activation stays instant and typed). */
+  tools: ToolSet;
+  /** Per-turn activation state, threaded through prepareStep. */
+  scope: TurnScope;
+  /** Tool names the model may see this step: core ∪ pre-routed ∪ activated,
+   *  plus installed app tools (dynamic, outside the static snapshot). */
+  activeTools: () => string[];
+};
+
+/** Assemble one chat turn: pre-route from the user message + conversation,
+ *  register the full gated catalog, and serve the per-step active subset. */
+export async function buildChatTurn(
+  authz: Authz,
+  features: FeatureState | null | undefined,
+  message: string,
+  priorNames: readonly string[] = [],
+): Promise<ChatTurn> {
+  const scope = createTurnScope(
+    preRouteModules(message, priorNames, (name) => moduleOfTool(name, featureOfTool(name))),
+  );
+  const tools = await buildToolRegistryAsync(authz, features, {
+    onActivateModules: (modules) => activateTurnModules(scope, modules),
+  });
+  const staticNames = new Set(chatCatalogTiers().map((t) => t.name));
+  const dynamicNames = Object.keys(tools).filter((name) => !staticNames.has(name));
+  return {
+    tools,
+    scope,
+    activeTools: () => [...resolveActiveToolNames(chatCatalogTiers(), scope), ...dynamicNames],
+  };
+}
+
+/** Per-step gate: the final step must answer, and every step only sends the
+ *  turn's active tools (verified: the SDK filters the request payload by
+ *  activeTools). Without the resolver every registered tool is sent —
+ *  the background-agent behaviour, unchanged. The narrow parameter keeps
+ *  the step policy unit-testable without a model. */
+export function createChatPrepareStep(
+  maxSteps: number,
+  activeTools?: () => string[],
+): (options: { stepNumber: number }) => { toolChoice?: "none"; activeTools?: string[] } {
+  return ({ stepNumber }) => ({
+    ...(stepNumber >= maxSteps - 1 ? { toolChoice: "none" as const } : undefined),
+    ...(activeTools ? { activeTools: activeTools() } : undefined),
+  });
 }
