@@ -1,28 +1,22 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../db.ts";
 import { div } from "../money.ts";
-import { getDriver } from "./driver-admin.ts";
 import type {
   AllocationDimension,
   AllocationRunTrigger,
-  DriverAsOf,
-  DriverResolveRequest,
-  DriverResolver,
   DriverVector,
   RunComputation,
 } from "./types.ts";
 
 /**
- * A8 shims for the not-yet-landed A2 (drivers) and A3 (period-run) engines.
+ * A8 shims for the not-yet-landed A3 period-run engine.
  *
- * DELETE THIS FILE when A2/A3 land: routes rewire to `resolveDriverVector`
- * (`engine/src/allocations/drivers.ts`) and `preview/post/reverse/rerunAllocationRun`
- * (`engine/src/allocations/period-run.ts`), and these tests move to their
- * suites. Every item below is marked REAL (works against the frozen schema)
- * or PENDING (typed `engine_pending` until the owning shard lands).
- *
- *   REAL: manual-kind driver preview vector (+ shares + dimension labels).
- *   PENDING: every other source_kind; the full run lifecycle.
+ * Driver evaluation landed with A2 (`engine/src/allocations/drivers.ts`):
+ * the preview route calls `previewDriverVector` directly and this module
+ * keeps only the run-lifecycle seam plus the preview display helpers
+ * (exact shares, dimension labels). DELETE the seam when A3's
+ * `period-run.ts` lands; the helpers move with the UI that uses them.
+ * PENDING items below throw typed `engine_pending` until A3 lands.
  */
 
 export const ENGINE_PENDING = "engine_pending";
@@ -62,53 +56,6 @@ function addDecimal(a: string, b: string): string {
   const negative = sum < 0n;
   const abs = negative ? -sum : sum;
   return `${negative ? "-" : ""}${abs / 10000n}.${String(abs % 10000n).padStart(4, "0")}`;
-}
-
-async function asOfDate(orgId: string, asOf: DriverAsOf, executor: SqlExecutor): Promise<string> {
-  if ("date" in asOf) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf.date)) throw new EnginePendingError("A8", `bad as-of date: ${asOf.date}`);
-    return asOf.date;
-  }
-  const rows = await executor.execute<{ ends_on: string }>(sql`
-    select ends_on::text as ends_on from accounting_periods
-     where org_id = ${orgId} and id = ${asOf.periodId}`);
-  const end = rows.rows[0]?.ends_on?.slice(0, 10);
-  if (!end) throw new EnginePendingError("A8", "period not found for driver preview");
-  return end;
-}
-
-/**
- * REAL: resolve a manual-kind driver to its effective-dated values.
- * Any other source_kind throws EnginePendingError (A2 owns those resolvers).
- */
-export async function previewManualDriverVector(
-  orgId: string,
-  driverId: string,
-  asOf: DriverAsOf,
-  opts?: { include?: string[]; exclude?: string[]; executor?: SqlExecutor },
-): Promise<{ vector: DriverVector; date: string }> {
-  const ex = opts?.executor ?? db;
-  const driver = await getDriver(orgId, driverId, ex);
-  if (!driver) throw new EnginePendingError("A8", "driver not found");
-  if (driver.sourceKind !== "manual") {
-    throw new EnginePendingError("A2", `driver preview for ${driver.sourceKind} lands with A2 (drivers.ts)`);
-  }
-  const date = await asOfDate(orgId, asOf, ex);
-  const include = opts?.include;
-  const exclude = new Set(opts?.exclude ?? []);
-  const rows = await ex.execute<{ dimension_value_id: string; value: string }>(sql`
-    select dimension_value_id::text as dimension_value_id, value::text as value
-      from allocation_driver_values
-     where org_id = ${orgId} and driver_id = ${driverId}
-       and effective_from <= ${date}
-       and (effective_to is null or effective_to >= ${date})`);
-  const vector: DriverVector = new Map();
-  for (const row of rows.rows) {
-    if (include !== undefined && !include.includes(row.dimension_value_id)) continue;
-    if (exclude.has(row.dimension_value_id)) continue;
-    vector.set(row.dimension_value_id, row.value);
-  }
-  return { vector, date };
 }
 
 /** REAL: human labels for dimension values in a preview table. */
@@ -200,20 +147,3 @@ export function getPeriodRunEngine(): PeriodRunEngine {
 export function setPeriodRunEngine(engine: PeriodRunEngine): void {
   activePeriodRunEngine = engine;
 }
-
-/**
- * PENDING until A2: a DriverResolver over the shim. Manual drivers resolve
- * for real; every other kind throws EnginePendingError.
- */
-export const shimDriverResolver: DriverResolver = {
-  async resolve(request: DriverResolveRequest): Promise<DriverVector> {
-    if (request.driver.sourceKind !== "manual") {
-      throw new EnginePendingError("A2", `driver preview for ${request.driver.sourceKind} lands with A2 (drivers.ts)`);
-    }
-    const { vector } = await previewManualDriverVector(request.orgId, request.driver.id, request.asOf, {
-      include: request.include,
-      exclude: request.exclude,
-    });
-    return vector;
-  },
-};
