@@ -979,13 +979,19 @@ function LockStage(
   );
 }
 
-function PublishStage(
+export function PublishStage(
   props: Props & {
     busy: boolean;
     onAction: (action: string, comment?: string) => void;
   },
 ) {
   const t = useTranslations("close");
+  const [note, setNote] = useState("");
+  // A re-publication after a controlled reopen is a restatement: the engine
+  // refuses it without a note, so the button stays disabled until the
+  // operator writes one. First publications keep the note optional.
+  const isRepublish = props.run.binder_hash != null;
+  const noteReady = !isRepublish || note.trim().length > 0;
   const reportHref: Record<string, string> = {
     "balance-sheet": "/reports/balance-sheet",
     pnl: "/reports/pnl",
@@ -1021,9 +1027,26 @@ function PublishStage(
         </Card>
         {props.advancedClose && props.run.status !== "published" ? (
           <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t("publish.noteLabel")}
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={t("publish.notePlaceholder")}
+                className="mt-1"
+              />
+            </label>
+            {isRepublish ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t("publish.noteRequired")}
+              </p>
+            ) : null}
             <Button
-              disabled={props.busy || !props.canRun || props.run.status !== "closed"}
-              onClick={() => window.confirm(t("publish.confirm")) && props.onAction("publish")}
+              disabled={props.busy || !props.canRun || props.run.status !== "closed" || !noteReady}
+              onClick={() =>
+                window.confirm(t("publish.confirm")) &&
+                props.onAction("publish", note.trim() || undefined)
+              }
             >
               <Send size={15} />
               {t("actions.publish")}
