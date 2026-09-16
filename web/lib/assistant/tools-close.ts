@@ -25,7 +25,7 @@ export function closeScopeDenied(authz: Authz): ToolResult | null {
 const getCloseRunStatus: AssistantToolDef = {
   name: "get_close_run_status",
   description:
-    "One period-close run's cockpit state: period and book, lifecycle status and stage, readiness score, task counts by status, open exceptions (most severe first), sign-offs, and the period locks for the run's period and book. Use list_close_runs for the runs in flight, then this for the detail. Read-only.",
+    "One close run's state: period/book, lifecycle stage, readiness, task counts, open exceptions (worst first), sign-offs, period locks. Use list_close_runs first. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({ runId: uuidInput }),
@@ -127,7 +127,7 @@ const getCloseRunStatus: AssistantToolDef = {
 const listPeriodLocks: AssistantToolDef = {
   name: "list_period_locks",
   description:
-    "List period locks by scope: period, book, subsidiary (null means org-wide), module (ar, ap, banking, assets, tax, gl), state (open, soft_closed, closed), who locked it, why, and any time-bounded reopen expiry. Optionally filter by period, state, or module. Read-only.",
+    "Period locks by scope: period, book, subsidiary (null = org-wide), module, state, locker, reason, reopen expiry. Filter by period, state, module. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({
@@ -194,7 +194,7 @@ const listPeriodLocks: AssistantToolDef = {
 const listPeriodReopenRequests: AssistantToolDef = {
   name: "list_period_reopen_requests",
   description:
-    "List period-reopen requests: period, book, subsidiary scope, modules, reason, status (requested, approved, rejected, expired, reclosed), requester and approver, and expiry. Requesting and deciding go through request_period_reopen / decide_period_reopen. Read-only.",
+    "Period-reopen requests: scope, modules, reason, status, requester/approver, expiry. Request/decide via request_period_reopen / decide_period_reopen. Read-only.",
   category: "search",
   // No close.read list surface shows these rows: requesting/deciding live
   // behind close.reopen (admin/close route) and the setup surface behind

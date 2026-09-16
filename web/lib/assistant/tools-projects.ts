@@ -15,7 +15,7 @@ const rankProjectsTool: AssistantToolDef = {
   name: "rank_projects",
   tier: "core",
   description:
-    "Rank and filter the whole project (job) portfolio in one call: per-project contract value, cost budget, posted cost, posted revenue, margin, margin %, committed PO cost, budget overrun, and unbilled contract, with the TOTAL matching count and paging. Use this for 'worst projects', 'over budget', 'largest fixed-price contracts', 'negative margin', or any portfolio ranking — never call project_profitability per project to build a list. Defaults: status active, projects with posted activity, sorted worst margin first. Read-only.",
+    "Rank the project portfolio in one call: value, budgets, costs, revenue, margin, overruns, unbilled, TOTAL count, paging; never loop project_profitability. Defaults: active, worst margin first. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
   feature: "projects",

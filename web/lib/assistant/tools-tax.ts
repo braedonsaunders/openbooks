@@ -24,7 +24,7 @@ const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 const listTaxReturnForms: AssistantToolDef = {
   name: "list_tax_return_forms",
   description:
-    "List the indirect-tax return forms configured for this org (e.g. a GST/HST return, a VAT return, a state sales-tax return) with country, submission channel, and whether a registration number is on file. Call before tax_return to learn the form codes. Read-only.",
+    "Indirect-tax return forms for this org, with country, channel, registration status. Call before tax_return for form codes. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({}),
@@ -57,7 +57,7 @@ const listTaxReturnForms: AssistantToolDef = {
 const taxReturn: AssistantToolDef = {
   name: "tax_return",
   description:
-    "Compute an indirect-tax return (GST/HST, VAT, sales tax) for a period from the ledger: every box of the configured form — taxable sales, tax collected, input tax credits / recoverable tax, and the net remittance or refund — exactly as the filing screen computes it. The window is clamped to the form's filing calendar; the response states the exact period used. Requires the form code from list_tax_return_forms. Read-only.",
+    "Indirect-tax return for a period (GST/HST, VAT, sales tax): every form box as the filing screen computes it; window clamped to the filing calendar, period stated. Needs a form code from list_tax_return_forms. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
@@ -124,7 +124,7 @@ const TAXABLE_KIND_PERM: Record<string, string> = {
 const documentsMissingTaxCode: AssistantToolDef = {
   name: "documents_missing_tax_code",
   description:
-    "Pre-filing review list: posted documents in a period that have at least one non-zero line WITHOUT a tax code (untaxed or unclassified lines the return will not see). Returns per-kind counts, the untaxed amount, and a capped list of the documents with their untaxed line count and amount. Some lines are legitimately tax-free (exempt, zero-rated, out of scope) — present this as a review list, not as errors. Read-only.",
+    "Pre-filing review: posted documents in a period with non-zero lines lacking a tax code. Per-kind counts, untaxed amount, capped document list. Some lines are legitimately tax-free — a review list, not errors. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "expenses.read"] },
   inputSchema: z.object({

@@ -111,7 +111,7 @@ function opportunityRow(r: Record<string, unknown>) {
 const searchOpportunities: AssistantToolDef = {
   name: "search_opportunities",
   description:
-    "Search sales opportunities (open pipeline and closed): number, title, customer, owner, stage, close probability, projected and probability-weighted amounts. Returns a capped page plus totals over ALL matches and a per-stage breakdown. Read-only.",
+    "Search sales opportunities (open and closed): number, title, customer, owner, stage, probability, projected/weighted amounts. Capped page plus totals and per-stage breakdown. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["crm.opportunities.read"] },
   feature: "crm",
@@ -597,7 +597,7 @@ const crmForecastSchema = z.object({
 const crmForecast: AssistantToolDef = {
   name: "crm_forecast",
   description:
-    "Sales forecast rollup for a close-date window: pipeline, probability-weighted, worst-case / most-likely / upside, and posted closed revenue per currency, plus the overlapping sales quotas and (for unrestricted callers) saved forecast snapshots. Read-only.",
+    "Sales forecast for a close-date window: pipeline, weighted, worst/likely/upside, closed revenue per currency, quotas, saved snapshots (if permitted). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["crm.forecasts.read"] },
   feature: "crm",

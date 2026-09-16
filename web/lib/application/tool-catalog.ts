@@ -91,34 +91,34 @@ export interface ApplicationToolDefinition {
  * flags (same rule as web/lib/assistant/tools-shared.ts UUID_RE).
  */
 const UUID = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)
-  .describe("Stable UUID, copied verbatim from the id a list_, find_, or get_ tool returned; never invent one.");
+  .describe("UUID copied from a list_, find_, or get_ tool; never invent one.");
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
   .describe("Calendar date (YYYY-MM-DD).");
 const TYPE_KEY = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100)
   .describe("Record type key from list_record_types.");
 const MONEY = z.string().regex(/^\d+(?:\.\d{1,4})?$/)
-  .describe("Positive exact decimal string with at most four decimal places.");
+  .describe("Positive exact decimal, at most four places.");
 const SIGNED_MONEY = z.string().regex(/^-?\d+(?:\.\d{1,4})?$/)
-  .describe("Exact decimal string with at most four decimal places.");
+  .describe("Exact decimal, at most four places; negative allowed.");
 const RATE = z.string().regex(/^\d+(?:\.\d{1,10})?$/)
-  .describe("Positive exact decimal rate with at most ten decimal places.");
+  .describe("Positive exact decimal rate, at most ten places.");
 const IDEMPOTENCY_KEY = z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
 const ROUTE = z.string().regex(/^\/[A-Za-z0-9._\-/\[\]()]*$/).max(120)
   .describe("Next.js route PATTERN the layout replaces, e.g. /banking or /apps/[key]. Never a concrete url.");
 const LAYOUT_SPEC = z.unknown()
-  .describe("A ViewSpec PageSpec document. Call validate_page_layout first; errors name the offending widget or path.");
+  .describe("A ViewSpec PageSpec document; call validate_page_layout first.");
 const EXTENSION_KEY = z.string().regex(/^[a-z][a-z0-9-]*$/).max(64)
   .describe("App package key, e.g. equipment-checks.");
 const CUSTOM = z.record(z.string(), z.unknown())
-  .describe("Field values keyed by the record type's field keys (camelCase, as list_record_types describes them).");
+  .describe("Field values by the record type's camelCase field keys.");
 const DOCUMENT_REVISION = z.string()
   .regex(new RegExp(DOCUMENT_REVISION_PATTERN), "must be the exact persisted document updated_at token")
   .describe(DOCUMENT_REVISION_DESCRIPTION);
 const RECORD_UPDATE_BODY = z.object({
   expectedUpdatedAt: DOCUMENT_REVISION.optional(),
 }).catchall(z.unknown())
-  .describe("Updated field values (partial update); document updates must include expectedUpdatedAt copied verbatim from a read.");
+  .describe("Partial update; documents must copy expectedUpdatedAt verbatim from a read.");
 const DIMENSIONS = z.record(z.string(), UUID.nullable());
 const CLOSE_MODULE = z.enum(["ar", "ap", "banking", "assets", "tax", "gl"]);
 
@@ -305,7 +305,7 @@ function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, 
 export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "get_vitals", title: "Get Vitals",
-    description: "One consistent org snapshot from the same resolvers the screens use: bank cash and runway, AR/AP outstanding and aging totals, pending approvals, and the latest close run. Sections the actor may not read are returned as available:false with the reason — an absent value is never a zero.",
+    description: "One org snapshot from the screen resolvers: cash and runway, AR/AP outstanding and aging, pending approvals, latest close run. Unreadable sections return available:false with reason; absent is never zero.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context) => ({ ok: true, ...await orgVitals(context) }),
@@ -346,7 +346,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_record", title: "Update Record",
-    description: "Update an authorized record through its authoritative domain writer. Document bodies require expectedUpdatedAt copied verbatim from the persisted updated_at returned by get_record; custom-record bodies that replace data require it too; never generate or reformat it.",
+    description: "Update a record through its domain writer. Documents (and data-replacing custom records) require expectedUpdatedAt copied verbatim from get_record; never generate or reformat it.",
     inputSchema: updateRecordSchema,
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await updateApplicationRecord(context, input) }),
@@ -360,14 +360,14 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "describe_page_layout_vocabulary", title: "Describe Page Layout Vocabulary",
-    description: "The block kinds, cell kinds, widget names and frame names a page layout may use, read from the live renderer registries, plus the rules a layout must obey. Start here before writing one: a widget this does not list is refused at save.",
+    description: "Block/cell/widget/frame names a page layout may use, from the live registries, plus the rules layouts obey. Start here; unlisted widgets are refused at save.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context) => ({ ok: true, ...await describeLayoutVocabulary(context) }),
   }),
   definition({
     name: "describe_page_layout", title: "Describe Page Layout",
-    description: "What a route renders TODAY: its built-in layout verbatim, this org's override if one is active, and every field path the page's loader exposes with a sample value. Read this before writing a layout — editing the built-in one beats composing from scratch, and a field path that does not exist here renders as blank rather than as an error. Runs the page's own loader under your own permissions; a page you cannot view reports that instead of its layout.",
+    description: "What a route renders today: built-in layout, org override, loader field paths with sample values. Edit the built-in; unknown paths render blank. Runs under your permissions.",
     inputSchema: z.object({
       route: ROUTE,
       params: z.record(z.string(), z.string()).optional()
@@ -396,7 +396,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "preview_page_layout", title: "Preview Page Layout",
-    description: "Stage a draft layout and get a url that renders the REAL page with it applied — visible only to you, expiring on its own, published to nobody. Use this to show a layout before set_page_layout makes it live for the whole org.",
+    description: "Stage a draft layout for a private expiring preview url of the real page. Show it before set_page_layout goes live org-wide.",
     inputSchema: z.object({
       route: ROUTE,
       spec: LAYOUT_SPEC,
@@ -409,7 +409,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "set_page_layout", title: "Set Page Layout",
-    description: "Replace what a route renders — for everyone in this org, or for you alone with scope: \"user\". The layout binds fields the page's loader already resolved; it cannot reach data the reader could not already see. A rejected layout is returned with its errors rather than stored.",
+    description: "Replace what a route renders (org-wide, or just you with scope user). Binds only fields the loader resolved. Rejections return errors, never store.",
     inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional()
         .describe("Human-readable reason for this layout change, stored in history"), scope: z.enum(["org", "user"]).optional()
         .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
@@ -427,7 +427,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "restore_page_layout", title: "Restore Page Layout",
-    description: "Publish a previous version of a route's layout again, by the id list_page_layout_history reports. Appends a new active version rather than reactivating the old row, so the history stays a true record of what was live when.",
+    description: "Republish a past layout version by history id. Appends a new active version; history stays a true live-record.",
     inputSchema: z.object({ route: ROUTE, versionId: UUID }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
@@ -461,7 +461,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "draft_app", title: "Prepare App Draft",
     featureKey: "apps",
-    description: "Save an immutable unpublished app package for this author. No installation, object creation, backend execution or activation occurs. Returns the human review URL, preview URL and exact content hash. A revision is a new draft; keep all intended files and definitions.",
+    description: "Save an immutable unpublished app package (no install, objects, execution, or activation). Returns review/preview urls and content hash. Revisions are new drafts.",
     inputSchema: z.object({
       bundle: z.unknown().describe("Complete app package bundle: owned definitions and files the draft installs."),
       reason: z.string().trim().min(1).max(2000).describe("Honest human-readable reason for this draft"),
@@ -501,7 +501,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "activate_app_draft", title: "Activate Reviewed Extension",
     featureKey: "apps",
-    description: "Activate only the exact author-owned draft the human reviewed and explicitly approved. Bind draftId and contentHash. Refuses stale base versions or unavailable permissions. Provisioning, version activation and audit commit atomically.",
+    description: "Activate the exact reviewed, approved author draft (bind draftId and contentHash). Refuses stale bases or missing permissions. Atomic commit.",
     inputSchema: z.object({
       draftId: UUID,
       contentHash: z.string().regex(/^[a-f0-9]{64}$/).describe("Exact content hash the draft call returned; guards against stale-base activation"),
@@ -615,7 +615,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "run_revaluation", title: "Run FX Revaluation",
-    description: "Run period-end unrealized FX revaluation for an accounting period: restate foreign-currency monetary balances to the period-end spot rate, booking the remaining gain/loss plus its next-period mirror. Reruns book only incremental corrections; unchanged reruns post nothing. Requires the multi-currency module and a configured unrealized gain/loss account.",
+    description: "Period-end unrealized FX revaluation: restate foreign balances to spot, booking gain/loss plus next-period mirror. Reruns book incremental corrections only. Needs multi-currency and a gain/loss account.",
     inputSchema: z.object({ periodId: UUID, bookId: UUID.optional(), idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("close.run"), featureKey: "multiCurrency",
@@ -630,7 +630,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   })),
   definition({
     name: "post_journal", title: "Post Journal",
-    description: "Submit (if draft) and post a manual journal through the accounting kernel; a draft may return pending approval. Journals are not in the generic document lifecycle — this is their governed post path, twin of the journal workspace action.",
+    description: "Submit (if draft) and post a manual journal; drafts may return pending approval. Journals skip the generic document lifecycle.",
     inputSchema: z.object({ documentId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("gl.post"),
@@ -706,7 +706,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "match_bank_line", title: "Match Bank Line",
-    description: "Manually pair one unmatched bank statement line with one or more posted journal lines in a reconciliation session. The journal total must equal the statement line exactly. Returns the session totals (difference must reach zero before sign-off).",
+    description: "Pair one unmatched bank line with posted journal lines totalling exactly the statement line. Returns session totals (difference must reach zero).",
     inputSchema: z.object({
       reconciliationId: UUID, statementLineId: UUID,
       journalLineIds: z.array(UUID).min(1).max(50).describe("Posted journal lines whose total must equal the statement line exactly"),
@@ -718,7 +718,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "match_bank_line_with_journal", title: "Match Bank Line With Journal",
-    description: "Create a categorizing journal from one unmatched bank statement line (bank leg on the line's account, remainder to the offset account) and match it into the session — the Match Bank Data Add-journal action. Use when no posted journal line explains the bank line.",
+    description: "Create a categorizing journal from one unmatched bank line (bank leg, remainder to offset) and match it in-session. Use when no posted line explains it.",
     inputSchema: z.object({ reconciliationId: UUID, statementLineId: UUID, offsetAccountId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
@@ -734,7 +734,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "sign_off_reconciliation", title: "Sign Off Reconciliation",
-    description: "Sign off a zero-difference reconciliation session: stamps every matched journal line reconciled and closes the session. Refuses when the difference is not exactly zero or statement evidence is missing. A signed-off session is permanent.",
+    description: "Sign off a zero-difference session: stamps matched lines reconciled, closes it. Refuses nonzero difference or missing evidence. Permanent.",
     inputSchema: z.object({ reconciliationId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("banking.reconcile"), featureKey: "banking",
@@ -742,7 +742,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_budget_cells", title: "Update Budget Cells",
-    description: "Write planning cells into a draft budget scenario through the same revision-checked command as the budget worksheet: amounts are exact decimal strings, cells are keyed by account, period, subsidiary and dimensions, and expectedRevision (from get_budget_workspace) must match or the write is refused. Approved, pending or archived scenarios refuse. Audited with before/after evidence.",
+    description: "Write planning cells into a draft scenario (revision-checked): exact decimal amounts keyed by account, period, subsidiary, dimensions; expectedRevision must match. Draft scenarios only. Audited.",
     inputSchema: z.object({
       scenarioId: UUID.describe("Budget scenario id from get_budget_workspace or budget_vs_actual"),
       expectedRevision: z.number().int().min(1)
@@ -767,7 +767,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "get_company_settings", title: "Get Company Settings", tier: "core",
-    description: "Company & Accounting settings as the settings screen shows them: identity (name, legal name, country), default locale, base currency, fiscal-year start month, reporting and tax frameworks, report PDF style, control-account mappings (with account numbers), and the resolved optional-feature switchboard. Read-only.",
+    description: "Company & Accounting settings as the screen shows them: identity, locale, base currency, fiscal start month, frameworks, PDF style, control accounts, feature switchboard. Read-only.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: anyPermission("admin.users.manage", "admin.setup.manage"),
     execute: async (context) => {
@@ -806,7 +806,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_company_settings", title: "Update Company Settings",
-    description: "Change Company & Accounting settings through the same command the settings screen uses: name, legalName, country, baseCurrency, fiscalYearStartMonth, reportingFramework (us_gaap|ifrs), taxFramework (asc740|ias12), defaultLocale, reportPdfStyle (formal|modern), controlAccounts ({ role: accountId | null }), fairValueRangePolicy. Only the keys you pass change. Refuses fiscal-calendar or base-currency changes once postings exist, and invalid control accounts. Audited.",
+    description: "Change Company & Accounting settings (only passed keys change): names, locale, frameworks, PDF style, control accounts. Refuses fiscal-calendar/base-currency changes with postings, and invalid control accounts. Audited.",
     inputSchema: z.object({
       changes: z.record(z.string(), z.unknown())
         .describe("Settings to change, keyed by setting name (only the keys passed change)"),
@@ -826,7 +826,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_features", title: "Update Features",
-    description: "Turn optional modules on or off ({ featureKey: boolean }, keys from list_features) through the same fenced command as Setup → Features: dependency rules are enforced, a module whose data is structurally load-bearing cannot be disabled, enabling installs the module's baseline configuration, and the change is audited. Returns the before/after switchboard.",
+    description: "Turn modules on/off (keys from list_features) via the fenced Setup command: dependencies enforced, load-bearing modules cannot disable, enabling installs baseline config. Audited; returns before/after.",
     inputSchema: z.object({
       features: z.record(z.string(), z.boolean())
         .describe("Feature switches to set, keyed by feature key from list_features"),
@@ -856,7 +856,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "create_setup_record", title: "Create Setup Record",
-    description: "Create one configuration record in a Setup entity (tax codes, departments, classes, locations, payment terms, item rate books, pay components, …) through the same validated, audited command as the Setup screens. Resolve the entity key and its field descriptors with list_setup_entities first; reference fields take the referenced row's id.",
+    description: "Create one Setup-entity record via the validated, audited Setup command. Resolve key and fields with list_setup_entities first; references take row ids.",
     inputSchema: z.object({ entityKey: SETUP_ENTITY_KEY, body: SETUP_BODY, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: SETUP_ADMIN,
     execute: async (context, input) => {
@@ -871,7 +871,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_setup_record", title: "Update Setup Record",
-    description: "Update one configuration record in a Setup entity by id through the same validated, audited command as the Setup screens. Pass only the fields to change; get ids from list_setup_records. Some entities version instead of overwrite (e.g. effective-dated payroll rules) and some values lock once used by postings — the command reports which.",
+    description: "Update one Setup-entity record by id (only changed fields; ids from list_setup_records). Some entities version, some values lock once posted — the command reports which.",
     inputSchema: z.object({
       entityKey: SETUP_ENTITY_KEY,
       id: z.string().min(1).max(120).describe("Id of the setup record, from list_setup_records"),

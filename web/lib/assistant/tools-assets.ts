@@ -38,7 +38,7 @@ const primaryAccumJoin = sql`
 const searchAssets: AssistantToolDef = {
   name: "search_assets",
   description:
-    "Search the fixed-asset register by number, name, status, or category, with acquisition cost, posted depreciation (primary book), and net book value per asset — disposed and written-off assets read zero — plus cost/NBV totals over ALL matches. Read-only.",
+    "Search the fixed-asset register by number, name, status, category: cost, posted depreciation, NBV per asset (disposed read zero), plus totals over ALL matches. Read-only.",
   category: "search",
   gate: assetGate(),
   feature: "fixedAssets",
@@ -108,7 +108,7 @@ const searchAssets: AssistantToolDef = {
 const getAsset: AssistantToolDef = {
   name: "get_asset",
   description:
-    "One fixed asset by id: header, category, effective GL accounts, primary-book totals (accumulated, net book value), book methods, lifecycle events, and a page of the depreciation schedule. Same payload the asset drawer renders. Read-only.",
+    "One fixed asset: header, category, GL accounts, book totals, methods, lifecycle events, a depreciation-schedule page. Same payload as the asset drawer. Read-only.",
   category: "read",
   gate: assetGate(),
   feature: "fixedAssets",
@@ -140,7 +140,7 @@ const getAsset: AssistantToolDef = {
 const assetTaxPools: AssistantToolDef = {
   name: "asset_tax_pools",
   description:
-    "Computed tax-depreciation pool results (Schedule 8-style) for a tax year: opening balance, additions, dispositions, allowance, closing balance, recapture, and terminal loss by pool class. Same rows the tax-depreciation tab reads. Read-only.",
+    "Tax-depreciation pool results for a tax year: opening, additions, dispositions, allowance, closing, recapture, terminal loss by class. Read-only.",
   category: "read",
   gate: assetGate(),
   feature: "fixedAssets",

@@ -41,7 +41,7 @@ async function wipBillingEnabled(orgId: string): Promise<boolean> {
 const searchSubcontracts: AssistantToolDef = {
   name: "search_subcontracts",
   description:
-    "Search subcontracts (vendor commitments on projects) by number, title, vendor, project, or status, with original commitment, approved revised commitment, billed to date, and retainage withheld per contract — plus totals over ALL matches. Read-only.",
+    "Search subcontracts by number, title, vendor, project, status: original/revised commitment, billed to date, retainage per contract, plus totals. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["ap.read"] },
   feature: "subcontracts",
@@ -144,7 +144,7 @@ const searchSubcontracts: AssistantToolDef = {
 const getSubcontract: AssistantToolDef = {
   name: "get_subcontract",
   description:
-    "One subcontract by id: header with revised commitment, schedule-of-values lines with earned to date, change orders, pay applications with vendor-bill links, pay-application lines, payment controls, and retainage releases. Same shape the subcontract workspace reads. Read-only.",
+    "One subcontract: header, schedule-of-values lines, change orders, pay applications with bill links, payment controls, retainage releases. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ap.read"] },
   feature: "subcontracts",

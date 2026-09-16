@@ -183,7 +183,7 @@ const findJournalEntries: AssistantToolDef = {
   name: "find_journal_entries",
   tier: "core",
   description:
-    "List posted-ledger journal entries with optional filters (free-text on entry number/memo, status, origin, posting-date range). Returns a capped page plus aggregates over ALL matches: total (count) and sumDebits. Quote the aggregates for counts and totals. Read-only.",
+    "List posted journal entries, filterable by entry number/memo text, status, origin, posting-date range. Capped page plus aggregates over ALL matches: total count and sumDebits — quote those, not page sums. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["gl.read"] },
   inputSchema: z.object({
@@ -347,7 +347,7 @@ const findDocuments: AssistantToolDef = {
   name: "find_documents",
   tier: "core",
   description:
-    "Search transaction documents — vendor bills, customer invoices, customer/vendor payments, credits, expense reports, orders, journals, pay runs, field tickets — by kind, status, document number, party name, or date range. Returns a capped page PLUS aggregates over ALL matches: total (count), sumTotal (document totals), sumOpenBalance (unpaid remainder). Quote the aggregates for counts and totals; keep limit small (default 20). Each row carries its exact persisted updatedAt revision. Read-only.",
+    "Search transaction documents by kind, status, number, party, or dates. Capped page PLUS aggregates over ALL matches (total, sumTotal, sumOpenBalance) — quote those. Read-only.",
   category: "search",
   gate: {
     mode: "anyOf",
@@ -449,7 +449,7 @@ const getDocument: AssistantToolDef = {
   name: "get_document",
   tier: "core",
   description:
-    "One transaction document in full: header (number, party, dates, status, totals), its exact persisted updatedAt revision, plus every line with account/item, description, quantity, and amount. Copy updatedAt verbatim to expectedUpdatedAt for a write; never parse or reformat it. Read-only.",
+    "One transaction document in full: header (number, party, dates, status, totals), lines (account/item, quantity, amount), exact updatedAt — copy verbatim to expectedUpdatedAt for writes. Read-only.",
   category: "read",
   gate: {
     mode: "anyOf",
@@ -596,7 +596,7 @@ const profitAndLossTool: AssistantToolDef = {
   name: "profit_and_loss",
   tier: "core",
   description:
-    "Profit & loss statement for a posting-date range, optionally filtered by department or project: per-account rows (reader-signed, hierarchical) plus revenue, COGS, gross profit, expenses, and net income totals. For any relative period ('YTD', 'this quarter', 'last year') pass a `period` preset — it resolves server-side against the org's fiscal calendar. Read-only.",
+    "P&L for a posting-date range, optional department/project filter: per-account rows plus revenue, COGS, gross profit, expenses, net income. Relative periods: pass a `period` preset (fiscal-resolved). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
@@ -715,7 +715,7 @@ const agingTool: AssistantToolDef = {
   name: "aging",
   tier: "core",
   description:
-    "AR or AP aging by customer/vendor as of a date: open-item balances bucketed into current, 1–30, 31–60, 61–90, and 90+ days past due, plus totals. Pass `bucket` to rank parties by ONE slice (e.g. over60 = 61–90 + 90+; overdue = everything past due) — rows are then sorted by that slice, zero rows dropped, and bucketTotal returned. Read-only.",
+    "AR/AP aging by customer/vendor as of a date: balances in current, 1–30, 31–60, 61–90, 90+ day buckets, plus totals. Pass `bucket` to rank by one slice (over60, overdue); rows sort by it with bucketTotal. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
@@ -784,7 +784,7 @@ const agingTool: AssistantToolDef = {
 const cashFlowTool: AssistantToolDef = {
   name: "cash_flow",
   description:
-    "Direct-method cash flow statement for a posting-date range: operating / investing / financing sections with per-account-type lines, net change in cash, and the opening/closing bank balances that prove it. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
+    "Direct-method cash flow for a posting-date range: operating/investing/financing lines, net change, opening/closing bank balances. Relative periods: pass a `period` preset. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ ...rangeInputFields }),
@@ -877,7 +877,7 @@ const financialPeriods: AssistantToolDef = {
 const financialTrends: AssistantToolDef = {
   name: "financial_trends",
   description:
-    "Return up to 15 completed fiscal periods of exact revenue, COGS, gross profit, operating expense, net income, gross-margin percentage, and period-end cash. Use for trend and anomaly analysis without making many report calls. Read-only.",
+    "Up to 15 completed fiscal periods of revenue, COGS, gross profit, opex, net income, margin %, period-end cash. For trends without many report calls. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
@@ -900,7 +900,7 @@ const financialTrends: AssistantToolDef = {
 const budgetVsActualTool: AssistantToolDef = {
   name: "budget_vs_actual",
   description:
-    "List budget scenarios or return one scenario's P&L budget-versus-actual statement with account rows and exact actual, budget, variance amount, and variance percent. Actuals cover the scenario's ENTIRE fiscal year (from/to echoed in the response, including postings dated after today) — compare with profit_and_loss period=this_fiscal_year, not a to-date window. Optional departmentId/projectId filters. Read-only.",
+    "Scenario P&L budget-vs-actual with actual, budget, variance, variance %. Actuals span the ENTIRE fiscal year — compare with profit_and_loss period=this_fiscal_year. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["budgets.read", "reports.read"] },
   feature: "budgets",
@@ -968,7 +968,7 @@ const budgetVsActualTool: AssistantToolDef = {
 const partyConcentration: AssistantToolDef = {
   name: "party_concentration",
   description:
-    "Rank customer revenue or vendor spend for a date range, with share of total and source-document counts. Use for concentration, dependency, and change-driver analysis. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
+    "Rank customer revenue or vendor spend for a date range, with share of total and document counts. Relative periods: pass a `period` preset. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "reports.read"] },
   inputSchema: z.object({
@@ -1015,7 +1015,7 @@ const projectProfitability: AssistantToolDef = {
   name: "project_profitability",
   tier: "core",
   description:
-    "ONE project's full job-cost detail by projectId: budget, posted revenue/cost/margin, commitments, forecast, cost by account, and source documents. Without projectId it only returns a short name-search page (with the total count) — for any ranking, filtering, or portfolio question use rank_projects instead. Read-only.",
+    "ONE project's full job-cost detail by projectId: budget, revenue/cost/margin, commitments, forecast, cost by account, source documents. Without projectId: name search only — for rankings use rank_projects. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
   feature: "projects",
@@ -1192,7 +1192,7 @@ const listOpenItems: AssistantToolDef = {
   name: "list_open_items",
   tier: "core",
   description:
-    "Open (unpaid/unapplied) AR or AP items as of a date, optionally for one party. Each item carries the openLineId that payment allocations require, its source document, due date, and remaining amount — resolve allocations from here, never by guessing ids. Read-only.",
+    "Open (unpaid/unapplied) AR/AP items as of a date, optionally one party. Each row carries the openLineId allocations need, source document, due date, remaining amount — resolve ids here, never guess. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({

@@ -38,7 +38,7 @@ function assistantFileViewer(authz: Authz): FileViewer {
 const listFilesTool: AssistantToolDef = {
   name: "list_files",
   description:
-    "Search the File Cabinet: file metadata (name, folder, size, content type, uploader, updated date) optionally filtered by folder and/or a name search, paginated. Respects the user's folder/file access grants. Never returns file contents. Read-only.",
+    "Search the File Cabinet (metadata only, paginated; optional folder/name filter): name, folder, size, type, uploader, updated. Respects access grants. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["documents.read"] },
   inputSchema: z.object({
@@ -86,7 +86,7 @@ const listFilesTool: AssistantToolDef = {
 const getFileTool: AssistantToolDef = {
   name: "get_file",
   description:
-    "One File Cabinet file's metadata detail: name, folder, size, content type, version history summary, and which records it is attached to. Respects access grants (a file the user cannot see reads as not found). Never returns file contents. Read-only.",
+    "One file's metadata: name, folder, size, type, version summary, attached records. Access grants apply (unseen files read as not found). Never returns contents. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["documents.read"] },
   inputSchema: z.object({ id: uuidInput }),
@@ -143,7 +143,7 @@ const getFileTool: AssistantToolDef = {
 const listFoldersTool: AssistantToolDef = {
   name: "list_folders",
   description:
-    "The File Cabinet folder tree the user may see (flat list with parent links): folder id, name, parent, system kind, and sub-folder/file counts. Private folders owned by others are excluded unless shared with the user. Read-only.",
+    "Visible File Cabinet folders (flat, with parent links): id, name, parent, kind, sub-folder/file counts. Others' private folders excluded unless shared. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["documents.read"] },
   inputSchema: z.object({}),

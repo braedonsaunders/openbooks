@@ -27,7 +27,7 @@ const describeCapabilities: AssistantToolDef = {
   name: "describe_capabilities",
   tier: "core",
   description:
-    "What this user can do right now: every assistant and application tool visible to them, grouped by module, plus the optional features currently off. Without `module` it returns the overview (tool names per module, with one-line blurbs only when the catalog is small); pass `module` (e.g. core, projects, payroll, apps) for that module's tools with descriptions. Call this when the user asks what you can do instead of listing capabilities from memory. Read-only.",
+    "Tools visible to this user, grouped by module, plus features currently off. Without `module`: names per module; pass one for blurbs. Call when asked what you can do; never list from memory. Read-only.",
   category: "read",
   // Which tools exist for the caller is not sensitive; every assistant user may ask.
   gate: { mode: "public" },

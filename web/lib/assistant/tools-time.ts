@@ -295,7 +295,7 @@ const unbilledTimeSchema = z.object({
 const unbilledTime: AssistantToolDef = {
   name: "unbilled_time",
   description:
-    "Unbilled work available to bill for one project: approved billable time not yet invoiced plus billable cost lines not yet billed, with revenue, cost, hours, and line counts — the same figure the billing cockpit shows. Read-only.",
+    "Unbilled work for one project: uninvoiced billable time plus unbilled cost lines, with revenue, cost, hours, counts. Same figure as the billing cockpit. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read"] },
   feature: "projects",

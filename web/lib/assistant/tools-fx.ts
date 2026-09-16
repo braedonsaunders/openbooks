@@ -57,7 +57,7 @@ const listCurrencies: AssistantToolDef = {
 const listFxRates: AssistantToolDef = {
   name: "list_fx_rates",
   description:
-    "Dated foreign-exchange rates for a currency pair (newest first): rate type, exact rate, source (manual or provider), and import timestamp. These are the rates period-end revaluation and settlement read. Past rates are history — a rerun books only the incremental correction. Read-only.",
+    "Dated FX rates for a pair (newest first): type, exact rate, source, import time. Revaluation and settlement read these; past rates are history. Read-only.",
   category: "search",
   // The rates table has no single-entity viewer page: it feeds revaluation
   // (close/gl) and settlement, so the read gate admits exactly those two.
@@ -109,7 +109,7 @@ const listFxRates: AssistantToolDef = {
 const listFxRevaluations: AssistantToolDef = {
   name: "list_fx_revaluations",
   description:
-    "Posted period-end unrealized FX revaluation entries (origin fx_revaluation) with period, book, posting date, totals, and each entry's next-period mirror number. Reruns book only incremental corrections, so repeat rows for a period are corrections, not duplicates. For ad-hoc entry search use find_journal_entries with origin fx_revaluation. Read-only.",
+    "Posted period-end unrealized FX revaluations and their next-period mirrors. Reruns book incremental corrections only. For ad-hoc search use find_journal_entries. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["gl.read"] },
   feature: "multiCurrency",
@@ -183,7 +183,7 @@ const listFxRevaluations: AssistantToolDef = {
 const getConsolidationView: AssistantToolDef = {
   name: "get_consolidation_view",
   description:
-    "One period's consolidation state: the derived consolidated FX rate sets per currency pair (current, average, historical), ownership consolidation runs with status, and ownership/elimination journal entries with numbers. Derive actions live on the Period Close page. Read-only.",
+    "One period's consolidation state: rate sets per pair, ownership runs, elimination entries. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["close.read"] },
   feature: "multiSubsidiary",

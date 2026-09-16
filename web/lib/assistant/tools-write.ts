@@ -43,7 +43,7 @@ const draftJournalEntry: AssistantToolDef = {
   name: "draft_journal_entry",
   tier: "core",
   description:
-    "Draft (do NOT create) a balanced manual journal entry for the user to review and confirm. Lines must sum to zero (debits positive, credits negative). You cannot create it directly — the user must click Apply, which saves it as a DRAFT journal they still post themselves. Never say you recorded it; say you drafted it.",
+    "Draft (do NOT create) a balanced manual journal for review: lines sum to zero, debits positive. Returns a proposal; Apply saves a DRAFT the user still posts. Never say you recorded it.",
   category: "write",
   requiresConfirmation: true,
   gate: { mode: "anyOf", perms: ["gl.post"] },

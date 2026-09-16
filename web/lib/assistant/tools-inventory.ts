@@ -111,7 +111,7 @@ const getItem: AssistantToolDef = {
 const inventoryLevels: AssistantToolDef = {
   name: "inventory_levels",
   description:
-    "On-hand stock by item and stock location from posted inventory movements: quantity and value per item/location, with zero-stock rows omitted. Filter by item or location. Returns a capped page plus totals over ALL matches. Read-only.",
+    "On-hand stock by item/location from posted movements: quantity and value, zero-stock omitted. Filter by item or location. Capped page plus totals. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["items.read"] },
   feature: "inventory",
@@ -173,7 +173,7 @@ const inventoryLevels: AssistantToolDef = {
 const inventoryMovements: AssistantToolDef = {
   name: "inventory_movements",
   description:
-    "Search posted inventory movements (receipts, issues, adjustments, transfers, builds, reversals) by item, location, kind, or date range, with quantity/value totals over ALL matches. Reversals carry their reason. Read-only.",
+    "Search posted inventory movements by item, location, kind, date: quantity/value totals over ALL matches. Reversals carry their reason. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["items.read"] },
   feature: "inventory",

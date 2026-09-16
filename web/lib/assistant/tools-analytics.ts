@@ -99,7 +99,7 @@ async function loadApSettings(orgId: string): Promise<{ weeklyCap: string; restr
 const financialHealthTool: AssistantToolDef = {
   name: "analytics_financial_health",
   description:
-    "Financial Health dashboard for a posting-date period: overall health score, ratio scorecard graded vs benchmarks, raw figures, 12-month P&L series, margin waterfall, department/class/location segment performance, revenue and cost drivers, item movers, budget variance, and generated insights. Lists capped. Read-only.",
+    "Financial Health dashboard for a period: health score, benchmark-graded ratios, 12-month P&L, margin waterfall, segment performance, drivers, insights. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
     inputSchema: periodInput,
@@ -177,7 +177,7 @@ const financialHealthTool: AssistantToolDef = {
 const customerIntelligenceTool: AssistantToolDef = {
   name: "analytics_customer_intelligence",
   description:
-    "Customer Intelligence dashboard for a posting-date period: intelligence score, per-customer RFM segment, CLV tier, churn and friction risk, payment behaviour and health grade, concentration (HHI), monthly growth, cohort retention, insights, plus job-costed customer profitability with fake-champion detection. Lists capped. Read-only.",
+    "Customer Intelligence dashboard for a period: score, RFM/CLV segments, churn risk, payment behaviour, concentration, cohorts, customer profitability. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
@@ -270,7 +270,7 @@ const customerIntelligenceTool: AssistantToolDef = {
 const vendorPerformanceTool: AssistantToolDef = {
   name: "analytics_vendor_performance",
   description:
-    "Vendor Performance dashboard for a posting-date period: per-vendor spend with YoY change, spend tiers, payment-relationship scorecard grades, leverage-matrix quadrants, concentration (HHI, top-5/10 share), and the 12-month spend trend. Lists capped. Read-only.",
+    "Vendor Performance dashboard for a period: spend with YoY change, tiers, relationship grades, concentration, 12-month trend. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
@@ -321,7 +321,7 @@ const vendorPerformanceTool: AssistantToolDef = {
 const cashflowTool: AssistantToolDef = {
   name: "analytics_cashflow",
   description:
-    "Cash Flow forecast: bank balances rolled through a 4, 8, or 12-week timeline (default 4) of predicted AR collections, capacity-scheduled AP payments, and recurring category flows — runway, burn rate, lowest-cash week, DSO/DPO, AR/AP aging summaries. Read-only.",
+    "Cash forecast over 4/8/12 weeks (default 4): predicted AR, scheduled AP, recurring flows — runway, burn, lowest-cash week, DSO/DPO. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
@@ -363,7 +363,7 @@ const cashflowTool: AssistantToolDef = {
 const trueCostTool: AssistantToolDef = {
   name: "analytics_true_cost",
   description:
-    "True Cost overhead engine for a period: company composite burden rate ($/billable hr), burden categories with rates and classified accounts, department composites, absorption gap, employee labour cost rates, monthly trend and forecast. Lists capped. Read-only.",
+    "True Cost overhead for a period: composite burden rate, burden categories, department composites, absorption gap, labour rates, trend. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   feature: "projects",
@@ -456,7 +456,7 @@ const trueCostTool: AssistantToolDef = {
 const utilizationTool: AssistantToolDef = {
   name: "analytics_utilization",
   description:
-    "Utilization dashboard for a period: company billable-hours utilization vs target with non-billable cost and alerts, department / service-item / employee breakdowns with prior-period deltas, and the rolling utilization history. Lists capped. Read-only.",
+    "Utilization dashboard for a period: billable utilization vs target, breakdowns by department/item/employee with deltas, rolling history. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   feature: "timeTracking",
@@ -503,7 +503,7 @@ const utilizationTool: AssistantToolDef = {
 const spendVelocityTool: AssistantToolDef = {
   name: "analytics_spend_velocity",
   description:
-    "Spend Velocity dashboard for a period: account and vendor spend growth (CAGR velocity + acceleration), anomaly detection, monthly and seasonal trends, boiling-frog creep, concentration, zombie subscriptions, fragmentation, commitment cliff, expense analysis, and period comparison. Lists capped. Read-only.",
+    "Spend Velocity dashboard for a period: spend growth, anomalies, seasonal trends, creep, concentration, zombie subscriptions, period comparison. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
@@ -603,7 +603,7 @@ const spendVelocityTool: AssistantToolDef = {
 const sentinelTool: AssistantToolDef = {
   name: "analytics_sentinel",
   description:
-    "Sentinel ledger forensics for a posting-date period: Benford first/second-digit conformity, duplicate payment pairs, threshold-trap (just-under-approval-limit) postings, weekend postings, vendor amount outliers (RSF and z-score), sequential invoice runs, ghost-vendor matches, audit-trail deletes/changes, and a per-vendor risk rollup. Every detail list is capped at 50 rows with a truncation flag. Read-only.",
+    "Ledger forensics for a period: Benford conformity, duplicate payments, threshold-trap/weekend postings, outliers, sequential runs, ghost vendors, audit-trail changes, vendor risk rollup. Lists capped at 50. Read-only.",
   category: "read",
   gate: { mode: "allOf", perms: ["reports.read", "admin.audit.read"] },
   inputSchema: periodInput,
@@ -689,7 +689,7 @@ const sentinelTool: AssistantToolDef = {
 const apPositionTool: AssistantToolDef = {
   name: "ap_position",
   description:
-    "Accounts Payable operational position (the AP cockpit): open payables outstanding and overdue, aging buckets, the 4-week predicted payment schedule, payables grouped by vendor, the pay-priority worklist, and the capacity-scheduled pay-run recommendation using the org's configured weekly AP cap. Lists capped. Read-only.",
+    "AP position (the AP cockpit): outstanding/overdue payables, aging, 4-week payment schedule, vendor groups, priority worklist, pay-run recommendation. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ap.read"] },
   inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
@@ -757,7 +757,7 @@ const apPositionTool: AssistantToolDef = {
 const arPositionTool: AssistantToolDef = {
   name: "ar_position",
   description:
-    "Accounts Receivable operational position (the AR cockpit): open receivables outstanding and overdue, aging buckets, the 4-week predicted collection schedule, receivables grouped by customer, and the collections worklist ordered most-overdue first. Lists capped. Read-only.",
+    "AR position (the AR cockpit): outstanding/overdue receivables, aging, 4-week collection schedule, customer groups, most-overdue-first worklist. Lists capped. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read"] },
   inputSchema: z.object({ asOfDate: dateInput.optional().describe("Position date; defaults to today") }),
@@ -815,7 +815,7 @@ const cashPositionTool: AssistantToolDef = {
   name: "cash_position",
   tier: "core",
   description:
-    "Company-wide cash position (the Banking cash cockpit, consolidated — no subsidiary filter): bank balances rolled through a 1–26 week forecast timeline (default 8; use 13 for a standard 13-week forecast) of predicted AR, capacity-scheduled AP, and recurring category flows, with projected end, lowest-cash week, burn rate, runway, and AR/AP coverage. Read-only.",
+    "Cash position (no subsidiary filter): bank balances over a 1–26 week forecast (default 8; 13 for a 13-week forecast) of predicted AR, scheduled AP, recurring flows — end cash, lowest week, burn, runway. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["banking.read"] },
   feature: "banking",
