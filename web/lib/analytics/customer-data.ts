@@ -499,8 +499,8 @@ export async function customerData(period: { from: string; to: string; label: st
       select d.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         sub.base_currency as func,
         count(*) filter (where d.posting_date >= ${from}) as txn_count,
-        sum(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${from}) as revenue,
-        sum(abs(d.total) * d.fx_rate) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo}) as prior_revenue,
+        sum(round(abs(d.total) * d.fx_rate, 4)) filter (where d.posting_date >= ${from}) as revenue,
+        sum(round(abs(d.total) * d.fx_rate, 4)) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo}) as prior_revenue,
         max(d.posting_date) filter (where d.posting_date >= ${from})::text as late,
         max(d.posting_date) filter (where d.posting_date >= ${pFrom} and d.posting_date <= ${pTo})::text as late_prior,
         min(d.posting_date) filter (where d.posting_date >= ${from}) as first_txn,
@@ -521,7 +521,7 @@ export async function customerData(period: { from: string; to: string; label: st
     (db.execute(sql`
       select d.party_id as id, sub.base_currency as func,
         count(*) filter (where d.kind = 'customer_credit') as credit_count,
-        coalesce(sum(abs(d.total) * d.fx_rate) filter (where d.kind = 'customer_credit'), 0) as credit_value,
+        coalesce(sum(round(abs(d.total) * d.fx_rate, 4)) filter (where d.kind = 'customer_credit'), 0) as credit_value,
         max(d.posting_date) filter (where d.kind = 'customer_credit')::text as late,
         count(*) filter (where d.kind = 'customer_invoice') as order_count
       from documents d
@@ -594,7 +594,7 @@ export async function customerData(period: { from: string; to: string; label: st
       )
       select to_char(d.posting_date, 'YYYY-MM') as month,
         sub.base_currency as func,
-        sum(abs(d.total) * d.fx_rate) as revenue,
+        sum(round(abs(d.total) * d.fx_rate, 4)) as revenue,
         max(d.posting_date)::text as late
       from documents d
       left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
@@ -635,7 +635,7 @@ export async function customerData(period: { from: string; to: string; label: st
       select party_id as id, sub.base_currency as func,
         max(posting_date) as last_order, min(posting_date) as first_order,
         max(posting_date)::text as late,
-        sum(abs(total) * fx_rate) as lifetime_revenue
+        sum(round(abs(total) * fx_rate, 4)) as lifetime_revenue
       from documents d
       left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
