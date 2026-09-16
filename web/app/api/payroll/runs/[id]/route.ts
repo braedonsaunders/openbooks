@@ -12,12 +12,12 @@ import {
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
-import { mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
+import { canonicalAdjustmentHours, mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const dynamic = 'force-dynamic'
 
@@ -234,22 +234,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (body.action === 'add-adjustment') {
       const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
       const amountRaw = canonicalDecimal(amount, 4)
-      let hoursRaw: string | null
-      if (hours == null || hours === '') {
-        hoursRaw = null
-      } else {
-        const exact = canonicalDecimal(hours, 4)
-        if (exact === null) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
-        try {
-          hoursRaw = normalizeMoney(exact)
-        } catch {
-          return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
-        }
+      // Hours persist into numeric(12,2): canonicalize at that scale, never
+      // through the 4dp money normalizer (its padding fails the engine gate
+      // for every hours value). The engine re-validates before persisting.
+      let hoursRaw: string | null = null
+      if (hours != null && hours !== '') {
+        hoursRaw = canonicalAdjustmentHours(hours)
+        if (hoursRaw === null) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
       }
       if (
         !isUuid(employeePartyId) || !isUuid(componentId) ||
         amountRaw === null ||
-        (hoursRaw !== null && compareDecimal(hoursRaw, '0') < 0) ||
         (note != null && (typeof note !== 'string' || note.length > 500)) ||
         (replaceComponent != null && typeof replaceComponent !== 'boolean')
       ) {
