@@ -11,6 +11,7 @@ import {
   Label,
   SearchSelect,
   Select,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -298,7 +299,10 @@ function ManualValuesSection({
       <p className="text-sm text-slate-500 dark:text-slate-400">{t('valuesHint')}</p>
       {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       {values === null ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">…</p>
+        <div className="space-y-2" aria-busy="true">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
       ) : values.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('noValues')}</p>
       ) : (
@@ -556,7 +560,31 @@ export function DriversTab() {
     setPreviewRows(json.rows ?? [])
   }
 
-  if (!drivers || !options) return <p className="text-sm text-slate-500 dark:text-slate-400">{error ?? '…'}</p>
+  // House loading: header row stays up while the list skeleton shimmers
+  // (audit-trail/account-register precedent) — never a bare ellipsis.
+  if (!drivers || !options) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
+          <Button type="button" onClick={() => setEditing({ form: newDriverForm() })}>
+            <Plus size={15} />
+            {t('newDriver')}
+          </Button>
+        </div>
+        {error ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        ) : (
+          <div className="space-y-2" aria-busy="true">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const form = editing?.form
   const creating = editing?.id === undefined

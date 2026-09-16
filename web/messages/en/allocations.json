@@ -118,6 +118,7 @@
       "applicabilityHeading": "Which lines the rule considers",
       "documentKinds": "Document kinds (empty means any)",
       "documentKindAdd": "Add",
+      "noOptions": "Nothing here yet.",
       "accountScope": "Account scope",
       "accountScopes": {
         "any": "Any account",
