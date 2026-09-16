@@ -1,8 +1,9 @@
 import 'server-only'
 
+import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
+import { can, getAuthz } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 
 export type AllocationsTab = 'rules' | 'drivers' | 'runs'
@@ -20,11 +21,18 @@ export interface AllocationsSetupData {
   currentParams: Record<string, string | string[] | undefined>
 }
 
-/** Setup workspace gate (admin) + allocations feature; unknown tabs fall back to Rules. */
+/**
+ * Setup workspace gate + allocations feature; unknown tabs fall back to
+ * Rules. The permission check mirrors SetupLayout exactly (admin.setup.manage
+ * with the crm.setup.manage alternative) so the shell never locks out a user
+ * the layout admits.
+ */
 export async function loadAllocations(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AllocationsSetupData> {
-  const authz = await requirePermission('admin.setup.manage')
+  const authz = await getAuthz()
+  if (!authz) redirect('/login')
+  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage')) redirect('/')
   await requireFeatureEnabled(authz.user.orgId, 'allocations')
   const t = await getTranslations('allocations')
   const raw = typeof sp.tab === 'string' ? sp.tab : 'rules'
