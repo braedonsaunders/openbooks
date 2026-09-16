@@ -1065,7 +1065,8 @@
       "fiscal_quarter": "会計四半期",
       "fiscal_year": "会計年度"
     },
-    "csvSection": "セクション"
+    "csvSection": "セクション",
+    "exportTruncated": "全{total}行のうち最初の{shown}行を表示しています — すべてを見るには期間を絞り込むかフィルターを追加してください。"
   },
   "export": {
     "pdf": "PDF",

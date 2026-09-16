@@ -4,7 +4,8 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardReportEntity } from '../../../../../../lib/report-authz'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
-import { resolveDefinitionToExportData } from '../../../../../../lib/report-run'
+import { resolveDefinitionToExportData, streamDefinitionExport } from '../../../../../../lib/report-run'
+import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { resolvePeriod } from '../../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
@@ -57,15 +58,36 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     customFrom: url.searchParams.get('from') ?? undefined,
     customTo: url.searchParams.get('to') ?? undefined,
   })
+  const stamp = await businessToday(user.orgId)
+  const filename = `${safeName(def.slug)}-${stamp}`
+
+  // Paged-entity CSV/XLSX streams page by page (bounded memory, per-page
+  // snapshots, capped with a disclosed footer); every other export keeps the
+  // buffered runner so statement kinds, PDFs, and non-paged plans are
+  // byte-for-byte what they were.
+  const streamQuery = def.report_type === 'query' && def.query && def.query.mode === 'rows'
+    ? (REPORT_ENTITY_MAP[def.query.entity]?.pagination ? def.query : null)
+    : null
+  if (streamQuery && format !== 'pdf') {
+    try {
+      const out = await streamDefinitionExport(user.orgId, id, url.searchParams, { orgId: user.orgId, t, period, query: q }, {
+        format: format as 'csv' | 'xlsx',
+        sectionHeader: (await reportCsvOptions()).sectionHeader,
+        generatedAt: new Date(`${stamp}T00:00:00Z`),
+      })
+      if (out.format === 'csv') return csvResponse(out.csv, filename)
+      return xlsxResponse(out.xlsx, filename)
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
+    }
+  }
+
   let data
   try {
     data = await resolveDefinitionToExportData(user.orgId, id, url.searchParams, { orgId: user.orgId, t, period, query: q })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
   }
-
-  const stamp = await businessToday(user.orgId)
-  const filename = `${safeName(def.slug)}-${stamp}`
 
   if (format === 'csv') {
     const { sectionHeader } = await reportCsvOptions()

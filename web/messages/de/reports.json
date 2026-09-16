@@ -1065,7 +1065,8 @@
       "fiscal_quarter": "Geschäftsquartal",
       "fiscal_year": "Geschäftsjahr"
     },
-    "csvSection": "Abschnitt"
+    "csvSection": "Abschnitt",
+    "exportTruncated": "Die ersten {shown} von {total} Zeilen werden angezeigt — grenzen Sie den Zeitraum ein oder fügen Sie Filter hinzu, um alles zu sehen."
   },
   "export": {
     "pdf": "PDF",

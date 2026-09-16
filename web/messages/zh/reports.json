@@ -1065,7 +1065,8 @@
       "fiscal_quarter": "会计季度",
       "fiscal_year": "会计年度"
     },
-    "csvSection": "分节"
+    "csvSection": "分节",
+    "exportTruncated": "共 {total} 行，仅显示前 {shown} 行 — 缩小期间或添加筛选条件以查看全部。"
   },
   "export": {
     "pdf": "PDF",

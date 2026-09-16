@@ -20,8 +20,17 @@ import {
 } from '@openbooks/reports'
 // The office wrapper applies the CSV formula-injection guard; never import the
 // raw serializer from @openbooks/reports for user-facing CSV.
-import { reportResultToCsv } from '@openbooks/office'
-import { reportCsvOptions, reportRunLabels } from './report-labels'
+import {
+  createPagedCsvStream,
+  createStreamingXlsxExport,
+  reportResultToCsv,
+  xlsxColumnWidth,
+  xlsxExportCellLength,
+  type PagedCsvPageGroup,
+  type StreamingXlsxGroup,
+} from '@openbooks/office'
+import { exportSummaryFooterRows } from './report-pdf'
+import { reportCsvOptions, reportRunLabels, type PagedExportLabels } from './report-labels'
 import { resolvePeriod } from './periods'
 import { fiscalStartMonth } from './fiscal'
 import { isFeatureEnabled } from './features'
@@ -317,6 +326,301 @@ export async function executeReportAllPages(
   }
 
   return mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels)
+}
+
+/**
+ * Hard backstop on rows any single paged-entity export may emit. The writers
+ * stream page by page (working set: one page), but output bytes still grow
+ * with the export — the cap bounds the response, and any truncation is
+ * disclosed in a footer exactly like the capped detail exports. Ten times the
+ * engine row cap: ordinary recall exports never notice it; PERF-scale dumps
+ * stop here instead of materialising gigabytes.
+ */
+export const PAGED_EXPORT_ROW_CAP = 100_000
+
+export type PagedExportMeta = {
+  /** Data rows emitted (at most the cap). */
+  rowCount: number
+  /** Rows the export would hold uncapped (page-one total under the same filters). */
+  totalRows: number
+  truncated: boolean
+}
+
+export type PagedExportOptions = {
+  title: string
+  dateRangeLabel?: string
+  sectionHeader?: string
+  generatedAt?: Date
+  /** Test seam for the cap (a cap-sized fixture is infeasible in-suite). */
+  rowCap?: number
+  labels?: ReportRunLabels
+}
+
+/** Merge identity for one page group — the same key mergeReportPages
+ *  coalesces on, so streaming slots assemble exactly merged order. */
+function reportGroupMergeKey(source: {
+  kind: string
+  groupKey?: { field: string; value: string }
+  title: string
+  columns: string[]
+}): string {
+  return source.groupKey
+    ? `${source.kind}\u0000${source.groupKey.field}\u0000${source.groupKey.value}`
+    : `${source.kind}\u0000${source.title}\u0000${source.columns.join('\u0000')}`
+}
+
+type ExportPageSlot = {
+  key: string
+  title: string
+  columns: string[]
+  /** Emitted-prefix row count (drives subtitles and width sampling). */
+  count: number
+  /** Per-column max display length over the header + first 400 prefix rows. */
+  widths: number[]
+}
+
+function exportTruncatedNotice(labels: ReportRunLabels, shown: number, total: number): string {
+  return (labels as PagedExportLabels).exportTruncated?.(shown, total)
+    ?? `Showing the first ${shown} of ${total} rows — narrow the period or add filters to see everything.`
+}
+
+/**
+ * Stream a paged-entity query to CSV without materialising every page. Each
+ * page is fetched with its own statement snapshot (no long-lived
+ * repeatable-read transaction pinning dead tuples while a large export runs),
+ * serialised to output lines, and released; only output bytes accumulate,
+ * bounded by the row cap. A shifting total between pages fails closed — the
+ * export throws instead of silently duplicating or omitting rows.
+ */
+export async function streamPagedReportCsv(
+  orgId: string,
+  query: ReportCustomQuery,
+  opts: PagedExportOptions,
+): Promise<{ csv: string } & PagedExportMeta> {
+  const entity = REPORT_ENTITY_MAP[query.entity]
+  if (query.mode !== 'rows' || !entity?.pagination) {
+    throw new Error('Streaming export needs a paged rows-mode entity')
+  }
+  const prepared = await prepareReportExecution(orgId, query, opts.labels)
+  const pageSize = entity.pagination.maxPageSize
+  const cap = opts.rowCap ?? PAGED_EXPORT_ROW_CAP
+  const stream = createPagedCsvStream({ sectionHeader: opts.sectionHeader })
+  const slots: ExportPageSlot[] = []
+  const byKey = new Map<string, number>()
+  let expectedTotal: number | null = null
+  let offset = 0
+  let emitted = 0
+  let summary: ReportRunResult['summary'] = []
+
+  for (;;) {
+    const page = await runCustomQuery(pool, prepared.query, {
+      ...prepared.options,
+      page: { offset, limit: pageSize },
+    })
+    if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+    if (expectedTotal === null) {
+      expectedTotal = page.pageInfo.totalRows
+      summary = page.summary
+    }
+    if (page.pageInfo.totalRows !== expectedTotal) {
+      throw new Error('Paged report total changed during streaming export')
+    }
+    // Register unseen groups first so the quota below allocates in merged
+    // (slot) order: the emitted prefix is the first `cap` rows of the order
+    // the uncapped file would show, never a page-order jumble.
+    const order: { slot: number; rows: (string | number | null | undefined)[][] }[] = []
+    for (const group of page.groups) {
+      const key = reportGroupMergeKey(group)
+      let slot = byKey.get(key)
+      if (slot === undefined) {
+        slot = slots.length
+        byKey.set(key, slot)
+        slots.push({ key, title: group.title, columns: group.columns, count: 0, widths: [] })
+      }
+      order.push({ slot, rows: group.rows })
+    }
+    order.sort((a, b) => a.slot - b.slot)
+    const chunk: PagedCsvPageGroup[] = []
+    for (const { slot, rows } of order) {
+      const take = Math.min(rows.length, cap - emitted)
+      const target = slots[slot]!
+      target.count += take
+      // Always file the slot (even rowless) so an empty result still carries
+      // its header — mergeReportPages keeps the empty group too.
+      chunk.push({ slot, title: target.title, columns: target.columns, rows: rows.slice(0, take) })
+      emitted += take
+      if (emitted >= cap) break
+    }
+    stream.pushPage(chunk)
+    offset += page.rowCount
+    if (offset < expectedTotal && page.rowCount === 0) {
+      throw new Error('Paged report stopped before all rows were returned')
+    }
+    if (offset >= expectedTotal || emitted >= cap) break
+  }
+  const totalRows = expectedTotal ?? 0
+  if (emitted < totalRows && emitted < cap) {
+    throw new Error('Paged report returned an inconsistent row count')
+  }
+  const truncated = emitted < totalRows
+  const finalSummary = summary.map((item, index) => (
+    index === 0 ? { ...item, value: totalRows } : item
+  ))
+  if (truncated) finalSummary.push({ label: exportTruncatedNotice(prepared.options.labels, emitted, totalRows), value: '' })
+  return { csv: stream.finish(exportSummaryFooterRows(finalSummary)), rowCount: emitted, totalRows, truncated }
+}
+
+/**
+ * Stream a paged-entity query to XLSX. Same page discipline as the CSV path,
+ * in two passes: a metadata pre-pass (group order, per-group totals for
+ * subtitles, column widths — rows released immediately) then the emit pass,
+ * which revalidates every page against the pre-pass and fails closed on any
+ * drift. Sheets are declared upfront in merged order so page-outer emission
+ * lands each row on its final sheet.
+ */
+export async function streamPagedReportXlsx(
+  orgId: string,
+  query: ReportCustomQuery,
+  opts: PagedExportOptions,
+): Promise<{ xlsx: Buffer } & PagedExportMeta> {
+  const entity = REPORT_ENTITY_MAP[query.entity]
+  if (query.mode !== 'rows' || !entity?.pagination) {
+    throw new Error('Streaming export needs a paged rows-mode entity')
+  }
+  const prepared = await prepareReportExecution(orgId, query, opts.labels)
+  const pageSize = entity.pagination.maxPageSize
+  const cap = opts.rowCap ?? PAGED_EXPORT_ROW_CAP
+  const labels = prepared.options.labels
+  // Merge keeps every page subtitle and rewrites it with the merged total;
+  // the pre-pass counts are those totals, shaped by the same labels hook.
+  const subtitles = (count: number): string | undefined =>
+    labels.rowCount?.(count) ?? `${count} row(s)`
+
+  // Pre-pass: merged-order slots, prefix counts, width samples, base summary.
+  const slots: ExportPageSlot[] = []
+  const byKey = new Map<string, number>()
+  const pageKeys: string[][] = []
+  let expectedTotal: number | null = null
+  let summary: ReportRunResult['summary'] = []
+  let offset = 0
+  let counted = 0
+  for (;;) {
+    const page = await runCustomQuery(pool, prepared.query, {
+      ...prepared.options,
+      page: { offset, limit: pageSize },
+    })
+    if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+    if (expectedTotal === null) {
+      expectedTotal = page.pageInfo.totalRows
+      summary = page.summary
+    }
+    if (page.pageInfo.totalRows !== expectedTotal) {
+      throw new Error('Paged report total changed during streaming export')
+    }
+    const keys: string[] = []
+    for (const group of page.groups) {
+      const key = reportGroupMergeKey(group)
+      keys.push(key)
+      let slot = byKey.get(key)
+      if (slot === undefined) {
+        slot = slots.length
+        byKey.set(key, slot)
+        slots.push({
+          key,
+          title: group.title,
+          columns: group.columns,
+          count: 0,
+          widths: group.columns.map((c) => xlsxExportCellLength(c)),
+        })
+      }
+      const target = slots[slot]!
+      for (const row of group.rows) {
+        if (counted >= cap) break
+        if (target.count < 400) {
+          row.forEach((cell, i) => {
+            const len = xlsxExportCellLength(cell)
+            if (i < target.widths.length && len > target.widths[i]!) target.widths[i] = len
+          })
+        }
+        target.count++
+        counted++
+      }
+      if (counted >= cap) break
+    }
+    pageKeys.push(keys)
+    offset += page.rowCount
+    if (offset < (expectedTotal ?? 0) && page.rowCount === 0) {
+      throw new Error('Paged report stopped before all rows were returned')
+    }
+    if (offset >= (expectedTotal ?? 0) || counted >= cap) break
+  }
+  const totalRows = expectedTotal ?? 0
+  if (counted < totalRows && counted < cap) {
+    throw new Error('Paged report returned an inconsistent row count')
+  }
+  const truncated = counted < totalRows
+  const finalSummary = summary.map((item, index) => (
+    index === 0 ? { ...item, value: totalRows } : item
+  ))
+  if (truncated) finalSummary.push({ label: exportTruncatedNotice(labels, counted, totalRows), value: '' })
+
+  const writer = createStreamingXlsxExport({
+    reportName: opts.title,
+    dateRangeLabel: opts.dateRangeLabel || undefined,
+    generatedAt: opts.generatedAt,
+    groups: slots.map((slot): StreamingXlsxGroup => ({
+      title: slot.title,
+      subtitle: subtitles(slot.count),
+      columns: slot.columns,
+      widths: slot.widths.map((w) => xlsxColumnWidth(w)),
+    })),
+  })
+
+  // Emit pass: same offsets, revalidated against the pre-pass.
+  offset = 0
+  let emitted = 0
+  let pageIndex = 0
+  for (;;) {
+    const page = await runCustomQuery(pool, prepared.query, {
+      ...prepared.options,
+      page: { offset, limit: pageSize },
+    })
+    if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+    if (page.pageInfo.totalRows !== totalRows) {
+      throw new Error('Paged report changed during streaming export')
+    }
+    const keys = page.groups.map((group) => reportGroupMergeKey(group))
+    const prior = pageKeys[pageIndex]
+    if (!prior || prior.length !== keys.length || prior.some((key, i) => key !== keys[i])) {
+      throw new Error('Paged report changed during streaming export')
+    }
+    const order = page.groups
+      .map((group) => ({ slot: byKey.get(reportGroupMergeKey(group))!, rows: group.rows }))
+      .sort((a, b) => a.slot - b.slot)
+    for (const { slot, rows } of order) {
+      const take = Math.min(rows.length, cap - emitted)
+      if (take > 0) writer.appendRows(slot, rows.slice(0, take))
+      emitted += take
+      if (emitted >= cap) break
+    }
+    offset += page.rowCount
+    pageIndex++
+    if (offset >= totalRows || emitted >= cap) break
+  }
+  if (emitted !== counted) {
+    throw new Error('Paged report changed during streaming export')
+  }
+  const footers = exportSummaryFooterRows(finalSummary)
+  if (footers.length > 0) {
+    const last = slots.length - 1
+    if (last >= 0) {
+      const target = slots[last]!
+      writer.appendRows(last, footers.map((cells) => cells.slice(0, target.columns.length)))
+    } else {
+      writer.appendRows(0, footers)
+    }
+  }
+  return { xlsx: await writer.finish(), rowCount: emitted, totalRows, truncated }
 }
 
 /**
