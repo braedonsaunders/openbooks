@@ -69,7 +69,12 @@ async function agingSection(context: ApplicationContext, side: "ar" | "ap", asOf
 }
 
 async function approvalsSection(context: ApplicationContext) {
-  if (!can(context.authz, "flows.approve")) return unavailable("flows.approve");
+  // Same doorway as the worklist itself: anyone who can approve anything
+  // (gates/documents or either pay direction) sees the unified count.
+  const mayApprove = can(context.authz, "flows.approve")
+    || can(context.authz, "ap.approve")
+    || can(context.authz, "ar.approve");
+  if (!mayApprove) return unavailable("flows.approve, ap.approve, or ar.approve");
   const approvals = await listApprovalWorklist(context);
   return { available: true as const, pending: approvals.length };
 }
