@@ -908,7 +908,7 @@ export async function creditItemsForParty(
  */
 export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: string, allowedSubsidiaryIds?: ReadonlySet<string> | null) {
   const doc = (await db.execute<Record<string, unknown>>(sql`
-    select d.*, to_char(d.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
+    select d.*, (d.revision_seq)::text as updated_at,
            p.display_name as party_name, e.id as entry_id, e.entry_number,
            ba.id as bank_account_id_line, ba.number as bank_account_number, ba.name as bank_account_name
       from documents d

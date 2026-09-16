@@ -212,7 +212,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   routeAuth.user = { orgId: org.orgId, id: actor };
   // post-with-applications fences its draft save on the exact document
   // revision: read the token the same lossless way the API surface does.
-  const paymentRevision = (await db.execute<{ revision: string }>(sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from documents where id=${payment.id}`)).rows[0]!.revision;
+  const paymentRevision = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${payment.id}`)).rows[0]!.revision;
 
   let entered!: (pid: number) => void;
   let release!: () => void;

@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { runTriggerScripts } from '@openbooks/engine/src/scripting.ts'
 import type { FieldValueMap } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
@@ -123,7 +123,7 @@ export async function PATCH(
   // image, while an audit failure rolls the mutation back with it.
   const outcome = await withOrgTransaction(user.orgId, async () => {
     const locked = (await db.execute<Record<string, unknown> & { revision?: unknown }>(sql`
-      select *, ${documentRevisionSql(sql`updated_at`)} as revision from custom_records
+      select *, ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
        where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
        for update
     `)).rows[0]

@@ -11,7 +11,7 @@ import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
 import {
   DocumentEditError,
-  documentRevisionSql,
+  documentRevisionCounterSql,
   requireDocumentEditRevision,
   runDocumentVersionedTransaction,
   validateEditableDocumentLines,
@@ -342,7 +342,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       lock: async (tx) => {
         const row = (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
           select status, subsidiary_id as "subsidiaryId",
-                 ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+                 ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
             from documents
            where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
            for update

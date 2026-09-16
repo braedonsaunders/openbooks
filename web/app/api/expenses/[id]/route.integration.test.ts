@@ -39,7 +39,7 @@ registerHooks({
 const { db, pool, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { documentRevisionSql } = await import('@openbooks/engine/src/document-revision.ts')
+const { documentRevisionCounterSql } = await import('@openbooks/engine/src/document-revision.ts')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { assertExpenseEmployee } = await import('@openbooks/engine/src/expense-validation.ts')
@@ -71,7 +71,7 @@ async function exists(id: string) {
 }
 const patch = (id: string, body: unknown) => withOrgContext(state.orgId, () => PATCH(new Request('http://expense.test', { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
 async function revision(id: string) {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from documents where id=${id} and org_id=${state.orgId}`)).rows[0]!.revision
+  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`)).rows[0]!.revision
 }
 
 test('expense GET keeps header, lines, exact revision and subsequent OCC save coherent across a committed writer', { skip: !DB }, async () => {

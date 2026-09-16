@@ -12,7 +12,7 @@ import {
   applyDocumentEdit,
   DOCUMENT_EDIT_VERSION_REQUIRED,
   DocumentEditError,
-  documentRevisionSql,
+  documentRevisionCounterSql,
   loadDocument,
   DOC_KINDS,
   createPermission,
@@ -82,7 +82,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
                document_date as "documentDate",
                custom,
-               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt",
+               ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
                subsidiary_id as "subsidiaryId"
           from documents where id = ${id} and org_id = ${user.orgId}`,
   ))

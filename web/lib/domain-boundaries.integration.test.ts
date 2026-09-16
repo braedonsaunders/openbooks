@@ -290,7 +290,7 @@ for (const boundary of [
               // upgrades a scope 404 into information.
               const revision = (
                 await db.execute<{ revision: string }>(
-                  sql`select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from crm_opportunities where org_id=${org.orgId} and id=${id}`,
+                  sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${org.orgId} and id=${id}`,
                 )
               ).rows[0]!.revision
               const edited = await opportunityEdit(

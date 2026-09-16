@@ -376,7 +376,7 @@ test(
       const revision = (
         await withBypass(() =>
           db.execute<{ revision: string }>(sql`
-            select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+            select (revision_seq)::text as revision
               from custom_records where id = ${id} and org_id = ${org.orgId}
           `),
         )

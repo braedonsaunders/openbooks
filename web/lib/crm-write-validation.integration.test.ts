@@ -127,7 +127,7 @@ async function header(orgId: string, id: string) {
 async function edit(orgId: string, id: string, body: Record<string, unknown>) {
   const revision = (
     await db.execute<{ revision: string }>(
-      sql`select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from crm_opportunities where org_id=${orgId} and id=${id}`,
+      sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`,
     )
   ).rows[0]!.revision
   return opportunityEdit(request({ ...body, expectedUpdatedAt: revision }), params(id))

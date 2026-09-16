@@ -22,13 +22,13 @@ registerHooks({
 });
 
 const { createRecord, updateRecord } = await import("./writers.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/document-revision.ts");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/src/document-revision.ts");
 
 /** Current optimistic-concurrency token for a custom record (opaque wire form). */
 async function revisionOf(id: string): Promise<string> {
   const rows = await withBypass(() =>
     db.execute<{ revision: string }>(sql`
-      select ${documentRevisionSql(sql`updated_at`)} as revision
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
         from custom_records where id = ${id}`),
   );
   return rows.rows[0]!.revision;

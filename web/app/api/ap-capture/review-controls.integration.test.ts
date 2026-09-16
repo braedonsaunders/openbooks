@@ -41,7 +41,7 @@ async function fixture() {
   await db.execute(sql`insert into ap_capture_fields(org_id,run_id,field_key,raw_value)
     values (${org.orgId},${run},'total','100.00')`)
   const revision = async () => (await db.execute<{ updatedAt: string }>(sql`
-    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+    select (revision_seq)::text as "updatedAt"
       from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!.updatedAt
   const patch = async (body: object) => {
     const expectedUpdatedAt = await revision()

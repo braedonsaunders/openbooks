@@ -43,7 +43,7 @@ import {
   applyDocumentEdit,
   controlDeps,
   createDocumentDraft,
-  documentRevisionSql,
+  documentRevisionCounterSql,
   DocumentEditError,
   isDocKindEnabled,
   loadDocument,
@@ -131,7 +131,7 @@ async function applyCustomRecord(
   // withOrgTransaction), so a concurrent editor serializes here and the
   // loser compares against the winner's committed revision.
   const locked = (await db.execute(sql`
-    select *, ${documentRevisionSql(sql`updated_at`)} as revision from custom_records
+    select *, ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
      where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
      for update`)).rows[0] as
     | (Record<string, unknown> & { revision?: unknown })
@@ -361,7 +361,7 @@ async function createCustomRecordAttempt(
   // persisted row instead of demanding a token the creator never read.
   if (body.data !== undefined || body.status !== undefined) {
     const fresh = (await db.execute<{ revision: string }>(sql`
-      select ${documentRevisionSql(sql`updated_at`)} as revision from custom_records
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
        where id = ${id} and org_id = ${user.orgId}`)).rows[0];
     const applied = await applyCustomRecord(
       user,
@@ -1216,7 +1216,7 @@ async function updateDocument(
            document_date as "documentDate",
            custom,
            subsidiary_id as "subsidiaryId",
-           ${documentRevisionSql(sql.raw("updated_at"))} as "updatedAt"
+           ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}
       for update`);
   const row = owned.rows[0];

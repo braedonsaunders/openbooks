@@ -108,7 +108,7 @@ async function loadStoredDocument(orgId: string, id: string): Promise<StoredDocu
   const result = await withOrgContext(orgId, async () => db.execute<StoredDocument>(sql`
     select kind, status, total::text as "total", tax_total::text as "taxTotal",
            party_id as "partyId", document_date::text as "documentDate", memo,
-           to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+           (revision_seq)::text as "updatedAt"
       from documents
      where org_id = ${orgId} and id = ${id}
   `))
@@ -518,9 +518,12 @@ test(
       ))
 
       await t.test('pristine existing drafts reject missing and null revisions', async () => {
+        // Seeded rows were only ever inserted, so each row's first counter
+        // token is 0; the revision_seq counter (migration 0167) is the token,
+        // never the seeded display timestamp.
         for (const [id, expectedMemo, expectedUpdatedAt, body] of [
-          [missingId, 'missing retained', '2026-08-24T12:00:00.100001Z', { memo: 'missing bypassed' }],
-          [nullId, 'null retained', '2026-08-24T12:00:00.100002Z', {
+          [missingId, 'missing retained', '0', { memo: 'missing bypassed' }],
+          [nullId, 'null retained', '0', {
             expectedUpdatedAt: null as never,
             memo: 'null bypassed',
           }],
@@ -542,14 +545,12 @@ test(
         }
       })
 
-      await t.test('same-millisecond PostgreSQL microseconds produce a real stale conflict', async () => {
+      await t.test('a concurrent display-timestamp write still produces a real stale conflict', async () => {
+        // The token is the revision_seq counter: the seeded row was only
+        // ever inserted, so its first token is 0 however precise the display
+        // timestamp looks.
         const opened = await loadStoredDocument(org.orgId, exactConflictId)
-        assert.equal(opened.updatedAt, '2026-08-24T12:00:00.123001Z')
-        assert.equal(
-          new Date(opened.updatedAt).getTime(),
-          new Date('2026-08-24T12:00:00.123999Z').getTime(),
-          'JavaScript Date intentionally cannot distinguish these database revisions',
-        )
+        assert.equal(opened.updatedAt, '0')
 
         await withOrgContext(org.orgId, async () => {
           await db.execute(sql`
@@ -572,7 +573,7 @@ test(
         )
         const retained = await loadStoredDocument(org.orgId, exactConflictId)
         assert.equal(retained.memo, 'concurrent exact update')
-        assert.equal(retained.updatedAt, '2026-08-24T12:00:00.123999Z')
+        assert.equal(retained.updatedAt, '1')
       })
 
       await t.test('storage refuses to let two writes share one revision token', async () => {
@@ -581,9 +582,11 @@ test(
         // repeats `now()` inside one transaction could store an updated_at
         // byte-identical to the one already on the row. Two distinct
         // revisions then serialized to one expectedUpdatedAt token and stale
-        // writes evaded detection. The documents_revision_monotonic trigger
-        // rewrites exactly that shape forward; nothing else about an explicit
-        // timestamp write changes.
+        // writes evaded detection. The revision_seq counter (migration 0167)
+        // is the token now, so every committed UPDATE advances it at the
+        // database boundary — including an explicit repeat of the stored
+        // display timestamp (which documents_revision_monotonic still rewrites
+        // forward) and an explicit backward timestamp (which it permits).
         const collapseId = randomUUID()
         await withBypass(async () => {
           await db.execute(sql`
@@ -601,12 +604,14 @@ test(
         })
 
         const opened = await loadStoredDocument(org.orgId, collapseId)
-        assert.equal(opened.updatedAt, '2026-08-24T12:00:00.400001Z')
+        assert.equal(opened.updatedAt, '0')
         await withOrgContext(org.orgId, async () => {
+          // Repeat the stored DISPLAY timestamp exactly: the row's updated_at
+          // is the seeded 400001Z value above, not the counter token.
           await db.execute(sql`
             update documents
                set memo = 'repeat attempt',
-                   updated_at = ${opened.updatedAt}::timestamptz
+                   updated_at = '2026-08-24T12:00:00.400001Z'::timestamptz
              where id = ${collapseId} and org_id = ${org.orgId}
           `)
         })
@@ -615,9 +620,28 @@ test(
         assert.notEqual(
           afterRepeat.updatedAt,
           opened.updatedAt,
-          'a write repeating the stored revision must receive a fresh token',
+          'a write repeating the stored display timestamp must receive a fresh token',
         )
-        assert.match(afterRepeat.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        assert.match(afterRepeat.updatedAt, /^\d+$/)
+        // A backward display timestamp still commits new content — and still
+        // advances the token, so reuse of an old display value can never
+        // resurrect a stale token.
+        await withOrgContext(org.orgId, async () => {
+          await db.execute(sql`
+            update documents
+               set memo = 'backward attempt',
+                   updated_at = '2020-01-01T00:00:00.000000Z'::timestamptz
+             where id = ${collapseId} and org_id = ${org.orgId}
+          `)
+        })
+        const afterBackward = await loadStoredDocument(org.orgId, collapseId)
+        assert.equal(afterBackward.memo, 'backward attempt')
+        assert.notEqual(
+          afterBackward.updatedAt,
+          afterRepeat.updatedAt,
+          'a backward display timestamp must still advance the token',
+        )
+        assert.match(afterBackward.updatedAt, /^\d+$/)
 
         // Two updates inside one transaction share now() by construction;
         // only the storage rule keeps their committed revisions distinct.
@@ -718,7 +742,7 @@ test(
         assert.ok(results[1].status === 'rejected' && isConflict(results[1].reason))
         const saved = await loadStoredDocument(org.orgId, serializedId)
         assert.equal(saved.memo, 'first writer')
-        assert.match(saved.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        assert.match(saved.updatedAt, /^\d+$/)
         assert.notEqual(saved.updatedAt, opened.updatedAt)
       })
 
@@ -814,7 +838,7 @@ test(
           }
           assert.equal(payload.doc.memo, `${source} request persisted`)
           assert.equal(payload.doc.internal_notes, 'settled by on_create')
-          assert.match(payload.doc.updated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+          assert.match(payload.doc.updated_at, /^\d+$/)
           const persisted = await loadStoredDocument(org.orgId, payload.doc.id)
           assert.equal(payload.doc.updated_at, persisted.updatedAt)
         }
@@ -838,11 +862,10 @@ test(
         const source = await loadStoredDocument(org.orgId, correctionSourceId)
         assert.equal(source.status, 'posted')
         // The draft→posted flip is itself a mutation, so storage has advanced
-        // the seeded revision: every committed documents update must move
-        // updated_at forward (documents_revision_monotonic trigger), and this
-        // correction's OCC evidence must be the current exact token, whatever
-        // value the flip produced.
-        assert.match(source.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        // the seeded counter: every committed documents update bumps
+        // revision_seq (migration 0167), and this correction's OCC evidence
+        // must be the current exact token, whatever value the flip produced.
+        assert.match(source.updatedAt, /^\d+$/)
         assert.notEqual(source.updatedAt, '2026-08-24T12:00:00.900001Z')
         const correctionBody = {
           expectedUpdatedAt: source.updatedAt,
@@ -1294,11 +1317,12 @@ test('load and lock SQL preserve the exact revision token end to end', () => {
     readFileSync(new URL('../../engine/src/document-revision.ts', import.meta.url), 'utf8'),
     /function documentRevisionSql[\s\S]*?at time zone 'UTC'[\s\S]*?HH24:MI:SS\.US/,
   )
-  // Every load and every lock projects the exact canonical token: the list
-  // read, loadDocument's row, loadDocumentEditCurrent's snapshot, the posted-
+  // Every load and every lock projects the exact canonical token — the
+  // revision_seq counter, never the display timestamp: the list read,
+  // loadDocument's row, loadDocumentEditCurrent's snapshot, the posted-
   // correction lock, and the edit lock.
-  assert.equal(DOCUMENTS_SOURCE.match(/documentRevisionSql\(sql\.raw\('(d\.)?updated_at'\)\)/g)?.length, 5)
-  assert.match(DOCUMENTS_SOURCE, /select kind, status,[\s\S]*?documentRevisionSql[\s\S]*?for update/)
+  assert.equal(DOCUMENTS_SOURCE.match(/documentRevisionCounterSql\(sql\.raw\('(d\.)?revision_seq'\)\)/g)?.length, 5)
+  assert.match(DOCUMENTS_SOURCE, /select kind, status,[\s\S]*?documentRevisionCounterSql[\s\S]*?for update/)
   // Draft minting is attributable: the insert stamps the creating user, and
   // on_create flows settle before the writer ever receives a token.
   assert.match(

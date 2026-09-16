@@ -12,7 +12,7 @@ import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business
 import { nextDocumentNumber } from './bills'
 import {
   assertDocumentEditRevision,
-  documentRevisionSql,
+  documentRevisionCounterSql,
   runDocumentVersionedTransaction,
 } from './documents'
 import { canonicalDecimal } from './exact-decimal'
@@ -189,7 +189,7 @@ export async function createFieldTicket(
  * re-derives customer/subsidiary/PO and (unless hours exist) the period
  * window; changing the period or anchor date re-windows a still-empty ticket.
  *
- * `expectedRevision` is the exact `documents.updated_at` token the caller
+ * `expectedRevision` is the exact `documents.revision_seq` token the caller
  * loaded; the write only lands while that revision still holds the row lock,
  * so two concurrent saves can never silently overwrite one another.
  */
@@ -217,7 +217,7 @@ export async function updateTicketHeader(
     transaction: (work) => db.transaction(work),
     lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
       select d.status,
-             ${documentRevisionSql(sql.raw('d.updated_at'))} as "updatedAt"
+             ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
         join field_tickets ft
           on ft.document_id = d.id and ft.org_id = d.org_id
@@ -356,7 +356,7 @@ function exactTicketQuantity(value: unknown): string {
  * Sync the crew grid onto time_entries: one row per employee × item × time
  * type × day. Upserts changed hours, deletes cleared cells. Draft tickets only.
  *
- * `expectedRevision` is the exact `documents.updated_at` token the caller
+ * `expectedRevision` is the exact `documents.revision_seq` token the caller
  * loaded; the grid replacement only lands while that revision still holds the
  * row lock, so two concurrent grid saves can never silently drop cells.
  */
@@ -377,7 +377,7 @@ export async function saveCrewGrid(
     transaction: (work) => db.transaction(work),
     lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
       select d.status,
-             ${documentRevisionSql(sql.raw('d.updated_at'))} as "updatedAt"
+             ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
         join field_tickets ft
           on ft.document_id = d.id and ft.org_id = d.org_id
@@ -569,7 +569,7 @@ export async function addTicketLine(
     transaction: (work) => db.transaction(work),
     lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
       select d.status, d.subsidiary_id as "subsidiaryId",
-             ${documentRevisionSql(sql.raw('d.updated_at'))} as "updatedAt"
+             ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
@@ -722,7 +722,7 @@ export async function removeTicketLine(
     transaction: (work) => db.transaction(work),
     lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
       select d.status, d.subsidiary_id as "subsidiaryId",
-             ${documentRevisionSql(sql.raw('d.updated_at'))} as "updatedAt"
+             ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
@@ -773,7 +773,7 @@ type HeaderRow = {
   currency: string
   reference_number: string | null
   memo: string | null
-  /** Exact canonical OCC token for documents.updated_at (microsecond text). */
+  /** Exact canonical OCC token for documents.revision_seq (counter text). */
   revision: string
   period: TicketPeriod
   period_start: string
@@ -795,7 +795,7 @@ async function loadHeader(
     select d.id, d.document_number, d.status, d.party_id,
            d.subsidiary_id as "subsidiaryId", d.project_id, d.currency,
            d.document_date::text as document_date, d.reference_number, d.memo,
-           ${documentRevisionSql(sql.raw('d.updated_at'))} as revision,
+           ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as revision,
            ft.period, ft.period_start::text as period_start,
            ft.period_end::text as period_end,
            ft.foreman_party_id, ft.charge_document_id, ft.submitted_by,

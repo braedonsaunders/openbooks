@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { pgTextArrayLiteral } from './pg-array'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
@@ -704,7 +704,7 @@ export async function loadPrebill(orgId: string, id: string, scope: SubsidiarySc
              line.adjustment_reason as "adjustmentReason",
              line.adjustment_evidence as "adjustmentEvidence",
              line.pricing_snapshot as "pricingSnapshot", line.disposition,
-             ${documentRevisionSql(sql`line.updated_at`)} as "updatedAt",
+             ${documentRevisionCounterSql(sql`line.revision_seq`)} as "updatedAt",
              hold.id as "holdId", hold.reason as "holdReason"
         from wip_prebill_lines line
         left join lateral (
@@ -757,7 +757,7 @@ export async function updatePrebillLine(
       select line.proposed_bill_amount::text as proposed, line.original_bill_amount::text as original,
              worksheet.status, worksheet.project_id, worksheet.period_end::text as period_end,
              worksheet.custom,
-             ${documentRevisionSql(sql`line.updated_at`)} as revision,
+             ${documentRevisionCounterSql(sql`line.revision_seq`)} as revision,
              coalesce((select sum(other.proposed_bill_amount) from wip_prebill_lines other
                         where other.org_id = line.org_id and other.prebill_id = line.prebill_id
                           and other.id <> line.id and other.disposition = 'bill'), 0)::text as other_proposed

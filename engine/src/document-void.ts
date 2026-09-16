@@ -46,7 +46,7 @@ export interface DocumentVoidResult {
 }
 
 /**
- * Optimistic-concurrency token from documents.updated_at. When supplied, the
+ * Optimistic-concurrency token from documents.revision_seq. When supplied, the
  * void refuses unless the caller's view is still the stored revision — a stale
  * dashboard must not cancel a document it never saw (edits, applications, or
  * an approval that landed after it loaded). The comparison happens inside the

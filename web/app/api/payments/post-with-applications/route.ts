@@ -38,7 +38,7 @@ const postWithApplicationsBody = z.object({
     (v) => uuidId.safeParse(v).success,
     'documentId is required',
   ),
-  /** Optimistic concurrency token from documents.updated_at (exact form). */
+  /** Optimistic concurrency token from documents.revision_seq (exact form). */
   expectedUpdatedAt: z.string().optional(),
   allocations: z.array(allocationInput).optional(),
 })

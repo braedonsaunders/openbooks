@@ -1,4 +1,4 @@
-import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -753,7 +753,7 @@ export async function convertOrder(
   return withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
     if (options.expectedUpdatedAt !== undefined) {
       const source = (await tx.execute<{ revision: string }>(sql`
-        select ${documentRevisionSql(sql`updated_at`)} as revision from documents
+        select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents
          where id = ${sourceId} and org_id = ${orgId} for update
       `)).rows[0];
       if (!source) throw new ConversionError('Order not found', 404)
@@ -1031,7 +1031,7 @@ export async function convertOrder(
 
     if (target.kind === 'sales_order') {
       const revision = (await tx.execute<{ updated_at: string }>(sql`
-        select ${documentRevisionSql(sql`updated_at`)} as updated_at from documents where id = ${newId} and org_id = ${orgId}
+        select ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${newId} and org_id = ${orgId}
       `)).rows[0]!.updated_at
       await issueSalesOrder({
         orgId,

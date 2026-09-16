@@ -3,7 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-config.ts'
 import {
   grid,
@@ -155,7 +155,7 @@ export async function loadApCapture(
     const selected = (await db.execute<CaptureDetail>(sql`
       select ci.*, f.content_type as "contentType", f.size_bytes as "sizeBytes",
              vendor.display_name as "resolvedVendor", po.document_number as "purchaseOrderNumber",
-             ${documentRevisionSql(sql`ci.updated_at`)} as "updatedAt"
+             ${documentRevisionCounterSql(sql`ci.revision_seq`)} as "updatedAt"
         from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
         left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id

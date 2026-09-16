@@ -8,7 +8,7 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import {
   DocumentEditError,
-  documentRevisionSql,
+  documentRevisionCounterSql,
   requireDocumentEditRevision,
   runDocumentVersionedTransaction,
 } from '../../../../lib/documents'
@@ -32,7 +32,7 @@ async function withExactDocumentRevision<T extends { doc: Record<string, unknown
   orgId: string,
 ): Promise<T> {
   const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+    select ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
       from documents where id = ${id} and org_id = ${orgId}
   `))
   if (row.rows[0]) payload.doc = { ...payload.doc, updated_at: row.rows[0].updatedAt }
@@ -74,7 +74,7 @@ const journalLineInput = z
   .refine((line) => toUnits(line.amount) !== 0n, 'journal line amounts cannot be zero')
 
 const journalPatchBody = z.object({
-  /** Optimistic concurrency token from documents.updated_at (exact form). */
+  /** Optimistic concurrency token from documents.revision_seq (exact form). */
   expectedUpdatedAt: z.string().optional(),
   partyId: nullableUuidId.optional(),
   documentDate: isoDate().optional(),
@@ -272,7 +272,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // check and the header/line replacement.
       lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
         select status,
-               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+               ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
           from documents
          where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
          for update
