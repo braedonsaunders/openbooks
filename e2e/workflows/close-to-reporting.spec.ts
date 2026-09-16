@@ -953,6 +953,12 @@ test.describe.serial("close to reporting", () => {
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
       await page.goto(`/close?run=${SEED.runId}&stage=publish`);
+      // A re-publication after a controlled reopen is a restatement: the
+      // engine refuses it without a note and the wizard keeps the button
+      // disabled until one is entered.
+      await page
+        .getByPlaceholder("Add a note about this publication\u2026")
+        .fill(`Restated after the August freight accrual for ${P.name}`);
       await page.getByRole("button", { name: "Publish package" }).click();
       await expectOkResponse(await republished, "re-publish package");
       const res2 = await page.request.get(`${baseURL}/api/close/runs/${SEED.runId}/binder`, {
