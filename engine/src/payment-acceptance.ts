@@ -1622,9 +1622,11 @@ async function processWebhookEvent(
     // session — so park it as a pending-clawback marker instead of dropping it
     // as unknown_attempt (which 200s and loses the return forever). The later
     // succeeded event consumes the marker, settles, and writes the clawback
-    // note. Redeliveries upsert idempotently; normal-order refunds never land
-    // here because they resolve above. Events without an intent key have
-    // nothing to park under and stay unknown.
+    // note. Redeliveries upsert idempotently but never re-arm a consumed
+    // marker (only last_seen_at/payload refresh), so one return fires exactly
+    // one clawback note. Normal-order refunds never land here because they
+    // resolve above. Events without an intent key have nothing to park under
+    // and stay unknown.
     if (event.status === "refunded" && intentRef) {
       await db.execute(sql`
         insert into payment_pending_clawbacks
@@ -1634,7 +1636,7 @@ async function processWebhookEvent(
         on conflict (org_id, provider, intent_ref)
         do update set event_status = excluded.event_status,
           event_payload = excluded.event_payload,
-          last_seen_at = now(), consumed_at = null, consumed_attempt_id = null
+          last_seen_at = now()
       `);
       return "pending_clawback";
     }
