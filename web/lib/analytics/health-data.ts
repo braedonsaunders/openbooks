@@ -2,7 +2,8 @@ import "server-only";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { neg, sum } from "@openbooks/engine/src/money.ts";
+import { add, mulDecimal, neg, sum } from "@openbooks/engine/src/money.ts";
+import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
@@ -125,6 +126,8 @@ type SqlNumeric = string | number | null;
 
 interface HealthMonthSqlRow {
   month: string;
+  func: string | null;
+  late: string | null;
   revenue: SqlNumeric;
   operating_revenue: SqlNumeric;
   cogs: SqlNumeric;
@@ -135,6 +138,9 @@ interface HealthMonthSqlRow {
 interface HealthSegmentSqlRow {
   id: string;
   name: string;
+  func: string | null;
+  late_cur: string | null;
+  late_prior: string | null;
   revenue: SqlNumeric;
   operating_revenue: SqlNumeric;
   cogs: SqlNumeric;
@@ -146,6 +152,9 @@ interface HealthDriverSqlRow {
   id: string;
   name: string;
   type: string;
+  func: string | null;
+  late_cur: string | null;
+  late_prior: string | null;
   cur_raw: SqlNumeric;
   prior_raw: SqlNumeric;
 }
@@ -153,9 +162,13 @@ interface HealthDriverSqlRow {
 interface HealthItemSqlRow {
   id: string;
   name: string;
+  func: string | null;
+  late_cur: string | null;
+  late_prior: string | null;
   current: SqlNumeric;
   prior: SqlNumeric;
 }
+
 
 interface BudgetScenarioSqlRow {
   id: string;
@@ -171,6 +184,20 @@ interface BudgetAccountSqlRow {
   type: string;
   budget: SqlNumeric;
   actual: SqlNumeric;
+}
+
+/**
+ * Translate one leg amount, skipping the rate lookup for zero money: an
+ * empty window's fallback date must never demand coverage for nothing.
+ * Nonzero money without coverage still fails closed in rateAt.
+ */
+function translateAmount(
+  amount: string,
+  func: string | null,
+  date: string,
+  rateAt: (func: string | null, date: string) => string,
+): string {
+  return Number(amount) === 0 ? "0" : mulDecimal(amount, rateAt(func, date));
 }
 
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"] as const;
@@ -196,25 +223,30 @@ async function monthlySeries(orgId: string, to: string, allowed: ReadonlySet<str
   const r = ((await db.execute(sql`
     with movement as (
       select g.account_id, to_char(g.month, 'YYYY-MM') as month,
-             (g.debit_total - g.credit_total) as amt
+             sub.base_currency as func,
+             (g.debit_total - g.credit_total) as amt,
+             (g.month + interval '1 month' - interval '1 day')::date::text as late
         from gl_month_activity g
+        left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = g.org_id
        where g.org_id = ${orgId}
          and g.book_id = ${statementBookExpr(orgId)}
          ${subsidiaryVisibleFilter(sql`g.subsidiary_id`, allowed)}
          and g.month >= ${startIso}::date
          and g.month < date_trunc('month', ${to}::date)::date
       union all
-      select l.account_id, to_char(e.posting_date, 'YYYY-MM'), l.amount
+      select l.account_id, to_char(e.posting_date, 'YYYY-MM'), sub.base_currency, l.amount,
+             e.posting_date::text
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
          and e.book_id = ${statementBookExpr(orgId)}
          and e.posting_date >= date_trunc('month', ${to}::date)::date
          and e.posting_date <= ${to}
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
     )
-    select m.month,
+    select m.month, m.func, max(m.late) as late,
       -sum(case when a.type in ('income','income_other') then m.amt else 0 end) as revenue,
       -sum(case when a.type = 'income' then m.amt else 0 end) as operating_revenue,
       sum(case when a.type = 'cogs' then m.amt else 0 end) as cogs,
@@ -223,10 +255,39 @@ async function monthlySeries(orgId: string, to: string, allowed: ReadonlySet<str
     from movement m
     join accounts a on a.id = m.account_id and a.org_id = ${orgId}
     where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-    group by 1
+    group by 1, 2
   `)));
   const monthRows = r.rows as unknown as HealthMonthSqlRow[];
-  const by = new Map(monthRows.map((x) => [x.month, x]));
+  // One shared flow context over every (month, functional) leg; each type
+  // bucket translates at its leg's latest date, then merges per month.
+  const monthCtx = await flowRates(orgId, monthRows.map((x) => ({
+    func: x.func ?? null, date: String(x.late ?? to).slice(0, 10),
+  })));
+  const rateAt = (func: string | null, date: string) => monthCtx.rateAt(func, date);
+  const by = new Map<string, HealthMonthSqlRow>();
+  for (const x of monthRows) {
+    const prior = by.get(x.month);
+    const date = String(x.late ?? to).slice(0, 10);
+    const t = (v: SqlNumeric) => translateAmount(String(v ?? 0), x.func ?? null, date, rateAt);
+    const merged: HealthMonthSqlRow = prior
+      ? {
+          ...prior,
+          revenue: add(String(prior.revenue ?? 0), t(x.revenue)),
+          operating_revenue: add(String(prior.operating_revenue ?? 0), t(x.operating_revenue)),
+          cogs: add(String(prior.cogs ?? 0), t(x.cogs)),
+          opex: add(String(prior.opex ?? 0), t(x.opex)),
+          other_exp: add(String(prior.other_exp ?? 0), t(x.other_exp)),
+        }
+      : {
+          ...x,
+          revenue: t(x.revenue),
+          operating_revenue: t(x.operating_revenue),
+          cogs: t(x.cogs),
+          opex: t(x.opex),
+          other_exp: t(x.other_exp),
+        };
+    by.set(x.month, merged);
+  }
   const out: MonthPoint[] = [];
   for (let i = 0; i < months; i++) {
     const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
@@ -274,6 +335,9 @@ async function segmentsBy(
   // posted status and the primary accounting book, just as the headline does.
   const r = ((await db.execute(sql`
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
+      sub.base_currency as func,
+      max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
+      max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
       -sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as revenue,
       -sum(case when a.type = 'income' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as operating_revenue,
       sum(case when a.type = 'cogs' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cogs,
@@ -283,16 +347,46 @@ async function segmentsBy(
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
-    group by 1, 2
+    group by 1, 2, 3
     having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
         or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
   `)));
-  const rows = r.rows as unknown as HealthSegmentSqlRow[];
+  const segLegs = r.rows as unknown as HealthSegmentSqlRow[];
+  // Current-window legs translate at their latest current date, prior legs
+  // at their latest prior date, then merge per segment in presentation.
+  const segCtx = await flowRates(orgId, [
+    ...segLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_cur ?? to).slice(0, 10) })),
+    ...segLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_prior ?? pTo).slice(0, 10) })),
+  ]);
+  const segById = new Map<string, {
+    id: string; name: string; revenue: string; operating_revenue: string;
+    cogs: string; opex: string; prior_revenue: string;
+  }>();
+  const segRateAt = (func: string | null, date: string) => segCtx.rateAt(func, date);
+  for (const x of segLegs) {
+    const cur = (v: SqlNumeric) =>
+      translateAmount(String(v ?? 0), x.func ?? null, String(x.late_cur ?? to).slice(0, 10), segRateAt);
+    const prior = (v: SqlNumeric) =>
+      translateAmount(String(v ?? 0), x.func ?? null, String(x.late_prior ?? pTo).slice(0, 10), segRateAt);
+    const prev = segById.get(x.id);
+    const merged = {
+      id: x.id,
+      name: x.name,
+      revenue: add(String(prev?.revenue ?? 0), cur(x.revenue)),
+      operating_revenue: add(String(prev?.operating_revenue ?? 0), cur(x.operating_revenue)),
+      cogs: add(String(prev?.cogs ?? 0), cur(x.cogs)),
+      opex: add(String(prev?.opex ?? 0), cur(x.opex)),
+      prior_revenue: add(String(prev?.prior_revenue ?? 0), prior(x.prior_revenue)),
+    };
+    segById.set(x.id, merged);
+  }
+  const rows = [...segById.values()];
   // A dimension nobody tags is unused, not "one big Unassigned segment" — keep
   // the empty state in that case.
   if (rows.every((x) => x.id === "unassigned")) return [];
@@ -329,33 +423,55 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
   const pTo = priorYear(to);
   // Retain the selective line-date predicate while enforcing ledger status/book.
   const r = ((await db.execute(sql`
-    select a.id, a.name, a.type,
+    select a.id, a.name, a.type, sub.base_currency as func,
+      max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
+      max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
       sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cur_raw,
       sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_raw
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
-    group by a.id, a.name, a.type
+    group by a.id, a.name, a.type, sub.base_currency
   `)));
+  const drvLegs = r.rows as unknown as HealthDriverSqlRow[];
+  const drvCtx = await flowRates(orgId, [
+    ...drvLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_cur ?? to).slice(0, 10) })),
+    ...drvLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_prior ?? pTo).slice(0, 10) })),
+  ]);
+  const drvByAccount = new Map<string, { name: string; type: string; current: string; prior: string }>();
+  const drvRateAt = (func: string | null, date: string) => drvCtx.rateAt(func, date);
+  for (const x of drvLegs) {
+    const prev = drvByAccount.get(x.id) ?? { name: x.name, type: x.type, current: "0", prior: "0" };
+    prev.current = add(
+      prev.current,
+      translateAmount(String(x.cur_raw ?? 0), x.func ?? null, String(x.late_cur ?? to).slice(0, 10), drvRateAt),
+    );
+    prev.prior = add(
+      prev.prior,
+      translateAmount(String(x.prior_raw ?? 0), x.func ?? null, String(x.late_prior ?? pTo).slice(0, 10), drvRateAt),
+    );
+    drvByAccount.set(x.id, prev);
+  }
   const isIncome = (t: string) => t === "income" || t === "income_other";
-  const rows = (r.rows as unknown as HealthDriverSqlRow[]).map((x) => {
-    const sign = isIncome(x.type) ? -1 : 1;
-    const current = sign * Number(x.cur_raw);
-    const prior = sign * Number(x.prior_raw);
+  const rows = [...drvByAccount.entries()].map(([id, v]) => {
+    const sign = isIncome(v.type) ? -1 : 1;
+    const current = sign * Number(v.current);
+    const prior = sign * Number(v.prior);
     return {
-      id: x.id as string,
-      name: x.name as string,
-      type: x.type as string,
+      id,
+      name: v.name,
+      type: v.type,
       current,
       prior,
       change: current - prior,
       changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
-      isIncome: isIncome(x.type),
+      isIncome: isIncome(v.type),
     };
   });
   const rank = (subset: typeof rows) => {
@@ -380,28 +496,50 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   const r = ((await db.execute(sql`
-    select a.id, a.name,
+    select a.id, a.name, sub.base_currency as func,
+      max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
+      max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
       -sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as current,
       -sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and a.type in ('income','income_other')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
-    group by a.id, a.name
+    group by a.id, a.name, sub.base_currency
   `)));
+  const itemLegs = r.rows as unknown as HealthItemSqlRow[];
+  const itemCtx = await flowRates(orgId, [
+    ...itemLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_cur ?? to).slice(0, 10) })),
+    ...itemLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_prior ?? pTo).slice(0, 10) })),
+  ]);
+  const itemByAccount = new Map<string, { name: string; current: string; prior: string }>();
+  const itemRateAt = (func: string | null, date: string) => itemCtx.rateAt(func, date);
+  for (const x of itemLegs) {
+    const prev = itemByAccount.get(x.id) ?? { name: x.name, current: "0", prior: "0" };
+    prev.current = add(
+      prev.current,
+      translateAmount(String(x.current ?? 0), x.func ?? null, String(x.late_cur ?? to).slice(0, 10), itemRateAt),
+    );
+    prev.prior = add(
+      prev.prior,
+      translateAmount(String(x.prior ?? 0), x.func ?? null, String(x.late_prior ?? pTo).slice(0, 10), itemRateAt),
+    );
+    itemByAccount.set(x.id, prev);
+  }
   const totalChangeAbs =
-    ((r.rows)).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
-  const rows = (r.rows as unknown as HealthItemSqlRow[])
-    .map((x): ItemRow => {
-      const current = Number(x.current);
-      const prior = Number(x.prior);
+    ([...itemByAccount.values()]).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
+  const rows = ([...itemByAccount.entries()])
+    .map(([id, v]): ItemRow => {
+      const current = Number(v.current);
+      const prior = Number(v.prior);
       return {
-        id: x.id,
-        name: x.name,
+        id,
+        name: v.name,
         prior,
         current,
         change: current - prior,
@@ -607,51 +745,99 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
   const s = scen.rows[0];
   if (!s) return { scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } };
 
+  // Both sides arrive per (account, functional) and translate to
+  // presentation before the variance compares them — the same second leg as
+  // the budget-vs-actual report (see budget-report.ts).
   const r = ((await db.execute(sql`
     with b as (
-      select bl.account_id, sum(case when acc.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
+      select bl.account_id, sub.base_currency as func,
+        max(p.ends_on)::text as late,
+        sum(case when acc.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
       from budget_lines bl
       join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
       join accounts acc on acc.id = bl.account_id and acc.org_id = bl.org_id
+      left join subsidiaries sub on sub.id = bl.subsidiary_id and sub.org_id = bl.org_id
       where bl.org_id = ${orgId} and bl.scenario_id = ${s.id} and p.starts_on <= ${to} and p.ends_on >= ${from}
         ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowed)}
-      group by 1
+      group by 1, 2
     ), a as (
-      select l.account_id,
+      select l.account_id, sub.base_currency as func,
+        max(e.posting_date)::text as late,
         sum(case when acc.type in ('income','income_other') then -l.amount else l.amount end) as actual
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
         and l.posting_date >= ${from} and l.posting_date <= ${to}
-      group by 1
+      group by 1, 2
     )
-    select acc.id, acc.name, acc.type,
+    select acc.id, acc.name, acc.type, b.func as b_func, b.late as b_late, a.func as a_func, a.late as a_late,
       coalesce(b.budget, 0) as budget, coalesce(a.actual, 0) as actual
     from accounts acc
     left join b on b.account_id = acc.id
     left join a on a.account_id = acc.id
     where acc.org_id = ${orgId} and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
       and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0)
-    order by abs(coalesce(a.actual, 0) - coalesce(b.budget, 0)) desc
   `)));
+  const bvaRows = r.rows as unknown as (BudgetAccountSqlRow & {
+    b_func: string | null; b_late: string | null; a_func: string | null; a_late: string | null;
+  })[];
+  // The account × side join fans legs out one row per (account, side,
+  // functional); translate each side at its own latest date, then merge.
+  const bvaCtx = await flowRates(orgId, [
+    ...bvaRows.map((x) => ({ func: x.a_func ?? null, date: String(x.a_late ?? to).slice(0, 10) })),
+    ...bvaRows.map((x) => ({ func: x.b_func ?? null, date: String(x.b_late ?? to).slice(0, 10) })),
+  ]);
+  const bvaByAccount = new Map<string, { name: string; type: string; budget: string; actual: string }>();
+  // The account × side join repeats each side's leg once per leg on the
+  // other side; each CTE already yields one row per (account, functional),
+  // so an identical (account, side, func, date, amount) repeat is join
+  // fan-out, not money, and merges exactly once. Null functionals are
+  // root-owned legs in org base — they translate 1:1, never drop.
+  const seenLeg = new Set<string>();
+  const bvaRateAt = (func: string | null, date: string) => bvaCtx.rateAt(func, date);
+  for (const x of bvaRows) {
+    const prev = bvaByAccount.get(x.id) ?? { name: x.name, type: x.type, budget: "0", actual: "0" };
+    const aKey = `${x.id}|a|${x.a_func}|${x.a_late}|${x.actual}`;
+    if (!seenLeg.has(aKey)) {
+      seenLeg.add(aKey);
+      prev.actual = add(
+        prev.actual,
+        translateAmount(String(x.actual ?? 0), x.a_func ?? null, String(x.a_late ?? to).slice(0, 10), bvaRateAt),
+      );
+    }
+    const bKey = `${x.id}|b|${x.b_func}|${x.b_late}|${x.budget}`;
+    if ((x.b_func !== null || x.budget !== null) && !seenLeg.has(bKey)) {
+      seenLeg.add(bKey);
+      prev.budget = add(
+        prev.budget,
+        translateAmount(String(x.budget ?? 0), x.b_func ?? null, String(x.b_late ?? to).slice(0, 10), bvaRateAt),
+      );
+    }
+    bvaByAccount.set(x.id, prev);
+  }
 
   const isIncome = (t: string) => t === "income" || t === "income_other";
-  const rows: BudgetRow[] = (r.rows as unknown as BudgetAccountSqlRow[]).map((x) => {
-    const budget = Number(x.budget);
-    const actual = Number(x.actual);
-    const variance = actual - budget;
-    const variancePct = Math.abs(budget) > 0 ? variance / Math.abs(budget) : null;
-    const favorable = isIncome(x.type) ? variance >= 0 : variance <= 0;
-    let status: BudgetRow["status"];
-    if (budget === 0) status = "no-budget";
-    else if (favorable || Math.abs(variancePct ?? 0) <= 0.1) status = "on-track";
-    else if (Math.abs(variancePct ?? 0) <= 0.25) status = "watch";
-    else status = "over";
-    return { accountId: x.id, name: x.name, type: x.type, budget, actual, variance, variancePct, favorable, status };
-  });
+  // The variance-descending display order the SQL used to provide now
+  // applies after translation, on presentation figures.
+  const rows: BudgetRow[] = [...bvaByAccount.entries()]
+    .map(([accountId, v]): BudgetRow => {
+      const budget = Number(v.budget);
+      const actual = Number(v.actual);
+      const variance = actual - budget;
+      const variancePct = Math.abs(budget) > 0 ? variance / Math.abs(budget) : null;
+      const favorable = isIncome(v.type) ? variance >= 0 : variance <= 0;
+      let status: BudgetRow["status"];
+      if (budget === 0) status = "no-budget";
+      else if (favorable || Math.abs(variancePct ?? 0) <= 0.1) status = "on-track";
+      else if (Math.abs(variancePct ?? 0) <= 0.25) status = "watch";
+      else status = "over";
+      return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
+    })
+    .sort((a, b) => Math.abs(b.actual - b.budget) - Math.abs(a.actual - a.budget));
   return {
     scenario: { id: s.id, name: s.name, fiscalYear: Number(s.fiscal_year), status: s.status },
     rows,
