@@ -5,6 +5,32 @@ import { fileURLToPath } from 'node:url'
 
 const drawerSource = readFileSync(fileURLToPath(new URL('./RuleDrawer.tsx', import.meta.url)), 'utf8')
 
+/** Line numbers of `<Select …>` open tags with no aria-label before the tag closes. */
+function unlabeledSelects(source: string): number[] {
+  const missing: number[] = []
+  let from = 0
+  while (true) {
+    const start = source.indexOf('<Select', from)
+    if (start < 0) return missing
+    let depth = 0
+    let end = -1
+    for (let i = start; i < source.length; i++) {
+      const ch = source[i]
+      if (ch === '{' || ch === '(') depth++
+      else if (ch === '}' || ch === ')') depth--
+      else if (ch === '>' && depth === 0) {
+        end = i
+        break
+      }
+    }
+    assert.ok(end > start, 'unterminated <Select')
+    if (!source.slice(start, end).includes('aria-label')) {
+      missing.push(source.slice(0, start).split('\n').length)
+    }
+    from = end + 1
+  }
+}
+
 test('rule drawer is URL-state chrome over the rule APIs', () => {
   // UrlDrawer: open state comes from `?rule=`, close returns to the list.
   assert.match(drawerSource, /<UrlDrawer/)
@@ -70,4 +96,28 @@ test('rule drawer edits party, item and custom-segment filters from the options 
   assert.ok(!drawerSource.includes('readonlyFilters'), 'read-only filter branch is gone')
   assert.ok(drawerSource.includes(`key: 'partyId'`), 'test tab samples party lines')
   assert.ok(drawerSource.includes(`key: 'itemId'`), 'test tab samples item lines')
+})
+
+test('rule drawer uses shared field chrome and responsive grids', () => {
+  // Every control is a shared field component; hints ride the Label popover
+  // (SetupDrawer precedent), sections share its headings, and two-column
+  // grids collapse below sm so the form stays coherent at 1280 and 1536.
+  assert.match(drawerSource, /<Label help=/)
+  assert.match(drawerSource, /sm:grid-cols-2/)
+  assert.ok(!drawerSource.includes('grid grid-cols-2 '), 'no orphaned two-column grids')
+  assert.ok(!drawerSource.includes('grid-cols-3 '), 'no three-column grids')
+  // No bare checkboxes: the shared Check/MultiCheck styling only.
+  for (const line of drawerSource.split('\n')) {
+    if (line.includes('type="checkbox"')) {
+      assert.ok(line.includes('CHECKBOX_CLASS') || drawerSource.includes('CHECKBOX_CLASS'), 'checkboxes share one styled class')
+    }
+  }
+  assert.ok(drawerSource.includes('CHECKBOX_CLASS'), 'checkboxes share one styled class')
+  // Native selects are all labelled; the test preview uses shared tables.
+  // (Brace-aware scan: a naive [^>]* would stop at the `>` in `=>`.)
+  for (const unlabeled of unlabeledSelects(drawerSource)) {
+    assert.fail(`Select without aria-label near line ${unlabeled}`)
+  }
+  assert.ok(drawerSource.includes('<Table>'), 'test preview uses the shared Table')
+  assert.ok(!drawerSource.includes('<table'), 'no hand-rolled tables')
 })

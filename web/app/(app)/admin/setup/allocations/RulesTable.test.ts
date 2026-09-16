@@ -34,3 +34,23 @@ test('rules table scrolls horizontally on narrow viewports (seven columns)', () 
   // usage owns the narrow-viewport scroll container (tablet floor).
   assert.match(tableSource, /overflow-x-auto/)
 })
+
+test('empty tenants see the shared empty state with a New-rule action', () => {
+  // Braedon verdict: an empty tenant showed only "no allocation rules yet"
+  // with no way to create one (the toolbar New button vanished with the
+  // table). The header New button lives above the list and the empty slot
+  // is the shared EmptyState carrying the same create action.
+  assert.match(tableSource, /<EmptyState/)
+  assert.match(tableSource, /rules\.list\.emptyTitle/)
+  assert.match(tableSource, /rules\.length === 0/)
+  // Both the header button and the empty-state action drive ?rule=new
+  // through one shared handler.
+  assert.ok(tableSource.includes(`openRule('new')`), 'create opens ?rule=new')
+  const createActions = tableSource.match(/onClick=\{newRule\}/g) ?? []
+  assert.ok(createActions.length >= 2, 'header and empty-state actions must both create')
+})
+
+test('rule status renders house badges, never bare text', () => {
+  assert.match(tableSource, /<Badge variant=/)
+  assert.match(tableSource, /rules\.list\.inactive/)
+})

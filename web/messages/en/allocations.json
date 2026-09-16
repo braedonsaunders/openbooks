@@ -47,6 +47,7 @@
     "list": {
       "heading": "Allocation rules",
       "new": "New rule",
+      "emptyTitle": "No allocation rules yet",
       "empty": "No allocation rules yet. Create the first rule to start distributing costs.",
       "columns": {
         "name": "Name",
