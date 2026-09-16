@@ -99,7 +99,7 @@ const MATRIX: Entry[] = [
   { prefix: "consolidation", tools: ["get_consolidation_view"] },
   // --- operational modules --------------------------------------------------
   { prefix: "analytics", tools: ["analytics_financial_health", "analytics_customer_intelligence", "analytics_vendor_performance", "analytics_cashflow", "analytics_true_cost", "analytics_utilization", "analytics_spend_velocity", "analytics_sentinel", "ap_position", "ar_position", "cash_position"] },
-  { prefix: "reports", tools: ["list_report_definitions", "run_report", "list_report_schedules", "list_reporting_packages", "general_ledger", "aging_detail", "cash_flow_indirect", "partner_statement"], note: "run/delivery history has no tool yet (b04 gap fill: list_report_runs, list_email_deliveries)" },
+  { prefix: "reports", tools: ["list_report_definitions", "run_report", "list_report_schedules", "list_reporting_packages", "list_report_runs", "list_email_deliveries", "general_ledger", "aging_detail", "cash_flow_indirect", "partner_statement"] },
   { prefix: "inventory", tools: ["search_items", "get_item", "inventory_levels", "inventory_movements", "inventory_writedowns"] },
   { prefix: "items", tools: ["search_items", "get_item"] },
   { prefix: "sales-orders", tools: ["search_orders", "get_order"] },
