@@ -38,5 +38,6 @@ test("the registry exposes the shared strip and the row island", () => {
 test("the loader resolves display strings and KPI stats from the read model", () => {
   assert.match(view, /getTranslations\('admin'\)/);
   assert.match(view, /getAgentsOverview/);
+  assert.match(view, /getMoneyFormatter/);
   assert.match(lib, /export async function getAgentRunStats/);
 });

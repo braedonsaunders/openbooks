@@ -18,6 +18,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { pickString } from '../../../../../lib/list-params'
+import { getMoneyFormatter } from '../../../../../lib/money-server'
 import { getAgentRunStats, getAgentsOverview } from '../../../../../lib/setup/agents'
 
 /**
@@ -110,9 +111,10 @@ export async function loadAgentsOverview(
     ? (rawSort as AgentsOverviewSort)
     : 'pack'
   const dir = pickString(sp.dir) === 'desc' ? 'desc' : 'asc'
-  const [rows, stats] = await Promise.all([
+  const [rows, stats, { money: formatMoney }] = await Promise.all([
     getAgentsOverview(authz.user.orgId),
     getAgentRunStats(authz.user.orgId),
+    getMoneyFormatter(authz.user.orgId),
   ])
   const featureEnabled = rows[0]?.featureEnabled ?? false
   const mapped: AgentsOverviewRow[] = rows.map((row) => {
@@ -147,7 +149,7 @@ export async function loadAgentsOverview(
         count: activeDetectors,
         total: row.policy.detectors.length,
       })} · ${t('setup.agents.overview.materialitySummary', {
-        amount: row.policy.materialityThreshold,
+        amount: formatMoney(row.policy.materialityThreshold),
       })}`,
       lastRunLine: `${lastRunLine}${nextRunLine}`,
       lastRunStartedAt: row.lastRun?.startedAt ?? '',
