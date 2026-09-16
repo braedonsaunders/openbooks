@@ -105,7 +105,7 @@ export const MCP_SKILLS: readonly McpSkill[] = [
     body: [
       "# Run a period close",
       "",
-      "1. Orient first. list_close_runs shows what is in flight; get_close_run shows one run's checklist state. Never start a second run for a scope that already has one in progress — resume it.",
+      "1. Orient first. list_close_runs shows what is in flight; get_close_run_status reports one run's cockpit detail (tasks by status, open exceptions, sign-offs, locks). list_period_locks shows lock state by scope and list_period_reopen_requests shows reopen workflow state. Never start a second run for a scope that already has one in progress — resume it.",
       "2. start_close_run opens (or resumes) the authoritative checklist for an explicit period, book, and subsidiary scope. The checklist is the system's, not yours: your job is to drive its items to done, not to re-derive what closing means.",
       "3. refresh_close_run re-evaluates automated checks after you fix findings. Work the loop: read the run, resolve a finding through the normal tools (a missing accrual is a draft-and-post job; an unreconciled account is a human conversation), refresh, repeat.",
       "4. Owner-managed close uses attest_close_run, then close_period. request_close_approval and publish_close_package exist only when Advanced close controls are on; if those tools are absent or refuse, do not invent a substitute. Each step is gated by its own permission and may await other humans. Report where the run stands; never present a step you skipped as done.",
