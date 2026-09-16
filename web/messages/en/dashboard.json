@@ -23,14 +23,18 @@
     "openReceivables": "Open receivables",
     "overdueReceivables": "Overdue receivables",
     "openPayables": "Open payables",
-    "overduePayables": "Overdue payables"
+    "overduePayables": "Overdue payables",
+    "agentFindings": "Agent findings"
   },
   "metricContext": {
     "today": "Posted today",
     "awaitingDecision": "Awaiting a decision",
     "baseCurrency": "Base currency · {currency}",
     "outstanding": "Outstanding",
-    "pastDue": "Past due"
+    "pastDue": "Past due",
+    "agentProposals": "{count} with proposals",
+    "agentLastRun": "last run {date}",
+    "agentClear": "All clear"
   },
   "categories": {
     "kpi": "Headlines",
@@ -55,7 +59,8 @@
     "openReceivables": "Unpaid customer invoices in base currency.",
     "overdueReceivables": "Customer invoices past their due date in base currency.",
     "openPayables": "Unpaid vendor bills in base currency.",
-    "overduePayables": "Vendor bills past their due date in base currency."
+    "overduePayables": "Vendor bills past their due date in base currency.",
+    "agentFindings": "Open background-agent findings — jump to the workbench."
   },
   "grid": {
     "customizing": "Customizing your dashboard",

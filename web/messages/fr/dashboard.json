@@ -23,14 +23,18 @@
     "openReceivables": "Créances ouvertes",
     "overdueReceivables": "Créances en retard",
     "openPayables": "Dettes ouvertes",
-    "overduePayables": "Dettes en retard"
+    "overduePayables": "Dettes en retard",
+    "agentFindings": "Constats des agents"
   },
   "metricContext": {
     "today": "Comptabilisées aujourd’hui",
     "awaitingDecision": "En attente d’une décision",
     "baseCurrency": "Devise de base · {currency}",
     "outstanding": "Solde impayé",
-    "pastDue": "Échu"
+    "pastDue": "Échu",
+    "agentProposals": "{count} avec propositions",
+    "agentLastRun": "dernière exécution {date}",
+    "agentClear": "Rien en attente"
   },
   "categories": {
     "kpi": "Indicateurs clés",
@@ -55,7 +59,8 @@
     "openReceivables": "Factures clients impayées en devise de base.",
     "overdueReceivables": "Factures clients échues en devise de base.",
     "openPayables": "Factures fournisseurs impayées en devise de base.",
-    "overduePayables": "Factures fournisseurs échues en devise de base."
+    "overduePayables": "Factures fournisseurs échues en devise de base.",
+    "agentFindings": "Constats ouverts des agents en arrière-plan — ouvrir le poste de travail."
   },
   "grid": {
     "customizing": "Personnalisation du tableau de bord",
