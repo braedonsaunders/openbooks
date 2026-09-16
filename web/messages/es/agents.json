@@ -16,7 +16,8 @@
     "assignment": "Asignación",
     "assignedToMe": "Asignados a mí",
     "unassigned": "Sin asignar",
-    "overdue": "Vencidos"
+    "overdue": "Vencidos",
+    "since": "Desde"
   },
   "subsidiaryHelp": "La subsidiaria se resuelve en hallazgos vinculados a cuentas; el resto queda sin asignar.",
   "lastVisit": "Novedades desde el {date}",
@@ -93,5 +94,13 @@
   },
   "assignment": {
     "unassigned": "Sin asignar"
+  },
+  "since": {
+    "day": "Últimas 24 horas",
+    "week": "Últimos 7 días"
+  },
+  "columns": {
+    "age": "Antigüedad",
+    "due": "Vencimiento"
   }
 }

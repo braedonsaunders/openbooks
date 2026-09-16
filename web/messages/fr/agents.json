@@ -16,7 +16,8 @@
     "assignment": "Assignation",
     "assignedToMe": "Assignés à moi",
     "unassigned": "Non assignés",
-    "overdue": "En retard"
+    "overdue": "En retard",
+    "since": "Depuis"
   },
   "subsidiaryHelp": "La filiale est déduite des constats liés à un compte ; les autres restent non rattachés.",
   "lastVisit": "Nouveautés depuis le {date}",
@@ -93,5 +94,13 @@
   },
   "assignment": {
     "unassigned": "Non assigné"
+  },
+  "since": {
+    "day": "Dernières 24 heures",
+    "week": "7 derniers jours"
+  },
+  "columns": {
+    "age": "Ancienneté",
+    "due": "Échéance"
   }
 }

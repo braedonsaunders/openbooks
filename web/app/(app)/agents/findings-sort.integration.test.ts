@@ -15,7 +15,7 @@ const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __c01FindingsSort: state });
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
-  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" };
+  if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return (key, values)=>values && typeof values.count === 'number' ? `${values.count} records` : key};export async function getLocale(){return 'en'}" };
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__c01FindingsSort.user}' };
   if (specifier.startsWith('@/')) {
     const path = root + 'web/' + specifier.slice(2);
@@ -30,6 +30,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { getAuthz } = await import('../../../lib/authz');
 const { loadAgentInbox } = await import('../../../lib/agents/inbox');
 const { parseAgentFindingsParams } = await import('../../../lib/list/agent-findings');
+const { loadAgents, agentsSpec } = await import('./view');
 
 const FIRST = new Date(Date.now() - 10 * 86_400_000).toISOString();
 const T1 = new Date(Date.now() - 3 * 86_400_000).toISOString();
@@ -94,5 +95,45 @@ test('findings sort by rank, columns, and page deterministically', { skip: !proc
   } finally {
     await dropScratchOrg(org.orgId);
     await dropScratchOrg(other.orgId);
+  }
+});
+
+test('workbench loader serves the list source sort, filters, and row shape', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const moment = Date.now();
+    const hourAgo = new Date(moment - 3_600_000).toISOString();
+    const threeDaysAgo = new Date(moment - 3 * 86_400_000).toISOString();
+    const lowId = await seedFinding(org.orgId, { materiality: '100', severity: 'info', lastDetected: threeDaysAgo });
+    const highId = await seedFinding(org.orgId, { materiality: '900', severity: 'critical', lastDetected: hourAgo });
+    await asReader(org.orgId);
+    await withOrgContext(org.orgId, async () => {
+      // Rank default: the heavier finding leads.
+      const ranked = await loadAgents({});
+      assert.deepEqual(ranked.rows.map((r) => r.id), [highId, lowId]);
+      assert.equal(ranked.sort, 'rank');
+      assert.equal(ranked.dir, 'desc');
+      assert.ok((ranked.rows[0]?.age ?? '').length > 0, 'age renders a relative label');
+      assert.equal(ranked.rows[0]?.assigneeLabel, 'assignment.unassigned');
+      assert.equal(ranked.rows[0]?.due, '');
+      assert.deepEqual(ranked.sinceOptions.map((o) => o.value), ['day', 'week']);
+
+      // Column sort through the URL flips the order.
+      const byMateriality = await loadAgents({ sort: 'materiality', dir: 'asc' });
+      assert.deepEqual(byMateriality.rows.map((r) => r.id), [lowId, highId]);
+      assert.equal(byMateriality.sort, 'materiality');
+
+      // Unknown sort falls back to rank; the since window narrows by age.
+      const fallback = await loadAgents({ sort: 'nope' });
+      assert.deepEqual(fallback.rows.map((r) => r.id), [highId, lowId]);
+      const day = await loadAgents({ since: 'day' });
+      assert.deepEqual(day.rows.map((r) => r.id), [highId]);
+      const week = await loadAgents({ since: 'week' });
+      assert.equal(week.total, 2);
+      const spec = agentsSpec(week);
+      JSON.stringify(spec);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
   }
 });
