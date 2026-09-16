@@ -30,19 +30,6 @@ const RIGHT_ENTRIES = [
 // Entries fade in one-by-one once the covers finish opening (~1.05s).
 const entryDelay = (i: number): CSSProperties => ({ animationDelay: `${1.0 + i * 0.1}s` })
 
-const REDIRECT_BASE = 'https://openbooks.invalid'
-
-/** Accept only bounded, same-origin relative paths from the login query. */
-function safeNext(value: string | null): string {
-  if (!value || value.length > 2048 || !value.startsWith('/') || value.startsWith('//')) return '/'
-  try {
-    if (new URL(value, REDIRECT_BASE).origin !== REDIRECT_BASE) return '/'
-  } catch {
-    return '/'
-  }
-  return value
-}
-
 function HeroBook({ className }: { className?: string }) {
   return (
     <svg
