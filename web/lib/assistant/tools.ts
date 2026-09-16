@@ -899,6 +899,7 @@ const budgetVsActualTool: AssistantToolDef = {
     "List budget scenarios or return one scenario's P&L budget-versus-actual statement with account rows and exact actual, budget, variance amount, and variance percent. Actuals cover the scenario's ENTIRE fiscal year (from/to echoed in the response, including postings dated after today) — compare with profit_and_loss period=this_fiscal_year, not a to-date window. Optional departmentId/projectId filters. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["budgets.read", "reports.read"] },
+  feature: "budgets",
   inputSchema: z.object({
     scenarioId: uuidInput.optional(),
     departmentId: uuidInput.optional(),
@@ -1012,6 +1013,7 @@ const projectProfitability: AssistantToolDef = {
     "ONE project's full job-cost detail by projectId: budget, posted revenue/cost/margin, commitments, forecast, cost by account, and source documents. Without projectId it only returns a short name-search page (with the total count) — for any ranking, filtering, or portfolio question use rank_projects instead. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
+  feature: "projects",
   inputSchema: z.object({
     projectId: uuidInput.optional(),
     query: z.string().max(100).optional(),
@@ -1068,6 +1070,7 @@ const continuousCloseFindings: AssistantToolDef = {
     "List evidence-backed Accounting or Finance continuous-close findings. Defaults to active findings and returns exact materiality, detector summary, evidence count, and a link to review each item. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
+  feature: "continuousClose",
   inputSchema: z.object({
     agent: z.enum(["accounting", "finance"]).optional(),
     status: z.enum(["open", "in_review", "resolved", "dismissed"]).optional(),
@@ -1138,6 +1141,7 @@ const getContinuousCloseFinding: AssistantToolDef = {
     "Load one continuous-close finding with its exact detector summary and complete evidence packet. Use this before explaining root cause or recommending action. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
+  feature: "continuousClose",
   inputSchema: z.object({ findingId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "continuousClose"))) {

@@ -431,6 +431,7 @@ const listBudgetScenarios: AssistantToolDef = {
     "List non-archived budget and forecast scenarios: id, name, fiscal year, kind, and approval status. Use budget_vs_actual for variance analysis of one scenario. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["budgets.read"] },
+  feature: "budgets",
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
@@ -447,6 +448,7 @@ const getBudgetScenario: AssistantToolDef = {
     "One budget or forecast scenario's detail: book, fiscal year, kind, approval status, revision, and lifecycle timestamps. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["budgets.read"] },
+  feature: "budgets",
   inputSchema: z.object({ scenarioId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {

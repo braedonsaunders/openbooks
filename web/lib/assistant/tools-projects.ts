@@ -17,6 +17,7 @@ const rankProjectsTool: AssistantToolDef = {
     "Rank and filter the whole project (job) portfolio in one call: per-project contract value, cost budget, posted cost, posted revenue, margin, margin %, committed PO cost, budget overrun, and unbilled contract, with the TOTAL matching count and paging. Use this for 'worst projects', 'over budget', 'largest fixed-price contracts', 'negative margin', or any portfolio ranking — never call project_profitability per project to build a list. Defaults: status active, projects with posted activity, sorted worst margin first. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
+  feature: "projects",
   inputSchema: z.object({
     statuses: z.array(z.string().max(40)).max(10).optional()
       .describe("Project statuses to include (active, awarded, substantially_complete, closed, cancelled); default ['active']. Pass several for a wider portfolio."),

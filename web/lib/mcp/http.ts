@@ -45,7 +45,7 @@ export async function handleMcpPost(request: Request): Promise<Response> {
   if (limited) return limited;
 
   const requestId = resolveMcpRequestId(request);
-  const server = createOpenBooksMcpServer({ auth, request, requestId });
+  const server = await createOpenBooksMcpServer({ auth, request, requestId });
 
   let transportError: unknown;
   const response = await handleStreamableHttpRequest(request, {

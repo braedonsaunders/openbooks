@@ -175,6 +175,7 @@ const listBankFeeds: AssistantToolDef = {
     "List bank feed connections: provider, name, linked GL account, status, sync cadence, next sync, last success, last attempt timestamps, last result, and whether credentials are configured. Credentials themselves are sealed and never returned. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
+  feature: "bankFeeds",
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "bankFeeds"))) {

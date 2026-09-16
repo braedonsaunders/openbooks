@@ -11,6 +11,7 @@ import { buildToolRegistry } from "../../../../lib/assistant/registry";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { orgFiscalContext } from "../../../../lib/fiscal";
+import { resolvedFeatureState } from "../../../../lib/features";
 import {
   appendMessage,
   createConversation,
@@ -97,7 +98,8 @@ export async function POST(req: Request): Promise<Response> {
   ));
 
   const today = await businessToday(authz.user.orgId);
-  const tools = buildToolRegistry(authz);
+  const features = await resolvedFeatureState(authz.user.orgId);
+  const tools = buildToolRegistry(authz, features);
   const system = assistantSystemPrompt({
     orgName: aiConfig?.org?.name ?? null,
     baseCurrency: org.rows[0]?.base_currency ?? null,
@@ -105,6 +107,7 @@ export async function POST(req: Request): Promise<Response> {
     today,
     fiscal: await orgFiscalContext(today, authz.user.orgId),
     canWrite: can(authz, "assistant.write"),
+    features,
   });
 
   if (!conversationId) {

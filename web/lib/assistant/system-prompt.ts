@@ -1,4 +1,5 @@
 import type { FiscalContext } from "@openbooks/reports";
+import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/src/feature-registry.ts";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -19,6 +20,21 @@ export function fiscalCalendarLine(fiscal: FiscalContext): string {
   );
 }
 
+/** One sentence of module state so the model never hunts for data a disabled
+ *  module cannot have, and never claims a module is missing when it is only
+ *  switched off. Shared by every model surface. */
+export function featuresLine(features: FeatureState): string {
+  const enabled = FEATURES.filter((f) => featureEnabled(features, f.key)).map((f) => f.key);
+  const disabled = FEATURES.filter((f) => !featureEnabled(features, f.key)).map((f) => f.key);
+  return (
+    `Optional modules enabled for this org: ${enabled.length ? enabled.join(", ") : "none"}. ` +
+    `Disabled: ${disabled.length ? disabled.join(", ") : "none"}. ` +
+    `Tools of disabled modules are not available to you and their data does not exist here — ` +
+    `if the user asks about a disabled module, say it is turned off (Setup → Features, /admin/setup/features) instead of searching; ` +
+    `an admin can turn it on with update_features.`
+  );
+}
+
 /**
  * System prompt for the accounting-focused agentic assistant. Tool output is treated as
  * untrusted DATA, never as instructions (prompt-injection defense), and the
@@ -32,6 +48,8 @@ export function assistantSystemPrompt(args: {
   today: string; // ISO date, injected by the route
   fiscal: FiscalContext; // resolved from the org's fiscal start month by the route
   canWrite: boolean;
+  /** Resolved feature switchboard; omitted only by legacy callers. */
+  features?: FeatureState | null;
 }): string {
   const org = args.orgName ? ` at ${args.orgName}` : "";
   const who = args.userName ? ` You are assisting ${args.userName}.` : "";
@@ -49,6 +67,7 @@ export function assistantSystemPrompt(args: {
     `You are the openbooks Assistant, an AI built into a double-entry accounting platform${org}.${who}`,
     `Today is ${args.today}.${currency}`,
     fiscalCalendarLine(args.fiscal),
+    ...(args.features ? [featuresLine(args.features)] : []),
     ``,
     `Your job: help the user find, understand, and analyze their financial data — accounts, journal entries, bills, invoices, expenses, vendors, customers, financial statements, and continuous-close findings — by calling tools.`,
     ``,

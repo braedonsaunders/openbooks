@@ -42,16 +42,41 @@ function str(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
 }
 
-/** OpenAI returns every model (embeddings, tts, image…) — keep chat-capable text ones. */
+/**
+ * OpenAI returns every model (embeddings, tts, image…). Drop the families that
+ * can never chat; everything else is offered as-is so a new model family the
+ * provider ships tomorrow appears without a code change. The list is
+ * discovered from the provider — never a hardcoded allowlist of names.
+ */
 function isOpenAiChatModel(id: string): boolean {
-  if (
-    /embedding|whisper|tts|audio|dall-e|image|moderation|realtime|transcribe|search|similarity|edit|babbage|davinci/i.test(
-      id,
-    )
-  ) {
-    return false;
-  }
-  return /^(gpt-|o1|o3|o4|chatgpt)/i.test(id);
+  return !/embedding|whisper|tts|audio|dall-e|image|moderation|realtime|transcribe|similarity|babbage|davinci/i.test(
+    id,
+  );
+}
+
+/**
+ * Provider model lists change rarely and the settings UI asks for them on
+ * every dropdown open. Cache per provider + base URL + key fingerprint for a
+ * short TTL; a failed fetch is never cached. The key itself is not stored —
+ * only a SHA-256 fingerprint keys the entry.
+ */
+const MODEL_LIST_TTL_MS = 10 * 60 * 1000;
+const modelListCache = new Map<string, { at: number; items: ModelListItem[] }>();
+
+async function cacheKeyFor(config: AiConfig): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  const fingerprint = createHash("sha256").update(config.apiKey ?? "").digest("hex").slice(0, 32);
+  return `${config.provider}|${config.baseUrl ?? ""}|${fingerprint}`;
+}
+
+/** Cached wrapper around `listModels`; `force` bypasses the cache. */
+export async function listModelsCached(config: AiConfig, force = false): Promise<ModelListItem[]> {
+  const key = await cacheKeyFor(config);
+  const hit = modelListCache.get(key);
+  if (!force && hit && Date.now() - hit.at < MODEL_LIST_TTL_MS) return hit.items;
+  const items = await listModels(config);
+  modelListCache.set(key, { at: Date.now(), items });
+  return items;
 }
 
 /**
