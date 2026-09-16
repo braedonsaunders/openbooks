@@ -1,9 +1,10 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
 import { can, type Authz } from "../authz";
 import { readableContinuousCloseAgents } from "../continuous-close";
+import type { FindingDir, FindingSort } from "../list/agent-findings";
 
 /**
  * Agent Workbench inbox read model. ONE resolver backs the /agents inbox, the
@@ -44,6 +45,10 @@ export interface AgentInboxFilters {
   overdueOnly?: boolean;
   limit?: number;
   offset?: number;
+  /** List ordering for the workbench table. `rank` (default) is the
+   *  materiality × confidence × age score; the rest are column sorts. */
+  sort?: FindingSort;
+  dir?: FindingDir;
 }
 
 export interface AgentInboxRow {
@@ -132,6 +137,26 @@ function asOffset(offset: number | undefined): number {
   return Math.max(0, offset as number);
 }
 
+/**
+ * ORDER BY for the workbench table. Rank reuses the SELECT `score` alias
+ * (materiality × confidence × age); the column sorts name their own
+ * expression. The id tiebreaker pins every page deterministically — rank
+ * scores and timestamps tie constantly, and without it rows duplicate or
+ * drop across page boundaries.
+ */
+function inboxOrderBy(sort: FindingSort | undefined, dir: FindingDir | undefined): SQL {
+  const direction = dir === "asc" ? sql`asc` : sql`desc`;
+  const primary =
+    sort === "detected"
+      ? sql`w.last_detected_at`
+      : sort === "materiality"
+        ? sql`w.materiality`
+        : sort === "severity"
+          ? sql`case w.severity when 'info' then 0 when 'warning' then 1 when 'critical' then 2 else 3 end`
+          : sql`score`;
+  return sql`${primary} ${direction} nulls last, w.last_detected_at desc, w.id`;
+}
+
 export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): Promise<AgentInbox> {
   const empty: AgentInbox = {
     rows: [],
@@ -198,7 +223,7 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
           ${subjectJoin}
           ${assigneeJoin}
          where ${where}
-         order by score desc, w.last_detected_at desc, w.id
+         order by ${inboxOrderBy(filters.sort, filters.dir)}
          limit ${limit + 1} offset ${offset}
       `),
       db.execute<{ n: string | number }>(sql`

@@ -21,7 +21,11 @@ test("inbox enforces doorway, tenancy, and pack narrowing", () => {
 test("inbox ranks by materiality times confidence times age in SQL", () => {
   assert.match(inbox, /w\.materiality \* w\.confidence/);
   assert.match(inbox, /now\(\) - w\.first_detected_at/);
-  assert.match(inbox, /order by score desc/);
+  // c01 sort contract: the rank default still orders by the score alias,
+  // desc — now through the shared order builder the column sorts reuse.
+  assert.match(inbox, /order by \$\{inboxOrderBy\(filters\.sort, filters\.dir\)\}/);
+  assert.match(inbox, /: sql`score`;/);
+  assert.match(inbox, /dir === "asc" \? sql`asc` : sql`desc`/);
 });
 
 // Money stays canonical decimal strings; the float score is rank-only.
