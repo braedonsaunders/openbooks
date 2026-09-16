@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { postDocument } from "../posting.ts";
 import { requestDocumentVoid } from "../document-void.ts";
+import { runDriverReport } from "./report-runner.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -45,8 +46,26 @@ interface TargetSeed {
   departmentId?: string;
   subsidiaryId?: string | null;
   targetAccountId?: string | null;
-  fixedPercent: string;
+  fixedPercent?: string | null;
   label?: string;
+}
+
+async function seedManualDriver(
+  ctx: Ctx,
+  key: string,
+  entries: Array<[string, string]>,
+): Promise<string> {
+  const driverId = randomUUID();
+  await db.execute(sql`
+    insert into allocation_drivers (id, org_id, key, name, dimension, source_kind, config, is_active)
+    values (${driverId}, ${ctx.org.orgId}, ${key}, ${key}, 'department', 'manual', '{}'::jsonb, true)`);
+  for (const [dimensionValueId, value] of entries) {
+    await db.execute(sql`
+      insert into allocation_driver_values
+        (id, org_id, driver_id, dimension_value_id, effective_from, value)
+      values (${randomUUID()}, ${ctx.org.orgId}, ${driverId}, ${dimensionValueId}, '2026-01-01', ${value})`);
+  }
+  return driverId;
 }
 
 async function seedPostRule(
@@ -59,6 +78,7 @@ async function seedPostRule(
     bookIds?: string[];
     offsetAccountId?: string | null;
     accountId?: string;
+    basis?: { kind: "driver"; driverId: string };
   },
 ): Promise<{ ruleId: string; versionId: string }> {
   const ruleId = randomUUID();
@@ -74,12 +94,13 @@ async function seedPostRule(
     insert into allocation_rule_versions
       (id, org_id, rule_id, version_no, status, effective_from, definition_hash,
        book_scope, book_ids, document_kinds, account_scope, dimension_filters,
-       basis_kind, target_kind, impact, offset_account_id, residual_policy)
+       basis_kind, driver_id, target_kind, impact, offset_account_id, residual_policy)
     values (${versionId}, ${ctx.org.orgId}, ${ruleId}, 1, 'draft', '2026-01-01', null,
        ${opts.bookScope ?? "primary"}, ${JSON.stringify(opts.bookIds ?? [])}::jsonb,
        '["vendor_bill"]'::jsonb,
        ${JSON.stringify({ kind: "accounts", accountIds: [accountId] })}::jsonb,
-       '{}'::jsonb, 'fixed_percent', 'explicit', ${opts.impact},
+       '{}'::jsonb, ${opts.basis?.kind ?? "fixed_percent"}, ${opts.basis?.driverId ?? null},
+       'explicit', ${opts.impact},
        ${opts.offsetAccountId ?? null}, 'largest_share')`);
   let sequence = 0;
   for (const target of opts.targets) {
@@ -90,7 +111,7 @@ async function seedPostRule(
          subsidiary_id, fixed_percent, is_remainder, label)
       values (${randomUUID()}, ${ctx.org.orgId}, ${versionId}, ${sequence},
               ${target.targetAccountId ?? null}, ${target.departmentId ?? null},
-              ${target.subsidiaryId ?? null}, ${target.fixedPercent}, false,
+              ${target.subsidiaryId ?? null}, ${target.fixedPercent ?? null}, false,
               ${target.label ?? null})`);
   }
   // Publish last: freeze the version, then point the head at it (the
@@ -441,6 +462,114 @@ test("void reverses secondary-book allocation entries too", { skip: !DB }, async
       select count(*)::int as n from journal_entries
        where org_id = ${ctx.org.orgId} and status = 'posted'`)).rows[0]!;
     assert.equal(live.n, 2);
+  } finally {
+    await dropScratchOrg(ctx.org.orgId);
+  }
+});
+
+test("driver-basis rules weight lines by the measured vector end to end", { skip: !DB }, async () => {
+  const ctx = await setupCtx();
+  try {
+    // No test double: the posting path composes the engine resolver, and a
+    // manual driver needs no report runner.
+    const driverId = await seedManualDriver(ctx, "headcount", [
+      [ctx.deptA, "3.0000"],
+      [ctx.deptB, "1.0000"],
+    ]);
+    const { versionId } = await seedPostRule(ctx, {
+      key: "headcount-split",
+      impact: "net_zero_pair",
+      basis: { kind: "driver", driverId },
+      targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
+    });
+    const entryId = await postBill(ctx, await seedBill(ctx, "BILL-DRV-1", "100.0000"));
+    const lines = await entryLines(ctx.org.orgId, entryId);
+    assert.equal(lines.length, 5);
+    assert.deepEqual(lines.slice(2).map((l) => [l.account_id, l.department_id, l.amount]), [
+      [ctx.org.accounts.cogs, ctx.deptA, "75.0000"],
+      [ctx.org.accounts.cogs, ctx.deptB, "25.0000"],
+      [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
+    ]);
+    assert.ok(lines.slice(2).every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId));
+    const lineage = (await db.execute<{
+      journal_line_id: string | null;
+      driver_value: string | null;
+      driver_total: string | null;
+      share: string | null;
+      amount: string;
+    }>(sql`
+      select journal_line_id, driver_value::text, driver_total::text, share::text, amount::text
+        from allocation_lineage
+       where org_id = ${ctx.org.orgId} and mode = 'post'
+       order by amount desc`)).rows;
+    assert.equal(lineage.length, 3);
+    assert.deepEqual(lineage.map((r) => [r.amount, r.driver_value, r.driver_total, r.share]), [
+      ["75.0000", "3.0000", "4.0000", "0.7500000000"],
+      ["25.0000", "1.0000", "4.0000", "0.2500000000"],
+      ["-100.0000", null, "4.0000", null],
+    ]);
+    assert.ok(lineage.every((r) => r.journal_line_id !== null));
+  } finally {
+    await dropScratchOrg(ctx.org.orgId);
+  }
+});
+
+test("report_definition drivers run saved definitions under the actor", { skip: !DB }, async () => {
+  const ctx = await setupCtx();
+  try {
+    // The runner enforces reports.read under the actor: grant it, then prove
+    // an unprivileged actor is refused below.
+    await db.execute(sql`
+      update app_roles set permissions = '["reports.read"]'::jsonb
+       where org_id = ${ctx.org.orgId} and key = 'admin'`);
+    // Real posted data for the definition to measure (gate stays off: no rules).
+    await postBill(ctx, await seedBill(ctx, "BILL-RPT-1", "100.0000"));
+    const summarizeId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${summarizeId}, ${ctx.org.orgId}, 'custom', 'driver-sum-test', 'Driver sum test', 'query',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          mode: "summarize",
+          columns: [],
+          breakouts: [{ column: "account_id" }],
+          measures: [{ fn: "sum", column: "debit" }],
+          filters: {
+            combinator: "and",
+            rules: [{ field: "account_id", op: "eq", value: ctx.org.accounts.cogs }],
+          },
+        })}::jsonb)`);
+    const rowsId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions (id, org_id, kind, slug, name, report_type, query)
+      values (${rowsId}, ${ctx.org.orgId}, 'custom', 'driver-rows-test', 'Driver rows test', 'query',
+        ${JSON.stringify({
+          entity: "ledger_lines",
+          columns: ["account_id", "debit"],
+          filters: {
+            combinator: "and",
+            rules: [{ field: "account_id", op: "eq", value: ctx.org.accounts.cogs }],
+          },
+        })}::jsonb)`);
+    const base = {
+      orgId: ctx.org.orgId,
+      dimensionColumn: "account_id",
+      valueColumn: "debit",
+      params: {},
+      from: ctx.org.date,
+      to: ctx.org.date,
+      actorId: ctx.actor,
+    };
+    const summarized = await runDriverReport({ ...base, reportDefinitionId: summarizeId });
+    assert.deepEqual(summarized, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
+    const detailed = await runDriverReport({ ...base, reportDefinitionId: rowsId });
+    assert.deepEqual(detailed, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
+    // An actor without reports.read is refused, not given silent zeros.
+    const outsider = await createScratchUser(ctx.org.orgId, "Outsider", "viewer");
+    await assert.rejects(
+      runDriverReport({ ...base, reportDefinitionId: summarizeId, actorId: outsider }),
+      /cannot run reports/,
+    );
   } finally {
     await dropScratchOrg(ctx.org.orgId);
   }

@@ -27,6 +27,7 @@ import {
   type ContributedLineWithSource,
   type PostContributionResult,
 } from "./allocations/post.ts";
+import { postDriverResolver } from "./allocations/report-runner.ts";
 import { assertDocumentMutationRefsOwned } from "./document-mutation-refs.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
@@ -1942,7 +1943,12 @@ export async function postDocument(
         subsidiaryId: effectiveDoc.subsidiaryId,
       },
       kernelLines,
-      { migration: deps.migration, suppressAutomation: options.suppressAutomation },
+      {
+        migration: deps.migration,
+        suppressAutomation: options.suppressAutomation,
+        driverResolver: postDriverResolver,
+        actorId: options.audit?.actorId ?? null,
+      },
       { postingDate: effectiveDoc.postingDate ?? effectiveDoc.documentDate },
     );
   } catch (error) {

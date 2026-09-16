@@ -56,8 +56,13 @@ export interface PostContributionDeps {
   migration?: boolean;
   /** Larger atomic units (payment + applications + FX): skip contributions. */
   suppressAutomation?: boolean;
-  /** Injected driver resolver (A2). Required for driver/dynamic bases. */
+  /**
+   * Injected driver resolver. Tests inject doubles here; the posting path
+   * supplies the composed engine resolver (report-runner.ts).
+   */
   driverResolver?: DriverResolver;
+  /** Actor whose permissions govern report-backed drivers. */
+  actorId?: string | null;
   /** Account-group membership for account_scope matching; preloaded when needed. */
   resolveAccountGroup?: AccountGroupResolver;
   /** Resolve the feature gate; defaults to reading orgs.settings. */
@@ -267,6 +272,7 @@ async function measureDriver(
     driver: driver as AllocationDriver,
     asOf: { date: postingDate },
     subsidiaryId: doc.subsidiaryId ?? null,
+    actorId: deps.actorId ?? null,
   });
   return { vector, dimension: driver.dimension };
 }
