@@ -44,6 +44,10 @@ test("inbox table binds the list source sort and shared filters", () => {
   assert.match(view, /sort: 'detected'/);
   assert.match(view, /paramKey: 'since'/);
   assert.match(view, /column\(f\('columnAge'\)/);
+  // Materiality is right-aligned, so the shared SortableTh renders its
+  // sort icon on the left by design (flex-row-reverse) — confirmed, not
+  // changed.
+  assert.match(view, /column\(f\('columnMateriality'\), money\(item\('materiality'\)\), \{\s*\n\s*align: 'right',/);
   assert.match(view, /column\(\s*f\('columnDue'\)/);
   assert.match(view, /RelativeTimeFormat/);
   assert.match(view, /column\(f\('columnAssignee'\)/);
