@@ -93,3 +93,17 @@ test('every locale renders the spend-velocity insights without falling back to E
     }
   }
 })
+
+test('the shadow-IT gap reason resolves through the catalog (d6)', () => {
+  const legacy = 'Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.'
+  assert.equal(englishSpendVelocityStrings.shadowItReason, legacy)
+  const en = spendVelocityStrings(catalogTranslator('en'), 'en')
+  assert.equal(en.shadowItReason, legacy)
+  const fr = spendVelocityStrings(catalogTranslator('fr'), 'fr')
+  assert.equal(fr.shadowItReason, "Les lignes de notes de frais ne portent ni commerçant ni fournisseur — seul le compte de charges et une description libre — il est donc impossible de tracer l'adoption virale de logiciels par les employés.")
+  for (const locale of ['es', 'de', 'pt-BR', 'ja', 'zh']) {
+    const got = spendVelocityStrings(catalogTranslator(locale), locale).shadowItReason
+    assert.notEqual(got, legacy, `${locale} shadowItReason must not be English fallback`)
+    assert.ok(!got.includes('spendVelocity.insights'), `${locale} shadowItReason must resolve a catalog key`)
+  }
+})

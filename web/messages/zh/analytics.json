@@ -915,7 +915,8 @@
         "actionMonitor": "请监控采购增速并与销售管道保持一致。"
       },
       "seasonalHigh": "支出通常在{months}偏高",
-      "seasonalLow": "支出通常在{months}偏低"
+      "seasonalLow": "支出通常在{months}偏低",
+      "shadowItReason": "费用报销行没有商户/供应商信息——只有费用科目和自由文本说明——因此无法追踪员工之间病毒式传播的软件采用情况。"
     }
   },
   "sentinel": {

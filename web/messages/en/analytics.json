@@ -1954,7 +1954,8 @@
         "actionMonitor": "Monitor purchase velocity and align with sales pipeline."
       },
       "seasonalHigh": "Higher spending typically occurs in {months}",
-      "seasonalLow": "Lower spending typically occurs in {months}"
+      "seasonalLow": "Lower spending typically occurs in {months}",
+      "shadowItReason": "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced."
     }
   },
   "sentinel": {

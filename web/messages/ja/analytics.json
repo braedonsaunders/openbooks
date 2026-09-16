@@ -915,7 +915,8 @@
         "actionMonitor": "購買速度を監視し販売パイプラインと整合させてください。"
       },
       "seasonalHigh": "支出が増加しやすい時期：{months}",
-      "seasonalLow": "支出が減少しやすい時期：{months}"
+      "seasonalLow": "支出が減少しやすい時期：{months}",
+      "shadowItReason": "経費精算の明細には店舗名や仕入先名が含まれず、費用勘定と自由記述のみのため、従業員間でのソフトウェアのバイラルな普及を追跡できません。"
     }
   },
   "sentinel": {

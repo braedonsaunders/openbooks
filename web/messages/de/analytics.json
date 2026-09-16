@@ -915,7 +915,8 @@
         "actionMonitor": "Einkaufsdynamik beobachten und mit der Vertriebspipeline abstimmen."
       },
       "seasonalHigh": "Höhere Ausgaben fallen typischerweise in {months}",
-      "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}"
+      "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}",
+      "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen."
     }
   },
   "sentinel": {

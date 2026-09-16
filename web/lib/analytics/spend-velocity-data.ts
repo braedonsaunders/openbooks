@@ -796,7 +796,7 @@ export async function spendVelocityData(
   // ---- shadow IT — honest gap -------------------------------------------------------------
   const shadowIT = {
     available: false as const,
-    reason: "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
+    reason: strings.shadowItReason,
   };
 
   // ---- commitment cliff ----------------------------------------------------------------------
