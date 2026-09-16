@@ -18,6 +18,13 @@
     "manual": "手動",
     "rule": "ルール"
   },
+  "evidenceKind": {
+    "statement": "明細",
+    "sourceFrom": "{connector} から消込"
+  },
+  "sourceSystem": {
+    "other": "ソースシステム"
+  },
   "labels": {
     "never": "なし",
     "ref": "参照番号",
@@ -272,7 +279,8 @@
       "imported": "インポート日",
       "throughDate": "対象期日",
       "started": "開始日",
-      "signedOff": "承認日"
+      "signedOff": "承認日",
+      "evidence": "証跡"
     },
     "reconciliationsTitle": "消込",
     "searchReconciliations": "日付または残高で検索…",
@@ -373,7 +381,9 @@
       "difference": "差額",
       "matched": "照合済み"
     },
-    "matchedCounts": "{bank, number} 件（銀行）· {gl, number} 件（総勘定元帳）"
+    "matchedCounts": "{bank, number} 件（銀行）· {gl, number} 件（総勘定元帳）",
+    "sourceSignedOffDescription": "{connector} から {date} まで消込済み — 消込済み {cleared, number} 件 · 未消込 {uncleared, number} 件。明細はインポートされていません。",
+    "sourceSignedOffByDescription": "{connector} から {date} まで {name} が消込 — 消込済み {cleared, number} 件 · 未消込 {uncleared, number} 件。明細はインポートされていません。"
   },
   "workspace": {
     "signedOffAlert": "この消込は承認済みです。以下の照合された仕訳行は消込済みとして恒久的にスタンプされています。",

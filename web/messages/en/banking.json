@@ -18,6 +18,13 @@
     "manual": "manual",
     "rule": "rule"
   },
+  "evidenceKind": {
+    "statement": "Statement",
+    "sourceFrom": "Reconciled from {connector}"
+  },
+  "sourceSystem": {
+    "other": "source system"
+  },
   "labels": {
     "never": "never",
     "ref": "Ref",
@@ -379,7 +386,8 @@
       "imported": "Imported",
       "throughDate": "Through date",
       "started": "Started",
-      "signedOff": "Signed off"
+      "signedOff": "Signed off",
+      "evidence": "Evidence"
     },
     "reconciliationsTitle": "Reconciliations",
     "searchReconciliations": "Search by date or balance…",
@@ -480,7 +488,9 @@
       "difference": "Difference",
       "matched": "Matched"
     },
-    "matchedCounts": "{bank, number} bank · {gl, number} GL"
+    "matchedCounts": "{bank, number} bank · {gl, number} GL",
+    "sourceSignedOffDescription": "Reconciled from {connector} through {date} — {cleared, number} cleared · {uncleared, number} uncleared. No statement was imported.",
+    "sourceSignedOffByDescription": "Reconciled from {connector} through {date} by {name} — {cleared, number} cleared · {uncleared, number} uncleared. No statement was imported."
   },
   "workspace": {
     "signedOffAlert": "This reconciliation is signed off — the matched journal lines below are permanently stamped as reconciled.",

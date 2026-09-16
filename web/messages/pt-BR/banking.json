@@ -18,6 +18,13 @@
     "manual": "manual",
     "rule": "regra"
   },
+  "evidenceKind": {
+    "statement": "Extrato",
+    "sourceFrom": "Conciliado a partir de {connector}"
+  },
+  "sourceSystem": {
+    "other": "sistema de origem"
+  },
   "labels": {
     "never": "nunca",
     "ref": "Ref",
@@ -272,7 +279,8 @@
       "imported": "Importado",
       "throughDate": "Data limite",
       "started": "Iniciada",
-      "signedOff": "Finalizada"
+      "signedOff": "Finalizada",
+      "evidence": "Evidência"
     },
     "reconciliationsTitle": "Conciliações",
     "searchReconciliations": "Buscar por data ou saldo…",
@@ -373,7 +381,9 @@
       "difference": "Diferença",
       "matched": "Correspondido"
     },
-    "matchedCounts": "{bank, number} banco · {gl, number} razão"
+    "matchedCounts": "{bank, number} banco · {gl, number} razão",
+    "sourceSignedOffDescription": "Conciliado a partir de {connector} até {date} — {cleared, number} conciliadas · {uncleared, number} pendentes. Nenhum extrato foi importado.",
+    "sourceSignedOffByDescription": "Conciliado a partir de {connector} até {date} por {name} — {cleared, number} conciliadas · {uncleared, number} pendentes. Nenhum extrato foi importado."
   },
   "workspace": {
     "signedOffAlert": "Esta conciliação está finalizada — as linhas de lançamento correspondidas abaixo estão permanentemente marcadas como conciliadas.",

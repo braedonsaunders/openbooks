@@ -18,6 +18,13 @@
     "manual": "manuel",
     "rule": "règle"
   },
+  "evidenceKind": {
+    "statement": "Relevé",
+    "sourceFrom": "Rapproché depuis {connector}"
+  },
+  "sourceSystem": {
+    "other": "système source"
+  },
   "labels": {
     "never": "jamais",
     "ref": "Réf.",
@@ -272,7 +279,8 @@
       "imported": "Importé",
       "throughDate": "Date limite",
       "started": "Démarré",
-      "signedOff": "Approuvé"
+      "signedOff": "Approuvé",
+      "evidence": "Justificatif"
     },
     "reconciliationsTitle": "Rapprochements bancaires",
     "searchReconciliations": "Rechercher par date ou solde…",
@@ -373,7 +381,9 @@
       "difference": "Écart",
       "matched": "Apparié"
     },
-    "matchedCounts": "{bank, number} banque · {gl, number} GL"
+    "matchedCounts": "{bank, number} banque · {gl, number} GL",
+    "sourceSignedOffDescription": "Rapproché depuis {connector} jusqu’au {date} — {cleared, number} appariées · {uncleared, number} en attente. Aucun relevé importé.",
+    "sourceSignedOffByDescription": "Rapproché depuis {connector} jusqu’au {date} par {name} — {cleared, number} appariées · {uncleared, number} en attente. Aucun relevé importé."
   },
   "workspace": {
     "signedOffAlert": "Ce rapprochement bancaire est approuvé — les lignes de journal appariées ci-dessous sont marquées définitivement comme rapprochées.",

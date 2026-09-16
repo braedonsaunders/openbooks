@@ -18,6 +18,13 @@
     "manual": "manuell",
     "rule": "Regel"
   },
+  "evidenceKind": {
+    "statement": "Kontoauszug",
+    "sourceFrom": "Aus {connector} abgestimmt"
+  },
+  "sourceSystem": {
+    "other": "Quellsystem"
+  },
   "labels": {
     "never": "nie",
     "ref": "Ref.",
@@ -272,7 +279,8 @@
       "imported": "Importiert",
       "throughDate": "Bis Datum",
       "started": "Gestartet",
-      "signedOff": "Abgezeichnet"
+      "signedOff": "Abgezeichnet",
+      "evidence": "Nachweis"
     },
     "reconciliationsTitle": "Abstimmungen",
     "searchReconciliations": "Nach Datum oder Saldo suchen…",
@@ -373,7 +381,9 @@
       "difference": "Differenz",
       "matched": "Zugeordnet"
     },
-    "matchedCounts": "{bank, number} Bank · {gl, number} Hauptbuch"
+    "matchedCounts": "{bank, number} Bank · {gl, number} Hauptbuch",
+    "sourceSignedOffDescription": "Aus {connector} bis {date} abgestimmt — {cleared, number} abgeglichen · {uncleared, number} offen. Es wurde kein Kontoauszug importiert.",
+    "sourceSignedOffByDescription": "Aus {connector} bis {date} von {name} abgestimmt — {cleared, number} abgeglichen · {uncleared, number} offen. Es wurde kein Kontoauszug importiert."
   },
   "workspace": {
     "signedOffAlert": "Diese Abstimmung ist abgezeichnet — die unten zugeordneten Journalzeilen sind dauerhaft als abgestimmt gekennzeichnet.",
