@@ -70,7 +70,7 @@ const RATE = z.string().regex(/^\d+(?:\.\d{1,10})?$/)
   .describe("Positive exact decimal rate with at most ten decimal places.");
 const IDEMPOTENCY_KEY = z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
-const ROUTE = z.string().regex(/^\/[A-Za-z0-9\-_/[\]().]*$/).max(120)
+const ROUTE = z.string().regex(/^\/[A-Za-z0-9._\-/\[\]()]*$/).max(120)
   .describe("Next.js route PATTERN the layout replaces, e.g. /banking or /apps/[key]. Never a concrete url.");
 const LAYOUT_SPEC = z.unknown()
   .describe("A ViewSpec PageSpec document. Call validate_page_layout first; errors name the offending widget or path.");

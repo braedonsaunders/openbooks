@@ -33,6 +33,9 @@ export const rangeInputFields = {
   period: periodPresetInput.optional(),
   fromDate: dateInput.optional().describe("Custom range start; only when no `period` preset fits"),
   toDate: dateInput.optional().describe("Custom range end; only when no `period` preset fits"),
+  priorYears: z.number().int().min(0).max(10).optional().describe(
+    "Shift the resolved window back this many fiscal years for a comparative (e.g. period=last_fiscal_quarter + priorYears=1 = the same quarter one year earlier). Use this instead of hand-computing prior-year dates.",
+  ),
 };
 
 export type { RangeArgs };

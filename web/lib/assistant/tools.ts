@@ -190,7 +190,7 @@ const accountRegisterTool: AssistantToolDef = {
 const findJournalEntries: AssistantToolDef = {
   name: "find_journal_entries",
   description:
-    "List posted-ledger journal entries with optional filters (free-text on entry number/memo, status, origin, posting-date range). Returns a capped list plus the total match count. Read-only.",
+    "List posted-ledger journal entries with optional filters (free-text on entry number/memo, status, origin, posting-date range). Returns a capped page plus aggregates over ALL matches: total (count) and sumDebits. Quote the aggregates for counts and totals. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["gl.read"] },
   inputSchema: z.object({
@@ -244,8 +244,9 @@ const findJournalEntries: AssistantToolDef = {
     // list): an entry with no visible line is listed nowhere, so it is
     // counted nowhere. Counting entry-scoped would inflate the total with
     // entries these very rows can never return.
-    const c = (await db.execute<{ n: string }>(sql`
-      select count(distinct e.id) as n
+    const c = (await db.execute<{ n: string; sum_debits: string }>(sql`
+      select count(distinct e.id) as n,
+             coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as sum_debits
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id${lineSubsidiaryFilter}
        where ${where}
@@ -255,6 +256,7 @@ const findJournalEntries: AssistantToolDef = {
       ok: true,
       data: {
         total,
+        sumDebits: money(c.rows[0]?.sum_debits),
         returned: rows.rows.length,
         truncated: total > rows.rows.length,
         items: rows.rows.map((r) => ({
@@ -330,6 +332,11 @@ const KIND_PERM: Record<string, string> = {
   expense_report: "expenses.read",
   journal: "gl.read",
   transfer: "gl.read",
+  customer_payment: "ar.read",
+  deposit: "ar.read",
+  pay_run: "payroll.read",
+  project_charge: "projects.read",
+  field_ticket: "projects.read",
 };
 
 async function allowedKinds(authz: Authz): Promise<string[]> {
@@ -345,11 +352,11 @@ async function allowedKinds(authz: Authz): Promise<string[]> {
 const findDocuments: AssistantToolDef = {
   name: "find_documents",
   description:
-    "Search transaction documents — vendor bills, customer invoices, expense reports, payments, orders, journals — by kind, status, document number, party name, or date range. Returns a capped list plus the total match count and each exact persisted updatedAt revision. Read-only.",
+    "Search transaction documents — vendor bills, customer invoices, customer/vendor payments, credits, expense reports, orders, journals, pay runs, field tickets — by kind, status, document number, party name, or date range. Returns a capped page PLUS aggregates over ALL matches: total (count), sumTotal (document totals), sumOpenBalance (unpaid remainder). Quote the aggregates for counts and totals; keep limit small (default 20). Each row carries its exact persisted updatedAt revision. Read-only.",
   category: "search",
   gate: {
     mode: "anyOf",
-    perms: ["ap.read", "ar.read", "gl.read", "expenses.read"],
+    perms: ["ap.read", "ar.read", "gl.read", "expenses.read", "payroll.read", "projects.read"],
   },
   inputSchema: z.object({
     kind: z.string().max(40).optional()
@@ -405,8 +412,10 @@ const findDocuments: AssistantToolDef = {
        order by d.document_date desc, d.document_number desc
        limit ${limit}
     `));
-    const c = (await db.execute<{ n: string }>(sql`
-      select count(*) as n
+    const c = (await db.execute<{ n: string; sum_total: string; sum_open: string }>(sql`
+      select count(*) as n,
+             coalesce(sum(d.total), 0) as sum_total,
+             coalesce(sum(d.open_balance), 0) as sum_open
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where ${where}
@@ -416,6 +425,8 @@ const findDocuments: AssistantToolDef = {
       ok: true,
       data: {
         total,
+        sumTotal: money(c.rows[0]?.sum_total),
+        sumOpenBalance: money(c.rows[0]?.sum_open),
         returned: rows.rows.length,
         truncated: total > rows.rows.length,
         items: rows.rows.map((r) => ({
@@ -703,16 +714,18 @@ const trialBalanceTool: AssistantToolDef = {
 const agingTool: AssistantToolDef = {
   name: "aging",
   description:
-    "AR or AP aging by customer/vendor as of a date: open-item balances bucketed into current, 1–30, 31–60, 61–90, and 90+ days past due, plus totals. Read-only.",
+    "AR or AP aging by customer/vendor as of a date: open-item balances bucketed into current, 1–30, 31–60, 61–90, and 90+ days past due, plus totals. Pass `bucket` to rank parties by ONE slice (e.g. over60 = 61–90 + 90+; overdue = everything past due) — rows are then sorted by that slice, zero rows dropped, and bucketTotal returned. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
     side: z.enum(["ar", "ap"]),
     asOf: dateInput.optional(),
+    bucket: z.enum(["current", "days1to30", "days31to60", "days61to90", "over90", "over30", "over60", "overdue"]).optional()
+      .describe("Rank by this slice instead of total: over30 = 31+ days, over60 = 61+ days, overdue = all past due"),
     limit: z.number().int().min(1).max(100).optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { side: "ar" | "ap"; asOf?: string; limit?: number };
+    const a = raw as { side: "ar" | "ap"; asOf?: string; bucket?: string; limit?: number };
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
@@ -721,16 +734,37 @@ const agingTool: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 30, 100);
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
     const r = await agingByParty(a.side, asOf, reportDims(authz), authz.user.orgId);
+    const sliceOf = (row: { current: string; b1: string; b2: string; b3: string; b4: string; total: string }): number => {
+      const n = (v: string) => Number(v);
+      switch (a.bucket) {
+        case "current": return n(row.current);
+        case "days1to30": return n(row.b1);
+        case "days31to60": return n(row.b2);
+        case "days61to90": return n(row.b3);
+        case "over90": return n(row.b4);
+        case "over30": return n(row.b2) + n(row.b3) + n(row.b4);
+        case "over60": return n(row.b3) + n(row.b4);
+        case "overdue": return n(row.b1) + n(row.b2) + n(row.b3) + n(row.b4);
+        default: return n(row.total);
+      }
+    };
+    const ranked = a.bucket
+      ? r.rows.filter((row) => sliceOf(row) !== 0).sort((x, y) => Math.abs(sliceOf(y)) - Math.abs(sliceOf(x)))
+      : r.rows;
+    const bucketTotal = a.bucket
+      ? ranked.reduce((acc, row) => acc + sliceOf(row), 0)
+      : null;
     return {
       ok: true,
       data: {
         side: a.side,
         asOf: r.asOf,
         totals: r.totals,
+        ...(a.bucket ? { bucket: a.bucket, bucketTotal: bucketTotal!.toFixed(4), partiesInBucket: ranked.length } : {}),
         parties: r.rows.length,
-        returned: Math.min(r.rows.length, limit),
-        truncated: r.rows.length > limit,
-        rows: r.rows.slice(0, limit).map((row) => ({
+        returned: Math.min(ranked.length, limit),
+        truncated: ranked.length > limit,
+        rows: ranked.slice(0, limit).map((row) => ({
           party: row.partyName,
           current: row.current,
           days1to30: row.b1,
@@ -738,6 +772,7 @@ const agingTool: AssistantToolDef = {
           days61to90: row.b3,
           over90: row.b4,
           total: row.total,
+          ...(a.bucket ? { bucketAmount: sliceOf(row).toFixed(4) } : {}),
         })),
         href: `/reports/aging?side=${a.side}&asOf=${asOf}`,
       },
@@ -861,15 +896,19 @@ const financialTrends: AssistantToolDef = {
 const budgetVsActualTool: AssistantToolDef = {
   name: "budget_vs_actual",
   description:
-    "List budget scenarios or return one scenario's P&L budget-versus-actual statement with account rows and exact actual, budget, variance amount, and variance percent. Read-only.",
+    "List budget scenarios or return one scenario's P&L budget-versus-actual statement with account rows and exact actual, budget, variance amount, and variance percent. Actuals cover the scenario's ENTIRE fiscal year (from/to echoed in the response, including postings dated after today) — compare with profit_and_loss period=this_fiscal_year, not a to-date window. Optional departmentId/projectId filters. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["budgets.read", "reports.read"] },
-  inputSchema: z.object({ scenarioId: uuidInput.optional() }),
+  inputSchema: z.object({
+    scenarioId: uuidInput.optional(),
+    departmentId: uuidInput.optional(),
+    projectId: uuidInput.optional(),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
       return { ok: false, error: "budgets_feature_disabled" };
     }
-    const scenarioId = (raw as { scenarioId?: string }).scenarioId;
+    const { scenarioId, departmentId, projectId } = raw as { scenarioId?: string; departmentId?: string; projectId?: string };
     if (!scenarioId) {
       return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId), href: "/budgets" } };
     }
@@ -886,11 +925,26 @@ const budgetVsActualTool: AssistantToolDef = {
       expenses: "Expenses",
       netIncome: "Net income",
       totalOf: (section) => `Total ${section}`,
-    }, {}, reportDims(authz)?.subsidiaryIds);
+    }, { departmentId, projectId }, reportDims(authz)?.subsidiaryIds);
     if (!view) return { ok: false, error: "budget_not_found" };
+    const window = (await db.execute<{ fiscal_year: number; name: string; from: string | null; to: string | null }>(sql`
+      select s.fiscal_year, s.name,
+             (select min(p.starts_on)::text from accounting_periods p
+               where p.org_id = s.org_id and p.fiscal_year = s.fiscal_year and not p.is_adjustment) as "from",
+             (select max(p.ends_on)::text from accounting_periods p
+               where p.org_id = s.org_id and p.fiscal_year = s.fiscal_year and not p.is_adjustment) as "to"
+        from budget_scenarios s
+       where s.id = ${scenarioId} and s.org_id = ${authz.user.orgId}
+    `)).rows[0];
     return {
       ok: true,
+      note: window
+        ? `Actuals and budget cover the full fiscal year ${window.fiscal_year} (${window.from} – ${window.to}), including any postings dated after today.`
+        : undefined,
       data: {
+        scenario: window ? { id: scenarioId, name: window.name, fiscalYear: window.fiscal_year, from: window.from, to: window.to } : { id: scenarioId },
+        ...(departmentId ? { departmentId } : {}),
+        ...(projectId ? { projectId } : {}),
         columns: view.columns.map((column) => ({ key: column.key, label: column.label })),
         lines: view.lines.slice(0, MAX_STATEMENT_ROWS).map((line) => ({
           kind: line.kind,
@@ -955,7 +1009,7 @@ const partyConcentration: AssistantToolDef = {
 const projectProfitability: AssistantToolDef = {
   name: "project_profitability",
   description:
-    "List active projects, or return one project's budget, posted revenue/cost/margin, commitments, forecast, cost drivers, and source documents. Read-only.",
+    "ONE project's full job-cost detail by projectId: budget, posted revenue/cost/margin, commitments, forecast, cost by account, and source documents. Without projectId it only returns a short name-search page (with the total count) — for any ranking, filtering, or portfolio question use rank_projects instead. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["projects.read", "reports.read"] },
   inputSchema: z.object({
@@ -986,7 +1040,21 @@ const projectProfitability: AssistantToolDef = {
        order by case p.status when 'active' then 0 when 'awarded' then 1 else 2 end, p.name
        limit ${limit}
     `));
-    return { ok: true, data: { returned: rows.rows.length, projects: rows.rows, href: "/projects" } };
+    const count = (await db.execute<{ n: string }>(sql`
+      select count(*) as n
+       from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
+       where p.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
+         ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
+    `));
+    const total = Number(count.rows[0]?.n ?? 0);
+    return {
+      ok: true,
+      note: total > rows.rows.length
+        ? `${total} projects match; only ${rows.rows.length} listed. Use rank_projects for the full portfolio with margins, totals, and paging.`
+        : undefined,
+      data: { total, returned: rows.rows.length, truncated: total > rows.rows.length, projects: rows.rows, href: "/projects" },
+    };
   },
 };
 

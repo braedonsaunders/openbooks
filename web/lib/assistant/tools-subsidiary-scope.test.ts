@@ -45,7 +45,7 @@ const trends = read("../reports/trends.ts");
 test("financial_trends, budget_vs_actual and list_open_items carry the caller's subsidiary allowlist", () => {
   // X3b: the trend and budget tools previously passed only orgId.
   assert.match(tools, /financialTrendRows\(authz\.user\.orgId, limit, reportDims\(authz\)\?\.subsidiaryIds\)/);
-  assert.match(tools, /budgetVsActualView\(scenarioId, authz\.user\.orgId, \{[\s\S]*?\}, \{\}, reportDims\(authz\)\?\.subsidiaryIds\)/);
+  assert.match(tools, /budgetVsActualView\(scenarioId, authz\.user\.orgId, \{[\s\S]*?\}, \{ departmentId, projectId \}, reportDims\(authz\)\?\.subsidiaryIds\)/);
   assert.match(trends, /export async function financialTrends\([\s\S]*subsidiaryIds\?: readonly string\[\]/);
   assert.match(trends, /scope\(sql`l\.subsidiary_id`\)/);
   assert.match(trends, /scope\(sql`jl\.subsidiary_id`\)/);
