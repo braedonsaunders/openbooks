@@ -1014,6 +1014,86 @@
         "gross_margin_decline": {
           "title": "Baisse de la marge brute",
           "description": "Compare la marge brute des périodes terminées et signale une compression importante en points de pourcentage."
+        },
+        "overdue_customer_balance": {
+          "title": "Soldes clients échus",
+          "description": "Clients hors délais avec exposition totale, comportement de paiement et concentration par ancienneté."
+        },
+        "broken_payment_promise": {
+          "title": "Promesses de paiement non tenues",
+          "description": "Promesses au-delà de la tolérance de rupture, classées par ancienneté et exposition."
+        },
+        "credit_hold_candidate": {
+          "title": "Candidats au blocage crédit",
+          "description": "Clients au-delà de l'ancienneté et de l'exposition de blocage avec des factures échues répétées."
+        },
+        "duplicate_bills": {
+          "title": "Factures en double",
+          "description": "Factures fournisseurs ressemblant à des copies ressaisies dans la fenêtre de doublons."
+        },
+        "bills_due_before_payrun": {
+          "title": "Factures dues avant le règlement",
+          "description": "Factures approuvées dues dans l'horizon de règlement, mesurées pour la couverture."
+        },
+        "early_pay_discount_opportunity": {
+          "title": "Escomptes pour paiement anticipé",
+          "description": "Factures offrant au moins la remise minimale pour un paiement anticipé."
+        },
+        "bills_missing_approval": {
+          "title": "Factures sans approbation",
+          "description": "Factures en attente au-delà de l'âge de souffrance sans approbation."
+        },
+        "bank_line_match_candidate": {
+          "title": "Candidats au rapprochement",
+          "description": "Lignes non rapprochées avec un candidat fiable dans la fenêtre."
+        },
+        "stale_reconciliation": {
+          "title": "Rapprochements en souffrance",
+          "description": "Rapprochements en cours intouchés au-delà de l'âge de souffrance."
+        },
+        "never_reconciled_account": {
+          "title": "Comptes jamais rapprochés",
+          "description": "Comptes bancaires avec activité dans la fenêtre de révision et sans rapprochement."
+        },
+        "control_account_type_mismatch": {
+          "title": "Incohérences des comptes de contrôle",
+          "description": "Comptes dont le rôle de contrôle contredit le type."
+        },
+        "duplicate_party_identity": {
+          "title": "Tiers en double",
+          "description": "Tiers partageant un nom ou un identifiant fiscal."
+        },
+        "item_missing_tax_code": {
+          "title": "Articles sans code fiscal",
+          "description": "Articles sans code fiscal pour déterminer la taxe du document."
+        },
+        "project_missing_cost_budget": {
+          "title": "Projets sans budget de coûts",
+          "description": "Projets sans budget de coûts pour mesurer la marge."
+        },
+        "budget_scenario_without_lines": {
+          "title": "Scénarios budgétaires vides",
+          "description": "Scénarios budgétaires sans lignes."
+        },
+        "unmapped_payroll_component": {
+          "title": "Composantes de paie non affectées",
+          "description": "Composantes de paie sans affectation comptable."
+        },
+        "forensic_weekend_postings": {
+          "title": "Écritures de fin de semaine",
+          "description": "Écritures datées d'une fin de semaine dans la fenêtre de révision."
+        },
+        "forensic_round_dollar": {
+          "title": "Écritures en chiffres ronds",
+          "description": "Écritures rondes suspectes dans la fenêtre de révision."
+        },
+        "forensic_threshold_trap": {
+          "title": "Pièges de seuils",
+          "description": "Montants placés juste sous les seuils d'approbation."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Factures en double forensiques",
+          "description": "Factures quasi identiques que les contrôles fournisseurs ont pu manquer."
         }
       },
       "accounting": {
@@ -1282,6 +1362,22 @@
         "scanComplete": "{count, plural, one {# constat détecté} other {# constats détectés}}",
         "scanFailed": "Le lancement de l'analyse a échoué."
       },
+      "library": {
+        "title": "Bibliothèque",
+        "description": "Chaque pack du registre : ce qu'il lit, ce qu'il propose et ce qu'il exige. Installer active un pack avec ses contrôles par défaut.",
+        "install": "Installer",
+        "installed": "Installé",
+        "configure": "Configurer",
+        "readsLabel": "Lit",
+        "proposesLabel": "Propose",
+        "needsLabel": "Exige",
+        "checksTitle": "Contrôles ({count})",
+        "checksNote": "{count} actifs sur {total} par défaut",
+        "moduleRequires": "Exige le module {feature}",
+        "registryNote": "Pack {key} · {count} contrôles · déclaré dans le registre des agents",
+        "installFailed": "Impossible d'installer le pack.",
+        "installedToast": "{name} installé avec les contrôles par défaut."
+      },
       "packs": {
         "accounting": {
           "title": "Contrôles comptables",
@@ -1318,6 +1414,12 @@
           "description": "Incohérences des comptes de contrôle, tiers en double et fiches sans les codes, budgets ou affectations requis.",
           "reads": "Plan comptable, tiers, articles, projets, budgets et composantes de paie.",
           "proposes": "Des cartes de correction quand le remède est un paramètre."
+        },
+        "forensics": {
+          "title": "Forensique",
+          "description": "Analyses programmées d'anomalies — écritures de fin de semaine et en chiffres ronds, pièges de seuils et factures en double — ne montrant que les nouveaux constats.",
+          "reads": "Écritures et factures fournisseurs sous l'angle des anomalies.",
+          "proposes": "Des constats étayés avec les lignes exactes — révision uniquement, aucune écriture."
         }
       }
     },

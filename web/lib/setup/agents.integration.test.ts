@@ -9,9 +9,13 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 )
 type ScratchOrg = { orgId: string }
 const { applyFeatureChanges } = await import('../features-admin.ts')
-const { getAgentsOverview, listAgentRuns, runSetupAgentNow, saveSetupAgentPolicy } = await import(
-  './agents.ts'
-)
+const {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  getAgentsOverview,
+  listAgentRuns,
+  runSetupAgentNow,
+  saveSetupAgentPolicy,
+} = await import('./agents.ts')
 
 /**
  * DB proofs for the Agents setup adapters (web/lib/setup/agents.ts): toggling
@@ -113,8 +117,8 @@ test(
       Promise.all([getAgentsOverview(orgA.orgId), getAgentsOverview(orgB.orgId)]),
     )
     // One row per registered pack, even never-configured ones (defaults).
-    assert.equal(rowsA.length, 6)
-    assert.equal(rowsB.length, 6)
+    assert.equal(rowsA.length, CONTINUOUS_CLOSE_AGENT_KEYS.length)
+    assert.equal(rowsB.length, CONTINUOUS_CLOSE_AGENT_KEYS.length)
     const accountingA = rowsA.find((row) => row.agentKey === 'accounting')!
     assert.equal(accountingA.policy.enabled, true)
     assert.equal(accountingA.openFindings, 0)

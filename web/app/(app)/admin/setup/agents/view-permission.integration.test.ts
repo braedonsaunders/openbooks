@@ -55,9 +55,7 @@ const { withBypassContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
-const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import(
-  "@openbooks/engine/src/continuous-close-config.ts"
-);
+const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import("../../../../../lib/setup/agents.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

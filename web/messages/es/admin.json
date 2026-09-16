@@ -970,6 +970,86 @@
         "gross_margin_decline": {
           "title": "Disminución del margen bruto",
           "description": "Compara el margen bruto de períodos completados y señala compresiones materiales en puntos porcentuales."
+        },
+        "overdue_customer_balance": {
+          "title": "Saldos vencidos de clientes",
+          "description": "Clientes fuera de plazo con exposición total, comportamiento de pago y concentración por antigüedad."
+        },
+        "broken_payment_promise": {
+          "title": "Promesas de pago incumplidas",
+          "description": "Promesas superada la tolerancia de incumplimiento, ordenadas por antigüedad y exposición."
+        },
+        "credit_hold_candidate": {
+          "title": "Candidatos a retención de crédito",
+          "description": "Clientes que superan la antigüedad y la exposición de retención con facturas vencidas repetidas."
+        },
+        "duplicate_bills": {
+          "title": "Facturas duplicadas",
+          "description": "Facturas de proveedores que parecen copias reingresadas dentro de la ventana de duplicados."
+        },
+        "bills_due_before_payrun": {
+          "title": "Facturas que vencen antes del pago",
+          "description": "Facturas aprobadas que vencen dentro del horizonte de pagos, medidas para cobertura."
+        },
+        "early_pay_discount_opportunity": {
+          "title": "Descuentos por pronto pago",
+          "description": "Facturas que ofrecen al menos el descuento mínimo por pagar anticipado."
+        },
+        "bills_missing_approval": {
+          "title": "Facturas sin aprobación",
+          "description": "Facturas en espera superada la antigüedad de estancamiento sin aprobación."
+        },
+        "bank_line_match_candidate": {
+          "title": "Candidatos de coincidencia",
+          "description": "Movimientos sin conciliar con un candidato de coincidencia fiable dentro de la ventana."
+        },
+        "stale_reconciliation": {
+          "title": "Conciliaciones estancadas",
+          "description": "Conciliaciones en curso sin movimientos superada la antigüedad de estancamiento."
+        },
+        "never_reconciled_account": {
+          "title": "Cuentas nunca conciliadas",
+          "description": "Cuentas bancarias con actividad en la ventana de revisión y sin conciliación."
+        },
+        "control_account_type_mismatch": {
+          "title": "Descuadres de cuentas de control",
+          "description": "Cuentas cuyo rol de control no concuerda con su tipo."
+        },
+        "duplicate_party_identity": {
+          "title": "Terceros duplicados",
+          "description": "Terceros que comparten nombre o identificación fiscal."
+        },
+        "item_missing_tax_code": {
+          "title": "Artículos sin código fiscal",
+          "description": "Artículos sin código fiscal para determinar el impuesto del documento."
+        },
+        "project_missing_cost_budget": {
+          "title": "Proyectos sin presupuesto de costos",
+          "description": "Proyectos sin presupuesto de costos con el que medir el margen."
+        },
+        "budget_scenario_without_lines": {
+          "title": "Escenarios de presupuesto vacíos",
+          "description": "Escenarios de presupuesto sin líneas."
+        },
+        "unmapped_payroll_component": {
+          "title": "Componentes de nómina sin asignar",
+          "description": "Componentes de nómina sin asignación de contabilización."
+        },
+        "forensic_weekend_postings": {
+          "title": "Contabilizaciones en fin de semana",
+          "description": "Asientos con fecha de fin de semana dentro de la ventana de revisión."
+        },
+        "forensic_round_dollar": {
+          "title": "Contabilizaciones en cifras redondas",
+          "description": "Asientos sospechosamente redondos dentro de la ventana de revisión."
+        },
+        "forensic_threshold_trap": {
+          "title": "Trampas de umbral",
+          "description": "Importes estacionados justo por debajo de los umbrales de aprobación."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Facturas duplicadas forenses",
+          "description": "Facturas casi duplicadas que los controles de pagos pudieron pasar por alto."
         }
       },
       "accounting": {
@@ -1238,6 +1318,22 @@
         "scanComplete": "{count, plural, one {# hallazgo detectado} other {# hallazgos detectados}}",
         "scanFailed": "No se pudo iniciar el análisis."
       },
+      "library": {
+        "title": "Biblioteca",
+        "description": "Cada paquete del registro: lo que lee, lo que propone y lo que necesita. Instalar activa un paquete con sus controles predeterminados.",
+        "install": "Instalar",
+        "installed": "Instalado",
+        "configure": "Configurar",
+        "readsLabel": "Lee",
+        "proposesLabel": "Propone",
+        "needsLabel": "Necesita",
+        "checksTitle": "Controles ({count})",
+        "checksNote": "{count} de {total} activos por defecto",
+        "moduleRequires": "Requiere el módulo {feature}",
+        "registryNote": "Paquete {key} · {count} controles · declarado en el registro de agentes",
+        "installFailed": "No se pudo instalar el paquete.",
+        "installedToast": "{name} instalado con los controles predeterminados."
+      },
       "packs": {
         "accounting": {
           "title": "Controles contables",
@@ -1274,6 +1370,12 @@
           "description": "Descuadres de cuentas de control, terceros duplicados y registros sin los códigos, presupuestos o asignaciones que necesitan.",
           "reads": "Plan contable, terceros, artículos, proyectos, presupuestos y componentes de nómina.",
           "proposes": "Tarjetas de corrección donde el remedio es un ajuste de configuración."
+        },
+        "forensics": {
+          "title": "Forense",
+          "description": "Análisis programados de anomalías — contabilizaciones en fin de semana y en cifras redondas, trampas de umbral y facturas duplicadas — que solo muestran hallazgos nuevos.",
+          "reads": "Asientos y facturas de proveedores bajo la lupa de anomalías.",
+          "proposes": "Hallazgos con evidencia y filas exactas — solo revisión, sin escrituras."
         }
       }
     },

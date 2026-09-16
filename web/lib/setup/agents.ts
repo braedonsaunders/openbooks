@@ -35,9 +35,15 @@ import { isFeatureEnabled } from '../features'
 
 export const AGENT_PACK_FEATURE_KEY = 'continuousClose'
 
-/** Permissions whose holders can act on a pack's findings (mirrors the
- *  continuous-close read gates where one exists; setup-owned data otherwise). */
-const AGENT_PACK_READ_PERMISSIONS: Record<ContinuousCloseAgentKey, string[]> = {
+/**
+ * Curated read permissions per pack (mirrors the continuous-close read gates
+ * where one exists; setup-owned data otherwise). Packs the engine registers
+ * after this map was last curated fall back to the setup key — configuring
+ * packs already requires it, so an uncurated pack stays honestly gated while
+ * the contract test below forces curation (copy + permissions) for every
+ * registered key.
+ */
+const AGENT_PACK_READ_PERMISSIONS: Partial<Record<ContinuousCloseAgentKey, string[]>> = {
   accounting: ['banking.read', 'gl.read', 'close.read'],
   finance: ['reports.read', 'budgets.read'],
   collections: ['ar.read'],
@@ -45,7 +51,12 @@ const AGENT_PACK_READ_PERMISSIONS: Record<ContinuousCloseAgentKey, string[]> = {
   reconciliation: ['banking.read'],
   hygiene: ['admin.setup.manage'],
   forensics: ['gl.read', 'close.read'],
+  forensics: ['gl.read', 'ap.read'],
 }
+
+/** The registry keys as THIS setup lib sees them — one import point so pages
+ *  and tests share the exact module instance instead of pinning a duplicate. */
+export { CONTINUOUS_CLOSE_AGENT_KEYS } from '@openbooks/engine/src/continuous-close-config.ts'
 
 export interface AgentPackMeta {
   agentKey: ContinuousCloseAgentKey
@@ -58,7 +69,7 @@ export function agentPackMeta(agentKey: ContinuousCloseAgentKey): AgentPackMeta 
   return {
     agentKey,
     featureKey: AGENT_PACK_FEATURE_KEY,
-    readPermissions: AGENT_PACK_READ_PERMISSIONS[agentKey],
+    readPermissions: AGENT_PACK_READ_PERMISSIONS[agentKey] ?? ['admin.setup.manage'],
     detectorKeys: detectorSpecsForAgent(agentKey).map((spec) => spec.detectorKey),
   }
 }

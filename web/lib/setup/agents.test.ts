@@ -4,8 +4,7 @@ import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import test from 'node:test'
 registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
-const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import('../../../engine/src/continuous-close-config.ts')
-const { agentPackMeta, agentPackMetas } = await import('./agents.ts')
+const { CONTINUOUS_CLOSE_AGENT_KEYS, agentPackMeta, agentPackMetas } = await import('./agents.ts')
 
 /**
  * Source-contract for the Agents setup area (web/lib/setup/agents.ts + the

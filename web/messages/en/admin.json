@@ -1059,6 +1059,86 @@
         "gross_margin_decline": {
           "title": "Gross-margin decline",
           "description": "Compares completed-period gross margin and flags material compression in percentage points."
+        },
+        "overdue_customer_balance": {
+          "title": "Overdue customer balances",
+          "description": "Customers past terms with total exposure, payment behaviour, and aging concentrations."
+        },
+        "broken_payment_promise": {
+          "title": "Broken payment promises",
+          "description": "Promises past their breach tolerance, ranked by age and exposure."
+        },
+        "credit_hold_candidate": {
+          "title": "Credit-hold candidates",
+          "description": "Customers over the hold age and exposure with repeated overdue invoices."
+        },
+        "duplicate_bills": {
+          "title": "Duplicate bills",
+          "description": "Vendor bills that look like re-entered copies within the duplicate window."
+        },
+        "bills_due_before_payrun": {
+          "title": "Bills due before the pay run",
+          "description": "Approved bills falling due inside the pay-run horizon, measured for coverage."
+        },
+        "early_pay_discount_opportunity": {
+          "title": "Early-pay discounts",
+          "description": "Bills offering at least the minimum discount for paying early."
+        },
+        "bills_missing_approval": {
+          "title": "Bills missing approval",
+          "description": "Bills waiting past the stale age without an approval."
+        },
+        "bank_line_match_candidate": {
+          "title": "Match candidates",
+          "description": "Unmatched bank lines with a confident match candidate inside the window."
+        },
+        "stale_reconciliation": {
+          "title": "Stale reconciliations",
+          "description": "In-progress reconciliations untouched past the stale age."
+        },
+        "never_reconciled_account": {
+          "title": "Never-reconciled accounts",
+          "description": "Bank accounts with activity in the lookback window and no reconciliation."
+        },
+        "control_account_type_mismatch": {
+          "title": "Control-account mismatches",
+          "description": "Accounts whose control role disagrees with their type."
+        },
+        "duplicate_party_identity": {
+          "title": "Duplicate party identities",
+          "description": "Parties sharing a name or tax id."
+        },
+        "item_missing_tax_code": {
+          "title": "Items missing tax codes",
+          "description": "Items with no tax code to drive document tax."
+        },
+        "project_missing_cost_budget": {
+          "title": "Projects missing cost budgets",
+          "description": "Projects with no cost budget to measure margin against."
+        },
+        "budget_scenario_without_lines": {
+          "title": "Empty budget scenarios",
+          "description": "Budget scenarios holding no lines."
+        },
+        "unmapped_payroll_component": {
+          "title": "Unmapped payroll components",
+          "description": "Payroll components with no posting mapping."
+        },
+        "forensic_weekend_postings": {
+          "title": "Weekend postings",
+          "description": "Postings dated on weekends inside the lookback window."
+        },
+        "forensic_round_dollar": {
+          "title": "Round-dollar postings",
+          "description": "Suspiciously round postings inside the lookback window."
+        },
+        "forensic_threshold_trap": {
+          "title": "Threshold traps",
+          "description": "Amounts parked just below approval thresholds."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Forensic duplicate bills",
+          "description": "Near-duplicate bills the payables checks may have missed."
         }
       },
       "accounting": {
@@ -1372,6 +1452,22 @@
         "scanComplete": "{count, plural, one {# finding} other {# findings}} detected",
         "scanFailed": "The scan failed to start."
       },
+      "library": {
+        "title": "Library",
+        "description": "Every pack the registry ships — what it reads, what it proposes, and what it needs. Installing enables a pack with its default checks.",
+        "install": "Install",
+        "installed": "Installed",
+        "configure": "Configure",
+        "readsLabel": "Reads",
+        "proposesLabel": "Proposes",
+        "needsLabel": "Needs",
+        "checksTitle": "Checks ({count})",
+        "checksNote": "{count} of {total} on by default",
+        "moduleRequires": "Requires the {feature} module",
+        "registryNote": "Pack {key} · {count} checks · declared in the agent registry",
+        "installFailed": "Couldn't install the pack.",
+        "installedToast": "{name} installed with default checks."
+      },
       "packs": {
         "accounting": {
           "title": "Accounting controls",
@@ -1408,6 +1504,12 @@
           "description": "Control-account mismatches, duplicate parties, and records missing the codes, budgets or mappings they need.",
           "reads": "Chart of accounts, parties, items, projects, budgets and payroll components.",
           "proposes": "Setup-fix cards where the remedy is a setting."
+        },
+        "forensics": {
+          "title": "Forensics",
+          "description": "Scheduled anomaly scans — weekend and round-dollar postings, threshold traps and duplicate bills — surfacing only new findings.",
+          "reads": "Journal postings and vendor bills through the anomaly lens.",
+          "proposes": "Evidence-backed findings with the exact rows — review only, no writes."
         }
       }
     },

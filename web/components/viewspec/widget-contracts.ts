@@ -27,6 +27,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'admin-roles-table': { props: ['basePath', 'currentParams', 'dir', 'labels', 'roles', 'sort', 'subsidiaries'] },
   'admin-users-table': { props: ['allRoles', 'basePath', 'currentParams', 'dir', 'labels', 'sort', 'users'] },
   'agents-overview-workspace': { props: [], open: true },
+  'agents-library-workspace': { props: [], open: true },
   'aging-strip': { props: ['cells', 'total', 'totalDrill', 'totalLabel'] },
   'ai-settings-form': { props: ['detectorSpecs', 'initial', 'selectedAgentKey', 'specs'] },
   'analytics-hub': { props: ['description', 'groups', 'title'] },
