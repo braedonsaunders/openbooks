@@ -172,6 +172,7 @@ export interface AllocationDriver {
   orgId: string;
   key: string;
   name: string;
+  description?: string | null;
   unit?: string | null;
   dimension: AllocationDimension;
   sourceKind: AllocationDriverSourceKind;
