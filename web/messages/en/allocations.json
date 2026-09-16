@@ -84,7 +84,10 @@
         "definition": "Definition",
         "versions": "Versions",
         "test": "Test"
-      }
+      },
+      "loading": "Loading rule…",
+      "retry": "Retry",
+      "notFound": "That rule no longer exists."
     },
     "general": {
       "name": "Name",
@@ -172,7 +175,39 @@
       "runOffsetDays": "Days after period end",
       "presentationHeading": "Presentation",
       "memoTemplate": "Memo template",
-      "lineDescriptionTemplate": "Line description template"
+      "lineDescriptionTemplate": "Line description template",
+      "approvalFlow": "Approval flow",
+      "approvalFlowHint": "Optional workflow UUID required before a run posts.",
+      "driverAsOfs": {
+        "period": "Period",
+        "document_date": "Document date",
+        "prior_period": "Prior period"
+      },
+      "solveMethods": {
+        "sequential": "Sequential",
+        "simultaneous": "Simultaneous"
+      },
+      "filtersHeading": "Dimension filters",
+      "filtersUntagged": "Only untagged lines",
+      "filtersUntaggedHint": "Match only lines with no value in the checked dimensions.",
+      "filtersReadonly": "Party, item and custom-segment filters on this version are read-only here.",
+      "filters": {
+        "department": "Departments",
+        "location": "Locations",
+        "class": "Classes",
+        "project": "Projects",
+        "subsidiary": "Subsidiaries"
+      },
+      "accountGroupDimension": "Group dimension",
+      "dynamicMinWeight": "Minimum driver weight",
+      "dynamicInclude": "Only these values",
+      "dynamicExclude": "Skip these values",
+      "tiersHeading": "Stepped tiers",
+      "tierUpTo": "Up to (money)",
+      "tierTargetKey": "Target key",
+      "tierAdd": "Add tier",
+      "tierRemove": "Remove tier",
+      "tierOpenEnded": "Empty bound means unbounded — only the last tier may be open."
     },
     "targets": {
       "add": "Add target",
@@ -195,7 +230,9 @@
       "version": "Version {n}",
       "effective": "{from} – {to}",
       "openEnded": "open-ended",
-      "hash": "Definition {hash}"
+      "hash": "Definition {hash}",
+      "empty": "No versions yet.",
+      "current": "Current"
     },
     "problems": {
       "title": "Resolve these problems before publishing",
@@ -236,7 +273,17 @@
       "periodHeading": "Preview a period sweep",
       "period": "Period",
       "openRuns": "Open in Runs",
-      "noVersion": "This rule has no version to test yet."
+      "noVersion": "This rule has no version to test yet.",
+      "version": "Version",
+      "lineHeading": "Sample line",
+      "department": "Department",
+      "location": "Location",
+      "class": "Class",
+      "project": "Project",
+      "subsidiary": "Subsidiary",
+      "party": "Party",
+      "item": "Item",
+      "testing": "Testing…"
     },
     "errors": {
       "load": "Could not load allocation rules.",
