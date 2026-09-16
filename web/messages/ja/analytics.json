@@ -124,7 +124,64 @@
   },
   "customer": {
     "title": "得意先インテリジェンス",
-    "backToHub": "アナリティクス"
+    "backToHub": "アナリティクス",
+    "insights": {
+      "churnInactive": "{days, plural, one {# 日間} other {# 日間}}取引なし",
+      "churnDeclining": "エンゲージメント低下",
+      "churnBelowPattern": "通常の購買パターンを下回る",
+      "churnSingle": "取引1回のみの得意先",
+      "churnLowFrequency": "取引頻度が低い",
+      "recMaintain": "現在のエンゲージメント戦略を継続",
+      "recFriction": "{count, plural, one {摩擦大：クレジット # 件 — 直ちに対応} other {摩擦大：クレジット # 件 — 直ちに対応}}",
+      "recOverdue": "発注が{overdue, plural, one {# 日} other {# 日}}遅延（平均サイクル：{cycle, plural, one {# 日} other {# 日}}）",
+      "recWinBack": "離反リスクあり — 直ちにフォローが必要",
+      "recNurture": "高価値顧客 — 関係を優先",
+      "recOnboard": "新規顧客 — オンボーディングの成功に注力",
+      "recReprice": "売上は大きいが利益率が低い（{pct}%）— 価格を見直し",
+      "recReview": "エンゲージメントが低い — アカウント戦略を評価",
+      "scoreExcellent": "優秀",
+      "scoreVeryGood": "とても良い",
+      "scoreGood": "良い",
+      "scoreFair": "普通",
+      "scoreNeedsAttention": "要対応",
+      "projectedClv": {
+        "title": "予測顧客価値",
+        "message": "{count, plural, one {# 社} other {# 社}}から{years, plural, one {# 年間} other {# 年間}}の予測CLV {amount}"
+      },
+      "churnRisk": {
+        "title": "離反リスク警告",
+        "message": "{count, plural, one {# 社} other {# 社}}が高・重大な離反リスク（対象売上 {amount}）",
+        "action": "リスク顧客向けの再獲得キャンペーンを開始"
+      },
+      "champions": {
+        "title": "優良顧客",
+        "message": "{count, plural, one {# 社のチャンピオン顧客（売上 {amount}）} other {# 社のチャンピオン顧客（売上 {amount}）}}",
+        "action": "VIP対応と紹介プログラムを維持"
+      },
+      "concentration": {
+        "title": "売上集中リスク",
+        "message": "最大顧客が売上の{share}%を占めています。HHI：{hhi}",
+        "action": "依存度を下げるため顧客基盤を多様化"
+      },
+      "declining": {
+        "title": "売上減少トレンド",
+        "message": "月平均成長率 {growth}%",
+        "action": "顧客獲得・維持戦略を見直し"
+      },
+      "growing": {
+        "title": "力強い成長軌道",
+        "message": "月平均成長率{growth}%（新規顧客 {count, plural, one {# 社} other {# 社}}）"
+      },
+      "overdue": {
+        "title": "延滞請求書",
+        "message": "{count, plural, one {# 件の延滞請求書に} other {# 件の延滞請求書に}}対応が必要",
+        "action": "回収プロセスと支払条件を見直し"
+      }
+    },
+    "labels": {
+      "unknownCustomer": "不明",
+      "untitledProject": "無題のプロジェクト"
+    }
   },
   "vendor": {
     "title": "仕入先パフォーマンス",

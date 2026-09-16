@@ -124,7 +124,64 @@
   },
   "customer": {
     "title": "Kundenintelligenz",
-    "backToHub": "Analytik"
+    "backToHub": "Analytik",
+    "insights": {
+      "churnInactive": "Keine Aktivität seit {days, plural, one {# Tag} other {# Tagen}}",
+      "churnDeclining": "Nachlassende Bindung",
+      "churnBelowPattern": "Unter dem üblichen Kaufmuster",
+      "churnSingle": "Einmalkunde",
+      "churnLowFrequency": "Niedrige Transaktionshäufigkeit",
+      "recMaintain": "Aktuelle Bindungsstrategie fortsetzen",
+      "recFriction": "{count, plural, one {Hohe Friktion: # Gutschrift — Probleme sofort angehen} other {Hohe Friktion: # Gutschriften — Probleme sofort angehen}}",
+      "recOverdue": "{overdue, plural, one {# Tag} other {# Tage}} überfällig für Bestellung (Ø-Zyklus: {cycle, plural, one {# Tag} other {# Tage}})",
+      "recWinBack": "Abwanderungsgefährdet — sofortige Ansprache erforderlich",
+      "recNurture": "Hochwertiger Kunde — Beziehung priorisieren",
+      "recOnboard": "Neukunde — auf erfolgreiches Onboarding fokussieren",
+      "recReprice": "Hoher Umsatz bei niedriger Marge ({pct} %) — Preise prüfen",
+      "recReview": "Geringe Bindung — Kontostrategie evaluieren",
+      "scoreExcellent": "Exzellent",
+      "scoreVeryGood": "Sehr gut",
+      "scoreGood": "Gut",
+      "scoreFair": "Befriedigend",
+      "scoreNeedsAttention": "Handlungsbedarf",
+      "projectedClv": {
+        "title": "Prognostizierter Kundenwert",
+        "message": "{amount} prognostizierter CLV über {years, plural, one {# Jahr} other {# Jahre}} aus {count, plural, one {# Kunde} other {# Kunden}}"
+      },
+      "churnRisk": {
+        "title": "Abwanderungswarnung",
+        "message": "{count, plural, one {# Kunde} other {# Kunden}} mit hohem/kritischem Abwanderungsrisiko, {amount} Umsatz entsprechend",
+        "action": "Rückgewinnungskampagnen für gefährdete Kunden starten"
+      },
+      "champions": {
+        "title": "Top-Kunden",
+        "message": "{count, plural, one {# Top-Kunde mit} other {# Top-Kunden mit}} {amount} Umsatz",
+        "action": "VIP-Behandlung und Empfehlungsprogramme pflegen"
+      },
+      "concentration": {
+        "title": "Risiko Umsatzkonzentration",
+        "message": "Größter Kunde macht {share} % des Umsatzes aus. HHI: {hhi}",
+        "action": "Kundenbasis diversifizieren, um Abhängigkeit zu senken"
+      },
+      "declining": {
+        "title": "Sinkender Umsatztrend",
+        "message": "Durchschnittliches Monats­wachstum von {growth} %",
+        "action": "Akquise- und Bindungsstrategien prüfen"
+      },
+      "growing": {
+        "title": "Starke Wachstumsdynamik",
+        "message": "{growth} % durchschnittliches Monats­wachstum mit {count, plural, one {# Neukunde} other {# Neukunden}}"
+      },
+      "overdue": {
+        "title": "Überfällige Rechnungen",
+        "message": "{count, plural, one {# überfällige Rechnung erfordert} other {# überfällige Rechnungen erfordern}} Aufmerksamkeit",
+        "action": "Mahnwesen und Zahlungsbedingungen prüfen"
+      }
+    },
+    "labels": {
+      "unknownCustomer": "Unbekannt",
+      "untitledProject": "Projekt ohne Titel"
+    }
   },
   "vendor": {
     "title": "Lieferantenleistung",
