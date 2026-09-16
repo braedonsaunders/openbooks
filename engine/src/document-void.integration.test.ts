@@ -577,13 +577,14 @@ test("a stale exact-revision token refuses the void before any before_void effec
 
     const storedUpdatedAt = (
       await db.execute<{ updated_at: string }>(sql`
-        select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
+        select (revision_seq)::text as updated_at
           from documents
          where id = ${documentId} and org_id = ${org.orgId}
       `)
     ).rows[0]!.updated_at;
     const exactToken = storedUpdatedAt;
-    const staleToken = exactToken.replace(/(\d)Z$/, (_, digit: string) => `${(Number(digit) + 1) % 10}Z`);
+    // A counter token goes stale by advancing one revision past it.
+    const staleToken = String(Number(exactToken) + 1);
     assert.notEqual(staleToken, exactToken);
 
     await assert.rejects(

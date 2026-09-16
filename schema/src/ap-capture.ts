@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -48,6 +49,8 @@ export const apCaptureItems = pgTable(
     assignedTo: uuid("assigned_to"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
+    /** Strictly increasing OCC counter, see documents.revisionSeq (migration 0167). */
+    revisionSeq: bigint("revision_seq", { mode: "number" }).notNull().default(0),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     materializedAt: timestamp("materialized_at", { withTimezone: true }),

@@ -1,7 +1,7 @@
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "./db.ts";
-import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "./document-revision.ts";
 import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import {
   assertPeriodModulesOpen,
@@ -81,7 +81,7 @@ type DocumentRow = typeof schema.documents.$inferSelect & { revision: string };
 
 async function loadDocument(documentId: string, orgId: string): Promise<DocumentRow> {
   const [doc] = await db
-    .select({ ...getTableColumns(schema.documents), revision: documentRevisionSql(sql`${schema.documents.updatedAt}`) })
+    .select({ ...getTableColumns(schema.documents), revision: documentRevisionCounterSql(sql`revision_seq`) })
     .from(schema.documents)
     .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
     .for("update");

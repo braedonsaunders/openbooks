@@ -1,4 +1,4 @@
-import { documentRevisionSql, isDocumentRevisionToken } from "./document-revision.ts";
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "./document-revision.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withOrgTransaction } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
@@ -289,7 +289,7 @@ export async function issueSalesOrder(input: {
 }): Promise<IssueSalesOrderResult> {
   return withOrgTransaction(input.orgId, async () => {
     const order = (await db.execute<SalesOrderRow>(sql`
-      select id, status, party_id, currency, total, ${documentRevisionSql(sql`updated_at`)} as updated_at
+      select id, status, party_id, currency, total, ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
         from documents
        where id = ${input.salesOrderId}
          and org_id = ${input.orgId}

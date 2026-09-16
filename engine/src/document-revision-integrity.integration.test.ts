@@ -15,7 +15,9 @@ async function seed(org: ScratchOrg, actor: string, kind: "quote" | "sales_order
     values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`);
   if (kind === "quote") await db.execute(sql`update documents set status='approved',submitted_by=${actor} where id=${id}`);
   await db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`);
-  const revision = (await db.execute<{ revision: string }>(sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from documents where id=${id}`)).rows[0]!.revision;
+  // The revision token is the strictly increasing revision_seq counter
+  // (migration 0167), never the editable updated_at display timestamp.
+  const revision = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`)).rows[0]!.revision;
   return { id, revision };
 }
 
@@ -83,4 +85,45 @@ test("void rechecks the reviewed revision after a concurrent edit commits", { sk
     assert.deepEqual((await db.execute(sql`select status,memo,void_requested_at from documents where id=${doc.id}`)).rows[0],
       { status: "approved", memo: "Concurrent edit", void_requested_at: null });
   } finally { release(); await Promise.allSettled([edit,command]); await dropScratchOrg(org.orgId); }
+});
+
+for (const operation of ["issue", "void"] as const) {
+  test(`${operation} rejects a stale token after a backward-timestamp write`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    // Migration 0013 permits an explicitly backward updated_at; only the
+    // revision_seq counter (0167) keeps the token strictly increasing. A
+    // writer that backdates the display timestamp to exactly the holder's
+    // token must still invalidate that holder.
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Revision controller", "admin");
+      const doc = await seed(org, actor, operation === "issue" ? "sales_order" : "quote");
+      // Overwrite the display timestamp with a value older than any issued
+      // token while committing new content the holder never saw.
+      await db.execute(sql`update documents set memo='Backdated content', updated_at=now() - interval '30 days' where id=${doc.id}`);
+      const stored = (await db.execute<{ memo: string; revision: string }>(sql`select memo, (revision_seq)::text as revision from documents where id=${doc.id}`)).rows[0]!;
+      assert.equal(stored.memo, "Backdated content");
+      assert.notEqual(stored.revision, doc.revision, "the backdated write must advance the counter");
+      const run = operation === "issue"
+        ? issueSalesOrder({ orgId: org.orgId, actorId: actor, salesOrderId: doc.id, expectedUpdatedAt: doc.revision })
+        : requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: doc.id, expectedUpdatedAt: doc.revision, reversalDate: org.date, reason: "Cancel reviewed revision" });
+      await assert.rejects(run, /changed after you opened it/);
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`)).rows[0]!.status, operation === "issue" ? "draft" : "approved");
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+test("void accepts the fresh counter token after a backward-timestamp write", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The counter is the revision: a holder that re-reads after the backdated
+  // write holds the new token and proceeds normally.
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Revision controller", "admin");
+    const doc = await seed(org, actor, "quote");
+    await db.execute(sql`update documents set memo='Backdated content', updated_at=now() - interval '30 days' where id=${doc.id}`);
+    const fresh = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${doc.id}`)).rows[0]!.revision;
+    assert.notEqual(fresh, doc.revision);
+    const result = await requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: doc.id,
+      expectedUpdatedAt: fresh, reversalDate: org.date, reason: "Cancel reviewed revision" });
+    assert.equal(result.status, "voided");
+  } finally { await dropScratchOrg(org.orgId); }
 });

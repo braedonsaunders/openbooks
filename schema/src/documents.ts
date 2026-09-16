@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -45,12 +46,13 @@ import { fieldTickets } from "./field-tickets";
  * 0034: ordinary line writes require a draft parent and the parent row is locked
  * while its lifecycle status is checked.
  *
- * Concurrency: `updated_at` is the optimistic-concurrency revision token.
- * Readers project it through web/lib/documents.ts documentRevisionSql at full
- * six-digit precision, and migration 0013_document_revision_monotonic forces
- * every UPDATE to advance it — a write that would repeat the stored revision
- * is bumped forward at the database boundary, so two committed revisions can
- * never share a token, whichever driver wrote them.
+ * Concurrency: `revision_seq` is the optimistic-concurrency revision token.
+ * Readers project it through documentRevisionCounterSql, and migration
+ * 0167_document_revision_counter bumps it on every UPDATE at the database
+ * boundary — including writes that backdate the `updated_at` display
+ * timestamp, which migration 0013_document_revision_monotonic permits. Two
+ * committed revisions can therefore never share a token, whichever driver
+ * wrote them.
  *
  * Kinds (initial set, from actual usage): vendor_bill, vendor_credit,
  * vendor_payment, expense_report, customer_invoice, customer_credit,
@@ -135,6 +137,13 @@ export const documents = pgTable(
 
     memo: text("memo"),
     custom: jsonb("custom").notNull().default({}),
+    /**
+     * Strictly increasing optimistic-concurrency counter (migration 0167).
+     * Bumped by storage on every UPDATE, independent of the editable
+     * `updated_at` display timestamp; revision readers project this counter
+     * as the token instead of `updated_at`.
+     */
+    revisionSeq: bigint("revision_seq", { mode: "number" }).notNull().default(0),
     ...auditColumns,
   },
   (t): PgTableExtraConfigValue[] => [

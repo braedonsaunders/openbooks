@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrg, withOrgTransaction } from "./db.ts";
 import { allocateDocumentNumber } from "./document-numbering.ts";
+import { documentRevisionCounterSql } from "./document-revision.ts";
 import { businessToday } from "./business-date.ts";
 import { roundCurrencyMoney } from "./currencies.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
@@ -512,11 +513,11 @@ export async function updateDraftPayment(
       // The header was locked before reading the fields merged above. Check
       // the exact revision before writing; concurrent savers either committed
       // before that lock or wait for this whole save to commit.
-      // Same lossless wire form as web/lib/documents documentRevisionSql —
-      // node-postgres maps timestamptz to Date and would discard microseconds.
+      // The strictly increasing revision_seq counter (migration 0167), not
+      // the editable updated_at display timestamp, is the revision token.
       const locked = (await tx.execute<{ status: string; updatedAt: string }>(sql`
         select status,
-               to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+               ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt"
           from documents
          where id = ${id} and org_id = ${orgId}
          for update
