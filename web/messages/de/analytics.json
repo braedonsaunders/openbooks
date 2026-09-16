@@ -93,6 +93,7 @@
       "cogs": "Umsatzkosten",
       "grossProfit": "Bruttogewinn",
       "opex": "Betriebsausgaben",
+      "excludeOtherIncome": "Sonstige Erträge ausschließen",
       "operatingIncome": "Betriebsergebnis",
       "otherIncome": "Sonstige Erträge",
       "otherExpense": "Sonstige Aufwendungen",
@@ -120,6 +121,91 @@
       "noBudgetTitle": "Kein formelles Budget für diese Periode",
       "noBudgetDescription": "Erstellen und genehmigen Sie ein Budgetszenario, um echte Abweichungen auf Kontoebene zu sehen. Dieses Dashboard ersetzt keine synthetischen Benchmark-Ziele.",
       "createBudget": "Budget erstellen"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "Operativer Verlust",
+        "detail": "Das Betriebsergebnis beträgt {amount} — das Geschäft verliert Geld vor sonstigen Posten."
+      },
+      "gmCritical": {
+        "title": "Bruttomarge kritisch niedrig",
+        "detail": "Die Bruttomarge beträgt {actual} % — weniger als die Hälfte des {target} %-Ziels."
+      },
+      "gmWellBelow": {
+        "title": "Bruttomarge deutlich unter Ziel",
+        "detail": "Die Bruttomarge beträgt {actual} % gegenüber dem {target} %-Ziel."
+      },
+      "gmBelow": {
+        "title": "Bruttomarge unter Ziel",
+        "detail": "Die Bruttomarge beträgt {actual} % gegenüber einer {target} %-Benchmark."
+      },
+      "opmCritical": {
+        "title": "Operative Marge kritisch niedrig",
+        "detail": "Die operative Marge beträgt {actual} % — weniger als die Hälfte des {target} %-Ziels."
+      },
+      "opmBelow": {
+        "title": "Operative Marge unter Ziel",
+        "detail": "Die operative Marge beträgt {actual} % gegenüber einer {target} %-Benchmark."
+      },
+      "netLoss": {
+        "title": "Nettoverlust der Periode",
+        "detail": "Das Nettoergebnis beträgt {amount}."
+      },
+      "revFalling": {
+        "title": "Umsatz bricht im Jahresvergleich ein",
+        "detail": "Der Umsatz liegt {pct} % unter dem Vorjahr."
+      },
+      "revDeclined": {
+        "title": "Umsatz im Jahresvergleich gesunken",
+        "detail": "Der Umsatz liegt {pct} % unter dem Vorjahr."
+      },
+      "revTrendingDown": {
+        "title": "Umsatztrend abwärts",
+        "detail": "Der Umsatz fiel in den letzten drei aktiven Monaten um {pct} %."
+      },
+      "marginCompression": {
+        "title": "Margenkompression",
+        "detail": "Die Bruttomarge gab in den letzten drei aktiven Monaten um {pp}pp nach."
+      },
+      "belowBreakeven": {
+        "title": "Unter der Gewinnschwelle",
+        "detail": "Der durchschnittliche Monatsumsatz liegt unter der Gewinnschwelle von ca. {amount}."
+      },
+      "thinMargin": {
+        "title": "Dünne Sicherheitsmarge",
+        "detail": "Nur {pct} % des Monatsumsatzes trennen Sie von der Gewinnschwelle."
+      },
+      "heavyOverhead": {
+        "title": "Hoher Overhead",
+        "detail": "Die Betriebsausgaben betragen {pct} % des Umsatzes (>40 %)."
+      },
+      "healthyGM": {
+        "title": "Gesunde Bruttomarge",
+        "detail": "Direktkostendisziplin stimmt — Preise schützen."
+      },
+      "trimOpex": {
+        "title": "Betriebsausgaben straffen",
+        "detail": "Die Bruttomarge stimmt; die Lücke zur operativen Marge ist Overhead — OpEx prüfen."
+      },
+      "posLeverage": {
+        "title": "Positiver operativer Hebel",
+        "detail": "Das Betriebsergebnis skaliert {x}× zum Umsatz — auf Wachstum setzen."
+      },
+      "rule40": {
+        "title": "Rule of 40 erfüllt",
+        "detail": "Wachstum + Marge = {n}."
+      },
+      "marginOutlier": {
+        "title": "Margenausreißer im {month}",
+        "detail": "Bruttomarge {actual} % gegenüber {avg} % im Schnitt."
+      },
+      "revenueSpike": {
+        "title": "Umsatzspitze/-delle im {month}",
+        "detail": "Umsatz {amount} gegenüber {avg} im Schnitt."
+      }
+    },
+    "labels": {
+      "unassignedSegment": "Nicht zugeordnet"
     }
   },
   "customer": {
@@ -654,6 +740,6 @@
       "nov": "Nov",
       "dec": "Dez"
     },
-    "monthYear": "{month} '{yy}"
+    "monthYear": "{month} ''{yy}"
   }
 }

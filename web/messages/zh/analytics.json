@@ -93,6 +93,7 @@
       "cogs": "销售成本",
       "grossProfit": "毛利",
       "opex": "营业费用",
+      "excludeOtherIncome": "剔除其他收入",
       "operatingIncome": "营业利润",
       "otherIncome": "其他收入",
       "otherExpense": "其他费用",
@@ -120,6 +121,91 @@
       "noBudgetTitle": "本期间没有正式预算",
       "noBudgetDescription": "创建并批准一个预算情景，以查看真实的科目级差异。此仪表板不以合成的基准目标替代。",
       "createBudget": "创建预算"
+    },
+    "findings": {
+      "operatingLoss": {
+        "title": "营业亏损",
+        "detail": "营业利润为{amount}——其他项目之前已在亏损。"
+      },
+      "gmCritical": {
+        "title": "毛利率严重偏低",
+        "detail": "毛利率为{actual}%——不到{target}%目标的一半。"
+      },
+      "gmWellBelow": {
+        "title": "毛利率远低于目标",
+        "detail": "毛利率为{actual}%，目标为{target}%。"
+      },
+      "gmBelow": {
+        "title": "毛利率低于目标",
+        "detail": "毛利率为{actual}%，基准为{target}%。"
+      },
+      "opmCritical": {
+        "title": "营业利润率严重偏低",
+        "detail": "营业利润率为{actual}%——不到{target}%目标的一半。"
+      },
+      "opmBelow": {
+        "title": "营业利润率低于目标",
+        "detail": "营业利润率为{actual}%，基准为{target}%。"
+      },
+      "netLoss": {
+        "title": "本期净亏损",
+        "detail": "净利润为{amount}。"
+      },
+      "revFalling": {
+        "title": "营收同比大幅下滑",
+        "detail": "营收同比下降{pct}%。"
+      },
+      "revDeclined": {
+        "title": "营收同比下滑",
+        "detail": "营收同比下降{pct}%。"
+      },
+      "revTrendingDown": {
+        "title": "营收呈下降趋势",
+        "detail": "过去三个活跃月份营收下降{pct}%。"
+      },
+      "marginCompression": {
+        "title": "利润率被压缩",
+        "detail": "过去三个活跃月份毛利率下滑{pp}pp。"
+      },
+      "belowBreakeven": {
+        "title": "低于盈亏平衡点",
+        "detail": "月均营收低于约{amount}的盈亏平衡点。"
+      },
+      "thinMargin": {
+        "title": "安全边际过薄",
+        "detail": "距离盈亏平衡点仅剩月营收的{pct}%。"
+      },
+      "heavyOverhead": {
+        "title": "间接费用过重",
+        "detail": "营业费用占营收的{pct}%（>40%）。"
+      },
+      "healthyGM": {
+        "title": "毛利率健康",
+        "detail": "直接成本控制良好——请保持定价。"
+      },
+      "trimOpex": {
+        "title": "压缩营业费用",
+        "detail": "毛利率良好，与营业利润率的差距在间接费用——请复核运营费用。"
+      },
+      "posLeverage": {
+        "title": "正向经营杠杆",
+        "detail": "营业利润以营收{x}倍的速度增长——请聚焦增长。"
+      },
+      "rule40": {
+        "title": "达到40法则",
+        "detail": "增长率＋利润率＝{n}。"
+      },
+      "marginOutlier": {
+        "title": "{month}利润率异常",
+        "detail": "毛利率{actual}%，平均{avg}%。"
+      },
+      "revenueSpike": {
+        "title": "{month}营收骤增/骤降",
+        "detail": "营收{amount}，平均{avg}。"
+      }
+    },
+    "labels": {
+      "unassignedSegment": "未分配"
     }
   },
   "customer": {
