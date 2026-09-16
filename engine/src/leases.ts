@@ -213,6 +213,17 @@ export function measureLesseeLease(args: {
   periodsPerYear: number;
   timing: "arrears" | "advance";
   model: "finance" | "operating";
+  /**
+   * Continue-from-opening onboarding (migration 0156): a mid-life lease
+   * carries its opening liability and right-of-use carrying amounts in from
+   * the legacy system instead of measuring them. The accretion starts from
+   * the stated liability (the terminal period still absorbs any remainder so
+   * the schedule retires to exactly zero) and the ROU spreads from the
+   * stated carrying amount. Absent, the opening present value is measured as
+   * before and both figures equal it.
+   */
+  openingLiability?: string;
+  openingRouAsset?: string;
 }): LesseeMeasurement {
   if (args.timing === "advance") {
     throw new LeaseError("advance-timing schedules are not implemented yet — measure with arrears timing");
@@ -231,12 +242,19 @@ export function measureLesseeLease(args: {
     );
   }
   const rate: PeriodRate = periodRateFromAnnualPercent(args.annualRatePercent, args.periodsPerYear);
-  const liability = presentValueOfLevelStream({
-    payment: args.payment,
-    periods: args.periods,
-    rate,
-    timing: args.timing,
-  });
+  const liability = args.openingLiability !== undefined
+    ? exactMoney(args.openingLiability, "Opening liability")
+    : presentValueOfLevelStream({
+        payment: args.payment,
+        periods: args.periods,
+        rate,
+        timing: args.timing,
+      });
+  if (cmp(liability, "0") < 0) throw new LeaseError("Opening liability must be non-negative");
+  const rouAsset = args.openingRouAsset !== undefined
+    ? exactMoney(args.openingRouAsset, "Opening right-of-use carrying amount")
+    : liability;
+  if (cmp(rouAsset, "0") < 0) throw new LeaseError("Opening right-of-use carrying amount must be non-negative");
   const accretion = accreteToZero({
     opening: liability,
     payment: args.payment,
@@ -247,7 +265,7 @@ export function measureLesseeLease(args: {
   let schedule: LesseeSchedulePeriod[];
   if (args.model === "finance") {
     const amortizations = apportion(
-      toUnits(liability),
+      toUnits(rouAsset),
       new Array<number>(args.periods).fill(1),
     ).map(fromUnits);
     schedule = accretion.map((line, i) => ({ ...line, amortization: amortizations[i]! }));
@@ -257,18 +275,28 @@ export function measureLesseeLease(args: {
       toUnits(totalPayments),
       new Array<number>(args.periods).fill(1),
     ).map(fromUnits);
+    // Continue-from-opening: the carried ROU generally differs from the
+    // stated liability (unamortised costs in the outgoing system), so the
+    // cost-minus-interest shape is level-shifted by the apportioned
+    // difference. The shift sums exactly to that difference, hence the
+    // adjustments retire exactly the stated ROU. Skipped when the figures
+    // coincide so un-onboarded measurement stays bit-identical.
+    const rouDelta = add(rouAsset, neg(liability));
+    const shift = cmp(rouDelta, "0") === 0
+      ? null
+      : apportion(toUnits(rouDelta), new Array<number>(args.periods).fill(1)).map(fromUnits);
     schedule = accretion.map((line, i) => ({
       ...line,
       singleCost: costs[i]!,
-      rouAdjustment: add(costs[i]!, neg(line.interest)),
+      rouAdjustment: shift ? add(add(costs[i]!, neg(line.interest)), shift[i]!) : add(costs[i]!, neg(line.interest)),
     }));
     // Invariant: the ROU adjustments must consume the asset exactly.
     const consumed = sum(schedule.map((l) => l.rouAdjustment!));
-    if (cmp(consumed, liability) !== 0) {
-      throw new LeaseError(`operating schedule does not consume the right-of-use asset (${consumed} vs ${liability})`);
+    if (cmp(consumed, rouAsset) !== 0) {
+      throw new LeaseError(`operating schedule does not consume the right-of-use asset (${consumed} vs ${rouAsset})`);
     }
   }
-  return { liability, rouAsset: liability, schedule };
+  return { liability, rouAsset, schedule };
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +534,13 @@ export interface CreateLeaseInput {
   classificationInputs?: LeaseClassificationInputs;
   /** Election; validated against eligibility for short_term. */
   exemption?: "short_term" | "low_value" | null;
+  /**
+   * Continue-from-opening onboarding (migration 0156): the liability and
+   * right-of-use carrying amounts measured through the cutover as-of date in
+   * the outgoing system. Commencement then schedules only the remaining
+   * periods from these figures and posts no commencement journal.
+   */
+  openingBalances?: { liability: string; rouCarrying: string; asOf: string } | null;
   accounts: {
     rouAsset: string;
     leaseLiability: string;
@@ -553,6 +588,29 @@ export async function createLeaseAgreement(
   }
   assertLeaseTimingSupported(input.paymentTiming ?? "arrears");
 
+  // Continue-from-opening validation (migration 0156): an exempt lease
+  // recognises no balances, so carry-in figures with an exemption election
+  // are contradictory; the as-of date is the cutover — it cannot precede the
+  // commencement the remaining term is counted from.
+  const openingBalances = input.openingBalances ?? null;
+  if (openingBalances) {
+    if (input.exemption) {
+      throw new LeaseError("exempt leases recognise no asset or liability — omit the opening balances");
+    }
+    assertLeaseCommencementOn(openingBalances.asOf);
+    if (openingBalances.asOf < input.commencementOn) {
+      throw new LeaseError("opening balances as-of date cannot precede the commencement date");
+    }
+  }
+  const openingLiability = openingBalances ? exactMoney(openingBalances.liability, "Opening liability") : null;
+  const openingRouCarrying = openingBalances ? exactMoney(openingBalances.rouCarrying, "Opening right-of-use carrying amount") : null;
+  if (openingLiability !== null && cmp(openingLiability, "0") < 0) {
+    throw new LeaseError("Opening liability must be non-negative");
+  }
+  if (openingRouCarrying !== null && cmp(openingRouCarrying, "0") < 0) {
+    throw new LeaseError("Opening right-of-use carrying amount must be non-negative");
+  }
+
   const paymentAmount = exactMoney(input.paymentAmount, "Payment amount");
   if (cmp(paymentAmount, "0") <= 0) {
     throw new LeaseError("Payment amount must be positive");
@@ -577,6 +635,7 @@ export async function createLeaseAgreement(
       (id, org_id, subsidiary_id, lease_number, description, status, commencement_on, term_periods,
        payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
        classification, classification_inputs, exemption,
+       opening_liability, opening_rou_carrying, opening_balances_as_of,
        rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
        amortization_expense_account_id, lease_expense_account_id, payment_account_id,
        department_id, project_id, location_id, custom, created_by, updated_by)
@@ -586,6 +645,7 @@ export async function createLeaseAgreement(
             ${annualDiscountRatePercent}, ${classification.model},
             ${JSON.stringify({ ...classificationInputs, resolvedCriteria: classification.criteria, framework })}::jsonb,
             ${input.exemption ?? null},
+            ${openingLiability}, ${openingRouCarrying}, ${openingBalances?.asOf ?? null},
             ${input.accounts.rouAsset}, ${input.accounts.leaseLiability}, ${input.accounts.interestExpense},
             ${input.accounts.amortizationExpense}, ${input.accounts.leaseExpense}, ${input.accounts.payment},
             ${input.departmentId ?? null}, ${input.projectId ?? null}, ${input.locationId ?? null},
@@ -606,6 +666,10 @@ type LeaseRow = {
   classification: "finance" | "operating";
   exemption: string | null;
   initial_liability: string | null;
+  initial_rou_asset: string | null;
+  opening_liability: string | null;
+  opening_rou_carrying: string | null;
+  opening_balances_as_of: string | null;
   rou_asset_account_id: string;
   lease_liability_account_id: string;
   interest_expense_account_id: string;
@@ -624,6 +688,10 @@ async function leaseRow(orgId: string, leaseId: string, runner: SqlExecutor): Pr
            payment_frequency, payment_timing, payment_amount::text as payment_amount,
            annual_discount_rate_percent::text as annual_discount_rate_percent,
            classification, exemption, initial_liability::text as initial_liability,
+           initial_rou_asset::text as initial_rou_asset,
+           opening_liability::text as opening_liability,
+           opening_rou_carrying::text as opening_rou_carrying,
+           opening_balances_as_of::text as opening_balances_as_of,
            rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
            amortization_expense_account_id, lease_expense_account_id, payment_account_id,
            department_id, project_id, location_id, commencement_entry_id
@@ -797,12 +865,35 @@ export async function commenceLease(
       return {
         leaseId,
         liability: lease.initial_liability ?? "0",
-        rouAsset: lease.initial_liability ?? "0",
+        rouAsset: lease.initial_rou_asset ?? lease.initial_liability ?? "0",
         commencementEntryId: lease.commencement_entry_id,
         periods: lease.term_periods,
       };
     }
     if (lease.status !== "draft") throw new LeaseError(`lease ${lease.lease_number} is ${lease.status}`);
+
+    // Continue-from-opening onboarding (migration 0156): the storage check
+    // guarantees all-or-none, so a half-set row can only come from a writer
+    // that bypassed it — fail closed rather than measuring half a carry-in.
+    const openingFields = [lease.opening_liability, lease.opening_rou_carrying, lease.opening_balances_as_of];
+    if (openingFields.some((f) => f === null) && openingFields.some((f) => f !== null)) {
+      throw new LeaseError("opening balances require a liability, a right-of-use carrying amount, and an as-of date together");
+    }
+    const opening = lease.opening_liability !== null
+      ? {
+          liability: lease.opening_liability,
+          rouCarrying: lease.opening_rou_carrying!,
+          asOf: lease.opening_balances_as_of!,
+        }
+      : null;
+    if (opening) {
+      if (lease.exemption) {
+        throw new LeaseError("exempt leases recognise no asset or liability — omit the opening balances");
+      }
+      if (opening.asOf < lease.commencement_on) {
+        throw new LeaseError("opening balances as-of date cannot precede the commencement date");
+      }
+    }
 
     // Re-validate the STORED term/frequency before ANY commencement loop: a
     // legacy row persisted before the creation guard can carry a huge term
@@ -841,27 +932,61 @@ export async function commenceLease(
       return { leaseId, liability: "0", rouAsset: "0", commencementEntryId: null, periods: lease.term_periods };
     }
 
+    // Continue-from-opening (migration 0156): only periods ending after the
+    // cutover schedule — earlier periods lived in the outgoing system and
+    // must never be caught up. The full-term sequence numbering continues so
+    // the remaining rows read as periods k..n of n.
+    const remaining = opening
+      ? boundaries.map((b, i) => ({ ...b, index: i })).filter((b) => b.end > opening.asOf)
+      : boundaries.map((b, i) => ({ ...b, index: i }));
+    if (opening && remaining.length === 0) {
+      throw new LeaseError(
+        `opening balances as-of ${opening.asOf} fall past the end of the lease term — no periods remain to continue`,
+      );
+    }
+
     const measurement = measureLesseeLease({
       payment: lease.payment_amount,
-      periods: lease.term_periods,
+      periods: remaining.length,
       annualRatePercent: lease.annual_discount_rate_percent,
       periodsPerYear,
       timing: lease.payment_timing,
       model: lease.classification,
+      ...(opening ? { openingLiability: opening.liability, openingRouAsset: opening.rouCarrying } : {}),
     });
 
     for (let i = 0; i < measurement.schedule.length; i++) {
       const line = measurement.schedule[i]!;
-      const b = boundaries[i]!;
+      const b = remaining[i]!;
       await tx.execute(sql`
         insert into lease_agreement_schedule_lines
           (id, org_id, lease_id, sequence, due_on, period_start, period_end,
            opening_liability, payment, interest, principal, closing_liability,
            amortization, single_cost, rou_adjustment, created_by, updated_by)
-        values (${randomUUID()}, ${orgId}, ${leaseId}, ${line.sequence}, ${b.dueOn}, ${b.start}, ${b.end},
+        values (${randomUUID()}, ${orgId}, ${leaseId}, ${b.index + 1}, ${b.dueOn}, ${b.start}, ${b.end},
                 ${line.opening}, ${line.payment}, ${line.interest}, ${fromUnits(toUnits(line.payment) - toUnits(line.interest))},
                 ${line.closing}, ${line.amortization ?? null}, ${line.singleCost ?? null},
                 ${line.rouAdjustment ?? null}, ${actorId}, ${actorId})`);
+    }
+
+    // An onboarded lease carries its GL balances in through the opening
+    // trial-balance import: booking the commencement here would double-count
+    // them. The subledger ties to those balances through initial_liability /
+    // initial_rou_asset instead.
+    if (opening) {
+      await tx.execute(sql`
+        update lease_agreements
+           set status = 'active', initial_liability = ${opening.liability},
+               initial_rou_asset = ${opening.rouCarrying}, commencement_entry_id = null,
+               updated_at = now(), updated_by = ${actorId}
+         where id = ${leaseId} and org_id = ${orgId}`);
+      return {
+        leaseId,
+        liability: opening.liability,
+        rouAsset: opening.rouCarrying,
+        commencementEntryId: null,
+        periods: lease.term_periods,
+      };
     }
 
     const entryId = await postLeaseEntry(tx, {
