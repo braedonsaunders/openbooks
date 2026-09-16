@@ -1,0 +1,132 @@
+name: Deploy production
+
+# Releases an attested image digest to the production swarm. Runs ONLY on the
+# self-hosted runner that lives on the LAN with the swarm manager: the release
+# procedure (deploy/swarm-release.sh) needs the manager's Docker socket and
+# the Dokploy database, neither of which is reachable from GitHub-hosted
+# runners. The runner connects over ssh with a dedicated, forced-options key
+# held as an environment secret; the `production` environment's deployment
+# policy restricts that secret to `v*` release tags.
+#
+# Two entry points, one job:
+#   - workflow_call from publish-container.yml after a successful, attested
+#     publish of a release tag (the normal path — a tag push deploys itself);
+#   - workflow_dispatch from a release tag ref for a re-deploy or a rollback
+#     to an earlier attested digest.
+#
+# Migrations run first from the exact digest, then both service pins swap;
+# the job then waits for the health endpoint to report the expected version.
+
+on:
+  workflow_call:
+    inputs:
+      digest:
+        description: Attested image digest to release (sha256:<64 hex>)
+        required: true
+        type: string
+      expected_version:
+        description: Version the health endpoint must report after the swap (e.g. v0.1.0-alpha.9)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: Attested image digest to release (sha256:<64 hex>)
+        required: true
+        type: string
+      expected_version:
+        description: Version the health endpoint must report after the swap (e.g. v0.1.0-alpha.9)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One release at a time; a second tag waits instead of racing the pin swap.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, dokploy]
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_HEALTH_URL }}
+    timeout-minutes: 30
+    env:
+      DIGEST: ${{ inputs.digest }}
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+      SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+      SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+      HEALTH_URL: ${{ vars.PRODUCTION_HEALTH_URL }}
+    steps:
+      - name: Validate release inputs
+        run: |
+          set -euo pipefail
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "digest must be sha256:<64 hex>, got: $DIGEST" >&2; exit 1
+          fi
+          if [[ ! "$EXPECTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "expected_version must be a v-prefixed semver, got: $EXPECTED_VERSION" >&2; exit 1
+          fi
+          for required in SSH_HOST SSH_USER HEALTH_URL; do
+            if [ -z "${!required:-}" ]; then
+              echo "production environment variable $required is not configured" >&2; exit 1
+            fi
+          done
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: deploy
+          sparse-checkout-cone-mode: true
+
+      - name: Install the deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/deploy-ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/deploy-ssh/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/deploy-ssh/known_hosts"
+          if [ ! -s "$RUNNER_TEMP/deploy-ssh/key" ] || [ ! -s "$RUNNER_TEMP/deploy-ssh/known_hosts" ]; then
+            echo "PRODUCTION_DEPLOY_SSH_KEY / PRODUCTION_SSH_KNOWN_HOSTS are not configured" >&2; exit 1
+          fi
+
+      - name: Release the digest (migrate first, then swap both pins)
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/deploy-ssh/key" \
+            -o UserKnownHostsFile="$RUNNER_TEMP/deploy-ssh/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            "$SSH_USER@$SSH_HOST" \
+            "bash -s -- '$DIGEST'" < deploy/swarm-release.sh
+
+      - name: Wait for the new version to serve
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 600 ))
+          while :; do
+            body="$(curl -sS --max-time 15 "$HEALTH_URL" || true)"
+            version="$(printf '%s' "$body" | jq -r '.version // empty' 2>/dev/null || true)"
+            status="$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)"
+            if [ "$status" = "ok" ] && [ "$version" = "$EXPECTED_VERSION" ]; then
+              echo "production serves $version"
+              exit 0
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "health did not report $EXPECTED_VERSION within 10 minutes (last: ${body:-<no response>})" >&2
+              echo "The release script left a backup under /home/$SSH_USER/openbooks-deploy-backup-<stamp>/ on the manager; restore composeFile.yml into Dokploy and redeploy to roll back." >&2
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Remove the deploy key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/deploy-ssh"
