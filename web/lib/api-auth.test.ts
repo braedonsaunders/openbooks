@@ -99,7 +99,24 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
   const snapshot = JSON.parse(
     migration.match(/SET scopes = '(\[[\s\S]*?\])'::jsonb/)?.[1] ?? "null",
   ) as string[];
-  assert.deepEqual(snapshot, [...PERMISSION_CATALOGUE]);
+  // The snapshot is the catalogue AS OF 0031. Permissions reviewed into the
+  // catalogue afterwards are listed here explicitly so growth is deliberate:
+  // a key that is neither in the frozen snapshot nor in this list fails.
+  const addedAfter0031 = new Set<string>([
+    // 0160 allocation kernel (rules, drivers, runs, approvals)
+    "allocations.read",
+    "allocations.manage",
+    "allocations.run",
+    "allocations.approve",
+  ]);
+  for (const key of addedAfter0031) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
+    assert.ok(!snapshot.includes(key), `${key} post-dates 0031 and must not be in its frozen snapshot`);
+  }
+  assert.deepEqual(
+    snapshot,
+    (PERMISSION_CATALOGUE as readonly string[]).filter((key) => !addedAfter0031.has(key)),
+  );
 
   // Storage owns the invariant afterwards: the empty shape is unrepresentable
   // and the '[]' default is gone, so omitted scopes fail at write time.

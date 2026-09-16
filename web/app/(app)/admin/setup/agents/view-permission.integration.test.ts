@@ -28,6 +28,9 @@ const mockIntl = `
   export async function getTranslations(namespace) {
     return (key, _vars) => namespace + ':' + key;
   }
+  export async function getLocale() {
+    return 'en';
+  }
 `;
 
 const hooks = registerHooks({
