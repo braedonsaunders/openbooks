@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
+import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
 import { can } from "../authz";
 import { listResources } from "../data-io/resources";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -213,4 +214,44 @@ const listSyncConnections: AssistantToolDef = {
   },
 };
 
-export const OPS_TOOLS: AssistantToolDef[] = [listDataResources, listImportRuns, listSyncConnections];
+const listEnvironments: AssistantToolDef = {
+  name: "list_environments",
+  description:
+    "Sandbox environments: name, tier, status, last refresh time and error, refresh schedule. Same rows as the environments admin page. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["admin.sandboxes.manage"] },
+  inputSchema: z.object({}),
+  execute: async (_raw, authz): Promise<ToolResult> => {
+    // Same read as loadSandboxes in web/app/(app)/admin/sandboxes/view.ts:
+    // managed against the home production org. Sandbox rows are
+    // production-scoped config, not subsidiary rows — no subsidiary fence,
+    // exactly like the loader.
+    const rows = await listSandboxes(authz.user.productionOrgId);
+    const { items, truncated } = capList(
+      rows.map((s) => ({
+        id: s.id,
+        name: s.name,
+        tier: s.tier,
+        masked: s.masked,
+        status: s.status,
+        lastError: s.lastError ? truncateText(s.lastError, 300) : null,
+        lastRefreshAt: s.lastRefreshAt,
+        refreshSchedule: s.refreshSchedule,
+        storageRows: s.storageRows,
+        createdAt: s.createdAt,
+      })),
+    );
+    return {
+      ok: true,
+      data: {
+        total: rows.length,
+        truncated,
+        insideSandbox: authz.user.envKind !== "production",
+        href: "/admin/sandboxes",
+        items,
+      },
+    };
+  },
+};
+
+export const OPS_TOOLS: AssistantToolDef[] = [listDataResources, listImportRuns, listSyncConnections, listEnvironments];

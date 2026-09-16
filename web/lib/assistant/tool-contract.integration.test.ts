@@ -94,6 +94,7 @@ const READER_PERMS = [
   "api.keys.manage",
   "data.export",
   "data.import",
+  "admin.sandboxes.manage",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
