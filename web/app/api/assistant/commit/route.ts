@@ -12,10 +12,18 @@ import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
+/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+function wholeDigits(canonical: string): number {
+  return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
+}
+
 /** Exact numeric(19,4) money string, or 'invalid'. */
 function exactMoney(v: unknown): string | "invalid" {
   const exact = canonicalDecimal(v, 4);
-  if (exact === null) return "invalid";
+  // Draft amounts land in documents/document_lines numeric(19,4) columns:
+  // refuse whole-digit widths the ledger cannot hold before any write,
+  // instead of throwing the raw overflow out of the commit.
+  if (exact === null || wholeDigits(exact) > 15) return "invalid";
   try {
     return normalizeMoney(exact);
   } catch {
