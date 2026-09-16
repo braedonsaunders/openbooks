@@ -8,6 +8,13 @@ const tabSource = readFileSync(
   'utf8',
 )
 
+test('drivers loading renders house skeletons, never a bare ellipsis', () => {
+  // Coordinator verdict: two literal '…' loading states. House loading is
+  // the shared Skeleton (audit-trail/account-register precedent).
+  assert.ok(!tabSource.includes(`'\u2026'`) && !tabSource.includes('{error ??'), 'no bare-ellipsis loading')
+  assert.match(tabSource, /<Skeleton/)
+})
+
 test('drivers list follows the departments composition', () => {
   // Blurb + New action row, then the search toolbar with the shared
   // show-inactive pill, then the table — headers plus one empty row when

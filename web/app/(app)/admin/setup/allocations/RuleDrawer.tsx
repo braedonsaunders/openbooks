@@ -105,6 +105,12 @@ function MultiCheck({
   ariaLabel: string
 }) {
   const selected = new Set(values)
+  const t = useTranslations('allocations')
+  // SetupDrawer multiref precedent: an empty options list renders the muted
+  // none-state line, never a collapsed empty box.
+  if (options.length === 0) {
+    return <p className="text-xs text-slate-400">{t('rules.definition.noOptions')}</p>
+  }
   return (
     <div aria-label={ariaLabel} className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-800">
       {options.map((option) => (

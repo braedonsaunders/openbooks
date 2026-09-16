@@ -104,6 +104,14 @@ test('rule drawer edits party, item and custom-segment filters from the options 
   assert.ok(drawerSource.includes(`key: 'itemId'`), 'test tab samples item lines')
 })
 
+test('empty multi-ref pickers render the shared none state, never a collapsed box', () => {
+  // Coordinator verdict: with no departments yet, the dimension filter
+  // pickers collapsed to ~1px lines. The SetupDrawer multiref precedent
+  // renders its muted none-state line instead of an empty box.
+  assert.match(drawerSource, /noOptions/)
+  assert.ok(drawerSource.includes('options.length === 0'), 'empty options take the none branch')
+})
+
 test('rule drawer uses shared field chrome and responsive grids', () => {
   // Every control is a shared field component; hints ride the Label popover
   // (SetupDrawer precedent), sections share its headings, and two-column
