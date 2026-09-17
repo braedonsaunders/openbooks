@@ -792,8 +792,8 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     // (F-i10): remaining fallbacks are reviewed identicals only.
     const expectedPmFallbacks: Record<string, number> = {
       de: 8,
-      es: 2,
-      fr: 11,
+      es: 1,
+      fr: 10,
       ja: 1,
       'pt-BR': 6,
       zh: 1,

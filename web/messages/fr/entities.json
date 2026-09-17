@@ -99,7 +99,8 @@
           "cam": "Charges communes",
           "storage": "Stockage",
           "utility": "Fluides",
-          "other": "Autre"
+          "other": "Autre",
+          "parking": "Stationnement"
         },
         "frequencies": {
           "monthly": "Mensuelle",

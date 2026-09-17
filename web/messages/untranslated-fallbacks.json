@@ -13,8 +13,7 @@
       "entities.propertyManagement.list.columns.status"
     ],
     "es": [
-      "entities.propertyManagement.detail.description",
-      "entities.propertyManagement.leaseSections.deposits.labels.memo"
+      "entities.propertyManagement.detail.description"
     ],
     "fr": [
       "entities.propertyManagement.detail.actions",
@@ -23,7 +22,6 @@
       "entities.propertyManagement.leaseSections.charges.labels.description",
       "entities.propertyManagement.leaseSections.charges.labels.type",
       "entities.propertyManagement.leaseSections.charges.table.charge",
-      "entities.propertyManagement.leaseSections.charges.types.parking",
       "entities.propertyManagement.leaseSections.deposits.labels.date",
       "entities.propertyManagement.leaseSections.deposits.labels.transaction",
       "entities.propertyManagement.list.columns.code",
