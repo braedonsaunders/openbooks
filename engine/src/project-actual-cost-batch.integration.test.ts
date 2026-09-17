@@ -178,27 +178,20 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
     const unpriced = await seedProject(db, org, "JOB-SORT-C", [
       { entryNumber: "SORT-C-1", amount: "1000.0000", status: "posted" },
     ], "0", noneType);
-    // A dangling type id falls back to built-in time-and-materials, exactly
-    // like the single-project loader.
-    const orphan = await seedProject(db, org, "JOB-SORT-D", [
-      { entryNumber: "SORT-D-1", amount: "300.0000", status: "posted" },
-    ], "0", randomUUID());
     // A type row missing its billing method keeps the page zero instead of
-    // failing it, mirroring the single loader's throw-then-catch.
+    // failing it, mirroring the single loader's throw-then-catch. A dangling
+    // type id cannot be inserted: projects_project_type_id_fkey refuses it.
     const brokenType = await seedProjectType(db, org, { source: "none" }, "");
     const broken = await seedProject(db, org, "JOB-SORT-E", [
       { entryNumber: "SORT-E-1", amount: "900.0000", status: "posted" },
     ], "0", brokenType);
 
-    const batch = await resolveProjectActualCosts(org.orgId, [pricey, cheap, unpriced, orphan, broken]);
+    const batch = await resolveProjectActualCosts(org.orgId, [pricey, cheap, unpriced, broken]);
     assert.equal(batch.get(pricey), "1075.0000");
     assert.equal(batch.get(cheap), "500.0000");
     const singleUnpriced = (await resolveProjectFinancials(org.orgId, unpriced, { ...profile, actualCost: { source: "none" } as never })).measures.actual_cost;
     assert.equal(singleUnpriced, "0.0000");
     assert.equal(batch.get(unpriced), String(singleUnpriced));
-    const singleOrphan = (await resolveProjectFinancials(org.orgId, orphan, profile)).measures.actual_cost;
-    assert.equal(singleOrphan, "300.0000");
-    assert.equal(batch.get(orphan), String(singleOrphan));
     assert.equal(batch.get(broken), "0.0000");
 
     const source = entityListSource("project");
@@ -213,11 +206,11 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
     // The two zero-cost projects tie; their relative order follows the uuid
     // tiebreak, so pin the ordered ranks and the tied pair as a set.
     const desc = await source.orderedPageIds!({ ...ctx, sort: "actual", dir: "desc" });
-    assert.deepEqual(desc?.slice(0, 3), [pricey, cheap, orphan]);
-    assert.deepEqual(new Set(desc?.slice(3)), new Set([unpriced, broken]));
+    assert.deepEqual(desc?.slice(0, 2), [pricey, cheap]);
+    assert.deepEqual(new Set(desc?.slice(2)), new Set([unpriced, broken]));
     const asc = await source.orderedPageIds!({ ...ctx, sort: "actual", dir: "asc" });
     assert.deepEqual(new Set(asc?.slice(0, 2)), new Set([unpriced, broken]));
-    assert.deepEqual(asc?.slice(2), [orphan, cheap, pricey]);
+    assert.deepEqual(asc?.slice(2), [cheap, pricey]);
 
     // The shared planned-page clauses read the planned order back through
     // real SQL — the same shape the list view pages with.
@@ -228,9 +221,8 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
     assert.deepEqual(descPage.map((r) => r.id), [pricey, cheap], "planned desc page");
     const ascClauses = plannedPageClauses([...asc!], idExpr);
     const ascPage = (await db.execute<{ id: string }>(sql`
-      select p.id from projects p where ${ascClauses.where} order by ${ascClauses.order} limit 3`)).rows;
-    assert.deepEqual(new Set(ascPage.slice(0, 2).map((r) => r.id)), new Set([unpriced, broken]), "planned asc page pair");
-    assert.equal(ascPage[2]!.id, orphan, "planned asc page third");
+      select p.id from projects p where ${ascClauses.where} order by ${ascClauses.order} limit 2`)).rows;
+    assert.deepEqual(new Set(ascPage.map((r) => r.id)), new Set([unpriced, broken]), "planned asc page pair");
   } finally {
     await dropScratchOrg(org.orgId);
   }

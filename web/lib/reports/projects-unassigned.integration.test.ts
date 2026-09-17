@@ -6,10 +6,9 @@ import { randomUUID } from 'node:crypto'
 
 /**
  * F-t07-004: Project Profitability silently excludes journal lines with no
- * project assignment, so its totals do not tie to the P&L (SIM Aperture:
- * $356,971.24 of untagged subcontractor COGS missing; Rassaun: CA$6.0M of
- * untagged revenue missing). Untagged P&L activity must surface as an
- * explicit Unassigned row and be included in the report totals.
+ * project assignment, so its totals do not tie to the P&L. Untagged P&L
+ * activity must surface as an explicit Unassigned row and be included in
+ * the report totals.
  */
 const root = pathToFileURL(process.cwd() + '/').href
 registerHooks({
