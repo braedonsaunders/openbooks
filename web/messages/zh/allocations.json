@@ -47,6 +47,7 @@
     "list": {
       "heading": "分摊规则",
       "new": "新建规则",
+      "emptyTitle": "尚无分摊规则",
       "empty": "尚无分摊规则。创建第一条规则以开始分摊费用。",
       "columns": {
         "name": "名称",
@@ -60,7 +61,9 @@
       "noVersion": "无已发布版本",
       "inactive": "停用",
       "active": "启用",
-      "searchPlaceholder": "搜索规则…"
+      "searchPlaceholder": "搜索规则…",
+      "emptyDescription": "创建第一条规则，开始分摊成本。",
+      "blurb": "在录入、过账或期间统分时触发的版本化规则。新建规则将打开向导式设置。"
     },
     "modes": {
       "entry": "录入时",
@@ -114,6 +117,8 @@
       },
       "applicabilityHeading": "规则适用的明细",
       "documentKinds": "单据类型 (为空表示全部)",
+      "documentKindAdd": "添加",
+      "noOptions": "此处尚无内容。",
       "accountScope": "科目范围",
       "accountScopes": {
         "any": "全部科目",
@@ -179,6 +184,7 @@
       "lineDescriptionTemplate": "明细说明模板",
       "approvalFlow": "审批流",
       "approvalFlowHint": "执行过账前所需的审批流UUID。",
+      "approvalFlowNone": "无审批流",
       "driverAsOfs": {
         "period": "期间",
         "document_date": "单据日期",
@@ -283,6 +289,7 @@
       "basisNote": "份额在运行时由动因向量解出。",
       "periodHeading": "预览期间分摊",
       "period": "期间",
+      "book": "账簿",
       "openRuns": "在执行中打开",
       "noVersion": "该规则尚无可测试版本。",
       "version": "版本",
@@ -316,12 +323,15 @@
     "key": "键",
     "keyHint": "组织内唯一的小写代号",
     "name": "名称",
+    "fieldDescription": "说明",
     "dimension": "维度",
     "sourceKind": "来源",
     "unit": "单位",
     "active": "启用",
+    "inactive": "停用",
     "showInactive": "显示停用",
     "empty": "尚无动因。",
+    "emptyTitle": "尚无动因",
     "deleteConfirm": "删除动因{name}吗?手工维护值将一并删除。",
     "sourceKinds": {
       "statistical_journal": "统计日记账",
@@ -372,6 +382,7 @@
     "note": "备注",
     "addValue": "添加值",
     "noValues": "该动因尚无值。",
+    "noDimensionValues": "尚无有效的{dimension}值 — 添加动因值之前请先创建一个。",
     "endValue": "定终止日",
     "deleteValueConfirm": "删除该值吗?",
     "preview": "预览向量",
@@ -385,7 +396,10 @@
     "loadFailed": "无法加载动因。",
     "saveFailed": "无法保存动因。",
     "deleteFailed": "无法删除动因。",
-    "previewFailed": "无法预览向量。"
+    "previewFailed": "无法预览向量。",
+    "manualCreateHint": "先保存动因 — 其带生效日期的值随后即可在此编辑。",
+    "valuesAfterSave": "动因已保存。请在下方添加其带生效日期的值。",
+    "emptyDescription": "创建第一个动因，开始分摊成本。"
   },
   "runs": {
     "title": "执行",
@@ -395,6 +409,7 @@
     "filterStatus": "状态",
     "all": "全部",
     "empty": "尚无执行。预览一条规则以计算。",
+    "emptyTitle": "尚无执行",
     "columns": {
       "rule": "规则",
       "period": "期间",
@@ -419,6 +434,7 @@
     },
     "previewRun": "预览执行",
     "runDetail": "执行详情",
+    "summary": "汇总",
     "sources": "来源",
     "driverVector": "动因向量",
     "targets": "分摊对象",
@@ -450,7 +466,125 @@
     "journalEntry": "记账凭证",
     "reversalEntry": "冲销凭证",
     "loadFailed": "无法加载执行。",
-    "detailFailed": "无法加载该执行。"
+    "detailFailed": "无法加载该执行。",
+    "pendingApprovalNotice": "该执行正在等待审批，不能从此处过账。",
+    "viewApproval": "打开审批",
+    "emptyDescription": "预览一条规则以计算一次执行。"
+  },
+  "wizard": {
+    "untitled": "未命名分摊",
+    "loadFailed": "无法为设置向导加载部门与动因。",
+    "createFailed": "无法创建分摊规则。",
+    "publishFailed": "规则已保存为草稿 — 完成定义后再发布。",
+    "created": "分摊规则已保存为草稿。准备就绪后请从版本发布。",
+    "published": "分摊规则已发布并生效。",
+    "creating": "正在创建…",
+    "finish": "创建规则",
+    "skipGuide": "跳过向导 — 打开空白规则",
+    "publishNow": "立即发布以使规则生效",
+    "publishNowHint": "草稿永不匹配明细或期间执行。除非想先复核定义，否则请保持开启。",
+    "advancedAfter": "创建后，规则抽屉仍保留全部高级字段 — 账簿、自定义维度、抵销与测试。",
+    "when": {
+      "title": "何时触发？",
+      "description": "同一规则模型，三个时点。请选择拆分应发生的时点。",
+      "advanced": "高级",
+      "entry": {
+        "title": "录入明细时",
+        "description": "保存匹配的账单、费用或日记账明细时，将其替换为拆分后的子明细。",
+        "example": "一张1,000.00的间接费用账单将按1 : 2 : 3 : 4的比例变为四条部门明细。"
+      },
+      "period": {
+        "title": "月末",
+        "description": "期间统分读取资金池进行分摊，并过账其自身的分摊凭证。",
+        "example": "未标IT支出在关账后按人数重分类至各部门。"
+      },
+      "post": {
+        "title": "单据过账时",
+        "description": "额外的日记账明细落在同一凭证上，并加盖本规则作为贡献方。",
+        "example": "当来源单据应保持完整、分摊仅限总账时使用。"
+      }
+    },
+    "source": {
+      "title": "应捕获哪些明细？",
+      "description": "为规则命名，再按交易类型与匹配维度筛选。交易类型为空即表示全部类型。",
+      "kinds": "交易类型",
+      "kindsHint": "指单据种类。全部关闭即匹配所有类型。",
+      "anyKind": "未选择即表示所有交易类型。",
+      "filters": "来源维度",
+      "filtersHint": "与交易类型按与组合。忽略某维度请保持全部。期间统分通常归集未标池。",
+      "filtersAny": "每个维度初始均为全部。仅对需要约束匹配的分类切换为指定。",
+      "modeAny": "全部",
+      "modeUntagged": "未标",
+      "modeSpecific": "指定",
+      "pickValue": "添加值…",
+      "noValues": "该维度尚无有效值。"
+    },
+    "split": {
+      "title": "金额应如何拆分？",
+      "description": "固定比例是具名拆分（1、2、3、4）。动因是附加于此的可复用度量 — 动因不是规则。",
+      "ratio": {
+        "title": "固定比例",
+        "description": "如1 : 2 : 3 : 4的相对权重，以合计恒为100的百分比存储。",
+        "example": "1＋2＋3＋4＝10份，份额分别为10%、20%、30%和40%。"
+      },
+      "percent": {
+        "title": "固定百分比",
+        "description": "自行录入百分比，合计必须为100。"
+      },
+      "driver": {
+        "title": "现有动因",
+        "description": "人数、工时、手工表或已存报表。请在动因页签创建动因，再在此处选择。"
+      },
+      "driverEmpty": "尚无动因。固定比例不需要动因，仅当权重需按期变化时才创建动因。",
+      "driverHint": "动因度量一个维度，动态对象在运行时跟随该维度。"
+    },
+    "targets": {
+      "title": "资金流向何处？",
+      "description": "选择目标维度并为每个值给定份额。科目为空则保留来源科目。",
+      "dimension": "拆分至",
+      "value": "对象",
+      "weight": "比例",
+      "percent": "百分比",
+      "pickValue": "选择值…",
+      "add": "添加对象",
+      "noValues": "该维度尚无有效值。",
+      "needOne": "请至少选择两个份额为正的对象。",
+      "example": "金额1,000.00的明细将变为{amounts}。",
+      "driverDynamic": "{driver}将拆分至每个有权重的{dimension}。",
+      "driverDynamicHint": "无需列出对象 — 动因向量即目标集。"
+    },
+    "policy": {
+      "title": "账簿应如何处理？",
+      "description": "拆分是否自动，以及成本是搬移还是仅增加维度归属。",
+      "applyAutomatic": "自动",
+      "applyAutomaticHint": "匹配明细在保存时拆分。",
+      "applySuggest": "建议",
+      "applySuggestHint": "行网格会提供一个标签，点击即应用拆分。",
+      "applyManual": "手动",
+      "applyManualHint": "拆分仅出现在明细的分摊选择器中。",
+      "impactReclass": "搬移成本",
+      "impactReclassHint": "贷记来源坐标、借记各对象，试算平衡总数不变。",
+      "impactNetZero": "归属而不动损益",
+      "impactNetZeroHint": "净零对：公司利润不变，维度变化。",
+      "periodActivityHint": "分摊本期已过账发生额，不含本规则自身明细。",
+      "periodBalanceHint": "分摊来源池的期末余额。",
+      "runManualHint": "请从执行页签预览与过账。",
+      "runAutoPreviewHint": "期末后自动计算预览，仍由您过账。"
+    },
+    "review": {
+      "title": "创建这条规则？",
+      "description": "这将写入抽屉所编辑的同一版本化规则，之后仍可修改任何内容。",
+      "when": "在{mode}触发",
+      "sourceAnyKind": "匹配所有交易类型",
+      "sourceKinds": "匹配{kinds}",
+      "sourceAnyDims": "无额外来源维度筛选",
+      "sourceUntagged": "仅未标{dimension}",
+      "sourceValues": "{dimension}：{values}",
+      "splitRatio": "按{weights} → {percents}拆分",
+      "splitPercent": "按{percents}拆分",
+      "splitDriver": "按动因{driver}拆分",
+      "targets": "分摊至{dimension}：{names}"
+    }
   },
   "lineage": {
     "title": "分摊溯源",

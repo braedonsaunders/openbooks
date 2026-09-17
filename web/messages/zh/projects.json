@@ -36,6 +36,7 @@
     "unbilledDetail": "{entries} 条工时记录 · {hours} 小时 · {lines} 条成本明细",
     "requestCreated": "开票请求已创建",
     "requestFailed": "无法创建开票请求",
+    "applicationsPermissionRequired": "查看此项目的付款申请需要应收账款访问权限。",
     "invoiceCreated": "发票 {number} 已创建",
     "invoiceFailed": "无法创建发票",
     "invoiceType": "发票阶段",
@@ -253,7 +254,10 @@
     "billedYes": "已计费",
     "created": "计费项已过账",
     "failed": "无法过账计费项",
-    "pickItem": "请先选择一项物料"
+    "pickItem": "请先选择一项物料",
+    "operator": "操作员",
+    "selectOperator": "选择操作员…",
+    "operatorNeedsEquipment": "仅设备明细"
   },
   "recognition": {
     "title": "收入确认",
@@ -285,7 +289,6 @@
     "margin_pct": "利润率",
     "revenue_posted": "已过账收入",
     "labor_cost": "人工成本",
-    "overhead": "间接费用",
     "billable_value": "可计费价值",
     "unbilled_billable": "未开票可计费金额",
     "hints": {
@@ -297,7 +300,8 @@
       "gross_profit": "基于已入账成本的利润——不含成本估算。",
       "overhead": "已计入作业总成本，因此已从毛利中扣除。",
       "overhead_informational": "未计入作业总成本，也未从毛利中扣除。"
-    }
+    },
+    "overhead": "间接费用"
   },
   "invoicingPref": {
     "heading": "开票偏好",
@@ -311,9 +315,176 @@
     "customerHint": "为此客户覆盖项目类型。",
     "projectHint": "为此项目覆盖类型/客户。"
   },
+  "schedule": {
+    "status": {
+      "not_started": "未开始",
+      "in_progress": "进行中",
+      "complete": "已完成",
+      "on_hold": "已挂起"
+    },
+    "view": {
+      "gantt": "甘特",
+      "list": "列表",
+      "board": "看板"
+    },
+    "empty": {
+      "title": "尚无计划作业",
+      "description": "添加第一项作业，开始编制此项目的进度计划。",
+      "action": "添加作业"
+    },
+    "leveling": {
+      "heading": "资源平衡",
+      "description": "顺延作业，使施工队、机械或分包商的日预订量不超日产能。应用前请复核建议的调整。"
+    }
+  },
   "invoicing": {
     "rateCardLapse": "费率卡已失效时",
     "block": "阻止开票",
     "carry_forward": "按最近一版费率卡开票"
+  },
+  "wipBilling": {
+    "wipHealthAria": "在产状况",
+    "tiles": {
+      "availableWip": "可用在产",
+      "availableWipSub": "符合条件且未冻结",
+      "over90": "超90天",
+      "over90Sub": "61–90天的{amount}",
+      "realization": "实现",
+      "realizationSub": "已开票{amount}",
+      "leakage": "漏损",
+      "leakageSub": "冻结超90天的{amount}"
+    },
+    "list": {
+      "title": "预开票工作表",
+      "description": "复核符合条件的项目工作、开票调整与审批状态。",
+      "newPrebill": "新建预开票"
+    },
+    "empty": {
+      "noProjectsTitle": "先创建一个项目",
+      "noPrebillsTitle": "尚无预开票工作表",
+      "noProjectsDescription": "在产复核从具有可开票工时或成本的有效项目开始。",
+      "noPrebillsDescription": "创建工作表，按截止日期快照符合条件的未开票项目工作。",
+      "createPrebill": "创建预开票",
+      "goToProjects": "前往项目"
+    },
+    "table": {
+      "worksheet": "工作表",
+      "project": "项目",
+      "status": "状态",
+      "proposed": "建议值",
+      "through": "截至{periodEnd}",
+      "noCustomer": "无客户"
+    },
+    "createDrawer": {
+      "title": "新建预开票工作表",
+      "description": "按截止日期快照符合条件的未开票工作。",
+      "cancel": "取消",
+      "creating": "正在创建…",
+      "submit": "创建预开票",
+      "projectLabel": "项目",
+      "projectHelp": "仅列出采用标准工料实报或成本加成来源开票的有效项目类型。",
+      "configureProjectTypes": "配置项目类型",
+      "startLabel": "开始（可选）",
+      "cutoffLabel": "截止日期",
+      "notesLabel": "复核备注",
+      "notesPlaceholder": "范围、开票说明或复核人背景信息"
+    },
+    "detail": {
+      "description": "{projectName}·截至{periodEnd}",
+      "sendForReview": "送复核",
+      "return": "退回",
+      "approve": "批准",
+      "converting": "正在转换…",
+      "createInvoice": "创建发票",
+      "void": "作废",
+      "openInvoice": "打开{invoiceNumber}"
+    },
+    "workflow": {
+      "returnTitle": "将工作表退回草稿",
+      "voidTitle": "作废工作表",
+      "returnDescription": "说明编制人需要更正的内容，该说明将记入复核轨迹。",
+      "voidDescription": "说明该工作表不得继续的原因，来源在产仍可用于以后的工作表。",
+      "reasonLabel": "原因",
+      "saving": "正在保存…",
+      "returnSubmit": "退回草稿",
+      "voidSubmit": "作废工作表",
+      "cancel": "取消"
+    },
+    "metrics": {
+      "original": "原值",
+      "proposed": "建议值",
+      "adjustment": "调整",
+      "cost": "成本"
+    },
+    "lockedAlert": "该审批快照已锁定。请按批准内容转换，或作废后重新编制工作表。",
+    "linesTable": {
+      "source": "来源",
+      "date": "日期",
+      "description": "说明",
+      "cost": "成本",
+      "original": "原值",
+      "proposedSupport": "建议值 / 依据"
+    },
+    "trail": {
+      "title": "复核轨迹",
+      "system": "系统"
+    },
+    "toasts": {
+      "created": "{worksheetNumber}已创建，含{sourceCount}条来源明细",
+      "sentForReview": "已送复核",
+      "approved": "预开票已批准",
+      "returnedToDraft": "已退回草稿",
+      "voided": "预开票已作废",
+      "converted": "{documentNumber}已创建为发票草稿"
+    },
+    "lineToasts": {
+      "saved": "开票金额已保存",
+      "holdApplied": "已应用开票冻结",
+      "holdReleased": "已解除开票冻结"
+    },
+    "line": {
+      "held": "已冻结",
+      "time": "工时",
+      "cost": "成本",
+      "amountAria": "建议开票金额",
+      "reasonAria": "调整原因",
+      "evidencePlaceholder": "证据引用，以逗号分隔",
+      "saving": "正在保存…",
+      "save": "保存",
+      "hold": "冻结",
+      "holdReason": "冻结原因",
+      "evidenceReferences": "证据引用",
+      "applyHold": "应用冻结",
+      "releaseHold": "解除冻结",
+      "releaseReason": "释放原因",
+      "release": "释放"
+    }
+  },
+  "duplicates": {
+    "title": "重复项目",
+    "description": "共享来源引用、名称与客户或工作编号的项目。按组选择保留项，预览影响后合并。",
+    "loading": "正在加载重复项…",
+    "empty": "未发现重复项目。",
+    "kind": {
+      "source_ref": "相同来源引用（{key}）",
+      "name_customer": "相同名称与客户（{key}）",
+      "job_number": "相同工作编号（{key}）"
+    },
+    "chooseSurvivor": "选择保留的项目，其他项目上的所有引用将在一个事务中移至该项目。",
+    "survivor": "保留项",
+    "code": "编码",
+    "name": "名称",
+    "status": "状态",
+    "action": "操作",
+    "preview": "预览",
+    "merge": "合并（{count, plural, one {# 条引用} other {# 条引用}}）",
+    "alreadyMerged": "已合并。",
+    "moveCount": "{count, plural, one {# 条引用} other {# 条引用}}将移动。",
+    "kept": "已保留",
+    "impactNote": "非草稿单据上的明细、变更单编号或预算单元格冲突时将拒绝合并。被合并项目将停用，并指向保留项。",
+    "loadFailed": "无法加载重复项。",
+    "previewFailed": "无法预览合并。",
+    "mergeFailed": "无法合并项目。",
+    "merged": "项目已合并。"
   }
 }
