@@ -132,7 +132,11 @@ export function PropertyManagementWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
-  const act = async (payload: Record<string, unknown>, success: string) => {
+  const act = async (
+    payload: Record<string, unknown>,
+    success: string,
+    onError?: (message: string) => void,
+  ) => {
     if (busy) return null;
     setBusy(true);
     try {
@@ -141,7 +145,9 @@ export function PropertyManagementWorkspace({
       await load();
       return result;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("toasts.actionFailed"));
+      const message = error instanceof Error ? error.message : t("toasts.actionFailed");
+      toast.error(message);
+      onError?.(message);
       return null;
     } finally {
       setBusy(false);
