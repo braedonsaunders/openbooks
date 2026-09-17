@@ -799,12 +799,24 @@ export async function convertOrder(
              dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount,
              dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
              dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
-             i.kind as item_kind
+             i.kind as item_kind, i.income_account_id as item_income_account_id
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
        order by dl.line_number
        for update of dl
     `))
+    // A sales-side line with no account inherits the item's income account so
+    // the converted document stays postable (F-t09-012: converted SO lines
+    // carried null accounts and their invoices could never post). An explicit
+    // line account always wins; the purchase side is untouched.
+    const salesSide = doc.kind !== 'purchase_order'
+    const convertedAccountOf = (l: { account_id: unknown; item_income_account_id: unknown }): string | null => {
+      if (typeof l.account_id === 'string' && l.account_id.length > 0) return l.account_id
+      if (salesSide && typeof l.item_income_account_id === 'string' && l.item_income_account_id.length > 0) {
+        return l.item_income_account_id
+      }
+      return null
+    }
 
     // Remaining (un-pulled) quantity per line.
     const remaining = lines.rows
@@ -929,7 +941,7 @@ export async function convertOrder(
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
               location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by)
-        values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
+        values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${convertedAccountOf(l)}, ${l.description},
               ${coveredQty}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable},
