@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../../../lib/authz'
+import { JOURNAL_ENTRY_TABLE, journalScopeWhere } from '../../../../../lib/customization/entity-list-query/journal-entries'
 import { onboardingStatus } from '../../../../../lib/onboarding'
 import type { SetupReadinessCheck } from './sections'
 
@@ -62,7 +63,7 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
       (select count(*)::int from payment_terms pt where pt.org_id=o.id and pt.is_active) as payment_terms,
       (select count(*)::int from tax_codes tc where tc.org_id=o.id and tc.is_active) as tax_codes,
       (select count(*)::int from accounts a where a.org_id=o.id and a.is_active and a.reconcilable) as bank_accounts,
-      (select count(*)::int from journal_entries je where je.org_id=o.id and je.status in ('posted','reversed')) as posted_entries,
+      (select count(*)::int from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(user.orgId)}) as posted_entries,
       (select count(*)::int from close_runs cr where cr.org_id=o.id and cr.status in ('closed','published')) as completed_closes
     from orgs o where o.id=${user.orgId}
   `))
