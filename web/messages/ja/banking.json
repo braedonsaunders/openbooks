@@ -140,7 +140,8 @@
     "description": "全勘定にわたる未完了および承認済みの消込です。",
     "search": "日付または勘定で検索…",
     "emptyTitle": "消込はまだありません",
-    "emptyDescription": "銀行またはカード勘定から消込を開始すると、ここに表示されます。"
+    "emptyDescription": "銀行またはカード勘定から消込を開始すると、ここに表示されます。",
+    "chooseAccount": "勘定を選択"
   },
   "rules": {
     "title": "消込ルール",
@@ -193,7 +194,103 @@
       "amountRange": "{min}〜{max}",
       "exclude": "除外",
       "categorize": "分類 → {account}",
-      "anyLine": "すべての明細"
+      "anyLine": "すべての明細",
+      "categorizeSplit": "分類 → {account} ほか+{count}",
+      "and": "および",
+      "or": "または"
+    },
+    "runSuggested": "{suggested, plural, one {確認対象の提案 # 件} other {確認対象の提案 # 件}}",
+    "modeSuggest": "提案",
+    "modeAuto": "自動記帳",
+    "assignPayee": "受取人を割当",
+    "payeePlaceholder": "取引先を検索",
+    "noPayee": "受取人なし",
+    "memoLabel": "メモ",
+    "memoPlaceholder": "銀行明細の摘要が初期値になります",
+    "suggestHint": "一致した明細には、銀行データの照合で確認待ちの提案が表示されます。確定するまで記帳されません。",
+    "autoHint": "一致した明細は、ルール実行時に自動的に記帳・照合されます。",
+    "fields": {
+      "description": "摘要",
+      "payee": "受取人",
+      "anyText": "任意のテキスト項目",
+      "reference": "参照",
+      "amount": "金額",
+      "flow": "方向",
+      "date": "日付"
+    },
+    "ops": {
+      "contains": "を含む",
+      "notContains": "を含まない",
+      "equals": "と完全一致",
+      "startsWith": "で始まる",
+      "endsWith": "で終わる",
+      "isBlank": "が空",
+      "eq": "=",
+      "ne": "≠",
+      "gt": "より大きい",
+      "gte": "以上",
+      "lt": "より小さい",
+      "lte": "以下",
+      "between": "の間",
+      "is": "である",
+      "on": "に",
+      "before": "より前",
+      "after": "より後",
+      "withinDays": "過去N日以内"
+    },
+    "cb": {
+      "match": "一致条件",
+      "allOf": "以下の条件をすべて満たす",
+      "anyOf": "以下の条件のいずれかを満たす",
+      "addCondition": "条件を追加",
+      "addGroup": "グループを追加",
+      "noConditions": "条件なし — すべての明細に一致します。",
+      "remove": "条件を削除",
+      "valuePlaceholder": "値",
+      "and": "かつ",
+      "to": "〜"
+    },
+    "scope": {
+      "label": "適用対象",
+      "allHint": "すべての消込対象勘定で実行されます。",
+      "someHint": "{count, plural, one {# 勘定} other {# 勘定}}で実行されます。",
+      "useAll": "すべての勘定を使用",
+      "limit": "特定の勘定に限定",
+      "search": "勘定を絞り込む…",
+      "selected": "{count} 件選択中",
+      "noneFound": "一致する勘定がありません。",
+      "emptyWarn": "少なくとも1つの勘定を選択するか、すべてに戻してください。"
+    },
+    "split": {
+      "remainder": "残り",
+      "percent": "割合",
+      "fixed": "固定",
+      "addLine": "明細を追加",
+      "removeLine": "明細を削除",
+      "accountPlaceholder": "勘定を選択",
+      "descriptionPlaceholder": "明細メモ",
+      "portion": "配分"
+    },
+    "coding": {
+      "department": "部門",
+      "location": "拠点",
+      "class": "クラス",
+      "tax": "税コード"
+    },
+    "preview": {
+      "title": "ライブプレビュー",
+      "pickAccount": "勘定",
+      "pickAccountHint": "照合対象をプレビューする勘定を選択してください。",
+      "needCondition": "一致する銀行明細をプレビューするには条件を追加してください。",
+      "loading": "最新の明細を確認中…",
+      "error": "プレビューを利用できません",
+      "matched": "{count, plural, one {一致する見込みの明細} other {一致する見込みの明細}}",
+      "conflicts": "{count, plural, one {# 件の競合} other {# 件の競合}}",
+      "noConflicts": "競合なし",
+      "none": "過去90日間で一致する明細はまだありません。",
+      "stolen": "優先度の高いルールが優先されます",
+      "split": "配分プレビュー",
+      "healthHint": "インポート済み明細の過去90日間に対するライブ表示です。"
     }
   },
   "match": {
@@ -233,7 +330,10 @@
     "excludedHint": "保留した明細です。消込時にスキップされます。",
     "searchExcluded": "除外済み明細を検索…",
     "noExcluded": "除外済みの明細はありません。",
-    "restore": "復元"
+    "restore": "復元",
+    "createRule": "この明細からルールを作成",
+    "postAndMatch": "記帳して照合",
+    "suggestedBy": "提案: {rule}"
   },
   "transactionsSearch": "カード請求、小切手、振替を検索…",
   "transactionsEmptyTitle": "銀行取引はまだありません",
@@ -372,7 +472,10 @@
     "formSetPreferred": "優先フォームに設定",
     "formSetPreferredDone": "優先フォームを保存しました",
     "formPreferredCleared": "優先フォームを解除しました",
-    "formPreferredFailed": "優先フォームを保存できませんでした"
+    "formPreferredFailed": "優先フォームを保存できませんでした",
+    "cardAccountHelp": "登録済みのカードがありません — 記帳先の消込対象カード勘定を選択してください。",
+    "noCardAccounts": "消込対象のカード勘定はまだありません。",
+    "noCardAccountsCta": "勘定科目表で追加する"
   },
   "reconcile": {
     "title": "{date} までの消込",
@@ -511,7 +614,12 @@
     },
     "authorizedKeys": "許可された SSH キー（任意）",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
-    "authorizedKeysHint": "1行につき1つの OpenSSH 公開キー。対応する秘密キーを持つクライアントはパスワードなしでログインできます。"
+    "authorizedKeysHint": "1行につき1つの OpenSSH 公開キー。対応する秘密キーを持つクライアントはパスワードなしでログインできます。",
+    "tabs": {
+      "endpoint": "接続とログイン",
+      "servers": "パートナーログイン",
+      "schedules": "インポートスケジュール"
+    }
   },
   "cash": {
     "title": "キャッシュ",
@@ -588,13 +696,13 @@
   },
   "bankFeeds": {
     "title": "Bank Feeds",
-    "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
+    "description": "銀行口座を接続して明細を自動インポートします — ライブアグリゲーターフィードまたは内蔵SFTPエンドポイント。",
     "navTitle": "Bank Feeds",
     "tabs": {
-      "connections": "Connections",
-      "sftp-endpoint": "SFTP endpoint",
-      "sftp-servers": "Partner logins",
-      "sftp-schedules": "Import schedules"
+      "connections": "接続",
+      "sftp-endpoint": "SFTPエンドポイント",
+      "sftp-servers": "パートナーログイン",
+      "sftp-schedules": "インポートスケジュール"
     },
     "operational": {
       "title": "銀行フィード接続",
@@ -607,7 +715,131 @@
     "client": {
       "configure": {
         "noEligibleAccounts": "接続可能な消込対象の銀行口座はまだありません。勘定科目表で銀行口座とカード口座を消込可能に設定してから、ここで選択してください。",
-        "noEligibleAccountsLink": "勘定科目表を開く"
+        "noEligibleAccountsLink": "勘定科目表を開く",
+        "back": "← 戻る",
+        "newConnection": "新規接続",
+        "kindLive": "ライブフィード",
+        "kindFileDrop": "ファイル受信",
+        "kindManual": "手動",
+        "providerQuestion": "利用するopen bankingプロバイダーは?",
+        "providerGocardless": "GoCardless — 無料、欧州",
+        "providerPlaid": "Plaid — 米国 / カナダ / 英国",
+        "providerTruelayer": "TrueLayer — 英国 / EU",
+        "explainerAutoFeed": "{provider}による自動フィード",
+        "explainerSftp": "SFTPファイル受信",
+        "explainerManual": "手動アップロード",
+        "stepAccount": "1 · 対象勘定",
+        "connectionName": "接続名",
+        "connectionNamePlaceholder": "例: 運転口座 — 日次",
+        "bankGlAccount": "銀行 / GL勘定",
+        "credentialsStep": "2 · {provider} の認証情報",
+        "providerAccountId": "プロバイダー側の口座ID",
+        "providerAccountIdPlaceholder": "プロバイダー側でのこの口座のID",
+        "importHowOften": "インポート頻度は?",
+        "cadenceDaily": "自動、日次",
+        "cadenceHourly": "自動、1時間ごと",
+        "cadenceManual": "「同期」をクリックしたときのみ",
+        "sftpStepTitle": "2 · SFTPログインの作成",
+        "sftpStepHelp": "専用ログインを作成し、その <inbound>/inbound</inbound> フォルダを上記の勘定に振り分けます。銀行に渡すホスト、ユーザー名、ワンタイムパスワードが発行されます。追加フォルダは後から接続配下で管理できます。",
+        "createSftpLogin": "SFTPログインを作成",
+        "addConnection": "接続を追加",
+        "cancel": "キャンセル"
+      },
+      "title": "Bank Feeds",
+      "description": "各銀行口座を接続して明細の自動インポートを設定します — ライブフィード、SFTPファイル受信、手動アップロード。すべて同じ照合パイプラインでインポートされます。",
+      "addConnection": "+ 接続を追加",
+      "empty": {
+        "none": "銀行接続はまだありません。",
+        "connectFirst": "最初の銀行を接続する"
+      },
+      "connection": {
+        "paused": "一時停止中",
+        "synced": "同期済み {date}",
+        "attempted": "試行 {date}",
+        "test": "テスト",
+        "sync": "同期",
+        "pause": "一時停止",
+        "resume": "再開",
+        "remove": "削除",
+        "removeConfirm": "この接続を削除しますか?スケジュールされたインポートは停止し、この設定は元に戻せません。"
+      },
+      "feedMessages": {
+        "verified": "接続を確認しました。",
+        "testFailed": "テストに失敗しました: {detail}",
+        "unknownError": "不明なエラー",
+        "syncFailed": "同期に失敗しました: {error}",
+        "imported": "新規 {imported} 件、重複 {duplicates} 件をインポートしました。"
+      },
+      "sftpCard": {
+        "badge": "SFTPファイル受信",
+        "login": "ログイン",
+        "routesTo": "{count, plural, one {# 勘定} other {# 勘定}}に振り分け",
+        "routing": "振り分け",
+        "done": "完了",
+        "remove": "削除",
+        "routingTitle": "インポートの振り分け — どのフォルダがどの勘定に取り込まれるか",
+        "noRouting": "振り分けはまだありません — 以下で追加してください。",
+        "folderPlaceholder": "フォルダ",
+        "addRoute": "振り分けを追加"
+      },
+      "sftpEndpoint": {
+        "title": "SFTP受信用エンドポイント",
+        "description": "銀行からのファイル送付先をここに向けてください。上記の各SFTP接続は、このエンドポイント上のログインです。",
+        "host": "ホスト",
+        "port": "ポート",
+        "status": "ステータス",
+        "hostKey": "ホストキー",
+        "enabled": "有効",
+        "disabled": "無効"
+      },
+      "chooseBank": {
+        "title": "銀行を選択",
+        "cancel": "キャンセル",
+        "searchPlaceholder": "銀行を検索…",
+        "allCountries": "すべての国",
+        "notListed": "一覧にない場合:明細の受信方法を選択",
+        "otherBank": "その他の銀行(ライブフィード)",
+        "otherBankHint": "Plaid / GoCardless / TrueLayer",
+        "sftpDrop": "SFTPファイル受信",
+        "sftpDropHint": "銀行が明細ファイルを送信",
+        "manualUpload": "手動アップロード",
+        "manualUploadHint": "OFX / CSVを手動でアップロード"
+      },
+      "errors": {
+        "couldNotCreateSftp": "SFTPログインを作成できませんでした",
+        "couldNotCreateConnection": "接続を作成できませんでした",
+        "failed": "失敗"
+      },
+      "sftpSecret": {
+        "title": "SFTPログインを作成しました",
+        "description": "これらを銀行にお渡しください。パスワードは一度だけ表示されます — 今すぐコピーしてください。",
+        "hostLabel": "ホスト:",
+        "portLabel": "ポート:",
+        "usernameLabel": "ユーザー名:",
+        "passwordLabel": "パスワード:",
+        "done": "完了",
+        "createdToast": "SFTP接続を作成しました。",
+        "addedToast": "{name} を追加しました。"
+      },
+      "method": {
+        "plaid": {
+          "blurb": "openbooksはPlaid(open bankingアグリゲーター)を通じて新しい取引を自動的に取得します。PlaidのAPIキーで一度接続すれば、ファイルを管理する必要はありません。",
+          "docsLabel": "Plaidダッシュボードでキーを取得"
+        },
+        "gocardless": {
+          "blurb": "openbooksはGoCardless Bank Account Data(旧Nordigen、無料の欧州open bankingフィード)を通じて取引を取得します。ダッシュボードでSecret IDとSecret Keyを作成してください。",
+          "docsLabel": "GoCardlessで認証情報を取得"
+        },
+        "truelayer": {
+          "blurb": "openbooksはTrueLayer(英国/EUのopen bankingプロバイダー)を通じて取引を取得します。TrueLayerコンソールからアクセストークンを貼り付けてください。",
+          "docsLabel": "TrueLayerコンソールを開く"
+        },
+        "sftp": {
+          "blurb": "銀行は明細ファイル(OFX/CSV/CAMT/BAI2/MT940)をSFTPでopenbooksに送信します。この銀行専用のログインを作成しますので、ホスト、ユーザー名、パスワードを銀行にお渡しください。到着したファイルは自動的にインポートされます。"
+        },
+        "manual": {
+          "blurb": "自動化なし — 明細ファイルが手元にあるときに、バンキングの口座ページから手動でアップロードします。銀行がフィードを提供できない口座向けです。"
+        }
       }
     }
   },
@@ -651,5 +883,12 @@
     "colNet": "純額",
     "reverse": "取消",
     "empty": "インポートされた決済明細はまだありません。"
+  },
+  "docStatus": {
+    "draft": "下書き",
+    "pending_approval": "承認待ち",
+    "approved": "承認済",
+    "posted": "記帳済",
+    "voided": "無効"
   }
 }
