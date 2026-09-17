@@ -372,13 +372,470 @@
     "labels": {
       "unknownCustomer": "Desconocido",
       "untitledProject": "Proyecto sin título"
-    }
+    },
+    "chart": {
+      "projectedClv": "CLV proyectado"
+    },
+    "clvHow": {
+      "annualBold": "Valor anual",
+      "annualTail": " = factura media × (facturas ÷ años activo, mínimo 3 meses). ",
+      "clvBold": "CLV proyectado",
+      "clvTail": " = valor anual × 3 años × retención.\n",
+      "retentionBold": "Factor de retención",
+      "retentionHead": " = 0,95·e",
+      "retentionSup": "−días desde la última ÷ 120",
+      "retentionTail": " , limitado entre 10 y 95 %. ",
+      "tiersNote": "Los niveles se ordenan por CLV proyectado: 10 % superior Platino, siguiente 20 % Oro, siguiente 30 % Plata, 40 % restante Bronce."
+    },
+    "config": {
+      "fields": {
+        "churnCritical": {
+          "help": "Una puntuación de fuga compuesta igual o superior se considera riesgo crítico",
+          "label": "Fuga — crítica (puntuación)"
+        },
+        "churnHigh": {
+          "help": "Una puntuación de fuga compuesta igual o superior se considera riesgo alto",
+          "label": "Fuga — alta (puntuación)"
+        },
+        "churnMedium": {
+          "help": "Una puntuación de fuga compuesta igual o superior se considera riesgo medio",
+          "label": "Fuga — media (puntuación)"
+        },
+        "clvYears": {
+          "help": "Años de valor futuro incluidos en la proyección de valor de vida",
+          "label": "Horizonte CLV (años)"
+        },
+        "hhiCritical": {
+          "help": "Un índice de Herfindahl igual o superior indica concentración crítica",
+          "label": "Concentración crítica (HHI)"
+        },
+        "hhiWarning": {
+          "help": "Un índice de Herfindahl igual o superior indica un aviso de concentración",
+          "label": "Aviso de concentración (HHI)"
+        }
+      }
+    },
+    "csv": {
+      "churn": "Fuga",
+      "grade": "Nota",
+      "payment": "Pago",
+      "projectedClv": "CLV proyectado",
+      "recommendation": "Recomendación",
+      "segment": "Segmento"
+    },
+    "customersCount": "{count} clientes",
+    "daysAgo": "hace {days} días",
+    "drill": {
+      "invoicesRevenue": "{invoices} facturas · {revenue}"
+    },
+    "empty": {
+      "noAtRisk": "Sin clientes en riesgo — la retención se ve saludable.",
+      "noFriction": "Sin fricción de notas de crédito en este período.",
+      "noOverdue": "Nadie superó su ciclo de pedido habitual.",
+      "noProjectProfitability": "Sin rentabilidad marcada por proyecto en este período.",
+      "noSignals": "Sin señales notables en este período."
+    },
+    "fakeChampionTitle": "Ingresos altos, margen bajo — revisar precios",
+    "fakeChampionTitleShort": "Ingresos altos, margen bajo",
+    "groupBy": {
+      "churn": "Por riesgo de fuga",
+      "grade": "Por nota de salud",
+      "none": "Sin agrupar",
+      "segment": "Por segmento",
+      "tier": "Por nivel de CLV"
+    },
+    "groupSummary": "{count} clientes · {revenue}",
+    "jobsCount": "{count} trabajos",
+    "kpi": {
+      "atRisk": "En riesgo",
+      "atRiskRevenue": "Ingresos en riesgo",
+      "avgHealth": "Salud media",
+      "avgMargin": "Margen medio",
+      "avgMonthly": "Media mensual",
+      "champions": "Campeones",
+      "critical": "Crítico",
+      "excellent": "Excelente",
+      "grossProfit": "Margen bruto",
+      "highFriction": "Fricción alta",
+      "medianMonthly": "Mediana mensual",
+      "newCustomers": "Clientes nuevos",
+      "overdueOrders": "Pedidos vencidos",
+      "periodRevenue": "Ingresos del período",
+      "profitLeaks": "Fugas de margen",
+      "projectedClv": "CLV proyectado",
+      "recencyRisk": "Riesgo de antigüedad",
+      "retentionRate": "Tasa de retención",
+      "totalCosts": "Costos totales",
+      "totalCustomers": "Clientes totales",
+      "totalProjectedClv": "CLV proyectado total",
+      "totalRevenue": "Ingresos totales",
+      "warning": "Aviso",
+      "yoyGrowth": "Crecimiento interanual"
+    },
+    "lastActive": "Último: {days}",
+    "margin": {
+      "excellent": "Excelente",
+      "fair": "Aceptable",
+      "good": "Bueno",
+      "loss": "Pérdida",
+      "low": "Bajo",
+      "profit": "Utilidad"
+    },
+    "metrics": {
+      "avgDso": "DSO medio",
+      "avgValue": "Valor medio",
+      "monthlyGrowth": "Crecimiento mensual",
+      "paymentRate": "Tasa de pago",
+      "retention": "Retención",
+      "top10Share": "Parte del 10 % superior"
+    },
+    "metricsSub": {
+      "avgMoM": "MoM medio (meses maduros)",
+      "daysToPay": "días de pago",
+      "ofRevenue": "de los ingresos",
+      "paidInFull": "facturas pagadas en su totalidad",
+      "perCustomer": "por cliente",
+      "retentionProb": "probabilidad de retención media"
+    },
+    "overdueBanner": {
+      "count": "{count} facturas vencidas",
+      "rest": " en este período — el riesgo de cobro puede ocultar el crecimiento. Revisa la pestaña Riesgo de fuga."
+    },
+    "pager": {
+      "next": "Siguiente",
+      "nounCustomers": "clientes",
+      "prev": "Anterior",
+      "showing": "Mostrando {from}–{to} de {total}"
+    },
+    "panels": {
+      "atRiskCustomers": "Clientes en riesgo ({count})",
+      "atRiskHint": "Puntuación de fuga: antigüedad 0–40 (>120 d/>60 d/>30 d) + caída de cadencia 0–30 (2×/1,5× su media) + bajo compromiso 0–30 (≤1/≤3 pedidos)",
+      "clvRanking": "Clasificación por valor de vida",
+      "cohortHint": "Por año del primer pedido · activo = pidió en los últimos 6 meses",
+      "cohortRetention": "Retención por cohorte",
+      "customerHealth": "Salud del cliente ({count})",
+      "customerHealthHint": "Ponderado 25 % antigüedad · 25 % frecuencia · 30 % importe · 20 % pago, menos penalización por fricción",
+      "customerProfitability": "Rentabilidad del cliente",
+      "customersBySegment": "Clientes por segmento ({count})",
+      "dataSources": "Fuentes de datos y cálculos",
+      "frictionHint": "Créditos ×2 puntos (sin documentos de autorización de devolución en este libro mayor, las devoluciones siempre son 0)",
+      "frictionSignals": "Señales de fricción",
+      "howClvProjected": "Cómo se proyecta el CLV",
+      "insights": "Análisis inteligentes",
+      "keyMetrics": "Métricas clave",
+      "monthlyDetails": "Detalles mensuales",
+      "monthlyDetailsHint": "Crecimiento MoM limitado a +200/−80 %; « — » marca el despegue desde un mes inmaduro",
+      "monthlyRevenueTrend": "Tendencia de ingresos mensuales",
+      "overdueHint": "Días más allá del ciclo de pedido medio propio de cada cliente",
+      "overdueOrders": "Pedidos vencidos",
+      "profitabilityHint": "Haz clic en un cliente para expandir trabajos · ⚠️ marca fugas de margen (> {threshold} de ingresos, margen < 15 %)",
+      "revenueByTier": "Ingresos por nivel de CLV",
+      "rfmHint": "Puntuaciones R/F/M: 5 la mejor, 1 la peor — antigüedad por umbrales fijos de días, frecuencia/importe por percentiles 33/66",
+      "rfmSegments": "Segmentos RFM",
+      "scoringModel": "Modelo de puntuación",
+      "scoringModelHint": "Cómo se construyen las puntuaciones compuestas",
+      "segmentCustomers": "{segment} ({count})",
+      "segmentMix": "Mezcla de segmentos",
+      "segmentPerformance": "Rendimiento de segmentos",
+      "tierDistribution": "Distribución de niveles de CLV",
+      "topByRevenue": "Mejores clientes por ingresos"
+    },
+    "profitTier": {
+      "high": "Alto",
+      "loss": "Pérdida",
+      "low": "Bajo",
+      "marginal": "Marginal",
+      "medium": "Medio"
+    },
+    "rec": {
+      "maintain": "Mantener",
+      "nurture": "Fidelizar",
+      "onboard": "Incorporar",
+      "reactivate": "Reactivar",
+      "reprice": "Reajustar precios",
+      "resolve-issues": "Resolver problemas",
+      "review": "Revisar",
+      "win-back": "Recuperar"
+    },
+    "risk": {
+      "critical": "Crítico",
+      "high": "Alto",
+      "low": "Bajo",
+      "medium": "Medio"
+    },
+    "scoring": {
+      "clvRetention": {
+        "label": "Retención CLV",
+        "value": "retención 0,95·e^(−días/120), limitada entre 10 y 95 %"
+      },
+      "clvTiers": {
+        "label": "Niveles de CLV",
+        "value": "10 % superior Platino · siguiente 20 % Oro · siguiente 30 % Plata · resto Bronce"
+      },
+      "frictionPenalty": {
+        "label": "Penalización por fricción",
+        "value": "Crítica −25 · Alta −15 · Media −8"
+      },
+      "healthGrades": {
+        "label": "Notas de salud",
+        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F por debajo"
+      },
+      "healthWeights": {
+        "label": "Pesos de salud",
+        "value": "Antigüedad 25 % · Frecuencia 25 % · Importe 30 % · Pago 20 %"
+      },
+      "paymentScore": {
+        "label": "Puntuación de pago",
+        "value": "100 − 40/20/10 si DSO >60/>30/>15 d − mín(40, vencidos×10)"
+      },
+      "rfmFrequency": {
+        "label": "Frecuencia / importe RFM",
+        "value": "cortes en percentiles 33 y 66 → 1 / 3 / 5"
+      },
+      "rfmRecency": {
+        "label": "Umbrales de antigüedad RFM",
+        "value": "≤30 d → 5 · ≤90 d → 3 · ≤180 d → 2 · si no 1"
+      }
+    },
+    "segment": {
+      "at-risk": "En riesgo",
+      "champions": "Campeones",
+      "hibernating": "Hibernando",
+      "lost": "Perdidos",
+      "loyal": "Leales",
+      "new": "Nuevos",
+      "potential": "Prometedores",
+      "regular": "Regulares"
+    },
+    "segmentDesc": {
+      "at-risk": "Antigüedad y frecuencia bajas (R≤2 F≤2)",
+      "champions": "Recientes, frecuentes, importe alto (R≥4 F≥4 M≥4)",
+      "hibernating": "Valor alto pero inactivos (R≤2 F≥3 M≥3)",
+      "lost": "Inactivos, valor bajo (R≤2 M≤2)",
+      "loyal": "Gastadores altos constantes (R≥3 F≥3 M≥4)",
+      "new": "Compradores nuevos recientes (R≥4 F≤2)",
+      "potential": "Recientes con valor sólido (R≥3 M≥3)",
+      "regular": "Compromiso moderado"
+    },
+    "sources": {
+      "cohortsBold": "Cohortes:",
+      "cohortsTail": " historial de facturas de vida agrupado por año del primer pedido; activo = pidió en los últimos 6 meses.",
+      "frictionBold": "Fricción:",
+      "frictionTail": " solo notas de crédito — este libro mayor no tiene documentos de autorización de devolución, así que el componente de devoluciones siempre es 0.",
+      "intelligenceBold": "Puntuación de inteligencia:",
+      "intelligenceTail": " 30 % parte de campeones (20 % de clientes = máx.) + 30 % probabilidad de retención media + 20 % salud de concentración + 20 % tasa de pago — puntuación {score} ({grade}).",
+      "newCustomersBold": "Clientes nuevos:",
+      "newCustomersTail": " sin factura ni pedido de venta anterior, de por vida, antes del mes de primera actividad.",
+      "paymentBold": "Comportamiento de pago:",
+      "paymentTail": " pagado = factura totalmente aplicada; días de pago = fecha de última aplicación − fecha de factura; vencido = pasada la fecha de vencimiento y no totalmente aplicada.",
+      "profitabilityBold": "Rentabilidad:",
+      "profitabilityTail": " líneas del libro mayor marcadas por proyecto, agregadas trabajo → cliente; los clientes sin actividad marcada por proyecto no muestran margen (nunca estimado).",
+      "recencyBold": "Antigüedad:",
+      "recencyTail": " medida hasta hoy (o hasta el fin del período en histórico), nunca hasta un fin de ejercicio futuro.",
+      "revenueBold": "Base de ingresos:",
+      "revenueTail": " totales de documentos de facturas de clientes contabilizadas."
+    },
+    "sub": {
+      "activeLast6mo": "activos en los últimos 6 meses",
+      "avgPerCustomer": "prom. {amount} / cliente",
+      "clvBase": "base CLV histórica",
+      "creditHeavy": "cuentas con mucho crédito",
+      "customersCount": "{count} clientes",
+      "firstOrderInPeriod": "primer pedido en el período",
+      "highCriticalAccounts": "cuentas altas + críticas",
+      "highCriticalChurn": "fuga alta + crítica",
+      "highRevenueLowMargin": "ingresos altos, margen < 15 %",
+      "jobsCount": "{count} trabajos",
+      "last3moVsLy": "últimos 3 meses vs mismo período año anterior",
+      "marginPct": "margen del {pct} %",
+      "newInPeriod": "{count} nuevos en el período",
+      "pastUsualCycle": "más allá de su ciclo habitual",
+      "revenue": "ingresos",
+      "rfmChampions": "segmento campeones RFM",
+      "score40to59": "puntuación 40–59",
+      "score80Plus": "puntuación ≥ 80",
+      "scoreBelow40": "puntuación < 40",
+      "threeYearProjection": "proyección a 3 años",
+      "trend": "tendencia: {trend}",
+      "weightedRfm": "R/F/M/pago ponderados"
+    },
+    "table": {
+      "active": "Activos",
+      "annualValue": "Valor anual",
+      "avgCycle": "Ciclo medio",
+      "avgLifetimeRev": "Ingr. de vida medios",
+      "avgPerCustomer": "Media / cliente",
+      "churn": "Fuga",
+      "cohort": "Cohorte",
+      "costs": "Costos",
+      "credits": "Créditos",
+      "creditValue": "Valor de créditos",
+      "customer": "Cliente",
+      "customerJob": "Cliente / Trabajo",
+      "customers": "Clientes",
+      "daysInactive": "Días inactivos",
+      "f": "F",
+      "health": "Salud",
+      "invoices": "Facturas",
+      "issueRate": "Tasa de incidentes",
+      "level": "Nivel",
+      "m": "M",
+      "margin": "Margen",
+      "mom": "MoM",
+      "month": "Mes",
+      "new": "Nuevos",
+      "overdue": "Vencido",
+      "payment": "Pago",
+      "profit": "Utilidad",
+      "projectedClv": "CLV proyectado",
+      "r": "R",
+      "recency": "Antigüedad",
+      "recommendation": "Recomendación",
+      "retention": "Retención",
+      "retentionProb": "Prob. retención",
+      "revenue": "Ingresos",
+      "revShare": "Parte ingr.",
+      "risk": "Riesgo",
+      "riskFactors": "Factores de riesgo",
+      "score": "Puntuación",
+      "segment": "Segmento",
+      "tier": "Nivel",
+      "txns": "Trans.",
+      "urgency": "Urgencia"
+    },
+    "tabs": {
+      "churn": "Riesgo de fuga",
+      "configuration": "Configuración",
+      "growth": "Crecimiento",
+      "health": "Puntuaciones de salud",
+      "lifetime": "Valor de vida",
+      "overview": "Resumen",
+      "profitability": "Rentabilidad",
+      "segmentation": "Segmentación"
+    },
+    "tier": {
+      "bronze": "Bronce",
+      "gold": "Oro",
+      "platinum": "Platino",
+      "silver": "Plata"
+    },
+    "txnsCount": "{count} trans."
   },
   "vendor": {
     "title": "Rendimiento de proveedores",
     "backToHub": "Analítica",
     "labels": {
       "unknownVendor": "Desconocido"
+    },
+    "chart": {
+      "spend": "Gasto",
+      "tooltipOnTime": "A tiempo: {pct} %",
+      "tooltipSpend": "Gasto: {amount}",
+      "xAxis": "Gasto (log) →",
+      "yAxis": "% a tiempo"
+    },
+    "csv": {
+      "onTimePct": "% a tiempo",
+      "sharePct": "Parte %"
+    },
+    "days": "{days} d",
+    "drill": {
+      "billsSpend": "{bills} facturas · {spend} de gasto"
+    },
+    "empty": {
+      "noLatePaid": "Sin gasto pagado con retraso."
+    },
+    "gauge": {
+      "balanced": "Equilibrado",
+      "concentrated": "Concentrado",
+      "diversified": "Diversificado"
+    },
+    "info": {
+      "body": "OTIF (entrega a tiempo y completa), fiabilidad de plazos, variación de precios de compra y gasto fuera de pedido requieren enlazar pedido → recepción → líneas de factura, datos que no existen aquí (sin vínculos entre documentos ni líneas en las facturas). El comportamiento de pago, la concentración y las fichas de relación se calculan con datos completos.",
+      "title": "No medible en este libro mayor:"
+    },
+    "kpi": {
+      "activeVendors": "Proveedores activos",
+      "avgBill": "Factura media",
+      "avgDaysToPay": "Días medios de pago",
+      "hhi": "Concentración (HHI)",
+      "latePaidSpend": "Gasto pagado con retraso",
+      "onTimeRate": "Tasa a tiempo",
+      "top5Share": "Parte de los 5 princ.",
+      "topVendor": "Principal proveedor",
+      "totalSpend": "Gasto total",
+      "vendorsPaid": "Proveedores pagados"
+    },
+    "panels": {
+      "allVendors": "Todos los proveedores ({count})",
+      "leverageHint": "Gasto (impacto) × fiabilidad de pago (desempeño) — tamaño de burbuja = gasto",
+      "leverageMatrix": "Matriz de apalancamiento",
+      "mostLatePaid": "Proveedores más pagados con retraso",
+      "paymentBehaviour": "Comportamiento de pago por proveedor",
+      "scorecard": "Ficha de proveedor",
+      "scorecardHint": "Valor de la relación — importancia del gasto, compromiso y estabilidad",
+      "spendByTier": "Gasto por nivel",
+      "spendTrend12mo": "Tendencia de gasto (12 meses)",
+      "topBySpend": "Principales proveedores por gasto"
+    },
+    "quadrant": {
+      "commodity": {
+        "desc": "Gasto alto, tenso — renegociar o doble fuente",
+        "label": "Básicos"
+      },
+      "niche": {
+        "desc": "Gasto bajo, fiable — cultivar",
+        "label": "Nicho"
+      },
+      "strategic": {
+        "desc": "Gasto alto, fiable — aliarse y proteger",
+        "label": "Estratégicos"
+      },
+      "transactional": {
+        "desc": "Gasto bajo, bajo compromiso — automatizar / consolidar",
+        "label": "Transaccionales"
+      }
+    },
+    "sub": {
+      "billsCount": "{count} facturas",
+      "diversified": "diversificado",
+      "fromBillToPayment": "de la factura al pago",
+      "highlyConcentrated": "muy concentrado",
+      "inPeriod": "en el período",
+      "moderate": "moderado",
+      "onTimeBills": "facturas pagadas a su vencimiento",
+      "paidAfterDue": "pagadas tras el vencimiento",
+      "perBill": "por factura",
+      "top5Concentration": "concentración del gasto",
+      "withPaymentHistory": "con historial de pago",
+      "yoy": "Interanual {pct}"
+    },
+    "table": {
+      "avgDays": "Días medios",
+      "bills": "Facturas",
+      "grade": "Nota",
+      "lateSpend": "Gasto atrasado",
+      "onTime": "A tiempo",
+      "paid": "Pagado",
+      "score": "Puntuación",
+      "share": "Parte",
+      "spend": "Gasto",
+      "tier": "Nivel",
+      "vendor": "Proveedor",
+      "yoy": "Interanual"
+    },
+    "tabs": {
+      "matrix": "Matriz de apalancamiento",
+      "overview": "Resumen",
+      "payment": "Comportamiento de pago",
+      "scorecard": "Fichas",
+      "vendors": "Proveedores"
+    },
+    "tier": {
+      "core": "Clave",
+      "strategic": "Estratégico",
+      "tactical": "Táctico",
+      "tail": "Cola larga"
     }
   },
   "cashflow": {
@@ -860,7 +1317,301 @@
     "labels": {
       "noTitle": "Sin título",
       "unknownName": "Desconocido"
-    }
+    },
+    "allDepartments": "Todos los departamentos",
+    "anomalyNote": "La detección de anomalías excluye a empleados de departamentos sin expectativa de facturación.",
+    "chart": {
+      "billable": "Facturable",
+      "forecast": "Previsión",
+      "historical": "Histórico",
+      "nonBillable": "No facturable",
+      "target": "Objetivo"
+    },
+    "config": {
+      "fields": {
+        "costSpike": {
+          "help": "Avisar cuando el costo no facturable suba más que esto frente al período anterior",
+          "label": "Alerta de pico de costo ($)"
+        },
+        "minHours": {
+          "help": "Los empleados por debajo de este umbral quedan fuera del análisis de anomalías / por pares",
+          "label": "Horas mínimas"
+        },
+        "targetBillable": {
+          "help": "Referencia de utilización para toda la empresa",
+          "label": "% facturable objetivo"
+        }
+      },
+      "historyNote": "Períodos móviles de {months} meses que alimentan tendencia y previsión",
+      "historyPeriods": "Períodos históricos",
+      "priorRange": "Período anterior",
+      "priorRangeNote": "Misma duración justo antes del período seleccionado"
+    },
+    "empCount": "{count} empl.",
+    "empty": {
+      "allWithinTarget": "Todas las métricas dentro del objetivo.",
+      "noDriftingTitles": "Sin puestos a la deriva",
+      "noImprovements": "Sin oportunidades de mejora identificadas",
+      "noIssues": "Sin problemas detectados",
+      "noPeerTitles": "Sin puestos con 2+ empleados para comparar",
+      "noSuddenDrops": "Sin caídas bruscas detectadas"
+    },
+    "entries": {
+      "billableOf": "{pct} facturable",
+      "count": "{count}{suffix} registros",
+      "employee": "Empleado",
+      "hrs": "{hours} h",
+      "item": "Artículo",
+      "peers": "vs {count} pares de {title}",
+      "pills": {
+        "byCustomer": "Por cliente",
+        "byEmployee": "Por empleado",
+        "byItem": "Por artículo de servicio",
+        "entries": "Registros"
+      },
+      "serviceItem": "Artículo de servicio",
+      "thisVsPeer": "Este empleado {emp} · media de pares {peer}",
+      "title": "Registros de tiempo"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar los registros."
+    },
+    "forecast": {
+      "atRisk": "En riesgo",
+      "current": "Actual",
+      "methodology": " las previsiones usan regresión lineal sobre períodos históricos. Un % facturable mayor se correlaciona naturalmente con menores costos no facturables, pues las mismas horas pasan de no facturables a facturables.",
+      "methodologyBold": "Metodología:",
+      "onTrack": "En curso",
+      "projected": "Proyectado"
+    },
+    "gauge": {
+      "atRisk": "EN RIESGO",
+      "belowTarget": "BAJO EL OBJETIVO",
+      "nearTarget": "CERCA DEL OBJETIVO",
+      "onTarget": "EN OBJETIVO",
+      "targetPct": "objetivo {target} %"
+    },
+    "heatmap": "Mapa de calor",
+    "hide": "Ocultar",
+    "hotspot": {
+      "highestCostItem": "Artículo más costoso",
+      "lowestBilledEmp": "Empleado menos facturado",
+      "mostExpensiveDept": "Departamento más costoso",
+      "others": "+ {count} otro{count, plural, one {} other {s}}"
+    },
+    "itemsWithActivity": "{count} artículos con actividad · haz clic en una fila para ver registros",
+    "kpi": {
+      "aboveTarget": "Sobre el objetivo",
+      "avgBillablePct": "% facturable medio",
+      "avgHours": "Horas medias",
+      "avgHoursItem": "Horas medias/artículo",
+      "avgSpread": "Dispersión media",
+      "avgTeamSize": "Tamaño medio de equipo",
+      "belowTarget": "Bajo el objetivo",
+      "bestTitle": "Mejor puesto",
+      "billableHours": "Horas facturables",
+      "capacityHeadroom": "Margen de capacidad",
+      "confidence": "Confianza",
+      "costPerDay": "Costo por día",
+      "efficiencyScore": "Puntuación de eficiencia",
+      "employees": "Empleados",
+      "highestCost": "Costo más alto",
+      "jobTitles": "Puestos",
+      "jobTitlesAnalyzed": "Puestos analizados",
+      "needsAttention": "Necesita atención",
+      "nonBillableCost": "Costo no facturable",
+      "opportunities": "Oportunidades",
+      "overtimeNoValue": "Horas extra sin valor",
+      "potentialSavings": "Ahorros potenciales",
+      "projectedBillablePct": "% facturable proyectado",
+      "projectedNonBillCost": "Costo no fact. proyectado",
+      "serviceItems": "Artículos de servicio",
+      "suddenDrops": "Caídas bruscas",
+      "target": "Objetivo",
+      "targetStatus": "Estado del objetivo",
+      "titleDrift": "Deriva de puestos",
+      "titlesWithOutliers": "Puestos con atípicos",
+      "topPerformer": "Mejor empleado",
+      "totalHours": "Horas totales",
+      "totalIssues": "Problemas totales"
+    },
+    "loading": "Cargando…",
+    "lowHoursCount": "{count} empleados con <{minHours} horas",
+    "metric": {
+      "billableHours": "Horas facturables",
+      "costPerDay": "Costo por día",
+      "nonBillableCost": "Costo no facturable",
+      "nonBillableHours": "Horas no facturables",
+      "percentBilled": "Porcentaje facturado",
+      "totalHours": "Horas totales"
+    },
+    "no": "No",
+    "noBillExpectation": "Sin expectativa de facturación",
+    "noBillExpShort": "sin expect. fact.",
+    "noBillableNote": "los departamentos con cero horas facturables quedan fuera del % facturable de la empresa y de los focos (las funciones de estructura no tienen expectativa de facturación).",
+    "none": "Ninguno",
+    "noTitle": "Sin puesto",
+    "outlook": {
+      "challenging": "Desafiante",
+      "favorable": "Favorable",
+      "neutral": "Neutral"
+    },
+    "panels": {
+      "alerts": "Alertas de utilización",
+      "costHotspots": "Focos de costos",
+      "dataSources": "Fuentes de datos y cálculos",
+      "efficiencySummary": "Resumen de eficiencia",
+      "forecastTrend": "Tendencia de % facturable con previsión",
+      "hiringIntelligence": "Inteligencia de contratación",
+      "hoursDistribution": "Distribución de horas",
+      "improvementHint": "Ahorros estimados de una mejora de cinco puntos en la utilización",
+      "improvementOpportunities": "Oportunidades de mejora",
+      "modelAssumptions": "Modelo y supuestos",
+      "noBillableExpectation": "Sin expectativa de facturación",
+      "overtimeHint": "20 % más horas que la media, facturable 20 puntos bajo el objetivo",
+      "peerComparison": "Comparación por pares y por puesto",
+      "peerHint": "Compara empleados que hacen trabajo similar",
+      "reallocationIdeas": "Ideas de reasignación",
+      "suddenDrop": "Caída brusca",
+      "suddenDropHint": "% facturable cayó >15 puntos vs anterior",
+      "titleDriftHint": "Roles donde TODOS los empleados van a la baja",
+      "topDepartments": "Principales departamentos",
+      "topDepartmentsHint": "Por costo no facturable",
+      "treemap": "Treemap de utilización",
+      "treemapHint": "Tamaño = horas · color = % facturable · haz clic para explorar"
+    },
+    "peers": {
+      "outliersBold": "Atípicos",
+      "outliersNote": " son empleados cuyo % facturable se desvía más de 1,5 desviaciones estándar de la media de su puesto. Una dispersión alta o atípicos pueden indicar brechas de formación, desequilibrios de carga o roles inadecuados."
+    },
+    "ppAvg": "media {avg} puntos",
+    "prior": "Anterior: {pct}",
+    "searchEmployees": "Buscar empleados…",
+    "searchItems": "Buscar artículos…",
+    "show": "Mostrar",
+    "sources": {
+      "billableBold": "Facturable",
+      "billableItem": " — el indicador facturable del registro (cada registro facturable lleva un proyecto → cliente).",
+      "dominantClass": "clase de mano de obra dominante",
+      "intro": "Todo se calcula en vivo desde los ",
+      "introTail": ":",
+      "jobTitleBold": "Puesto",
+      "jobTitleItem": " (el artículo de servicio al que la persona registra más horas, p. ej. «MECH:Foreman»).",
+      "jobTitleMid": " — los empleados no tienen campo de puesto, así que el puesto de una persona es su ",
+      "noBillItem": " — los departamentos con cero horas facturables (actuales + anteriores) se marcan solos y quedan fuera del % de la empresa, p. ej. Estructura.",
+      "nonBillCostBold": "Costo no facturable",
+      "nonBillCostItem": " — Σ horas × la tarifa de costo propia del registro en tiempo no facturable.",
+      "timeEntries": "registros de tiempo"
+    },
+    "sub": {
+      "aboveNear": "{above} arriba, {near} cerca",
+      "acrossItems": "todos los artículos",
+      "belowTargetCount": "{count} bajo el objetivo",
+      "billableThreshold": "umbral facturable",
+      "dataPoints": "{count} puntos de datos",
+      "daysInRange": "{days} días en el período",
+      "detectedAnomalies": "anomalías detectadas",
+      "drop15pp": "empleados con caída >15 puntos",
+      "employeesPerTitle": "empleados por puesto",
+      "hiresAtEfficiency": "contrataciones a la eficiencia actual",
+      "highHoursLowBillable": "muchas horas, poco facturable",
+      "hoursWeighted": "ponderado por horas",
+      "ifAllImplemented": "si se aplica todo",
+      "improvementScenarios": "escenarios de mejora",
+      "maxMinusMin": "máx. − mín. en el puesto",
+      "outOf100": "sobre 100",
+      "perEmployee": "por empleado",
+      "performanceVariance": "variación de desempeño",
+      "perServiceItem": "por artículo de servicio",
+      "qualified": "{count} calificados (≥{minHours} h)",
+      "recordedTime": "tiempo registrado",
+      "revenueGenerating": "generador de ingresos",
+      "rolesTrendingDown": "roles a la baja",
+      "targetPct": "objetivo: {target} %",
+      "totalForRange": "total del período",
+      "trajectory": "trayectoria {arrow} {amount}",
+      "trendArrow": "tendencia {arrow} {trend} puntos",
+      "uniqueRoles": "roles únicos (clase de mano de obra)",
+      "with2Plus": "con 2+ empleados",
+      "withActivity": "con actividad"
+    },
+    "subTabs": {
+      "anomalies": "Anomalías",
+      "forecasting": "Previsión",
+      "peers": "Análisis por pares",
+      "treemap": "Treemap",
+      "whatif": "Escenarios"
+    },
+    "table": {
+      "avgPct": "% medio",
+      "billable": "Facturable",
+      "billablePct": "% facturable",
+      "change": "Variación",
+      "cost": "Costo",
+      "currentRange": "Período actual",
+      "customer": "Cliente",
+      "date": "Fecha",
+      "department": "Departamento",
+      "employees": "Empleados",
+      "hours": "Horas",
+      "jobTitle": "Puesto",
+      "max": "Máximo",
+      "metric": "Métrica",
+      "min": "Mínimo",
+      "nonBill": "No facturable",
+      "nonBillCost": "Costo no facturable",
+      "outliers": "Atípicos",
+      "pctBilled": "% facturable",
+      "pctPrior": "% anterior",
+      "priorRange": "Período anterior",
+      "share": "Parte",
+      "spread": "Dispersión",
+      "totalHrs": "Horas totales"
+    },
+    "tableLabel": "Tabla",
+    "tabs": {
+      "config": "Configuración",
+      "departments": "Departamentos",
+      "employees": "Empleados",
+      "intelligence": "Inteligencia",
+      "items": "Artículos",
+      "overview": "Resumen",
+      "titles": "Puestos"
+    },
+    "titles": {
+      "drawerDesc": "{count} empleados · {billable} facturable · {cost} de costo no facturable"
+    },
+    "treemap": {
+      "breadcrumb": "Miga de pan para subir",
+      "clickDrill": "Haz clic para explorar",
+      "colourBillable": "Color = % facturable",
+      "sizeHours": "Tamaño = horas trabajadas"
+    },
+    "unit": {
+      "billable": "facturable",
+      "hrs": "h"
+    },
+    "whatif": {
+      "avgCostEmployee": "Costo medio/empleado",
+      "avgHoursEmployee": "Horas medias/empleado",
+      "bestTitle": "Mejor puesto",
+      "billablePctLabel": "% facturable",
+      "breakEvenRate": "Tasa de equilibrio",
+      "costPerNonBillHour": "Costo por hora no fact.",
+      "highBillableRoles": "roles muy facturables",
+      "improve": "Mejorar «{title}» un 5 %",
+      "improveDetail": "{count} empleados ahora en {pct} % de media",
+      "na": "N/A",
+      "needsFocus": "Requiere atención",
+      "nonBillableLabel": "no facturable",
+      "recExceptional": "Las nuevas contrataciones necesitan tasas facturables excepcionales para ser rentables. Considera contratistas para picos de demanda.",
+      "recFocus": "Enfoca la contratación en {title}. Los mejores actuales promedian {avgPct} %.",
+      "recSupports": "La utilización actual permite contratar. Prioriza roles que complementen las fortalezas del equipo.",
+      "save": "Ahorrar {amount}",
+      "teamAvgBillable": "% facturable medio actual del equipo",
+      "totalEmployees": "Empleados totales"
+    },
+    "yes": "Sí"
   },
   "spendVelocity": {
     "title": "Velocidad de gasto",
@@ -917,6 +1668,280 @@
       "seasonalHigh": "El gasto elevado suele concentrarse en {months}",
       "seasonalLow": "El gasto reducido suele concentrarse en {months}",
       "shadowItReason": "Las líneas de informes de gastos no llevan comercio ni proveedor — solo la cuenta de gastos y una descripción libre — por lo que la adopción viral de software entre empleados no se puede rastrear."
+    },
+    "banner": {
+      "count": "{total} alertas en total",
+      "rest": " en 8 detectores — haz clic en una tarjeta para filtrar"
+    },
+    "chart": {
+      "priorYear": "Año anterior",
+      "spend": "Gasto"
+    },
+    "chips": {
+      "all": "Todo",
+      "decreases": "↓ Bajas",
+      "highVel": "🔥 Vel. alta",
+      "increases": "↑ Alzas",
+      "new": "+ Nuevo"
+    },
+    "clearFilter": "Limpiar filtro · {key}",
+    "config": {
+      "anomalyThreshold": {
+        "label": "Umbral de anomalía",
+        "note": "Puntuación Z de atípicos estadísticos (crítica en 3σ)"
+      },
+      "boilingFrog": {
+        "label": "Rana hirviendo",
+        "note": "Meses mínimos de pequeñas alzas monótonas (<10 %)"
+      },
+      "fields": {
+        "anomalySigma": {
+          "help": "Los meses más allá de esta cantidad de desviaciones estándar se marcan como anomalías",
+          "label": "σ de anomalía"
+        },
+        "boilingFrogMonths": {
+          "help": "Meses mínimos de pequeñas alzas sostenidas",
+          "label": "Meses rana hirviendo"
+        },
+        "fragmentationAvgSize": {
+          "help": "Tope de tamaño medio de transacción para el detector de fragmentación",
+          "label": "Tamaño medio de fragmentación"
+        },
+        "fragmentationTxns": {
+          "help": "Un conteo mensual de transacciones sobre este umbral (bajo el tope de tamaño) indica fragmentación",
+          "label": "Transacciones de fragmentación/mes"
+        },
+        "highVelocity": {
+          "help": "Un TCAC mensual sobre este umbral clasifica como aceleración/alta",
+          "label": "Velocidad alta (%/mes)"
+        },
+        "mediumVelocity": {
+          "help": "Un TCAC mensual sobre este umbral clasifica como al alza",
+          "label": "Velocidad media (%/mes)"
+        },
+        "zombieMonths": {
+          "help": "Totales mensuales idénticos de un proveedor durante al menos estos meses",
+          "label": "Meses zombi"
+        }
+      },
+      "fragmentation": {
+        "label": "Fragmentación",
+        "note": "Transacciones por mes / tamaño medio de transacción"
+      },
+      "velocityEngine": {
+        "label": "Motor de velocidad",
+        "note": "(fin/inicio)^(1/períodos) − 1 con base mínima de {minBase}",
+        "value": "TCAC mensual"
+      },
+      "velocityThresholds": {
+        "label": "Umbrales de velocidad",
+        "note": "Cortes de TCAC mensual al alza / alta"
+      },
+      "zombieWindow": {
+        "label": "Ventana zombi",
+        "note": "Totales recurrentes idénticos de proveedores (desviación <1 %)"
+      }
+    },
+    "csv": {
+      "changePct": "Variación %",
+      "current": "Actual",
+      "prior": "Anterior",
+      "projected": "Proyectado",
+      "twoBack": "-2",
+      "velocityPctMo": "Velocidad %/mes"
+    },
+    "details": {
+      "anomaly": "{sigma}σ de la media en {month}",
+      "cliff": "brecha {gap} %, ratio {ratio}×",
+      "cliffItem": "Velocidad pedidos a proveedores vs pedidos de clientes",
+      "concentration": "{share} % del gasto, {trend}",
+      "fragmentation": "{txns} trans./mes, prom. {avg}",
+      "frog": "+{rate} %/mes durante {months} meses",
+      "seasonal": "{deviation} % vs mes promedio",
+      "zombie": "{amount}/mes sin cambios durante {months} meses"
+    },
+    "detectors": {
+      "anomaly": {
+        "desc": "Atípicos estadísticos (>2,5σ)",
+        "label": "Anomalías",
+        "sub": "crítica"
+      },
+      "cliff": {
+        "desc": "Brecha de velocidad pedidos a proveedores vs de clientes",
+        "label": "Abismo de compromisos",
+        "sub": "Velocidad de pedidos"
+      },
+      "concentration": {
+        "desc": "Dependencia excesiva de una categoría",
+        "label": "Concentración",
+        "sub": "parte de los 5 princ."
+      },
+      "fragmentation": {
+        "desc": "Muchas compras pequeñas",
+        "label": "Fragmentación",
+        "sub": "gasto fragmentado"
+      },
+      "frog": {
+        "desc": "Deriva silenciosa de costos",
+        "label": "Rana hirviendo",
+        "sub": "impacto anual"
+      },
+      "seasonal": {
+        "desc": "Gasto fuera de estacionalidad",
+        "label": "Estacionalidad",
+        "sub": "meses atípicos"
+      },
+      "shadow": {
+        "desc": "Adopción viral de software",
+        "label": "Informática en la sombra",
+        "sub": "no disponible"
+      },
+      "zombie": {
+        "desc": "Costos recurrentes sin cambios",
+        "label": "Zombis",
+        "sub": "costo anual"
+      }
+    },
+    "deviationNote": "Desviación mensual del promedio",
+    "empty": {
+      "forDetector": " para este detector",
+      "noAlerts": "Sin alertas detectadas",
+      "noAnomalies": "Sin anomalías detectadas",
+      "noSeasonal": "Sin estacionalidad significativa detectada"
+    },
+    "health": {
+      "atRisk": "EN RIESGO",
+      "caption": "salud del gasto",
+      "elevated": "ELEVADA",
+      "healthy": "SALUDABLE",
+      "watch": "VIGILANCIA"
+    },
+    "kpi": {
+      "alerts": "Alertas",
+      "avgVelocity": "Velocidad media",
+      "savingsPotential": "Ahorro potencial",
+      "totalSpend": "Gasto total"
+    },
+    "newBadge": "NUEVO",
+    "panels": {
+      "accountVelocity": "Velocidad de cuentas de gasto",
+      "alertDetails": "Detalles de la alerta",
+      "dataSources": "Fuentes de datos",
+      "deepAnalysis": "Análisis profundo de la cuenta",
+      "deepAnalysisHint": "{count} cuentas · haz clic en una fila para ver transacciones",
+      "detectorSummary": "Resumen de detectores",
+      "highestVelocity": "Cuentas de mayor velocidad",
+      "insights": "Análisis",
+      "modelThresholds": "Modelo y umbrales",
+      "monthlySpendVelocity": "Velocidad mensual del gasto",
+      "monthlySpendVelocityHint": "Mes actual vs mismo mes del año anterior",
+      "monthlySummary": "Resumen mensual",
+      "monthlyTrend": "Tendencia mensual",
+      "seasonalPatterns": "Patrones estacionales",
+      "top10BySpend": "Top 10 por gasto",
+      "vendorDrillDown": "Detalle por proveedor",
+      "velocityVsAccel": "Velocidad vs aceleración",
+      "velocityVsAccelHint": "Velocidad = cambio mensual del gasto · Aceleración = cambio de la velocidad · tamaño = gasto"
+    },
+    "period": {
+      "basedOnTrend": "según la tendencia",
+      "current": "Período actual",
+      "prior": "Período anterior",
+      "projectedNext": "Próximo proyectado",
+      "twoBack": "Hace 2 períodos"
+    },
+    "row": {
+      "txns": "{txns} trans.",
+      "txnsMonths": "{txns} trans. · {months} meses"
+    },
+    "scatter": {
+      "tooltipAccel": "Acél.: {pct} %",
+      "tooltipSpend": "Gasto: {amount}",
+      "tooltipVelocity": "Velocidad: {pct} %",
+      "xAxis": "Velocidad %",
+      "yAxis": "Acél."
+    },
+    "searchPlaceholder": "Buscar cuentas…",
+    "severity": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "low": "Baja",
+      "medium": "Media"
+    },
+    "shadowIt": {
+      "body": " no está disponible en openbooks: {reason}",
+      "title": "Informática en la sombra"
+    },
+    "sort": {
+      "accel": "Orden: acél.",
+      "changePct": "Orden: variación %",
+      "spend": "Orden: gasto",
+      "velocity": "Orden: velocidad"
+    },
+    "sources": {
+      "intro": "Gasto = líneas de diario de gastos/COGS de los cuatro tipos de documentos de gasto:",
+      "li1Bold1": "Facturas de proveedores, informes de gastos, cheques",
+      "li1Bold2": "notas de crédito de proveedores",
+      "li1Mid": " suman al gasto; ",
+      "li1Tail": " se restan.",
+      "li2Bold": "Abismo de compromisos",
+      "li2Tail": " compara la velocidad mensual de pedidos a proveedores vs pedidos de clientes.",
+      "li3Bold": "Normalización por ingresos",
+      "li3Tail": " usa los ingresos del libro mayor para el ratio OpEx ({ratio} %).",
+      "li4Bold": "Informática en la sombra",
+      "li4Tail": " — no disponible: {reason}",
+      "outro": "Los detalles traen toda la actividad de esa cuenta o proveedor en el período al hacer clic (consultable, con tendencia mensual y desglose); cada fila enlaza al registro real en su módulo nativo."
+    },
+    "sub": {
+      "acceleratingCount": "{count} en aceleración",
+      "accountsCount": "{count} cuentas",
+      "anomaliesCount": "{count} anomalías",
+      "creepAndZombies": "de deriva + zombis",
+      "noIssues": "sin problemas detectados"
+    },
+    "table": {
+      "accel": "Acél.",
+      "account": "Cuenta",
+      "billsExp": "Fact./gastos",
+      "change": "Variación",
+      "current": "Actual",
+      "detector": "Detector",
+      "details": "Detalles",
+      "impact": "Impacto",
+      "item": "Elemento",
+      "month": "Mes",
+      "prior": "Anterior",
+      "priorYear": "Año anterior",
+      "projected": "Proyectado",
+      "severity": "Gravedad",
+      "sparkline": "Sparkline",
+      "spend": "Gasto",
+      "totalSpend": "Gasto total",
+      "trend": "Tendencia",
+      "txns": "Trans.",
+      "vendor": "Proveedor",
+      "vendors": "Proveedores",
+      "velocity": "Velocidad",
+      "yoyChange": "Variación interanual"
+    },
+    "tabs": {
+      "accounts": "Cuentas",
+      "config": "Configuración",
+      "detectors": "Detectores",
+      "overview": "Resumen",
+      "trends": "Tendencias",
+      "velocity": "Velocidad"
+    },
+    "trend": {
+      "accelerating": "En aceleración",
+      "declining": "A la baja",
+      "high": "Alta",
+      "new": "Nuevo",
+      "rising": "Al alza",
+      "stable": "Estable"
+    },
+    "unit": {
+      "months": "meses"
     }
   },
   "sentinel": {
@@ -928,11 +1953,43 @@
     "table": {
       "currency": "Moneda",
       "members": "Documentos",
-      "span": "Intervalo"
+      "span": "Intervalo",
+      "action": "Acción",
+      "amount": "Importe",
+      "change": "Variación",
+      "confidence": "Confianza",
+      "count": "Conteo",
+      "date": "Fecha",
+      "daysApart": "Días de diferencia",
+      "deviation": "Desviación",
+      "digit": "Dígito",
+      "digits": "Dígitos",
+      "doc1": "Doc 1",
+      "doc2": "Doc 2",
+      "document": "Documento",
+      "employee": "Empleado",
+      "flag": "Señal",
+      "flaggedAmount": "Importe marcado",
+      "flagTypes": "Tipos de señal",
+      "flags": "Señales",
+      "match": "Coincidencia",
+      "party": "Contraparte",
+      "partyAvg": "Media contraparte",
+      "reason": "Motivo",
+      "risk": "Riesgo",
+      "riskScore": "Puntuación de riesgo",
+      "secondLargest": "2.º mayor",
+      "table": "Tabla",
+      "vendor": "Proveedor",
+      "when": "Cuándo",
+      "z": "Z"
     },
     "duplicates": {
       "sharedReference": "referencia compartida {reference}",
-      "spanDays": "{days} d"
+      "spanDays": "{days} d",
+      "ruleNote": "mismo proveedor + tipo + moneda + importe + referencia, ≥{min}",
+      "ruleValue": "≤{days} días",
+      "sameMemo": "misma nota"
     },
     "benford": {
       "conforming": "Conforme",
@@ -983,7 +2040,221 @@
         "area": "Desviación Benford",
         "message": "La distribución del primer dígito se desvía significativamente"
       }
-    }
+    },
+    "analysis": {
+      "calendar": "Calendario",
+      "rsfFull": "Factor de tamaño relativo",
+      "rsfNote": " = importe ÷ la 2.ª mayor transacción histórica del proveedor en la misma moneda (base de 36 meses, calculada en una sola pasada de función de ventana). Un RSF ≥ 10 indica una transacción desproporcionada para ese proveedor — una señal clásica de error/fraude.",
+      "zscoreNote": " mide a cuántas desviaciones estándar está una transacción de la media propia de ese proveedor en la misma moneda (bases por proveedor y moneda en 36 meses, en una sola pasada agregada). |z| ≥ 3 marca atípicos propios de la entidad que los umbrales globales no ven.",
+      "zscoreWord": "Puntuación Z"
+    },
+    "auditNote": "Registro de auditoría nativo. La mayoría de los registros de este libro mayor se migraron en masa, así que el historial de cambios empieza en la salida en vivo — la pista crece a medida que los usuarios trabajan en openbooks.",
+    "banner": {
+      "ledger": "libro mayor completo",
+      "pre": "Analizado en todo tu ",
+      "stats": "{docs} documentos · {amount} · {days} días · en {seconds} s — sin topes ni límites de fechas."
+    },
+    "chart": {
+      "expected": "Esperado",
+      "expectedBenford": "Esperado (Benford)",
+      "observed": "Observado"
+    },
+    "config": {
+      "benfordConformity": "Conformidad con Benford",
+      "benfordNote": "Bandas 1D 0,006/0,012/0,015 · bandas 2D 0,0012/0,0022/0,0033",
+      "duplicatesNote": "Mismo proveedor, tipo, moneda, importe y referencia en la ventana; créditos excluidos; un hallazgo por grupo",
+      "fields": {
+        "duplicateDays": {
+          "help": "Una pareja del mismo proveedor, tipo e importe en estos días se marca",
+          "label": "Ventana de duplicados (días)"
+        },
+        "duplicateMinAmount": {
+          "help": "Las parejas bajo este importe se ignoran",
+          "label": "Mínimo de duplicados ($)"
+        },
+        "sequentialMinCount": {
+          "help": "Las series de números de factura sin huecos necesitan al menos estos documentos",
+          "label": "Mínimo de serie secuencial"
+        },
+        "sequentialMinDays": {
+          "help": "Las series en menos días se tratan como carga en lote, no como señal",
+          "label": "Alcance secuencial (días)"
+        }
+      },
+      "rsfNote": "Importe ÷ 2.º mayor del proveedor en base de 36 meses (base mínima {floor})",
+      "sequentialNote": "Números de referencia de proveedores sin huecos; alcances de 30+ días son de alto riesgo",
+      "sequentialRuns": "Series secuenciales",
+      "trapNote": "Terminaciones redondas en dólares (.00 o .99 centavos) justo bajo límites redondos",
+      "weekendNote": "Fecha contable del documento (los datos migrados traen marcas de importación, así que la hora de creación del sistema no es significativa aquí)",
+      "zscoreNote": "Base media/σ por proveedor, ≥5 transacciones y σ > {sigma}"
+    },
+    "coverage": {
+      "benfordBold": "Benford",
+      "benfordItem": " — marca importes cuyos primeros dígitos no siguen patrones naturales de gasto.",
+      "duplicatesItem": " — agrupa transacciones por proveedor, tipo, moneda, importe y referencia para detectar pagos repetidos, un hallazgo por grupo.",
+      "intro": "Cada control se ejecuta en todo tu ",
+      "introTail": " — sin ventanas de 30 días, sin atajos por proveedor, sin muestreo. Nada se omite:",
+      "ledger": "libro mayor completo",
+      "outro": "Este período: {docs} documentos ({amount}) en {days} días, analizados en {seconds} s. Las tablas de detalle muestran los mejores resultados por control; los conteos y distribuciones siempre cubren todo.",
+      "rszBold": "Tamaño relativo y puntuación Z",
+      "rszItem": " — compara cada transacción con el historial propio del proveedor para revelar atípicos.",
+      "sequentialItem": " — detecta secuencias sospechosamente continuas de números de referencia de proveedores."
+    },
+    "csv": {
+      "kind": "Tipo"
+    },
+    "detectors": {
+      "auditEvents": "Eventos de auditoría",
+      "duplicates": "Duplicados",
+      "ghostVendors": "Proveedores fantasma"
+    },
+    "drill": {
+      "documentsTotal": "{count} documentos · {total}",
+      "firstTwoDigits": "Dos primeros dígitos",
+      "leadingDigit": "Primer dígito",
+      "noDocuments": "Ningún documento empieza con {digit}.",
+      "top": "top {count}"
+    },
+    "empty": {
+      "noAuditEvents": "Sin eventos de auditoría de alto riesgo en este período",
+      "noElevatedRisk": "Sin áreas de riesgo elevado",
+      "noGhostMatches": "Sin coincidencias de nombre o dirección proveedor–empleado",
+      "noSequential": "Sin series secuenciales sin huecos detectadas",
+      "nothingFlagged": "Nada marcado"
+    },
+    "error": {
+      "loadFailed": "No se pudieron cargar las transacciones."
+    },
+    "flag": {
+      "duplicate": "Duplicado",
+      "rsf": "RSF",
+      "sequential": "Secuencial",
+      "trap": "Trampa-99",
+      "weekend": "Fin de semana",
+      "zscore": "Punt. Z"
+    },
+    "ghost": {
+      "note": " son empresas beneficiarias controladas por empleados. Cruce en dos fases en todo el registro de contrapartes: nombres de empleados contra nombres de proveedores, y direcciones postales normalizadas (línea 1 + código postal) compartidas entre un proveedor pagado y un empleado. Coincidir en nombre vale 75, en dirección 90, en ambas 95.",
+      "title": "Proveedores fantasma"
+    },
+    "kpi": {
+      "amountsAnalyzed": "Importes analizados",
+      "anomalousPairs": "Parejas anómalas",
+      "approvalLimitRisk": "Riesgo de límite de aprobación",
+      "auditEvents": "Eventos de auditoría",
+      "benford": "Benford",
+      "conformity": "Conformidad",
+      "deletions": "Eliminaciones",
+      "deviatingDigits": "Dígitos desviados",
+      "digit1Share": "Parte del dígito 1",
+      "duplicatePairs": "Grupos de duplicados",
+      "endsIn": "Termina en {ending}",
+      "flagged": "Marcados",
+      "rule": "Regla",
+      "saturday": "Sábado",
+      "sensitiveChanges": "Cambios sensibles",
+      "shellSignals": "Señales de pantalla",
+      "signal": "Señal",
+      "sunday": "Domingo",
+      "totalValue": "Valor total",
+      "trapAmounts": "Importes trampa",
+      "valueAtRisk": "Valor en riesgo",
+      "weekendDocuments": "Documentos de fin de semana"
+    },
+    "kind": {
+      "check": "Cheque",
+      "customer_credit": "Crédito de cliente",
+      "expense_report": "Gasto",
+      "journal": "Diario",
+      "vendor_bill": "Factura",
+      "vendor_credit": "Crédito",
+      "vendor_payment": "Pago"
+    },
+    "loading": "Cargando…",
+    "no": "No",
+    "panels": {
+      "allFlaggedDocs": "Todos los documentos marcados (top {top} de {total})",
+      "anomalousPairs": "Parejas de dígitos anómalas",
+      "benfordFirstDigit": "Ley de Benford — primer dígito",
+      "benfordHint": "{amounts} importes · MAD {mad} · {conformity}",
+      "completeCoverage": "Cobertura completa",
+      "detectorSummary": "Resumen de detectores",
+      "detectorThresholds": "Umbrales de detectores",
+      "digitDetail": "Detalle por dígito",
+      "digitDetailHint": "Haz clic en un dígito para ver sus transacciones",
+      "duplicatesHint": "Un hallazgo por grupo coincidente — cada miembro se abre en su módulo nativo",
+      "ghostMatches": "Coincidencias fantasma ({count})",
+      "ghostVendors": "Proveedores fantasma",
+      "highestRiskFlags": "Señales de mayor riesgo",
+      "highestRiskHint": "Todos los detectores · haz clic en un documento para abrirlo",
+      "highRiskAudit": "Eventos de auditoría de alto riesgo",
+      "observedVsExpected": "Distribución observada vs esperada",
+      "potentialDuplicates": "Grupos de posibles duplicados",
+      "rsfAnomalies": "Anomalías RSF ({count})",
+      "sequentialRuns": "Series de facturas secuenciales",
+      "spendCalendar": "Calendario de gasto",
+      "spendCalendarHint": "Intensidad diaria del gasto — destacan picos de fin de semana y grupos inusuales",
+      "thresholdTrapDocs": "Documentos trampa de umbral",
+      "topRiskAreas": "Principales áreas de riesgo",
+      "twoDigitDistribution": "Distribución de dos primeros dígitos (10–99)",
+      "vendorRiskHint": "Contrapartes ordenadas por gravedad de señales en todos los detectores · haz clic en una fila para ver sus transacciones",
+      "vendorRiskRollup": "Riesgo de proveedores agregado",
+      "weekendDated": "Documentos de fin de semana (top 200 por importe)",
+      "zscoreAnomalies": "Anomalías de puntuación Z ({count})"
+    },
+    "risk": {
+      "caption": "riesgo de integridad",
+      "elevated": "ELEVADO",
+      "high": "RIESGO ALTO",
+      "low": "RIESGO BAJO",
+      "moderate": "MODERADO"
+    },
+    "sequential": {
+      "indicatorNote1": " si los números de factura de un proveedor hacia ti son perfectamente secuenciales durante semanas o meses, probablemente seas su ",
+      "indicatorNote2": " cliente. Los proveedores legítimos tienen huecos de numeración por facturar a otros. Detectado al revisar los números de referencia de cada proveedor por moneda buscando series continuas.",
+      "indicatorTitle": "Indicador de empresa pantalla:",
+      "more": "+{count} más",
+      "only": "único",
+      "runTotal": " — total {total} ({first} → {last})"
+    },
+    "sub": {
+      "allMatchingPairs": "un hallazgo por grupo",
+      "atRisk": "{amount} en riesgo",
+      "bankingContactAddress": "bancaria / contacto / dirección",
+      "documents": "documentos",
+      "ending99": "termina en 99 / 999 / 9999",
+      "everyDocument": "cada documento, sin topes",
+      "expected301": "esperado 30,1 %",
+      "ghostsSequential": "{ghosts} fantasmas · {sequential} secuenciales",
+      "higherRiskWeighting": "mayor ponderación de riesgo",
+      "inPeriod": "en el período",
+      "limitGaming": "posible juego con límites",
+      "offExpected25": ">25 % del esperado",
+      "offExpected50": ">50 % del esperado, n≥5",
+      "recordsRemoved": "registros eliminados",
+      "seeThresholdTrap": "ver Trampa de umbral",
+      "sumPairAmounts": "copias de más a tasas de documentos",
+      "twoD": "2D: {value}",
+      "twoDigitPairs": "parejas de dos primeros dígitos"
+    },
+    "tabs": {
+      "analysis": "Análisis",
+      "audit": "Pista de auditoría",
+      "benford": "Benford",
+      "config": "Configuración",
+      "detection": "Detección",
+      "overview": "Resumen",
+      "vendors": "Proveedores"
+    },
+    "trapNote": "Los importes justo bajo umbrales redondos (terminados en 99, 999 o 9999) pueden indicar compras calibradas para no superar un límite de aprobación. Las trampas recurrentes del mismo solicitante o proveedor merecen revisión. Las trampas siempre leen el importe del documento: un 99 USD se marca como trampa-99 aunque su valor convertido esté lejos de cualquier umbral.",
+    "vendors": {
+      "drillSub": "{flags} señales · {amount} marcado"
+    },
+    "weekend": {
+      "signalNote": "fecha contable en sáb./dom.",
+      "signalValue": "Fecha del doc."
+    },
+    "yes": "Sí"
   },
   "charts": {
     "history": "Historial",
@@ -1019,5 +2290,218 @@
       "dec": "dic"
     },
     "monthYear": "{month} ''{yy}"
+  },
+  "cashWeek": {
+    "actionBar": {
+      "bills": "facturas de proveedores",
+      "buildCollectionRun": "Crear lote de cobro",
+      "buildPayRun": "Crear lote de pago",
+      "invoices": "facturas de clientes",
+      "summary": "{count} {kind} · {total}"
+    },
+    "breakdown": {
+      "deferredBacklog": "Diferido (atraso)",
+      "endingCash": "Efectivo final",
+      "inflowAr": "Entradas (AR)",
+      "inflowOther": "Entradas (otros)",
+      "netChange": "Cambio neto",
+      "outCategory": "Salidas: {name}",
+      "outflowAp": "Salidas (AP)",
+      "safeApCapacity": "Capacidad AP segura",
+      "startingCash": "Efectivo inicial"
+    },
+    "category": {
+      "export": "Exportar",
+      "exportCsvTitle": "Exportar CSV",
+      "method": "Método",
+      "sourceItems": "Elementos fuente",
+      "thisWeek": "Esta semana",
+      "totalForecast": "Previsión total"
+    },
+    "coverageRatio": "Ratio de cobertura",
+    "csvHeaders": {
+      "amount": "Importe",
+      "date": "Fecha",
+      "entityDescription": "Entidad/Descripción",
+      "type": "Tipo"
+    },
+    "drawerDescription": "Neto {net} · final {ending}",
+    "empty": {
+      "inflows": "entradas",
+      "noMatches": "Sin resultados para tu búsqueda.",
+      "noSourceItems": "Sin elementos fuente tras esta estimación.",
+      "noneThisWeek": "Sin {side} previstos esta semana.",
+      "outflows": "salidas"
+    },
+    "meta": {
+      "accountsIncluded": "Cuentas",
+      "adjustmentPct": "Ajuste %",
+      "amount": "Importe",
+      "avgAmount": "Importe medio",
+      "avgPayment": "Pago medio",
+      "bankAccounts": "Cuentas bancarias",
+      "currentBalance": "Saldo de tarjeta",
+      "currentWeekApplied": "Aplicado esta semana",
+      "dailyBurnRate": "Consumo diario",
+      "daysSinceLastPayment": "Días desde el pago",
+      "detectedPaymentDay": "Paga el día",
+      "finalAverage": "Media semanal",
+      "finalWeekly": "Est. semanal",
+      "frequency": "Frecuencia",
+      "historyWeeks": "Semanas históricas",
+      "interval": "Intervalo (días)",
+      "medianPayment": "Pago mediano",
+      "monthlyMedian": "Mediana mensual",
+      "monthlySpendRate": "Gasto mensual",
+      "monthsAnalyzed": "Meses analizados",
+      "nextPaymentDate": "Próximo pago",
+      "paymentTrend": "Tendencia",
+      "projectedGrowth": "Crecimiento proyectado",
+      "rawAverage": "Media bruta",
+      "samples": "Muestras",
+      "sourceTotal": "Total fuente",
+      "vendor": "Proveedor",
+      "vendors": "Proveedores",
+      "weeksUsed": "Semanas usadas",
+      "memoKeywords": "Filtro de notas"
+    },
+    "methods": {
+      "average": "Promedio",
+      "dueDate": "Vencimiento",
+      "history": "Historial",
+      "pushed": "Aplazado"
+    },
+    "netChange": "Cambio neto",
+    "pagination": {
+      "showing": "Mostrando {from}–{to} de {total}"
+    },
+    "paymentHistoryTitle": "Historial de pagos y fiabilidad",
+    "search": {
+      "customers": "clientes",
+      "sourceItems": "Buscar elementos fuente…",
+      "transactions": "Buscar {party} o n.º de documento…",
+      "vendors": "proveedores"
+    },
+    "table": {
+      "amount": "Importe",
+      "customer": "Cliente",
+      "date": "Fecha",
+      "entityDescription": "Entidad / Descripción",
+      "id": "ID",
+      "method": "Método",
+      "predicted": "Previsto",
+      "status": "Estado",
+      "type": "Tipo",
+      "vendor": "Proveedor"
+    },
+    "tabs": {
+      "apOutflows": "Salidas AP",
+      "arInflows": "Entradas AR"
+    }
+  },
+  "categoryManager": {
+    "days": {
+      "distributed": "Distribuido",
+      "friday": "Viernes",
+      "monday": "Lunes",
+      "saturday": "Sábado",
+      "sunday": "Domingo",
+      "thursday": "Jueves",
+      "tuesday": "Martes",
+      "wednesday": "Miércoles"
+    },
+    "editTitle": "Editar",
+    "empty": "Sin categorías aún — las previsiones AR/AP son los únicos flujos de la previsión.",
+    "form": {
+      "addCategory": "Añadir categoría",
+      "adjustmentPct": "Ajuste %",
+      "amount": "Importe",
+      "bankAccounts": "Cuentas bancarias",
+      "calcMethod": "Método de cálculo",
+      "cancel": "Cancelar",
+      "cardAccounts": "Cuentas de tarjeta de crédito",
+      "checksPayments": "Cheques y pagos",
+      "expectedDay": "Día esperado",
+      "expectedWeek": "Semana esperada",
+      "formula": "Fórmula",
+      "frequency": "Frecuencia",
+      "frequencyBiweekly": "Cada 2 semanas",
+      "frequencyMonthly": "Mensual",
+      "frequencyWeekly": "Semanal",
+      "glAccounts": "Cuentas del libro mayor",
+      "historyMonths": "Meses históricos",
+      "historyWeeks": "Semanas históricas",
+      "journals": "Diarios",
+      "memoKeywords": "Palabras de la nota",
+      "memoKeywordsHelp": "Palabras separadas por comas para filtrar transacciones (vacío = todo)",
+      "memoKeywordsPlaceholder": "nómina, alquiler, luz…",
+      "name": "Nombre",
+      "namePlaceholder": "Nombre de la categoría",
+      "saveCategory": "Guardar categoría",
+      "saving": "Guardando…",
+      "searchAccounts": "Buscar cuentas…",
+      "searchBankAccounts": "Buscar cuentas bancarias…",
+      "searchCardAccounts": "Buscar cuentas de tarjeta…",
+      "searchVendors": "Buscar proveedores…",
+      "threshold": "Umbral de pago significativo ($)",
+      "thresholdHelp": "0 = detección auto (50 % del pago mediano)",
+      "transfers": "Transferencias",
+      "type": "Tipo",
+      "typeInflow": "Entrada (ingreso/cobro)",
+      "typeOutflow": "Salida (gasto/pago)",
+      "useNetAmount": "Usar importe neto (respetar +/−)",
+      "vendors": "Proveedores"
+    },
+    "formulaHelp": "Variables: {vars} · Funciones: {funcs}",
+    "methods": {
+      "bank_register_history": {
+        "description": "Previene desde movimientos reales de efectivo de cuentas bancarias",
+        "label": "Historial del registro bancario"
+      },
+      "credit_card_cycle": {
+        "description": "Sigue la deuda de tarjeta + el crecimiento proyectado hasta la fecha de pago",
+        "label": "Ciclo de tarjeta de crédito"
+      },
+      "formula_expression": {
+        "description": "Fórmula personalizada con sintaxis tipo Excel y variables de previsión",
+        "label": "Expresión de fórmula"
+      },
+      "gl_history_average": {
+        "description": "Analiza imputaciones del libro mayor en un período definido para calcular medias semanales",
+        "label": "Media histórica del libro mayor"
+      },
+      "manual_recurring": {
+        "description": "Importe fijo a frecuencia definida (semanal, cada 2 semanas, mensual)",
+        "label": "Recurrente manual"
+      },
+      "vendor_payment_history": {
+        "description": "Agrega pagos históricos a proveedores para proyectar gasto futuro",
+        "label": "Historial de pagos a proveedores"
+      },
+      "vendor_recurring_average": {
+        "description": "Detecta la frecuencia de pago y calcula el ritmo desde el historial del proveedor",
+        "label": "Recurrente de proveedor (auto)"
+      }
+    },
+    "newCategory": "Nueva categoría",
+    "panelHint": "Flujos de caja no AR/AP — los siete métodos de cálculo del motor",
+    "panelTitle": "Categorías de previsión",
+    "picker": {
+      "noMatches": "Sin resultados.",
+      "selectedCount": "{count, plural, one {# seleccionado} other {# seleccionados}}"
+    },
+    "remove": "Quitar",
+    "toasts": {
+      "forbidden": "Guardar requiere el permiso Configuración.",
+      "saveFailed": "No se pudo guardar ({status}).",
+      "savedRecomputing": "Guardado — recalculando…"
+    },
+    "weeks": {
+      "1stWeek": "1.ª semana",
+      "2ndWeek": "2.ª semana",
+      "3rdWeek": "3.ª semana",
+      "4thWeek": "4.ª semana",
+      "distributed": "Distribuido"
+    }
   }
 }
