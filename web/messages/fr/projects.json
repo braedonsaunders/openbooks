@@ -36,6 +36,7 @@
     "unbilledDetail": "{entries} entrées de temps · {hours}h · {lines} lignes de coût",
     "requestCreated": "Demande de facturation créée",
     "requestFailed": "Impossible de créer la demande",
+    "applicationsPermissionRequired": "L’accès aux comptes clients est requis pour voir les demandes de paiement de ce projet.",
     "invoiceCreated": "Facture {number} créée",
     "invoiceFailed": "Impossible de créer la facture",
     "invoiceType": "Étape de facturation",
@@ -253,7 +254,10 @@
     "billedYes": "Facturé",
     "created": "Charge comptabilisée",
     "failed": "Impossible de comptabiliser la charge",
-    "pickItem": "Choisissez un article"
+    "pickItem": "Choisissez un article",
+    "operator": "Opérateur",
+    "selectOperator": "Sélectionnez un opérateur…",
+    "operatorNeedsEquipment": "Lignes d’équipement uniquement"
   },
   "recognition": {
     "title": "Comptabilisation des produits",
@@ -311,36 +315,176 @@
     "customerHint": "Remplace le type de projet pour ce client.",
     "projectHint": "Remplace le type/client pour ce projet."
   },
+  "schedule": {
+    "status": {
+      "not_started": "Non commencé",
+      "in_progress": "En cours",
+      "complete": "Terminé",
+      "on_hold": "En attente"
+    },
+    "view": {
+      "gantt": "Gantt",
+      "list": "Liste",
+      "board": "Tableau"
+    },
+    "empty": {
+      "title": "Aucun travail planifié pour l’instant",
+      "description": "Ajoutez la première activité pour commencer à établir le calendrier de ce projet.",
+      "action": "Ajouter une activité"
+    },
+    "leveling": {
+      "heading": "Nivellement des ressources",
+      "description": "Retardez des activités pour qu’aucune équipe, machine ou sous-traitant ne dépasse sa capacité journalière. Vérifiez les déplacements proposés avant de les appliquer."
+    }
+  },
   "invoicing": {
     "rateCardLapse": "Lorsque la grille tarifaire a expiré",
     "block": "Bloquer la facturation",
     "carry_forward": "Facturer selon la dernière grille"
   },
-  "duplicates": {
-      "title": "Projets en double",
-      "description": "Projets partageant une référence source, un nom et un client, ou un numéro d'affaire. Choisissez le survivant par groupe, prévisualisez l'impact, puis fusionnez.",
-      "loading": "Chargement des doublons…",
-      "empty": "Aucun projet en double.",
-      "kind": {
-          "source_ref": "Même référence source ({key})",
-          "name_customer": "Même nom et client ({key})",
-          "job_number": "Même numéro d'affaire ({key})"
-      },
-      "chooseSurvivor": "Sélectionnez le projet survivant. Toutes les références des autres y sont transférées en une transaction.",
-      "survivor": "Survivant",
-      "code": "Code",
-      "name": "Nom",
+  "wipBilling": {
+    "wipHealthAria": "Santé des travaux en cours",
+    "tiles": {
+      "availableWip": "Travaux en cours disponibles",
+      "availableWipSub": "Admissibles et non bloqués",
+      "over90": "Plus de 90 jours",
+      "over90Sub": "{amount} à 61–90 jours",
+      "realization": "Réalisation",
+      "realizationSub": "{amount} facturés",
+      "leakage": "Pertes",
+      "leakageSub": "{amount} bloqués depuis plus de 90 jours"
+    },
+    "list": {
+      "title": "Feuilles de préfacture",
+      "description": "Examinez les travaux de projet admissibles, les ajustements de facturation et le statut d’approbation.",
+      "newPrebill": "Nouvelle préfacture"
+    },
+    "empty": {
+      "noProjectsTitle": "Créez d’abord un projet",
+      "noPrebillsTitle": "Aucune feuille de préfacture pour l’instant",
+      "noProjectsDescription": "L’examen des travaux en cours part d’un projet actif avec du temps ou des coûts facturables.",
+      "noPrebillsDescription": "Créez une feuille pour figer les travaux de projet non facturés admissibles à une date d’arrêté.",
+      "createPrebill": "Créer une préfacture",
+      "goToProjects": "Aller aux projets"
+    },
+    "table": {
+      "worksheet": "Feuille",
+      "project": "Projet",
       "status": "Statut",
-      "action": "Action",
-      "preview": "Aperçu",
-      "merge": "Fusionner ({count, plural, one {# référence} other {# références}})",
-      "alreadyMerged": "Déjà fusionné.",
-      "moveCount": "{count, plural, one {# référence sera transférée} other {# références seront transférées}}.",
-      "kept": "Conservé",
-      "impactNote": "Les fusions sont refusées en cas de lignes sur documents non brouillons, de numéros d'avenants ou de cellules budgétaires en conflit. Le projet fusionné est désactivé avec un pointeur vers son survivant.",
-      "loadFailed": "Impossible de charger les doublons.",
-      "previewFailed": "Impossible de prévisualiser la fusion.",
-      "mergeFailed": "Impossible de fusionner les projets.",
-      "merged": "Projets fusionnés."
+      "proposed": "Proposé",
+      "through": "Jusqu’au {periodEnd}",
+      "noCustomer": "Aucun client"
+    },
+    "createDrawer": {
+      "title": "Nouvelle feuille de préfacture",
+      "description": "Figez les travaux non facturés admissibles à une date d’arrêté.",
+      "cancel": "Annuler",
+      "creating": "Création…",
+      "submit": "Créer la préfacture",
+      "projectLabel": "Projet",
+      "projectHelp": "Seuls les types de projet actifs en facturation source standard régie ou coût majoré sont listés.",
+      "configureProjectTypes": "Configurer les types de projet",
+      "startLabel": "Début (facultatif)",
+      "cutoffLabel": "Date d’arrêté",
+      "notesLabel": "Notes d’examen",
+      "notesPlaceholder": "Périmètre, instructions de facturation ou contexte pour le réviseur"
+    },
+    "detail": {
+      "description": "{projectName} · jusqu’au {periodEnd}",
+      "sendForReview": "Envoyer en révision",
+      "return": "Renvoyer",
+      "approve": "Approuver",
+      "converting": "Conversion…",
+      "createInvoice": "Créer une facture",
+      "void": "Annuler",
+      "openInvoice": "Ouvrir {invoiceNumber}"
+    },
+    "workflow": {
+      "returnTitle": "Renvoyer la feuille en brouillon",
+      "voidTitle": "Annuler la feuille",
+      "returnDescription": "Expliquez ce que le préparateur doit corriger. Cela fera partie de la piste de révision.",
+      "voidDescription": "Expliquez pourquoi cette feuille ne doit pas aboutir. Les travaux en cours source restent disponibles pour une feuille ultérieure.",
+      "reasonLabel": "Motif",
+      "saving": "Enregistrement…",
+      "returnSubmit": "Renvoyer en brouillon",
+      "voidSubmit": "Annuler la feuille",
+      "cancel": "Annuler"
+    },
+    "metrics": {
+      "original": "Initial",
+      "proposed": "Proposé",
+      "adjustment": "Ajustement",
+      "cost": "Coût"
+    },
+    "lockedAlert": "Cet instantané d’approbation est verrouillé. Convertissez-le tel qu’approuvé, ou annulez-le et préparez une nouvelle feuille.",
+    "linesTable": {
+      "source": "Source",
+      "date": "Date",
+      "description": "Description",
+      "cost": "Coût",
+      "original": "Initial",
+      "proposedSupport": "Proposé / justificatifs"
+    },
+    "trail": {
+      "title": "Piste de révision",
+      "system": "Système"
+    },
+    "toasts": {
+      "created": "{worksheetNumber} créée avec {sourceCount} lignes sources",
+      "sentForReview": "Envoyée en révision",
+      "approved": "Préfacture approuvée",
+      "returnedToDraft": "Renvoyée en brouillon",
+      "voided": "Préfacture annulée",
+      "converted": "{documentNumber} créée comme facture brouillon"
+    },
+    "lineToasts": {
+      "saved": "Montant de facturation enregistré",
+      "holdApplied": "Blocage de facturation appliqué",
+      "holdReleased": "Blocage de facturation levé"
+    },
+    "line": {
+      "held": "Bloquée",
+      "time": "Temps",
+      "cost": "Coût",
+      "amountAria": "Montant de facturation proposé",
+      "reasonAria": "Motif de l’ajustement",
+      "evidencePlaceholder": "Références de preuves, séparées par des virgules",
+      "saving": "Enregistrement…",
+      "save": "Enregistrer",
+      "hold": "Bloquer",
+      "holdReason": "Motif du blocage",
+      "evidenceReferences": "Références de preuves",
+      "applyHold": "Appliquer le blocage",
+      "releaseHold": "Lever le blocage",
+      "releaseReason": "Motif de la levée",
+      "release": "Lever"
+    }
+  },
+  "duplicates": {
+    "title": "Projets en double",
+    "description": "Projets partageant une référence source, un nom et un client, ou un numéro d'affaire. Choisissez le survivant par groupe, prévisualisez l'impact, puis fusionnez.",
+    "loading": "Chargement des doublons…",
+    "empty": "Aucun projet en double.",
+    "kind": {
+      "source_ref": "Même référence source ({key})",
+      "name_customer": "Même nom et client ({key})",
+      "job_number": "Même numéro d'affaire ({key})"
+    },
+    "chooseSurvivor": "Sélectionnez le projet survivant. Toutes les références des autres y sont transférées en une transaction.",
+    "survivor": "Survivant",
+    "code": "Code",
+    "name": "Nom",
+    "status": "Statut",
+    "action": "Action",
+    "preview": "Aperçu",
+    "merge": "Fusionner ({count, plural, one {# référence} other {# références}})",
+    "alreadyMerged": "Déjà fusionné.",
+    "moveCount": "{count, plural, one {# référence sera transférée} other {# références seront transférées}}.",
+    "kept": "Conservé",
+    "impactNote": "Les fusions sont refusées en cas de lignes sur documents non brouillons, de numéros d'avenants ou de cellules budgétaires en conflit. Le projet fusionné est désactivé avec un pointeur vers son survivant.",
+    "loadFailed": "Impossible de charger les doublons.",
+    "previewFailed": "Impossible de prévisualiser la fusion.",
+    "mergeFailed": "Impossible de fusionner les projets.",
+    "merged": "Projets fusionnés."
   }
 }
