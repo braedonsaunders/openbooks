@@ -97,10 +97,17 @@ export function AccountDrawer({
   }), [account, createMode])
   const [form, setForm] = useState(initial)
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
+  // A blocked save that only fires a transient toast reads as "nothing
+  // happened" once it dismisses (F-t06-004, the F-t06-018 precedent): the
+  // failure also persists as a form-level alert, cleared on the next edit.
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const editable = canManage && mode === 'edit'
   const compatibleParents = parents.filter((option) => option.type === form.type)
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }))
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+    setFieldError(null)
+    setForm((current) => ({ ...current, [key]: value }))
+  }
   // The settlement currency is Multi-currency configuration — except that a
   // reconcilable account MUST carry one (the API 422s without it), so the
   // field stays available whenever the flag is on, even with Multi-currency
@@ -153,7 +160,9 @@ export function AccountDrawer({
     const data = await response.json().catch(() => ({}))
     setBusy(false)
     if (!response.ok) {
-      toast.error(errorMessage(data.error))
+      const message = errorMessage(data.error)
+      setFieldError(message)
+      toast.error(message)
       return
     }
     toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
@@ -180,6 +189,7 @@ export function AccountDrawer({
       router.push(closeHref as never)
       return
     }
+    setFieldError(null)
     setForm(initial)
     setMode('view')
   }
@@ -223,6 +233,11 @@ export function AccountDrawer({
       }
     >
       <div className="space-y-7 p-1">
+        {fieldError ? (
+          <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            {fieldError}
+          </p>
+        ) : null}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${fieldClass} lg:col-span-2`}>
             <Label>{tc('labels.name')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
