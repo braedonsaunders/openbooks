@@ -137,14 +137,27 @@ test("property buildings table headers render French, never English (F-t09-017)"
 
 test("property type and status cells resolve through the catalog (F-t09-017)", () => {
   const html = renderFr();
+  // F-v4-001: each row describes a building (un immeuble, masculine — the
+  // "Immeuble"/"Type"/"Statut" headers), so the type/status adjectives agree
+  // masculine. The catalog previously carried the feminine forms.
   assert.ok(
-    html.includes("Résidentielle"),
+    html.includes(">Résidentiel<"),
     "fr render must translate the residential type",
   );
   assert.ok(
-    html.includes(">Active<"),
+    html.includes(">Actif<"),
     "fr render must translate the active status",
   );
+  for (const feminine of [
+    "Résidentielle",
+    "Commerciale",
+    "Industrielle",
+    "Vendue",
+    ">Active<",
+    ">Inactive<",
+  ]) {
+    assert.ok(!html.includes(feminine), `fr render must not use feminine ${feminine}`);
+  }
   assert.ok(!html.includes("Residential"), "raw English type must not leak");
   assert.ok(!html.includes("Not mapped"), "English not-mapped must not leak");
   assert.ok(html.includes("Non associé"), "unmapped location needs French copy");

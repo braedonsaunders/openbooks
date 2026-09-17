@@ -66,15 +66,15 @@
       "occupancy": "Occupation"
     },
     "status": {
-      "sold": "Vendue",
-      "active": "Active",
-      "inactive": "Inactive"
+      "sold": "Vendu",
+      "active": "Actif",
+      "inactive": "Inactif"
     },
     "types": {
-      "residential": "Résidentielle",
-      "commercial": "Commerciale",
+      "residential": "Résidentiel",
+      "commercial": "Commercial",
       "mixed_use": "Usage mixte",
-      "industrial": "Industrielle",
+      "industrial": "Industriel",
       "other": "Autre"
     }
   },
