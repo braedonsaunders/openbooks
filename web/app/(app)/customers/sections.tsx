@@ -59,14 +59,14 @@ export function ArPulse({
   return (
     <>
       <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800">
-        <div className="px-3 py-2.5 text-center">
-          <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{outstanding}</p>
+        <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
+          <p className="text-sm font-bold break-words tabular-nums text-slate-800 dark:text-slate-100">{outstanding}</p>
           <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.open}</p>
         </div>
-        <div className="px-3 py-2.5 text-center">
+        <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
           <p
             className={cn(
-              'text-sm font-bold tabular-nums',
+              'text-sm font-bold break-words tabular-nums',
               overdueIsNegative ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100',
             )}
           >
@@ -74,8 +74,8 @@ export function ArPulse({
           </p>
           <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.overdue}</p>
         </div>
-        <div className="px-3 py-2.5 text-center">
-          <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{dso}</p>
+        <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
+          <p className="text-sm font-bold break-words tabular-nums text-slate-800 dark:text-slate-100">{dso}</p>
           <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.dso}</p>
         </div>
       </div>
