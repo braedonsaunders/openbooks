@@ -8,7 +8,8 @@
       "people": "ユーザーとアクセス",
       "workspace": "ワークスペース",
       "activity": "アクティビティとデータ",
-      "data": "連携とデータ"
+      "data": "連携とデータ",
+      "platform": "プラットフォーム・開発"
     },
     "cards": {
       "settings": {
@@ -86,6 +87,18 @@
       "email": {
         "title": "メール配信",
         "description": "スケジュールされたレポートを送信できるよう、メールプロバイダーを設定"
+      },
+      "agentsSetup": {
+        "description": "バックグラウンドのエージェントパックです。インストール、スケジュールとチェックの設定、実行の確認を行います",
+        "title": "エージェント"
+      },
+      "flows": {
+        "description": "統制された自動化・承認ゲート・条件・アクションを構築します",
+        "title": "フロー"
+      },
+      "queryConsole": {
+        "description": "分析・連携作業向けに権限管理されたクエリを実行します",
+        "title": "クエリコンソール"
       }
     }
   },
@@ -131,7 +144,48 @@
     "userFilter": "ユーザー",
     "dateFrom": "開始日",
     "dateTo": "終了日",
-    "clearDates": "日付をクリア"
+    "clearDates": "日付をクリア",
+    "documentation": "ドキュメント",
+    "drawer": {
+      "actor": "利用者",
+      "after": "後",
+      "afterSnapshot": "このイベント後のレコード",
+      "before": "前",
+      "beforeSnapshot": "このイベント前のレコード",
+      "changeCount": "{count, plural, one {変更 # 件} other {変更 # 件}}",
+      "changedFields": "変更された項目",
+      "description": "{actor}が{when}に記録",
+      "emptyCollection": "値なし",
+      "eventContext": "イベント内容",
+      "field": "項目",
+      "item": "明細",
+      "itemCount": "{count, plural, one {明細 # 件} other {明細 # 件}}",
+      "itemPosition": "{total}件中{current}件目",
+      "lineItem": "行{line}",
+      "no": "いいえ",
+      "noDifferences": "このイベントには前後の項目差分が記録されませんでした。",
+      "notSet": "未設定",
+      "propertyCount": "{count, plural, one {属性 # 件} other {属性 # 件}}",
+      "recordRemoved": "レコードを削除",
+      "recordRemovedDescription": "このイベントでレコードが削除されたため、後のスナップショットはありません。",
+      "recordType": "レコード種別",
+      "reference": "レコード参照",
+      "tabs": {
+        "after": "後",
+        "before": "前",
+        "changes": "変更"
+      },
+      "tabsAria": "監査イベントの表示",
+      "technicalDetails": "技術詳細",
+      "when": "記録日時",
+      "yes": "はい"
+    },
+    "openEventAria": "{when}の{recordType}の{action}イベントを開く",
+    "summaries": {
+      "changeCount": "{count, plural, =0 {イベント詳細} one {変更項目 # 件} other {変更項目 # 件}}",
+      "metadata": "レコードのメタデータ",
+      "snapshot": "前後の完全なスナップショット"
+    }
   },
   "customFields": {
     "title": "カスタムフィールド",
@@ -381,7 +435,9 @@
       "subsidiaryPlaceholder": "子会社を選択…",
       "subsidiarySearchPlaceholder": "子会社を検索…",
       "subsidiaryRequired": "子会社を選択してください",
-      "subsidiaryListRequired": "少なくとも1つの子会社を選択してください"
+      "subsidiaryListRequired": "少なくとも1つの子会社を選択してください",
+      "inactivePermissions": "非有効のアプリ権限",
+      "permissionsLoadFailed": "アプリ権限を読み込めませんでした"
     }
   },
   "scripts": {
@@ -409,7 +465,8 @@
       "scheduled": "スケジュール実行",
       "endpoint": "エンドポイント",
       "bulk": "一括",
-      "client": "クライアント"
+      "client": "クライアント",
+      "customGlLines": "カスタム総勘定元帳行"
     },
     "kinds": {
       "vendorBill": "仕入請求書",
@@ -550,7 +607,9 @@
       "reportPdfStyle": "財務レポートのPDFスタイル",
       "reportPdfStyleModern": "モダン（ブランド）",
       "reportPdfStyleFormal": "フォーマル（GAAP）",
-      "reportPdfStyleHint": "エクスポートした財務諸表の見た目です。モダンはブランドのアクセントカラーとサンセリフ体を使用し、フォーマルは古典的なセリフ体、グレースケール、監査対応の諸表です。"
+      "reportPdfStyleHint": "エクスポートした財務諸表の見た目です。モダンはブランドのアクセントカラーとサンセリフ体を使用し、フォーマルは古典的なセリフ体、グレースケール、監査対応の諸表です。",
+      "perEntityNote": "この会社は最上位の法人です。法人名・国・通貨はここにあります。下に子会社を追加し、それぞれに設定します。",
+      "subsidiariesLink": "子会社を開く"
     },
     "fiscal": {
       "title": "会計年度",
@@ -655,8 +714,13 @@
         "valuationAllowance": {
           "label": "評価性引当額",
           "hint": "繰延税金資産の控除項目"
+        },
+        "retainagePayable": {
+          "hint": "承認済みの解除まで保持される仕入先出来高請求の保留金",
+          "label": "買掛保留金"
         }
-      }
+      },
+      "defaultsNote": "全社共通の既定値です。子会社は自レコードで上書きでき、空欄の上書きはこれに戻ります。"
     },
     "revenue": {
       "title": "収益認識",
@@ -741,7 +805,8 @@
     "inviteCopyLink": "リンクをコピー",
     "inviteCopied": "リンクをコピーしました",
     "inviteCopyFailed": "リンクをコピーできませんでした — 手動で選択してください",
-    "inviteTooManyAttempts": "招待が多すぎます — しばらくしてから試してください"
+    "inviteTooManyAttempts": "招待が多すぎます — しばらくしてから試してください",
+    "unassignedRole": "ロール未割当"
   },
   "permissions": {
     "groups": {
@@ -766,7 +831,10 @@
       "admin": "管理",
       "assets": "固定資産と減価償却",
       "data": "インポートとエクスポート",
-      "crm": "顧客関係管理"
+      "crm": "顧客関係管理",
+      "allocations": "配賦",
+      "compliance": "コンプライアンス",
+      "payroll": "給与計算"
     },
     "gl_read": "仕訳と残高を表示",
     "gl_manage": "会計科目表を管理",
@@ -853,7 +921,19 @@
     "crm_forecasts_read": "販売予測を表示",
     "crm_forecasts_manage": "予測スナップショットを作成",
     "crm_forecasts_override": "チーム予測を上書き",
-    "crm_setup_manage": "CRMセットアップを管理"
+    "crm_setup_manage": "CRMセットアップを管理",
+    "allocations_approve": "承認待ちの配賦実行を承認します",
+    "allocations_manage": "配賦ルールとドライバーを作成・編集します",
+    "allocations_read": "配賦ルール・実行・由来を表示します",
+    "allocations_run": "配賦のプレビュー・記帳・取消・再実行をします",
+    "compliance_file": "情報申告書を確定して提出します",
+    "compliance_manage": "証明書・放棄書・申告書を記録します",
+    "compliance_read": "下請コンプライアンスを表示します",
+    "compliance_verify": "証明書を検証します",
+    "compliance_waive": "コンプライアンス例外を認めます",
+    "payroll_manage": "給与計算と従業員プロフィールを設定します",
+    "payroll_read": "給与計算と明細を表示します",
+    "payroll_run": "給与計算を作成・計算・確定します"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -947,7 +1027,8 @@
         "count": "件",
         "percent": "%",
         "multiple": "× 重要性",
-        "points": "パーセントポイント"
+        "points": "パーセントポイント",
+        "weeks": "週"
       },
       "parameters": {
         "criticalAgeDays": "重大とする経過日数",
@@ -959,7 +1040,23 @@
         "minimumDeclinePercent": "最小の収益減少",
         "criticalDeclinePercent": "重大な収益減少",
         "minimumDropPoints": "最小の利益率低下",
-        "criticalDropPoints": "重大な利益率低下"
+        "criticalDropPoints": "重大な利益率低下",
+        "breachToleranceDays": "違反許容",
+        "criticalCustomerCount": "重要得意先の件数",
+        "criticalPairCount": "重要ペアの件数",
+        "dueWithinDays": "期限内",
+        "duplicateDays": "重複期間",
+        "duplicateWindowDays": "重複期間",
+        "forecastWeeks": "予測期間",
+        "holdMaterialityMultiple": "保留重要性倍率",
+        "holdOverdueDays": "保留延滞日数",
+        "lookbackDays": "振り返り",
+        "matchWindowDays": "照合期間",
+        "minOverdueInvoices": "最小延滞請求書数",
+        "minimumConfidencePercent": "最低確度",
+        "minimumDiscountPercent": "最低割引率",
+        "payRunHorizonDays": "給与計算の範囲",
+        "unbilledDays": "未請求後の経過"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -989,6 +1086,142 @@
         "gross_margin_decline": {
           "title": "売上総利益率の低下",
           "description": "完了した期間の売上総利益率を比較し、パーセントポイント単位の重要な圧縮をフラグ付けします。"
+        },
+        "broken_payment_promise": {
+          "title": "破られた支払約束",
+          "description": "違反許容を過ぎた約束を、経過と与信額で順位付けします。"
+        },
+        "cash_bill_crunch": {
+          "description": "手元資金を上回る期間内の買掛金を検出します。",
+          "title": "支払集中"
+        },
+        "cash_forecast_shortfall": {
+          "description": "予測期間内に予測残高がマイナスに落ち込む時点を検出します。",
+          "title": "資金不足予測"
+        },
+        "cash_low_balance": {
+          "description": "下限を下回る銀行残高を不足額付きで検出します。",
+          "title": "現金残高の低下"
+        },
+        "forensic_duplicate_bills": {
+          "description": "買掛のチェックをすり抜けた可能性のある酷似請求書です。",
+          "title": "フォレンジック重複請求書"
+        },
+        "forensic_round_dollar": {
+          "description": "振り返り期間内の不自然にきりの良い記帳です。",
+          "title": "きりの良い金額の記帳"
+        },
+        "forensic_threshold_trap": {
+          "description": "承認限度額の直下に置かれた金額です。",
+          "title": "限度額トラップ"
+        },
+        "forensic_weekend_postings": {
+          "description": "振り返り期間内で週末日付の記帳です。",
+          "title": "週末の記帳"
+        },
+        "overdue_customer_balance": {
+          "description": "条件超過の得意先を、与信額・入金行動・滞留集中とともに示します。",
+          "title": "延滞得意先残高"
+        },
+        "payroll_missing_elections": {
+          "description": "TD1・W-4の申告が未登録の在籍従業員を検出します。",
+          "title": "法定申告の未登録"
+        },
+        "payroll_remittance_due": {
+          "description": "納期限が範囲内で請求書の裏付けがない源泉額を検出します。",
+          "title": "納付期限"
+        },
+        "payroll_unknown_accounts": {
+          "description": "明細が申告・負債口座に紐付いていない確定済み給与を検出します。",
+          "title": "不明な給与口座"
+        },
+        "payroll_yearend_gaps": {
+          "description": "年末調書に必要なSINの欠落や法定率の未設定を検出します。",
+          "title": "年末申告の抜け"
+        },
+        "project_budget_overrun": {
+          "description": "記帳原価と未決済引当の合計が承認予算を超えたプロジェクトを検出します。",
+          "title": "プロジェクト予算超過"
+        },
+        "project_negative_margin": {
+          "description": "記帳粗利がマイナスの進行中プロジェクトを、前回からの転換付きで検出します。",
+          "title": "マイナスのプロジェクト粗利"
+        },
+        "project_stale_unbilled": {
+          "description": "経過基準を過ぎても未請求の承認済み請求可能作業を検出します。",
+          "title": "滞留した未請求作業"
+        },
+        "tax_missing_codes": {
+          "description": "申告書に載らない税なし明細を持つ記帳済み証憑を見つけます。",
+          "title": "税コードなし証憑"
+        },
+        "tax_missing_registration": {
+          "description": "登録番号が未登録の有効な申告書式を検出します。",
+          "title": "税務登録の欠落"
+        },
+        "tax_return_blocked": {
+          "description": "申告エンジンが計算できない設定済み申告書を検出します。",
+          "title": "停止中の税務申告"
+        },
+        "tax_unlocked_period": {
+          "description": "税務ロックのない直近の完了期間を検出します。",
+          "title": "未ロックの税務期間"
+        },
+        "bank_line_match_candidate": {
+          "description": "期間内に確度の高い照合候補がある未照合の銀行明細です。",
+          "title": "照合候補"
+        },
+        "bills_due_before_payrun": {
+          "description": "給与計算範囲内に期限が来る承認済み請求書を、支払能力とともに測定します。",
+          "title": "給与計算前の期限請求書"
+        },
+        "bills_missing_approval": {
+          "description": "経過基準を過ぎても承認なく待機中の請求書です。",
+          "title": "承認なし請求書"
+        },
+        "budget_scenario_without_lines": {
+          "description": "明細を持たない予算シナリオです。",
+          "title": "空の予算シナリオ"
+        },
+        "control_account_type_mismatch": {
+          "description": "管理役割が種別と食い違う口座です。",
+          "title": "管理口座の不一致"
+        },
+        "credit_hold_candidate": {
+          "description": "保留年齢・与信額を超え、延滞請求書が繰り返す得意先です。",
+          "title": "与信停止候補"
+        },
+        "duplicate_bills": {
+          "description": "重複期間内に再入力のコピーと思われる仕入先請求書です。",
+          "title": "重複請求書"
+        },
+        "duplicate_party_identity": {
+          "description": "名称または納税者番号を共有する取引先です。",
+          "title": "重複した取引先"
+        },
+        "early_pay_discount_opportunity": {
+          "description": "早期支払で最低割引率以上が得られる請求書です。",
+          "title": "早期支払割引"
+        },
+        "item_missing_tax_code": {
+          "description": "証憑の税金を動かす税コードがない品目です。",
+          "title": "税コードなし品目"
+        },
+        "never_reconciled_account": {
+          "description": "振り返り期間に動きがあり消込がない銀行口座です。",
+          "title": "未消込の口座"
+        },
+        "project_missing_cost_budget": {
+          "description": "粗利を測る原価予算がないプロジェクトです。",
+          "title": "原価予算なしプロジェクト"
+        },
+        "stale_reconciliation": {
+          "description": "経過基準を過ぎても手つかずの進行中消込です。",
+          "title": "滞留した消込"
+        },
+        "unmapped_payroll_component": {
+          "description": "記帳マッピングがない給与項目です。",
+          "title": "未マッピング給与項目"
         }
       },
       "accounting": {
@@ -1012,6 +1245,51 @@
         "failed": "失敗",
         "skipped": "スキップ",
         "running": "実行中"
+      },
+      "cash": {
+        "coverage": "残高低下・支払集中・資金不足予測をチェックします。",
+        "description": "継続的な資金流動性統制です。",
+        "title": "資金エージェント"
+      },
+      "collections": {
+        "coverage": "延滞得意先残高を入金行動・破られた支払約束・与信停止候補とともにチェックします。",
+        "description": "継続的な売掛統制です。",
+        "title": "回収エージェント"
+      },
+      "forensics": {
+        "coverage": "週末記帳・きりの良い支出・限度直下の金額・重複請求書をチェックします。",
+        "description": "継続的な支出異常統制です。",
+        "title": "フォレンジックエージェント"
+      },
+      "hygiene": {
+        "coverage": "管理口座の不一致・重複取引先・必要なコードや予算、マッピングが欠けたレコードをチェックします。",
+        "description": "継続的なマスタ統制です。",
+        "title": "データ衛生エージェント"
+      },
+      "payables": {
+        "coverage": "重複請求書・次回給与計算前の期限請求書・早期支払割引・承認漏れをチェックします。",
+        "description": "継続的な買掛統制です。",
+        "title": "買掛エージェント"
+      },
+      "payroll": {
+        "coverage": "納付期限・不明口座・申告漏れ・年末の抜けをチェックします。",
+        "description": "継続的な給与コンプライアンス統制です。",
+        "title": "給与エージェント"
+      },
+      "projects": {
+        "coverage": "マイナス粗利・予算超過・滞留未請求作業をチェックします。",
+        "description": "継続的なプロジェクト粗利統制です。",
+        "title": "プロジェクトエージェント"
+      },
+      "reconciliation": {
+        "coverage": "確度の高い照合候補のある未照合銀行明細・滞留消込・未消込口座をチェックします。",
+        "description": "継続的な銀行照合統制です。",
+        "title": "照合エージェント"
+      },
+      "tax": {
+        "coverage": "税コード・登録・計算可能な申告書・期間ロックをチェックします。",
+        "description": "継続的な申告準備統制です。",
+        "title": "税務エージェント"
       }
     },
     "documentCapture": {
@@ -1050,8 +1328,16 @@
       "typeManually": "手動で入力",
       "current": "{id}（現在）",
       "hint": "APIキーで最新のモデル一覧を読み込むか、モデルIDを手動で入力してください。",
-      "idPlaceholder": "モデルID"
-    }
+      "idPlaceholder": "モデルID",
+      "result": {
+        "empty": "プロバイダがモデルを返しませんでした。IDを手入力してください。",
+        "missingKey": "このプロバイダのモデルを読み込むにはAPIキーを入力してください。",
+        "unauthorized": "APIキーが拒否されました（{status}）。キーを確認してもう一度お試しください。"
+      }
+    },
+    "manageAgentsDescription": "スケジュール・チェック・検出事項の振り分けは「設定 → エージェント」にあります。",
+    "manageAgentsLink": "エージェント設定を開く",
+    "manageAgentsTitle": "バックグラウンドエージェント"
   },
   "setup": {
     "title": "セットアップ",
@@ -1069,10 +1355,59 @@
           "trade": "職種を選択",
           "department": "部門を選択",
           "subsidiary": "子会社を選択"
-        }
+        },
+        "add": "レートを追加",
+        "annualHours": "年間時間数",
+        "annualHoursRequired": "年間時間数はゼロより大きい値を入力してください",
+        "basis": "基準",
+        "confirmDelete": "このレートを削除しますか？原価計上済みの時間はスナップショットを保持し、今後の承認はこれなしで解決されます。",
+        "drawerEditDescription": "{scope}の発効日付き賃金レートを更新します。",
+        "drawerEditTitle": "賃金レートを編集",
+        "drawerNewTitle": "新しい賃金レート",
+        "employeeNote": "{total}名中{covered}名が賃金に解決されます。従業員別の賃金と昇給履歴は各従業員レコードにあります（業務 → 従業員）。",
+        "emptyFiltered": "この条件に一致する賃金レートはありません。",
+        "endDateHint": "空欄のままにするとこのレートは無期限です。",
+        "from": "開始",
+        "hourlyEquivalent": "時間換算：{amount}",
+        "hr": "時間",
+        "invalidEndDate": "終了日は開始日より前にできません",
+        "notes": "メモ",
+        "openRate": "{scope}の賃金レートを開く",
+        "perHour": "1時間あたり",
+        "perYear": "1年あたり",
+        "rate": "レート",
+        "rateDeleted": "賃金レートを削除しました",
+        "rateUpdated": "賃金レートを更新しました",
+        "scope": "範囲",
+        "scopeOrg": "組織の既定値",
+        "scopeTrade": "職種",
+        "search": "レートを検索…",
+        "selectTrade": "職種を選択",
+        "status": "ステータス",
+        "statusActive": "有効・予定あり",
+        "statusCurrent": "現在",
+        "statusEnded": "終了",
+        "statusScheduled": "予定",
+        "title": "賃金レート",
+        "to": "終了",
+        "who": "対象",
+        "yr": "年"
       },
       "reconciliation": {
-        "subsidiary": "子会社"
+        "subsidiary": "子会社",
+        "from": "開始",
+        "hint": "標準労務は承認時に仮勘定に貸記され、給与仕訳（取込または手入力）は同口座に借記されます。残りが給与差異です。期間終了時に振り替えてください。",
+        "load": "読込",
+        "openBalance": "仮勘定残高（全期間）",
+        "payrollPosted": "突合済みの給与実績",
+        "periodVariance": "期間差異",
+        "postVariance": "差異を記帳",
+        "project": "プロジェクト",
+        "standardCost": "標準原価",
+        "standardPosted": "記帳済みの標準労務",
+        "title": "給与照合",
+        "to": "終了",
+        "variancePosted": "給与差異${amount}を記帳しました"
       },
       "billing": {
         "title": "請求用労務レート表",
@@ -1174,9 +1509,155 @@
         }
       },
       "tabs": {
-        "billing": "請求レート表"
+        "billing": "請求レート表",
+        "components": "付帯費見積",
+        "posting": "記帳",
+        "rates": "賃金レート",
+        "reconciliation": "給与照合"
       },
-      "navTitle": "労務費"
+      "navTitle": "労務費",
+      "components": {
+        "addBurden": "付帯費（％）を追加",
+        "addPerDiem": "日当を追加",
+        "hint": "給与実績が届く前の案件原価を現実的にするため、賃金に上乗せします（法定付帯費、日当）。実績の記帳後は実際の労務費に置き換わります。恒久的な層ではありません。",
+        "hoursPerDay": "1日あたり時間数",
+        "kind": "種別",
+        "name": "名称",
+        "newBurden": "給与付帯費（見積）",
+        "newPerDiem": "日当",
+        "perDay": "1日あたり金額",
+        "perHour": "1時間あたり金額",
+        "percentOfWage": "賃金の％",
+        "remove": "項目を削除",
+        "scalesOt": "時間外に連動",
+        "title": "原価見積項目",
+        "value": "値",
+        "addWorkerComp": "労災保険を追加",
+        "annualHours": "年間時間数（給与）",
+        "example": "{wage}/時の賃金での例：",
+        "exampleDt": "ダブル×2",
+        "exampleOt": "時間外×1.5",
+        "exampleReg": "通常",
+        "newWorkerComp": "労災保険（WSIB）",
+        "presetCa": "カナダ 約13％",
+        "presetCaName": "法定付帯費 — CPP・EI・WSIB・EHT・休暇（見積）",
+        "presetLead": "クイックスタート：",
+        "presetUs": "米国 約30％",
+        "presetUsName": "給与付帯費 — FICA・FUTA/SUTA・労災（見積）",
+        "workerComp": "労災保険（グループ別）",
+        "workerCompHint": "レートは各従業員の労災グループから取得します（設定 → 従業員 → 労災グループ。従業員レコードで割当）。ここ値はグループ未割当時の代替％にすぎません。"
+      },
+      "description": "1時間の労務費です。発効日付き賃金、給与実績前の見積項目、標準原価の案件への記帳方法を管理します。間接費は間接費モデルで別途設定します。",
+      "orgDefault": "組織の既定値",
+      "rateRequired": "レートを入力してください",
+      "rateSaved": "レートを保存しました",
+      "save": "設定を保存",
+      "saved": "労務費計算の設定を保存しました",
+      "scopeRequired": "従業員または職種を選択してください",
+      "title": "労務費計算",
+      "tradePrefix": "職種：",
+      "checklist": {
+        "burden": "付帯費見積",
+        "burdenDone": "{count}項目を設定済み",
+        "burdenNone": "項目なし — 給与前原価は素の賃金です",
+        "launchWizard": "設定ガイド",
+        "posting": "案件記帳",
+        "postingAccounts": "オンには仕掛品＋仮勘定が必要です",
+        "postingOff": "オフ — レートのスナップショットのみ",
+        "postingOn": "標準原価は承認時に案件へ記帳されます",
+        "trueup": "給与照合",
+        "trueupNone": "期間を締めるには差異口座を割り当ててください",
+        "trueupReady": "差異口座を割当済み — 下で照合してください",
+        "wages": "賃金レート",
+        "wagesDetail": "{total}名中{covered}名がレートに解決されます"
+      },
+      "docs": "ドキュメント",
+      "posting": {
+        "hint": "記帳をオンにすると、承認された工数が標準原価で借方：労務仕掛品（案件別）／貸方：労務仮勘定に記帳されます。給与実績は後に同口座を消し込み、残りが給与差異です。",
+        "laborClearing": "労務仮勘定",
+        "laborWip": "労務仕掛品・案件原価口座",
+        "modeOff": "オフ — レートのスナップショットのみ",
+        "modePost": "標準原価を案件に記帳",
+        "overheadNote": "間接費はこのレートに含まれません。間接費モデルが独自の層として適用します。",
+        "payrollVariance": "給与差異口座",
+        "title": "記帳"
+      },
+      "wizard": {
+        "apply": "設定を適用",
+        "applying": "適用中…",
+        "back": "戻る",
+        "burden": {
+          "canada": "カナダ — 法定 約13％",
+          "canadaHint": "CPP・EI・WSIB・EHT・休暇給。妥当な開始見積です。いつでも調整できます。",
+          "custom": "カスタム率",
+          "customHint": "自社の数値がお分かりですね。入力してください。",
+          "customPct": "賃金の％",
+          "skip": "今はスキップ",
+          "skipHint": "項目を追加するまで案件原価は素の賃金のみ表示されます。",
+          "us": "米国 — 建設 約30％",
+          "usHint": "FICA・FUTA/SUTA・労災です。一般的な範囲は25～40％です。"
+        },
+        "description": "賃金の代替値・給与付帯費・元帳記帳のためのガイド設定です。",
+        "done": "労務費計算を設定しました",
+        "next": "次へ",
+        "q1": "給与付帯費をどう見積もりますか？",
+        "q1Hint": "賃金が生む事業主コスト（税金・保険・休暇）です。見積りにより給与計算前の案件原価が現実的になります。実際の給与が置き換えます。",
+        "title": "労務費計算を設定",
+        "customBurdenName": "給与付帯費（見積）",
+        "exDt": "ダブル×2",
+        "exOt": "時間外×1.5",
+        "exReg": "通常",
+        "fallbackHint": "レコード整備中も案件原価を動かし続けます。多くの会社は空欄のままです。",
+        "fallbackRate": "賃金未設定の従業員向けの任意の代替レート",
+        "nextOverhead": "労務費計算は賃金と法定付帯費を対象とします。貴社の間接費（家賃・管理・車両など）は独自のガイド設定を持つ別の層です。原価を分類し、計算レートを確認してプロジェクト種別に適用します。",
+        "nextOverheadLink": "間接費モデルを開く",
+        "nextSteps": "この後：間接費",
+        "openEmployees": "従業員を開く",
+        "orgRate": "既定の時間賃金（個別レートのない全員）",
+        "perEmployeeLater": "従業員別の正確なレートはいつでもワークスペースで追加できます。職種・既定レートに優先します。",
+        "posting": {
+          "clearing": "労務仮勘定",
+          "off": "まだ行わない — レートのみ管理",
+          "offHint": "時間は報告用に原価計上されます。総勘定元帳には何も記帳されません。",
+          "post": "はい — 承認時に標準原価を記帳",
+          "postHint": "借方：労務仕掛品（案件別）／貸方：労務仮勘定。給与実績は後に同口座を消し込みます。",
+          "variance": "給与差異口座（任意 — 月末照合用）",
+          "varianceLater": "後で選択",
+          "wip": "労務仕掛品・案件原価口座"
+        },
+        "q2": "賃金はどこから取得しますか？",
+        "q2Hint": "従業員ごとに賃金を設定します。作業員を検索して入力してください。空欄の方は下の任意の代替値を利用でき、給与制社員は後でワークスペースで調整できます。",
+        "q3": "労務費を案件に記帳しますか？",
+        "q3Hint": "記帳をオンにすると、工数の承認で標準労務費が各プロジェクトに対して元帳に書き込まれ、給与に先行します。",
+        "ratedCount": "{total}名中{rated}名に賃金あり",
+        "ratePlaceholder": "0.00",
+        "review": "適用準備：",
+        "reviewBurden": "付帯費見積：{name}（{pct}％）",
+        "reviewEmployeeRates": "{count}名分の賃金。",
+        "reviewExample": "{wage}/時の賃金での例：",
+        "reviewFallback": "未設定者向けの代替{rate}/時。",
+        "reviewNoBurden": "付帯費見積なし（素の賃金のみ）",
+        "reviewNoOrgRate": "既定賃金なし。",
+        "reviewNoPosting": "記帳はオフのままです。後で有効化できます",
+        "reviewNote": "ここでの内容はすべて後でワークスペースで編集できます。このガイドは同じ設定を入力するだけです。",
+        "reviewOrgRate": "既定賃金${rate}/時。",
+        "reviewPosting": "標準原価は承認時に案件へ記帳されます",
+        "reviewTradeRates": "+ 職種レート{count}件。",
+        "reviewWagesOnRecord": "賃金は各従業員のレコードから取得します。",
+        "searchEmployees": "従業員を検索…",
+        "tradeRates": "職種別レート（任意 — 既定に優先）",
+        "wagesOnRecord": "各従業員の賃金（と昇給履歴）は従業員レコードで設定します。その方に関する他のすべてを管理する場所と同じです。ここで入力することはありません。"
+      },
+      "discard": "破棄",
+      "related": {
+        "overhead": "間接費モデル",
+        "overheadHint": "会社コストの層です。プール・部門レート・間接費の案件への届き方を管理します。",
+        "rateBooks": "品目レート表",
+        "rateBooksHint": "請求内容です。品目・得意先別の請求レートを通常・時間外・ダブルの段階付きで管理します。",
+        "timeTypes": "時間種別",
+        "timeTypesHint": "通常・時間外・ダブルタイムです。この画面の原価・請求倍率のもとになります。"
+      },
+      "unsaved": "未保存の変更"
     },
     "taxLibrary": {
       "title": "税務申告ライブラリ",
@@ -1201,12 +1682,12 @@
     },
     "assetDepreciationSetup": {
       "navTitle": "帳簿減価償却",
-      "title": "Book Depreciation",
-      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
-      "tabsAria": "Book depreciation setup sections",
+      "title": "帳簿減価償却",
+      "description": "再利用可能な減価償却方法と、各会計帳簿が資産区分に適用する方法・耐用年数・慣習を設定します。",
+      "tabsAria": "帳簿減価償却設定のセクション",
       "tabs": {
-        "methods": "Methods",
-        "books": "Book policies"
+        "methods": "方法",
+        "books": "帳簿ポリシー"
       }
     },
     "taxDepreciationSetup": {
@@ -1745,97 +2226,236 @@
         "description": "管轄区別の制定所得税率（効力日付き）— ASC 740 税金計算の基礎。"
       },
       "tax-jurisdictions": {
-        "title": "税務管轄"
+        "title": "税務管轄",
+        "description": "間接税を課す国・州・地方で、ネクサスの中核です。",
+        "singularTitle": "税務管轄区域"
       },
       "tax-registrations": {
-        "title": "ネクサス"
+        "title": "ネクサス",
+        "description": "徴収・納付のために事業者が登録されている地域、申告頻度、提出する申告書です。",
+        "singularTitle": "税務登録"
       },
       "tax-regimes": {
-        "title": "税務減価償却制度"
+        "title": "税務減価償却制度",
+        "description": "設定可能なプール型税務減価償却制度です。カナダ（CCA）・英国・オーストラリア・ニュージーランド用を組込済み。自作や組込の上書きが可能です。",
+        "singularTitle": "税務減価償却制度"
       },
       "tax-pool-classes": {
-        "title": "税務減価償却クラス"
+        "title": "税務減価償却クラス",
+        "description": "制度ごとのプール区分です。税率・方法・初年度按分・取戻の扱いを定め、組込の区分表を上書きします。",
+        "singularTitle": "税務減価償却区分"
       },
       "tax-first-year-rules": {
-        "title": "初年度ルール"
+        "title": "初年度ルール",
+        "description": "制度・区分ごとの日付付き初年度ルール（半年ルール、加速投資優遇、即時費用化）です。",
+        "singularTitle": "初年度ルール"
       },
       "pay-schedules": {
-        "title": "給与スケジュール"
+        "title": "給与スケジュール",
+        "description": "給与頻度カレンダーです。年間の期間数、基準期間末、支給日オフセットを管理します。"
       },
       "pay-components": {
-        "title": "給与項目"
+        "title": "給与項目",
+        "description": "税務処理・総勘定元帳口座・納付先を備えた支給・控除・事業主負担です。"
       },
       "union-agreements": {
-        "title": "労働協約"
+        "title": "労働協約",
+        "description": "労働協約です。組合・支部、組合納付金の支払先を管理します。"
       },
       "subsidiary-ownership-interests": {
-        "title": "子会社持分"
+        "title": "子会社持分",
+        "description": "連結のための発効日付き持分・取得・非支配持分・持分法ポリシーです。",
+        "singularTitle": "持分"
       },
       "allocations": {
-        "title": "配賦"
+        "title": "配賦",
+        "description": "プールされた原価をドライバー基準で対象に配分します。入力時の分割、記帳時の積み上げ、期間ごとの一掃を行います。",
+        "singular": "配賦ルール"
       },
       "overhead-model": {
         "title": "間接費",
         "application": {
           "systemRule": {
-            "title": "エンジン配賦ルール"
+            "title": "エンジン配賦ルール",
+            "body": "上記の各記帳は、エンジン所有の配賦ルール{key}（版{version}、発効{date}、定義{hash}）で作成されます。このポリシーと公開レート表を反映しているため、ここでは編集も削除もできません。ポリシーを変更するか新しいレートを公開してください。",
+            "noVersion": "有効なルール版がありません。ポリシーが有効なゼロサムペアでないか、時間レート表が空です。両方が揃うとカーネル経由で記帳が再開します。",
+            "viewRule": "配賦で見る"
+          },
+          "account": "適用間接費口座",
+          "autoHint": "間接費は自動適用されます。工数が承認されると、各入力の取り分（時間×作業日の公開部門レート）が同じ承認で記帳されます。月末処理は不要で、給与計算を待ちません。",
+          "backfill": "過去の工数に適用",
+          "backfillPrompt": "承認済み入力{entries}件（約{hours}時間）がこの方式より前で、まだ間接費が付いていません。",
+          "backfilled": "過去の入力{entries}件に間接費${total}を適用しました",
+          "date": "日付",
+          "entry": "仕訳",
+          "hint": "間接費の帳簿への届き方です。報告のみは統計扱いのままです。ゼロサムペアは、各プロジェクトの取り分をプロジェクトタグ付きで間接費口座に記帳し、同額をタグなしで戻します。原価ビューには間接費が乗り、口座と全社損益はゼロに相殺されます。",
+          "modes": {
+            "net_zero_pair": "ゼロサムペア",
+            "off": "オフ",
+            "report_only": "報告のみ"
+          },
+          "projects": "プロジェクト",
+          "save": "保存",
+          "saved": "間接費の適用を保存しました",
+          "status": "ステータス",
+          "title": "元帳適用",
+          "total": "適用済み"
+        },
+        "approach": {
+          "per_hour": {
+            "desc": "全社一律の1時間あたり金額レートです。部門管理は不要でシンプルです。",
+            "title": "一律の1時間あたり金額"
+          },
+          "percent": {
+            "desc": "労務費に対する％加算としての間接費です。専門サービスで一般的です。",
+            "title": "労務費の割合"
+          },
+          "rate_card": {
+            "desc": "部門別の発効日付きドル/時レートで、エンジンから公開または手入力します。案件原価は安定し監査可能です。過去期間は常に当時のレートを保持します。",
+            "title": "部門レート表"
           }
+        },
+        "applyHint": "選択したプロジェクト種別にこの間接費方式を適用します。その損益計算書に間接費の行が加わり、案件総原価に含まれます。",
+        "back": "戻る",
+        "cancel": "キャンセル",
+        "current": "現在の設定",
+        "description": "プロジェクト間接費の裏側にあるレートエンジンです。コストプール・配賦基準・部門レートマトリクス・プロファイルで構成されます。レートエンジン方式のプロジェクトはこのレートを工数に適用します。",
+        "docs": "ドキュメント",
+        "effectiveFrom": "発効日",
+        "finish": "完了",
+        "flatPerHour": "1工数時間あたりの間接費（ドル）",
+        "flatPercent": "労務費に対する間接費（％）",
+        "liveNow": "実績から計算：${rate}/時",
+        "methodCard": "部門レート表",
+        "methodGl": "記帳済み総勘定元帳（口座グループ）",
+        "methodHr": "${rate}/工数時間",
+        "methodNone": "間接費なし",
+        "methodPct": "労務費の{rate}％",
+        "next": "次へ",
+        "noRates": "公開済みレートはまだありません。設定ウィザードを実行するかレートを公開してください。",
+        "publish": "レートを公開",
+        "publishConfirm": "公開",
+        "publishDone": "レートをレート表に公開しました",
+        "publishHint": "エンジンが計算したレートを、間接費レート表に発効日付きの行として確定します。プロジェクトは次回公開までこの公開レートで間接費を計上します。過去期間は元のレートを保持します。",
+        "publishTitle": "レート表に公開",
+        "ratesActive": "{date}から有効な公開レート{count}件",
+        "recommended": "推奨",
+        "step1d": "下の「カテゴリ」タブに{count}カテゴリ、未割当口座{unassigned}件があります。間接費の費用口座をすべて分類し、漏れをなくしてください。",
+        "step1t": "間接費を分類",
+        "step2d": "「マトリクス」タブに実績からの部門別レートを表示します。現在は合成で${rate}/時です。プレビューのみで、案件に直接計上されることはありません。",
+        "step2t": "計算レートを確認",
+        "step3t": "公開と適用",
+        "stepOf": "ステップ {step}/{total}",
+        "viewAnalytics": "分析を見る",
+        "wizard": "設定ウィザード",
+        "wizardDone": "間接費を設定しました",
+        "wizardIntro": "間接費は、各案件に会社運営コストの取り分を持たせます。プロジェクト損益上の管理数値であり、元帳記帳ではありません。案件間接費は常に公開済みの発効日付きレートから計上されるため、締め済み期間は変わりません。レートの決め方を選んでください。",
+        "wizardTitle": "プロジェクト間接費を設定",
+        "working": "保存中…",
+        "laborCostingLink": "労務費計算",
+        "lifecycle": {
+          "cadences": {
+            "monthly": "月次",
+            "quarterly": "四半期"
+          },
+          "department": "部門",
+          "drift": "乖離",
+          "hint": "標準方式とゼロサムペアが読む公開レート表を誰が保守するかを示します。",
+          "live": "ライブ（ドル/時）",
+          "modeHints": {
+            "live": "プロジェクト種別はライブエンジンを直接読みます（レート源「live」）。公開表は参考のみです。",
+            "manual": "エンジンが計算して推奨し、担当者が下の乖離を確認して「公開」を押します。",
+            "scheduled": "ワーカーが各期間の開始時にライブ合成レートを表にスナップショットします。"
+          },
+          "modes": {
+            "live": "ライブ",
+            "manual": "手動",
+            "scheduled": "定期"
+          },
+          "published": "公開済み（ドル/時）",
+          "save": "保存",
+          "saved": "レートライフサイクルを保存しました",
+          "title": "レートライフサイクル"
+        },
+        "tabs": {
+          "application": "元帳適用",
+          "lifecycle": "レートライフサイクル",
+          "model": "モデル",
+          "rates": "レート"
         }
       },
       "compliance-classes": {
-        "title": "取引先クラス"
+        "title": "取引先クラス",
+        "description": "仕入先がどのような取引先区分で、どのような支払管理が伴うかを示します。",
+        "singular": "取引先区分"
       },
       "compliance-requirements": {
-        "title": "コンプライアンス要件"
+        "title": "コンプライアンス要件",
+        "description": "ポリシーごとに1行。要件書類・表示すべき限度額・失効時の扱いを定めます。",
+        "singular": "コンプライアンス要件"
       },
       "information-return-box-rules": {
-        "title": "情報申告欄"
+        "title": "情報申告欄",
+        "description": "口座の支出が属する1099/T4Aの欄です。未マッピングは仕入先の既定欄に落ちます。",
+        "singular": "欄ルール"
       },
       "payroll-filing-accounts": {
-        "title": "申告口座"
+        "title": "申告口座",
+        "description": "事業者が納付・申告する給与プログラム・EIN・州失業保険の口座です。従業員には給与プロフィールで1つ割り当てます。"
       },
       "entitlement-plans": {
-        "title": "休暇付与プラン"
+        "title": "休暇付与プラン",
+        "description": "給与バンクです。時間外積立・休暇・傷病バンク、休職中の福利回収を管理します。残高は金額で保存し、現在の賃金で時間表示します。",
+        "singular": "給付プラン"
       },
       "entitlement-plan-limits": {
-        "title": "バンク上限"
+        "title": "バンク上限",
+        "description": "役割ごとの積立上限です。従業員・職名・職種・部門・法人・プラン既定の順に具体的なものが優先されます。",
+        "singular": "バンク上限"
       },
       "entitlement-service-tiers": {
-        "title": "勤続スケジュール"
+        "title": "勤続スケジュール",
+        "description": "勤続に応じた付与内容です。3か月で福利、1年でRRSP、5年・10年・15年で高い休暇率など。",
+        "singular": "勤続テーブル"
       },
       "pay-derived-rules": {
-        "title": "計算支給"
+        "title": "計算支給",
+        "description": "現場の事実を給与に変えるルールです。宿泊の日当、当番日、1日の最初の案件への移動、現場・設備の奨励金など。適用前にルールをプレビューしてください。"
       },
       "trades": {
-        "title": "職種"
+        "title": "職種",
+        "description": "電気工・機械工・溶接工など、従業員が従事する職種です。賃金範囲・付帯費・派生支給ルールで使用します。"
       },
       "payroll-holidays": {
-        "title": "祝日"
+        "title": "祝日",
+        "description": "適用する任意の法定祝日と、追加する会社休業日です。必須の法定祝日は国別パック由来で、ここでは削除できません。",
+        "singularTitle": "祝日"
       },
       "extension-settings": {
-        "title": "アプリ設定"
+        "title": "アプリ設定",
+        "description": "インストール済みアプリが宣言した設定を構成します。変更時は以前の値と発効日を保持します。"
       }
     },
     "fields": {
       "accountId": "勘定科目",
-      "classAttribute": "Asset class attribute",
-      "countryCode": "Country",
-      "calculationModel": "Calculation model",
-      "regime": "Regime",
-      "classCode": "Class code",
+      "classAttribute": "資産区分属性",
+      "countryCode": "国",
+      "calculationModel": "計算モデル",
+      "regime": "税制",
+      "classCode": "区分コード",
       "rate": "レート",
       "method": "方法",
-      "firstYearFraction": "First-year fraction",
-      "allowRecapture": "Allow recapture",
-      "allowTerminalLoss": "Allow terminal loss",
-      "costCap": "Cost cap",
-      "depreciationSystem": "Depreciation system",
-      "macrsMethod": "MACRS method",
-      "recoveryPeriodYears": "Recovery period (years)",
-      "taxAttributes": "Tax attributes (JSON)",
-      "enhancedMultiplier": "Enhanced multiplier",
-      "acquiredFrom": "Acquired from",
-      "acquiredTo": "Acquired to",
+      "firstYearFraction": "初年度按分",
+      "allowRecapture": "取戻しを認める",
+      "allowTerminalLoss": "最終損失を認める",
+      "costCap": "原価上限",
+      "depreciationSystem": "減価償却制度",
+      "macrsMethod": "MACRS法",
+      "recoveryPeriodYears": "償却期間（年）",
+      "taxAttributes": "税務属性（JSON）",
+      "enhancedMultiplier": "割増倍率",
+      "acquiredFrom": "取得元",
+      "acquiredTo": "取得先",
       "code": "コード",
       "name": "名称",
       "appliesTo": "適用対象",
@@ -1961,10 +2581,170 @@
       "rateBookId": "レート表",
       "customerId": "顧客",
       "projectId": "プロジェクト",
-      "isDefault": "既定"
+      "isDefault": "既定",
+      "acquisitionCost": "取得原価",
+      "acquisitionDate": "取得日",
+      "acquisitionRate": "取得時為替レート",
+      "anchorPeriodEnd": "基準期間末",
+      "billMultiplier": "請求倍率",
+      "classId": "適用区分",
+      "coverageCurrency": "限度額通貨",
+      "defaultInformationReturn": "既定の情報申告書",
+      "defaultLienWaiverType": "既定の放棄書式",
+      "distributionAccountId": "分配口座",
+      "distributionIncomeAccountId": "分配収益口座",
+      "enforcement": "不履行時の扱い",
+      "equityIncomeAccountId": "持分利益口座",
+      "expenseAccountId": "費用口座",
+      "expiryWarningDays": "期限前に警告（日数）",
+      "fairValueAdjustmentAccountId": "公正価値調整口座",
+      "fairValueNetAssets": "純資産の公正価値",
+      "filingFrequency": "申告頻度",
+      "frequency": "頻度",
+      "goodwillAccountId": "のれん口座",
+      "graceDays": "猶予日数",
+      "insurable": "保険対象",
+      "investmentAccountId": "投資口座",
+      "jurisdictionId": "管轄区域",
+      "level": "レベル",
+      "liabilityAccountId": "負債口座",
+      "lienWaiverEnforcement": "留置権放棄書の管理",
+      "localNumber": "支部番号",
+      "minAggregateAmount": "通算下限額",
+      "minCoverageAmount": "1回あたりの下限額",
+      "nciEquityAccountId": "非支配持分口座",
+      "nciFairValue": "非支配持分の公正価値",
+      "nciIncomeAccountId": "非支配持分利益口座",
+      "nciMeasurement": "非支配持分の測定",
+      "nonPeriodic": "非定期的（賞与方式）",
+      "ownershipPercent": "持分％",
+      "parentSubsidiaryId": "親子会社",
+      "payDateOffsetDays": "支給日オフセット（日数）",
+      "pensionable": "年金対象",
+      "periodsPerYear": "年間期間数",
+      "rateKind": "レート種別",
+      "registrationNumber": "登録番号",
+      "remittancePartyId": "納付先",
+      "requiresAdditionalInsured": "追加被保険者が必須",
+      "requiresExpiry": "期限の記載が必須",
+      "requiresPrimaryNoncontributory": "プライマリかつ非分担が必須",
+      "requiresVerification": "第二者による検証が必須",
+      "requiresWaiverOfSubrogation": "代位権放棄が必須",
+      "returnFormCode": "申告書式",
+      "taxTreatment": "税務処理",
+      "taxType": "税種別",
+      "taxable": "課税対象",
+      "unionName": "組合",
+      "vacationable": "休暇給の対象",
+      "value": "値",
+      "accrualComponentId": "積立項目",
+      "accrualMethod": "積立方法",
+      "accrualValue": "積立額",
+      "accountNumber": "口座番号",
+      "afterMonths": "経過後（勤続月数）",
+      "basisCapAmountPerPeriod": "基準上限 — 期間あたり金額",
+      "basisCapAmountPerYear": "基準上限 — 年間金額",
+      "basisCapHoursPerPeriod": "基準上限 — 期間あたり時間",
+      "billableOnly": "請求可能時間のみ",
+      "box": "欄",
+      "capBehavior": "上限到達時の扱い",
+      "componentId": "給与項目",
+      "costingMode": "原価配賦",
+      "direction": "方向",
+      "eligible": "対象",
+      "employeePartyId": "従業員",
+      "equipmentUnitId": "設備単位",
+      "excludeFromWages": "イベントのみ（勤務時間外）",
+      "excludedJobTitles": "除外する職名",
+      "extensionKey": "アプリ",
+      "formType": "様式",
+      "includeInDisposableEarnings": "保護対象基準に算入",
+      "includedJobTitles": "対象の職名のみ",
+      "isObserved": "適用あり",
+      "isPaid": "有給",
+      "jobTitle": "職名",
+      "jurisdiction": "管轄区域",
+      "maxAssessable": "年間査定上限額",
+      "maxBalance": "上限",
+      "notifyBalance": "通知水準",
+      "observance": "週末に当たる場合",
+      "observedOn": "日付",
+      "packKey": "法定祝日",
+      "payoutComponentId": "払出項目",
+      "planId": "プラン",
+      "programType": "口座種別",
+      "protectionBase": "保護対象の所得基準",
+      "protectionMaxPercent": "基準の上限割合",
+      "protectionPriority": "保護の優先順位",
+      "quantityMode": "数量",
+      "rateMode": "レート",
+      "rateValue": "レート値",
+      "reason": "変更理由",
+      "remitterType": "納付者種別",
+      "ruleDay": "日",
+      "ruleKind": "周期",
+      "ruleMonth": "月",
+      "ruleNth": "第何",
+      "ruleOffset": "復活祭からの日数",
+      "ruleWeekday": "曜日",
+      "settingKey": "設定",
+      "stateCode": "州",
+      "timeTypeId": "時間種別",
+      "tradeId": "職種",
+      "trigger": "起因",
+      "unit": "単位"
     },
     "fieldHelp": {
-      "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。"
+      "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
+      "basisCapAmountPerPeriod": "1給与期間にこの金額に達したらこの項目を停止します。",
+      "basisCapAmountPerYear": "課税年度にこの金額に達したらこの項目を停止します。CRAのマネー・パーチェス限度額または米国402(g)の選択的繰延限度額が該当します。期首残高を含む当年確定済み金額も算入されます。",
+      "basisCapHoursPerPeriod": "1期間あたり最大この時間数でこの項目を計算します。例：RRSPは週40時間まで。案件に計上された時間外・ダブルタイムは対象外で、上限は適用されません。",
+      "complianceEnforcement": "支払停止は資金を止めます。請求停止は請求自体が記録されません。",
+      "complianceRequirementClass": "空欄のままにすると、管理対象のすべての取引先に適用されます。",
+      "coverageCurrency": "下限額を設定したら必須です。限度額は金額であり比較可能でなければなりません。",
+      "defaultInformationReturn": "この区分の仕入先が自ら様式を指定しない場合に使用されます。",
+      "defaultLienWaiverType": "これらの取引先に対する放棄書を作成する際に初期選択されます。",
+      "entitlementAccrualValue": "率連動プランの割合（4＝4％）、それ以外は1時間あたりまたは1給与期間あたりの金額です。",
+      "entitlementAfterMonths": "入社日からの継続勤務月数。36＝3年です。",
+      "entitlementCapBehavior": "警告は積立を記録してフラグを立てます。停止はその従業員の給与計算を止めます。自動払出はバンクに上限を設けて超過分を支払います。",
+      "entitlementDirection": "積立：会社が従業員に負います。立替：従業員が会社に負います。残高はマイナスで推移し、ちょうどゼロになるまで将来の給与から返済されます。",
+      "entitlementLiabilityAccount": "貸借対照表上のバンクの位置です。空欄のままにすると報告のみのプランになります。",
+      "entitlementMaxBalance": "プランの単位での上限額です。",
+      "entitlementNotifyBalance": "上限接近として従業員にフラグを立てる緩やかなしきい値です。",
+      "entitlementPayoutComponent": "バンクを払い出す支給項目です。立替プランでは回収する控除が該当します。",
+      "entitlementScope": "範囲は最大1つ設定します。プラン全体の既定値にする場合はすべての範囲を空欄にします。",
+      "entitlementTierTarget": "プラン（積立率を引き上げます）または給与項目（対象にします）のいずれかを設定してください。両方は不可です。",
+      "entitlementUnit": "金額を強く推奨します。時間建てのバンクは昇給のたびに再評価され、差額がひそかに会社の負担になります。",
+      "equipmentUnitId": "指定した1台の機械でのみ支給します。空欄にして仕掛品目を使用すれば、1つのルールで設備区分全体を対象にできます。",
+      "excludeFromWages": "この入力は現場イベント（当番日・日当の夜など）を記録するもので、勤務時間ではありません。派生支給ルールは読み取りますが、賃金計算は除外します。",
+      "excludedJobTitles": "ここに記載された職名の従業員はこのルールの対象になりません。除外は包含に優先します。照合では大文字・小文字と空白を無視します。",
+      "expiryWarningDaysHint": "30",
+      "filingAccountDefault": "プロフィールで口座を指定していない従業員は、自国の既定口座で申告・納付されます。",
+      "graceDaysHint": "0",
+      "holidayEffectiveTo": "終了日がない場合は空欄にします。発効日は祝日の日付と比較されるため、過去の給与計算は実行時のカレンダーを保持します。",
+      "holidayIsObserved": "オフにすると、以前選択した任意の祝日が非表示になります。",
+      "holidayIsPaid": "オフにすると、その日が無給の休業日になります。法定祝日は常に有給です。",
+      "holidayJurisdiction": "変更対象のカレンダーの管轄区域です。従業員が対象となる州、または連邦規制の雇用者の場合はカナダ（連邦）を選択してください。",
+      "holidayName": "追加する会社休日の名称です。法定祝日への選択行の場合は空欄にします。",
+      "holidayObservance": "法定祝日は日付を保持し、法律により代休が付与されます。実際に移動する会社休日の場合のみ振替を選択してください。",
+      "holidayPackKey": "この選択が適用される法定祝日（例：boxing_day、heritage_day）です。自社の会社休日を追加する場合は空欄にします。オフにできるのは任意の祝日のみで、必須の祝日は拒否されます。",
+      "holidayRuleNth": "1はその月の最初の該当曜日、-1は最後です。",
+      "holidayRuleOffset": "マイナスは遡ります。聖金曜日は-2、イースターマンデーは1です。",
+      "holidayRuleWeekday": "0は日曜日から6は土曜日です。",
+      "includedJobTitles": "ここに記載された職名の従業員のみこのルールの対象です。名簿の職名から選ぶか新規入力してください。空欄のままにすると全員に支給します。照合では大文字・小文字と空白を無視します。",
+      "includeInDisposableEarnings": "この項目が保護対象の基準に属するかどうかです。基準内の支給は加算、基準内の控除は減算します。差押えの対象外とすべき手当・福利はオフにしてください。",
+      "informationReturnBox": "欄は法令で定められています。設定するのは、自社のどの口座がどの欄に集計されるかです。",
+      "itemId": "このカタログ品目で課金されるすべての設備に支給します。「すべてのショベル」という1つのルールで、機械ごとのルールが不要になります。",
+      "lienWaiverEnforcement": "停止とは、署名済み放棄書が対象になるまでこの区分の請求が支払えないことを意味します。",
+      "maxAssessable": "労災保険が従業員の所得を査定する年間上限額（当局の被保険者1人あたりの上限）です。上限なしの場合は空欄にします。",
+      "minCoverageAmount": "この限度額未満の証明書は拒否されます。限度額は通貨間で換算されません。",
+      "payScheduleAnchor": "任意の1期間の終了日。他のすべての期間はここから導出されます。半月払いは日にちを読みます。20日は5日と20日締め、15日（または30日・31日月の月末）は15日と月末を意味します。14日と2月末日は暦を特定できず拒否されます。",
+      "protectionBase": "控除の上限を測る基準です。手取りは他のすべての控除後の支給額です。可処分所得は、下の基準に含めた支給と控除のみを数えます。手当や福利を対象外にする仕組みです。",
+      "protectionMaxPercent": "この控除が基準から取得できる上限。オンタリオの通常差押えは20％、家族扶養は50％、米国CCPAでは25％です。収まらない分は給与計算で不足額として報告されます。",
+      "protectionPriority": "複数の保護対象控除が同じ給与を奪い合う場合の優先順位です。数値の小さい順。扶養命令は通常の債権者に優先します。",
+      "requiresExpiry": "保険はオン、期限のないW-9はオフです。",
+      "requiresVerification": "証明書を記録した本人が検証することはできません。",
+      "stateCode": "州・地域ごとに登録される制度種別（州失業保険口座など）にのみ必須です。口座保存時に国別パックの宣言と照合されます。"
     },
     "options": {
       "timeClassification": {
@@ -1974,26 +2754,26 @@
         "other": "その他"
       },
       "taxDepreciationModel": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "区分プール",
+        "macrs": "資産ごとMACRS"
       },
       "macrsSystem": {
         "gds": "GDS",
         "ads": "ADS"
       },
       "macrsMethod": {
-        "200db": "200% declining balance",
-        "150db": "150% declining balance",
-        "straightLine": "Straight line"
+        "200db": "200％定率法",
+        "150db": "150％定率法",
+        "straightLine": "定額法"
       },
       "taxDepreciationConvention": {
-        "halfYear": "Half-year",
-        "midQuarter": "Mid-quarter",
-        "midMonth": "Mid-month"
+        "halfYear": "半年",
+        "midQuarter": "四半期中",
+        "midMonth": "月中"
       },
       "poolMethod": {
-        "declining": "Declining balance",
-        "straightLine": "Straight line"
+        "declining": "定率法",
+        "straightLine": "定額法"
       },
       "appliesTo": {
         "sales": "販売",
@@ -2098,6 +2878,209 @@
         "staging": "ステージング",
         "transit": "輸送中",
         "quarantine": "検疫"
+      },
+      "complianceCategory": {
+        "bond": "保証金",
+        "insurance": "保険",
+        "licence": "許可証",
+        "other": "その他",
+        "safety": "安全",
+        "taxForm": "税務様式"
+      },
+      "complianceEnforcement": {
+        "advisory": "報告のみ",
+        "blockBill": "請求を停止",
+        "blockPayment": "支払を停止",
+        "warn": "支払時に警告"
+      },
+      "consolidationMethod": {
+        "equity": "持分法",
+        "full": "全部連結",
+        "proportionate": "比例連結"
+      },
+      "filingFrequency": {
+        "annual": "年次",
+        "bimonthly": "隔月",
+        "monthly": "月次",
+        "quarterly": "四半期",
+        "semiannual": "半期"
+      },
+      "informationReturnBox": {
+        "misc1": "MISC 1 — 賃貸料",
+        "misc2": "MISC 2 — ロイヤルティ",
+        "misc3": "MISC 3 — その他の所得",
+        "misc4": "MISC 4 — 源泉徴収された連邦所得税",
+        "nec1": "NEC 1 — 非従業員報酬",
+        "nec2": "NEC 2 — 5,000ドル以上の直接販売",
+        "nec4": "NEC 4 — 源泉徴収された連邦所得税",
+        "misc10": "MISC 10 — 弁護士に支払った総額",
+        "misc11": "MISC 11 — 転売目的で購入した魚",
+        "misc12": "MISC 12 — セクション409A繰延",
+        "misc14": "MISC 14 — 過大なゴールデンパラシュート",
+        "misc15": "MISC 15 — 非適格繰延報酬",
+        "misc5": "MISC 5 — 漁船収益",
+        "misc6": "MISC 6 — 医療費の支払",
+        "misc8": "MISC 8 — 代替支払",
+        "misc9": "MISC 9 — 農作物保険収益",
+        "t4a020": "T4A 020 — 自営業手数料",
+        "t4a022": "T4A 022 — 控除された所得税",
+        "t4a048": "T4A 048 — 役務手数料"
+      },
+      "informationReturnForm": {
+        "misc": "1099-MISC",
+        "nec": "1099-NEC",
+        "none": "報告対象外",
+        "t4a": "T4A"
+      },
+      "jurisdictionLevel": {
+        "city": "市",
+        "country": "国",
+        "county": "郡",
+        "federal": "連邦",
+        "special": "特別区",
+        "state": "州・省"
+      },
+      "lienWaiverEnforcement": {
+        "block": "支払を停止",
+        "none": "管理対象外",
+        "warn": "警告"
+      },
+      "lienWaiverType": {
+        "conditionalFinal": "条件付き — 最終",
+        "conditionalProgress": "条件付き — 出来高",
+        "unconditionalFinal": "無条件 — 最終",
+        "unconditionalProgress": "無条件 — 出来高"
+      },
+      "nciMeasurement": {
+        "fairValue": "公正価値",
+        "proportionate": "純資産の持分割合"
+      },
+      "overheadRateKind": {
+        "per_hour": "ドル/時",
+        "percent": "労務費の％"
+      },
+      "payComponentBasis": {
+        "fixedAmount": "固定額",
+        "perHour": "時間あたり",
+        "percentOfGross": "総支給の割合"
+      },
+      "payComponentKind": {
+        "deduction": "控除",
+        "earning": "支給",
+        "employerContribution": "事業主負担"
+      },
+      "payFrequency": {
+        "biweekly": "隔週",
+        "monthly": "月次",
+        "semiMonthly": "半月",
+        "weekly": "週次"
+      },
+      "payTaxTreatment": {
+        "alimony": "扶養料（F2）",
+        "none": "税引後",
+        "pensionF": "年金（RPP/RRSP、係数F）",
+        "unionDues": "組合費（U1）"
+      },
+      "sourceKind": {
+        "builtin": "組込",
+        "custom": "カスタム"
+      },
+      "taxType": {
+        "consumption": "消費税",
+        "gst": "GST",
+        "hst": "HST",
+        "other": "その他",
+        "pst": "PST",
+        "qst": "QST",
+        "salesUse": "売上税・使用税",
+        "vat": "付加価値税"
+      },
+      "derivedCosting": {
+        "firstProjectOfDay": "その日の最初の案件",
+        "none": "原価配賦なし",
+        "source": "事実が生じた案件"
+      },
+      "derivedQuantity": {
+        "count": "数量",
+        "countNights": "泊数",
+        "sumBillAmount": "請求合計額",
+        "sumHours": "合計時間",
+        "sumQuantity": "課金数量合計"
+      },
+      "derivedRate": {
+        "fixedPerUnit": "単位あたり固定額",
+        "percentOfGross": "総支給の割合",
+        "percentOfQuantity": "課金額の割合",
+        "rateCard": "給与項目から"
+      },
+      "derivedTrigger": {
+        "distinctDay": "勤務した日ごと",
+        "distinctProjectDay": "案件・日ごと",
+        "equipmentCharge": "月次（設備課金時）",
+        "monthEnd": "月次（月末後）",
+        "nightStayed": "宿泊した夜ごと",
+        "timeEntry": "工数入力ごと"
+      },
+      "entitlementAccrualMethod": {
+        "fixedPerPeriod": "給与期間あたり固定",
+        "manual": "手動のみ",
+        "perHourWorked": "勤務1時間あたり",
+        "percentOfEarnings": "支給額の割合"
+      },
+      "entitlementCapBehavior": {
+        "autoPayout": "超過分を払い出す",
+        "block": "実行を停止",
+        "warn": "警告"
+      },
+      "entitlementDirection": {
+        "accrue": "会社が従業員に負う",
+        "owe": "従業員が会社に負う"
+      },
+      "entitlementUnit": {
+        "hours": "時間",
+        "money": "金額"
+      },
+      "holidayJurisdiction": {
+        "ca": "カナダ（連邦規制）",
+        "caAb": "アルバータ州",
+        "caBc": "ブリティッシュコロンビア州",
+        "caOn": "オンタリオ州",
+        "caQc": "ケベック州",
+        "caSk": "サスカチュワン州",
+        "us": "米国"
+      },
+      "holidayObservance": {
+        "nearestWeekday": "最も近い平日に移動",
+        "nextMonday": "次の営業日に移動",
+        "none": "日付を維持"
+      },
+      "holidayRuleKind": {
+        "date": "特定の1日",
+        "easterOffset": "復活祭の日曜日基準",
+        "fixed": "毎年同じ日",
+        "nthWeekday": "月の第n曜日",
+        "weekdayBefore": "日付前の最後の平日"
+      },
+      "payComponentCountry": {
+        "CA": "カナダ",
+        "US": "米国"
+      },
+      "payProtectionBase": {
+        "disposableEarnings": "可処分所得",
+        "gross": "総支給",
+        "netPay": "手取り",
+        "none": "保護対象外"
+      },
+      "payrollProgramType": {
+        "caRp": "CRA給与プログラム（RP）",
+        "usEin": "米国雇用者番号（EIN）",
+        "usStateSui": "州失業保険（SUI）"
+      },
+      "payrollRemitterType": {
+        "accelerated1": "加速 — 基準1",
+        "accelerated2": "加速 — 基準2",
+        "quarterly": "四半期",
+        "regular": "通常（月次）"
       }
     },
     "invoicing": {
@@ -2364,13 +3347,502 @@
         "blocked": "この機能は無効にできません — 台帳の基盤となるデータが含まれています。",
         "dependency": "先に必要な機能を有効にしてください: {features}。",
         "dependents": "先に従属する機能を無効にしてください: {features}。"
-      }
+      },
+      "affectsNote": "オフにすると{items}が非表示になります。データは保持され、再度有効化すると戻ります。",
+      "blockedReason": "オフにできません — {items}。",
+      "categories": {
+        "accounting": "会計",
+        "operations": "業務",
+        "platform": "プラットフォーム",
+        "sales": "営業・得意先"
+      },
+      "childOptions": "{count, plural, one {有効化後に利用可能なオプション # 件} other {有効化後に利用可能なオプション # 件}}",
+      "confirmDisable": "{name}をオフにしますか？\n\n{items}が非表示になります。データは保持され、再度有効化すると戻ります。",
+      "countOn": "{total} 件中 {n} 件がオン",
+      "description": "貴社の任意モジュールをオン・オフします。オフにした機能は全体で非表示になりますが、データが削除されることはありません。",
+      "disabled": "{name}は無効です",
+      "enabled": "{name}は有効です",
+      "impacts": {
+        "activeAllocationRules": "{count, plural, one {有効な配賦ルール # 件} other {有効な配賦ルール # 件}}",
+        "activeApiKeys": "{count, plural, one {有効なAPIキー # 件} other {有効なAPIキー # 件}}",
+        "activeBankFeeds": "{count, plural, one {有効な銀行フィード接続 # 件} other {有効な銀行フィード接続 # 件}}",
+        "activeBankImportSchedules": "{count, plural, one {有効なSFTP銀行取込スケジュール # 件} other {有効なSFTP銀行取込スケジュール # 件}}",
+        "activeCertificates": "{count, plural, one {有効な証明書 # 件} other {有効な証明書 # 件}}",
+        "activeProjects": "{count, plural, one {進行中のプロジェクト # 件} other {進行中のプロジェクト # 件}}",
+        "activeScripts": "{count, plural, one {有効なスクリプト # 件} other {有効なスクリプト # 件}}",
+        "activeSubcontractPaymentControls": "{count, plural, one {有効な下請支払管理 # 件} other {有効な下請支払管理 # 件}}",
+        "activeSubcontracts": "{count, plural, one {有効な下請契約 # 件} other {有効な下請契約 # 件}}",
+        "activeSubscriptions": "{count, plural, one {有効なサブスクリプション # 件} other {有効なサブスクリプション # 件}}",
+        "activeWipHolds": "{count, plural, one {有効な仕掛品保留 # 件} other {有効な仕掛品保留 # 件}}",
+        "advancedSubscriptionContracts": "{count, plural, one {有効な版管理サブスクリプション契約 # 件} other {有効な版管理サブスクリプション契約 # 件}}",
+        "assets": "{count, plural, one {固定資産 # 件} other {固定資産 # 件}}",
+        "bankStatements": "{count, plural, one {銀行明細 # 件} other {銀行明細 # 件}}",
+        "blockingCompliancePolicies": "{count, plural, one {支払を止めるポリシー # 件} other {支払を止めるポリシー # 件}}",
+        "controlCheckUnavailable": "完了できなかった整合性チェック",
+        "draftInformationReturns": "{count, plural, one {作成中の情報申告書 # 件} other {作成中の情報申告書 # 件}}",
+        "foreignTxns": "{count, plural, one {外貨建て記帳 # 件} other {外貨建て記帳 # 件}}",
+        "inventoryMovements": "{count, plural, one {在庫移動 # 件} other {在庫移動 # 件}}",
+        "openChangeOrders": "{count, plural, one {下書きの変更指示書 # 件} other {下書きの変更指示書 # 件}}",
+        "openFieldTickets": "{count, plural, one {未処理の作業日報 # 件} other {未処理の作業日報 # 件}}",
+        "openLienWaivers": "{count, plural, one {署名待ちの留置権放棄書 # 件} other {署名待ちの留置権放棄書 # 件}}",
+        "openOrders": "{count, plural, one {未転換残高のある発行済み注文 # 件} other {未転換残高のある発行済み注文 # 件}}",
+        "openPayApplications": "{count, plural, one {未処理の支払申請 # 件} other {未処理の支払申請 # 件}}",
+        "openPrebills": "{count, plural, one {完了待ちの前請求 # 件} other {完了待ちの前請求 # 件}}",
+        "openProjectBillingRequests": "{count, plural, one {未処理のプロジェクト請求依頼 # 件} other {未処理のプロジェクト請求依頼 # 件}}",
+        "openProjectDocuments": "{count, plural, one {未記帳のプロジェクト証憑 # 件} other {未記帳のプロジェクト証憑 # 件}}",
+        "openProjectTimeEntries": "{count, plural, one {未承認のプロジェクト工数 # 件} other {未承認のプロジェクト工数 # 件}}",
+        "activePropertyLeases": "{count, plural, one {有効な不動産賃貸契約 # 件} other {有効な不動産賃貸契約 # 件}}",
+        "openVendorPayApplications": "{count, plural, one {処理中の仕入先支払申請 # 件} other {処理中の仕入先支払申請 # 件}}",
+        "outstandingRetainage": "未払いの保留金",
+        "postedPayRuns": "{count, plural, one {元帳に記帳済みの給与計算 # 件} other {元帳に記帳済みの給与計算 # 件}}",
+        "previewedAllocationRuns": "{count, plural, one {プレビュー済みの配賦実行 # 件} other {プレビュー済みの配賦実行 # 件}}",
+        "projects": "{count, plural, one {プロジェクト # 件} other {プロジェクト # 件}}",
+        "reconciliations": "{count, plural, one {消込 # 件} other {消込 # 件}}",
+        "revenueSchedules": "{count, plural, one {前受収益スケジュール # 件} other {前受収益スケジュール # 件}}",
+        "scheduledTasks": "{count, plural, one {予定された作業 # 件} other {予定された作業 # 件}}",
+        "securityDepositTransactions": "{count, plural, one {敷金取引 # 件} other {敷金取引 # 件}}",
+        "submittedTimeEntries": "{count, plural, one {確認待ちの提出済み工数 # 件} other {確認待ちの提出済み工数 # 件}}",
+        "subsidiaryTxns": "{count, plural, one {記帳済み取引のある子会社 # 社} other {記帳済み取引のある子会社 # 社}}",
+        "trackedVendors": "{count, plural, one {管理中の下請業者 # 社} other {管理中の下請業者 # 社}}",
+        "unfiledInformationReturns": "{count, plural, one {確定済み未提出の情報申告書 # 件} other {確定済み未提出の情報申告書 # 件}}"
+      },
+      "title": "機能"
     },
     "taxSetup": {
-      "navTitle": "税務設定"
+      "navTitle": "税務設定",
+      "countryPackReady": "根拠資料付き国別パック",
+      "countryTaxSetup": "国別税務設定",
+      "detailedPack": "詳細パック",
+      "installed": "設定済み",
+      "jurisdictionSetup": "管轄区域設定",
+      "packInDevelopment": "開発中の国別パック",
+      "provisionHint": "詳細パックは、管轄区域・税コード・税率・申告書・ネクサスの保守済みコンテンツを作成します。国別税務設定では、バージョン管理された国別パックで定義された親申告書と発効日付き税率をインストールします。管轄区域設定では、管理された参照データと非アクティブなネクサス下書きを作成し、不足している法令コンテンツを補完することはありません。本番前に各登録内容をご確認ください。",
+      "provisionSelected": "{count, plural, =0 {設定} one {# 管轄区域を設定} other {# 管轄区域を設定}}",
+      "provisionSuccess": "{jurisdictions} 管轄区域、{codes} 税コード、{groups} 税グループを作成し、{nexus} ネクサス登録を準備しました",
+      "provisioning": "設定中…",
+      "searchPlaceholder": "国または管轄区域を検索…",
+      "statesAvailable": "{count, plural, one {利用可能な管轄区域 # 件} other {利用可能な管轄区域 # 件}}",
+      "statesSelected": "{count, plural, one {選択中の管轄区域 # 件} other {選択中の管轄区域 # 件}}",
+      "step1": {
+        "description": "国を選択し、展開して州・準州・特別区を網羅してください。各選択肢に保守済みの詳細申告パックがあるかどうかが表示されます。",
+        "title": "事業を行う地域を選択"
+      },
+      "step2": {
+        "cta": "管轄区域を開く",
+        "description": "パックが作成した国・州・地方です。手動で追加や入れ子ができます。",
+        "stat": "{count, plural, =0 {管轄区域はまだありません} one {管轄区域 # 件} other {管轄区域 # 件}}",
+        "title": "管轄区域を確認"
+      },
+      "step3": {
+        "cta": "ネクサスを設定",
+        "description": "徴収・納付のために事業者が登録されている地域、申告頻度、提出する申告書を記録します。",
+        "stat": "{count, plural, =0 {登録はまだありません} one {登録 # 件} other {登録 # 件}}",
+        "title": "ネクサスを申告"
+      },
+      "subtitle": "納税義務が生じ得るすべての国・州・準州・特別区を選択してください。カナダと米国は第一レベルの管轄区域を完全に網羅しています。",
+      "title": "税務設定",
+      "toggleStates": "{country} の管轄区域を表示"
     },
     "payroll": {
       "navTitle": "給与"
+    },
+    "guide": {
+      "activity": {
+        "high": "月間1,000件超の処理",
+        "light": "月間100件未満の処理",
+        "steady": "月間100～1,000件の処理"
+      },
+      "bank": {
+        "action": "銀行口座を確認",
+        "descReady": "{count, plural, one {消込可能な口座 # 件} other {消込可能な口座 # 件}}が「銀行」に表示されます。実際の口座のみ消込可能にしてください。",
+        "descWaiting": "明細を取り込む前に、実際の銀行・カードの総勘定元帳口座をそれぞれ消込可能に設定してください。",
+        "title": "銀行・カード口座"
+      },
+      "close": {
+        "actionDone": "決算を確認",
+        "actionReview": "決算ワークスペースを開く",
+        "descDone": "{count, plural, one {期間決算 # 件} other {期間決算 # 件}}が完了しました。チェックリストの保存、承認、ロック、決算パッケージを含みます。",
+        "descReview": "実処理が存在します。期間を照合し、財務諸表を確認し、{close}チェックリストを完了し、証明または承認のうえ、ロックして公開してください。",
+        "descWaiting": "実処理が始まると、OpenBooksが最初の{close}決算を照合から帳簿ロック・決算パッケージ保存までご案内します。",
+        "titleAnnual": "最初の年次決算",
+        "titleMonthly": "最初の月次決算",
+        "titleQuarterly": "最初の四半期決算"
+      },
+      "closeName": {
+        "annual": "年次",
+        "monthly": "月次",
+        "quarterly": "四半期"
+      },
+      "foundation": {
+        "action": "基礎を確認",
+        "descReady": "{count, plural, one {有効な口座 # 件} other {有効な口座 # 件}}、主帳簿、会計期間、管理口座、ルート法人1社の準備ができています。",
+        "descWaiting": "記帳前に勘定科目表・帳簿・期間・ルート法人・通貨・管理口座マッピングを完成させてください。",
+        "title": "会計基礎"
+      },
+      "hero": {
+        "badgeNeeds": "基礎に要対応あり",
+        "badgeReady": "会計基礎の準備完了",
+        "description": "OpenBooksは貴社に合わせてワークスペースを整えました。このガイドでは、請求書・仕入請求書・銀行・期間決算を初日から確実にするための判断を確認します。",
+        "kicker": "本番ガイド",
+        "progressLabel": "設定の進捗",
+        "progressOf": "{total} 分野中 {done} 分野を準備済み",
+        "title": "最初の記帳を、良い意味で退屈なものにしましょう。"
+      },
+      "invoicing": {
+        "action": "請求を確認",
+        "descReady": "{count, plural, one {有効な支払条件 # 件} other {有効な支払条件 # 件}}が利用可能です。採番と証憑の初期値を確認してください。",
+        "descWaiting": "期日を手計算しなくて済むよう、支払条件を1つ以上選択してください。",
+        "title": "請求書・仕入請求書・支払条件"
+      },
+      "opening": {
+        "actionFreshLedger": "元帳を確認",
+        "actionMigrateEnter": "期首残高を入力",
+        "actionMigrateJournal": "仕訳帳を確認",
+        "descFreshEmpty": "帳簿をゼロから開始することを確認済みのため、移行仕訳は不要です。",
+        "descFreshPosted": "帳簿はゼロから開始しました。{count, plural, one {記帳済みエントリ # 件が} other {記帳済みエントリ # 件が}}移行期首残高ではなく実処理を記録しています。",
+        "descMigrateEmpty": "既存の帳簿を移行中です。貸借一致した開始仕訳を入力し、得意先・仕入先・銀行・税金・繰越利益金の明細を確認してください。",
+        "descMigratePosted": "{count, plural, one {記帳済みエントリ # 件が存在します} other {記帳済みエントリ # 件が存在します}}。移行完了を宣言する前に、開始仕訳を移行元の試算表および未決済明細と照合してください。",
+        "title": "期首残高と移行"
+      },
+      "profile": {
+        "actionReady": "プロフィールを確認",
+        "actionWaiting": "ウォークスルーを実行",
+        "descReady": "業種・担当分担・{activity}・{close}決算サイクル・機能の推奨を確認済みです。",
+        "descWaiting": "貴社の運営方法をOpenBooksに伝えてください。適切な水準でワークスペースを開始できます。",
+        "title": "会社・ワークスペースのプロフィール"
+      },
+      "state": {
+        "complete": "完了",
+        "review": "確認",
+        "waiting": "待機"
+      },
+      "tax": {
+        "action": "税金を確認",
+        "descNotRegistered": "この会社には現在、売上税・GST/HST・VATの徴収義務がないことを確認済みです。義務が変わる前に再確認してください。",
+        "descReady": "{count, plural, one {有効な税コード # 件} other {有効な税コード # 件}}を設定済みです。登録と申告義務をご確認ください。",
+        "descRegistered": "登録済みであることを確認済みです。実証憑を発行する前に管轄区域・登録・税コード・申告サイクルを追加してください。",
+        "descUndecided": "税務登録は未確定です。実請求書の発行や回収可能税の記録前に解決してください。",
+        "title": "税務処理"
+      }
+    },
+    "wizard": {
+      "apply": "帳簿を設定",
+      "back": "戻る",
+      "company": {
+        "country": "国",
+        "currency": "基準通貨",
+        "description": "この内容が会計の基礎になります。名称と法務情報は後から編集できます。基準通貨・業種・会計年度カレンダーは最初の記帳後に固定されます。",
+        "fiscalYear": "会計年度の開始月",
+        "legalName": "法人名（任意）",
+        "legalNamePlaceholder": "登記上の法人名",
+        "name": "会社名",
+        "namePlaceholder": "e.g. Saunders Construction Ltd.",
+        "title": "貴社について教えてください"
+      },
+      "error": "問題が発生しました。もう一度お試しください。",
+      "industry": {
+        "classificationOnly": "既存の勘定科目表と記帳履歴は保持されます。この初回分類はワークスペースと機能の推奨のみ調整します。",
+        "description": "貴業界の働き方に合った勘定科目表と関連機能を推奨します。適用前に推奨内容をご確認いただけます。",
+        "locked": "取引の記帳後は業種を変更できませんが、勘定科目表と機能は個別にカスタマイズできます。",
+        "search": "業種を検索…",
+        "title": "業種は何ですか？"
+      },
+      "next": "続ける",
+      "operations": {
+        "agentsNote": "帳簿が動き出すと、それを見守るバックグラウンドのエージェントパックは「会社設定 → エージェント」にあります。パックのインストール、チェックの調整、検出事項の振り分けはそこから行います。",
+        "description": "実際に行う業務と運営する財務体制をご確認ください。業種の回答は下に反映済みです。",
+        "inventory": {
+          "description": "在庫追跡・拠点・品目原価・組立品です。",
+          "title": "在庫"
+        },
+        "note": "これは確認可能な出発点です。各スイッチは「会社設定 → 機能」で正式に調整可能で、データを保持する安全チェック付きです。",
+        "orders": {
+          "description": "請求書・仕入請求書の前に見積・受注・発注を使います。",
+          "title": "見積・受発注"
+        },
+        "projects": {
+          "description": "予算・原価・請求・収益性とともに案件を追跡します。",
+          "title": "プロジェクト・原価管理"
+        },
+        "structureDescription": "直接お答えください。OpenBooksは人数や業種から追加の法人や外貨会計を想定しません。",
+        "structureTitle": "財務体制",
+        "subscriptionBilling": {
+          "description": "定期請求書を自動生成するプランとサブスクリプションです。",
+          "title": "サブスクリプション請求"
+        },
+        "timeTracking": {
+          "description": "提出・承認・原価／請求レート追跡付きのタイムシートです。",
+          "title": "工数管理"
+        },
+        "title": "どのように運営していますか？",
+        "workTitle": "貴社が行う業務",
+        "crm": {
+          "description": "販売前のリード・案件・活動・予測を追跡します。",
+          "title": "営業パイプライン"
+        },
+        "multiCurrency": {
+          "description": "為替レートと再評価で外貨建て取引を行います。",
+          "title": "複数通貨"
+        },
+        "multiSubsidiary": {
+          "description": "連結と会社間で複数の法人を運営します。",
+          "title": "複数法人"
+        },
+        "payroll": {
+          "description": "法定源泉の国別パックで給与計算を行います。",
+          "title": "給与計算"
+        }
+      },
+      "profile": {
+        "adapting": "OpenBooksは曖昧な会社規模ではなく、こうした具体的な働き方から統制を推奨します。適用前に有効化される機能をすべてご確認いただけます。",
+        "complexity": {
+          "advanced": {
+            "description": "職務が分離され、承認・証跡・決算承認の統制が必要です。",
+            "title": "正式な統制"
+          },
+          "essentials": {
+            "description": "信頼できる同じ担当者が帳簿の作成・確認・記帳・決算を行えます。",
+            "title": "経営者管理"
+          },
+          "growing": {
+            "description": "作業を分担し、重要な取引には明確な確認者が必要です。",
+            "title": "チーム確認"
+          }
+        },
+        "complexityQuestion": "経理業務はどのように確認されますか？",
+        "description": "OpenBooksは今日はシンプルなまま、チームと会計ニーズの成長に合わせて高度な統制を開示できます。",
+        "team": {
+          "large": {
+            "description": "専門チームと強い統制",
+            "title": "51名以上"
+          },
+          "medium": {
+            "description": "明確な役割分担と確認者",
+            "title": "11～50名"
+          },
+          "small": {
+            "description": "作業を共有する小さなチーム",
+            "title": "2～10名"
+          },
+          "solo": {
+            "description": "経営者・経理担当・創業者",
+            "title": "自分のみ"
+          }
+        },
+        "teamQuestion": "OpenBooksで働く人数は何名ですか？",
+        "title": "貴社の現在地に合わせます"
+      },
+      "skip": "今はスキップ",
+      "welcome": {
+        "description": "貴社の運営方法を教えてください。OpenBooksが焦点を絞った開始ワークスペースを整えます。変更前にすべての選択をご確認いただけます。",
+        "f1": "勘定科目表",
+        "f2": "合ったワークスペース",
+        "f3": "ガイド付き本番移行",
+        "title": "帳簿を設定しましょう"
+      },
+      "launch": {
+        "books": {
+          "fresh": {
+            "description": "引き継ぐ残高はなく、元帳はゼロから開始します。",
+            "title": "新規に開始"
+          },
+          "migrate": {
+            "description": "期首残高・未決済の請求書と仕入請求書・移行日の確認が必要です。",
+            "title": "既存の帳簿を移行"
+          }
+        },
+        "booksQuestion": "帳簿はどこから開始しますか？",
+        "description": "最後のいくつかの回答で、設定から最初の実記帳までの作業に本番ガイドの焦点を合わせます。",
+        "features": {
+          "bankFeeds": {
+            "description": "銀行の動きを自動的に取り込みます。",
+            "title": "銀行接続"
+          },
+          "fixedAssets": {
+            "description": "資産と減価償却スケジュールを追跡します。",
+            "title": "資産減価償却"
+          },
+          "onlinePayments": {
+            "description": "請求書から得意先が支払えるようにします。",
+            "title": "オンライン決済"
+          }
+        },
+        "sample": {
+          "description": "取引・プロジェクト・報告書・締め済み期間を備えた現実的な会社です。選択した業種に合わせます。",
+          "error": "実会社は設定されましたが、任意のサンプル会社を準備できませんでした。「インポートとエクスポート」から再試行できます。",
+          "question": "すぐに探索できる会社が必要ですか？",
+          "safety": "別個の明示されたワークスペースです。サンプル入力がこの帳簿に入ることはなく、外部メール・支払・API・連携は無効です。",
+          "title": "業種サンプル会社を作成"
+        },
+        "tax": {
+          "not_registered": "いいえ、不要です",
+          "registered": "はい、登録済みです",
+          "unsure": "まだ不明です"
+        },
+        "taxQuestion": "この会社は売上税・GST/HST・VATを徴収しますか？",
+        "title": "本番移行のかたちを整えます",
+        "toolsQuestion": "初日から用意するものはどれですか？"
+      },
+      "review": {
+        "bookStart": "元帳の開始点",
+        "companyName": "会社名",
+        "complexity": "開始ワークスペース",
+        "country": "国",
+        "currency": "通貨",
+        "description": "設定内容は次のとおりです。「帳簿を設定」を押すとすべて適用されます。",
+        "fiscalYear": "会計年度の開始",
+        "legalName": "法人名",
+        "notProvided": "未入力",
+        "teamSize": "OpenBooksチーム",
+        "title": "設定を確認",
+        "accounts": "口座",
+        "chartOfAccounts": "勘定科目表",
+        "chartPreserved": "既存の勘定科目表を保持",
+        "closeCadence": "正式な決算",
+        "features": "有効化する機能",
+        "industry": "業種",
+        "monthlyActivity": "月間の処理",
+        "note": "会計基礎と開始ワークスペースを作成します。最初の実記帳前に不足があれば本番ガイドに表示されます。任意の機能は「会社設定 → 機能」から調整可能です。",
+        "notePreserved": "既存の勘定科目表や記帳履歴を変えずに、会社分類とワークスペース推奨を更新します。任意の機能は「会社設定 → 機能」から調整可能です。",
+        "payrollPack": "給与の国別パック",
+        "payrollPackCanada": "カナダ（CRA T4127）",
+        "payrollPackNone": "なし — 後で給与設定からインストール",
+        "sampleCompany": "探索用ワークスペース",
+        "sampleCompanyNo": "今は作成しない",
+        "sampleCompanyYes": "別の業種サンプル会社を作成",
+        "taxPosition": "税務方針"
+      },
+      "rhythm": {
+        "activity": {
+          "high": {
+            "description": "自動化と継続監視は最初から用意すべきです。",
+            "title": "1,000件超"
+          },
+          "light": {
+            "description": "自動化の負担が少ない集中ワークフローです。",
+            "title": "100件未満"
+          },
+          "steady": {
+            "description": "取込・ルール・継続確認が時間を節約できる件数です。",
+            "title": "100～1,000件"
+          }
+        },
+        "activityHint": "仕訳行ではなく、得意先・仕入先証憑・経費・支払・銀行／カード取引を数えてください。",
+        "activityQuestion": "月間のおおよその処理件数は？",
+        "close": {
+          "annual": {
+            "description": "最小限の正式な決算サイクルです。日常の照合は引き続き重要です。",
+            "title": "年末"
+          },
+          "monthly": {
+            "description": "適時の管理報告と早期の誤り検出におすすめです。",
+            "title": "毎月"
+          },
+          "quarterly": {
+            "description": "軽めの正式サイクルで、銀行照合は四半期を通じて行います。",
+            "title": "四半期ごと"
+          }
+        },
+        "closeQuestion": "帳簿を正式に締めて報告する頻度は？",
+        "description": "件数により自動化の効き方が変わります。決算サイクルによりOpenBooksが前に出すべき定型が変わります。",
+        "note": "開始時の好みであり制限ではありません。件数が少なくても記帳の整合性や決算統制を弱めることはありません。",
+        "title": "経理のリズムを設定"
+      },
+      "applying": {
+        "description": "勘定科目表を作成し、機能を設定して管理口座をマッピングしています。",
+        "title": "帳簿を設定しています…"
+      },
+      "done": {
+        "description": "次に、本番ガイドが実処理の記帳前に会社・税金・採番・銀行・期首残高の判断を確認します。バックグラウンドのエージェントは「設定 → エージェント」からいつでもインストールできます。",
+        "title": "開始ワークスペースの準備ができました"
+      },
+      "industries": {
+        "accounting_firm": {
+          "description": "記帳・会計事務所向けです。複数顧客・信託会計・案件管理に対応します。",
+          "title": "会計事務所"
+        },
+        "construction_contractor": {
+          "description": "請負・職方・建設業者向けです。原価管理・出来高請求・保留金・作業日報に対応します。",
+          "title": "建設・職方"
+        },
+        "engineering_architecture": {
+          "description": "EPC・AEC企業向けです。WBS・段階請求・設備原価・出来高請求に対応します。",
+          "title": "エンジニアリング・建築"
+        },
+        "general_business": {
+          "description": "あらゆる会社に使える標準設定です。業種固有の想定はありません。",
+          "title": "一般事業"
+        },
+        "healthcare_practice": {
+          "description": "医科・歯科医院向けです。患者売掛・医療消耗品・設備に対応します。",
+          "title": "医療機関"
+        },
+        "it_software_saas": {
+          "description": "サブスクリプション請求・ASC 606収益認識・前受収益の追跡に対応します。",
+          "title": "ソフトウェア・SaaS"
+        },
+        "manufacturing": {
+          "description": "軽製造・個別製造向けです。BOM・原材料・仕掛品・製品・間接費に対応します。",
+          "title": "製造"
+        },
+        "nonprofit": {
+          "description": "慈善・非営利団体向けです。補助金追跡・基金会計・寄付・使途拘束純資産に対応します。",
+          "title": "非営利"
+        },
+        "professional_services": {
+          "description": "コンサル・代理店・顧問向けです。工数管理・プロジェクト収益性・顧問料請求に対応します。",
+          "title": "専門サービス"
+        },
+        "property_management": {
+          "description": "賃貸ポートフォリオ・管理会社向けです。定期家賃・CAM・敷金・固定資産に対応します。",
+          "title": "不動産管理"
+        },
+        "wholesale_distribution": {
+          "description": "卸・流通業者向けです。在庫・仕入諸掛・GRNI・保管拠点に対応します。",
+          "title": "卸・流通"
+        }
+      },
+      "payroll": {
+        "checklist": {
+          "accounts": "記帳口座（賃金・手取り・源泉負債）を",
+          "accountsLink": "給与設定 → 口座と記帳",
+          "pack": "選択した国別パックは、この設定の適用時に自動インストールされます。",
+          "schedule": "最初の給与スケジュールを",
+          "scheduleLink": "給与設定 → 給与スケジュール",
+          "title": "この後の給与仕上げ"
+        },
+        "description": "給与計算はインストール式の国別パックで動きます。各パックにその管轄区域の法定源泉エンジンと項目が付属します。",
+        "installError": "給与は有効化されましたが、国別パックをインストールできませんでした。「給与設定 → 国別パック」からインストールできます。",
+        "packQuestion": "どの国別パックをインストールしますか？",
+        "packs": {
+          "canada": {
+            "description": "CRA T4127法定エンジン、全州・準州対応、CRA PDOCで検証済み。",
+            "title": "カナダ"
+          },
+          "us": {
+            "description": "予定 — まだ利用できません。",
+            "title": "米国"
+          }
+        },
+        "title": "給与を設定"
+      }
+    },
+    "filterAll": "すべて",
+    "sections": {
+      "basisCaps": "基準上限",
+      "deductionProtection": "控除保護",
+      "holidayCompanyDay": "会社休日",
+      "holidayElection": "法定祝日への選択"
+    },
+    "segmentValues": {
+      "builtinLink": "{name}を開く",
+      "builtinNotice": "{name}は組込ディメンションです。値は{name}タブで管理します。",
+      "builtinNoticeNoLink": "{name}は組込ディメンションです。値は専用タブで管理します。",
+      "builtinTitle": "組込ディメンション",
+      "description": "{name}セグメントの選択値です。",
+      "empty": "値はまだありません。最初を追加してください。",
+      "new": "新しい値",
+      "searchPlaceholder": "値を検索…"
     }
   },
   "flows": {
@@ -2621,70 +4093,436 @@
         "subject": "レコード",
         "started": "開始",
         "finished": "終了",
-        "error": "エラー"
-      }
+        "error": "エラー",
+        "actions": "操作"
+      },
+      "retry": "再試行",
+      "retryFailed": "再試行に失敗しました",
+      "retried": "実行を再駆動しました",
+      "retrying": "再試行中…"
     }
   },
   "features": {
     "bankFeeds": {
-      "title": "Bank Feeds",
-      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+      "title": "銀行フィード",
+      "description": "銀行接続の自動化です。SFTPファイル受け渡しとPlaid・GoCardless・TrueLayerのライブフィードに対応します。"
     },
     "subscriptionBilling": {
-      "title": "Subscription Billing",
-      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+      "title": "サブスクリプション請求",
+      "description": "定期請求書を自動生成するプランとサブスクリプションです（SaaS／顧問料）。"
     },
     "onlinePayments": {
       "title": "オンライン決済",
       "description": "請求書のホスト型決済リンク（Stripe / Adyen / GoCardless銀行引落）、サーチャージルール、入金を自動消込するWebhook。"
     },
     "advancedClose": {
-      "title": "高度な決算管理"
+      "title": "高度な決算管理",
+      "description": "証跡重視の決算設計図・独立した承認ルート・管理されたロック・統制された決算パッケージ公開です。オフでも中核の月末決算は利用できます。"
     },
     "advancedSubscriptions": {
-      "title": "高度なサブスクリプション管理"
+      "title": "高度なサブスクリプション管理",
+      "description": "版管理プラン・複数項目・試用・更新・共同期日・改定、前払・後払い請求に対応します。"
     },
     "allocations": {
-      "title": "配賦"
+      "title": "配賦",
+      "description": "プール原価をドライバー基準で対象に配分する単一の版管理ルールモデルです。取引入力時の分配キー・記帳時の追加総勘定元帳行・定期の期末一掃を、完全な由来付きで管理します。"
     },
     "allocationsAtEntry": {
-      "title": "入力時配賦"
+      "title": "入力時配賦",
+      "description": "保存済み証憑行を、口座とディメンションにまたがる子行群に展開する配賦ルールを許可します。"
     },
     "allocationsAtPosting": {
-      "title": "計上時配賦"
+      "title": "計上時配賦",
+      "description": "記帳時に取引自体の仕訳へ追加の総勘定元帳行を寄せる配賦ルールと承認済みスクリプトを許可します。"
     },
     "apiAccess": {
-      "title": "REST API"
+      "title": "REST API",
+      "description": "範囲付きAPIキーを作成し、版管理・テナント対応のREST APIとライブリファレンスを公開します。"
     },
     "mcpAccess": {
-      "title": "MCPアクセス"
+      "title": "MCPアクセス",
+      "description": "範囲付きAPIキー認証で統制されたOpenBooksツールをMCPクライアントに公開します。"
     },
     "multiCurrency": {
-      "title": "複数通貨"
+      "title": "複数通貨",
+      "description": "基準通貨以外の通貨で取引します。為替レート・再評価・実現／未実現の為替差損益付きです。為替レートフィードとレート表が有効になります。"
     },
     "multiSubsidiary": {
-      "title": "複数子会社"
+      "title": "複数子会社",
+      "description": "通貨と帳簿の異なる複数の法人を運営して連結します。子会社・会社間・連結為替レートが有効になります。"
     },
     "payroll": {
-      "title": "給与計算"
+      "title": "給与計算",
+      "description": "給与計算・給与スケジュール・従業員プロフィール・法定源泉の国別パック・納付負債です。カナダ（CRA T4127）と米国（対応49州：課税エンジン40＋非課税9。DCとNMは公式ゴールデン待ちで対象外）に対応します。"
     },
     "projectScheduling": {
-      "title": "プロジェクトスケジュール管理"
+      "title": "プロジェクトスケジュール管理",
+      "description": "プロジェクト日程向けのガントチャート・クリティカルパス・資源平準化です。"
     },
     "propertyManagement": {
-      "title": "不動産管理"
+      "title": "不動産管理",
+      "description": "物件・部屋・賃貸契約・定期家賃・増額・延滞料・敷金・CAM照合です。"
     },
     "queryConsole": {
-      "title": "クエリコンソール"
+      "title": "クエリコンソール",
+      "description": "権限のある利用者がライブ報告スキーマに読取専用・テナント範囲のSQLを実行できるようにします。"
     },
     "scripts": {
-      "title": "スクリプト"
+      "title": "スクリプト",
+      "description": "管理された取引・定期・一括・クライアント・エンドポイントのきっかけでサンドボックスJavaScriptを実行します。"
     },
     "subcontracts": {
-      "title": "下請契約と出来高請求"
+      "title": "下請契約と出来高請求",
+      "description": "仕入先引当・下請変更・仕入先SOVと支払申請・買掛保留金・解除・共同小切手・支払停止です。"
     },
     "wipBilling": {
-      "title": "仕掛品と前請求"
+      "title": "仕掛品と前請求",
+      "description": "請求可能なプロジェクト作業を確認し、証跡付きで行の保留・調整、前請求の承認、仕掛品の経過・実現・漏れを監視します。"
+    },
+    "apps": {
+      "description": "アプリパッケージとアプリライブラリです。",
+      "title": "アプリ"
+    },
+    "banking": {
+      "description": "銀行フィード・明細照合・消込・ルールです。",
+      "title": "銀行"
+    },
+    "budgets": {
+      "description": "口座・ディメンション別の予算編成と報告比較です。",
+      "title": "予算"
+    },
+    "continuousClose": {
+      "description": "期間決算に加えて常時行う決算チェックです。",
+      "title": "継続決算"
+    },
+    "crm": {
+      "description": "リード・見込・商談・活動・売上予測です。",
+      "title": "CRM"
+    },
+    "equipment": {
+      "description": "設備単位・レート表・案件への使用料課金です。",
+      "title": "設備・レンタル"
+    },
+    "expenses": {
+      "description": "従業員経費の取得・承認・精算です。",
+      "title": "経費精算"
+    },
+    "fieldTickets": {
+      "description": "T&M作業向けの署名済み作業日報です。現場責任者が作業員全員の時間に設備・材料を加えて記録し、得意先が署名します。請求書は署名済み日報から作成されます。",
+      "title": "作業日報"
+    },
+    "fixedAssets": {
+      "description": "資産台帳・減価償却帳簿・税務減価償却です。",
+      "title": "固定資産"
+    },
+    "flows": {
+      "description": "ワークフローの自動化です。きっかけ・条件・承認ゲートを管理します。",
+      "title": "フロー・承認"
+    },
+    "inventory": {
+      "description": "在庫追跡・拠点・品目原価・組立品です。",
+      "title": "在庫"
+    },
+    "orders": {
+      "description": "請求書・仕入請求書への転換付きの見積・受注・発注です。",
+      "title": "見積・受発注"
+    },
+    "projects": {
+      "description": "予算・原価・請求・収益性とともに案件を管理します。",
+      "title": "プロジェクト・原価管理"
+    },
+    "revenueRecognition": {
+      "description": "契約向けの認識ルール・スケジュール・前受収益です。",
+      "title": "収益認識"
+    },
+    "subcontractorCompliance": {
+      "description": "保険証券・留置権放棄書・1099-NEC/MISCとT4Aの情報申告書を、下請業者の保証失効時の支払停止付きで管理します。",
+      "title": "下請コンプライアンス"
+    },
+    "timeTracking": {
+      "description": "提出と承認付きの個人週次タイムシートです。",
+      "title": "工数管理"
+    }
+  },
+  "extensions": {
+    "draft": {
+      "action": "バックエンドアクション：{name}",
+      "actionCount": "アクション",
+      "activate": "アプリを有効化",
+      "added": "追加",
+      "backToReview": "確認に戻る",
+      "changed": "変更",
+      "changes": "インストール版からの変更",
+      "closed": "この下書きは適用または置換済みです。",
+      "confirm": "この版と要求アクセスを確認しました。",
+      "contents": "パッケージ内容",
+      "customApp": "カスタム画面",
+      "discard": "下書きを破棄",
+      "discardConfirm": "この下書きを破棄しますか？保留中のパッケージは削除されます。有効な内容は変わりません。",
+      "discardEdits": "未保存のパッケージ変更を破棄しますか？",
+      "editPackage": "パッケージを編集",
+      "explore": "アプリを試す",
+      "exploreHelp": "画面を開いてサンプルデータでレイアウトとフォームを試せます。",
+      "failed": "アプリを有効化できませんでした。",
+      "field": "カスタム項目：{name}",
+      "files": "パッケージファイル{count}件",
+      "grants": "この版の権限：{permissions}",
+      "nativeApp": "ネイティブアプリ",
+      "nav": "ナビ項目：{name}",
+      "newPackage": "新しいアプリ",
+      "noPermissions": "プラットフォーム権限の要求はありません。",
+      "page": "ページカスタマイズ：{name}",
+      "pending": "確認待ち",
+      "permission": "権限：{name}",
+      "permissions": "要求アクセス",
+      "preview": "プレビュー",
+      "previewNotice": "未公開プレビュー・サンプルデータのみ。一覧とフォームをお試しください。変更は保存されず、バックエンドアクションは実行されません。",
+      "previewPage": "プレビューページ：{route}",
+      "proposalNotes": "提案メモ",
+      "recordType": "レコードワークスペース：{name}",
+      "removed": "削除",
+      "retainedData": "パッケージから定義を外しても、既存レコードや監査履歴は削除されません。",
+      "reviewReady": "有効化前に確認",
+      "reviewTab": "変更とアクセス",
+      "revise": "変更を依頼",
+      "saveEditsFirst": "有効化前にパッケージ変更を新しい下書きとして保存してください。",
+      "screenCount": "画面",
+      "screenKind": {
+        "action": "アクションフォーム",
+        "page": "ページ",
+        "records": "レコードワークスペース"
+      },
+      "setting": "設定：{name}",
+      "source": "詳細：パッケージソースと指紋",
+      "title": "下書きの確認",
+      "unpublished": "この提案は有効ではありません。有効化前に画面・要求アクセス・変更を確認してください。",
+      "workspaceCount": "レコード種別"
+    },
+    "actions": {
+      "advanced": "詳細パッケージソース",
+      "deactivate": "無効化",
+      "drafts": "確認待ちの下書き",
+      "new": "新しいアプリ",
+      "publish": "ライブラリに公開",
+      "reactivate": "再有効化",
+      "updateListing": "ライブラリ掲載を更新"
+    },
+    "columns": {
+      "contents": "内容",
+      "key": "キー",
+      "name": "名称",
+      "status": "ステータス",
+      "updated": "更新",
+      "version": "版"
+    },
+    "description": "組織向けのアプリを作成・取込・編集・管理します。",
+    "empty": "一致するアプリはありません。アプリを作成して開始してください。",
+    "native": {
+      "actionComplete": "アクションが完了しました。",
+      "actionFailed": "アクションを完了できませんでした。同じ送信を確認するには再試行してください。",
+      "actionRunning": "処理中…",
+      "existingRecordsPreview": "この画面は既存のレコード種別を参照しています。ライブレコードは有効化後にアクセス権のある利用者が利用できます。",
+      "previewAction": "フォームプレビューのみです。バックエンドアクションは有効化後に、インストール版とあなたの権限で実行されます。",
+      "previewRecords": "提案中のレコード定義でのフォームプレビューです。有効化後、このワークスペースは共有のレコード一覧・フィルタ・ドロワーを使用します。",
+      "sampleNumber": "サンプル{number}",
+      "sampleOnly": "プレビューの変更は保存されません。",
+      "sampleReference": "サンプル参照",
+      "sampleValue": "サンプル{field}{number}"
+    },
+    "request": {
+      "agentHelp": "アプリ作成ガイド",
+      "agentInstruction": "この要求向けのアプリを作成してください。describe_app_vocabularyから始めてください。draft_appで未公開パッケージを準備し、その確認用とプレビューのリンクをください。不足している業務要件のみ質問してください。私が確認するまで有効化しないでください。",
+      "brief": "何を作成しますか？",
+      "help": "必要なアプリを説明してアシスタントと作成するか、下のパッケージから開始してください。",
+      "placeholder": "例：チェックリスト・メモ・点検履歴を備えた設備点検ワークスペース。",
+      "reviewHelp": "有効化前にプレビューして変更を依頼できます。接続済みエージェントもアプリツールで下書きを準備できます。",
+      "start": "アシスタントと作成"
+    },
+    "searchPlaceholder": "アプリを検索…",
+    "status": "ステータス",
+    "statuses": {
+      "awaitingApproval": "承認待ち",
+      "disabled": "無効",
+      "installed": "インストール済み"
+    },
+    "title": "アプリ"
+  },
+  "backupsManager": {
+    "alerts": {
+      "noObjectStorageBody": "この環境にはS3オブジェクトストレージ（S3_ENDPOINT／S3_BUCKET／認証情報）がなく、保存・定期バックアップは利用できません。ブラウザのみのストリーミングは復元可能なハッシュ証跡を提供できないため意図的に無効です。運用者の<cli>backup-local-cli.ts</cli>ワークフローを使用してください。",
+      "noObjectStorageTitle": "オブジェクトストレージが未設定です",
+      "workerOfflineBody": "保存・定期バックアップはバックグラウンドワーカーで実行されますが、最近報告がありません。開始まで新規実行は待機します。",
+      "workerOfflineTitle": "バックグラウンドワーカーがオフラインです"
+    },
+    "autoCard": {
+      "body": "環境のS3オブジェクトストレージに定期バックアップします。最新の<keep>keep</keep>件のみ保持され、成功ごとに古いものが自動ローテーションされます。",
+      "daily": "毎日",
+      "dayOfMonth": "日",
+      "dayOfWeek": "曜日",
+      "enabled": "有効",
+      "frequency": "頻度",
+      "keepNewest": "最新を保持",
+      "lastSuccess": " ・最終成功バックアップ：{when}",
+      "monthly": "毎月",
+      "nextRun": "次回定期実行：{when}（UTCスケジュール）",
+      "off": "定期バックアップはオフです。",
+      "saveSchedule": "スケジュールを保存",
+      "timeUtc": "時刻（UTC）",
+      "title": "自動バックアップ",
+      "weekly": "毎週"
+    },
+    "deleteConfirm": "保存済みバックアップ{fileName}を削除しますか？元に戻せません。",
+    "errors": {
+      "couldNotDelete": "バックアップを削除できませんでした",
+      "couldNotSave": "バックアップポリシーを保存できませんでした",
+      "couldNotStart": "バックアップを開始できませんでした"
+    },
+    "exportsCard": {
+      "body": "下で保存済みバックアップを作成し、<archive>アーカイブ</archive>と<manifest>マニフェスト</manifest>の両方をダウンロードしてください。マニフェストには復元CLIが必要とする完全なSHA-256と件数が含まれます。両ファイルを一緒に保管してください。当該証跡のないブラウザの生ストリームは復元入力として非対応です。",
+      "title": "復元可能なエクスポート"
+    },
+    "storedCard": {
+      "body": "最新の完了済みバックアップ{count}件をオブジェクトストレージに保持し、残りはローテーションされます。バックアップの削除はストレージから即時削除されます。",
+      "backUpNow": "今すぐバックアップ",
+      "noneYet": "保存済みバックアップはまだありません。",
+      "title": "保存済みバックアップ"
+    },
+    "table": {
+      "actionsSr": "操作",
+      "archive": "アーカイブ",
+      "contents": "内容",
+      "created": "作成",
+      "delete": "削除",
+      "inProgress": "進行中…",
+      "kept": "保持",
+      "kind": "種別",
+      "manifest": "マニフェスト",
+      "purged": "削除済み（{reason}）・{when}",
+      "retention": "保持",
+      "rowsTables": "{rows}行・{tables}テーブル",
+      "sha256": "SHA-256",
+      "size": "サイズ",
+      "status": "ステータス"
+    },
+    "toasts": {
+      "deleted": "バックアップを削除しました",
+      "scheduleOff": "定期バックアップをオフにしました",
+      "scheduleSaved": "バックアップスケジュールを保存しました",
+      "started": "バックアップを開始しました。下に表示されます"
+    },
+    "weekdays": {
+      "0": "日曜日",
+      "1": "月曜日",
+      "2": "火曜日",
+      "3": "水曜日",
+      "4": "木曜日",
+      "5": "金曜日",
+      "6": "土曜日"
+    }
+  },
+  "pageLayouts": {
+    "actions": {
+      "openPreview": "プレビューを開く",
+      "remove": "カスタマイズを削除",
+      "removed": "カスタマイズを削除しました。ページは組込レイアウトを表示します。",
+      "restore": "復元",
+      "restored": "その版が再び有効になりました。",
+      "save": "レイアウトを保存",
+      "saved": "レイアウトを保存しました。",
+      "undo": "元に戻す",
+      "validate": "チェック",
+      "validated": "このレイアウトは有効です。"
+    },
+    "blocks": {
+      "filter-bar": "フィルタバー",
+      "frame": "ラッパー",
+      "grid": "グループ",
+      "heading": "見出し",
+      "page-header": "ページヘッダー",
+      "panel": "パネル",
+      "pagination": "ページネーション",
+      "paper": "帳票",
+      "repeat": "繰返しグループ",
+      "stat-tile": "指標タイル",
+      "summary-line": "サマリー行",
+      "table": "テーブル",
+      "text": "テキスト",
+      "widget": "コンポーネント"
+    },
+    "columns": {
+      "module": "モジュール",
+      "note": "メモ",
+      "route": "ルート",
+      "status": "ステータス",
+      "updated": "更新"
+    },
+    "description": "この組織の全員向けにページの表示内容を変更するか、アプリ付属のレイアウトにリセットします。",
+    "drawer": {
+      "builtIn": "このページはアプリ付属のレイアウトを表示しています。",
+      "customized": "このページは組織のレイアウトを表示しています。",
+      "customizedByYou": "このページはあなた個人のレイアウトを表示しています。",
+      "note": "メモ",
+      "notePlaceholder": "このページを変更した理由",
+      "replacesWarning": "保存したレイアウトは組込ページを置換するため、カスタマイズを外すまでこのページの今後の改善は表示されません。"
+    },
+    "empty": "この検索に一致するページはありません。",
+    "errors": {
+      "json": "有効なJSONではありません：{message}"
+    },
+    "fields": {
+      "count": "{count, plural, one {行 # 件} other {行 # 件}}",
+      "help": "レイアウトがバインドできるパスで、このページ自体のデータ由来です。字下げのパスは上のリストの1行に属します。",
+      "truncated": "一覧を見やすくするため、深い項目の一部を省略しています。"
+    },
+    "history": {
+      "active": "公開中",
+      "empty": "このページはカスタマイズされたことがありません。",
+      "help": "このルートに保存されたすべてのレイアウトです。保存で以前のものが消えることはないため、後から編集を元に戻せます。",
+      "loading": "読込中…"
+    },
+    "outline": {
+      "body": "本文",
+      "conditional": "非表示の場合あり",
+      "count": "{count, plural, one {部品 # 件} other {部品 # 件}}",
+      "header": "ヘッダー",
+      "hide": "このブロックを非表示",
+      "moveDown": "下へ移動",
+      "moveUp": "上へ移動"
+    },
+    "preview": {
+      "help": "未保存レイアウトで描画した実際のページを開きます。あなたにのみ表示され、30分で適用が終了します。",
+      "newTab": "新しいタブで開きます。他サイトによるページ埋め込みを防ぐ保護のため、アプリはフレーム内の表示を拒否します。",
+      "opened": "開きました"
+    },
+    "scope": {
+      "legend": "このレイアウトの対象者は？",
+      "org": "この組織の全員",
+      "orgHelp": "ここの全員向けにページを変更します。通常の選択です。",
+      "user": "自分のみ",
+      "userHelp": "あなた向けにのみページを変更し、他の方は組織のレイアウトのままです。"
+    },
+    "searchPlaceholder": "ルートとモジュールを検索",
+    "status": {
+      "builtIn": "組込",
+      "customized": "カスタマイズ済み",
+      "filter": "ステータス",
+      "personal": "個人"
+    },
+    "summary": "{total}ページ中{customized}ページをカスタマイズ済み。",
+    "tabs": {
+      "aria": "レイアウト編集セクション",
+      "fields": "利用可能な項目",
+      "history": "履歴",
+      "json": "詳細",
+      "preview": "プレビュー",
+      "structure": "構成"
+    },
+    "title": "ページレイアウト",
+    "unavailable": {
+      "empty": "このページはあなた向けに何も表示しないため、読むレイアウトがありません。",
+      "notFound": "このページはあなた向けに「見つかりません」と応答するため、読むレイアウトがありません。",
+      "redirect": "このページは描画せず{href}へ転送します。通常は保持していない権限か、オフの機能が原因です。",
+      "segment": "このルートの表示にはレコードが必要です。編集するにはアドレスに?param.{segment}=…を追加してください。"
     }
   }
 }
