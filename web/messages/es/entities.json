@@ -160,7 +160,8 @@
           "amount": "Importe",
           "bankAccount": "Cuenta bancaria",
           "tenantInvoice": "Factura del inquilino",
-          "offsetAccount": "Cuenta de contrapartida"
+          "offsetAccount": "Cuenta de contrapartida",
+          "memo": "Nota"
         },
         "kinds": {
           "received": "Recibido",
