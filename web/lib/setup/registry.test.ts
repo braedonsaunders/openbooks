@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/src/information-returns.ts'
 import {
+  SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,
   SETUP_GROUPS,
   setupEntitiesByGroup,
@@ -238,4 +240,31 @@ test('allocations is a feature-gated custom-page rail entry, never generic CRUD'
   // A rail entry, not a nested/rehomed record: it renders in the Accounting group.
   const rail = (setupEntitiesByGroup().get('accounting') ?? []).map((e) => e.key)
   assert.ok(rail.includes('allocations'), 'allocations must appear on the setup rail')
+})
+
+test('every static setup option labelKey resolves under admin.setup', () => {
+  // The generic setup list/drawer translates option labelKeys against the
+  // admin.setup namespace, so a key that misses its prefix renders raw
+  // (time-type Classification showed "admin.setup.timeClassification.regular").
+  const catalog = JSON.parse(
+    readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8'),
+  ) as Record<string, unknown>
+  const setup = (catalog.setup ?? {}) as Record<string, unknown>
+  const missing: string[] = []
+  const seen = new Set<string>()
+  for (const entity of SETUP_ENTITIES) {
+    const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
+    for (const carrier of carriers) {
+      for (const option of carrier.options ?? []) {
+        if (!option.labelKey || seen.has(option.labelKey)) continue
+        seen.add(option.labelKey)
+        let node: unknown = setup
+        for (const part of option.labelKey.split('.')) {
+          node = (node as Record<string, unknown> | null)?.[part]
+        }
+        if (typeof node !== 'string' || node.length === 0) missing.push(`${entity.key}: ${option.labelKey}`)
+      }
+    }
+  }
+  assert.deepEqual(missing, [])
 })
