@@ -499,6 +499,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       series={props.series as ComponentProps<typeof TrendChart>['series']}
       height={typeof props.height === 'number' ? props.height : undefined}
       area={props.area === true}
+      maxTicks={typeof props.maxTicks === 'number' ? props.maxTicks : undefined}
     />
   ),
   'directory-section': (props) => (

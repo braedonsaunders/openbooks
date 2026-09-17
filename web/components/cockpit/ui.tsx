@@ -55,9 +55,9 @@ export function StatTile({
         <Icon size={20} strokeWidth={2} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">{label}</p>
+        <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500 leading-tight">{label}</p>
         <p className={cn('truncate text-2xl font-bold tabular-nums', tone === 'negative' ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{value}</p>
-        {sub ? <p className={cn('truncate text-xs font-medium', SUB_TONE[tone])}>{sub}</p> : null}
+        {sub ? <p className={cn('text-xs font-medium leading-snug', SUB_TONE[tone])}>{sub}</p> : null}
       </div>
     </div>
   )
