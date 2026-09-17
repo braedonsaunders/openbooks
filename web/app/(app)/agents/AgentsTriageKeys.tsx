@@ -31,10 +31,13 @@ export function AgentsTriageKeys({
   rows,
   canWrite,
   orgId,
+  locale,
 }: {
   rows: TriageKeyRow[]
   canWrite: boolean
   orgId: string
+  /** App locale for the last-visit banner date (never the browser default). */
+  locale: string
 }) {
   const t = useTranslations('agents')
   const tc = useTranslations('continuousClose')
@@ -200,7 +203,7 @@ export function AgentsTriageKeys({
     <div className="space-y-2">
       {lastSeen && (newCount ?? 0) > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
-          <span>{t('lastVisit', { date: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSeen)) })} · {newCount}</span>
+          <span>{t('lastVisit', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSeen)) })} · {newCount}</span>
           <Button
             variant="outline"
             size="sm"

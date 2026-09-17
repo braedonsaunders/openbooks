@@ -77,6 +77,15 @@
       "team": "Team",
       "nobody": "Nobody",
       "noTeam": "No team",
+      "roles": {
+        "accountant": "Accountant",
+        "administrator": "Administrator",
+        "approver": "Approver",
+        "controller": "Controller",
+        "salesManager": "Sales Manager",
+        "salesRepresentative": "Sales Representative",
+        "viewer": "Viewer"
+      },
       "due": "Due",
       "overdue": "Overdue",
       "save": "Save",

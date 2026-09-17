@@ -77,6 +77,15 @@
       "team": "Équipe",
       "nobody": "Personne",
       "noTeam": "Aucune équipe",
+      "roles": {
+        "accountant": "Comptable",
+        "administrator": "Administrateur",
+        "approver": "Approbateur",
+        "controller": "Contrôleur",
+        "salesManager": "Responsable commercial",
+        "salesRepresentative": "Représentant commercial",
+        "viewer": "Lecteur"
+      },
       "due": "Échéance",
       "overdue": "En retard",
       "save": "Enregistrer",
