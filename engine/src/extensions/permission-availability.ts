@@ -16,10 +16,6 @@ export async function extensionPermissionAvailability(orgId: string, tx: SqlExec
   return { active: valid.filter((row) => row.active).map((row) => row.key), inactive: valid.filter((row) => !row.active).map((row) => row.key) };
 }
 
-export async function inactiveExtensionPermissions(orgId: string, tx: SqlExecutor = db): Promise<string[]> {
-  return (await extensionPermissionAvailability(orgId, tx)).inactive;
-}
-
 /** Exact runtime denies preserve wildcards and all unrelated permission meanings. */
 export function denyInactiveExtensionPermissions(permissions: Set<string>, inactive: readonly string[]): Set<string> {
   for (const permission of inactive) { permissions.delete(permission); permissions.add(`!${permission}`); }

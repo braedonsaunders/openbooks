@@ -7,10 +7,6 @@ import { isCataloguePermission, permissionSetCovers } from '../permissions.ts';
 import { defaultNavConfig, type OrgNavConfig } from '../modules/nav-registry.ts';
 import { supplementalContributionSchema, type SupplementalContribution } from './contribution-schemas.ts';
 
-export const CONTRIBUTION_PERMISSIONS = {
-  nav: 'admin.customization.manage', setting: 'admin.setup.manage', permission: 'admin.roles.manage',
-} as const;
-
 export async function listActiveExtensionContributions(orgId: string, tx: SqlExecutor = db) {
   const rows = (await tx.execute<{ extensionKey: string; extensionId: string; versionId: string; manifest: { contributions?: unknown[] } }>(sql`
     select m.key as "extensionKey", m.id as "extensionId", v.id as "versionId", v.manifest

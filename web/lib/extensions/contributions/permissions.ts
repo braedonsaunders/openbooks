@@ -1,10 +1,6 @@
 import { permissionContributionSchema } from '@openbooks/engine/src/extensions/contribution-schemas.ts'
-import type { z } from 'zod'
-
 /** Declaration availability comes from installed active versions; grants stay in app_roles. */
 export { permissionContributionSchema }
-export type PermissionContribution = z.infer<typeof permissionContributionSchema>
-export const PERMISSION_PROJECTION_TARGET = 'app_roles' as const
 
 export function parsePermissionContribution(raw: unknown) {
   const result = permissionContributionSchema.safeParse(raw)

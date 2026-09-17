@@ -28,8 +28,6 @@ import {
  * - restricted subsidiary sets filter fail-closed, mirroring the gate path.
  */
 
-export type ApprovalWorklistKind = "flow_gate" | "document" | "pay_run";
-
 export interface WorklistDocument {
   kind: "document";
   /** Decide handle for the document-status approval path. */

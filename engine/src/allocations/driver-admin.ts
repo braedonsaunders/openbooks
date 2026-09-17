@@ -35,8 +35,6 @@ export const NATIVE_MEASURES = [
   "direct_cost",
   "rentable_area",
 ] as const;
-export type NativeMeasure = (typeof NATIVE_MEASURES)[number];
-
 const BUILTIN_DIMENSIONS = ["department", "location", "class", "project", "subsidiary"] as const;
 
 export const DRIVER_SOURCE_KINDS: readonly AllocationDriverSourceKind[] = [

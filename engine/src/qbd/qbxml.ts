@@ -280,13 +280,3 @@ export function parseReportRows(xml: string): QbdReportRow[] {
   collect(report.ReportData);
   return rows;
 }
-
-export function soapText(parsed: unknown, method: string, argument: string): string {
-  const methodNode = firstNode(parsed, method);
-  if (!methodNode) return "";
-  const value = methodNode[argument];
-  if (value && typeof value === "object" && "#text" in (value as Record<string, unknown>)) {
-    return String((value as Record<string, unknown>)["#text"] ?? "");
-  }
-  return value == null ? "" : String(value);
-}

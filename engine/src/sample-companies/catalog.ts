@@ -84,6 +84,4 @@ export const SAMPLE_COMPANY_BY_INDUSTRY = new Map<string, (typeof SAMPLE_COMPANY
   SAMPLE_COMPANY_PROFILES.map((profile) => [profile.industryKey, profile]),
 );
 
-export const SAMPLE_COMPANY_BY_PROFILE = new Map<string, (typeof SAMPLE_COMPANY_PROFILES)[number]>(
-  SAMPLE_COMPANY_PROFILES.map((profile) => [profile.profileId, profile]),
-);
+

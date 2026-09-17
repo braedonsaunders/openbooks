@@ -102,12 +102,4 @@ export function resolveTargetTests(
     .sort();
 }
 
-/** Repo-relative paths of every file the config references. */
-export function configReferencedFiles(config: MutationConfig): string[] {
-  const files = new Set<string>();
-  for (const target of config.targets) {
-    files.add(target.path);
-    for (const test of target.tests) files.add(test);
-  }
-  return [...files].sort();
-}
+

@@ -107,5 +107,3 @@ export class OdooClient {
 /** Odoo many2one comes back as `[id, "display name"] | false`. */
 export const m2oId = (v: unknown): string | null =>
   Array.isArray(v) && v.length > 0 ? String(v[0]) : null;
-export const m2oName = (v: unknown): string | null =>
-  Array.isArray(v) && v.length > 1 ? String(v[1]) : null;

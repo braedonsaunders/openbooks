@@ -54,12 +54,3 @@ export type AgentPackFindings = (
   agentThreshold: string,
   detectors: ContinuousCloseDetectorPolicy[],
 ) => Promise<AgentFinding[]>;
-
-/**
- * Detector data-source ports. Packs accept their rows through these adapters
- * so unit tests inject fixtures while the production adapters run the
- * canonical queries (each loader cites the screen/service it mirrors).
- */
-export type AgentPackAdapters<TLoaders extends Record<string, unknown>> = {
-  loaders: TLoaders;
-};

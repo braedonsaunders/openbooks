@@ -72,27 +72,6 @@ export const AMT = {
   adjusting: "750.00",
 } as const;
 
-/** Consolidated primary-book expectations for period P (pre-adjustment). */
-export const EXPECT = {
-  revenue: "25,000.00",
-  expenses: "18,500.00",
-  net: "6,500.00",
-  ar: "20,000.00",
-  ap: "5,000.00",
-  cash: "32,500.00",
-  projectRevenue: "5,000.00",
-  projectCost: "2,000.00",
-  projectMargin: "3,000.00",
-  priorRevenue: "6,000.00",
-  adjustingRevenue: "25,000.00",
-  adjustingExpenses: "17,250.00",
-  adjustingNet: "5,750.00",
-  accrued: "750.00",
-  adjustingBookExpense: "10,000.00",
-  subANet: "0.00",
-  subBNet: "6,500.00",
-} as const;
-
 export interface Seed {
   orgId: string;
   rootSubId: string;
