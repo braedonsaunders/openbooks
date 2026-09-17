@@ -160,6 +160,7 @@ export {
 } from "./run-queries.ts";
 export {
   allocationFingerprint,
+  AllocationRunError,
   postAllocationRun,
   previewAllocationRun,
   rerunAllocationRun,

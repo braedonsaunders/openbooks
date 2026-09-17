@@ -51,3 +51,19 @@ test('run detail keeps summary, computation, lineage and house actions', () => {
   assert.match(tabSource, /headerActions=/)
   assert.ok(!tabSource.includes('footer={'), 'no footer button rows')
 })
+
+test('preview failures render inside the preview drawer, not behind it (F-t06-017)', () => {
+  // runPreview stores server failures in `notice`, but the preview drawer
+  // body rendered only the computation — a 422/500 left the dialog exactly
+  // as-is with the message behind it. The drawer must render the notice.
+  const drawerOpen = tabSource.indexOf('open={previewOpen}')
+  assert.ok(drawerOpen >= 0, 'preview drawer must exist')
+  const after = tabSource.slice(drawerOpen)
+  const drawerEnd = after.indexOf('</Drawer>')
+  assert.ok(drawerEnd > 0, 'preview drawer must close')
+  assert.match(
+    after.slice(0, drawerEnd),
+    /\{notice /,
+    'the preview drawer body must render the failure notice inline',
+  )
+})
