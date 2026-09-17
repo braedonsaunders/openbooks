@@ -74,7 +74,7 @@ test('open AR counts only unpaid lines and renders dates as dates', { skip: !pro
   try {
     await withBypassContext(async () => {
       // Invoice A $1000 due 06-30: unpaid.
-      const [lineA] = await postArEntry(org, 'JE-AR-A', [
+      await postArEntry(org, 'JE-AR-A', [
         { accountId: org.accounts.ar, amount: '1000', dueDate: '2026-06-30' },
         { accountId: org.accounts.revenue, amount: '-1000', dueDate: null },
       ])
