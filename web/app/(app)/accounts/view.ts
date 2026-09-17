@@ -22,7 +22,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
-import { accountsWithBalances } from '../../../lib/data'
+import { accountsWithBalances, orgInfo } from '../../../lib/data'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadAccount } from '../../api/accounts/_lib'
@@ -208,10 +208,11 @@ export async function loadAccounts(
     count,
   }))
 
-  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled] = await Promise.all([
+  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency] = await Promise.all([
     accountId && isUuid(accountId) ? loadAccount(accountId, authz.user.orgId) : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
+    orgInfo(authz.user.orgId).then((org) => org?.base_currency ?? ''),
   ])
   const drawerOptions =
     accountId || creating
@@ -223,7 +224,11 @@ export async function loadAccounts(
         `),
           multiCurrencyEnabled
             ? db.execute<CurrencyOption>(sql`select code, name from currencies order by code`)
-            : Promise.resolve({ rows: [] as CurrencyOption[] }),
+            // Single-currency orgs offer only the base currency, so a
+            // reconcilable account still has a settlement currency to carry.
+            : baseCurrency
+              ? db.execute<CurrencyOption>(sql`select code, name from currencies where code = ${baseCurrency}`)
+              : Promise.resolve({ rows: [] as CurrencyOption[] }),
           db.execute<SubsidiaryOption>(sql`
           select id, name from subsidiaries
            where org_id = ${authz.user.orgId}
@@ -296,6 +301,7 @@ export async function loadAccounts(
           createMode: creating,
           multiCurrency: multiCurrencyEnabled,
           multiSubsidiary: subsidiaryUiEnabled,
+          baseCurrency,
         }
       : null
 

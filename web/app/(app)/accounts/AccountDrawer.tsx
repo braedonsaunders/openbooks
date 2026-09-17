@@ -53,6 +53,7 @@ export function AccountDrawer({
   createMode = false,
   multiCurrency = false,
   multiSubsidiary = false,
+  baseCurrency = '',
 }: {
   payload: AccountPayload
   parents: Option[]
@@ -64,6 +65,9 @@ export function AccountDrawer({
   closeHref: string
   createMode?: boolean
   multiCurrency?: boolean
+  /** Org base currency (e.g. USD). In single-currency orgs this is the only
+   * settlement currency a reconcilable account can carry. */
+  baseCurrency?: string
   /** Company Settings → Features. Elimination is Multi-subsidiary
    *  consolidation configuration; hide and omit it when that switch is off. */
   multiSubsidiary?: boolean
@@ -97,12 +101,17 @@ export function AccountDrawer({
   const editable = canManage && mode === 'edit'
   const compatibleParents = parents.filter((option) => option.type === form.type)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }))
+  // The settlement currency is Multi-currency configuration — except that a
+  // reconcilable account MUST carry one (the API 422s without it), so the
+  // field stays available whenever the flag is on, even with Multi-currency
+  // off. Otherwise single-currency orgs have no UI path to set reconcilable.
+  const showCurrencyField = multiCurrency || form.reconcilable
 
   function errorMessage(code: unknown) {
     const key = typeof code === 'string' ? code : 'save_failed'
     const known = new Set([
       'name_required', 'invalid_type', 'type_has_transactions', 'invalid_parent', 'parent_must_be_summary',
-      'parent_type_mismatch', 'parent_cycle', 'summary_reconcilable_conflict', 'summary_has_transactions', 'summary_has_children',
+      'parent_type_mismatch', 'parent_cycle', 'summary_reconcilable_conflict', 'reconcilable_currency_required', 'summary_has_transactions', 'summary_has_children',
       'inactive_has_children', 'invalid_currency', 'invalid_subsidiary', 'invalid_dimensions',
       'invalid_custom_fields', 'number_in_use', 'account_changed', 'invalid_idempotency_key', 'save_failed',
     ])
@@ -112,6 +121,13 @@ export function AccountDrawer({
   async function save() {
     if (!form.name.trim()) {
       toast.error(t('drawer.errors.name_required'))
+      return
+    }
+    // Refuse client-side what the server would 422: a reconcilable account
+    // without a settlement currency. The flag's checkbox defaults the base
+    // currency in, so this trips only when no currency can be offered.
+    if (form.reconcilable && !form.currencyRestriction) {
+      toast.error(t('drawer.errors.reconcilable_currency_required'))
       return
     }
     setBusy(true)
@@ -130,7 +146,7 @@ export function AccountDrawer({
         parentId: form.parentId || null,
         subsidiaryId: form.subsidiaryId || null,
         monetary: form.monetary === '' ? null : form.monetary === 'true',
-        ...(multiCurrency ? { currencyRestriction: currencyRestriction || null } : {}),
+        ...(multiCurrency || form.reconcilable ? { currencyRestriction: currencyRestriction || null } : {}),
         ...(multiSubsidiary ? { eliminate } : {}),
       }),
     })
@@ -242,7 +258,7 @@ export function AccountDrawer({
               <SearchSelect value={form.parentId} onChange={(v) => set('parentId', v)} options={compatibleParents} clearable emptyLabel={tc('labels.none')} ariaLabel={t('drawer.parent')} />
             ) : value(parents.find((option) => option.value === form.parentId)?.label ?? payload.parentName)}
           </div>
-          {multiCurrency ? (
+          {(editable ? showCurrencyField : (multiCurrency || form.currencyRestriction)) ? (
           <div className={fieldClass}>
             <Label>{t('drawer.currencyRestriction')}</Label>
             {editable ? (
@@ -293,9 +309,32 @@ export function AccountDrawer({
             <span className="text-sm">{t('drawer.summary')}</span>
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.reconcilable} disabled={form.isSummary} onChange={(e) => set('reconcilable', e.target.checked)} className={checkboxClass} />
+            <input
+              type="checkbox"
+              checked={form.reconcilable}
+              disabled={form.isSummary}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setForm((current) => ({
+                  ...current,
+                  reconcilable: checked,
+                  // Single-currency orgs offer only the base currency: default
+                  // it in so checking the flag is immediately savable.
+                  currencyRestriction:
+                    checked && !current.currencyRestriction && !multiCurrency && baseCurrency
+                      ? baseCurrency
+                      : current.currencyRestriction,
+                }))
+              }}
+              className={checkboxClass}
+            />
             <span className="text-sm">{t('drawer.reconcilable')}</span>
           </label>
+          {editable && form.reconcilable && !form.currencyRestriction ? (
+            <p className="text-xs text-amber-700 sm:col-span-2 lg:col-span-3 dark:text-amber-400">
+              {t('drawer.errors.reconcilable_currency_required')}
+            </p>
+          ) : null}
           {multiSubsidiary ? <label className="flex items-center gap-2">
             <input type="checkbox" checked={form.eliminate} onChange={(e) => set('eliminate', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.eliminate')}</span>

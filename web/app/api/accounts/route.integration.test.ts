@@ -129,6 +129,68 @@ test(
 );
 
 test(
+  "accounts POST/PATCH let the reconcilable base currency through when Multi-currency is off",
+  { skip: !DB },
+  async () => {
+    // F-t05-003: single-currency orgs (scratch orgs are CAD, feature off)
+    // have no other currency to settle in, so the reconcilable invariant can
+    // only ever mean the base currency. Anything else stays refused.
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+
+      const created = await POST(
+        postRequest(randomUUID(), {
+          name: "Base settlement cash",
+          type: "asset_bank",
+          reconcilable: true,
+          currencyRestriction: "CAD",
+        }),
+      );
+      assert.equal(created.status, 201);
+
+      const foreign = await POST(
+        postRequest(randomUUID(), {
+          name: "Foreign settlement cash",
+          type: "asset_bank",
+          reconcilable: true,
+          currencyRestriction: "USD",
+        }),
+      );
+      assert.equal(foreign.status, 404);
+
+      const unflagged = await POST(
+        postRequest(randomUUID(), {
+          name: "Plain cash with currency",
+          type: "asset_bank",
+          currencyRestriction: "CAD",
+        }),
+      );
+      assert.equal(unflagged.status, 404);
+
+      const plainId = randomUUID();
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type)
+        values (${plainId}, ${org.orgId}, '9003', 'Plain cash', 'asset_bank')
+      `);
+      const allowed = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "cad" }), {
+        params: Promise.resolve({ id: plainId }),
+      });
+      assert.equal(allowed.status, 200);
+
+      const refused = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "USD" }), {
+        params: Promise.resolve({ id: plainId }),
+      });
+      assert.equal(refused.status, 404);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "accounts PATCH refuses to add reconcilable or drop its currency instead of failing in storage",
   { skip: !DB },
   async () => {

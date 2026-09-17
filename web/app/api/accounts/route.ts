@@ -10,7 +10,7 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/feature
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { assetBankHygieneWarning } from '../../../lib/accounts-hygiene'
 import { isUuid } from '../../../lib/list-params'
-import { loadAccount } from './_lib'
+import { loadAccount, orgBaseCurrency } from './_lib'
 import { accountInputFields } from './_input'
 
 export const runtime = 'nodejs'
@@ -49,8 +49,15 @@ export async function POST(request: Request) {
   const parsedBody = await parseJsonBody(request, createBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
+  // Multi-currency off refuses settlement-currency writes — except the one the
+  // reconcilable invariant forces: a reconcilable account must carry a
+  // currency, and a single-currency org has only its base.
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    const restriction = body.currencyRestriction?.toUpperCase() ?? null
+    const base = await orgBaseCurrency(gate.user.orgId)
+    if (!(body.reconcilable === true && restriction && base && restriction === base)) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
   }
   if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
