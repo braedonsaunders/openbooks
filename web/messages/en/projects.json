@@ -297,6 +297,7 @@
       "committed_cost": "Open purchase-order commitments.",
       "total_price": "Contract / selling price of the job.",
       "total_cost": "All cost incurred and committed.",
+      "gross_profit": "Profit on posted costs to date — excludes cost estimates.",
       "overhead": "Included in total job cost and therefore already deducted in gross profit.",
       "overhead_informational": "Not included in total job cost or deducted from gross profit."
     },

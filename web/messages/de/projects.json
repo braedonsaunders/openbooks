@@ -294,6 +294,7 @@
       "committed_cost": "Offene Bestellverpflichtungen.",
       "total_price": "Vertrags-/Verkaufspreis des Auftrags.",
       "total_cost": "Alle angefallenen und gebundenen Kosten.",
+      "gross_profit": "Ergebnis auf Basis gebuchter Kosten — ohne Kostenschätzungen.",
       "overhead": "In den gesamten Auftragskosten enthalten und daher bereits vom Bruttogewinn abgezogen.",
       "overhead_informational": "Nicht in den gesamten Auftragskosten enthalten und nicht vom Bruttogewinn abgezogen."
     }

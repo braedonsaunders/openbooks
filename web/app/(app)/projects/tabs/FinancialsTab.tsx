@@ -28,7 +28,26 @@ export interface FinancialsData {
 /** Measures that read better as "good when positive, bad when negative". */
 const SIGNED_GOOD = new Set(['gross_profit', 'could_be_invoiced', 'remaining_budget'])
 /** Measures that carry an explanatory hint. */
-const HINTED = new Set(['invoiced_to_date', 'could_be_invoiced', 'committed_cost', 'total_price', 'total_cost', 'overhead'])
+const HINTED = new Set(['invoiced_to_date', 'could_be_invoiced', 'committed_cost', 'total_price', 'total_cost', 'overhead', 'gross_profit'])
+
+/**
+ * Cost-budget line visibility. A ceiling (remaining budget + the bar below)
+ * belongs to capped/not-to-exceed types, but an estimated cost budget is
+ * informative for every type that carries one: the work breakdown promises
+ * the rollup, so a positive budget shows even when the ceiling does not
+ * apply. Pure so the list ordering stays testable.
+ */
+export function budgetAwareFinancialLayout(
+  layout: PnlLine[],
+  costBudgetApplies: boolean,
+  costBudget: string | number,
+): PnlLine[] {
+  if (costBudgetApplies) return layout
+  const hasBudget = cmp(String(costBudget ?? 0), '0') > 0
+  return layout.filter(
+    (line) => line.measure !== 'remaining_budget' && (line.measure !== 'cost_budget' || hasBudget),
+  )
+}
 
 export function shouldHideFinancialLine(hideWhenZero: boolean, value: string | number): boolean {
   return hideWhenZero && cmp(String(value), '0') === 0
@@ -91,9 +110,7 @@ export function FinancialsTab({ data }: {
     { key: 'category' as const, label: t('cockpit.costByCategory') },
     { key: 'account' as const, label: t('cockpit.costByAccount') },
   ]
-  const budgetAwareLayout = data.costBudgetApplies
-    ? data.layout
-    : data.layout.filter((line) => line.measure !== 'cost_budget' && line.measure !== 'remaining_budget')
+  const budgetAwareLayout = budgetAwareFinancialLayout(data.layout, data.costBudgetApplies, m.cost_budget ?? 0)
   // Overhead is a component of total cost for profiles that opt into it. Some
   // older saved profiles appended the display line after gross profit, which
   // visually implied a second deduction even though the calculation already
@@ -131,7 +148,7 @@ export function FinancialsTab({ data }: {
                 <Line
                   key={`${line.measure}-${i}`}
                   label={line.label ?? measureLabel(line.measure)}
-                  hint={line.variant === 'line' ? measureHint(line.measure) : undefined}
+                  hint={line.measure === 'gross_profit' ? measureHint(line.measure) : line.variant === 'line' ? measureHint(line.measure) : undefined}
                   value={fmt(line.measure, v)}
                   variant={line.variant}
                   tone={line.variant === 'total' && line.measure === 'gross_profit'
