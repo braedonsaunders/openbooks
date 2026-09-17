@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import test from 'node:test'
+
+// F-t08-002 (partial): the rate dialog's region picker rendered the pack's
+// raw region token ("state") as its label. The run view already presents the
+// pack's declared label capitalized ("State"/"Province"); the dialog must do
+// the same instead of showing the raw token.
+const source = readFileSync(new URL('./StatutoryRatesSection.tsx', import.meta.url), 'utf8')
+
+test('the rate dialog labels the region picker from the pack, capitalized', () => {
+  assert.doesNotMatch(source, /\{pack\?\.regionLabel \?\? label\('rates\.columns\.region'/)
+})
