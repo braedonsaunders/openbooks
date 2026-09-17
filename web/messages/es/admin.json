@@ -1,4 +1,51 @@
 {
+  "apiKeys": {
+    "title": "Claves API",
+    "description": "Claves API de alcance limitado para integraciones y automatización. Cada clave lleva un subconjunto de permisos: una solicitud solo se permite cuando tanto los ámbitos de la clave como los permisos efectivos del propietario la cubren.",
+    "searchPlaceholder": "Buscar claves, propietarios…",
+    "empty": "Aún no hay claves API: cree una para empezar a crear integraciones.",
+    "table": {
+      "name": "Nombre",
+      "key": "Clave",
+      "owner": "Propietario",
+      "scopes": "Ámbitos",
+      "scopesCount": "{count, plural, one {# permiso} other {# permisos}}",
+      "fullScope": "Sin ámbitos explícitos",
+      "lastUsed": "Último uso",
+      "status": "Estado"
+    },
+    "statusActive": "activa",
+    "statusRevoked": "revocada",
+    "drawer": {
+      "newKey": "Nueva clave API",
+      "newTitle": "Nueva clave API",
+      "description": "Cree una clave de alcance limitado para el acceso programático a la API REST. La clave en texto legible se muestra una sola vez: guárdela en un lugar seguro.",
+      "nameRequired": "El nombre es obligatorio",
+      "namePlaceholder": "Integración de sincronización de producción",
+      "descriptionPlaceholder": "¿Para qué es esta clave?",
+      "saveFailed": "No se pudo guardar la clave",
+      "created": "Clave creada",
+      "updated": "Clave actualizada",
+      "revoke": "Revocar",
+      "revokeConfirm": "¿Revocar esta clave? Todas las integraciones que la usen dejarán de funcionar de inmediato. Esta acción no se puede deshacer.",
+      "revokeFailed": "No se pudo revocar la clave",
+      "revoked": "Clave revocada",
+      "revokedNotice": "Esta clave ha sido revocada y ya no puede autenticar solicitudes.",
+      "keyCreated": "Copie su clave API",
+      "keyCreatedHint": "Esta es la única vez que se mostrará la clave completa. Guárdela en un lugar seguro: no podrá volver a verla.",
+      "copy": "Copiar",
+      "copied": "Copiado al portapapeles",
+      "createKey": "Crear clave",
+      "saveChanges": "Guardar cambios",
+      "scopesHeading": "Ámbitos de permiso",
+      "scopesHint": "Seleccione los permisos que otorga esta clave (se requiere al menos uno). Una clave solo otorga lo seleccionado aquí, nunca el conjunto completo del propietario.",
+      "scopesCount": "{count, plural, one {# permiso seleccionado} other {# permisos seleccionados}}",
+      "scopesRequired": "Seleccione al menos un ámbito de permiso.",
+      "rateLimitLabel": "Solicitudes por minuto",
+      "rateLimitPlaceholder": "Ilimitado",
+      "rateLimitHint": "Solicitudes máximas que esta clave puede realizar por minuto. Déjelo en blanco para ningún límite."
+    }
+  },
   "hub": {
     "metaTitle": "Centro de administración",
     "title": "Centro de administración",
@@ -2957,6 +3004,387 @@
     },
     "payroll": {
       "navTitle": "Nómina"
+    },
+    "wizard": {
+      "skip": "Omitir por ahora",
+      "back": "Atrás",
+      "next": "Continuar",
+      "apply": "Configurar mis libros",
+      "error": "Algo salió mal. Inténtelo de nuevo.",
+      "welcome": {
+        "title": "Configuremos sus libros",
+        "description": "Cuéntenos cómo funciona su empresa y OpenBooks dará forma a un espacio de trabajo inicial enfocado. Revisará cada elección antes de que cambie nada.",
+        "f1": "Plan contable",
+        "f2": "Un espacio a su medida",
+        "f3": "Una puesta en marcha guiada"
+      },
+      "company": {
+        "title": "Cuéntenos sobre su empresa",
+        "description": "Estos datos establecen su base contable. El nombre y los datos jurídicos siguen siendo editables; la moneda base, el sector y el calendario fiscal se bloquean tras el primer apunte.",
+        "name": "Nombre de la empresa",
+        "namePlaceholder": "p. ej. Saunders Construction Ltd.",
+        "legalName": "Razón social (opcional)",
+        "legalNamePlaceholder": "Nombre de la entidad jurídica registrada",
+        "country": "País",
+        "currency": "Moneda base",
+        "fiscalYear": "El ejercicio empieza en"
+      },
+      "industry": {
+        "title": "¿A qué sector pertenece?",
+        "description": "Recomendaremos un plan contable y funciones adaptadas a su sector. Revisará la recomendación antes de aplicarla.",
+        "search": "Buscar sectores…",
+        "locked": "Su sector no podrá cambiarse después de contabilizar movimientos, pero aún podrá personalizar su plan contable y sus funciones.",
+        "classificationOnly": "Su plan existente y su historial contabilizado se conservarán. Esta primera clasificación solo ajusta las recomendaciones de espacio y funciones."
+      },
+      "profile": {
+        "title": "Partimos de donde está su empresa",
+        "description": "OpenBooks puede mantenerse agréablement simple hoy y mostrar controles más avanzados a medida que crezcan su equipo y sus necesidades contables.",
+        "teamQuestion": "¿Cuántas personas trabajarán en OpenBooks?",
+        "complexityQuestion": "¿Cómo se revisa el trabajo financiero?",
+        "adapting": "OpenBooks usa estos hábitos de trabajo concretos —no una vaga etiqueta de tamaño— para recomendar controles. Revisará cada función activada antes de aplicarla.",
+        "team": {
+          "solo": {
+            "title": "Solo yo",
+            "description": "Propietario, contable o fundador"
+          },
+          "small": {
+            "title": "2 a 10 personas",
+            "description": "Un equipo pequeño con trabajo compartido"
+          },
+          "medium": {
+            "title": "11 a 50 personas",
+            "description": "Responsabilidades definidas y revisores"
+          },
+          "large": {
+            "title": "51 personas o más",
+            "description": "Equipos especializados y controles más estrictos"
+          }
+        },
+        "complexity": {
+          "essentials": {
+            "title": "Gestión del propietario",
+            "description": "La misma persona de confianza puede preparar, revisar, contabilizar y cerrar los libros."
+          },
+          "growing": {
+            "title": "Revisión en equipo",
+            "description": "El equipo comparte el trabajo y los movimientos importantes deben tener un revisor claro."
+          },
+          "advanced": {
+            "title": "Controles formales",
+            "description": "Las tareas están separadas y las aprobaciones, la evidencia y la validación del cierre deben estar reguladas."
+          }
+        }
+      },
+      "operations": {
+        "title": "¿Cómo opera usted?",
+        "description": "Confirme el trabajo que realmente hace y la estructura financiera con la que opera. Sus respuestas del sector ya están reflejadas abajo.",
+        "workTitle": "Trabajo que hace su empresa",
+        "structureTitle": "Estructura financiera",
+        "structureDescription": "Responda directamente. OpenBooks nunca supone entidades jurídicas adicionales ni contabilidad multimoneda a partir del personal o del sector.",
+        "note": "Este es un punto de partida revisable. Cada interruptor sigue siendo oficial y ajustable en Configuración → Funciones, con comprobaciones de seguridad que preservan los datos.",
+        "agentsNote": "Cuando los libros estén en marcha, los paquetes de agentes en segundo plano que los vigilan están en Configuración → Agentes: instale paquetes, ajuste sus comprobaciones y dirija sus hallazgos desde allí.",
+        "projects": {
+          "title": "Proyectos y costos",
+          "description": "Siga los trabajos con presupuestos, costos, facturación y rentabilidad."
+        },
+        "timeTracking": {
+          "title": "Control horario",
+          "description": "Partes de horas con envío, aprobación y seguimiento de tarifas de costo y facturación."
+        },
+        "inventory": {
+          "title": "Inventario",
+          "description": "Control de existencias, ubicaciones, costos de artículos y ensamblajes."
+        },
+        "subscriptionBilling": {
+          "title": "Facturación de suscripciones",
+          "description": "Planes y suscripciones que generan facturas recurrentes automáticamente."
+        },
+        "orders": {
+          "title": "Presupuestos y pedidos",
+          "description": "Use presupuestos, pedidos de venta y pedidos de compra antes de facturas de venta o de proveedor."
+        },
+        "crm": {
+          "title": "Cartera comercial",
+          "description": "Siga clientes potenciales, oportunidades, actividades y previsiones antes de la venta."
+        },
+        "multiSubsidiary": {
+          "title": "Múltiples entidades",
+          "description": "Opere más de una entidad jurídica con consolidación e intercompañía."
+        },
+        "multiCurrency": {
+          "title": "Multimoneda",
+          "description": "Opere en moneda extranjera con tipos de cambio y revaluación."
+        },
+        "payroll": {
+          "title": "Nómina",
+          "description": "Procese la nómina con paquetes reglamentarios por país."
+        }
+      },
+      "rhythm": {
+        "title": "Defina su ritmo contable",
+        "description": "El volumen cambia cuánto ayuda la automatización. La cadencia de cierre cambia qué rutinas debe mostrarle OpenBooks.",
+        "activityQuestion": "¿Cuánto movimiento gestiona aproximadamente cada mes?",
+        "activityHint": "Cuente documentos de clientes y proveedores, gastos, pagos y movimientos bancarios o de tarjeta, no líneas de apunte.",
+        "activity": {
+          "light": {
+            "title": "Menos de 100",
+            "description": "Un flujo enfocado con poca sobrecarga de automatización."
+          },
+          "steady": {
+            "title": "100 a 1 000",
+            "description": "Suficiente movimiento para que importaciones, reglas y revisión continua ahorren tiempo."
+          },
+          "high": {
+            "title": "Más de 1 000",
+            "description": "La automatización y la supervisión continua deben estar listas desde el inicio."
+          }
+        },
+        "closeQuestion": "¿Con qué frecuencia piensa cerrar formalmente e informar sus libros?",
+        "close": {
+          "monthly": {
+            "title": "Cada mes",
+            "description": "Recomendado para informes de gestión puntuales y detección temprana de errores."
+          },
+          "quarterly": {
+            "title": "Cada trimestre",
+            "description": "Un ciclo formal más ligero, con la banca conciliada durante todo el trimestre."
+          },
+          "annual": {
+            "title": "Al cierre del año",
+            "description": "Cadencia mínima de cierre formal; la conciliación habitual sigue siendo importante."
+          }
+        },
+        "note": "Son preferencias iniciales, no límites. OpenBooks nunca debilitará la integridad de los apuntes ni los controles de cierre porque el movimiento sea bajo."
+      },
+      "launch": {
+        "title": "Dé forma a su puesta en marcha",
+        "description": "Unas últimas respuestas permiten que la guía de puesta en marcha se concentre en el trabajo entre la configuración y su primer apunte real.",
+        "booksQuestion": "¿De dónde parten los libros?",
+        "books": {
+          "fresh": {
+            "title": "Empezar de cero",
+            "description": "No hay saldos anteriores que traer; el mayor parte de cero."
+          },
+          "migrate": {
+            "title": "Trasladar libros existentes",
+            "description": "Saldos de apertura, facturas abiertas de venta y de compra y fecha de corte por verificar."
+          }
+        },
+        "taxQuestion": "¿Esta empresa recauda impuesto sobre las ventas, GST/HST o IVA?",
+        "tax": {
+          "registered": "Sí, registrada",
+          "not_registered": "No, no obligada",
+          "unsure": "Aún no lo sé"
+        },
+        "toolsQuestion": "¿Cuáles de estas herramientas deben estar listas desde el primer día?",
+        "features": {
+          "bankFeeds": {
+            "title": "Banca conectada",
+            "description": "Importe automáticamente el movimiento bancario."
+          },
+          "onlinePayments": {
+            "title": "Pagos en línea",
+            "description": "Permita que sus clientes paguen desde las facturas."
+          },
+          "fixedAssets": {
+            "title": "Depreciación de activos",
+            "description": "Siga los activos y los planes de depreciación."
+          }
+        },
+        "sample": {
+          "question": "¿Desea una empresa para explorar de inmediato?",
+          "title": "Crear una empresa de muestra por sector",
+          "description": "Una empresa realista con movimientos, proyectos, informes y períodos cerrados, según el sector elegido.",
+          "safety": "Es un espacio separado y claramente marcado. Los apuntes de muestra nunca entran en estos libros, y el correo saliente, los pagos, las API y las integraciones están desactivados.",
+          "error": "Su empresa real quedó configurada, pero la empresa de muestra opcional no pudo prepararse. Puede reintentarlo en Importación y exportación."
+        }
+      },
+      "review": {
+        "title": "Revise su configuración",
+        "description": "Esto es lo que configuraremos. Pulse «Configurar mis libros» para aplicarlo todo.",
+        "companyName": "Nombre de la empresa",
+        "legalName": "Razón social",
+        "notProvided": "No indicado",
+        "country": "País",
+        "currency": "Moneda",
+        "fiscalYear": "Inicio del ejercicio",
+        "teamSize": "Equipo de OpenBooks",
+        "complexity": "Espacio inicial",
+        "bookStart": "Punto de partida del mayor",
+        "taxPosition": "Situación fiscal",
+        "monthlyActivity": "Movimiento mensual",
+        "closeCadence": "Cierre formal",
+        "sampleCompany": "Espacio de exploración",
+        "sampleCompanyYes": "Crear una empresa de muestra separada por sector",
+        "sampleCompanyNo": "Ahora no",
+        "industry": "Sector",
+        "chartOfAccounts": "Plan contable",
+        "chartPreserved": "Plan existente conservado",
+        "accounts": "cuentas",
+        "features": "Funciones activadas",
+        "note": "Esto crea su base contable y su espacio inicial. La guía de puesta en marcha mostrará lo que falte antes de su primer apunte real. Cada función opcional sigue ajustable desde Configuración → Funciones.",
+        "notePreserved": "Esto actualiza la clasificación de la empresa y las recomendaciones de espacio sin cambiar el plan existente ni el historial contabilizado. Cada función opcional sigue ajustable desde Configuración → Funciones.",
+        "payrollPack": "Paquete de nómina por país",
+        "payrollPackCanada": "Canadá (CRA T4127)",
+        "payrollPackNone": "Ninguno — instalar más tarde desde Nómina"
+      },
+      "applying": {
+        "title": "Configurando sus libros…",
+        "description": "Creando su plan contable, configurando funciones y asignando cuentas de control."
+      },
+      "done": {
+        "title": "Su espacio inicial está listo",
+        "description": "Ahora la guía de puesta en marcha verificará las últimas decisiones de empresa, impuestos, numeración, banca y saldos de apertura antes de contabilizar movimiento real. Los agentes en segundo plano pueden instalarse en cualquier momento en Configuración → Agentes."
+      },
+      "industries": {
+        "general_business": {
+          "title": "Negocio general",
+          "description": "Una configuración estándar que sirve para cualquier empresa. Sin supuestos sectoriales."
+        },
+        "construction_contractor": {
+          "title": "Construcción y oficios",
+          "description": "Contratistas, oficios y constructores. Costos de obra, facturación por avance, retenciones de garantía y partes de campo."
+        },
+        "professional_services": {
+          "title": "Servicios profesionales",
+          "description": "Consultores, agencias y asesores. Control horario, rentabilidad de proyectos y facturación con anticipo."
+        },
+        "engineering_architecture": {
+          "title": "Ingeniería y arquitectura",
+          "description": "Firmas EPC y AEC. EDT (WBS), facturación por fases, costos de equipos y facturación por avance."
+        },
+        "it_software_saas": {
+          "title": "Software y SaaS",
+          "description": "Facturación de suscripciones, reconocimiento de ingresos ASC 606 y seguimiento de ingresos diferidos."
+        },
+        "accounting_firm": {
+          "title": "Despacho contable",
+          "description": "Despachos de contabilidad y teneduría. Multicliente, contabilidad de fondos de terceros y seguimiento de encargos."
+        },
+        "wholesale_distribution": {
+          "title": "Mayorista y distribución",
+          "description": "Mayoristas y distribuidores. Inventario, costos de importación, recepciones no facturadas (GRNI) y ubicaciones de stock."
+        },
+        "property_management": {
+          "title": "Administración de inmuebles",
+          "description": "Carteras de alquiler y administradores. Rentas recurrentes, gastos comunes (CAM), depósitos de garantía y activos fijos."
+        },
+        "nonprofit": {
+          "title": "Sin fines de lucro",
+          "description": "Fundaciones y organizaciones sin fines de lucro. Seguimiento de subvenciones, contabilidad por fondos, donaciones y activo neto restringido."
+        },
+        "manufacturing": {
+          "title": "Manufactura",
+          "description": "Manufactura ligera y discreta. Listas de materiales, materias primas, trabajo en curso, productos terminados y costos indirectos."
+        },
+        "healthcare_practice": {
+          "title": "Clínica",
+          "description": "Clínicas médicas y dentales. Cuentas por cobrar de pacientes, insumos médicos y equipos."
+        }
+      },
+      "payroll": {
+        "title": "Configurar la nómina",
+        "description": "La nómina funciona con paquetes por país instalables: cada paquete trae el motor de retenciones reglamentarias y los componentes de esa jurisdicción.",
+        "packQuestion": "¿Qué paquete de país debe instalarse?",
+        "packs": {
+          "canada": {
+            "title": "Canadá",
+            "description": "Motor reglamentario CRA T4127, todas las provincias y territorios, verificado contra el PDOC de la CRA."
+          },
+          "us": {
+            "title": "Estados Unidos",
+            "description": "Previsto, aún no disponible."
+          }
+        },
+        "checklist": {
+          "title": "Terminar la nómina tras este recorrido",
+          "pack": "El paquete de país seleccionado se instala automáticamente al aplicar esta configuración.",
+          "accounts": "Dirija las cuentas de contabilización (salarios, pago neto, pasivos de retenciones) a su plan en",
+          "accountsLink": "Nómina → Cuentas y contabilización",
+          "schedule": "Cree su primer calendario de nómina en",
+          "scheduleLink": "Nómina → Calendarios de nómina"
+        },
+        "installError": "La nómina quedó activada, pero el paquete de país no pudo instalarse. Puede instalarlo desde Nómina → Módulos de país."
+      }
+    },
+    "guide": {
+      "hero": {
+        "kicker": "Guía de puesta en marcha",
+        "title": "Haga que el primer apunte sea aburrido, en el buen sentido.",
+        "description": "OpenBooks ha dado forma al espacio alrededor de su empresa. Esta guía verifica las decisiones que hacen que la facturación, la banca y el cierre sean fiables desde el primer día.",
+        "badgeReady": "Base contable lista",
+        "badgeNeeds": "La base necesita atención",
+        "progressLabel": "Progreso de la configuración",
+        "progressOf": "{done} de {total} áreas preparadas"
+      },
+      "activity": {
+        "high": "más de 1.000 actividades mensuales",
+        "steady": "100–1.000 actividades mensuales",
+        "light": "menos de 100 actividades mensuales"
+      },
+      "closeName": {
+        "monthly": "mensual",
+        "quarterly": "trimestral",
+        "annual": "anual"
+      },
+      "state": {
+        "complete": "completo",
+        "review": "por revisar",
+        "waiting": "pendiente"
+      },
+      "profile": {
+        "title": "Perfil de la empresa y del espacio",
+        "descReady": "El sector, las responsabilidades del equipo, {activity}, la cadencia de cierre {close} y las recomendaciones de funciones se han revisado.",
+        "descWaiting": "Cuéntele a OpenBooks cómo opera su empresa para que el espacio empiece al nivel adecuado.",
+        "actionReady": "Revisar el perfil",
+        "actionWaiting": "Iniciar el recorrido"
+      },
+      "foundation": {
+        "title": "Base contable",
+        "descReady": "{count, plural, one {# cuenta activa} other {# cuentas activas}}, un libro principal, ejercicios fiscales, cuentas de control y una entidad raíz única están listos.",
+        "descWaiting": "Termine el plan contable, el libro, los ejercicios, la entidad raíz, la moneda y la asignación de cuentas de control antes de contabilizar.",
+        "action": "Revisar la base"
+      },
+      "invoicing": {
+        "title": "Facturas de venta y de compra y plazos de pago",
+        "descReady": "{count, plural, one {# plazo de pago activo} other {# plazos de pago activos}} disponibles. Revise la numeración y los valores por defecto de los documentos.",
+        "descWaiting": "Elija al menos un plazo de pago para no calcular vencimientos a mano.",
+        "action": "Revisar la facturación"
+      },
+      "tax": {
+        "title": "Tratamiento fiscal",
+        "descReady": "{count, plural, one {# código fiscal activo configurado} other {# códigos fiscales activos configurados}}. Confirme registros y obligaciones de declaración.",
+        "descNotRegistered": "Confirmó que esta empresa actualmente no está obligada a recaudar impuesto sobre las ventas, GST/HST o IVA. Revíselo antes de que cambien las obligaciones.",
+        "descRegistered": "Confirmó que la empresa está registrada. Añada su jurisdicción, registro, códigos fiscales y cadencia de declaración antes de emitir documentos reales.",
+        "descUndecided": "El registro fiscal sigue sin decidirse. Resuélvalo antes de emitir facturas reales o de contabilizar impuesto recuperable.",
+        "action": "Revisar impuestos"
+      },
+      "bank": {
+        "title": "Cuentas bancarias y tarjetas",
+        "descReady": "{count, plural, one {# cuenta conciliable} other {# cuentas conciliables}} aparecerán en Banca. Mantenga conciliables solo las cuentas reales.",
+        "descWaiting": "Marque cada cuenta real bancaria o de tarjeta del mayor como conciliable antes de importar extractos.",
+        "action": "Revisar cuentas bancarias"
+      },
+      "opening": {
+        "title": "Saldos de apertura y corte",
+        "descFreshPosted": "Los libros partieron de cero; {count, plural, one {# apunte contabilizado refleja} other {# apuntes contabilizados reflejan}} movimiento real en lugar de un saldo de apertura migrado.",
+        "descFreshEmpty": "Confirmó que los libros parten de cero, así que no se espera ningún apunte de migración.",
+        "descMigratePosted": "{count, plural, one {# apunte contabilizado existe} other {# apuntes contabilizados existen}}. Concilie el apunte de apertura con el balance de origen y el detalle de partidas abiertas antes de declarar completo el corte.",
+        "descMigrateEmpty": "Está trasladando libros existentes. Registre un apunte de apertura cuadrado y verifique el detalle de clientes, proveedores, bancos, impuestos y resultados acumulados.",
+        "actionFreshLedger": "Revisar el mayor",
+        "actionMigrateJournal": "Revisar el diario",
+        "actionMigrateEnter": "Registrar saldos de apertura"
+      },
+      "close": {
+        "titleMonthly": "Primer cierre mensual",
+        "titleQuarterly": "Primer cierre trimestral",
+        "titleAnnual": "Primer cierre anual",
+        "descDone": "{count, plural, one {# cierre realizado} other {# cierres realizados}} con lista preservada, validación, bloqueos y paquete de cierre.",
+        "descReview": "Existe movimiento real. Concilie el período, revise los estados financieros, complete la lista de cierre {close}, certifique o apruebe, bloquee y publique.",
+        "descWaiting": "Cuando empiece el movimiento real, OpenBooks guiará el primer cierre {close} desde la conciliación hasta los libros bloqueados y el paquete de cierre preservado.",
+        "actionDone": "Revisar cierres",
+        "actionReview": "Abrir el espacio de cierre"
+      }
     }
   },
   "flows": {

@@ -521,7 +521,10 @@
       "scopesHeading": "Berechtigungsbereiche",
       "scopesHint": "Wählen Sie die Berechtigungen aus, die dieser Schlüssel gewährt — mindestens eine ist erforderlich. Ein Schlüssel gewährt nur, was hier ausgewählt ist, niemals den vollständigen Berechtigungssatz des Eigentümers.",
       "scopesCount": "{count, plural, one {# Berechtigung ausgewählt} other {# Berechtigungen ausgewählt}}",
-      "scopesRequired": "Wählen Sie mindestens einen Berechtigungsbereich aus."
+      "scopesRequired": "Wählen Sie mindestens einen Berechtigungsbereich aus.",
+      "rateLimitLabel": "Anfragen pro Minute",
+      "rateLimitPlaceholder": "Unbegrenzt",
+      "rateLimitHint": "Maximale Anfragen, die dieser Schlüssel pro Minute stellen darf. Leer lassen für kein Limit."
     }
   },
   "settings": {
@@ -2145,13 +2148,207 @@
       "navTitle": "Zahlungsanbieter"
     },
     "agents": {
-      "overview": {
-        "scanAlreadyRunning": "Es läuft bereits ein Scan."
-      },
       "nav": {
         "overview": "Übersicht",
         "library": "Bibliothek",
         "activity": "Aktivität"
+      },
+      "overview": {
+        "title": "Agenten",
+        "description": "Hintergrund-Agenten, die die Bücher überwachen und prüfbare nächste Schritte vorschlagen. Sie buchen oder bearbeiten niemals selbst Datensätze.",
+        "configure": "Konfigurieren",
+        "runNow": "Jetzt ausführen",
+        "enabled": "Ein",
+        "disabled": "Aus",
+        "controlsEnabled": "{count} von {total} Prüfungen ein",
+        "manualOnly": "Nur manuelle Läufe",
+        "cadences": {
+          "daily": "Täglich",
+          "weekly": "Wöchentlich"
+        },
+        "materialitySummary": "Wesentlichkeit {amount}",
+        "lastRun": "Letzter Lauf {date} · {status}",
+        "runStatus": {
+          "completed": "abgeschlossen",
+          "failed": "fehlgeschlagen",
+          "skipped": "übersprungen",
+          "running": "läuft"
+        },
+        "neverRun": "Nie ausgeführt",
+        "nextRun": "Nächster {date}",
+        "openFindings": "{count, plural, one {# offener Befund} other {# offene Befunde}}",
+        "reviewWork": "Arbeit prüfen",
+        "featureOff": "Das Modul Abschlussmonitor ist ausgeschaltet, daher können Packs weder aktiviert noch ausgeführt werden.",
+        "enableModule": "Unter Funktionen einschalten",
+        "featureOffError": "Schalten Sie erst das Modul Abschlussmonitor ein, bevor Sie ein Pack aktivieren.",
+        "toggleFailed": "Die Pack-Einstellung konnte nicht gespeichert werden.",
+        "scanComplete": "{count, plural, one {# Befund} other {# Befunde}} erkannt",
+        "scanFailed": "Der Scan konnte nicht gestartet werden.",
+        "scanAlreadyRunning": "Es läuft bereits ein Scan.",
+        "guideLink": "Einrichtungsleitfaden",
+        "columns": {
+          "pack": "Pack",
+          "status": "Status",
+          "schedule": "Zeitplan",
+          "lastRun": "Letzter Lauf",
+          "findings": "Befunde",
+          "actions": "Aktionen"
+        },
+        "kpis": {
+          "enabled": "Packs ein",
+          "enabledValue": "{count} von {total}",
+          "openFindings": "Offene Befunde",
+          "runs7d": "Läufe · 7 Tage",
+          "failed7d": "Fehlgeschlagen · 7 Tage"
+        }
+      },
+      "library": {
+        "title": "Bibliothek",
+        "description": "Jedes Pack aus der Registry — was es liest, was es vorschlägt und was es braucht. Installieren aktiviert ein Pack mit seinen Standardprüfungen.",
+        "install": "Installieren",
+        "installed": "Installiert",
+        "configure": "Konfigurieren",
+        "readsLabel": "Liest",
+        "proposesLabel": "Schlägt vor",
+        "needsLabel": "Braucht",
+        "checksTitle": "Prüfungen ({count})",
+        "checksNote": "{count} von {total} standardmäßig ein",
+        "moduleRequires": "Erfordert das Modul {feature}",
+        "registryNote": "Pack {key} · {count} Prüfungen · in der Agenten-Registry deklariert",
+        "installFailed": "Das Pack konnte nicht installiert werden.",
+        "installedToast": "{name} mit Standardprüfungen installiert."
+      },
+      "policy": {
+        "backLabel": "Alle Agenten",
+        "notificationsTitle": "Mitteilungen über Befunde",
+        "notificationsDescription": "Wer die Befunde dieses Packs erhält und wie. Das Routing wird in der Richtlinie gespeichert — Befunde erscheinen immer unter Aktivität.",
+        "modes": {
+          "findings_only": {
+            "title": "Nur Befunde",
+            "description": "Keine Mitteilungen — Befunde unter Aktivität prüfen."
+          },
+          "digest": {
+            "title": "Tagesübersicht",
+            "description": "Eine Zusammenfassung neuer Befunde pro Tag."
+          },
+          "immediate": {
+            "title": "Sofort",
+            "description": "Eine Mitteilung für jeden neuen Befund."
+          }
+        },
+        "rolesLabel": "Rollen",
+        "usersLabel": "Personen",
+        "noTargets": "Keine",
+        "usersTruncatedNote": "Die ersten 200 Personen werden angezeigt.",
+        "deliveryNote": "Der E-Mail-Versand ist noch nicht verdrahtet — hier wird gespeichert, wer was erhalten soll. Befunde erscheinen solange immer unter Aktivität.",
+        "rolesPlaceholder": "Rolle hinzufügen…",
+        "usersPlaceholder": "Person hinzufügen…"
+      },
+      "activity": {
+        "title": "Aktivität",
+        "description": "Jeder Agenten-Scan über alle Packs — Status, Dauer, Befunde und Fehler. Jedes Pack lässt sich von hier erneut ausführen.",
+        "allPacks": "Alle Packs",
+        "allStatuses": "Alle Status",
+        "sinceColumn": "Seit",
+        "sinceAll": "Gesamter Zeitraum",
+        "since": {
+          "day": "Letzte 24 Stunden",
+          "week": "Letzte 7 Tage"
+        },
+        "packColumn": "Pack",
+        "triggerColumn": "Auslöser",
+        "triggers": {
+          "manual": "Manuell",
+          "scheduler": "Geplant"
+        },
+        "statusColumn": "Status",
+        "startedColumn": "Gestartet",
+        "durationColumn": "Dauer",
+        "detectedColumn": "Erkannt",
+        "resolvedColumn": "Gelöst",
+        "actionsColumn": "Aktionen",
+        "rerun": "Erneut ausführen",
+        "viewFindings": "Befunde",
+        "empty": "Noch keine Läufe.",
+        "emptyHint": "Führen Sie ein Pack aus der Übersicht aus, um hier seinen ersten Scan zu sehen.",
+        "truncatedNote": "Die neuesten {shown} von {total} Läufen werden angezeigt.",
+        "totalNote": "{count, plural, one {# Lauf} other {# Läufe}}",
+        "showMore": "Mehr anzeigen",
+        "loadFailed": "Läufe konnten nicht geladen werden."
+      },
+      "packs": {
+        "accounting": {
+          "title": "Kontrollen Rechnungswesen",
+          "description": "Unabgestimmte Bankbewegungen, unausgeglichene Abstimmungen und alte Entwürfe, die den Abschluss blockieren.",
+          "reads": "Kontoauszüge und Abstimmungen, offene Buchungsbelege.",
+          "proposes": "Eine Prüfliste zu klärender Bedingungen — bucht oder bearbeitet niemals Datensätze."
+        },
+        "finance": {
+          "title": "Kontrollen Finanzen",
+          "description": "Fehlende genehmigte Budgets, ungünstige Abweichungen und Leistungseinbrüche der Periode.",
+          "reads": "Genehmigte Budgetszenarien, Ist-Werte und Periodenumsatz.",
+          "proposes": "Abweichungshinweise mit den genauen Konten — nur Prüfung, keine Buchungen."
+        },
+        "collections": {
+          "title": "Forderungsmanagement",
+          "description": "Überfällige Kundensalden mit Zahlungsverhalten, gebrochene Zusagen und Kandidaten für Kreditsperren.",
+          "reads": "Offene Forderungen, Zusagen und Zahlungshistorie.",
+          "proposes": "Mahnungsentwürfe und eine priorisierte Anrufliste zur Prüfung."
+        },
+        "payables": {
+          "title": "Verbindlichkeiten",
+          "description": "Doppelte Rechnungen, Rechnungen vor dem nächsten Zahllauf, Skonti und fehlende Genehmigungen.",
+          "reads": "Lieferantenrechnungen, Genehmigungen und Zahllaufkalender.",
+          "proposes": "Ein Zahllauf als Prüfkarte — nichts wird automatisch gezahlt."
+        },
+        "reconciliation": {
+          "title": "Bankabstimmung",
+          "description": "Unabgestimmte Bankzeilen mit sicherem Match-Kandidaten, alte Abstimmungen und nie abgestimmte Konten.",
+          "reads": "Kontoauszugszeilen und Abstimmstatus.",
+          "proposes": "Match-Befehle zum einzelnen Bestätigen."
+        },
+        "hygiene": {
+          "title": "Datenhygiene",
+          "description": "Kontrollkonten-Abweichungen, doppelte Partner und Datensätze ohne benötigte Codes, Budgets oder Zuordnungen.",
+          "reads": "Kontenplan, Partner, Artikel, Projekte, Budgets und Lohnkomponenten.",
+          "proposes": "Setup-Fixkarten, wo die Lösung eine Einstellung ist."
+        },
+        "forensics": {
+          "title": "Forensik",
+          "description": "Wochenendbuchungen, glatte Beträge, knapp-unter-Limit-Beträge und doppelte Rechnungen.",
+          "reads": "Ausgabenbelege und das Sentinel-Dashboard.",
+          "proposes": "Sentinel-Prüflinks an jedem Befund — nur Prüfung, keine Buchungen."
+        },
+        "tax": {
+          "title": "Steuern",
+          "description": "Fehlende Steuercodes, nicht registrierte Formulare, nicht berechenbare Erklärungen und entsperrte Meldeperioden.",
+          "reads": "Gebuchte Belege, Erklärungsformulare, Registrierungen und Periodensperren.",
+          "proposes": "Links zur Erklärungsprüfung an jedem Befund — nur Prüfung, keine Buchungen."
+        },
+        "payroll": {
+          "title": "Lohn",
+          "description": "Fällige Abführungen, unbekannte Konten, fehlende Wahlen und Jahresendlücken.",
+          "reads": "Festgeschriebene Lohnläufe, Abführungsgruppen, Mitarbeiterprofile und gesetzliche Sätze.",
+          "proposes": "Prüflinks für Abführungen und Mitarbeiter — nur Prüfung, keine Buchungen."
+        },
+        "projects": {
+          "title": "Projekte",
+          "description": "Negative Margen, Budgetüberschreitungen und alte nicht abgerechnete Arbeit.",
+          "reads": "Gebuchte Projektkosten und -erlöse, genehmigte Budgets, offene Verpflichtungen und nicht abgerechnete Arbeit.",
+          "proposes": "Projekt-Prüflinks — nur Prüfung, keine Buchungen."
+        },
+        "cash": {
+          "title": "Liquidität",
+          "description": "Niedrige Salden, Rechnungsballungen und prognostizierte Engpässe.",
+          "reads": "Banksalden, offene Forderungen und Verbindlichkeiten sowie die Liquiditätsprognose.",
+          "proposes": "Bank-Prüflinks — nur Prüfung, keine Buchungen."
+        }
+      },
+      "runStatuses": {
+        "completed": "Abgeschlossen",
+        "failed": "Fehlgeschlagen",
+        "skipped": "Übersprungen",
+        "running": "Läuft"
       }
     },
     "readiness": {

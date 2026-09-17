@@ -3,6 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../../../lib/authz'
 import { onboardingStatus } from '../../../../../lib/onboarding'
 import type { SetupReadinessCheck } from './sections'
@@ -34,6 +35,7 @@ export interface SetupReadinessHero {
   badgeLabel: string
   badgeReady: boolean
   progressLabel: string
+  progressOf: string
   progressCount: number
   progressTotal: number
   progressPercent: number
@@ -49,6 +51,7 @@ export interface SetupReadinessData {
 
 export async function loadSetupReadiness(): Promise<SetupReadinessData> {
   const { user } = await requirePermission('admin.setup.manage')
+  const t = await getTranslations('admin')
   const result = (await db.execute<Record<string, any>>(sql`
     select o.name, o.legal_name, o.base_currency, o.country, o.settings,
       (select count(*)::int from currencies) as currencies,
@@ -73,12 +76,13 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
   const closeCadence = ['monthly', 'quarterly', 'annual'].includes(String(workspaceProfile.closeCadence))
     ? String(workspaceProfile.closeCadence)
     : 'monthly'
-  const closeLabel = closeCadence === 'quarterly' ? 'quarterly' : closeCadence === 'annual' ? 'year-end' : 'monthly'
+  const closeName = t(`setup.guide.closeName.${closeCadence}`)
+  const closeTitle = t(`setup.guide.close.${closeCadence === 'annual' ? 'titleAnnual' : closeCadence === 'quarterly' ? 'titleQuarterly' : 'titleMonthly'}`)
   const activityLabel = workspaceProfile.monthlyActivity === 'high'
-    ? 'more than 1,000 monthly activities'
+    ? t('setup.guide.activity.high')
     : workspaceProfile.monthlyActivity === 'steady'
-      ? '100–1,000 monthly activities'
-      : 'under 100 monthly activities'
+      ? t('setup.guide.activity.steady')
+      : t('setup.guide.activity.light')
   const control = (settings.controlAccounts ?? {}) as Record<string, unknown>
   const foundationReady = org?.currencies > 0 && org?.roots === 1 && org?.accounts > 0
     && org?.books > 0 && org?.periods > 0 && Boolean(control.ar && control.ap && control.bank)
@@ -86,67 +90,67 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
 
   const checks: Omit<SetupReadinessCheck, 'indexLabel' | 'stateLabel'>[] = [
     {
-      title: 'Company and workspace profile',
+      title: t('setup.guide.profile.title'),
       description: profileReady
-        ? `Industry, team responsibilities, ${activityLabel}, ${closeLabel} close cadence, and feature recommendations have been reviewed.`
-        : 'Tell OpenBooks how your company operates so the workspace starts at the right level.',
-      href: '/admin/setup/wizard', action: profileReady ? 'Review profile' : 'Run walkthrough',
+        ? t('setup.guide.profile.descReady', { activity: activityLabel, close: closeName })
+        : t('setup.guide.profile.descWaiting'),
+      href: '/admin/setup/wizard', action: profileReady ? t('setup.guide.profile.actionReady') : t('setup.guide.profile.actionWaiting'),
       state: profileReady ? 'complete' : 'waiting',
     },
     {
-      title: 'Accounting foundation',
+      title: t('setup.guide.foundation.title'),
       description: foundationReady
-        ? `${org.accounts} active accounts, a primary book, fiscal periods, control accounts, and one root entity are ready.`
-        : 'Finish the chart of accounts, book, periods, root entity, currency, and control-account mapping before posting.',
-      href: '/admin/setup/company', action: 'Review foundation', state: foundationReady ? 'complete' : 'waiting',
+        ? t('setup.guide.foundation.descReady', { count: org?.accounts ?? 0 })
+        : t('setup.guide.foundation.descWaiting'),
+      href: '/admin/setup/company', action: t('setup.guide.foundation.action'), state: foundationReady ? 'complete' : 'waiting',
     },
     {
-      title: 'Invoices, bills, and payment terms',
+      title: t('setup.guide.invoicing.title'),
       description: org?.payment_terms > 0
-        ? `${org!.payment_terms} active payment term${org!.payment_terms === 1 ? '' : 's'} available. Review numbering and document defaults.`
-        : 'Choose at least one payment term so due dates do not have to be calculated by hand.',
-      href: '/admin/setup/invoicing', action: 'Review invoicing', state: org?.payment_terms > 0 ? 'complete' : 'review',
+        ? t('setup.guide.invoicing.descReady', { count: org!.payment_terms })
+        : t('setup.guide.invoicing.descWaiting'),
+      href: '/admin/setup/invoicing', action: t('setup.guide.invoicing.action'), state: org?.payment_terms > 0 ? 'complete' : 'review',
     },
     {
-      title: 'Tax treatment',
+      title: t('setup.guide.tax.title'),
       description: org?.tax_codes > 0
-        ? `${org!.tax_codes} active tax code${org!.tax_codes === 1 ? '' : 's'} configured. Confirm registrations and filing obligations.`
+        ? t('setup.guide.tax.descReady', { count: org!.tax_codes })
         : taxPosition === 'not_registered'
-          ? 'You confirmed this company is not currently required to collect sales tax, GST/HST, or VAT. Revisit this before obligations change.'
+          ? t('setup.guide.tax.descNotRegistered')
           : taxPosition === 'registered'
-            ? 'You confirmed the company is registered. Add its jurisdiction, registration, tax codes, and filing cadence before issuing live documents.'
-            : 'Tax registration is still undecided. Resolve it before issuing live invoices or recording recoverable tax.',
-      href: '/admin/setup/tax-setup', action: 'Review tax',
+            ? t('setup.guide.tax.descRegistered')
+            : t('setup.guide.tax.descUndecided'),
+      href: '/admin/setup/tax-setup', action: t('setup.guide.tax.action'),
       state: org?.tax_codes > 0 || taxPosition === 'not_registered' ? 'complete' : 'review',
     },
     {
-      title: 'Bank and card accounts',
+      title: t('setup.guide.bank.title'),
       description: org?.bank_accounts > 0
-        ? `${org!.bank_accounts} reconcilable account${org!.bank_accounts === 1 ? '' : 's'} will appear in Banking. Keep only real accounts reconcilable.`
-        : 'Mark each real bank or card GL account as reconcilable before importing statements.',
-      href: '/admin/setup/accounts', action: 'Review bank accounts', state: org?.bank_accounts > 0 ? 'complete' : 'review',
+        ? t('setup.guide.bank.descReady', { count: org!.bank_accounts })
+        : t('setup.guide.bank.descWaiting'),
+      href: '/admin/setup/accounts', action: t('setup.guide.bank.action'), state: org?.bank_accounts > 0 ? 'complete' : 'review',
     },
     {
-      title: 'Opening balances and cutover',
+      title: t('setup.guide.opening.title'),
       description: bookStart === 'fresh'
         ? org?.posted_entries > 0
-          ? `Books began from zero; ${org!.posted_entries} posted entr${org!.posted_entries === 1 ? 'y records' : 'ies record'} live activity rather than a migrated opening balance.`
-          : 'You confirmed the books start from zero, so no migration journal is expected.'
+          ? t('setup.guide.opening.descFreshPosted', { count: org!.posted_entries })
+          : t('setup.guide.opening.descFreshEmpty')
         : org?.posted_entries > 0
-          ? `${org!.posted_entries} posted entr${org!.posted_entries === 1 ? 'y exists' : 'ies exist'}. Reconcile the opening journal to the source trial balance and open-item detail before declaring cutover complete.`
-          : 'You are moving existing books. Enter a balanced opening journal and verify customer, vendor, bank, tax, and retained-earnings detail.',
+          ? t('setup.guide.opening.descMigratePosted', { count: org!.posted_entries })
+          : t('setup.guide.opening.descMigrateEmpty'),
       href: '/journal',
-      action: bookStart === 'fresh' ? 'Review ledger' : org?.posted_entries > 0 ? 'Review journal' : 'Enter opening balances',
+      action: bookStart === 'fresh' ? t('setup.guide.opening.actionFreshLedger') : org?.posted_entries > 0 ? t('setup.guide.opening.actionMigrateJournal') : t('setup.guide.opening.actionMigrateEnter'),
       state: bookStart === 'fresh' ? 'complete' : org?.posted_entries > 0 ? 'review' : 'waiting',
     },
     {
-      title: `First ${closeLabel} close`,
+      title: closeTitle,
       description: org?.completed_closes > 0
-        ? `${org!.completed_closes} period close${org!.completed_closes === 1 ? '' : 's'} completed with a preserved checklist, sign-off, locks, and close package.`
+        ? t('setup.guide.close.descDone', { count: org!.completed_closes })
         : org?.posted_entries > 0
-          ? `Live activity exists. Reconcile the period, review financial statements, complete the ${closeLabel} checklist, attest or approve, lock, and publish.`
-          : `After live activity begins, OpenBooks will guide the first ${closeLabel} close from reconciliation through locked books and a preserved close package.`,
-      href: '/close', action: org?.completed_closes > 0 ? 'Review closes' : 'Open close workspace',
+          ? t('setup.guide.close.descReview', { close: closeName })
+          : t('setup.guide.close.descWaiting', { close: closeName }),
+      href: '/close', action: org?.completed_closes > 0 ? t('setup.guide.close.actionDone') : t('setup.guide.close.actionReview'),
       state: org?.completed_closes > 0 ? 'complete' : org?.posted_entries > 0 ? 'review' : 'waiting',
     },
   ]
@@ -155,13 +159,13 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
 
   return {
     hero: {
-      kicker: 'Go-live guide',
-      title: 'Make the first posting boring—in the best way.',
-      description:
-        'OpenBooks has shaped the workspace around your company. This guide verifies the decisions that make invoices, bills, banking, and period close reliable from day one.',
-      badgeLabel: hardReady ? 'Accounting foundation ready' : 'Foundation needs attention',
+      kicker: t('setup.guide.hero.kicker'),
+      title: t('setup.guide.hero.title'),
+      description: t('setup.guide.hero.description'),
+      badgeLabel: hardReady ? t('setup.guide.hero.badgeReady') : t('setup.guide.hero.badgeNeeds'),
       badgeReady: hardReady,
-      progressLabel: 'Setup progress',
+      progressLabel: t('setup.guide.hero.progressLabel'),
+      progressOf: t('setup.guide.hero.progressOf', { done: complete, total: checks.length }),
       progressCount: complete,
       progressTotal: checks.length,
       progressPercent: Math.round((complete / checks.length) * 100),
@@ -172,7 +176,7 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
     checks: checks.map((item, index) => ({
       ...item,
       indexLabel: String(index + 1),
-      stateLabel: item.state,
+      stateLabel: t(`setup.guide.state.${item.state}`),
     })),
   }
 }
@@ -193,6 +197,7 @@ export function setupReadinessSpec(data: SetupReadinessData): PageSpec {
           badgeLabel: f('hero.badgeLabel'),
           badgeReady: f('hero.badgeReady'),
           progressLabel: f('hero.progressLabel'),
+          progressOf: f('hero.progressOf'),
           progressCount: f('hero.progressCount'),
           progressTotal: f('hero.progressTotal'),
           progressPercent: f('hero.progressPercent'),

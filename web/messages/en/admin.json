@@ -1042,7 +1042,6 @@
         "duplicateDays": "Duplicate window",
         "dueWithinDays": "Due within",
         "unbilledDays": "Unbilled after",
-        "dueWithinDays": "Due within",
         "forecastWeeks": "Forecast horizon",
         "minimumVariancePercent": "Minimum unfavorable variance",
         "criticalVariancePercent": "Critical unfavorable variance",
@@ -3765,6 +3764,85 @@
       "basisCaps": "Basis caps",
       "holidayElection": "Election on a statutory holiday",
       "holidayCompanyDay": "Company holiday"
+    },
+    "guide": {
+      "hero": {
+        "kicker": "Go-live guide",
+        "title": "Make the first posting boring—in the best way.",
+        "description": "OpenBooks has shaped the workspace around your company. This guide verifies the decisions that make invoices, bills, banking, and period close reliable from day one.",
+        "badgeReady": "Accounting foundation ready",
+        "badgeNeeds": "Foundation needs attention",
+        "progressLabel": "Setup progress",
+        "progressOf": "{done} of {total} areas prepared"
+      },
+      "activity": {
+        "high": "more than 1,000 monthly activities",
+        "steady": "100–1,000 monthly activities",
+        "light": "under 100 monthly activities"
+      },
+      "closeName": {
+        "monthly": "monthly",
+        "quarterly": "quarterly",
+        "annual": "year-end"
+      },
+      "state": {
+        "complete": "complete",
+        "review": "review",
+        "waiting": "waiting"
+      },
+      "profile": {
+        "title": "Company and workspace profile",
+        "descReady": "Industry, team responsibilities, {activity}, {close} close cadence, and feature recommendations have been reviewed.",
+        "descWaiting": "Tell OpenBooks how your company operates so the workspace starts at the right level.",
+        "actionReady": "Review profile",
+        "actionWaiting": "Run walkthrough"
+      },
+      "foundation": {
+        "title": "Accounting foundation",
+        "descReady": "{count, plural, one {# active account} other {# active accounts}}, a primary book, fiscal periods, control accounts, and one root entity are ready.",
+        "descWaiting": "Finish the chart of accounts, book, periods, root entity, currency, and control-account mapping before posting.",
+        "action": "Review foundation"
+      },
+      "invoicing": {
+        "title": "Invoices, bills, and payment terms",
+        "descReady": "{count, plural, one {# active payment term} other {# active payment terms}} available. Review numbering and document defaults.",
+        "descWaiting": "Choose at least one payment term so due dates do not have to be calculated by hand.",
+        "action": "Review invoicing"
+      },
+      "tax": {
+        "title": "Tax treatment",
+        "descReady": "{count, plural, one {# active tax code} other {# active tax codes}} configured. Confirm registrations and filing obligations.",
+        "descNotRegistered": "You confirmed this company is not currently required to collect sales tax, GST/HST, or VAT. Revisit this before obligations change.",
+        "descRegistered": "You confirmed the company is registered. Add its jurisdiction, registration, tax codes, and filing cadence before issuing live documents.",
+        "descUndecided": "Tax registration is still undecided. Resolve it before issuing live invoices or recording recoverable tax.",
+        "action": "Review tax"
+      },
+      "bank": {
+        "title": "Bank and card accounts",
+        "descReady": "{count, plural, one {# reconcilable account} other {# reconcilable accounts}} will appear in Banking. Keep only real accounts reconcilable.",
+        "descWaiting": "Mark each real bank or card GL account as reconcilable before importing statements.",
+        "action": "Review bank accounts"
+      },
+      "opening": {
+        "title": "Opening balances and cutover",
+        "descFreshPosted": "Books began from zero; {count, plural, one {# posted entry records} other {# posted entries record}} live activity rather than a migrated opening balance.",
+        "descFreshEmpty": "You confirmed the books start from zero, so no migration journal is expected.",
+        "descMigratePosted": "{count, plural, one {# posted entry exists} other {# posted entries exist}}. Reconcile the opening journal to the source trial balance and open-item detail before declaring cutover complete.",
+        "descMigrateEmpty": "You are moving existing books. Enter a balanced opening journal and verify customer, vendor, bank, tax, and retained-earnings detail.",
+        "actionFreshLedger": "Review ledger",
+        "actionMigrateJournal": "Review journal",
+        "actionMigrateEnter": "Enter opening balances"
+      },
+      "close": {
+        "titleMonthly": "First monthly close",
+        "titleQuarterly": "First quarterly close",
+        "titleAnnual": "First year-end close",
+        "descDone": "{count, plural, one {# period close} other {# period closes}} completed with a preserved checklist, sign-off, locks, and close package.",
+        "descReview": "Live activity exists. Reconcile the period, review financial statements, complete the {close} checklist, attest or approve, lock, and publish.",
+        "descWaiting": "After live activity begins, OpenBooks will guide the first {close} close from reconciliation through locked books and a preserved close package.",
+        "actionDone": "Review closes",
+        "actionReview": "Open close workspace"
+      }
     }
   },
   "flows": {

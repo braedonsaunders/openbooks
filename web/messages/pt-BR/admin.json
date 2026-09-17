@@ -521,7 +521,10 @@
       "scopesHeading": "Escopos de permissão",
       "scopesHint": "Selecione as permissões que esta chave concede — pelo menos uma é obrigatória. Uma chave concede apenas o que está selecionado aqui, nunca o conjunto completo de permissões do proprietário.",
       "scopesCount": "{count, plural, one {# permissão selecionada} other {# permissões selecionadas}}",
-      "scopesRequired": "Selecione pelo menos um escopo de permissão."
+      "scopesRequired": "Selecione pelo menos um escopo de permissão.",
+      "rateLimitLabel": "Solicitações por minuto",
+      "rateLimitPlaceholder": "Ilimitado",
+      "rateLimitHint": "Máximo de solicitações que esta chave pode fazer por minuto. Deixe em branco para nenhum limite."
     }
   },
   "settings": {
@@ -2145,13 +2148,207 @@
       "navTitle": "Provedores de pagamento"
     },
     "agents": {
-      "overview": {
-        "scanAlreadyRunning": "Já há uma varredura em execução."
-      },
       "nav": {
         "overview": "Visão geral",
         "library": "Biblioteca",
         "activity": "Atividade"
+      },
+      "overview": {
+        "title": "Agentes",
+        "description": "Agentes em segundo plano que vigiam os livros e propõem próximos passos revisáveis. Eles nunca lançam nem editam registros sozinhos.",
+        "configure": "Configurar",
+        "runNow": "Executar agora",
+        "enabled": "Ativado",
+        "disabled": "Desativado",
+        "controlsEnabled": "{count} de {total} verificações ativadas",
+        "manualOnly": "Somente execuções manuais",
+        "cadences": {
+          "daily": "Diária",
+          "weekly": "Semanal"
+        },
+        "materialitySummary": "Materialidade {amount}",
+        "lastRun": "Última execução {date} · {status}",
+        "runStatus": {
+          "completed": "concluída",
+          "failed": "falhou",
+          "skipped": "ignorada",
+          "running": "em execução"
+        },
+        "neverRun": "Nunca executado",
+        "nextRun": "Próxima {date}",
+        "openFindings": "{count, plural, one {# achado aberto} other {# achados abertos}}",
+        "reviewWork": "Revisar trabalho",
+        "featureOff": "O módulo Monitor de Fechamento está desligado, então os pacotes não podem ser ativados nem executados.",
+        "enableModule": "Ative em Funcionalidades",
+        "featureOffError": "Ative o módulo Monitor de Fechamento antes de ativar um pacote.",
+        "toggleFailed": "Não foi possível salvar a configuração do pacote.",
+        "scanComplete": "{count, plural, one {# achado detectado} other {# achados detectados}}",
+        "scanFailed": "A varredura falhou ao iniciar.",
+        "scanAlreadyRunning": "Já há uma varredura em execução.",
+        "guideLink": "Guia de configuração",
+        "columns": {
+          "pack": "Pacote",
+          "status": "Status",
+          "schedule": "Agenda",
+          "lastRun": "Última execução",
+          "findings": "Achados",
+          "actions": "Ações"
+        },
+        "kpis": {
+          "enabled": "Pacotes ativos",
+          "enabledValue": "{count} de {total}",
+          "openFindings": "Achados abertos",
+          "runs7d": "Execuções · 7 dias",
+          "failed7d": "Falhas · 7 dias"
+        }
+      },
+      "library": {
+        "title": "Biblioteca",
+        "description": "Todos os pacotes do registro — o que cada um lê, propõe e exige. Instalar ativa um pacote com suas verificações padrão.",
+        "install": "Instalar",
+        "installed": "Instalado",
+        "configure": "Configurar",
+        "readsLabel": "Lê",
+        "proposesLabel": "Propõe",
+        "needsLabel": "Exige",
+        "checksTitle": "Verificações ({count})",
+        "checksNote": "{count} de {total} ativadas por padrão",
+        "moduleRequires": "Exige o módulo {feature}",
+        "registryNote": "Pacote {key} · {count} verificações · declarado no registro de agentes",
+        "installFailed": "Não foi possível instalar o pacote.",
+        "installedToast": "{name} instalado com verificações padrão."
+      },
+      "policy": {
+        "backLabel": "Todos os agentes",
+        "notificationsTitle": "Notificações de achados",
+        "notificationsDescription": "Quem recebe os achados deste pacote e como. O roteamento fica na política — os achados sempre aparecem em Atividade.",
+        "modes": {
+          "findings_only": {
+            "title": "Só achados",
+            "description": "Sem notificações — revise os achados em Atividade."
+          },
+          "digest": {
+            "title": "Resumo diário",
+            "description": "Um resumo de novos achados por dia."
+          },
+          "immediate": {
+            "title": "Imediata",
+            "description": "Uma notificação para cada novo achado."
+          }
+        },
+        "rolesLabel": "Papéis",
+        "usersLabel": "Pessoas",
+        "noTargets": "Nenhum",
+        "usersTruncatedNote": "Mostrando as primeiras 200 pessoas.",
+        "deliveryNote": "O envio por e-mail ainda não está ligado — aqui fica quem deve receber o quê. Os achados aparecem em Atividade enquanto isso.",
+        "rolesPlaceholder": "Adicionar um papel…",
+        "usersPlaceholder": "Adicionar uma pessoa…"
+      },
+      "activity": {
+        "title": "Atividade",
+        "description": "Cada varredura dos agentes em todos os pacotes — status, duração, achados e erros. Execute qualquer pacote de novo daqui.",
+        "allPacks": "Todos os pacotes",
+        "allStatuses": "Todos os status",
+        "sinceColumn": "Desde",
+        "sinceAll": "Todo o período",
+        "since": {
+          "day": "Últimas 24 horas",
+          "week": "Últimos 7 dias"
+        },
+        "packColumn": "Pacote",
+        "triggerColumn": "Gatilho",
+        "triggers": {
+          "manual": "Manual",
+          "scheduler": "Agendada"
+        },
+        "statusColumn": "Status",
+        "startedColumn": "Início",
+        "durationColumn": "Duração",
+        "detectedColumn": "Detectados",
+        "resolvedColumn": "Resolvidos",
+        "actionsColumn": "Ações",
+        "rerun": "Executar de novo",
+        "viewFindings": "Achados",
+        "empty": "Sem execuções ainda.",
+        "emptyHint": "Execute um pacote na visão geral para ver sua primeira varredura aqui.",
+        "truncatedNote": "Mostrando as {shown} mais recentes de {total} execuções.",
+        "totalNote": "{count, plural, one {# execução} other {# execuções}}",
+        "showMore": "Mostrar mais",
+        "loadFailed": "Não foi possível carregar as execuções."
+      },
+      "packs": {
+        "accounting": {
+          "title": "Controles contábeis",
+          "description": "Movimento bancário sem conciliação, conciliações desequilibradas e rascunhos antigos que impedem o fechamento.",
+          "reads": "Extratos e conciliações bancárias, documentos contábeis abertos.",
+          "proposes": "Uma lista de condições a sanar — nunca lança nem edita registros."
+        },
+        "finance": {
+          "title": "Controles financeiros",
+          "description": "Orçamentos aprovados ausentes, variações desfavoráveis e quedas de desempenho do período.",
+          "reads": "Cenários de orçamento aprovados, realizado e receita do período.",
+          "proposes": "Apontamentos de variação com as contas exatas — só revisão, sem lançamentos."
+        },
+        "collections": {
+          "title": "Cobrança",
+          "description": "Saldos de clientes em atraso com comportamento de pagamento, promessas quebradas e candidatos a bloqueio de crédito.",
+          "reads": "Contas a receber abertas, promessas e histórico de pagamentos.",
+          "proposes": "Rascunhos de lembretes e uma lista de ligações prioritárias para revisão."
+        },
+        "payables": {
+          "title": "Contas a pagar",
+          "description": "Faturas duplicadas, faturas antes do próximo ciclo de pagamento, descontos por antecipação e aprovações ausentes.",
+          "reads": "Faturas de fornecedores, aprovações e o calendário de pagamentos.",
+          "proposes": "Um ciclo de pagamento como cartão de revisão — nada é pago automaticamente."
+        },
+        "reconciliation": {
+          "title": "Conciliação bancária",
+          "description": "Linhas bancárias sem conciliação com candidato confiante, conciliações antigas e contas nunca conciliadas.",
+          "reads": "Linhas de extrato e status de conciliação.",
+          "proposes": "Comandos de conciliação para confirmar um a um."
+        },
+        "hygiene": {
+          "title": "Higiene de dados",
+          "description": "Divergências em contas de controle, parceiros duplicados e registros sem os códigos, orçamentos ou vínculos de que precisam.",
+          "reads": "Plano de contas, parceiros, itens, projetos, orçamentos e componentes de folha.",
+          "proposes": "Cartões de correção onde o remédio é uma configuração."
+        },
+        "forensics": {
+          "title": "Forense",
+          "description": "Lançamentos de fim de semana, gastos redondos, valores logo abaixo do limite e faturas duplicadas.",
+          "reads": "Documentos de gasto e o painel sentinela.",
+          "proposes": "Links de revisão sentinela em cada achado — só revisão, sem lançamentos."
+        },
+        "tax": {
+          "title": "Fiscal",
+          "description": "Códigos fiscais ausentes, formulários sem registro, apurações incalculáveis e períodos de entrega destravados.",
+          "reads": "Documentos lançados, formulários, registros e travas de período.",
+          "proposes": "Links de revisão da apuração em cada achado — só revisão, sem lançamentos."
+        },
+        "payroll": {
+          "title": "Folha de pagamento",
+          "description": "Guias devidas, contas desconhecidas, opções ausentes e lacunas de fim de ano.",
+          "reads": "Folhas comprometidas, grupos de guia, perfis de empregados e alíquotas legais.",
+          "proposes": "Links de revisão de guias e empregados — só revisão, sem lançamentos."
+        },
+        "projects": {
+          "title": "Projetos",
+          "description": "Margens negativas, estouros de orçamento e trabalho antigo não faturado.",
+          "reads": "Custos e receitas de projetos lançados, orçamentos aprovados, compromissos abertos e trabalho não faturado.",
+          "proposes": "Links de revisão de projetos — só revisão, sem lançamentos."
+        },
+        "cash": {
+          "title": "Caixa",
+          "description": "Saldos baixos, aperto de contas e quedas previstas.",
+          "reads": "Saldos bancários, contas a receber e a pagar abertas e a previsão de caixa.",
+          "proposes": "Links de revisão bancária — só revisão, sem lançamentos."
+        }
+      },
+      "runStatuses": {
+        "completed": "Concluída",
+        "failed": "Falhou",
+        "skipped": "Ignorada",
+        "running": "Em execução"
       }
     },
     "readiness": {

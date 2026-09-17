@@ -517,7 +517,7 @@
       "key": "Clé",
       "owner": "Propriétaire",
       "scopes": "Portées",
-      "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
+      "scopesCount": "{count, plural, one {# autorisation} other {# autorisations}}",
       "fullScope": "Aucune portée explicite",
       "lastUsed": "Dernière utilisation",
       "status": "Statut"
@@ -548,7 +548,10 @@
       "scopesHeading": "Portées des permissions",
       "scopesHint": "Sélectionnez les permissions accordées par cette clé — au moins une est requise. Une clé n'accorde que ce qui est sélectionné ici, jamais l'ensemble complet des permissions du propriétaire.",
       "scopesCount": "{count, plural, one {# permission sélectionnée} other {# permissions sélectionnées}}",
-      "scopesRequired": "Sélectionnez au moins une portée de permission."
+      "scopesRequired": "Sélectionnez au moins une portée de permission.",
+      "rateLimitLabel": "Requêtes par minute",
+      "rateLimitPlaceholder": "Illimité",
+      "rateLimitHint": "Nombre maximal de requêtes que cette clé peut effectuer par minute. Laissez vide pour aucune limite."
     }
   },
   "settings": {
@@ -3001,6 +3004,387 @@
     },
     "payroll": {
       "navTitle": "Paie"
+    },
+    "wizard": {
+      "skip": "Passer pour l'instant",
+      "back": "Retour",
+      "next": "Continuer",
+      "apply": "Configurer mes livres",
+      "error": "Un problème est survenu. Veuillez réessayer.",
+      "welcome": {
+        "title": "Configurons vos livres",
+        "description": "Dites-nous comment votre entreprise fonctionne et OpenBooks façonnera un espace de travail ciblé autour d'elle. Vous validerez chaque choix avant que quoi que ce soit ne change.",
+        "f1": "Plan comptable",
+        "f2": "Un espace adapté",
+        "f3": "Une mise en service guidée"
+      },
+      "company": {
+        "title": "Parlez-nous de votre entreprise",
+        "description": "Ces informations établissent votre base comptable. Le nom et les détails juridiques restent modifiables ; la devise de base, le secteur et l'exercice se verrouillent après votre première écriture.",
+        "name": "Nom de l'entreprise",
+        "namePlaceholder": "p. ex. Saunders Construction Ltd.",
+        "legalName": "Dénomination sociale (facultatif)",
+        "legalNamePlaceholder": "Nom de l'entité juridique enregistrée",
+        "country": "Pays",
+        "currency": "Devise de base",
+        "fiscalYear": "L'exercice commence en"
+      },
+      "industry": {
+        "title": "Quel est votre secteur d'activité ?",
+        "description": "Nous recommanderons un plan comptable et des fonctionnalités adaptées à votre secteur. Vous validerez la recommandation avant son application.",
+        "search": "Rechercher des secteurs…",
+        "locked": "Votre secteur ne peut plus être modifié après la comptabilisation d'écritures, mais vous pouvez toujours personnaliser votre plan comptable et vos fonctionnalités.",
+        "classificationOnly": "Votre plan existant et votre historique comptabilisé seront préservés. Ce premier classement ajuste uniquement les recommandations d'espace et de fonctionnalités."
+      },
+      "profile": {
+        "title": "Partez d'où en est votre entreprise",
+        "description": "OpenBooks peut rester agréablement simple aujourd'hui et révéler des contrôles plus poussés à mesure que votre équipe et vos besoins comptables grandissent.",
+        "teamQuestion": "Combien de personnes travailleront dans OpenBooks ?",
+        "complexityQuestion": "Comment le travail financier est-il contrôlé ?",
+        "adapting": "OpenBooks utilise ces habitudes de travail concrètes — et non une vague étiquette de taille — pour recommander des contrôles. Vous validerez chaque fonctionnalité activée avant toute application.",
+        "team": {
+          "solo": {
+            "title": "Moi uniquement",
+            "description": "Propriétaire, comptable ou fondateur"
+          },
+          "small": {
+            "title": "2 à 10 personnes",
+            "description": "Une petite équipe au travail partagé"
+          },
+          "medium": {
+            "title": "11 à 50 personnes",
+            "description": "Responsabilités définies et réviseurs"
+          },
+          "large": {
+            "title": "51 personnes et plus",
+            "description": "Équipes spécialisées et contrôles renforcés"
+          }
+        },
+        "complexity": {
+          "essentials": {
+            "title": "Gestion par le propriétaire",
+            "description": "La même personne de confiance peut préparer, contrôler, comptabiliser et clôturer les livres."
+          },
+          "growing": {
+            "title": "Contrôle d'équipe",
+            "description": "L'équipe partage le travail et les écritures importantes doivent avoir un réviseur désigné."
+          },
+          "advanced": {
+            "title": "Contrôles formels",
+            "description": "Les tâches sont séparées et les approbations, les pièces et la validation de clôture doivent être encadrées."
+          }
+        }
+      },
+      "operations": {
+        "title": "Comment fonctionnez-vous ?",
+        "description": "Confirmez le travail que vous effectuez réellement et la structure financière que vous exploitez. Vos réponses secteur sont déjà prises en compte ci-dessous.",
+        "workTitle": "Travail effectué par votre entreprise",
+        "structureTitle": "Structure financière",
+        "structureDescription": "Répondez directement. OpenBooks ne suppose jamais d'entités juridiques supplémentaires ni de comptabilité multidevise à partir de l'effectif ou du secteur.",
+        "note": "Ceci est un point de départ révisable. Chaque interrupteur reste officiel et ajustable sous Configuration → Fonctionnalités, avec des contrôles de sécurité préservant les données.",
+        "agentsNote": "Une fois les livres en route, les modules d'agents d'arrière-plan qui les surveillent se trouvent sous Configuration → Agents : installez des modules, ajustez leurs contrôles et routez leurs constats depuis cet écran.",
+        "projects": {
+          "title": "Projets et coûts de revient",
+          "description": "Suivez les affaires avec budgets, coûts, facturation et rentabilité."
+        },
+        "timeTracking": {
+          "title": "Suivi du temps",
+          "description": "Feuilles de temps avec soumission, approbation et suivi des taux de coût et de facturation."
+        },
+        "inventory": {
+          "title": "Stocks",
+          "description": "Suivi des stocks, emplacements, coûts d'articles et assemblages."
+        },
+        "subscriptionBilling": {
+          "title": "Facturation d'abonnements",
+          "description": "Formules et abonnements qui génèrent automatiquement des factures récurrentes."
+        },
+        "orders": {
+          "title": "Devis et commandes",
+          "description": "Utilisez devis, bons de commande clients et bons de commande fournisseurs avant les factures clients ou fournisseurs."
+        },
+        "crm": {
+          "title": "Pipeline commercial",
+          "description": "Suivez prospects, opportunités, activités et prévisions avant la vente."
+        },
+        "multiSubsidiary": {
+          "title": "Entités multiples",
+          "description": "Exploitez plusieurs entités juridiques avec consolidation et intercompagnies."
+        },
+        "multiCurrency": {
+          "title": "Multidevise",
+          "description": "Effectuez des transactions en devises avec taux de change et réévaluation."
+        },
+        "payroll": {
+          "title": "Paie",
+          "description": "Traitez la paie avec les modules réglementaires par pays."
+        }
+      },
+      "rhythm": {
+        "title": "Définissez votre rythme comptable",
+        "description": "Le volume change l'utilité de l'automatisation. La cadence de clôture change les routines qu'OpenBooks doit vous proposer.",
+        "activityQuestion": "Quel volume d'activité traitez-vous environ chaque mois ?",
+        "activityHint": "Comptez les documents clients et fournisseurs, les dépenses, les paiements et les transactions bancaires ou par carte — pas les lignes d'écriture.",
+        "activity": {
+          "light": {
+            "title": "Moins de 100",
+            "description": "Un flux ciblé avec peu de surcharge d'automatisation."
+          },
+          "steady": {
+            "title": "100 à 1 000",
+            "description": "Assez d'activité pour que imports, règles et contrôle continu fassent gagner du temps."
+          },
+          "high": {
+            "title": "Plus de 1 000",
+            "description": "L'automatisation et la surveillance continue doivent être prêtes dès le départ."
+          }
+        },
+        "closeQuestion": "À quelle fréquence comptez-vous clôturer et arrêter formellement vos comptes ?",
+        "close": {
+          "monthly": {
+            "title": "Chaque mois",
+            "description": "Recommandé pour un reporting de gestion à jour et une détection précoce des erreurs."
+          },
+          "quarterly": {
+            "title": "Chaque trimestre",
+            "description": "Un cycle formel plus léger, avec un rapprochement bancaire continu pendant le trimestre."
+          },
+          "annual": {
+            "title": "En fin d'année",
+            "description": "Cadence de clôture formelle minimale ; le rapprochement courant reste important."
+          }
+        },
+        "note": "Ce sont des préférences de départ, pas des limites. OpenBooks n'affaiblira jamais l'intégrité des écritures ni les contrôles de clôture parce que l'activité est faible."
+      },
+      "launch": {
+        "title": "Façonnez votre mise en service",
+        "description": "Quelques dernières réponses permettent au guide de mise en service de se concentrer sur le travail entre le paramétrage et votre première écriture réelle.",
+        "booksQuestion": "D'où partent les livres ?",
+        "books": {
+          "fresh": {
+            "title": "Démarrage à zéro",
+            "description": "Aucun solde antérieur à reprendre ; le grand livre part de zéro."
+          },
+          "migrate": {
+            "title": "Reprise de livres existants",
+            "description": "Soldes d'ouverture, factures clients et fournisseurs ouvertes et date de bascule à vérifier."
+          }
+        },
+        "taxQuestion": "Cette entreprise collecte-t-elle la taxe de vente, la TPS/TVH ou la TVA ?",
+        "tax": {
+          "registered": "Oui, inscrite",
+          "not_registered": "Non, non requise",
+          "unsure": "Pas encore sûr"
+        },
+        "toolsQuestion": "Lesquels de ces outils doivent être prêts dès le premier jour ?",
+        "features": {
+          "bankFeeds": {
+            "title": "Banque connectée",
+            "description": "Importez automatiquement l'activité bancaire."
+          },
+          "onlinePayments": {
+            "title": "Paiements en ligne",
+            "description": "Laissez vos clients payer depuis les factures."
+          },
+          "fixedAssets": {
+            "title": "Amortissement des actifs",
+            "description": "Suivez les actifs et les plans d'amortissement."
+          }
+        },
+        "sample": {
+          "question": "Souhaitez-vous une entreprise à explorer immédiatement ?",
+          "title": "Créer une entreprise de démonstration par secteur",
+          "description": "Une entreprise réaliste avec transactions, projets, rapports et périodes clôturées — adaptée au secteur choisi.",
+          "safety": "C'est un espace séparé et clairement identifié. Les écritures de démonstration n'entrent jamais dans ces livres, et les courriels sortants, paiements, API et intégrations sont désactivés.",
+          "error": "Votre entreprise réelle a été configurée, mais l'entreprise de démonstration facultative n'a pas pu être préparée. Vous pouvez réessayer sous Import et export."
+        }
+      },
+      "review": {
+        "title": "Vérifiez votre paramétrage",
+        "description": "Voici ce que nous allons configurer. Cliquez sur « Configurer mes livres » pour tout appliquer.",
+        "companyName": "Nom de l'entreprise",
+        "legalName": "Dénomination sociale",
+        "notProvided": "Non renseigné",
+        "country": "Pays",
+        "currency": "Devise",
+        "fiscalYear": "Début de l'exercice",
+        "teamSize": "Équipe OpenBooks",
+        "complexity": "Espace de départ",
+        "bookStart": "Point de départ du grand livre",
+        "taxPosition": "Situation fiscale",
+        "monthlyActivity": "Activité mensuelle",
+        "closeCadence": "Clôture formelle",
+        "sampleCompany": "Espace d'exploration",
+        "sampleCompanyYes": "Créer une entreprise de démonstration séparée par secteur",
+        "sampleCompanyNo": "Pas pour l'instant",
+        "industry": "Secteur d'activité",
+        "chartOfAccounts": "Plan comptable",
+        "chartPreserved": "Plan existant préservé",
+        "accounts": "comptes",
+        "features": "Fonctionnalités activées",
+        "note": "Ceci crée votre base comptable et votre espace de départ. Le guide de mise en service indiquera ce qui manque avant votre première écriture réelle. Chaque fonctionnalité facultative reste ajustable depuis Configuration → Fonctionnalités.",
+        "notePreserved": "Ceci met à jour la classification de l'entreprise et les recommandations d'espace sans modifier le plan existant ni l'historique comptabilisé. Chaque fonctionnalité facultative reste ajustable depuis Configuration → Fonctionnalités.",
+        "payrollPack": "Module de paie par pays",
+        "payrollPackCanada": "Canada (ARC T4127)",
+        "payrollPackNone": "Aucun — à installer plus tard depuis la Paie"
+      },
+      "applying": {
+        "title": "Configuration de vos livres…",
+        "description": "Création de votre plan comptable, configuration des fonctionnalités et paramétrage des comptes de contrôle."
+      },
+      "done": {
+        "title": "Votre espace de départ est prêt",
+        "description": "Ensuite, le guide de mise en service vérifiera les dernières décisions d'entreprise, de taxe, de numérotation, de banque et de soldes d'ouverture avant de comptabiliser une activité réelle. Les agents d'arrière-plan peuvent être installés à tout moment sous Configuration → Agents."
+      },
+      "industries": {
+        "general_business": {
+          "title": "Entreprise générale",
+          "description": "Une configuration standard qui convient à toute entreprise. Aucune hypothèse sectorielle."
+        },
+        "construction_contractor": {
+          "title": "Construction et métiers",
+          "description": "Entrepreneurs, artisans et constructeurs. Coûts de revient, facturation d'avancement, retenues de garantie et bons de chantier."
+        },
+        "professional_services": {
+          "title": "Services professionnels",
+          "description": "Consultants, agences et conseillers. Suivi du temps, rentabilité des projets et facturation au forfait et sur provision."
+        },
+        "engineering_architecture": {
+          "title": "Ingénierie et architecture",
+          "description": "Bureaux d'études et firmes d'architecture. Structure de découpage (WBS), facturation par phase, coûts de matériel et facturation d'avancement."
+        },
+        "it_software_saas": {
+          "title": "Logiciels et SaaS",
+          "description": "Facturation d'abonnements, comptabilisation des revenus ASC 606 et suivi des produits différés."
+        },
+        "accounting_firm": {
+          "title": "Cabinet comptable",
+          "description": "Cabinets d'expertise et de tenue comptable. Multiclients, comptabilité des fonds confiés et suivi des missions."
+        },
+        "wholesale_distribution": {
+          "title": "Commerce de gros et distribution",
+          "description": "Grossistes et distributeurs. Stocks, coûts rendus, réceptions non facturées (GRNI) et emplacements de stock."
+        },
+        "property_management": {
+          "title": "Gestion immobilière",
+          "description": "Portefeuilles locatifs et gestionnaires. Loyers récurrents, charges communes (CAM), dépôts de garantie et immobilisations."
+        },
+        "nonprofit": {
+          "title": "Organisme sans but lucratif",
+          "description": "Organismes de bienfaisance et OSBL. Suivi des subventions, comptabilité par fonds, dons et actif net grevé d'affectations."
+        },
+        "manufacturing": {
+          "title": "Fabrication",
+          "description": "Fabrication légère et discrète. Nomenclatures, matières premières, encours, produits finis et frais généraux."
+        },
+        "healthcare_practice": {
+          "title": "Cabinet de santé",
+          "description": "Cabinets médicaux et dentaires. Créances patients, fournitures médicales et équipement."
+        }
+      },
+      "payroll": {
+        "title": "Configurer la paie",
+        "description": "La paie repose sur des modules par pays installables — chaque module apporte le moteur de retenues réglementaires et les composants de cette juridiction.",
+        "packQuestion": "Quel module pays faut-il installer ?",
+        "packs": {
+          "canada": {
+            "title": "Canada",
+            "description": "Moteur réglementaire ARC T4127, toutes provinces et territoires, vérifié contre le PDOC de l'ARC."
+          },
+          "us": {
+            "title": "États-Unis",
+            "description": "Prévu — pas encore disponible."
+          }
+        },
+        "checklist": {
+          "title": "Finaliser la paie après ce parcours",
+          "pack": "Le module pays sélectionné s'installe automatiquement quand vous appliquez ce paramétrage.",
+          "accounts": "Pointez les comptes d'imputation (salaires, paie nette, passifs de retenues) vers votre plan dans",
+          "accountsLink": "Paie → Comptes et imputation",
+          "schedule": "Créez votre premier calendrier de paie dans",
+          "scheduleLink": "Paie → Calendriers de paie"
+        },
+        "installError": "La paie a été activée, mais le module pays n'a pas pu être installé. Vous pouvez l'installer depuis Paie → Modules pays."
+      }
+    },
+    "guide": {
+      "hero": {
+        "kicker": "Guide de mise en service",
+        "title": "Rendez la première écriture ennuyeuse, dans le bon sens.",
+        "description": "OpenBooks a façonné l'espace autour de votre entreprise. Ce guide vérifie les décisions qui rendent la facturation, la banque et la clôture fiables dès le premier jour.",
+        "badgeReady": "Base comptable prête",
+        "badgeNeeds": "La base demande votre attention",
+        "progressLabel": "Progression du paramétrage",
+        "progressOf": "{done} sur {total} domaines préparés"
+      },
+      "activity": {
+        "high": "plus de 1 000 activités mensuelles",
+        "steady": "100 à 1 000 activités mensuelles",
+        "light": "moins de 100 activités mensuelles"
+      },
+      "closeName": {
+        "monthly": "mensuelle",
+        "quarterly": "trimestrielle",
+        "annual": "annuelle"
+      },
+      "state": {
+        "complete": "terminé",
+        "review": "à revoir",
+        "waiting": "en attente"
+      },
+      "profile": {
+        "title": "Profil de l'entreprise et de l'espace",
+        "descReady": "Le secteur, les responsabilités d'équipe, {activity}, le rythme de clôture {close} et les recommandations de fonctionnalités ont été revus.",
+        "descWaiting": "Dites à OpenBooks comment votre entreprise fonctionne pour que l'espace démarre au bon niveau.",
+        "actionReady": "Revoir le profil",
+        "actionWaiting": "Lancer le parcours"
+      },
+      "foundation": {
+        "title": "Base comptable",
+        "descReady": "{count, plural, one {# compte actif} other {# comptes actifs}}, un livre principal, des exercices, des comptes de contrôle et une entité racine unique sont prêts.",
+        "descWaiting": "Terminez le plan comptable, le livre, les exercices, l'entité racine, la devise et le mappage des comptes de contrôle avant de comptabiliser.",
+        "action": "Revoir la base"
+      },
+      "invoicing": {
+        "title": "Factures clients et fournisseurs et délais de paiement",
+        "descReady": "{count, plural, one {# délai de paiement actif} other {# délais de paiement actifs}} disponibles. Vérifiez la numérotation et les paramètres par défaut des documents.",
+        "descWaiting": "Choisissez au moins un délai de paiement pour ne pas calculer les échéances à la main.",
+        "action": "Revoir la facturation"
+      },
+      "tax": {
+        "title": "Traitement fiscal",
+        "descReady": "{count, plural, one {# code de taxe actif configuré} other {# codes de taxe actifs configurés}}. Confirmez les inscriptions et les obligations déclaratives.",
+        "descNotRegistered": "Vous avez confirmé que cette entreprise n'est actuellement pas tenue de collecter la taxe de vente, la TPS/TVH ou la TVA. Revenez-y avant que les obligations ne changent.",
+        "descRegistered": "Vous avez confirmé que l'entreprise est inscrite. Ajoutez sa juridiction, son inscription, ses codes de taxe et sa cadence déclarative avant d'émettre des documents réels.",
+        "descUndecided": "L'inscription fiscale reste indécise. Tranchez avant d'émettre des factures réelles ou de comptabiliser de la taxe récupérable.",
+        "action": "Revoir la fiscalité"
+      },
+      "bank": {
+        "title": "Comptes bancaires et cartes",
+        "descReady": "{count, plural, one {# compte rapprochable} other {# comptes rapprochables}} apparaîtront dans Banque. Ne gardez rapprochables que les vrais comptes.",
+        "descWaiting": "Marquez chaque vrai compte bancaire ou carte du grand livre comme rapprochable avant d'importer des relevés.",
+        "action": "Revoir les comptes bancaires"
+      },
+      "opening": {
+        "title": "Soldes d'ouverture et bascule",
+        "descFreshPosted": "Les livres sont partis de zéro ; {count, plural, one {# écriture comptabilisée témoigne} other {# écritures comptabilisées témoignent}} de l'activité réelle plutôt que d'un solde d'ouverture migré.",
+        "descFreshEmpty": "Vous avez confirmé que les livres partent de zéro, donc aucune écriture de migration n'est attendue.",
+        "descMigratePosted": "{count, plural, one {# écriture comptabilisée existe} other {# écritures comptabilisées existent}}. Rapprochez l'écriture d'ouverture avec la balance source et le détail des éléments ouverts avant de déclarer la bascule terminée.",
+        "descMigrateEmpty": "Vous reprenez des livres existants. Saisissez une écriture d'ouverture équilibrée et vérifiez le détail clients, fournisseurs, banque, taxe et report à nouveau.",
+        "actionFreshLedger": "Revoir le grand livre",
+        "actionMigrateJournal": "Revoir le journal",
+        "actionMigrateEnter": "Saisir les soldes d'ouverture"
+      },
+      "close": {
+        "titleMonthly": "Première clôture mensuelle",
+        "titleQuarterly": "Première clôture trimestrielle",
+        "titleAnnual": "Première clôture annuelle",
+        "descDone": "{count, plural, one {# clôture réalisée} other {# clôtures réalisées}} avec liste préservée, validation, verrous et dossier de clôture.",
+        "descReview": "Une activité réelle existe. Rapprochez la période, revoyez les états financiers, remplissez la liste de clôture {close}, attestez ou approuvez, verrouillez et publiez.",
+        "descWaiting": "Quand l'activité réelle commencera, OpenBooks guidera la première clôture {close}, du rapprochement aux livres verrouillés et au dossier de clôture préservé.",
+        "actionDone": "Revoir les clôtures",
+        "actionReview": "Ouvrir l'espace de clôture"
+      }
     }
   },
   "flows": {
