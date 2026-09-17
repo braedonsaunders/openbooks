@@ -102,6 +102,28 @@ export async function approveSubmittedTimeEntries(
     // must not be stamped approved over it. This also closes the concurrent
     // double-approval race — the loser flips nothing and fails closed.
     if (approved.rows.length === 0) {
+      // Zero flips over already-approved entries is a re-approval, not an
+      // unsubmitted week: name the prior approval (who/when) and the way
+      // back (reopen/amend) instead of misreporting it.
+      const prior = ((await db.execute<{ by_name: string | null; by_email: string | null; on: string | null }>(sql`
+        select u.name as by_name, u.email as by_email, max(e.approved_at)::date::text as on
+          from time_entries e
+          left join users u on u.id = e.approved_by
+         where e.org_id = ${options.orgId}
+           and e.employee_party_id = ${options.employeePartyId}
+           and e.worked_on >= ${days[0]}
+           and e.worked_on <= ${days[6]}
+           and e.status = 'approved'
+         group by u.name, u.email
+         order by max(e.approved_at) desc
+         limit 1
+      `)).rows[0])
+      if (prior) {
+        const who = prior.by_name ?? prior.by_email ?? 'another approver'
+        throw new Error(
+          `week already approved by ${who}${prior.on ? ` on ${prior.on}` : ''} — reopen or amend the week to change it`,
+        )
+      }
       throw new Error('no submitted entries to approve — submit the week first')
     }
     const ids = approved.rows.map((row) => row.id)
