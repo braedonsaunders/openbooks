@@ -304,6 +304,7 @@
     "voidReason": "Pour quel motif ?",
     "frozenNotice": "Cette déclaration est figée. Les montants et exclusions reflètent ce qui a été transmis ; les corrections passent par une nouvelle déclaration.",
     "noRecipients": "Rien de calculé. Calculez la déclaration pour retracer les paiements de l'année.",
+    "computedNoRecipients": "Calculé — aucun bénéficiaire n'a atteint le seuil de déclaration.",
     "adjust": "Ajuster",
     "adjustDescription": "Les ajustements sont des écarts signés par rapport au montant du grand livre : la traçabilité n'est jamais écrasée.",
     "adjustReason": "Motif de l'ajustement",

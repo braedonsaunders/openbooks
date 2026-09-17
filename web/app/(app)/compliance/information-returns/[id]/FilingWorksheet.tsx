@@ -221,7 +221,9 @@ export function FilingWorksheet({
 
       {filing.recipients.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {t('informationReturns.noRecipients')}
+          {filing.status === 'draft'
+            ? t('informationReturns.noRecipients')
+            : t('informationReturns.computedNoRecipients')}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
