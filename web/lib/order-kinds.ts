@@ -30,7 +30,10 @@ export const CONVERSION_TARGETS: Record<
     { kind: 'sales_order', labelKey: 'kinds.salesOrder', prefix: 'SO-', link: 'created_from' },
     { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
   ],
-  sales_order: [{ kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' }],
+  sales_order: [
+    { kind: 'sales_fulfillment', labelKey: 'kinds.shipment', prefix: 'SHIP-', link: 'fulfills' },
+    { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
+  ],
   purchase_order: [
     { kind: 'purchase_receipt', labelKey: 'kinds.receipt', prefix: 'RCPT-', link: 'fulfills' },
     { kind: 'vendor_bill', labelKey: 'kinds.bill', prefix: 'BILL-', link: 'bills' },

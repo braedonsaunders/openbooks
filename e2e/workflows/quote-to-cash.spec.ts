@@ -423,12 +423,10 @@ test.describe('quote-to-cash workflows', () => {
       // UI: convert to sales order.
       const so = await uiConvert(page, `/estimates?estimate=${quote.quoteId}`, '/api/estimates', quote.quoteId, 'Convert to Sales order', 'sales_order');
 
-      // Fulfil (no fulfil affordance in the SO UI; same convert endpoint the workspace would call).
-      const soGet = await apiOk(page, 'GET', `/api/sales-orders/${so.id}`);
-      const fulfil = await api(page, 'POST', `/api/sales-orders/${so.id}/convert`, {
-        targetKind: 'sales_fulfillment', expectedUpdatedAt: str(docOf(soGet).updated_at, 'so revision'),
-      });
-      expect(fulfil.status, JSON.stringify(fulfil.body).slice(0, 300)).toBe(200);
+      // UI: fulfil the sales order (F-t07-002: an Approved order used to be
+      // a dead end — Convert to Invoice 422'd with no fulfil control).
+      const fulfil = await uiConvert(page, `/sales-orders?order=${so.id}`, '/api/sales-orders', so.id, 'Convert to Shipment', 'sales_fulfillment');
+      expect(fulfil.documentNumber.startsWith('SHIP-'), fulfil.documentNumber).toBe(true);
 
       // UI: convert the sales order to a customer invoice, submit, post.
       const inv = await uiConvert(page, `/sales-orders?order=${so.id}`, '/api/sales-orders', so.id, 'Convert to Invoice', 'customer_invoice');
