@@ -30,6 +30,11 @@ export default function GlobalError({
               description={t.errorDescription}
               action={<Button onClick={reset}>Retry</Button>}
             />
+            {error.digest ? (
+              <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
+                {t.errorReference.replace('{id}', error.digest)}
+              </p>
+            ) : null}
           </div>
         </div>
       </body>
