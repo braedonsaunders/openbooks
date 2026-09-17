@@ -5,7 +5,6 @@ import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
 import { flowRates } from './fx-presentation'
 import type { BudgetDimensions } from './budgets'
 import {
-  sumSection,
   combineTotals,
   recomputeVariance,
   PNL_TYPES,
@@ -241,6 +240,20 @@ export async function budgetVsActualView(
     leaf.set(accountId, cur as [ExactDecimal, ExactDecimal])
   }
 
+  // Section total over the depth-0 rows only. The budget tree keeps the
+  // rolled presentation (parents carry their subtree, F-t08-001 deliberately
+  // leaves this reader alone), so summing every row would count nested
+  // accounts twice now that the shared sumSection assumes gross-presentation
+  // rows. This preserves the budget's exact historical totals.
+  const sumTopSection = (m: StatementMatrix, types: string[]): StatementValue[] => {
+    const totals: StatementValue[] = m.columns.map(() => '0.0000')
+    for (const row of m.rows) {
+      if (row.depth !== 0 || !types.includes(row.type)) continue
+      for (let i = 0; i < totals.length; i++) totals[i] = decimalAdd(totals[i] ?? '0.0000', row.values[i] ?? '0.0000')
+    }
+    return recomputeVariance(m, totals)
+  }
+
   const treeRows = treeify(accounts.rows, leaf)
 
   const columns: StatementColumn[] = [
@@ -269,9 +282,9 @@ export async function budgetVsActualView(
   const revenueTypes = ['income', 'income_other']
   const cogsTypes = ['cogs']
   const expenseTypes = ['expense', 'expense_other', 'expense_deferred']
-  const revenue = sumSection(matrix, revenueTypes)
-  const cogs = sumSection(matrix, cogsTypes)
-  const expenses = sumSection(matrix, expenseTypes)
+  const revenue = sumTopSection(matrix, revenueTypes)
+  const cogs = sumTopSection(matrix, cogsTypes)
+  const expenses = sumTopSection(matrix, expenseTypes)
   const grossProfit = combineTotals(matrix, [revenue, cogs], [1, -1])
   const netIncome = combineTotals(matrix, [revenue, cogs, expenses], [1, -1, -1])
 

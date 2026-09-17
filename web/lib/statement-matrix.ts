@@ -578,8 +578,13 @@ async function comparePeriods(
   return [current, { key: 'prior', label: prior.aligned ? 'Prior period' : 'Prior period (equal length)', from: prior.from, to: prior.to }]
 }
 
-/** Roll each column vector up the account tree; sign-flip and prune like the
- * scalar statement tree, but over a value vector. */
+/** Gross presentation over the account tree (F-t08-001): every account line
+ * shows its OWN balance and contra accounts print as sibling lines, so the
+ * displayed lines foot to the section total. Rolling child balances into
+ * parents made cost lines read net while the contra printed again beside
+ * them — depreciation was subtracted twice from every visual sum while the
+ * total stayed net. Sign-flip and prune like the scalar statement tree, but
+ * over a value vector. */
 function treeifyMatrix(
   rows: {
     id: string
@@ -591,37 +596,45 @@ function treeifyMatrix(
     vals: ExactDecimal[]
   }[],
   types: string[],
-  colCount: number,
   showZero: boolean,
 ): MatrixRow[] {
   const byId = new Map(rows.map((r) => [r.id, r]))
-  const rolled = new Map<string, ExactDecimal[]>(rows.map((r) => [r.id, [...r.vals]]))
-  for (const r of rows) {
-    // A malformed imported cycle must terminate, not hang the report: each
-    // ancestor absorbs the column once (same policy as the scalar treeify).
-    const seen = new Set<string>([r.id])
-    let p = r.parent_id
-    while (p && !seen.has(p)) {
-      seen.add(p)
-      const acc = rolled.get(p)
-      if (acc) for (let i = 0; i < colCount; i++) acc[i] = decimalAdd(acc[i] ?? '0.0000', r.vals[i] ?? '0.0000')
-      p = byId.get(p)?.parent_id ?? null
-    }
-  }
+  const ownMaterial = new Map(
+    rows.map((r) => [r.id, r.vals.some((v) => decimalIsMaterial(v ?? '0.0000'))]),
+  )
   const children = new Map<string | null, typeof rows>()
   for (const r of rows) {
     if (!children.has(r.parent_id)) children.set(r.parent_id, [])
     children.get(r.parent_id)!.push(r)
   }
+  // A row prints when it is self-visible (material own balance, summary, or
+  // showZero) or when a type-matching descendant prints, so group headers
+  // survive their children and the tree keeps its shape. A malformed
+  // imported cycle must terminate, not hang the report: the path guard
+  // refuses re-entry (same tolerate-and-show policy as the old rollup).
+  const emitsMemo = new Map<string, boolean>()
+  const visiting = new Set<string>()
+  const emits = (id: string): boolean => {
+    const hit = emitsMemo.get(id)
+    if (hit !== undefined) return hit
+    const r = byId.get(id)
+    if (!r || visiting.has(id)) return false
+    visiting.add(id)
+    let kid = false
+    for (const k of children.get(id) ?? []) kid = emits(k.id) || kid
+    const out =
+      (types.includes(r.type) && (ownMaterial.get(id) === true || r.is_summary || showZero)) ||
+      (types.includes(r.type) && kid)
+    visiting.delete(id)
+    emitsMemo.set(id, out)
+    return out
+  }
   const out: MatrixRow[] = []
   const walk = (parent: string | null, depth: number) => {
     for (const r of children.get(parent) ?? []) {
-      if (!types.includes(r.type)) continue
-      const raw = rolled.get(r.id) ?? []
-      const flip = CREDIT_NORMAL.has(r.type)
-      const values = raw.map((v) => (flip ? decimalNeg(v) : v))
-      const nonZero = values.some((v) => decimalIsMaterial(v ?? '0.0000'))
-      if (nonZero || r.is_summary || showZero) {
+      if (emits(r.id)) {
+        const flip = CREDIT_NORMAL.has(r.type)
+        const values = r.vals.map((v) => (flip ? decimalNeg(v) : v))
         out.push({
           id: r.id,
           number: r.number,
@@ -636,10 +649,11 @@ function treeifyMatrix(
     }
   }
   walk(null, 0)
-  // Prune empty summary rows with no visible descendants (unless showing zeros).
+  // Prune immaterial group headers with no visible descendants (unless
+  // showing zeros). Material own-balance rows always print.
   if (showZero) return out
   return out.filter((r, i) => {
-    if (!r.isSummary || r.values.some((v) => decimalIsMaterial(v ?? '0.0000'))) return true
+    if (ownMaterial.get(r.id)) return true
     const next = out[i + 1]
     return next !== undefined && next.depth > r.depth
   })
@@ -906,7 +920,7 @@ export async function statementMatrix(opts: {
     vals: cols.map((_, i) => String(r[`c${i}`] ?? '0')),
   }))
 
-  const rows = treeifyMatrix(parsed, opts.types, cols.length, showZero)
+  const rows = treeifyMatrix(parsed, opts.types, showZero)
 
   // Assemble display columns; append variance for a compare pair.
   const columns: StatementColumn[] = cols.map((c) => ({
@@ -949,11 +963,14 @@ export function recomputeVariance(matrix: StatementMatrix, values: StatementValu
   return values
 }
 
-/** Per-column totals over the depth-0 rows of the given types (section total). */
+/** Per-column totals over every row of the given types (section total). Each
+ * account prints exactly once at its own balance (gross presentation), so
+ * the total is the sum over all rows — depth-0-only summing was correct
+ * only when parents carried rolled balances. */
 export function sumSection(matrix: StatementMatrix, types: string[]): StatementValue[] {
   const totals: StatementValue[] = matrix.columns.map(() => '0.0000')
   for (const row of matrix.rows) {
-    if (row.depth !== 0 || !types.includes(row.type)) continue
+    if (!types.includes(row.type)) continue
     for (let i = 0; i < totals.length; i++) totals[i] = decimalAdd(totals[i] ?? '0.0000', row.values[i] ?? '0.0000')
   }
   return recomputeVariance(matrix, totals)
