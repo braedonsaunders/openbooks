@@ -603,6 +603,12 @@
       "lastSync": "最終同期",
       "lastAttempt": "最終試行",
       "never": "なし"
+    },
+    "client": {
+      "configure": {
+        "noEligibleAccounts": "接続可能な消込対象の銀行口座はまだありません。勘定科目表で銀行口座とカード口座を消込可能に設定してから、ここで選択してください。",
+        "noEligibleAccountsLink": "勘定科目表を開く"
+      }
     }
   },
   "pspSettlements": {

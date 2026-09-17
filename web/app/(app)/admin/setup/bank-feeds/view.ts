@@ -8,6 +8,7 @@ import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
+import { listReconcilableBankAccounts } from '../../../../../lib/banking-accounts'
 import type { BankFeedsClient } from './BankFeedsClient'
 
 /**
@@ -56,7 +57,11 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
   const features = await resolvedFeatureState(authz.user.orgId)
   if (!featureEnabled(features, 'bankFeeds')) redirect('/admin/setup/features')
 
-  const [conns, accts, servers, sched, cfg, hdrs] = await Promise.all([
+  // Feed targets read through the one reconcilable-bank membership every
+  // banking surface agrees on (F-t06-001): without the bank/card type filter
+  // a reconcilable non-bank account would be offered as a feed target, and
+  // its statements could never be reconciled (F-t11-005).
+  const [conns, eligible, servers, sched, cfg, hdrs] = await Promise.all([
     db.execute<any>(sql`
       select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
@@ -68,11 +73,7 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
         join accounts a on a.id = c.account_id and a.org_id = c.org_id
        where c.org_id = ${authz.user.orgId} order by c.created_at desc
     `),
-    db.execute(sql`
-      select id, number, name from accounts
-       where org_id = ${authz.user.orgId} and reconcilable and not is_summary and is_active
-       order by number nulls last
-    `),
+    listReconcilableBankAccounts(authz.user.orgId),
     db.execute<any>(sql`
       select id, name, username, root_prefix as "rootPrefix", is_active as "isActive",
              last_connected_at as "lastConnectedAt"
@@ -97,7 +98,7 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
     host,
     fingerprint: hostKeyFingerprint(cfg.hostKey),
   }
-  const accounts = accts.rows.map((a: any) => ({
+  const accounts = eligible.map((a) => ({
     id: a.id,
     label: [a.number, a.name].filter(Boolean).join(' · '),
   }))

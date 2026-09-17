@@ -75,9 +75,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Plaid account id is required" }, { status: 400 });
   }
 
+  // A feed may only attach where its statements can be reconciled: the same
+  // reconcilable-bank membership every banking picker reads (F-t06-001). An
+  // inactive or non-bank account would strand imports where no banking
+  // surface can match them (F-t11-005).
   const acct = (await db.execute(sql`
     select id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
-      and reconcilable and not is_summary
+      and reconcilable and is_active and not is_summary and type in ('asset_bank', 'liability_card')
   `));
   if (!acct.rows.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
 

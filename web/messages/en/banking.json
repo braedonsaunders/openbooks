@@ -797,6 +797,8 @@
         "connectionName": "Connection name",
         "connectionNamePlaceholder": "e.g. Operating account — daily",
         "bankGlAccount": "Bank / GL account",
+        "noEligibleAccounts": "No reconcilable bank accounts to connect yet. Flag your bank and card accounts as reconcilable in the Chart of Accounts, then pick one here.",
+        "noEligibleAccountsLink": "Open the Chart of Accounts",
         "credentialsStep": "2 · {provider} credentials",
         "providerAccountId": "Provider account id",
         "providerAccountIdPlaceholder": "the account's id at the provider",
