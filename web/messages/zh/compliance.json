@@ -1,0 +1,362 @@
+{
+  "title": "分包商合规",
+  "description": "面向收款方的保险证书、留置权弃权书和年末信息申报表。",
+  "tabs": {
+    "overview": "概览",
+    "vendors": "分包商",
+    "lienWaivers": "留置权弃权书",
+    "informationReturns": "信息申报表"
+  },
+  "setup": {
+    "prompt": "尚未执行任何管控。请定义交易对方类别及其各自必须持有的证书。",
+    "action": "配置合规"
+  },
+  "stats": {
+    "tracked": "受跟踪分包商",
+    "trackedHint": "{count} 份有效保单",
+    "compliant": "已保障",
+    "compliantHint": "{expiring} 份即将到期",
+    "blocked": "已冻结",
+    "blockedHint": "{bills} 张账单受影响",
+    "exposure": "冻结敞口",
+    "exposureHint": "无法放行的应付款"
+  },
+  "panels": {
+    "blocked": "管控冻结的付款",
+    "blockedHint": "依据当日证据实时重估",
+    "blockedEmpty": "没有付款被冻结。每张未结分包商账单均可放行。",
+    "expiring": "本月到期",
+    "expiringHint": "在失效前跟进处理",
+    "expiringEmpty": "没有证书进入预警窗口。",
+    "waivers": "待办留置权弃权书",
+    "waiversHint": "已请求或已收到但尚未签署",
+    "waiversEmpty": "没有弃权书等待签署。",
+    "waiversAction": "全部弃权书",
+    "readiness": "1099 就绪情况 — {year}",
+    "readinessHint": "在一月之前修正这些问题",
+    "readinessEmpty": "每家应申报供应商都已具备申报所需材料。",
+    "readinessAction": "申报"
+  },
+  "empty": {
+    "title": "尚未跟踪任何分包商",
+    "description": "为供应商指定合规类别，即可开始要求其提供证书。"
+  },
+  "states": {
+    "compliant": "已保障",
+    "expiring": "即将到期",
+    "waived": "已豁免",
+    "missing": "缺失",
+    "expired": "已过期",
+    "insufficient": "不足",
+    "awaiting_verification": "待核验",
+    "rejected": "已驳回"
+  },
+  "reasons": {
+    "no_evidence": "无存档文件",
+    "rejected": "已驳回",
+    "awaiting_verification": "待核验",
+    "not_yet_effective": "尚未生效",
+    "expired": "已过期",
+    "coverage_below_minimum": "每次事故限额低于最低要求",
+    "aggregate_below_minimum": "累计限额低于最低要求",
+    "coverage_currency_mismatch": "限额币种不符",
+    "coverage_amount_missing": "证书上未列明限额",
+    "missing_additional_insured": "未列为附加被保险人",
+    "missing_waiver_of_subrogation": "无代位求偿权弃权",
+    "missing_primary_noncontributory": "非首要且可分摊"
+  },
+  "decision": {
+    "cleared": "放行",
+    "warned": "警告",
+    "blocked": "已冻结",
+    "overridden": "已覆盖"
+  },
+  "certificateStatus": {
+    "pending_review": "待复核",
+    "active": "已核验",
+    "rejected": "已驳回",
+    "superseded": "已取代"
+  },
+  "waiverStatus": {
+    "draft": "草稿",
+    "requested": "已请求",
+    "received": "已收到",
+    "signed": "已签署",
+    "rejected": "已驳回",
+    "void": "已作废"
+  },
+  "filingStatus": {
+    "draft": "草稿",
+    "computed": "已计算",
+    "finalized": "已定稿",
+    "filed": "已申报",
+    "void": "已作废"
+  },
+  "recipientStatus": {
+    "included": "申报中",
+    "excluded": "已排除",
+    "corrected": "已更正",
+    "void": "已作废"
+  },
+  "filingChannel": {
+    "iris": "IRS IRIS",
+    "fire": "IRS FIRE",
+    "provider": "申报服务商",
+    "paper": "纸质",
+    "other": "其他"
+  },
+  "direction": {
+    "received": "收自分包商",
+    "issued": "由我方签发"
+  },
+  "waiverType": {
+    "conditional_progress": "附条件 — 进度款",
+    "unconditional_progress": "无条件 — 进度款",
+    "conditional_final": "附条件 — 尾款",
+    "unconditional_final": "无条件 — 尾款"
+  },
+  "waiverTypeHint": {
+    "conditional_progress": "仅在款项到账后，才解除截至该日期的工程留置权。",
+    "unconditional_progress": "立即解除截至该日期的工程留置权 — 即使款项最终未能到账。",
+    "conditional_final": "在尾款到账后，解除整个合同（含保留金）的留置权。",
+    "unconditional_final": "立即无条件解除整个合同（含保留金）的留置权。"
+  },
+  "taxClassification": {
+    "individual": "个人",
+    "sole_proprietor": "个体经营",
+    "partnership": "合伙企业",
+    "c_corp": "C 类公司",
+    "s_corp": "S 类公司",
+    "llc": "LLC",
+    "trust_estate": "信托或遗产",
+    "government": "政府机构",
+    "nonprofit": "非营利组织",
+    "other": "其他"
+  },
+  "tinType": {
+    "ein": "EIN",
+    "ssn": "SSN",
+    "itin": "ITIN",
+    "atin": "ATIN",
+    "sin": "SIN（加拿大）",
+    "bn": "企业编号（加拿大）",
+    "unknown": "未知"
+  },
+  "readiness": {
+    "unflagged": "付款已超申报门槛但未标记为应申报",
+    "missingTin": "无存档 TIN",
+    "noForm": "未指定信息申报表"
+  },
+  "vendors": {
+    "title": "分包商合规矩阵",
+    "description": "每行一家受跟踪分包商，每列一项保单要求。与付款运行执行的评估一致。",
+    "columns": {
+      "vendor": "分包商",
+      "class": "类别",
+      "status": "状态",
+      "exposure": "未结应付"
+    },
+    "filters": {
+      "class": "类别",
+      "allClasses": "全部类别",
+      "state": "状态",
+      "allStates": "全部状态",
+      "attention": "需处理",
+      "expiring": "即将到期"
+    },
+    "empty": {
+      "title": "没有匹配的受跟踪分包商",
+      "description": "在供应商的“合规”选项卡中指定合规类别，即可将其纳入矩阵。"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "certificates": "证书",
+      "identification": "税务识别",
+      "exceptions": "豁免",
+      "aria": "合规分区"
+    }
+  },
+  "certificates": {
+    "empty": "该分包商暂无存档证书。",
+    "recordTitle": "记录证书",
+    "record": "记录证书",
+    "recordHint": "记录后为待复核状态，须经他人核验后方为有效。",
+    "noPolicies": "该分包商所属类别暂无适用保单要求。",
+    "noExpiry": "无到期日",
+    "limits": "每次事故 {occurrence} · 累计 {aggregate}",
+    "additionalInsured": "附加被保险人",
+    "waiverOfSubrogation": "代位求偿权弃权",
+    "primaryNoncontributory": "首要且不可分摊",
+    "verify": "核验",
+    "reject": "驳回",
+    "rejectTitle": "驳回此证书",
+    "rejectReason": "驳回原因？",
+    "verifiedBy": "{who} 于 {when} 核验",
+    "selfVerifyBlocked": "证书须由记录人以外的人员核验。"
+  },
+  "exceptions": {
+    "intro": "豁免是绕过冻结性要求的唯一途径。豁免必有期限，且全程留痕。",
+    "empty": "没有生效中的豁免。",
+    "grantTitle": "授予豁免",
+    "grant": "授予豁免",
+    "grantHint": "最长 120 天。更长的暂停属于政策变更，而非豁免。",
+    "revoke": "撤销",
+    "revokeTitle": "撤销此豁免",
+    "revokeReason": "撤销原因？",
+    "window": "{from} → {to}"
+  },
+  "lienWaivers": {
+    "title": "留置权弃权书",
+    "description": "以工程款交换的法定解除文件 — 收自分包商，或随付款申请签发给业主。",
+    "new": "新建弃权书",
+    "create": "创建弃权书",
+    "columns": {
+      "number": "弃权书",
+      "direction": "方向",
+      "party": "对方",
+      "project": "项目",
+      "type": "类型",
+      "through": "截至",
+      "amount": "金额",
+      "status": "状态",
+      "jurisdiction": "司法辖区",
+      "bill": "对应账单",
+      "requested": "请求日期"
+    },
+    "filters": {
+      "direction": "方向",
+      "allDirections": "全部方向",
+      "status": "状态",
+      "allStatuses": "全部状态"
+    },
+    "empty": {
+      "title": "暂无留置权弃权书",
+      "description": "向分包商索取解除文件，或随付款申请签发时创建。"
+    },
+    "jurisdictionHint": "所遵循法规的文本格式，如 US-CA 或 CA-ON。打印在文件上。",
+    "editTitle": "解除条款",
+    "notesHint": "打印在弃权书上的例外事项和争议索赔。",
+    "copyFromBill": "从账单复制金额…",
+    "request": "标记为已请求",
+    "receive": "标记为已收到",
+    "reject": "驳回",
+    "rejectTitle": "驳回此弃权书",
+    "rejectReason": "驳回原因？",
+    "void": "作废",
+    "voidTitle": "作废此弃权书",
+    "voidReason": "作废原因？",
+    "recordSignature": "记录已签署的弃权书",
+    "recordSignatureHint": "将弃权书标记为已签署会释放被冻结的付款。请在拿到已签署文件后再操作。",
+    "signedByName": "签署人",
+    "signedByTitle": "职务",
+    "signedAt": "签署日期",
+    "notarized": "已公证",
+    "markSigned": "标记为已签署",
+    "signedBy": "{who} {title} 于 {when} 签署",
+    "printForm": "打印表格",
+    "executedCopy": "已签署副本",
+    "executedCopyHint": "在此附上扫描的已签署弃权书。文件保存在文件柜中并关联到本记录。",
+    "errors": {
+      "partyAndProject": "请同时选择对方和项目 — 留置权是针对特定项目的主张。"
+    }
+  },
+  "informationReturns": {
+    "title": "信息申报表",
+    "description": "1099-NEC、1099-MISC 和 T4A，根据日历年内实际支付的现金计算。",
+    "new": "新建申报",
+    "create": "开始申报",
+    "orgRoot": "整个组织",
+    "columns": {
+      "year": "年度",
+      "form": "表格",
+      "entity": "申报主体",
+      "recipients": "收款人",
+      "total": "已申报",
+      "status": "状态",
+      "attention": "需处理",
+      "vendor": "供应商",
+      "issue": "问题",
+      "classification": "税务分类",
+      "paid": "已付",
+      "recipient": "收款人",
+      "tin": "TIN"
+    },
+    "empty": {
+      "title": "暂无申报",
+      "description": "为已结束的日历年新建申报，并根据总账计算。"
+    },
+    "excluded": "+{count} 项已排除",
+    "missingTin": "{count} 项无 TIN",
+    "readinessTitle": "就绪情况 — {year}",
+    "readinessDescription": "若无人跟进，将导致申报出错的供应商。",
+    "readinessClear": "每家应申报供应商都有 TIN 和指定表格。",
+    "detailDescription": "{entity} · 申报门槛 {threshold}",
+    "compute": "根据总账计算",
+    "recompute": "重新计算",
+    "computed": "已计算 {count} 位收款人，{exceptions} 项例外待复核。",
+    "finalize": "定稿",
+    "markFiled": "标记为已申报",
+    "printCopies": "收款人副本",
+    "exportTransmittal": "报送文件",
+    "void": "作废申报",
+    "voidTitle": "作废此申报",
+    "voidReason": "作废原因？",
+    "frozenNotice": "此申报已冻结。金额与排除项反映已报送内容；更正请新建申报。",
+    "noRecipients": "尚未计算。请计算申报以追溯全年付款。",
+    "computedNoRecipients": "已计算 — 没有收款人达到申报门槛。",
+    "adjust": "调整",
+    "adjustDescription": "调整是对总账金额的有符号差额，追溯链条永不被覆盖。",
+    "adjustReason": "调整原因",
+    "delta": "差额",
+    "ledgerFigure": "总账：{value}",
+    "exclude": "将此收款人排除在申报之外",
+    "exclusionReason": "排除原因",
+    "channel": "申报渠道",
+    "reference": "确认编号",
+    "referenceHint": "渠道返回的回执或提交编号。",
+    "filedVia": "经由 {channel} 申报 · {reference}",
+    "footnote": "金额为日历年内实际支付的现金，经付款申请追溯至各账单的费用科目。星号标记经人工调整的金额。"
+  },
+  "fields": {
+    "requirement": "要求",
+    "select": "请选择…",
+    "none": "无",
+    "issuer": "保险公司或签发机构",
+    "policyNumber": "保单或证书编号",
+    "effectiveFrom": "生效日期",
+    "expiresOn": "到期日期",
+    "expiryRequired": "此要求需要到期日期。",
+    "coverageAmount": "每次事故限额",
+    "aggregateAmount": "累计限额",
+    "coverageCurrency": "限额币种",
+    "coverageCurrencyHint": "须为 {currency} — 比较限额时永不折算。",
+    "project": "项目",
+    "allProjects": "全部项目",
+    "supersedes": "续替",
+    "notes": "备注",
+    "reason": "原因",
+    "save": "保存",
+    "complianceClass": "合规类别",
+    "complianceClassHint": "无类别表示不跟踪该供应商，且永不冻结其付款。",
+    "notTracked": "未跟踪",
+    "taxClassification": "税务分类",
+    "unknown": "未知",
+    "reportable": "须在信息申报表中申报",
+    "informationReturnForm": "表格",
+    "inheritClass": "继承自类别",
+    "notReportable": "无须申报",
+    "informationReturnBox": "默认栏",
+    "defaultBox": "表格默认",
+    "tinType": "TIN 类型",
+    "tin": "纳税人识别号",
+    "tinPlaceholder": "9 位数字",
+    "tinHint": "静态加密存储。之后仅显示末四位。",
+    "backupWithholding": "须备用预扣税"
+  },
+  "errors": {
+    "saveFailed": "保存失败。",
+    "pickRequirement": "请选择此证书满足的要求。",
+    "exceptionIncomplete": "豁免需要指定要求和结束日期。"
+  }
+}
