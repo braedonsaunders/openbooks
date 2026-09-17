@@ -29,6 +29,7 @@
     "reference": "Kundenreferenz-Nr.",
     "accountColumn": "Ertragskonto",
     "accountPlaceholder": "Konto…",
+    "currencyMismatch": "{account} akzeptiert nur {allowed}-Buchungen, nicht {actual}",
     "noTax": "Keine Steuer",
     "taxAmountColumn": "Steuerbetr.",
     "selectCustomerPlaceholder": "Kunde auswählen…",

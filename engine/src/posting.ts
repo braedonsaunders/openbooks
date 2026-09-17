@@ -1347,6 +1347,43 @@ export const RULES: Record<string, RuleFn> = {
 export class PostingError extends Error {}
 
 /**
+ * Application-layer proof for the storage trigger `jl_check_account`
+ * (F-t06-002): every final line inserts in its line currency, so a target
+ * account carrying a currency restriction must name exactly that currency.
+ * Refusing here — naming the account and its allowed currency, never an
+ * id — turns a 500 raw-SQL escape into a typed refusal before any journal
+ * row is inserted. Runs inside `applySubsidiaries`, so first posting,
+ * regeneration, and secondary-book sets all pass through it, with no
+ * migration exemption (the trigger enforces currency on replay too).
+ */
+async function assertAccountCurrencyRestrictions(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  lines: readonly { accountId: string; currency: string }[],
+): Promise<void> {
+  const ids = [...new Set(lines.map((l) => l.accountId))];
+  if (ids.length === 0) return;
+  const rows = (await runner.execute<{
+    id: string;
+    number: string | null;
+    name: string;
+    restriction: string | null;
+  }>(sql`
+    select id, number, name, currency_restriction as restriction from accounts
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const line of lines) {
+    const acct = byId.get(line.accountId);
+    if (acct && acct.restriction && line.currency !== acct.restriction) {
+      const label = [acct.number, acct.name].filter(Boolean).join(" ");
+      throw new PostingError(
+        `${label} only accepts ${acct.restriction} postings, not ${line.currency}`,
+      );
+    }
+  }
+}
+
+/**
  * Application-layer proof immediately before a ledger write. PostgreSQL
  * repeats these assertions at the deferred-constraint boundary; keeping both
  * defenses independent turns a malformed projection into a readable posting
@@ -1545,6 +1582,7 @@ async function applySubsidiaries(
       partyId: doc.partyId,
       docSubsidiaryId: docSubId,
     });
+    await assertAccountCurrencyRestrictions(runner, doc.orgId, all);
     return {
       lines: all,
       docSubId,

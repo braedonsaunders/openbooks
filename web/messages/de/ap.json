@@ -32,6 +32,7 @@
     "reference": "Lieferanten-Ref.-Nr.",
     "accountColumn": "Konto",
     "accountPlaceholder": "Konto…",
+    "currencyMismatch": "{account} akzeptiert nur {allowed}-Buchungen, nicht {actual}",
     "noTax": "Keine Steuer",
     "taxAmountColumn": "Steuerbetrag",
     "selectVendorPlaceholder": "Lieferant auswählen…",

@@ -32,6 +32,7 @@
     "reference": "Nº de ref. do fornecedor",
     "accountColumn": "Conta",
     "accountPlaceholder": "Conta…",
+    "currencyMismatch": "{account} só aceita lançamentos em {allowed}, não em {actual}",
     "noTax": "Sem imposto",
     "taxAmountColumn": "Valor do imposto",
     "selectVendorPlaceholder": "Selecionar fornecedor…",

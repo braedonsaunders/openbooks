@@ -29,6 +29,7 @@
     "reference": "N° de réf. client",
     "accountColumn": "Compte de produits",
     "accountPlaceholder": "Compte…",
+    "currencyMismatch": "{account} n'accepte que les écritures en {allowed}, pas en {actual}",
     "noTax": "Sans taxe",
     "taxAmountColumn": "Mt taxe",
     "selectCustomerPlaceholder": "Sélectionner un client…",

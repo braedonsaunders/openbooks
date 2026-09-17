@@ -62,6 +62,8 @@ type Opt = {
   label?: string
   subsidiary_id?: string | null
   tax_components?: TaxComponentConfig[]
+  /** Settlement currency the account accepts (null = any; F-t06-002). */
+  currency_restriction?: string | null
 };
 
 interface SubsidiaryOpt {
@@ -378,6 +380,36 @@ export async function readDocumentActionResult(
     message: typeof data.error === 'string' && data.error ? data.error : null,
     pendingApproval: data.pendingApproval === true,
   }
+}
+
+export interface CurrencyMismatchedAccount {
+  accountId: string
+  label: string
+  allowed: string
+}
+
+/**
+ * Form-level currency proof (F-t06-002): every referenced account carrying
+ * a settlement-currency restriction must name the document's own currency —
+ * the storage trigger would refuse anything else at post, so saving or
+ * posting a mismatched form only buys a round trip to a certain refusal.
+ * Returns the first offender in form order, or null when nothing provably
+ * mismatches (unknown accounts stay the server's call — fail open).
+ */
+export function findCurrencyMismatchedAccount(
+  docCurrency: unknown,
+  refs: { accountId: unknown; label: string }[],
+  restrictionById: Map<string, string | null | undefined>,
+): CurrencyMismatchedAccount | null {
+  if (typeof docCurrency !== 'string' || !docCurrency) return null
+  for (const ref of refs) {
+    if (typeof ref.accountId !== 'string' || !ref.accountId) continue
+    const allowed = restrictionById.get(ref.accountId)
+    if (allowed && allowed !== docCurrency) {
+      return { accountId: ref.accountId, label: ref.label, allowed }
+    }
+  }
+  return null
 }
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
@@ -1401,6 +1433,13 @@ export function DocumentDrawer({
       return
     }
     for (const w of gate.warnings) toast.warning(w)
+    // A currency-mismatched form can never post (the ledger refuses it), so
+    // refuse the save up front with the account named (F-t06-002).
+    if (blockCurrencyMismatch()) {
+      setSaveState('error')
+      setBusy(false)
+      return
+    }
     const request = buildDocumentSaveRequest(
       String(doc.id),
       documentRevision,
@@ -1496,6 +1535,12 @@ export function DocumentDrawer({
   async function act(action: 'submit' | 'post') {
     setBusy(true)
     setActionError(null)
+    // Same up-front refusal as save: posting a currency-mismatched record
+    // is a certain 422, so name the account before the round trip (F-t06-002).
+    if (blockCurrencyMismatch()) {
+      setBusy(false)
+      return
+    }
     try {
       const res = await fetch('/api/documents/actions', {
         method: 'POST',
@@ -1659,6 +1704,43 @@ export function DocumentDrawer({
     if (!id) return '—'
     const a = [...(cardAccounts ?? []), ...(bankAccounts ?? accounts)].find((x) => x.id === id) ?? accounts.find((x) => x.id === id)
     return a ? `${a.number ?? ''} ${a.name ?? ''}`.trim() : String(id)
+  }
+  // Settlement-currency restrictions keyed by account, across every picker
+  // list the form can reference (F-t06-002).
+  const currencyRestrictionById = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const a of [...(cardAccounts ?? []), ...(bankAccounts ?? accounts), ...accounts]) {
+      if (!map.has(a.id)) map.set(a.id, a.currency_restriction ?? null)
+    }
+    return map
+  }, [accounts, bankAccounts, cardAccounts])
+  // Collect the accounts this save would actually insert (zero legs never
+  // reach the ledger — the kernel drops them before the trigger runs) and
+  // prove each one against the document currency.
+  const currencyMismatch = (): CurrencyMismatchedAccount | null => {
+    const lines = (payload_ as { lines?: { accountId?: unknown; amount?: unknown }[] }).lines ?? []
+    const refs = lines
+      .filter((l) => typeof l.amount === 'string' && l.amount !== '' && Number(l.amount) !== 0)
+      .map((l) => ({ accountId: l.accountId, label: accountName(l.accountId) }))
+    const override = customValues.controlAccountId
+    if (typeof override === 'string' && override) {
+      refs.push({ accountId: override, label: accountName(override) })
+    }
+    return findCurrencyMismatchedAccount(doc.currency, refs, currencyRestrictionById)
+  }
+  const blockCurrencyMismatch = (): boolean => {
+    const mismatch = currencyMismatch()
+    if (!mismatch) return false
+    const message = t('drawer.currencyMismatch', {
+      account: mismatch.label,
+      allowed: mismatch.allowed,
+      actual: String(doc.currency),
+    })
+    // A refusal the operator can trigger stays on the record, not only in
+    // a toast: the typed reason pins as an alert until the next action.
+    setActionError(message)
+    toast.error(message)
+    return true
   }
   // Card-instrument fallback (F-t05-020): no UI creates payment_cards rows,
   // so with zero instruments the instrument picker is unfillable. Offer the

@@ -29,6 +29,7 @@
     "reference": "Nº de ref. do cliente",
     "accountColumn": "Conta de receita",
     "accountPlaceholder": "Conta…",
+    "currencyMismatch": "{account} só aceita lançamentos em {allowed}, não em {actual}",
     "noTax": "Sem imposto",
     "taxAmountColumn": "Val. imposto",
     "selectCustomerPlaceholder": "Selecionar cliente…",

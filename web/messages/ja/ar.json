@@ -29,6 +29,7 @@
     "reference": "得意先参照番号",
     "accountColumn": "収益勘定",
     "accountPlaceholder": "勘定…",
+    "currencyMismatch": "{account}は{allowed}建ての仕訳のみ受け付けます（{actual}不可）",
     "noTax": "税なし",
     "taxAmountColumn": "税額",
     "selectCustomerPlaceholder": "得意先を選択…",

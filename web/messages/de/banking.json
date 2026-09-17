@@ -351,6 +351,7 @@
     "transferAmount": "Betrag",
     "accountColumn": "Konto",
     "accountPlaceholder": "Konto…",
+    "currencyMismatch": "{account} akzeptiert nur {allowed}-Buchungen, nicht {actual}",
     "noTax": "Keine Steuer",
     "taxAmountColumn": "Steuerbetr.",
     "selectVendorPlaceholder": "Lieferant auswählen…",

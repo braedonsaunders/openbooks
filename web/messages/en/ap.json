@@ -32,6 +32,7 @@
     "reference": "Vendor ref #",
     "accountColumn": "Account",
     "accountPlaceholder": "Account…",
+    "currencyMismatch": "{account} only accepts {allowed} postings, not {actual}",
     "noTax": "No tax",
     "taxAmountColumn": "Tax amt",
     "selectVendorPlaceholder": "Select vendor…",
