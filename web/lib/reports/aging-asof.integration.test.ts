@@ -100,9 +100,12 @@ test('AR aging as of July still shows the balance settled in August', { skip: !p
 
       const aging = await agingByParty('ar', '2026-07-31', undefined, org.orgId)
       assert.equal(aging.totals.total, '500.0000', 'July AR aging must tie the July control balance after an August settlement')
+      // Empty buckets read the canonical ledger zero ('0.0000', as the totals
+      // always have): the old grouped query returned SQL's integer-coalesced
+      // '0' here, a formatting artifact of the query shape, not arithmetic.
       assert.deepEqual(
         aging.rows.map((r) => [r.partyName, r.current, r.b1, r.b2, r.b3, r.b4, r.total]),
-        [['Acme Customer', '0', '500.0000', '0', '0', '0', '500.0000']],
+        [['Acme Customer', '0.0000', '500.0000', '0.0000', '0.0000', '0.0000', '500.0000']],
       )
 
       const detail = await agingDetail('ar', '2026-07-31', undefined, org.orgId)

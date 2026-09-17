@@ -1,7 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { mulDecimal } from "@openbooks/engine/src/money.ts";
 import { resolveOrgId } from "../org-scope";
+import { presentationCurrency, presentationRates } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
@@ -46,6 +48,49 @@ export interface AgingResult {
   rows: AgingRow[];
   totals: Omit<AgingRow, "partyId" | "partyName">;
   asOf: string;
+  basis: AgingCurrencyBasis;
+  reportingCurrency: string;
+}
+
+/**
+ * Currency basis for aging conversion (Intacct model: a REPORTING CURRENCY
+ * selector plus a "convert from" basis toggle).
+ *
+ * - `base`: convert each line's FUNCTIONAL (stored base) open at the as-of
+ *   spot. Ties to the GL control; the default — finance teams may have filed
+ *   against these numbers, so nothing moves silently.
+ * - `transaction`: rebuild the open in each document's own TRANSACTION
+ *   currency (gross txn lines minus applied txn legs, as of the report date)
+ *   and convert at the as-of spot. Answers "what the customer owes in their
+ *   own money, expressed in mine".
+ *
+ * Both bases rebuild as of the report date from stored dual-recorded amounts
+ * (`jl.amount` / `jl.txn_amount`, `applications.amount` /
+ * `source/target_transaction_amount`) — never by re-translating at document
+ * FX, which drifts from the posted ledger by dust (F-t08-004).
+ */
+export type AgingCurrencyBasis = "base" | "transaction";
+
+export interface AgingOptions {
+  /** Default "base": the numbers booked to date, unchanged. */
+  basis?: AgingCurrencyBasis;
+  /** Default the org base currency. Must be base or an in-scope txn currency. */
+  reportingCurrency?: string;
+}
+
+/** A needed spot rate has no coverage on or before the as-of date. The
+ * caller maps this to the rates-blocked banner instead of throwing numbers. */
+export class AgingRatesUnavailableError extends Error {
+  readonly missing: string[];
+  readonly reportingCurrency: string;
+  readonly asOf: string;
+  constructor(missing: string[], reportingCurrency: string, asOf: string) {
+    super(`no spot rate for ${missing.join(", ")}→${reportingCurrency} on or before ${asOf}`);
+    this.name = "AgingRatesUnavailableError";
+    this.missing = missing;
+    this.reportingCurrency = reportingCurrency;
+    this.asOf = asOf;
+  }
 }
 
 /**
@@ -74,14 +119,42 @@ export interface AgingResult {
  * as an explicit per-party residual (the "(no party)" row when no party is
  * stamped), so the aging total always ties to the control (F-t08-006).
  */
-export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilter, orgId?: string): Promise<AgingResult> {
-  const resolvedOrgId = await resolveOrgId(orgId);
-  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
-  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+/**
+ * One open document as rebuilt from stored dual-recorded amounts: the signed
+ * functional open AND the signed transaction-currency open, side by side.
+ * Both readers (summary, detail) share this one rebuild — the basis toggle
+ * only chooses which leg converts to the reporting currency.
+ */
+interface OpenDocument {
+  docId: string;
+  kind: string;
+  partyId: string | null;
+  partyName: string | null;
+  reference: string | null;
+  due: string | null;
+  ageDays: number;
+  docCurrency: string;
+  txnCcy: string;
+  funcCcy: string;
+  openBase: string;
+  openTxn: string;
+}
+
+async function openDocuments(
+  side: AgingSide,
+  asOf: string,
+  dims: DimFilter | undefined,
+  orgId: string,
+  orgBase: string,
+  positiveKind: string,
+  creditKind: string,
+): Promise<OpenDocument[]> {
   const r = (await db.execute<{
-      party_id: string | null; party_name: string | null;
-      current: string; b1: string; b2: string; b3: string; b4: string; total: string;
-    }>(sql`
+    doc_id: string; kind: string; party_id: string | null; party_name: string | null;
+    reference: string | null; due: string | null; age_days: number;
+    doc_currency: string; txn_ccy: string; func_ccy: string;
+    open_base: string; open_txn: string;
+  }>(sql`
     -- The open is reconstructed AS OF the report date — gross open-item
     -- lines minus applications dated on/before it — never the live cached
     -- balance: a later settlement must not rewrite a past aging (or
@@ -89,75 +162,170 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
     -- Scale shape: per-document gross/applied laterals used to run once per
     -- posted document (hundreds of thousands of index-probe loops into
     -- applications). Each side is aggregated once, in bulk, instead.
+    -- Both currency legs rebuild here: the functional leg (stored base
+    -- amounts and base carrying amounts — never re-translated, so the aging
+    -- ties its control by construction) and the transaction leg (stored txn
+    -- amounts and txn application legs). Which leg converts is the basis
+    -- toggle, decided in JS below — the SQL stays one rebuild.
     with doc_lines as (
-      select d.id as doc_id, d.party_id, d.kind,
-             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date)) as age_days,
-             jl.id as line_id, abs(jl.amount) as line_gross
+      select d.id as doc_id, d.kind, d.party_id, d.document_number,
+             coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
+             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days,
+             d.currency as doc_currency,
+             jl.id as line_id,
+             abs(jl.amount) as base_gross, abs(jl.txn_amount) as txn_gross,
+             jl.currency as txn_ccy,
+             coalesce(sub.base_currency, ${orgBase}) as func_ccy
         from documents d
         join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
-       where d.org_id = ${resolvedOrgId}
+        left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
+       where d.org_id = ${orgId}
          and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     ),
     applied_lines as (
       -- applications.amount is the base-currency carrying amount (the same
-      -- denomination as the journal lines above), so no FX re-translation.
-      select s.line_id, sum(s.amt) as applied from (
-        select dl.line_id, a.amount as amt
+      -- denomination as the base leg above); the source/target transaction
+      -- legs are the same denomination as the txn leg. No FX re-translation
+      -- on either side.
+      select s.line_id, sum(s.base_amt) as applied_base, sum(s.txn_amt) as applied_txn from (
+        select dl.line_id, a.amount as base_amt,
+               case when a.from_line_id = dl.line_id
+                    then a.source_transaction_amount
+                    else a.target_transaction_amount end as txn_amt
           from doc_lines dl
-          join applications a on a.from_line_id = dl.line_id
-           and a.org_id = ${resolvedOrgId}
-           and a.applied_on <= ${asOf}
-           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
-        union all
-        select dl.line_id, a.amount as amt
-          from doc_lines dl
-          join applications a on a.to_line_id = dl.line_id
-           and a.org_id = ${resolvedOrgId}
+          join applications a on (a.from_line_id = dl.line_id or a.to_line_id = dl.line_id)
+           and a.org_id = ${orgId}
            and a.applied_on <= ${asOf}
            and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
       ) s group by s.line_id
     ),
-    open_items as (
-      select dl.party_id,
-             -- Stored base amounts are ledger-scale, but round once here so
-             -- bucket sums and the JS exact-decimal rollup below always tie
-             -- (unrounded values throw past 4dp).
-             round((case when dl.kind = ${creditKind} then -1 else 1 end)
-               * (sum(dl.line_gross) - coalesce(sum(al.applied), 0)), 4) as open,
-             dl.age_days
+    open_docs as (
+      select dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days,
+             dl.doc_currency, dl.txn_ccy, dl.func_ccy,
+             (case when dl.kind = ${creditKind} then -1 else 1 end)
+               * (sum(dl.base_gross) - coalesce(sum(al.applied_base), 0)) as open_base,
+             (case when dl.kind = ${creditKind} then -1 else 1 end)
+               * (sum(dl.txn_gross) - coalesce(sum(al.applied_txn), 0)) as open_txn
         from doc_lines dl
         left join applied_lines al on al.line_id = dl.line_id
-       group by dl.doc_id, dl.party_id, dl.kind, dl.age_days
-      having (sum(dl.line_gross) - coalesce(sum(al.applied), 0)) > 0
+       group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due,
+                dl.age_days, dl.doc_currency, dl.txn_ccy, dl.func_ccy
+      -- Settlement completeness is a ledger (base-leg) question under both
+      -- bases, so the population rule never moves with the toggle: the base
+      -- report reads exactly the documents it always has.
+      having (sum(dl.base_gross) - coalesce(sum(al.applied_base), 0)) > 0
     )
-    select oi.party_id, p.display_name as party_name,
-           coalesce(sum(oi.open) filter (where oi.age_days <= 0), 0) as current,
-           coalesce(sum(oi.open) filter (where oi.age_days between 1 and 30), 0) as b1,
-           coalesce(sum(oi.open) filter (where oi.age_days between 31 and 60), 0) as b2,
-           coalesce(sum(oi.open) filter (where oi.age_days between 61 and 89), 0) as b3,
-           coalesce(sum(oi.open) filter (where oi.age_days >= 90), 0) as b4,
-           coalesce(sum(oi.open), 0) as total
-      from open_items oi
-      left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
-     group by oi.party_id, p.display_name
-    having abs(sum(oi.open)) > 0
-     order by abs(sum(oi.open)) desc
+    select od.doc_id, od.kind, od.party_id, p.display_name as party_name,
+           od.document_number as reference, od.due, od.age_days,
+           od.doc_currency, od.txn_ccy, od.func_ccy,
+           od.open_base, od.open_txn
+      from open_docs od
+      left join parties p on p.id = od.party_id and p.org_id = ${orgId}
+     where abs(od.open_base) > 0
   `));
-  const rows: AgingRow[] = r.rows.map((x) => ({
+  return r.rows.map((x) => ({
+    docId: x.doc_id,
+    kind: x.kind,
     partyId: x.party_id,
     partyName: x.party_name,
-    current: x.current,
-    b1: x.b1,
-    b2: x.b2,
-    b3: x.b3,
-    b4: x.b4,
-    total: x.total,
+    reference: x.reference,
+    due: x.due,
+    ageDays: x.age_days,
+    docCurrency: x.doc_currency,
+    txnCcy: x.txn_ccy,
+    funcCcy: x.func_ccy,
+    openBase: x.open_base,
+    openTxn: x.open_txn,
   }));
-  await foldControlResidual(side, asOf, dims, resolvedOrgId, rows);
-  // The residual merge above can change row totals: restore the
-  // abs(total)-descending display order of the grouped query.
+}
+
+/** Translate one native open to the reporting currency at the as-of spot.
+ * Same-currency legs resolve 1:1 with no rate row — the landed single-currency
+ * path stays exactly correct. `mulDecimal` reads 10dp rates exactly and
+ * rounds half-away to ledger scale, the same conversion the cash readers use. */
+function convertOpen(
+  native: string,
+  from: string,
+  target: string,
+  rates: Map<string, string>,
+): ExactDecimal {
+  if (from === target) return native as ExactDecimal;
+  return mulDecimal(native, rates.get(from)!) as ExactDecimal;
+}
+
+async function missingSpotCoverage(
+  orgId: string,
+  target: string,
+  needed: Set<string>,
+  asOf: string,
+): Promise<string[]> {
+  const list = [...needed].filter((c) => c !== target);
+  if (list.length === 0) return [];
+  const r = await db.execute<{ ccy: string }>(sql`
+    select c as ccy from unnest(${"{" + list.join(",") + "}"}::text[]) as c
+     where not exists (
+       select 1 from fx_rates
+        where org_id = ${orgId} and rate_type = 'spot' and as_of <= ${asOf}::date
+          and ((from_currency = c and to_currency = ${target})
+            or (from_currency = ${target} and to_currency = c))
+     )`);
+  return r.rows.map((x) => x.ccy);
+}
+
+export async function agingByParty(
+  side: AgingSide,
+  asOf: string,
+  dims?: DimFilter,
+  orgId?: string,
+  opts?: AgingOptions,
+): Promise<AgingResult> {
+  const resolvedOrgId = await resolveOrgId(orgId);
+  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
+  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  const basis: AgingCurrencyBasis = opts?.basis ?? "base";
+  const orgBase = await presentationCurrency(resolvedOrgId);
+  const target = opts?.reportingCurrency ?? orgBase;
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, positiveKind, creditKind);
+  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase);
+  // A document currency with no spot must never block the BASE report (it
+  // converts nothing through it): only request the legs this basis reads,
+  // plus the functional legs the residual always needs.
+  const needed = new Set<string>();
+  for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
+  for (const res of residuals) needed.add(res.funcCcy);
+  needed.delete(target);
+  let rates = new Map<string, string>();
+  if (needed.size > 0) {
+    try {
+      rates = await presentationRates(resolvedOrgId, target, needed, asOf);
+    } catch {
+      throw new AgingRatesUnavailableError(
+        await missingSpotCoverage(resolvedOrgId, target, needed, asOf),
+        target,
+        asOf,
+      );
+    }
+  }
+  const convert = (native: string, from: string): ExactDecimal => convertOpen(native, from, target, rates);
+  const byParty = new Map<string | null, AgingRow>();
+  for (const d of docs) {
+    const open = convert(basis === "transaction" ? d.openTxn : d.openBase, basis === "transaction" ? d.txnCcy : d.funcCcy);
+    if (decimalCmp(open, ZERO) === 0) continue;
+    const bucket = bucketOf(d.ageDays);
+    let row = byParty.get(d.partyId);
+    if (!row) {
+      row = { partyId: d.partyId, partyName: d.partyName, current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO };
+      byParty.set(d.partyId, row);
+    }
+    row[bucket] = decimalAdd(row[bucket], open);
+    row.total = decimalAdd(row.total, open);
+  }
+  const rows: AgingRow[] = [...byParty.values()];
+  await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, convert);
+  // The residual merge can change row totals: restore the
+  // abs(total)-descending display order of the old grouped query.
   rows.sort((a, b) => compareAbsoluteDescending(a.total, b.total));
   const totals = rows.reduce(
     (a, r) => ({
@@ -170,7 +338,7 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
     }),
     { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO },
   );
-  return { rows, totals, asOf };
+  return { rows, totals, asOf, basis, reportingCurrency: target };
 }
 
 /**
@@ -194,44 +362,79 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
  * before. Subsidiary stamps ride on documents and lines together, so
  * subsidiary-scoped reads keep the residual.
  */
-async function foldControlResidual(
+interface ControlResidual {
+  partyId: string | null;
+  funcCcy: string;
+  bal: string;
+}
+
+async function controlResiduals(
   side: AgingSide,
   asOf: string,
   dims: DimFilter | undefined,
   orgId: string,
-  rows: AgingRow[],
-): Promise<void> {
+  orgBase: string,
+): Promise<ControlResidual[]> {
   if (
     dims?.departmentId || dims?.projectId || dims?.locationId || dims?.classId ||
     (dims?.segments && Object.keys(dims.segments).length > 0)
   ) {
-    return;
+    return [];
   }
   const type = side === "ap" ? "liability_payable" : "asset_receivable";
-  const control = await db.execute<{ party_id: string | null; bal: string }>(sql`
-    select l.party_id, coalesce(sum(l.amount), 0) as bal
+  const control = await db.execute<{ party_id: string | null; func_ccy: string; bal: string }>(sql`
+    select l.party_id, coalesce(sub.base_currency, ${orgBase}) as func_ccy, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where l.org_id = ${orgId} and a.type = ${type} and e.posting_date <= ${asOf}
        and ${dimWhere(dims)}
-     group by l.party_id
+     -- Ordinal, not a repeated expression: the SELECT's coalesce carries a
+     -- different bind parameter per occurrence, which GROUP BY will not match.
+     group by l.party_id, 2
   `);
-  if (control.rows.length === 0) return;
-  const docTotals = new Map<string | null, ExactDecimal>(rows.map((row) => [row.partyId, row.total]));
-  const unnamed: string[] = [];
-  for (const c of control.rows) {
+  return control.rows.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
+}
+
+async function foldControlResidual(
+  side: AgingSide,
+  orgId: string,
+  rows: AgingRow[],
+  docs: OpenDocument[],
+  residuals: ControlResidual[],
+  convert: (native: string, from: string) => ExactDecimal,
+): Promise<void> {
+  if (residuals.length === 0) return;
+  // Document opens net per (party, functional): the residual is a
+  // functional-space concept (control minus document BASE opens) under both
+  // bases — undocumented balances have no transaction currency, so they
+  // translate at the as-of spot like every other functional leg.
+  const docBase = new Map<string, ExactDecimal>();
+  for (const d of docs) {
+    const key = `${d.partyId ?? "\0"}‖${d.funcCcy}`;
+    docBase.set(key, decimalAdd(docBase.get(key) ?? ZERO, d.openBase as ExactDecimal));
+  }
+  const residualByParty = new Map<string | null, ExactDecimal>();
+  for (const c of residuals) {
     // AP control is credit-normal; present it positive like the document opens.
     const presented = (side === "ap" ? decimalNeg(c.bal) : c.bal) as ExactDecimal;
-    const residual = decimalSubtract(presented, docTotals.get(c.party_id) ?? ZERO);
+    const residual = decimalSubtract(presented, docBase.get(`${c.partyId ?? "\0"}‖${c.funcCcy}`) ?? ZERO);
     if (decimalCmp(residual, ZERO) === 0) continue;
-    const existing = rows.find((row) => row.partyId === c.party_id);
+    const key = c.partyId;
+    residualByParty.set(key, decimalAdd(residualByParty.get(key) ?? ZERO, convert(residual, c.funcCcy)));
+  }
+  if (residualByParty.size === 0) return;
+  const unnamed: string[] = [];
+  for (const [partyId, residual] of residualByParty) {
+    if (decimalCmp(residual, ZERO) === 0) continue;
+    const existing = rows.find((row) => row.partyId === partyId);
     if (existing) {
       existing.current = decimalAdd(existing.current, residual);
       existing.total = decimalAdd(existing.total, residual);
     } else {
       rows.push({
-        partyId: c.party_id,
+        partyId,
         partyName: null,
         current: residual,
         b1: ZERO,
@@ -240,7 +443,7 @@ async function foldControlResidual(
         b4: ZERO,
         total: residual,
       });
-      if (c.party_id !== null) unnamed.push(c.party_id);
+      if (partyId !== null) unnamed.push(partyId);
     }
   }
   if (unnamed.length > 0) {
@@ -277,11 +480,18 @@ export interface AgingDetailRow {
   ageDays: number
   bucket: AgingBucket
   open: ExactDecimal
+  /** The document's own currency, always shown whatever basis is selected. */
+  docCurrency: string
+  /** The open rebuilt in the document's own currency (unconverted) — the
+   * "what the customer actually owes" leg, always shown alongside `open`. */
+  txnOpen: ExactDecimal
 }
 export interface AgingDetailResult {
   rows: AgingDetailRow[]
   totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal }
   asOf: string
+  basis: AgingCurrencyBasis
+  reportingCurrency: string
 }
 
 export function bucketOf(age: number): AgingBucket {
@@ -297,77 +507,88 @@ export function bucketOf(age: number): AgingBucket {
  * `agingByParty`, but one row per document rather than aggregated per party.
  * Credits are negative open items so the detail and summary always tie.
  */
-export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilter, orgId?: string): Promise<AgingDetailResult> {
+export async function agingDetail(
+  side: AgingSide,
+  asOf: string,
+  dims?: DimFilter,
+  orgId?: string,
+  opts?: AgingOptions,
+): Promise<AgingDetailResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
   const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice"
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
-  const r = (await db.execute<{
-      id: string; kind: string
-      party_id: string | null; party_name: string | null; reference: string | null
-      due_date: string | null; age_days: number; open: string
-    }>(sql`
-    -- Same bulk-aggregated as-of reconstruction as the summary: per-document
-    -- laterals into applications do not survive hundreds of thousands of
-    -- posted documents.
-    with doc_lines as (
-      select d.id as doc_id, d.kind, d.party_id, d.document_number,
-             coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
-             (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days,
-             jl.id as line_id, abs(jl.amount) as line_gross
-        from documents d
-        join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
-       where d.org_id = ${resolvedOrgId}
-         and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and coalesce(d.posting_date, d.document_date) <= ${asOf}
-         and ${dimWhere(dims, sql`d`)}
-    ),
-    applied_lines as (
-      -- Base carrying amounts, like the summary: no FX re-translation, so
-      -- detail opens agree with the summary buckets per document.
-      select s.line_id, sum(s.amt) as applied from (
-        select dl.line_id, a.amount as amt
-          from doc_lines dl
-          join applications a on a.from_line_id = dl.line_id
-           and a.org_id = ${resolvedOrgId}
-           and a.applied_on <= ${asOf}
-           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
-        union all
-        select dl.line_id, a.amount as amt
-          from doc_lines dl
-          join applications a on a.to_line_id = dl.line_id
-           and a.org_id = ${resolvedOrgId}
-           and a.applied_on <= ${asOf}
-           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
-      ) s group by s.line_id
-    ),
-    open_items as (
-      select dl.doc_id as id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days,
-             -- Same 4dp ledger-scale rounding as the summary so detail rows
-             -- never carry precision the exact-decimal rollup cannot hold.
-             -- Deliberately documents-only: control balances with no open
-             -- item behind them (unapplied receipts, direct control
-             -- journals) surface on the summary residual row, never here.
-             round((case when dl.kind = ${creditKind} then -1 else 1 end)
-               * (sum(dl.line_gross) - coalesce(sum(al.applied), 0)), 4) as open
-        from doc_lines dl
-        left join applied_lines al on al.line_id = dl.line_id
-       group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days
-      having (sum(dl.line_gross) - coalesce(sum(al.applied), 0)) > 0
-    )
-    select oi.id, oi.kind, oi.party_id, p.display_name as party_name, oi.document_number as reference,
-           oi.due as due_date, oi.age_days, oi.open
-      from open_items oi
-      left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
-     where abs(oi.open) > 0
-     order by p.display_name nulls last, oi.age_days desc
-  `))
+  const basis: AgingCurrencyBasis = opts?.basis ?? "base";
+  const orgBase = await presentationCurrency(resolvedOrgId);
+  const target = opts?.reportingCurrency ?? orgBase;
+  // The same shared rebuild as the summary — detail rows can never disagree
+  // with the summary buckets per document. Deliberately documents-only:
+  // control balances with no open item behind them (unapplied receipts,
+  // direct control journals) surface on the summary residual row, never here.
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, positiveKind, creditKind);
+  const needed = new Set<string>();
+  for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
+  needed.delete(target);
+  let rates = new Map<string, string>();
+  if (needed.size > 0) {
+    try {
+      rates = await presentationRates(resolvedOrgId, target, needed, asOf);
+    } catch {
+      throw new AgingRatesUnavailableError(
+        await missingSpotCoverage(resolvedOrgId, target, needed, asOf),
+        target,
+        asOf,
+      );
+    }
+  }
   const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
-  const rows: AgingDetailRow[] = r.rows.map((x) => {
-    const open = x.open
-    const bucket = bucketOf(x.age_days)
+  const rows: AgingDetailRow[] = []
+  for (const d of docs) {
+    const open = convertOpen(basis === "transaction" ? d.openTxn : d.openBase, basis === "transaction" ? d.txnCcy : d.funcCcy, target, rates)
+    if (decimalCmp(open, ZERO) === 0) continue;
+    const bucket = bucketOf(d.ageDays)
     totals[bucket] = decimalAdd(totals[bucket], open)
     totals.total = decimalAdd(totals.total, open)
-    return { docId: x.id, docKind: x.kind, partyId: x.party_id, partyName: x.party_name, reference: x.reference, dueDate: x.due_date, ageDays: x.age_days, bucket, open }
-  })
-  return { rows, totals, asOf }
+    rows.push({
+      docId: d.docId, docKind: d.kind, partyId: d.partyId, partyName: d.partyName,
+      reference: d.reference, dueDate: d.due, ageDays: d.ageDays, bucket, open,
+      docCurrency: d.docCurrency, txnOpen: d.openTxn as ExactDecimal,
+    })
+  }
+  // The old grouped query ordered by party name with nulls last, oldest first.
+  rows.sort((a, b) =>
+    (a.partyName ?? "\uffff").localeCompare(b.partyName ?? "\uffff") || b.ageDays - a.ageDays,
+  )
+  return { rows, totals, asOf, basis, reportingCurrency: target }
+}
+
+/**
+ * Reporting-currency options for the selector: the org base plus the
+ * transaction currencies actually in scope for the report (posted documents
+ * of the side's kinds as of the date with open-item lines) — never the full
+ * registry, which would offer currencies no document uses.
+ */
+export async function agingCurrenciesInScope(
+  side: AgingSide,
+  asOf: string,
+  dims?: DimFilter,
+  orgId?: string,
+): Promise<{ baseCurrency: string; currencies: string[] }> {
+  const resolvedOrgId = await resolveOrgId(orgId);
+  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
+  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  const baseCurrency = await presentationCurrency(resolvedOrgId);
+  const r = await db.execute<{ ccy: string }>(sql`
+    select distinct d.currency as ccy
+      from documents d
+      join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+     where d.org_id = ${resolvedOrgId}
+       and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+       and coalesce(d.posting_date, d.document_date) <= ${asOf}
+       and ${dimWhere(dims, sql`d`)}
+  `);
+  const inScope = [...new Set(r.rows.map((x) => x.ccy))].sort();
+  return {
+    baseCurrency,
+    currencies: [baseCurrency, ...inScope.filter((c) => c !== baseCurrency)],
+  };
 }
