@@ -17,7 +17,10 @@ test('journal approval UX is Flow-driven and does not reserve a drawer tab', () 
   assert.match(drawer, /<ApprovalActions subjectKind="journal" subjectId=\{String\(doc\.id\)\} \/>/)
   assert.match(drawer, /<ApprovalHistory subjectKind="journal" subjectId=\{String\(doc\.id\)\} \/>/)
   assert.doesNotMatch(drawer, /detailTabs=\{\[[\s\S]*?key: 'approvals'/)
-  assert.match(history, /if \(history\.length === 0\) return null/)
+  // Journal keeps the compact inline default. The Approvals tab opts into
+  // loading/pending/empty copy via showEmptyState; a blank tab looked broken.
+  assert.match(history, /if \(!showEmptyState\) return null/)
+  assert.doesNotMatch(drawer, /showEmptyState/)
 })
 
 test('journal drawer keeps immutable lifecycle states out of edit mode', () => {

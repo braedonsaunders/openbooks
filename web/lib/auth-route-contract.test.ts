@@ -14,7 +14,11 @@ test("login cookies use the environment-aware production-secure policy", () => {
 
 test("the request proxy checks server-side session revocation", () => {
   const proxy = readFileSync("web/proxy.ts", "utf8");
-  assert.match(proxy, /isSessionRecordActive/);
+  const gate = readFileSync("web/lib/session-gate.ts", "utf8");
+  // The lookup lives in the bounded gate so a stalled session store fails
+  // this request closed instead of wedging the process.
+  assert.match(proxy, /checkSessionLiveness/);
+  assert.match(gate, /isSessionRecordActive/);
   assert.match(proxy, /parseSessionTokenFormat/);
   assert.match(proxy, /requireSessionSecret/);
 });
