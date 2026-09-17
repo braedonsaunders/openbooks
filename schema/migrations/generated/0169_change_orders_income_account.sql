@@ -24,7 +24,6 @@ SET standard_conforming_strings = on;
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
-SET row_security = off;
 
 SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
 
