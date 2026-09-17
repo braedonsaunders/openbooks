@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { statementMatrix } = await import('./statement-matrix')
 
@@ -40,11 +40,14 @@ test('department breakout ignores draft entries when discovering columns', { ski
           (${scratch.orgId}, ${draftEntry}, 2, ${scratch.accounts.revenue}, ${scratch.subsidiaryId}, ${deptB}, '-50', 'CAD', '-50', '1')`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${postEntry}`)
     })
-    const matrix = await statementMatrix({
+    // Scoped like the cash-basis precision case (F-coord-005): the web
+    // request-org resolver denies unscoped reads under pooled RLS, so a bare
+    // call returns zero rows and mints no columns at all.
+    const matrix = await withBypass(() => withOrgContext(scratch.orgId, async () => statementMatrix({
       orgId: scratch.orgId, types: ['income'], mode: 'flow',
       period: { from: '2026-07-01', to: '2026-07-31' }, periodLabel: 'July 2026',
       breakout: 'department',
-    })
+    })))
     assert.deepEqual(matrix.columns.map((c) => c.label), ['AAA Posted Dept'])
     assert.equal(matrix.truncated, false)
   } finally {
@@ -74,11 +77,11 @@ test('department breakout ignores draft-only untagged lines for the Unassigned c
           (${scratch.orgId}, ${draftEntry}, 2, ${scratch.accounts.revenue}, ${scratch.subsidiaryId}, null, '-50', 'CAD', '-50', '1')`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${postEntry}`)
     })
-    const matrix = await statementMatrix({
+    const matrix = await withBypass(() => withOrgContext(scratch.orgId, async () => statementMatrix({
       orgId: scratch.orgId, types: ['income'], mode: 'flow',
       period: { from: '2026-07-01', to: '2026-07-31' }, periodLabel: 'July 2026',
       breakout: 'department',
-    })
+    })))
     assert.deepEqual(matrix.columns.map((c) => c.label), ['AAA Posted Dept'])
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))

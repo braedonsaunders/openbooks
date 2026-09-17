@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { createPaymentDocument, updateDraftPayment, postPaymentWithApplications } = await import('@openbooks/engine/src/payments.ts')
@@ -67,14 +67,16 @@ for (const [currency, fxRate, total, paid, open, baseOpen, baseTotal] of [
         await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
         return id
       })
-      // Engine calls run unwrapped (the preloaded trusted-test bypass covers
-      // them, exactly like the engine-side settlement suites): wrapping them
-      // in withBypass would stage createPaymentDocument's ambient writes in
-      // an uncommitted outer transaction invisible to updateDraftPayment's
-      // own connection.
-      const entry = await postDocument(invoiceId, {
+      // Engine calls run under withBypassContext: importing the statement
+      // reader below pulls in the web request-org resolver, which replaces the
+      // preloaded trusted-test bypass and denies unscoped queries (bare calls
+      // die with 42501). withBypassContext is context-only — no outer
+      // transaction — so createPaymentDocument's ambient writes still commit
+      // immediately and stay visible to updateDraftPayment's own connection
+      // (wrapping in withBypass would stage them uncommitted and invisible).
+      const entry = await withBypassContext(() => postDocument(invoiceId, {
         control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank },
-      })
+      }))
       await withBypass(async () => {
         const legs = (await db.execute<{ bal: string }>(
           sql`select coalesce(sum(amount), 0)::text as bal from journal_lines where entry_id = ${entry}`,
@@ -88,21 +90,21 @@ for (const [currency, fxRate, total, paid, open, baseOpen, baseTotal] of [
       const line = (await withBypass(() => db.execute<{ id: string }>(
         sql`select id from journal_lines where entry_id = ${entry} and is_open_item`,
       ))).rows[0]!.id
-      const payment = await createPaymentDocument({
+      const payment = await withBypassContext(() => createPaymentDocument({
         orgId: scratch.orgId, kind: 'customer_payment', createdBy: actor,
         partyId: scratch.customerId, bankAccountId: scratch.accounts.bank,
         subsidiaryId: scratch.subsidiaryId, documentDate: scratch.date,
         currency, fxRate,
-      })
-      await updateDraftPayment(payment.id, {
+      }))
+      await withBypassContext(() => updateDraftPayment(payment.id, {
         bankAccountId: scratch.accounts.bank,
         allocations: [{
           openLineId: line, sourceTransactionAmount: paid, targetTransactionAmount: paid,
           settlementRate: '1', settlementRateSource: 'same_currency', settlementRateReference: 'D5-E2E',
         }],
-      }, actor, scratch.orgId)
+      }, actor, scratch.orgId))
       await withBypass(() => db.execute(sql`update documents set status = 'approved', submitted_by = ${actor}, submitted_at = now() where id = ${payment.id}`))
-      await postPaymentWithApplications(payment.id, undefined, actor)
+      await withBypassContext(() => postPaymentWithApplications(payment.id, undefined, actor))
       await withBypass(async () => {
         const balances = (await db.execute<{ id: string; open_balance: string }>(
           sql`select id, open_balance::text as open_balance from documents where id in (${invoiceId}, ${payment.id})`,
@@ -111,9 +113,12 @@ for (const [currency, fxRate, total, paid, open, baseOpen, baseTotal] of [
         assert.equal(byId.get(invoiceId), open, 'partial settlement leaves the exact remainder open')
         assert.equal(byId.get(payment.id), '0.0000', 'the payment itself is fully applied')
       })
-      const st = await partnerStatement(scratch.customerId, scratch.orgId, {
+      // The statement reader issues bare queries with explicit org predicates,
+      // so it runs in the scratch org's scope (unscoped it sees zero rows and
+      // every scale assert below reads undefined).
+      const st = await withOrgContext(scratch.orgId, () => partnerStatement(scratch.customerId, scratch.orgId, {
         from: '2026-07-01', to: '2026-07-31', side: 'ar',
-      })
+      }))
       assert.equal(st.opening, '0.0000')
       assert.equal(st.closing, baseOpen, 'statement closing ties the settled remainder at document FX')
       assert.equal(st.aging.total, baseOpen, 'aging footer agrees with the statement')
