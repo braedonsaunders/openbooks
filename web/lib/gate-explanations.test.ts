@@ -73,6 +73,20 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(DB_MOCK) };
     }
     if (
+      (specifier === "./cash/core" || specifier === "./cash/open-items") &&
+      context.parentURL?.includes("lib/compliance.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export const addMoney = () => '0'; export const ZERO_MONEY = '0'; export async function openItems() { return []; }",
+          ),
+      };
+    }
+    if (
       specifier === "./features" &&
       (context.parentURL?.includes("lib/feature-gates.ts") ||
         context.parentURL?.includes("lib/compliance.ts"))

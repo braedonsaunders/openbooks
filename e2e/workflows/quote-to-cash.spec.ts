@@ -514,12 +514,16 @@ test.describe('quote-to-cash workflows', () => {
       rows = await reportRows(page);
       {
         // Columns: Account # | Account | Debits | Credits | Balance.
-        // Zero-balance accounts are omitted: AR nets to exactly 0, so its
-        // absence plus balanced totals proves the subledger cleared.
+        // F-t08-002: zero-balance accounts with real legs stay on the TB.
+        // AR nets to exactly 0; a zero balance plus balanced totals proves
+        // the subledger cleared.
         const bankRow = findRow(rows, `${t} Operating`);
         expect(bankRow[2]).toBe(fmtCAD(total));
         expect(bankRow[4]).toBe(fmtCAD(total));
-        expect(rows.some((r) => r.some((c) => c.includes('Accounts Receivable')))).toBe(false);
+        const arRow = findRow(rows, 'Accounts Receivable');
+        expect(arRow[2]).toBe(fmtCAD(total));
+        expect(arRow[3]).toBe(fmtCAD(total));
+        expect(arRow[4]).toBe(fmtCAD(0n));
         const taxRow = findRow(rows, 'Sales Tax Payable');
         expect(taxRow[3]).toBe(fmtCAD(tax));
         expect(taxRow[4]).toBe(fmtCAD(-tax));
@@ -527,8 +531,8 @@ test.describe('quote-to-cash workflows', () => {
         expect(revenueRow[3]).toBe(fmtCAD(subtotal));
         expect(revenueRow[4]).toBe(fmtCAD(-subtotal));
         const totalsRow = findRow(rows, 'Totals');
-        expect(totalsRow[2]).toBe(fmtCAD(total));
-        expect(totalsRow[3]).toBe(fmtCAD(total));
+        expect(totalsRow[2]).toBe(fmtCAD(total + total));
+        expect(totalsRow[3]).toBe(fmtCAD(total + total));
         expect(totalsRow[totalsRow.length - 1]).toBe(fmtCAD(0n));
       }
       await page.goto(`/reports/balance-sheet?${period}`);
@@ -685,7 +689,10 @@ test.describe('quote-to-cash workflows', () => {
         const bankRow = findRow(rows, `${t} Operating`);
         expect(bankRow[2]).toBe(fmtCAD(cash));
         expect(bankRow[4]).toBe(fmtCAD(cash));
-        expect(rows.some((r) => r.some((c) => c.includes('Accounts Receivable')))).toBe(false);
+        const arRow = findRow(rows, 'Accounts Receivable');
+        expect(arRow[2]).toBe(fmtCAD(total));
+        expect(arRow[3]).toBe(fmtCAD(total));
+        expect(arRow[4]).toBe(fmtCAD(0n));
         const taxRow = findRow(rows, 'Sales Tax Payable');
         // Gross columns are cumulative: March invoice credits 20.00, April
         // invoice credits 20.00, April credit-memo debits 10.00.
@@ -697,9 +704,9 @@ test.describe('quote-to-cash workflows', () => {
         expect(revenueRow[3]).toBe(fmtCAD(subtotal));
         expect(revenueRow[4]).toBe(fmtCAD(-netRevenue));
         const totalsRow = findRow(rows, 'Totals');
-        // Debits 630 + 10 + 200 = 840; credits 40 + 400 + 400 = 840.
-        expect(totalsRow[2]).toBe(fmtCAD(toCents('840.00')));
-        expect(totalsRow[3]).toBe(fmtCAD(toCents('840.00')));
+        // Debits 630 + 10 + 200 + AR 420 = 1260; credits 40 + 400 + 400 + AR 420 = 1260.
+        expect(totalsRow[2]).toBe(fmtCAD(toCents('1260.00')));
+        expect(totalsRow[3]).toBe(fmtCAD(toCents('1260.00')));
         expect(totalsRow[totalsRow.length - 1]).toBe(fmtCAD(0n));
       }
       await page.goto(`/reports/balance-sheet?${period}`);
@@ -835,7 +842,10 @@ test.describe('quote-to-cash workflows', () => {
         const bankRow = findRow(rows, `${t} Operating`);
         expect(bankRow[2]).toBe(fmtCAD(receiptBase));
         expect(bankRow[4]).toBe(fmtCAD(receiptBase));
-        expect(rows.some((r) => r.some((c) => c.includes('Accounts Receivable')))).toBe(false);
+        const arRow = findRow(rows, 'Accounts Receivable');
+        expect(arRow[2]).toBe(fmtCAD(invoiceBase));
+        expect(arRow[3]).toBe(fmtCAD(invoiceBase));
+        expect(arRow[4]).toBe(fmtCAD(0n));
         const fxRow = findRow(rows, `${t} FX Realized`);
         expect(fxRow[2]).toBe(fmtCAD(fxLoss));
         expect(fxRow[4]).toBe(fmtCAD(fxLoss));
@@ -843,9 +853,9 @@ test.describe('quote-to-cash workflows', () => {
         expect(revenueRow[3]).toBe(fmtCAD(invoiceBase));
         expect(revenueRow[4]).toBe(fmtCAD(-invoiceBase));
         const totalsRow = findRow(rows, 'Totals');
-        // Debits 1880 + 10 + 200 + 110 = 2200; credits 40 + 400 + 400 + 1360 = 2200.
-        expect(totalsRow[2]).toBe(fmtCAD(toCents('2200.00')));
-        expect(totalsRow[3]).toBe(fmtCAD(toCents('2200.00')));
+        // Debits 1880 + 10 + 200 + 110 + AR 1360 = 3560; credits 40 + 400 + 400 + 1360 + AR 1360 = 3560.
+        expect(totalsRow[2]).toBe(fmtCAD(toCents('3560.00')));
+        expect(totalsRow[3]).toBe(fmtCAD(toCents('3560.00')));
         expect(totalsRow[totalsRow.length - 1]).toBe(fmtCAD(0n));
         expect(cumBank).toBe(toCents('1880.00'));
       }
