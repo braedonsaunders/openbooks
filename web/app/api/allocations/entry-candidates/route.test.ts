@@ -59,7 +59,7 @@ const deniedKey = Symbol.for("openbooks.entry-candidates-route-denied");
 
 function cannedRule(
   key: string,
-  overrides: Partial<CannedRule> & { policy?: string; match?: boolean; specificity?: number } = {},
+  overrides: Partial<CannedRule> & { policy?: string; match?: boolean; specificity?: number; documentKinds?: string[] | null } = {},
 ): CannedRule {
   return {
     key,
@@ -68,6 +68,7 @@ function cannedRule(
     version: {
       id: `00000000-0000-4000-8000-00000000b${key.slice(-3)}`,
       applyPolicy: overrides.policy ?? "manual",
+      documentKinds: overrides.documentKinds ?? null,
       __match: overrides.match ?? true,
       __specificity: overrides.specificity ?? 0,
     },
@@ -123,7 +124,7 @@ const mockSources = new Map<string, string>([
            effectiveTo: null,
            bookScope: 'primary',
            bookIds: [],
-           documentKinds: null,
+           documentKinds: canned.version.documentKinds ?? null,
            accountScope: { kind: 'any' },
            dimensionFilters: {},
            applyPolicy: canned.version.applyPolicy,
@@ -155,6 +156,12 @@ const mockSources = new Map<string, string>([
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
        state.matchCalls += 1
        state.lastLine = { ...line }
+       // Same kind predicate as the engine matcher: a rule naming kinds
+       // only matches a line of one of those kinds.
+       const kinds = version.documentKinds
+       if (kinds && kinds.length > 0 && (line.documentKind == null || !kinds.includes(line.documentKind))) {
+         return { matched: false, specificity: 0 }
+       }
        return { matched: version.__match !== false, specificity: version.__specificity ?? 0 }
      }
      export function selectRule(candidates, line) {
@@ -208,6 +215,25 @@ test("the server refuses when the entry gate is off, regardless of UI", async ()
   const res = await get(`?documentKind=bill&accountId=${ACCOUNT_ID}`);
   assert.equal(res.status, 404);
   assert.deepEqual(await res.json(), { error: "not_found" });
+});
+
+test("a kind no rule covers answers empty without consulting the gate", async () => {
+  reset();
+  state.features = { allocations: true, allocationsAtEntry: false };
+  state.rules = [cannedRule("overhead", { documentKinds: ["bill"] })];
+  for (const kind of ["check", "vendor_bill", "deposit"]) {
+    const res = await get(`?documentKind=${kind}&accountId=${ACCOUNT_ID}`);
+    assert.equal(res.status, 200, kind);
+    assert.deepEqual(await res.json(), { rules: [] }, kind);
+  }
+});
+
+test("a kind no rule covers answers empty when the gate is on", async () => {
+  reset();
+  state.rules = [cannedRule("overhead", { documentKinds: ["bill"] })];
+  const res = await get(`?documentKind=check&accountId=${ACCOUNT_ID}&documentDate=2026-09-01`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { rules: [] });
 });
 
 test("the server refuses unauthenticated callers", async () => {
