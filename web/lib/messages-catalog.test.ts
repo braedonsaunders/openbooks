@@ -3662,3 +3662,138 @@ test('I11 close and continuous-close copy ships translated in every locale', () 
     assert.deepEqual(I11_armsDrift, [], `${I11_locale} close translations drop ICU plural/select arms`)
   }
 })
+
+const I9_BANKING_AP_IDENTICAL_BY_FACT = new Set([
+  'fr:banking.bankFeeds.client.chooseBank.otherBankHint|Plaid / GoCardless / TrueLayer',
+  'fr:banking.bankFeeds.client.sftpEndpoint.port|Port',
+  'fr:banking.bankFeeds.client.title|Bank Feeds',
+  'fr:banking.rules.action|Action',
+  'fr:banking.rules.fields.date|Date',
+  'fr:banking.rules.fields.description|Description',
+  'fr:banking.rules.ops.eq|=',
+  'fr:banking.rules.ops.ne|≠',
+  'fr:banking.rules.summary.amountRange|{min}–{max}',
+  'es:banking.bankFeeds.client.chooseBank.otherBankHint|Plaid / GoCardless / TrueLayer',
+  'es:banking.bankFeeds.client.configure.kindManual|Manual',
+  'es:banking.bankFeeds.client.sftpEndpoint.host|Host',
+  'es:banking.bankFeeds.client.sftpSecret.hostLabel|host:',
+  'es:banking.bankFeeds.client.title|Bank Feeds',
+  'es:banking.rules.memoLabel|Memo',
+  'es:banking.rules.ops.eq|=',
+  'es:banking.rules.ops.ne|≠',
+  'es:banking.rules.summary.amountRange|{min}–{max}',
+  'es:banking.sftp.endpointTitle|Endpoint',
+  'de:banking.bankFeeds.client.chooseBank.otherBankHint|Plaid / GoCardless / TrueLayer',
+  'de:banking.bankFeeds.client.sftpCard.routing|Routing',
+  'de:banking.bankFeeds.client.sftpEndpoint.host|Host',
+  'de:banking.bankFeeds.client.sftpEndpoint.port|Port',
+  'de:banking.bankFeeds.client.sftpEndpoint.status|Status',
+  'de:banking.bankFeeds.client.title|Bank Feeds',
+  'de:banking.rules.memoLabel|Memo',
+  'de:banking.rules.ops.eq|=',
+  'de:banking.rules.ops.ne|≠',
+  'de:banking.rules.optional|optional',
+  'de:banking.rules.summary.amountRange|{min}–{max}',
+  'de:banking.sftp.loginsTitle|Logins',
+  'ja:banking.bankFeeds.client.chooseBank.otherBankHint|Plaid / GoCardless / TrueLayer',
+  'ja:banking.bankFeeds.client.title|Bank Feeds',
+  'ja:banking.rules.ops.eq|=',
+  'ja:banking.rules.ops.ne|≠',
+  'zh:banking.bankFeeds.client.chooseBank.otherBankHint|Plaid / GoCardless / TrueLayer',
+  'zh:banking.bankFeeds.client.title|Bank Feeds',
+  'zh:banking.rules.ops.eq|=',
+  'zh:banking.rules.ops.ne|≠',
+  'zh:banking.rules.summary.amountRange|{min}–{max}',
+  'zh:banking.rules.summary.contains|“{text}”',
+  'pt-BR:ap.cockpit.stats.days|{n}d',
+  'pt-BR:banking.bankFeeds.client.chooseBank.otherBankHint|Plaid / GoCardless / TrueLayer',
+  'pt-BR:banking.bankFeeds.client.configure.kindManual|Manual',
+  'pt-BR:banking.bankFeeds.client.sftpCard.login|login',
+  'pt-BR:banking.bankFeeds.client.sftpEndpoint.host|Host',
+  'pt-BR:banking.bankFeeds.client.sftpEndpoint.status|Status',
+  'pt-BR:banking.bankFeeds.client.sftpSecret.hostLabel|host:',
+  'pt-BR:banking.bankFeeds.client.title|Bank Feeds',
+  'pt-BR:banking.rules.ops.eq|=',
+  'pt-BR:banking.rules.ops.ne|≠',
+  'pt-BR:banking.rules.summary.amountRange|{min}–{max}',
+  'pt-BR:banking.rules.summary.contains|“{text}”',
+  'pt-BR:banking.sftp.endpointTitle|Endpoint',
+  'pt-BR:banking.sftp.loginsTitle|Logins',
+])
+
+test('I9 banking rules/feeds and ap cockpit copy ships translated in every locale', () => {
+  // F-i9-001: 274 banking/ap leaves (docStatus, rules builder/scope/split/
+  // coding/preview/summary, bank-feed client setup, ap cockpit) plus 23
+  // scattered leaves (match actions, drawer card help, sftp endpoint/logins/
+  // schedules/tabs, feed tabs) existed only in en — all six locales
+  // rendered English inside otherwise translated banking/ap screens.
+  // Every leaf must exist, keep its ICU placeholders and plural/select
+  // arms, and differ from English except for reviewed cognates, pinned
+  // to the exact term.
+  const I9_source = flattenCatalog('en')
+  const I9_prefixes = [
+    'banking.docStatus.',
+    'banking.rules.',
+    'banking.bankFeeds.client.',
+    'ap.cockpit.',
+  ]
+  const I9_extra = [
+    'banking.reconsPage.chooseAccount',
+    'banking.match.createRule',
+    'banking.match.postAndMatch',
+    'banking.match.suggestedBy',
+    'banking.drawer.cardAccountHelp',
+    'banking.drawer.noCardAccounts',
+    'banking.drawer.noCardAccountsCta',
+    'banking.sftp.endpointTitle',
+    'banking.sftp.endpointHint',
+    'banking.sftp.loginsTitle',
+    'banking.sftp.connectCommand',
+    'banking.sftp.copyField',
+    'banking.sftp.copied',
+    'banking.sftp.schedules.needsLogin',
+    'banking.sftp.schedules.needsAccount',
+    'banking.sftp.tabs.endpoint',
+    'banking.sftp.tabs.servers',
+    'banking.sftp.tabs.schedules',
+    'banking.bankFeeds.description',
+    'banking.bankFeeds.tabs.connections',
+    'banking.bankFeeds.tabs.sftp-endpoint',
+    'banking.bankFeeds.tabs.sftp-servers',
+    'banking.bankFeeds.tabs.sftp-schedules',
+  ]
+  const I9_wanted = [...I9_source.keys()].filter(
+    (I9_key) => I9_prefixes.some((I9_prefix) => I9_key.startsWith(I9_prefix)) || I9_extra.includes(I9_key),
+  )
+  assert.equal(I9_wanted.length, 297, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
+  const I9_tokens = (I9_value: string): Set<string> =>
+    new Set(I9_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I9_arms = (I9_value: string): string[] => I9_value.match(/, +(plural|select)/g) ?? []
+  for (const I9_locale of ['fr', 'es', 'de', 'ja', 'zh', 'pt-BR']) {
+    const I9_catalog = flattenCatalog(I9_locale)
+    for (const I9_key of I9_wanted) {
+      const I9_value = I9_catalog.get(I9_key)
+      assert.ok(I9_value && I9_value.trim(), `${I9_locale} is missing ${I9_key}`)
+      const I9_identical = [...I9_BANKING_AP_IDENTICAL_BY_FACT].find((I9_entry) =>
+        I9_entry.startsWith(`${I9_locale}:${I9_key}|`),
+      )
+      if (I9_identical) {
+        assert.equal(I9_value, I9_identical.split('|')[1], `${I9_locale}:${I9_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I9_value, I9_source.get(I9_key), `${I9_locale} must not copy English ${I9_key}`)
+      }
+    }
+    const I9_drift = I9_wanted.filter((I9_key) => {
+      const I9_expected = I9_tokens(I9_source.get(I9_key) ?? '')
+      const I9_actual = I9_tokens(I9_catalog.get(I9_key) ?? '')
+      return I9_expected.size !== I9_actual.size || [...I9_expected].some((I9_token) => !I9_actual.has(I9_token))
+    })
+    assert.deepEqual(I9_drift, [], `${I9_locale} banking/ap translations drop or rename ICU placeholders`)
+    const I9_armsDrift = I9_wanted.filter((I9_key) => {
+      const I9_expected = I9_arms(I9_source.get(I9_key) ?? '').join(',')
+      const I9_actual = I9_arms(I9_catalog.get(I9_key) ?? '').join(',')
+      return I9_expected !== I9_actual
+    })
+    assert.deepEqual(I9_armsDrift, [], `${I9_locale} banking/ap translations drop ICU plural/select arms`)
+  }
+})
