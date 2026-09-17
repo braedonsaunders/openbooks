@@ -293,6 +293,7 @@
       "committed_cost": "Engagements de bons de commande ouverts.",
       "total_price": "Prix contractuel / de vente du projet.",
       "total_cost": "Total des coûts engagés et réels.",
+      "gross_profit": "Marge sur les coûts comptabilisés — hors estimations.",
       "overhead": "Inclus dans le coût total du projet et donc déjà déduit de la marge brute.",
       "overhead_informational": "Non inclus dans le coût total du projet et non déduit de la marge brute."
     },

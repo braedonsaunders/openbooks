@@ -294,6 +294,7 @@
       "committed_cost": "Compromissos de pedidos de compra em aberto.",
       "total_price": "Preço de contrato / venda da obra.",
       "total_cost": "Todo o custo incorrido e comprometido.",
+      "gross_profit": "Lucro sobre custos lançados — exclui estimativas.",
       "overhead": "Incluído no custo total da obra e, portanto, já deduzido do lucro bruto.",
       "overhead_informational": "Não incluído no custo total da obra nem deduzido do lucro bruto."
     }
