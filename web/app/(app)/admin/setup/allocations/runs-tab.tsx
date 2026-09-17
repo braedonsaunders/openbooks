@@ -61,7 +61,7 @@ interface RunRow {
   createdAt: string | null
 }
 
-interface Computation {
+export interface Computation {
   ruleId: string
   versionId: string
   definitionHash: string
@@ -134,7 +134,7 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
   return <Badge variant={STATUS_VARIANTS[status] ?? 'outline'}>{label}</Badge>
 }
 
-function ComputationView({ computation }: { computation: Computation }) {
+export function ComputationView({ computation }: { computation: Computation }) {
   const t = useTranslations('allocations.runs')
   return (
     <div className="space-y-3">

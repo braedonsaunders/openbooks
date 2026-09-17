@@ -135,3 +135,12 @@ test('rule drawer uses shared field chrome and responsive grids', () => {
   assert.ok(drawerSource.includes('<Table>'), 'test preview uses the shared Table')
   assert.ok(!drawerSource.includes('<table'), 'no hand-rolled tables')
 })
+
+test('period Test tab computes a preview inline instead of a bare Runs link (F-t06-015)', () => {
+  // Period rules do not match lines: the tab returned only a Runs deep link
+  // onto an empty table, so there was no working preview path. The period
+  // branch must POST the runs preview (rule + period + book) and render the
+  // computation or the server error.
+  assert.match(drawerSource, /\/api\/allocations\/runs\/preview/, 'period test posts the runs preview')
+  assert.match(drawerSource, /ComputationView/, 'period test renders the computed preview')
+})
