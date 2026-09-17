@@ -720,6 +720,19 @@ function duplicateConflict(entityKey: string): { status: 409; body: { error: str
   return { status: 409, body: { error, code: 'duplicate' } }
 }
 
+/**
+ * Overlap conflicts stay typed (F-t09-016): a GiST exclusion rejection
+ * (SQLSTATE 23P01) must never echo Postgres constraint text to the drawer.
+ * `code` drives the drawer's localized copy while `error` reads as user
+ * language for every other surface of this shared layer.
+ */
+function overlapConflict(entityKey: string): { status: 409; body: { error: string; code: 'overlap' } } {
+  const error = entityKey === 'income-tax-rates'
+    ? 'An active rate already covers this jurisdiction for this period.'
+    : 'This period overlaps an existing record.'
+  return { status: 409, body: { error, code: 'overlap' } }
+}
+
 /** Create one setup record (the POST semantics of /api/admin/setup/[entity]). */
 export async function createSetupRecord(
   actor: SetupActor,
@@ -915,6 +928,11 @@ export async function createSetupRecord(
     // (the insert and its audit share one transaction).
     if (pgErrorCode(e) === '23505') {
       return duplicateConflict(entity.key)
+    }
+    // Effective-range exclusion constraints (SQLSTATE 23P01) arbitrate overlap
+    // races the same way: typed 409, never raw Postgres text (F-t09-016).
+    if (pgErrorCode(e) === '23P01') {
+      return overlapConflict(entity.key)
     }
     return { status: 400, body: { error: describeDbError(e) } }
   }
@@ -1195,9 +1213,13 @@ export async function updateSetupRecord(
     }
     // Same storage-authority mapping as POST: an edit that moves a row onto an
     // occupied natural key (codes are editable on several entities) is a
-    // duplicate conflict, not a generic save failure.
+    // duplicate conflict, not a generic save failure. Edits that newly
+    // overlap an effective range map the same way (F-t09-016).
     if (pgErrorCode(e) === '23505') {
       return duplicateConflict(entity.key)
+    }
+    if (pgErrorCode(e) === '23P01') {
+      return overlapConflict(entity.key)
     }
     return { status: 400, body: { error: describeDbError(e) } }
   }

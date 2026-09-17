@@ -1410,7 +1410,9 @@
       "primaryActiveRequired": "Le livre comptable principal doit rester actif.",
       "archiveOnly": "Les livres comptables sont conservés pour l’historique du grand livre et peuvent seulement être archivés.",
       "invalidUrl": "Saisissez une URL gouvernementale valide commençant par http:// ou https://.",
-      "invalidDepreciationFormula": "Saisissez une formule d’amortissement valide avec les variables et opérateurs documentés."
+      "invalidDepreciationFormula": "Saisissez une formule d’amortissement valide avec les variables et opérateurs documentés.",
+      "overlap": "Un taux actif couvre déjà cette juridiction pour cette période.",
+      "saveTimedOut": "L’enregistrement a expiré. Vérifiez le tableau avant de réessayer — l’enregistrement existe peut-être déjà."
     },
     "groups": {
       "company": "Company",

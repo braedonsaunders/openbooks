@@ -76,6 +76,24 @@ test('typed validation failures render their message verbatim (F-t06-023)', () =
   assert.match(source, /errorMessage\(data\)/, 'call sites pass the whole body')
 })
 
+test('exclusion-conflict 409s resolve through the overlap code, never raw Postgres (F-t09-016)', () => {
+  // The income-tax exclusion rejection arrived as a 400 echoing the raw
+  // "conflicting key value violates exclusion constraint" string verbatim.
+  // The server now answers 409 {code: 'overlap'} and the drawer must map
+  // through the code to localized copy.
+  assert.match(source, /code === 'overlap'/, 'the drawer must map the overlap code')
+  assert.match(source, /t\('errors\.overlap'\)/, 'overlap must resolve to localized copy')
+})
+
+test('a hung or rejected save surfaces instead of wedging silently (F-t09-016)', () => {
+  // A response that never arrives left the drawer open with no toast, a stale
+  // table, and a stuck disabled button — every later click died silently.
+  // save() must bound the request and name transport failures inline.
+  assert.match(saveBlock(), /AbortController/, 'save() must bound the request')
+  assert.match(saveBlock(), /catch/, 'save() must surface transport failures')
+  assert.match(source, /saveTimedOut/, 'a timeout must name the maybe-saved state')
+})
+
 test('server required-field refusals render through the field label (F-t06-022 follow-up)', () => {
   // A server-side "X is required" still names the registry key: errorMessage
   // must map it through fields.* into validation.required — the same string

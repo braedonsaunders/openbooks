@@ -398,6 +398,23 @@ test('property-management workspace chrome ships in every locale', () => {
   }
 })
 
+test('setup save-failure copy ships localized in every locale', () => {
+  // F-t09-016: the overlap conflict and the save-timeout guidance render from
+  // these keys — absent outside en they fall back to English inside otherwise
+  // translated drawers. Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const keys = ['admin.setup.errors.overlap', 'admin.setup.errors.saveTimedOut']
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
 test('the generated fallback manifest exactly identifies untranslated property-management copy', () => {
   const source = flattenCatalog('en')
   const manifest = readFallbackManifest()

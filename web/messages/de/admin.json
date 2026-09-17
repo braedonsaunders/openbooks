@@ -1297,7 +1297,9 @@
       "primaryActiveRequired": "Das primäre Buchungsbuch muss aktiv bleiben.",
       "archiveOnly": "Buchungsbücher werden für die Hauptbuchhistorie aufbewahrt und können nur archiviert werden.",
       "invalidUrl": "Geben Sie eine gültige http://- oder https://-URL für die behördliche Meldung ein.",
-      "invalidDepreciationFormula": "Geben Sie eine gültige Abschreibungsformel mit den dokumentierten Variablen und Operatoren ein."
+      "invalidDepreciationFormula": "Geben Sie eine gültige Abschreibungsformel mit den dokumentierten Variablen und Operatoren ein.",
+      "overlap": "Ein aktiver Satz gilt für diese Jurisdiktion in diesem Zeitraum bereits.",
+      "saveTimedOut": "Das Speichern hat zu lange gedauert. Prüfen Sie die Tabelle vor einem erneuten Versuch — der Datensatz existiert möglicherweise bereits."
     },
     "groups": {
       "company": "Unternehmen",
