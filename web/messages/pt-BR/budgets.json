@@ -116,7 +116,8 @@
     "rejected": "Orçamento devolvido para rascunho.",
     "budgetRequiresLines": "Adicione pelo menos uma linha orçamentária diferente de zero antes de enviar para aprovação.",
     "actionFailed": "A ação do orçamento falhou.",
-    "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar."
+    "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar.",
+    "selfApprovalForbidden": "Você não pode aprovar um orçamento que você enviou. Peça a outro aprovador que decida."
   },
   "import": {
     "button": "Importar",

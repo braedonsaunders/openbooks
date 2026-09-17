@@ -52,7 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const result = await db.transaction(async (tx) => {
       const locked = (await tx.execute<Record<string, any>>(sql`
-        select id, name, description, book_id, fiscal_year, kind, status, revision
+        select id, name, description, book_id, fiscal_year, kind, status, revision, submitted_by
           from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
       `))
       const scenario = locked.rows[0]
@@ -93,6 +93,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       if (action === 'approve' || action === 'reject') {
         if (scenario.status !== 'pending_approval') throw new BudgetMutationError('only_pending_budgets_can_be_decided', 409)
+        // F-coord-003: separation of duties, mirroring the document path
+        // ("the submitter cannot approve their own document"). The submitter
+        // may not decide their own budget even when they hold
+        // budgets.approve; a single-admin exception would need to be an
+        // explicit, audited, configurable opt-out, not this code path.
+        // Reject (return to draft) stays open to the submitter: sending a
+        // budget back is not an approval.
+        if (action === 'approve' && scenario.submitted_by && scenario.submitted_by === user.id) {
+          throw new BudgetMutationError('self_approval_forbidden', 409)
+        }
         const to = action === 'approve' ? 'approved' : 'draft'
         const nextRevision = expectedRevision + 1
         await tx.execute(sql`

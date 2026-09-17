@@ -116,7 +116,8 @@
     "rejected": "Presupuesto devuelto a borrador.",
     "budgetRequiresLines": "Agregue al menos una línea presupuestaria distinta de cero antes de enviar para su aprobación.",
     "actionFailed": "La acción del presupuesto falló.",
-    "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar."
+    "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar.",
+    "selfApprovalForbidden": "No puede aprobar un presupuesto que usted ha enviado. Pida a otra persona aprobadora que lo revise."
   },
   "import": {
     "button": "Importar",

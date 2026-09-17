@@ -323,6 +323,8 @@ export function BudgetDrawer({
     } catch (error) {
       if (error instanceof Error && error.message === 'budget_requires_lines') {
         setActionError(t('feedback.budgetRequiresLines'))
+      } else if (error instanceof Error && error.message === 'self_approval_forbidden') {
+        setActionError(t('feedback.selfApprovalForbidden'))
       } else {
         setSaveState('error')
         toast.error(t('feedback.actionFailed'))

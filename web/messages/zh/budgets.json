@@ -116,7 +116,8 @@
     "rejected": "预算已退回草稿。",
     "budgetRequiresLines": "在提交审批之前，请至少添加一个非零预算行。",
     "actionFailed": "预算操作失败。",
-    "revisionConflict": "此预算已在别处更改。请重新加载以继续。"
+    "revisionConflict": "此预算已在别处更改。请重新加载以继续。",
+    "selfApprovalForbidden": "您不能批准自己提交的预算。请让其他审批人进行裁决。"
   },
   "import": {
     "button": "导入",
