@@ -379,9 +379,9 @@ export function PaymentDrawer({
   async function remove() {
     if (
       !(await confirmDialog({
-        title: t('drawer.deleteConfirmTitle'),
-        message: t('drawer.deleteConfirmBody'),
-        confirmLabel: t('drawer.deleteConfirmAction'),
+        title: t('deleteConfirmTitle'),
+        message: t('deleteConfirmBody'),
+        confirmLabel: t('deleteConfirmAction'),
         tone: 'danger',
       }))
     )
@@ -389,11 +389,11 @@ export function PaymentDrawer({
     setBusy(true)
     const res = await fetch(`/api/payments/${doc.id}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success(t('drawer.deleted'))
+      toast.success(t('deleted'))
       router.push(basePath)
       router.refresh()
     } else {
-      toast.error((await res.json()).error ?? t('drawer.deleteFailed'))
+      toast.error((await res.json()).error ?? t('deleteFailed'))
       setBusy(false)
     }
   }
