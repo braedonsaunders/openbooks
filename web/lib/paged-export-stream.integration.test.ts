@@ -228,7 +228,8 @@ test("the row cap truncates with a disclosed footer instead of materialising eve
     assert.equal(streamed.truncated, true);
     const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
     assert.equal(lines.length, 1 + 700 + 3);
-    assert.ok(lines[lines.length - 1]!.includes("run.exportTruncated"), lines[lines.length - 1]);
+    const last = lines[lines.length - 1] ?? "";
+    assert.ok(last.includes("run.exportTruncated"), last);
     const streamedX = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
       streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, rowCap: 700 })));
     assert.equal(streamedX.rowCount, 700);
