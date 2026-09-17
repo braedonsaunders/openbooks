@@ -162,3 +162,25 @@ test("cash cockpit switchers offer the core horizon presets", () => {
   const analyticsView = readFileSync(join(import.meta.dirname, "../../app/(app)/analytics/cashflow/view.ts"), "utf8");
   assert.match(analyticsView, /normalizeCashHorizonWeeks\(sp\.horizon, 4\)/);
 });
+
+test("week labels localize month names (F-t04-010)", () => {
+  // core.ts is server-only in production, so run the behavior check under
+  // React's server condition (the same pattern used by other web tests).
+  const source = `
+    import assert from "node:assert/strict";
+    import { weekLabel } from "./web/lib/cash/core.ts";
+
+    const d = new Date("2026-09-07T00:00:00Z");
+    assert.equal(weekLabel(d), "Sep 7");
+    assert.equal(weekLabel(d, "en-US"), "Sep 7");
+    assert.match(weekLabel(d, "fr"), /sept/i);
+    assert.match(weekLabel(d, "es"), /sept/i);
+    console.log("cash weekLabel locale behavior passed");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

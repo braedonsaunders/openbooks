@@ -92,5 +92,56 @@
     "createDraftFailed": "No se pudo crear un borrador",
     "deleted": "Documento eliminado",
     "deleteFailed": "Error al eliminar"
+  },
+  "cockpit": {
+    "title": "Cuentas por pagar",
+    "description": "Su centro de control de pagos — lo que debe, lo vencido y lo que hay que pagar esta semana.",
+    "tabs": {
+      "overview": "Resumen",
+      "bills": "Facturas"
+    },
+    "current": "al día",
+    "vendor": "Proveedor",
+    "overdueCol": "Vencido",
+    "openCol": "Abierto",
+    "noPayables": "Sin deudas pendientes. Está al día.",
+    "stats": {
+      "openPayables": "Deudas pendientes",
+      "overdue": "Vencido",
+      "overdueSub": "{count} facturas · {pct} de las deudas",
+      "dueThisWeek": "Vence esta semana",
+      "next30": "Próximos 30 días",
+      "dpo": "Días de pago (DPO)",
+      "dpoSub": "Días promedio de pago",
+      "days": "{n} d"
+    },
+    "panels": {
+      "payRun": "Planificador de pagos",
+      "payRunHint": "Facturas previstas esta semana — seleccione y cree un lote de pago",
+      "payRunHintScheduled": "Recomendado según su capacidad semanal — las más antiguas primero",
+      "aging": "Antigüedad de deudas",
+      "schedule": "Calendario de pagos",
+      "scheduleHint": "Pagos previstos en {weeks} semanas",
+      "byVendor": "Deudas por proveedor"
+    },
+    "payRun": {
+      "noCap": "Vence esta semana",
+      "weeklyCap": "Límite semanal",
+      "safeCapacity": "Capacidad segura",
+      "startingCash": "Efectivo disponible {amount}",
+      "overCap": "Capacidad superada",
+      "deferred": "{amount} se difiere a semanas posteriores",
+      "selected": "{count} seleccionadas",
+      "build": "Crear lote de pago",
+      "empty": "Sin facturas previstas esta semana."
+    },
+    "deferralNote": "{amount} de deudas no se pueden pagar dentro del horizonte con la configuración actual — el atraso supera la última semana. Ajuste el límite en la configuración del pronóstico de tesorería.",
+    "forecastLink": {
+      "pre": "¿Quiere modelar las próximas semanas?",
+      "link": "Abrir el pronóstico de tesorería"
+    },
+    "configure": "Configurar",
+    "configTitle": "Regla de selección de pagos",
+    "configDescription": "Cómo se elige el lote de pago de esta semana — el límite semanal, la protección de capacidad segura y el modelo de planificación detrás de la recomendación."
   }
 }

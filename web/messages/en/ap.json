@@ -184,7 +184,7 @@
     "stats": {
       "openPayables": "Open payables",
       "overdue": "Overdue",
-      "overdueSub": "{count} bills · {pct}% of open",
+      "overdueSub": "{count} bills · {pct} of open",
       "dueThisWeek": "Due this week",
       "next30": "Next 30 days",
       "dpo": "Days payable (DPO)",

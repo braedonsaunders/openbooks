@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
@@ -45,7 +45,7 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const position = await apPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds)
+  const position = await apPosition(authz.user.orgId, 4, apSettings, undefined, authz.allowedSubsidiaryIds, await getLocale())
   // The schedule bars need each week's label and amount; the week drill
   // fetches the week a reader actually opens from /api/cash/week-entries.
   // Shipping every week's transactions as well repeated the whole open-item

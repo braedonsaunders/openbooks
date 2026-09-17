@@ -118,6 +118,8 @@ export async function apPosition(
   apSettings: ApSettings,
   asOfDate: string | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  /** BCP-47 locale for week labels (F-t04-010); defaults to en-US. */
+  locale = "en-US",
 ): Promise<ApPosition> {
   const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];
   const asOfIso = await resolveAsOf(orgId, asOfDate);
@@ -147,6 +149,7 @@ export async function apPosition(
     apByWeek: ap.byWeek,
     categories,
     apSettings: exactApSettings,
+    locale,
   });
 
   const summary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg);
