@@ -19,6 +19,7 @@ import { buildListDrawerHref, parseListParams, pickString } from '../lib/list-pa
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
+import { displayListViewName } from '../lib/customization/display'
 import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
 import { listOrderClause, listSource } from '../lib/list/sources'
 import { RelatedPartyLink } from './related-party-link'
@@ -121,7 +122,7 @@ export async function RecordListView({
     showInListDefs,
   })
   const view = resolvedView.view
-  const viewName = resolvedView.row?.name ?? tCustom('views.defaultName')
+  const viewName = displayListViewName(resolvedView.row?.name, tCustom('views.defaultName'))
 
   const allowedSorts = meta.listColumns.filter((c) => c.sortable && c.sortKey).map((c) => c.sortKey!) as string[]
   const viewSortKey = view.sort ? listColumnMeta(recordType, view.sort.column)?.sortKey : undefined
