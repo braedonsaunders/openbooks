@@ -6,6 +6,29 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.15] - 2026-09-17
+
+Fleet-7 defect wave on top of alpha.14. No new migration.
+
+### Payroll, parties, and close
+
+- Backdated wage rates persist, capped before their successor.
+- Parallel-run net is attributed against stated gross; pay-run funding
+  reads ledger balances including reversals.
+- Party PATCH accepts stored customer/vendor/employee kinds.
+- Close reporting-package slugs resolve to names and links.
+
+### Gates, documents, and send
+
+- Disabled features and refused permissions explain themselves instead
+  of silent 404s and bounces; Scripts and REST API docs name the
+  Features-switch prerequisite.
+- Unset subsidiary stays unset; save and convert refusals pin as
+  record alerts. Incomplete email config is a typed refusal; failed
+  sends stay visible in the composer.
+- Inventory Post refusals pin on the record; line-less budget submits
+  refuse with a typed message.
+
 ## [0.1.0-alpha.14] - 2026-09-17
 
 Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.
