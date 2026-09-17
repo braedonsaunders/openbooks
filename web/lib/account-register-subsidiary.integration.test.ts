@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { accountRegister } = await import('./reports/registers')
 
@@ -30,20 +30,27 @@ test('account registers scope both lines and totals within a visible intercompan
           (${scratch.orgId}, ${entry}, 4, ${scratch.accounts.revenue}, ${child}, '100', 'CAD', '100', '1')`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
     })
-    const scoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([scratch.subsidiaryId]))
+    // Reads run in the scratch org's scope: the register issues bare queries
+    // with explicit org predicates, which pooled RLS denies outside an
+    // explicit scope (unscoped, every scope reads zero rows and totals tie on
+    // nothing).
+    const { scoped, childScoped, all, none } = await withOrgContext(scratch.orgId, async () => {
+      const scoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([scratch.subsidiaryId]))
+      const childScoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([child]))
+      const all = await accountRegister(scratch.orgId, scratch.accounts.bank)
+      const none = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set())
+      return { scoped, childScoped, all, none }
+    })
     assert.equal(scoped.total, 1)
     assert.equal(scoped.lines.length, 1)
     assert.equal(scoped.balance, '100.0000')
     assert.equal(scoped.lines[0]?.amount, '100.0000')
-    const childScoped = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set([child]))
     assert.equal(childScoped.total, 1)
     assert.equal(childScoped.lines.length, 1)
     assert.equal(childScoped.balance, '-100.0000')
     assert.equal(childScoped.lines[0]?.amount, '-100.0000')
-    const all = await accountRegister(scratch.orgId, scratch.accounts.bank)
     assert.equal(all.total, 2)
     assert.equal(all.balance, '0.0000')
-    const none = await accountRegister(scratch.orgId, scratch.accounts.bank, 100, 0, undefined, new Set())
     assert.equal(none.total, 0)
     assert.equal(none.lines.length, 0)
   } finally { await withBypass(() => dropScratchOrg(scratch.orgId)) }
