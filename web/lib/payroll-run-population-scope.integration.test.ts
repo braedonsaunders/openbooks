@@ -36,7 +36,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { GET } = await import("../app/api/payroll/runs/route");
@@ -46,14 +46,22 @@ const { default: Page } = await import("../app/(app)/payroll/runs/[id]/page");
 
 for (const surface of ["collection", "record list", "assistant list", "assistant detail", "wizard"] as const) {
   test(`payroll population scope: ${surface}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const fx = await seedAdoption();
+    // Fixture seeds under explicit bypass: importing the payroll route/page
+    // above pulls in the web request-org resolver, which denies every
+    // unscoped query under pooled RLS (bare setup dies with 42501). The
+    // surfaces under test issue bare reads with explicit org predicates, so
+    // each read runs in the scratch org's scope; the gate provides the
+    // app-level subsidiary filtering under test.
+    const fx = await withBypassContext(() => seedAdoption());
     try {
       const childId = randomUUID();
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden payroll population','CAD','CA')`);
-      await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
-      const { input } = await calculatedRun(fx);
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+          values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden payroll population','CAD','CA')`);
+        await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
+      });
+      const { input } = await withBypassContext(() => calculatedRun(fx));
       const gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.read", "payroll.run"]), allowedSubsidiaryIds: new Set([fx.subsidiaryId]) } as Authz;
       state.gate = gate;
       const read = async (visible: boolean) => {
@@ -79,11 +87,11 @@ for (const surface of ["collection", "record list", "assistant list", "assistant
           }
         }
       };
-      await read(false);
+      await withOrgContext(fx.orgId, () => read(false));
       state.gate = { ...gate, allowedSubsidiaryIds: null };
-      await read(true);
+      await withOrgContext(fx.orgId, () => read(true));
       state.gate = { ...gate, allowedSubsidiaryIds: new Set([fx.subsidiaryId, childId]) };
-      await read(true);
-    } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+      await withOrgContext(fx.orgId, () => read(true));
+    } finally { state.gate = null; await withBypassContext(() => dropScratchOrgReporting(fx.orgId)); }
   });
 }
