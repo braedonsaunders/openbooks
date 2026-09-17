@@ -338,7 +338,20 @@ const SOURCES: Record<string, EntityListSource> = {
     },
     quickFilters: [
       { paramKey: 'status', filterKey: 'status' },
-      { paramKey: 'billing', filterKey: 'project_type' },
+      {
+        paramKey: 'billing',
+        filterKey: 'project_type',
+        loadOptions: async (orgId) => {
+          // Custom project types are tenant data: without them their keys
+          // render underscore-spaced in cells and cannot be filtered at all.
+          // Built-ins keep their static translated options — the list merges
+          // these in after, so they still win on any value collision (F-t11-003).
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
+            select key as value, name as label from project_types
+             where org_id = ${orgId} and is_active order by name`)
+          return result.rows
+        },
+      },
     ],
     drawerParam: 'project',
     basePath: '/projects',
