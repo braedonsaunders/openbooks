@@ -32,14 +32,21 @@ import { authedContext, dismissSetupWizard } from '../auth';
 
 const RUN = process.env.E2E_RUN ?? '';
 
+/**
+ * Per-attempt prefix. A Playwright retry re-runs seedScenario against an org
+ * the failed attempt already seeded, so the suffix has to move with the retry
+ * index or the tax code collides ("This record already exists").
+ */
 function tag(base: string): string {
-  return `${base}${RUN}`;
+  const retry = test.info().retry;
+  return `${base}${RUN}${retry > 0 ? `R${retry}` : ''}`;
 }
 
-/** Two digits distinguishing local re-runs; always 00 in CI (pristine org). */
+/** Two digits distinguishing re-runs; retries shift it so numbers stay free. */
 function runCode(): string {
   const m = /(\d+)\s*$/.exec(RUN);
-  return m ? String(Number(m[1]) % 100).padStart(2, '0') : '00';
+  const base = m ? Number(m[1]) : 0;
+  return String((base + test.info().retry * 17) % 100).padStart(2, '0');
 }
 
 /** Minor-unit money: '420.00' -> 42000n. */
