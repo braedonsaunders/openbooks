@@ -199,7 +199,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
 
 const f = ref<ReportsHubData>()
 
-export function reportsHubSpec(data: ReportsHubData): PageSpec {
+export function reportsHubSpec(): PageSpec {
   return page({
     route: '/reports',
     // The hub content is one client-interactive island (search state, the

@@ -87,8 +87,6 @@ export interface RecordApprovalState {
   canRetry: boolean
 }
 
-type Rows<T> = { rows: T[] }
-
 const iso = (v: unknown): string =>
   v instanceof Date ? v.toISOString() : v ? new Date(String(v)).toISOString() : ''
 

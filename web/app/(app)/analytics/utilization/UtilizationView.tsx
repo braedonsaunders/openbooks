@@ -3,15 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
-  AlertTriangle, ArrowDown, ArrowRightLeft, BarChart3, Box, Brain, Building2, Calculator,
+  AlertTriangle, ArrowDown, ArrowRightLeft, Box, Brain, Calculator,
   ChartArea, CheckCircle2, Clock, DollarSign, Info, Lightbulb, PieChart as PieIcon,
-  Scale, Search, SlidersHorizontal, Table2, Target, TrendingDown, TrendingUp, Trophy,
-  UserPlus, UserRound, Users, LayoutGrid, Grid3X3,
-} from 'lucide-react'
+  Scale, Search, Table2, Target, TrendingDown, TrendingUp, Trophy,
+  UserPlus, UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
 import { cn, Select, Drawer, Badge } from '@openbooks/ui'
 import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
-import type { UtilizationData, UGroupRow, UStat } from '../../../../lib/analytics/utilization-data'
+import type { UtilizationData, UGroupRow } from '../../../../lib/analytics/utilization-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'

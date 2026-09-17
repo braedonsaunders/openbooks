@@ -160,7 +160,7 @@ export async function POST(req: Request) {
         if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
-        const { gated, runId, flowError, autoApproved } =
+        const { runId, flowError, autoApproved } =
           await submitAndReleaseIfUngated('expense_report', body.documentId, user.id)
         if (flowError) {
           return NextResponse.json(

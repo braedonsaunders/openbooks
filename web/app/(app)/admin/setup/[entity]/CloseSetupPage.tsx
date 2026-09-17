@@ -14,7 +14,7 @@ import {
   describeStatement,
   type ReportDescriptor,
 } from "../../../../../lib/close/report-descriptor";
-import { clamp, isUuid, pickString } from "../../../../../lib/list-params";
+import { clamp, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";

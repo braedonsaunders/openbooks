@@ -4,7 +4,6 @@ import { Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Drawer } from '@openbooks/ui'
 import {
-  WIDGETS,
   CATEGORY_LABEL_KEYS,
   type WidgetCategory,
   type WidgetMeta,

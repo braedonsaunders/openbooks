@@ -353,10 +353,7 @@ function RateCardDrawer(
     () => ({ ...props.options, item: itemOptions }),
     [props.options, props.items],
   );
-  const update = <K extends keyof BillCardDetail>(
-    key: K,
-    value: BillCardDetail[K],
-  ) => setDraft((row) => ({ ...row, [key]: value }));
+
 
   async function save() {
     setBusy(true);

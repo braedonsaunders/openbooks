@@ -42,11 +42,7 @@ interface BenfordDrillData {
   documents: BenfordDrillDocument[]
 }
 
-function riskTone(score: number) {
-  if (score >= 80) return { text: 'text-rose-600 dark:text-rose-400', hex: '#ef4444', badge: 'destructive' as const }
-  if (score >= 60) return { text: 'text-amber-600 dark:text-amber-400', hex: '#f59e0b', badge: 'warning' as const }
-  return { text: 'text-slate-500 dark:text-slate-400', hex: '#94a3b8', badge: 'secondary' as const }
-}
+
 
 function RiskPill({ score }: { score: number }) {
   return <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', score >= 80 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' : score >= 60 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>{score}</span>

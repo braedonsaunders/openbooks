@@ -10,7 +10,6 @@ import {
   BarChart3,
   PieChart as PieIcon,
   Layers,
-  Trophy,
   DollarSign,
   FileText,
   HandCoins,
@@ -27,7 +26,6 @@ import {
   Grid3x3,
   CalendarClock,
   Undo2,
-  Settings2,
   Timer,
   Download,
 } from 'lucide-react'
@@ -93,7 +91,6 @@ const RISK_STYLE: Record<RiskLevel, string> = {
   critical: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
 }
 
-const SEGMENTS: Segment[] = ['champions', 'loyal', 'potential', 'new', 'regular', 'hibernating', 'at-risk', 'lost']
 const SEGMENT_COLOR: Record<Segment, string> = {
   champions: '#8b5cf6',
   loyal: '#14b8a6',

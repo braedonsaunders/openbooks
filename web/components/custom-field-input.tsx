@@ -6,8 +6,6 @@ import { FieldLabel, Input, Select, Textarea } from '@openbooks/ui'
 import { SearchSelect } from '@openbooks/ui'
 import type { CustomFieldDefClient } from './custom-field-inputs'
 
-import { CUSTOM_FIELD_REFERENCE_TABLES as REFERENCE_TABLES } from '@openbooks/customization'
-
 /**
  * One custom field's control (edit) or display (view). Extracted from
  * CustomFieldInputs so the layout-driven header renderer can place custom

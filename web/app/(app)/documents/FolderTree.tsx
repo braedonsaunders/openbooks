@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ChevronRight, Folder as FolderIcon, FolderOpen, FolderPlus } from 'lucide-react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { ChevronRight, Folder as FolderIcon, FolderOpen } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from '@openbooks/ui'
 import { useState } from 'react'

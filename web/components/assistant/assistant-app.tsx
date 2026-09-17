@@ -16,7 +16,6 @@ import {
 } from 'ai'
 import {
   ArrowDown,
-  Loader2,
   Menu,
   MoreHorizontal,
   Pencil,

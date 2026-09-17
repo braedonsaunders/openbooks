@@ -248,7 +248,6 @@ function indent(d: number): string {
 
 function statementGroup(
   t: Translator,
-  sectionKey: string,
   sectionTitle: string,
   items: StatementRow[],
   types: string[],
@@ -286,9 +285,9 @@ export function pnlExportData(
       { label: t('pnl.netIncome'), value: pl.netIncome, money: true },
     ],
     groups: [
-      statementGroup(t, 'revenue', revenueTitle, pl.items, ['income', 'income_other'], pl.revenue),
-      statementGroup(t, 'cogs', cogsTitle, pl.items, ['cogs'], pl.cogs),
-      statementGroup(t, 'expenses', expensesTitle, pl.items, ['expense', 'expense_other', 'expense_deferred'], pl.expenses),
+      statementGroup(t, revenueTitle, pl.items, ['income', 'income_other'], pl.revenue),
+      statementGroup(t, cogsTitle, pl.items, ['cogs'], pl.cogs),
+      statementGroup(t, expensesTitle, pl.items, ['expense', 'expense_other', 'expense_deferred'], pl.expenses),
       {
         kind: 'summary',
         title: t('pnl.netIncome'),
@@ -310,7 +309,7 @@ export function balanceSheetExportData(
   const liabTitle = t('balanceSheet.liabilities')
   const equityTitle = t('balanceSheet.equity')
   const groupFor = (title: string, items: StatementRow[], total: ExactDecimal) =>
-    statementGroup(t, title, title, items, items.map((i) => i.type), total)
+    statementGroup(t, title, items, items.map((i) => i.type), total)
   return {
     title: t('balanceSheet.title'),
     dateRangeLabel: t('balanceSheet.asOf', { date: asOf }),

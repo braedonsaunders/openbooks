@@ -11,10 +11,9 @@ import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engi
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { nextDocumentNumber } from './bills'
 import {
-  assertDocumentEditRevision,
+  
   documentRevisionCounterSql,
-  runDocumentVersionedTransaction,
-} from './documents'
+  runDocumentVersionedTransaction } from './documents'
 import { canonicalDecimal } from './exact-decimal'
 import { unpricedLaborHours as fieldTicketUnpricedHours } from './field-ticket-totals'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'

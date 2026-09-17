@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { AlertTriangle, BookOpen, Clock, KeyRound, Play, RotateCcw, Search, TerminalSquare } from 'lucide-react'
+import { BookOpen, Clock, KeyRound, Play, RotateCcw, Search, TerminalSquare } from 'lucide-react'
 import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
 
 /**

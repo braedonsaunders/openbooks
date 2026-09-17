@@ -13,9 +13,6 @@
 import type { CSSProperties, SVGProps } from 'react'
 import { cn } from '@openbooks/ui'
 
-const BRAND_TEAL = '#0f766e'
-const BRAND_TEAL_DARK = '#2dd4bf'
-
 const INK_CLASS = 'text-slate-900 dark:text-slate-100'
 
 // static — fully drawn, no motion.

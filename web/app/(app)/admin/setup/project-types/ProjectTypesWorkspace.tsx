@@ -108,7 +108,7 @@ function Chips({ label, all, selected, onToggle }: { label: string; all: string[
   )
 }
 
-const BLANK = (t: string, name: string): ProjectTypeRow => ({
+const BLANK = (name: string): ProjectTypeRow => ({
   id: 'new', key: '', name, description: '', isBuiltIn: false, isActive: true, sortOrder: 50, billingMethod: 'time_and_materials',
   financialProfileEffectiveFrom: null,
   financialProfile: {
@@ -168,7 +168,7 @@ export function ProjectTypesWorkspace({
   const [financialEffectiveFrom, setFinancialEffectiveFrom] = useState(today)
   const [financialChangeReason, setFinancialChangeReason] = useState('')
 
-  const selected = useMemo(() => (selId === 'new' ? BLANK(t('newTypeName'), t('newTypeName')) : list.find((x) => x.id === selId)) ?? list[0]!, [selId, list, t])
+  const selected = useMemo(() => (selId === 'new' ? BLANK(t('newTypeName')) : list.find((x) => x.id === selId)) ?? list[0]!, [selId, list, t])
   const [draft, setDraft] = useState<ProjectTypeRow>(selected)
   // Re-sync draft when selection changes.
   const [lastSel, setLastSel] = useState(selId)
