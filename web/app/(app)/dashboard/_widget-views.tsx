@@ -210,6 +210,14 @@ function RecentEntriesList({
 }) {
   const { money } = useMoney()
   const t = useTranslations('dashboard')
+  // The loader only emits posted/reversed rows; anything else renders raw
+  // rather than guessing a translation (F-t01-009).
+  const statusLabel = (status: string) =>
+    status === 'posted'
+      ? t('widgets.recentEntryStatusPosted')
+      : status === 'reversed'
+        ? t('widgets.recentEntryStatusReversed')
+        : status
   if (entries.length === 0) {
     return (
       <CardShell title={t('widgets.recentEntries')} icon={<NotebookPen size={14} />}>
@@ -236,7 +244,7 @@ function RecentEntriesList({
                     {e.entryNumber ?? '—'}
                   </span>
                   <Badge variant={e.status === 'posted' ? 'success' : 'outline'}>
-                    {e.status}
+                    {statusLabel(e.status)}
                   </Badge>
                 </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
@@ -248,7 +256,7 @@ function RecentEntriesList({
                   {money(e.totalDebits)}
                 </div>
                 <div className="text-xs text-slate-400 dark:text-slate-500">
-                  {e.lineCount} lines
+                  {t('widgets.recentEntryLines', { count: e.lineCount })}
                 </div>
               </div>
             </Link>
