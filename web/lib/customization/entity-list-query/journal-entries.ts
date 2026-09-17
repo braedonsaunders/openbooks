@@ -69,7 +69,10 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
  * entry that qualifies both ways. Pay runs ride leg (b): a posted payroll JE
  * hits the GL like any other posting and the run links to it, so hiding it
  * here breaks the audit trail (F-t08-014). Other subledger postings (bills,
- * invoices, payments, …) still live in their own modules and stay out.
+ * invoices, payments, …) still live in their own modules and stay out. The
+ * /journal header and the setup-guide "posted entries" tile count this same
+ * relation through journalScopeWhere, so all three surfaces agree by
+ * construction (F-t11-010).
  */
 export const JOURNAL_ENTRY_TABLE = `(
   select je.* from journal_entries je
@@ -83,6 +86,31 @@ export const JOURNAL_ENTRY_TABLE = `(
  * visibility). Count queries use exactly this — the per-entry line totals
  * below would otherwise be computed for EVERY entry in the tenant just to
  * produce a count. */
+/**
+ * The one journal scope every "posted entries" surface counts (F-t11-010):
+ * the setup-guide tile, the /journal header, and the list total all read
+ * the JOURNAL_ENTRY_TABLE union through this predicate — org-wide, both
+ * statuses, subsidiary-fenced exactly like the list. Reversed entries stay
+ * in: the list shows them (status facet, destructive variant) and the
+ * header describes that same page total, so a posted-only scope here would
+ * re-split the header from the list it heads. journalEntryWhere builds on
+ * this; the header and guide readers call it directly with no view filters
+ * (the journal default view carries none), so the three counts agree by
+ * construction instead of by copy. Alias `e` matches the list table alias.
+ */
+export function journalScopeWhere(orgId: string, allowedSubsidiaryIds?: Set<string> | null): SQL {
+  const parts: SQL[] = [sql`e.org_id = ${orgId}`]
+  if (allowedSubsidiaryIds) {
+    const ids = [...allowedSubsidiaryIds]
+    parts.push(ids.length ? sql`and exists (
+      select 1 from journal_lines visible
+       where visible.entry_id=e.id and visible.org_id = e.org_id and visible.org_id = ${orgId}
+         and visible.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
+    )` : sql`and false`)
+  }
+  return sql.join(parts, sql` `)
+}
+
 export function journalEntryCountJoins(): SQL {
   return sql`
     left join lateral (
@@ -150,15 +178,9 @@ export function journalEntryWhere(
   // built into JOURNAL_ENTRY_TABLE as a union of two index-driven legs — a
   // WHERE-level OR here defeated the ORDER BY/LIMIT index walk and the old
   // per-row source_doc lateral test ran for every entry in the tenant.
-  const parts: SQL[] = [sql`e.org_id = ${orgId}`]
-  if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and exists (
-      select 1 from journal_lines visible
-       where visible.entry_id=e.id and visible.org_id = e.org_id and visible.org_id = ${orgId}
-         and visible.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
-    )` : sql`and false`)
-  }
+  // Org scope plus the subsidiary fence is the shared journalScopeWhere so
+  // the list total and the header/guide counts cannot drift apart (F-t11-010).
+  const parts: SQL[] = [journalScopeWhere(orgId, allowedSubsidiaryIds)]
   for (const filter of view.filters) {
     const predicate = journalEntryFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)

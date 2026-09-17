@@ -18,7 +18,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { createDraftJournal, loadJournalDoc } from '../../../lib/journals'
-import { JOURNAL_GL_NATIVE_ORIGINS } from '../../../lib/customization/entity-list-query/journal-entries'
+import { JOURNAL_ENTRY_TABLE, journalScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import type { JournalDrawer } from './JournalDrawer'
@@ -73,17 +73,6 @@ export async function loadJournal(
   const authz = await requirePermission('gl.read')
   const allowedSubsidiaries = authz.allowedSubsidiaryIds
   const allowedIds = allowedSubsidiaries ? [...allowedSubsidiaries] : []
-  const entryVisibility = allowedSubsidiaries
-    ? allowedIds.length
-      ? sql`and exists (
-          select 1 from journal_lines visible
-           where visible.entry_id = e.id
-             and visible.org_id = e.org_id
-             and visible.org_id = ${authz.user.orgId}
-             and visible.subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])
-        )`
-      : sql`and false`
-    : sql``
 
   // ?entry= drives the manual-journal drawer over DOCUMENT ids;
   // posted-entry links to /journal/[id] are a separate, untouched surface.
@@ -95,19 +84,13 @@ export async function loadJournal(
     redirect(`/journal?entry=${draft.id}&mode=edit`)
   }
 
-  // The Journal list shows ONLY actual journal entries — never the GL posting
-  // of a bill / invoice / payment / expense (those live in their subledger
-  // module). An entry qualifies if its source document is a journal or a pay
-  // run (the run links to its posted entry, so hiding it breaks the audit
-  // trail — F-t08-014), or it's a GL-native entry with no subledger document
-  // (closing, allocation, etc.). Keep in sync with JOURNAL_ENTRY_TABLE leg (b).
-  const journalsOnly = sql`(
-    exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
-    or (
-      not exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id)
-      and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})
-    )
-  )`
+  // The header counts the list's own backing relation (JOURNAL_ENTRY_TABLE)
+  // through the shared journalScopeWhere — same scope, same subsidiary
+  // fence, no status filter — so the header total and the list total agree
+  // by construction (F-t11-010). The old journalsOnly predicate counted a
+  // narrower scope (it dropped native entries carrying a subledger document,
+  // e.g. migrated bills) with no status filter, which is why the header
+  // read 25,943 against the list's 47,625.
   // draft manual journals are documents (not entries yet) — surfaced separately
   const [draftDocs, openJournal, pickers, postedCount] = await Promise.all([
     (db.execute(sql`
@@ -143,7 +126,7 @@ export async function loadJournal(
           customSegmentOptions(authz.user.orgId),
         ])
       : null,
-    (db.execute(sql`select count(*) as n from journal_entries e where e.org_id = ${authz.user.orgId} and ${journalsOnly} ${entryVisibility}`)),
+    (db.execute(sql`select count(*) as n from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(authz.user.orgId, allowedSubsidiaries)}`)),
   ])
   const total = Number(postedCount.rows[0]?.n ?? 0)
   const resolvedForm = openJournal && pickers
