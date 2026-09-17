@@ -635,6 +635,9 @@ export function JournalDrawer({
       closeHref="/journal"
       recordId={String(doc.id)}
       canEditAttachments
+      // Detach 409s on posted records (evidence is retained), so posted
+      // journals hide Remove and name the retention; uploading stays on.
+      canRemoveAttachments={doc.status !== 'posted'}
       panelClassName={docTypeMeta('journal').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">

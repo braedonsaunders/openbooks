@@ -382,15 +382,15 @@ function installDeferredFetch(): { requests: RequestRecord[]; restore(): void } 
   }
 }
 
-function renderPanel(targetId: string): RenderedElement {
+function renderPanel(targetId: string, extra: Record<string, unknown> = {}): RenderedElement {
   testState.harness.beginRender()
-  let tree = AttachmentPanel({ targetTable: 'documents', targetId, canEdit: true }) as unknown as RenderedElement
+  let tree = AttachmentPanel({ targetTable: 'documents', targetId, canEdit: true, ...extra }) as unknown as RenderedElement
   testState.harness.commitEffects()
   // Effects synchronously clear target-specific state and set loading. Render
   // once more so assertions observe the same committed state a user sees.
   if (testState.harness.dirty) {
     testState.harness.beginRender()
-    tree = AttachmentPanel({ targetTable: 'documents', targetId, canEdit: true }) as unknown as RenderedElement
+    tree = AttachmentPanel({ targetTable: 'documents', targetId, canEdit: true, ...extra }) as unknown as RenderedElement
     testState.harness.commitEffects()
   }
   return tree
@@ -503,4 +503,43 @@ test('a late A error cannot replace B files or B loading/error state', async (t)
   tree = renderPanel('record-b')
   assert.equal(loadingVisible(tree), false)
   assert.deepEqual(testState.errors, ['loadFailed'])
+})
+
+// F-t06-010: detaching from a posted record always 409s (evidence is
+// retained), but the journal offered Remove with no explanation. Locked
+// records hide the impossible affordance and name the retention instead;
+// unlocked records keep it.
+test('locked removal hides the remove affordance and explains retention', async (t) => {
+  testState.harness.reset()
+  const transport = installDeferredFetch()
+  t.after(() => transport.restore())
+
+  renderPanel('record-a', { canRemove: false })
+  transport.requests[0]!.response.resolve(response([attachment('file-a', 'A.pdf')]))
+  await settle()
+  const locked = renderPanel('record-a', { canRemove: false })
+  assert.match(renderedText(locked), /A\.pdf/)
+  assert.match(renderedText(locked), /retainedNote/, 'locked records explain retention instead of offering remove')
+  assert.equal(
+    findRenderedElement(
+      locked,
+      (element) => typeof element.type === 'function' && element.type.name === 'Button' && element.props['aria-label'] === 'removeAria',
+    ),
+    null,
+    'no remove affordance may be offered when the server would 409',
+  )
+
+  testState.harness.reset()
+  renderPanel('record-a')
+  transport.requests[1]!.response.resolve(response([attachment('file-a', 'A.pdf')]))
+  await settle()
+  const unlocked = renderPanel('record-a')
+  assert.ok(
+    findRenderedElement(
+      unlocked,
+      (element) => typeof element.type === 'function' && element.type.name === 'Button' && element.props['aria-label'] === 'removeAria',
+    ),
+    'unlocked records keep the remove affordance',
+  )
+  assert.doesNotMatch(renderedText(unlocked), /retainedNote/)
 })

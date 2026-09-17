@@ -60,10 +60,18 @@ export function AttachmentPanel({
   targetTable,
   targetId,
   canEdit,
+  canRemove = canEdit,
 }: {
   targetTable: string
   targetId: string
   canEdit: boolean
+  /**
+   * Detach affordance, independent of uploading: evidence the server retains
+   * (posted documents — see detachAttachment) 409s on every remove, so those
+   * records hide the impossible button and name the retention instead.
+   * Defaults to canEdit; adding files stays available while removal is off.
+   */
+  canRemove?: boolean
 }) {
   const t = useTranslations('ui.attachments')
   const tCommon = useTranslations('common')
@@ -248,6 +256,12 @@ export function AttachmentPanel({
               />
             </div>
 
+            {canEdit && !canRemove && items.length > 0 ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                {t('retainedNote')}
+              </p>
+            ) : null}
+
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
               {loading ? (
                 <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -309,7 +323,7 @@ export function AttachmentPanel({
                             <Download className="h-4 w-4" />
                           </a>
                         </Button>
-                        {canEdit ? (
+                        {canEdit && canRemove ? (
                           <Button
                             variant="ghost"
                             size="icon"
