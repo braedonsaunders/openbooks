@@ -15,9 +15,7 @@
   },
   "dependencies": {
     "@openbooks/reports": "*",
-    "drizzle-orm": "1.0.0-rc.4",
     "echarts": "^6.0.0",
-    "lucide-react": "^1.24.0",
     "next-intl": "^4.13.2"
   },
   "peerDependencies": {
