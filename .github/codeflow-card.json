@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-09-17T01:37:26.899Z",
-      "sha": "04a4e2f5d14f0cf736f50c6452a6f117f45a39a1",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 4983,
-      "functions": 15055,
-      "loc": 1132081,
-      "languages": 15,
-      "topLanguages": [
-        {
-          "ext": "ts",
-          "pct": 67,
-          "lines": 761458
-        },
-        {
-          "ext": "tsx",
-          "pct": 13,
-          "lines": 143438
-        },
-        {
-          "ext": "json",
-          "pct": 12,
-          "lines": 141183
-        },
-        {
-          "ext": "sql",
-          "pct": 6,
-          "lines": 69176
-        },
-        {
-          "ext": "mjs",
-          "pct": 1,
-          "lines": 8015
-        }
-      ],
-      "dead": 137,
-      "deadPct": 0.9,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 9.3,
-      "securityIssues": 602,
-      "patterns": 10,
-      "duplicates": 156,
-      "layerViolations": 9958,
-      "connections": 46536,
-      "avgFnLines": 15.7,
-      "longestFn": 16,
-      "testFiles": 1716,
-      "testRatio": 34.4,
-      "topFolders": [
-        {
-          "name": "web",
-          "count": 3314
-        },
-        {
-          "name": "engine",
-          "count": 1138
-        },
-        {
-          "name": "schema",
-          "count": 246
-        },
-        {
-          "name": "packages",
-          "count": 144
-        },
-        {
-          "name": "scripts",
-          "count": 57
-        }
-      ],
-      "folders": 5,
-      "grade": "F",
-      "score": 58,
-      "topBlast": {
-        "path": "web/lib/docs/articles/taxes.ts",
-        "direct": 2320,
-        "transitive": 4595,
-        "total": 6915
-      },
-      "fragility": [
-        {
-          "path": "web/lib/docs/articles/taxes.ts",
-          "direct": 2320,
-          "transitive": 4595,
-          "total": 6915
-        },
-        {
-          "path": "web/app/(app)/admin/customization/FormDesigner-duplicate.test.ts",
-          "direct": 2331,
-          "transitive": 4566,
-          "total": 6897
-        },
-        {
-          "path": "web/lib/customization/resolve.ts",
-          "direct": 1981,
-          "transitive": 4566,
-          "total": 6547
-        }
-      ]
-    },
-    {
       "at": "2026-09-17T01:44:50.509Z",
       "sha": "f0a4940a64a0bddf8650de89d813e48213cfc574",
       "pr": null,
@@ -3058,6 +2956,108 @@
           "direct": 2078,
           "transitive": 4784,
           "total": 6862
+        }
+      ]
+    },
+    {
+      "at": "2026-09-17T14:22:36.530Z",
+      "sha": "591e36d479740f20614d01f3903b4045251497c7",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 5187,
+      "functions": 15596,
+      "loc": 1169751,
+      "languages": 15,
+      "topLanguages": [
+        {
+          "ext": "ts",
+          "pct": 67,
+          "lines": 778993
+        },
+        {
+          "ext": "tsx",
+          "pct": 13,
+          "lines": 154986
+        },
+        {
+          "ext": "json",
+          "pct": 13,
+          "lines": 149564
+        },
+        {
+          "ext": "sql",
+          "pct": 6,
+          "lines": 69239
+        },
+        {
+          "ext": "mjs",
+          "pct": 1,
+          "lines": 8017
+        }
+      ],
+      "dead": 138,
+      "deadPct": 0.9,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 9.7,
+      "securityIssues": 620,
+      "patterns": 10,
+      "duplicates": 165,
+      "layerViolations": 10636,
+      "connections": 50283,
+      "avgFnLines": 15.7,
+      "longestFn": 16,
+      "testFiles": 1880,
+      "testRatio": 36.2,
+      "topFolders": [
+        {
+          "name": "web",
+          "count": 3511
+        },
+        {
+          "name": "engine",
+          "count": 1143
+        },
+        {
+          "name": "schema",
+          "count": 247
+        },
+        {
+          "name": "packages",
+          "count": 145
+        },
+        {
+          "name": "scripts",
+          "count": 57
+        }
+      ],
+      "folders": 5,
+      "grade": "F",
+      "score": 58,
+      "topBlast": {
+        "path": "web/lib/docs/articles/taxes.ts",
+        "direct": 2423,
+        "transitive": 4817,
+        "total": 7240
+      },
+      "fragility": [
+        {
+          "path": "web/lib/docs/articles/taxes.ts",
+          "direct": 2423,
+          "transitive": 4817,
+          "total": 7240
+        },
+        {
+          "path": "web/app/(app)/admin/customization/FormDesigner-duplicate.test.ts",
+          "direct": 2437,
+          "transitive": 4788,
+          "total": 7225
+        },
+        {
+          "path": "web/lib/customization/resolve.ts",
+          "direct": 2079,
+          "transitive": 4787,
+          "total": 6866
         }
       ]
     }
