@@ -3118,9 +3118,14 @@ export async function postPaymentRun(
     }
 
     const finalStatus = failures.length === 0 ? "confirmed" : "partially_failed";
+    // The per-instruction reasons persist on the run event — not just in the
+    // POST response — so the activity feed can name them after the toast
+    // dismisses and the clerk can fix and retry (F-t03-005). Counts alone
+    // left "0 sent · N failed" with no reason anywhere.
     await finishPaymentRunPosting(runId, orgId, userId, finalStatus, {
       posted,
       failureCount: failures.length,
+      failures,
     }, claim);
     return { posted, failures };
   } catch (error) {
