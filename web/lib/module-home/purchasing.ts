@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
-import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
+import { flowRates, translateFlows } from '../fx-presentation'
 import { openItems, parseISO, summariseSide, toISO } from '../cash/core'
 import { isFeatureEnabled } from '../features'
 
@@ -144,7 +144,6 @@ export async function purchasingHome(
   // and must read no rows — never degrade to the whole organization. `[]`
   // binds as an empty uuid array so every `= any(...)` leg matches nothing.
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
-  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   // Document-side reads match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
   const docScope =
@@ -158,43 +157,11 @@ export async function purchasingHome(
   // the bespoke live aggregate counted future-posted bills while netting
   // future-dated applications, so the pulse never tied to /ap. openItems
   // arrives in presentation currency, exactly like the cockpit's summary.
-  const [apItems, topRes, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
+  // The hero roster groups the SAME item set (F-t03-009): its own live
+  // aggregate additionally gated on the cached open_balance, so one page
+  // showed two different Talent figures.
+  const [apItems, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
     openItems(orgId, 'ap', today, subIds),
-    // Hero roster — vendor commitments: open POs and open bills side by side.
-    db.execute(sql`
-      with oi as (
-        select jl.party_id, jl.due_date, sub.base_currency as func,
-               abs(jl.amount) - coalesce((
-                 select sum(x.amount) from applications x
-                  where x.org_id = ${orgId}
-                    and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                    and x.unapplied_at is null
-               ), 0) as remaining
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
-          join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-          join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
-           and d.posted_entry_id = je.id and d.status = 'posted'
-           and d.kind in ('vendor_bill', 'expense_report')
-           and d.open_balance > 0
-          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
-      ), bills as (
-        select party_id, func, sum(remaining) as billed_open,
-               sum(remaining) filter (where due_date < ${today}) as overdue,
-               count(*) filter (where remaining > 0) as open_bills,
-               min(due_date) as oldest_due
-          from oi where remaining > 0 group by party_id, func
-      )
-      select b.party_id, b.func,
-             coalesce(p.display_name, 'Unspecified') as name,
-             coalesce(b.open_bills, 0) as open_bills,
-             coalesce(b.billed_open, 0) as billed_open,
-             coalesce(b.overdue, 0) as overdue,
-             b.oldest_due
-        from bills b
-        left join parties p on p.id = b.party_id and p.org_id = ${orgId}
-    `),
     // 13-week billed-spend trend (posted vendor bills by week). Documents
     // translate txn→functional at their maintained rate; the second leg to
     // presentation happens per (week, functional) below.
@@ -264,17 +231,9 @@ export async function purchasingHome(
       select base_currency as "baseCurrency" from orgs where id = ${orgId}`),
   ]))
 
-  // Presentation: balances translate at the tile-date (closing) spot, flows at
-  // their document-date spot. Missing coverage fails closed.
-  const base = await presentationCurrency(orgId)
-  const balRates = await presentationRates(
-    orgId,
-    base,
-    [...topRes.rows.map((r) => (r.func ?? null) as string | null)],
-    today,
-  )
-  const trBal = (amount: unknown, func: unknown): number =>
-    Number(mulDecimal(String(amount ?? 0), balRates.get(lineFunctional(typeof func === "string" ? func : null, base))!))
+  // Presentation: flows translate at their document-date spot. Balances
+  // arrive already translated — openItems returns presentation currency.
+  // Missing coverage fails closed.
   // Each week bucket translates at its latest document date, so the rate
   // lookup never runs ahead of the data it translates.
   const trendCtx = await flowRates(
@@ -301,18 +260,12 @@ export async function purchasingHome(
   if (!orgCurrency) throw new Error('organization currency is not configured')
   const po = await openPoValueInOrgCurrency(orgId, orgCurrency, today, poRowsRes.rows)
 
-  // Hero roster — vendor commitments merged from open bills and translated
-  // open POs, ranked by combined exposure like the query did before. Bill
-  // legs translate per (party, functional) at the tile-date spot.
-  type BillsRow = {
-    party_id: string
-    func: string | null
-    name: string
-    open_bills: string | number
-    billed_open: string | number
-    overdue: string | number
-    oldest_due: string | null
-  }
+  // Hero roster — vendor commitments merged from the SAME as-of open items
+  // as the pulse (F-t03-009) with translated open POs, ranked by combined
+  // exposure. Per-vendor billed legs net exactly like the /ap cockpit's
+  // by-vendor grouping, so the roster ties to both the pulse and /ap by
+  // construction. Items without a party cannot join a vendor row and stay
+  // pulse-only (the pulse still counts them).
   const billedByParty = new Map<string, {
     name: string
     openBills: number
@@ -320,16 +273,22 @@ export async function purchasingHome(
     overdue: number
     oldestDue: string | null
   }>()
-  for (const raw of topRes.rows) {
-    const r = raw as BillsRow
-    const partyId = String(r.party_id)
-    const cur = billedByParty.get(partyId) ?? { name: String(r.name), openBills: 0, billedOpen: 0, overdue: 0, oldestDue: null as string | null }
-    cur.openBills += Number(r.open_bills ?? 0)
-    cur.billedOpen += trBal(r.billed_open, r.func)
-    cur.overdue += trBal(r.overdue, r.func)
-    const due = r.oldest_due ? String(r.oldest_due) : null
+  for (const it of apItems) {
+    if (it.partyId == null) continue
+    const remaining = Number(it.remaining)
+    const cur = billedByParty.get(it.partyId) ?? {
+      name: String(it.partyName ?? 'Unspecified'),
+      openBills: 0,
+      billedOpen: 0,
+      overdue: 0,
+      oldestDue: null as string | null,
+    }
+    if (remaining > 0) cur.openBills += 1
+    cur.billedOpen += remaining
+    const due = it.dueDate ? toISO(it.dueDate) : null
+    if (due !== null && due < today) cur.overdue += remaining
     if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
-    billedByParty.set(partyId, cur)
+    billedByParty.set(it.partyId, cur)
   }
   const topExposure = [...new Set([...billedByParty.keys(), ...po.byParty.keys()])]
     .map((partyId) => {
