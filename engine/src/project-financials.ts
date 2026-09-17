@@ -1,13 +1,13 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { db, orgContext, pool } from './db.ts'
-import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
+import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups.ts'
 import { flowTranslation, translateFlowAmount } from './fx-translation.ts'
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from './money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
 import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
-import { loadProjectType } from './project-type.ts'
+import { businessToday } from './business-date.ts'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -752,8 +752,10 @@ export async function resolveProjectFinancials(
  * - legs aggregate per functional with the max posting date and translate
  *   through the same `flowTranslation`/`translateFlowAmount` pair, fetched
  *   once for every leg on the page;
- * - profiles load through the same `loadProjectType` the cockpit passes in,
- *   so tenant cost-source customizations apply identically.
+ * - profiles resolve through one batched type/version lookup that mirrors
+ *   `loadProjectType` row-for-row (complete type row wins, otherwise the
+ *   built-in time-and-materials profile), so tenant cost-source
+ *   customizations apply identically without one query per project.
  */
 export async function resolveProjectActualCosts(
   orgId: string,
@@ -762,15 +764,51 @@ export async function resolveProjectActualCosts(
   const ids = [...new Set(projectIds.filter((id) => typeof id === 'string' && id.length > 0))]
   const out = new Map<string, string>(ids.map((id) => [id, normalizeMoney('0')]))
   if (ids.length === 0) return out
+  // One type/version lookup for the whole id set (F-t03-013: a list sort over
+  // hundreds of projects cannot afford one `loadProjectType` query each).
+  // Mirrors `loadProjectType` (engine/src/project-type.ts): a complete type
+  // row (id, versioned financial profile, invoicing and backup profiles)
+  // wins, a type row missing its billing method throws like the single
+  // loader, and anything else falls back to built-in time-and-materials.
+  const builtinTm = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!.financialProfile
+  const today = await businessToday(orgId)
+  const typeRows = (await db.execute<{
+    project_id: string; type_id: string | null; bm: string | null; fp: FinancialProfile | null;
+    has_ip: boolean; has_bp: boolean;
+  }>(sql`
+    select p.id as project_id, pt.id as type_id, pt.billing_method as bm,
+           version.financial_profile as fp,
+           (pt.invoicing_profile is not null) as has_ip,
+           (pt.backup_profile is not null) as has_bp
+      from projects p
+      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+      left join lateral (
+        select v.financial_profile
+          from project_financial_profile_versions v
+         where v.org_id = p.org_id
+           and v.project_type_id = pt.id
+           and v.effective_from <= ${today}
+           and (v.effective_to is null or v.effective_to >= ${today})
+         order by v.effective_from desc
+         limit 1
+      ) version on true
+     where p.id = any(${`{${ids.join(',')}}`}::uuid[]) and p.org_id = ${orgId}`)).rows
+  const typeByProject = new Map(typeRows.map((r) => [r.project_id, r]))
   const profiles = new Map<string, FinancialProfile>()
-  await Promise.all(ids.map(async (id) => {
+  for (const id of ids) {
     try {
-      profiles.set(id, (await loadProjectType(orgId, id)).financialProfile)
+      const row = typeByProject.get(id)
+      if (row?.type_id && row.fp && row.has_ip && row.has_bp) {
+        if (!row.bm) throw new Error(`project type ${row.type_id} is missing its billing classification`)
+        profiles.set(id, row.fp)
+      } else {
+        profiles.set(id, builtinTm)
+      }
     } catch {
       // A project whose type cannot load keeps the zero above rather than
       // failing the whole list page.
     }
-  }))
+  }
   const groupCache = new Map<string, Set<string>>()
   const groupIdsFor = async (src: CostSource): Promise<Set<string>> => {
     if (src.source !== 'account_group') return new Set()

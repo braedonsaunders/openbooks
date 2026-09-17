@@ -11,26 +11,17 @@ import { uuidOrFalse } from "../list-query";
 /**
  * Displayed actual cost is overwritten post-fetch by the profile-driven
  * actual-cost reader (`resolveProjectActualCosts`, the same reader the
- * cockpit Financials tab uses). This lateral stays as the SQL sort grain:
- * posted+reversed primary-book legs plus manual actual_cost adjustments, so
- * ordering matches the displayed values whenever the type uses the standard
- * cost source (a customized account-group source can still order slightly
- * differently than it displays — display always ties).
+ * cockpit Financials tab uses), and sort-by-actual is planned the same way
+ * (`orderedPageIds` in the projects entity source). No join here may touch
+ * journal lines per row: a correlated lateral over journal_lines times out
+ * on large tenants (F-t03-013) — the aggregate runs once, batched over the
+ * filtered id set, before the page read (aggregate-before-join).
  */
 export const PROJECT_BASE_JOINS = sql`
-  left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
-  left join lateral (
-    select coalesce(sum(l.amount), 0)
-         + coalesce((select sum(adj.amount) from project_financial_adjustments adj
-                      where adj.org_id = p.org_id and adj.project_id = p.id and adj.measure = 'actual_cost'), 0) as cost
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = p.org_id and l.project_id = p.id and e.status in ('posted', 'reversed')
-       and e.book_id = (select b.id from accounting_books b
-                         where b.org_id = p.org_id and b.is_primary and b.is_active and b.posts_gl)
-       and a.type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
-  ) actual on true`
+  left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id`
+
+/** Projects counts never need actual cost: the lateral-free joins. */
+export const PROJECT_COUNT_JOINS = PROJECT_BASE_JOINS
 
 const CONTRACT_EXPR = sql`p.contract_value`
 
@@ -42,7 +33,10 @@ export const PROJECT_BUILT_IN_EXPR: Record<string, SQL> = {
   status: sql`p.status`,
   project_type: sql`coalesce((select pt.key from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`,
   contract: CONTRACT_EXPR,
-  actual: sql`actual.cost`,
+  // Placeholder: `enrichRows` overwrites every displayed row with the
+  // profile-driven reader before render, so SQL never values this column
+  // (and must never scan journal lines to do so).
+  actual: sql`null`,
   created: sql`to_char(p.created_at, 'YYYY-MM-DD')`,
 }
 
@@ -53,6 +47,10 @@ export const PROJECT_SORTS: Record<string, SQL> = {
   customer: sql`cust.display_name`,
   status: sql`p.status`,
   contract: CONTRACT_EXPR,
+  // Sort-by-actual never reaches SQL ordering: the projects source plans the
+  // page through `orderedPageIds` (batched profile reader over the filtered
+  // id set) and the list orders by array position. This entry only marks the
+  // column sortable; referencing it in SQL would raise (no `actual` join).
   actual: sql`actual.cost`,
   created: sql`p.created_at`,
 }

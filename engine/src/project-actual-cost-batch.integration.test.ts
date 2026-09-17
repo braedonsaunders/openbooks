@@ -21,7 +21,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 }});
 
-const { entityListSource } = await import("../../web/lib/list/entity-sources.ts");
+const { entityListSource, plannedPageClauses } = await import("../../web/lib/list/entity-sources.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -34,8 +34,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * fixture carrying exactly the divergent grain: a reversed-status cost and
  * a manual actual_cost adjustment.
  */
-const profile = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!
-  .financialProfile;
+const builtinTm = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!;
+const profile = builtinTm.financialProfile;
 
 async function seedProject(
   exec: SqlExecutor,
@@ -43,12 +43,13 @@ async function seedProject(
   code: string,
   postings: { entryNumber: string; amount: string; status: "posted" | "reversed" }[],
   adjustment: string,
+  projectTypeId: string | null = null,
 ): Promise<string> {
   const projectId = randomUUID();
   await exec.execute(sql`
-    insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+    insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, project_type_id, custom)
     values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, ${code},
-            ${code}, ${org.customerId}, 'active', true, '{}'::jsonb)`);
+            ${code}, ${org.customerId}, 'active', true, ${projectTypeId}, '{}'::jsonb)`);
   for (const posting of postings) {
     const entryId = randomUUID();
     // The posted-balance trigger requires ≥2 lines, so seed as draft, add
@@ -122,7 +123,7 @@ test("the batched list actual-cost reader ties the single-project resolver", { s
     assert.equal(batch.get(plain), String(singleB));
 
     // The list wires this reader through the projects source enrichment,
-    // overwriting the SQL lateral's `actual` key on displayed rows.
+    // overwriting the SQL `actual` placeholder on displayed rows.
     const source = entityListSource("project");
     assert.ok(source?.enrichRows, "projects source enriches rows");
     const rows: Record<string, unknown>[] = [
@@ -132,6 +133,104 @@ test("the batched list actual-cost reader ties the single-project resolver", { s
     await source.enrichRows!(org.orgId, rows);
     assert.equal(rows[0]!.actual, String(singleA));
     assert.equal(rows[1]!.actual, String(singleB));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * F-t03-013: the batched reader must resolve each project's own type profile
+ * in one lookup (no per-project `loadProjectType`), and sort-by-actual must
+ * plan from the same reader — one aggregate over the filtered id set, never
+ * a correlated per-row sum over journal_lines.
+ */
+async function seedProjectType(
+  exec: SqlExecutor,
+  org: ScratchOrg,
+  actualCost: unknown,
+  billingMethod: string | null,
+): Promise<string> {
+  const typeId = randomUUID();
+  await exec.execute(sql`
+    insert into project_types (id, org_id, key, name, billing_method, invoicing_profile, backup_profile)
+    values (${typeId}, ${org.orgId}, ${`TEST-${typeId.slice(0, 8)}`}, 'Batch test type',
+            ${billingMethod}, ${JSON.stringify(builtinTm.invoicingProfile)}::jsonb,
+            ${JSON.stringify(builtinTm.backupProfile)}::jsonb)`);
+  await exec.execute(sql`
+    insert into project_financial_profile_versions (org_id, project_type_id, effective_from, financial_profile, reason)
+    values (${org.orgId}, ${typeId}, '2026-01-01',
+            ${JSON.stringify({ ...profile, actualCost })}::jsonb, 'batch reader fixture')`);
+  return typeId;
+}
+
+test("the batched reader resolves per-type profiles and plans actual-cost sorts without journal scans", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const pricey = await seedProject(db, org, "JOB-SORT-A", [
+      { entryNumber: "SORT-A-1", amount: "1000.0000", status: "posted" },
+    ], "75.0000");
+    const cheap = await seedProject(db, org, "JOB-SORT-B", [
+      { entryNumber: "SORT-B-1", amount: "500.0000", status: "posted" },
+    ], "0");
+    // A custom type whose actual-cost source matches nothing: its legs must
+    // price at zero even though the org holds posted cost lines for it.
+    const noneType = await seedProjectType(db, org, { source: "none" }, "time_and_materials");
+    const unpriced = await seedProject(db, org, "JOB-SORT-C", [
+      { entryNumber: "SORT-C-1", amount: "1000.0000", status: "posted" },
+    ], "0", noneType);
+    // A dangling type id falls back to built-in time-and-materials, exactly
+    // like the single-project loader.
+    const orphan = await seedProject(db, org, "JOB-SORT-D", [
+      { entryNumber: "SORT-D-1", amount: "300.0000", status: "posted" },
+    ], "0", randomUUID());
+    // A type row missing its billing method keeps the page zero instead of
+    // failing it, mirroring the single loader's throw-then-catch.
+    const brokenType = await seedProjectType(db, org, { source: "none" }, "");
+    const broken = await seedProject(db, org, "JOB-SORT-E", [
+      { entryNumber: "SORT-E-1", amount: "900.0000", status: "posted" },
+    ], "0", brokenType);
+
+    const batch = await resolveProjectActualCosts(org.orgId, [pricey, cheap, unpriced, orphan, broken]);
+    assert.equal(batch.get(pricey), "1075.0000");
+    assert.equal(batch.get(cheap), "500.0000");
+    const singleUnpriced = (await resolveProjectFinancials(org.orgId, unpriced, { ...profile, actualCost: { source: "none" } as never })).measures.actual_cost;
+    assert.equal(singleUnpriced, "0.0000");
+    assert.equal(batch.get(unpriced), String(singleUnpriced));
+    const singleOrphan = (await resolveProjectFinancials(org.orgId, orphan, profile)).measures.actual_cost;
+    assert.equal(singleOrphan, "300.0000");
+    assert.equal(batch.get(orphan), String(singleOrphan));
+    assert.equal(batch.get(broken), "0.0000");
+
+    const source = entityListSource("project");
+    assert.ok(source?.orderedPageIds, "projects source plans actual-cost sorts");
+    const ctx = {
+      orgId: org.orgId,
+      tableSql: sql`projects p`,
+      baseJoins: sql``,
+      where: sql`p.org_id = ${org.orgId} and p.is_active`,
+    };
+    assert.equal(await source.orderedPageIds!({ ...ctx, sort: "name", dir: "asc" }), null);
+    // The two zero-cost projects tie; their relative order follows the uuid
+    // tiebreak, so pin the ordered ranks and the tied pair as a set.
+    const desc = await source.orderedPageIds!({ ...ctx, sort: "actual", dir: "desc" });
+    assert.deepEqual(desc?.slice(0, 3), [pricey, cheap, orphan]);
+    assert.deepEqual(new Set(desc?.slice(3)), new Set([unpriced, broken]));
+    const asc = await source.orderedPageIds!({ ...ctx, sort: "actual", dir: "asc" });
+    assert.deepEqual(new Set(asc?.slice(0, 2)), new Set([unpriced, broken]));
+    assert.deepEqual(asc?.slice(2), [orphan, cheap, pricey]);
+
+    // The shared planned-page clauses read the planned order back through
+    // real SQL — the same shape the list view pages with.
+    const idExpr = sql`p.id`;
+    const descClauses = plannedPageClauses([...desc!], idExpr);
+    const descPage = (await db.execute<{ id: string }>(sql`
+      select p.id from projects p where ${descClauses.where} order by ${descClauses.order} limit 2`)).rows;
+    assert.deepEqual(descPage.map((r) => r.id), [pricey, cheap], "planned desc page");
+    const ascClauses = plannedPageClauses([...asc!], idExpr);
+    const ascPage = (await db.execute<{ id: string }>(sql`
+      select p.id from projects p where ${ascClauses.where} order by ${ascClauses.order} limit 3`)).rows;
+    assert.deepEqual(new Set(ascPage.slice(0, 2).map((r) => r.id)), new Set([unpriced, broken]), "planned asc page pair");
+    assert.equal(ascPage[2]!.id, orphan, "planned asc page third");
   } finally {
     await dropScratchOrg(org.orgId);
   }
