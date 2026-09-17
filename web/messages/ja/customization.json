@@ -112,6 +112,7 @@
       "saved": "フォームを保存しました",
       "saveFailed": "フォームを保存できませんでした",
       "delete": "フォームを削除",
+      "deleteDefaultConfirm": "「{name}」はこのレコードタイプの組織の既定フォームです。削除すると全員が標準レイアウトに戻ります。本当に削除しますか？",
       "deleted": "フォームを削除しました",
       "headerSection": "ヘッダーフィールド",
       "linesSection": "明細列",

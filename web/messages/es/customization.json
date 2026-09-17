@@ -117,6 +117,7 @@
       "saved": "Formulario guardado",
       "saveFailed": "No se pudo guardar el formulario",
       "delete": "Eliminar formulario",
+      "deleteDefaultConfirm": "«{name}» es el formulario predeterminado de la organización para este tipo de registro. Al eliminarlo, todos vuelven al diseño estándar. ¿Eliminar de todos modos?",
       "deleted": "Formulario eliminado",
       "headerSection": "Campos de encabezado",
       "linesSection": "Columnas de líneas",

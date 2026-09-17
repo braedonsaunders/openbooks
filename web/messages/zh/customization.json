@@ -112,6 +112,7 @@
       "saved": "表单已保存",
       "saveFailed": "无法保存表单",
       "delete": "删除表单",
+      "deleteDefaultConfirm": "“{name}”是此记录类型的组织默认表单。删除后所有用户将恢复标准布局。仍要删除吗？",
       "deleted": "表单已删除",
       "headerSection": "表头字段",
       "linesSection": "行列",

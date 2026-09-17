@@ -112,6 +112,7 @@
       "saved": "Formulário salvo",
       "saveFailed": "Não foi possível salvar o formulário",
       "delete": "Excluir formulário",
+      "deleteDefaultConfirm": "“{name}” é o formulário padrão da organização para este tipo de registro. Ao excluí-lo, todos voltam ao layout padrão. Excluir mesmo assim?",
       "deleted": "Formulário excluído",
       "headerSection": "Campos de cabeçalho",
       "linesSection": "Colunas de linha",
