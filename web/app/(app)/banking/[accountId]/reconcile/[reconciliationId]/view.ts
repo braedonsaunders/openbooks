@@ -8,6 +8,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../../lib/authz'
+import { openingCarryStartDate } from '../../../../../../lib/banking-accounts'
 import { isUuid, parsePrefixedListParams } from '../../../../../../lib/list-params'
 
 /**
@@ -241,9 +242,13 @@ export async function loadReconciliation(
     perPage: 15,
     allowedSorts: ['date', 'amount', 'entry'] as const,
   })
+  // Lines covered by a signed opening carry are cleared by that carry, not
+  // by matching — hide them here exactly as the engine excludes them.
+  const carryStart = await openingCarryStartDate(ctx.orgId, accountId)
   const glWhere = sql`jl.account_id = ${accountId} and jl.org_id = ${ctx.orgId}
     and je.book_id = ${bookId} and jl.currency = ${recon.currency}
     and je.status = 'posted' and je.posting_date <= ${recon.through_date}
+    ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
     and jl.reconciled_at is null
     and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
     ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.txn_amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
