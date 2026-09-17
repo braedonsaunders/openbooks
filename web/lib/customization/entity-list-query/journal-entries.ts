@@ -59,17 +59,20 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
 /**
  * The journal list's backing relation: entries visible in the journal are the
  * union of (a) standalone engine journals by origin and (b) entries posted by
- * a journal-kind document. Both legs are index-driven ((org_id, origin,
- * posting_date) and documents (org_id, kind) → posted_entry_id); the outer
- * org_id predicate pushes down into each. UNION (not ALL) dedupes an entry
- * that qualifies both ways.
+ * a journal- or pay-run-kind document. Both legs are index-driven ((org_id,
+ * origin, posting_date) and documents (org_id, kind) → posted_entry_id); the
+ * outer org_id predicate pushes down into each. UNION (not ALL) dedupes an
+ * entry that qualifies both ways. Pay runs ride leg (b): a posted payroll JE
+ * hits the GL like any other posting and the run links to it, so hiding it
+ * here breaks the audit trail (F-t08-014). Other subledger postings (bills,
+ * invoices, payments, …) still live in their own modules and stay out.
  */
 export const JOURNAL_ENTRY_TABLE = `(
   select je.* from journal_entries je
    where je.origin in (${JOURNAL_GL_NATIVE_ORIGINS.map((origin) => `'${origin}'`).join(",")})
   union
   select je.* from journal_entries je
-    join documents jd on jd.posted_entry_id = je.id and jd.kind = 'journal' and jd.org_id = je.org_id
+    join documents jd on jd.posted_entry_id = je.id and jd.kind in ('journal', 'pay_run') and jd.org_id = je.org_id
 )`
 
 /** The one join the journal-entry WHERE clause references (manual-vs-document
@@ -79,9 +82,9 @@ export const JOURNAL_ENTRY_TABLE = `(
 export function journalEntryCountJoins(): SQL {
   return sql`
     left join lateral (
-      select d.id, d.custom
+      select d.id, d.custom, d.kind
         from documents d
-       where d.posted_entry_id = e.id and d.kind = 'journal'
+       where d.posted_entry_id = e.id and d.kind in ('journal', 'pay_run')
        limit 1
     ) source_doc on true`
 }

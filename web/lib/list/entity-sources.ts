@@ -437,11 +437,18 @@ const SOURCES: Record<string, EntityListSource> = {
     ],
     where: journalEntryWhere,
     drawerParam: 'txn',
-    drawerTarget: (row) => row.source_document_id
-      ? { param: 'entry', id: String(row.source_document_id) }
-      : { param: 'txn', id: String(row.id) },
+    // Only manual-journal documents open in the journal document drawer
+    // (?entry=, kind journal only). A pay_run source opens its posted entry
+    // (?txn=) instead — ?entry= with a pay_run document id resolves nothing
+    // and stranded the run's View-journal link (F-t08-014).
+    drawerTarget: (row) => {
+      if (row.source_document_id && String(row.source_document_kind ?? '') === 'journal') {
+        return { param: 'entry', id: String(row.source_document_id) }
+      }
+      return { param: 'txn', id: String(row.id) }
+    },
     basePath: '/journal',
-    extraSelect: sql`source_doc.id as source_document_id`,
+    extraSelect: sql`source_doc.id as source_document_id, source_doc.kind as source_document_kind`,
     statusVariant: (row) => row.status === 'posted' ? 'success' : row.status === 'reversed' ? 'destructive' : 'secondary',
   },
   inventory_onhand: {

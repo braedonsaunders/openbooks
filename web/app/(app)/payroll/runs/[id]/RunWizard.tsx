@@ -2360,7 +2360,7 @@ function FinishStep({
         <div className="flex items-center gap-2">
           {posted && run.posted_entry_id && (
             <Button asChild size="sm" variant="outline">
-              <Link href={`/journal?entry=${run.posted_entry_id}` as never}>
+              <Link href={`/journal?txn=${run.posted_entry_id}` as never}>
                 <BookOpenCheck size={14} aria-hidden />
                 {t('wizard.finish.viewJournal')}
               </Link>
@@ -2371,7 +2371,7 @@ function FinishStep({
           )}
           {posted && run.paid_entry_id && (
             <Button asChild size="sm" variant="ghost">
-              <Link href={`/journal?entry=${run.paid_entry_id}` as never}>
+              <Link href={`/journal?txn=${run.paid_entry_id}` as never}>
                 {t('wizard.finish.viewPayment')}
               </Link>
             </Button>

@@ -97,10 +97,12 @@ export async function loadJournal(
 
   // The Journal list shows ONLY actual journal entries — never the GL posting
   // of a bill / invoice / payment / expense (those live in their subledger
-  // module). An entry qualifies if its source document is a journal, or it's a
-  // GL-native entry with no subledger document (closing, allocation, etc.).
+  // module). An entry qualifies if its source document is a journal or a pay
+  // run (the run links to its posted entry, so hiding it breaks the audit
+  // trail — F-t08-014), or it's a GL-native entry with no subledger document
+  // (closing, allocation, etc.). Keep in sync with JOURNAL_ENTRY_TABLE leg (b).
   const journalsOnly = sql`(
-    exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind = 'journal')
+    exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
     or (
       not exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id)
       and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})
