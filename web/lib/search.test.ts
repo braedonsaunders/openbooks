@@ -712,7 +712,9 @@ test('journal entries are indexed and link through the entry redirect', async ()
 
   const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
   assert.ok(entriesQuery, 'entries must be queried')
-  assert.match(entriesQuery.text, /\(e\.entry_number = \?\) desc/, 'exact entries order first')
+  // The merged legs sit in a subquery (UNION forbids expression ORDER BY),
+  // so the exact-first ordering addresses the subquery alias.
+  assert.match(entriesQuery.text, /\(u\.entry_number = \?\) desc/, 'exact entries order first')
 })
 
 test('journal entries stay gated by the journal read permission', async () => {
