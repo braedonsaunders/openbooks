@@ -4,14 +4,17 @@ import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/e
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
 import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
+import { openItems, parseISO, summariseSide, toISO } from '../cash/core'
 import { isFeatureEnabled } from '../features'
 
 /**
  * Purchasing module home — one light round trip for the buy-to-pay workspace
  * landing: commitments + payables vitals, the top vendor exposures (the hero
  * roster: open POs → open bills per vendor), a 13-week spend trend, and the
- * live-directory badges. Deliberately NOT apPosition() — the pay-run engine
- * stays on the /ap cockpit tab; everything here is cheap counts and sums.
+ * live-directory badges. The open-payables vitals reuse the shared cash
+ * engine (openItems as of today) so the pulse ties to /ap by construction —
+ * a bespoke live aggregate drifted on both time boundaries (F-t04-012).
+ * The pay-run engine itself stays on the /ap cockpit tab.
  */
 
 export interface VendorExposureRow {
@@ -151,36 +154,12 @@ export async function purchasingHome(
         ? sql` and d.subsidiary_id = any(${subArr})`
         : sql``
 
-  const [apRes, topRes, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
-    // Open payables aggregate — open bill/expense items with remaining balance.
-    // Legs are stamped in their line entity's functional: aggregate per
-    // functional and translate to presentation below.
-    db.execute(sql`
-      with oi as (
-        select jl.party_id, jl.due_date, sub.base_currency as func,
-               abs(jl.amount) - coalesce((
-                 select sum(x.amount) from applications x
-                  where x.org_id = ${orgId}
-                    and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                    and x.unapplied_at is null
-               ), 0) as remaining
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
-          join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-          join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
-           and d.posted_entry_id = je.id and d.status = 'posted'
-           and d.kind in ('vendor_bill', 'expense_report')
-           and d.open_balance > 0
-          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
-      )
-      select oi.func,
-             coalesce(sum(remaining), 0) as outstanding,
-             coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
-             coalesce(sum(remaining) filter (where due_date >= ${today} and due_date < ${in7}), 0) as due_7,
-             count(*) filter (where remaining > 0) as open_count
-        from oi where remaining > 0 group by oi.func
-    `),
+  // Open-payables vitals reuse the shared cash engine as of today (F-t04-012):
+  // the bespoke live aggregate counted future-posted bills while netting
+  // future-dated applications, so the pulse never tied to /ap. openItems
+  // arrives in presentation currency, exactly like the cockpit's summary.
+  const [apItems, topRes, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
+    openItems(orgId, 'ap', today, subIds),
     // Hero roster — vendor commitments: open POs and open bills side by side.
     db.execute(sql`
       with oi as (
@@ -291,7 +270,7 @@ export async function purchasingHome(
   const balRates = await presentationRates(
     orgId,
     base,
-    [...apRes.rows.map((r) => (r.func ?? null) as string | null), ...topRes.rows.map((r) => (r.func ?? null) as string | null)],
+    [...topRes.rows.map((r) => (r.func ?? null) as string | null)],
     today,
   )
   const trBal = (amount: unknown, func: unknown): number =>
@@ -370,16 +349,22 @@ export async function purchasingHome(
     .sort((x, y) => y.billedOpen + y.openPoValue - (x.billedOpen + x.openPoValue))
     .slice(0, 10)
 
-  // Open-payables vitals: per-functional balances summed in presentation.
-  let apOutstanding = 0
-  let apOverdue = 0
+  // Open-payables vitals straight off the shared summary, so the pulse ties
+  // to /ap by construction: signed outstanding, overdue as outstanding
+  // minus current (the cockpit's own definition), the 7-day window and the
+  // open-line count over the same as-of item set.
+  const apSummary = summariseSide(apItems, parseISO(today), '0.0000', 0)
+  const apOutstanding = Number(apSummary.outstanding)
+  const apCurrent = Number(apSummary.buckets.find((b) => b.label === 'Current')?.amount ?? 0)
+  const apOverdue = apOutstanding > apCurrent ? apOutstanding - apCurrent : 0
   let openBills = 0
   let dueNext7 = 0
-  for (const r of apRes.rows) {
-    apOutstanding += trBal(r.outstanding, r.func)
-    apOverdue += trBal(r.overdue, r.func)
-    openBills += Number(r.open_count ?? 0)
-    dueNext7 += trBal(r.due_7, r.func)
+  for (const it of apItems) {
+    const remaining = Number(it.remaining)
+    if (!(remaining > 0)) continue
+    openBills += 1
+    const due = it.dueDate ? toISO(it.dueDate) : null
+    if (due !== null && due >= today && due < in7) dueNext7 += remaining
   }
   const badge = badgeRes.rows[0] ?? {}
   return {
