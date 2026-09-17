@@ -73,10 +73,13 @@ function validateEmailConfigFields(raw: PlainEmailConfig | RawEmailConfig, requi
     throw new Error('SMTP port must be a whole number from 1 to 65535.')
   }
   if (!requireComplete) return
+  // Presence messages read correctly whether the save enables delivery or
+  // merely stages a provider: a selected provider must be sendable-shaped
+  // even while disabled (F-t12-002), so no "before enabling" suffix here.
   if (!raw.provider) throw new Error('Select an email provider before enabling email delivery.')
-  if (!raw.fromEmail) throw new Error('Enter a valid From email address before enabling email delivery.')
-  if (raw.provider === 'smtp' && !raw.smtpHost) throw new Error('Enter a valid SMTP host without a protocol or path.')
-  if (raw.provider === 'mailgun' && !raw.mailgunDomain) throw new Error('Enter a valid Mailgun sending domain, such as mg.example.com.')
+  if (!raw.fromEmail) throw new Error('Enter a From email address to save this provider configuration.')
+  if (raw.provider === 'smtp' && !raw.smtpHost) throw new Error('Enter an SMTP host to save this provider configuration.')
+  if (raw.provider === 'mailgun' && !raw.mailgunDomain) throw new Error('Enter a Mailgun sending domain to save this provider configuration.')
   if (raw.provider === 'smtp' && 'secret' in raw) {
     const hasUsername = Boolean(raw.smtpUsername?.trim())
     const hasPassword = Boolean(raw.secret?.trim())
@@ -96,7 +99,10 @@ export function validateStoredEmailConfig(raw: RawEmailConfig, options: { requir
   if ((raw.keyCiphertext && raw.keyCiphertext.length > MAX_SEALED_SECRET_LENGTH) || (raw.keyNonce && raw.keyNonce.length > MAX_SEALED_SECRET_LENGTH)) {
     throw new Error('The stored provider credential is invalid; replace it before enabling email.')
   }
-  if (requireComplete && raw.provider !== 'smtp' && !(hasCiphertext && hasNonce)) {
+  // The credential is required only at enable time: clearing it while
+  // disabling (offboarding) or staging a credential-less draft must keep
+  // working — enabling and test-sending still refuse loudly without one.
+  if (raw.enabled === true && raw.provider !== 'smtp' && !(hasCiphertext && hasNonce)) {
     throw new Error("Enter this provider's credential before enabling email delivery.")
   }
   if (raw.provider === 'smtp') {
