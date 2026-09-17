@@ -17,7 +17,7 @@ import {
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
-import { isFeatureEnabled } from "../../../../lib/features";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -31,6 +31,23 @@ export async function GET() {
       ? sql` and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
       : sql` and false`
     : sql``;
+  // The import form's subsidiary picker reads the same scope the batches do:
+  // multi-subsidiary orgs pick the posting entity up front (F-t06-004), while
+  // single-entity orgs get no options and post to the root like every other
+  // document. Restricted callers see only their own entities.
+  const subsidiaryIdFilter = gate.allowedSubsidiaryIds
+    ? gate.allowedSubsidiaryIds.size > 0
+      ? sql` and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+      : sql` and false`
+    : sql``;
+  const subsidiaries = (await subsidiaryFeatureEnabled(orgId))
+    ? await db.execute(sql`
+      select id, name, base_currency as "baseCurrency"
+        from subsidiaries
+       where org_id = ${orgId} and is_active and not is_elimination${subsidiaryIdFilter}
+       order by name
+    `)
+    : { rows: [] };
   const [batches, configs] = await Promise.all([
     db.execute(sql`
       select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
@@ -54,7 +71,7 @@ export async function GET() {
         from psp_provider_configs where org_id = ${orgId}
     `),
   ]);
-  return NextResponse.json({ batches: batches.rows, configs: configs.rows });
+  return NextResponse.json({ batches: batches.rows, configs: configs.rows, subsidiaries: subsidiaries.rows });
 }
 
 export async function POST(req: Request) {

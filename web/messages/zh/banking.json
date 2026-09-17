@@ -635,6 +635,7 @@
     "uuidPlaceholder": "UUID",
     "stripePayloadLabel": "余额交易 JSON 数组",
     "genericPayloadLabel": "结算 JSON 对象",
+    "payloadShapeHint": "每行需要 id、type、最小单位的 amount、fee、net 和 currency — 例如：{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}。缺少 type 的行无法分类。",
     "importDraft": "导入草稿",
     "recentBatches": "最近批次",
     "reversalDate": "冲销日期",

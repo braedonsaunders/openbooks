@@ -243,7 +243,7 @@ export function parseStripeBalanceTransactions(
   }
   const lines: ParsedSettlementLine[] = [];
   let currency = "";
-  for (const r of rows) {
+  for (const [index, r] of rows.entries()) {
     // Every row carries its own explicit currency: inheriting a previous
     // row's (or a USD default) would silently convert foreign amounts at the
     // wrong scale, and rows of different currencies must never be summed as
@@ -277,26 +277,39 @@ export function parseStripeBalanceTransactions(
     if (r.net != null) {
       fromPspMinorUnits(r.net, "Stripe net amount", false, currency);
     }
+    // A missing type is a client-shape refusal, not a 500: the kind mapping
+    // below reads `.includes` off this field, so an unvalidated row escapes
+    // as a TypeError with no schema help (F-t06-004). Name the 1-based row
+    // (plus the provider id when the row carries one) so the payload can be
+    // repaired field-by-field.
+    const rowType = typeof r.type === "string" ? r.type : "";
+    if (rowType === "") {
+      const rowId =
+        typeof r.id === "string" && r.id !== "" ? ` ${r.id}` : "";
+      throw new PspSettlementError(
+        `Stripe transaction type is required (row ${index + 1}${rowId})`,
+      );
+    }
     const kind: SettlementLineKind =
-      r.type === "stripe_fee" || r.type === "fee"
+      rowType === "stripe_fee" || rowType === "fee"
         ? "fee"
-        : r.type === "refund" || r.type === "payment_refund"
+        : rowType === "refund" || rowType === "payment_refund"
           ? "refund"
-          : r.type === "adjustment" &&
+          : rowType === "adjustment" &&
               (r.description ?? "").toLowerCase().includes("dispute")
             ? "dispute"
-            : r.type === "payout" || r.type === "transfer"
+            : rowType === "payout" || rowType === "transfer"
               ? "transfer"
-              : r.type.includes("dispute")
+              : rowType.includes("dispute")
                 ? "dispute"
                 : "charge";
     lines.push({
       kind,
       amount: major,
       externalRef: r.id,
-      description: r.description ?? r.type,
+      description: r.description ?? rowType,
       currency,
-      meta: { stripeType: r.type, fee: r.fee, net: r.net },
+      meta: { stripeType: rowType, fee: r.fee, net: r.net },
     });
     if (fee != null && r.fee !== 0 && kind === "charge") {
       lines.push({
@@ -623,6 +636,36 @@ export async function importSettlementBatch(
     { label: "fx", id: accounts.fxAccountId },
     { label: "clearing", id: accounts.clearingAccountId },
   ]);
+  // The subsidiary reference enters the lifecycle here too: a malformed id
+  // would otherwise die in Postgres as a raw uuid-cast 500, and a foreign
+  // or inactive id would persist to strand the draft at posting (F-t06-004).
+  // Absence stays lenient — the import form asks up front, and posting
+  // resolves an absent subsidiary exactly like every other document.
+  const subsidiaryId =
+    typeof accounts.subsidiaryId === "string" &&
+    accounts.subsidiaryId !== ""
+      ? accounts.subsidiaryId
+      : null;
+  if (subsidiaryId !== null) {
+    if (!PSP_ACCOUNT_UUID_RE.test(subsidiaryId)) {
+      throw new PspSettlementError(
+        `settlement subsidiary ${subsidiaryId} is not a valid subsidiary reference`,
+      );
+    }
+    const sub = (await db.execute<{ name: string; isActive: boolean }>(sql`
+      select name, is_active as "isActive"
+        from subsidiaries
+       where org_id = ${orgId} and id = ${subsidiaryId}
+    `)).rows[0];
+    if (!sub) {
+      throw new PspSettlementError(
+        "settlement subsidiary is not a subsidiary of this organization",
+      );
+    }
+    if (!sub.isActive) {
+      throw new PspSettlementError(`subsidiary "${sub.name}" is inactive`);
+    }
+  }
   const totals = summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
@@ -638,7 +681,7 @@ export async function importSettlementBatch(
         ${totals.adjustmentAmount}, ${totals.netAmount}, ${totals.fxAmount}, ${parsed.settlementDate},
         ${accounts.bankAccountId ?? null}, ${accounts.feeAccountId ?? null},
         ${accounts.disputeAccountId ?? null}, ${accounts.fxAccountId ?? null},
-        ${accounts.clearingAccountId ?? null}, ${accounts.subsidiaryId ?? null},
+        ${accounts.clearingAccountId ?? null}, ${subsidiaryId},
         ${parsed.raw ? JSON.stringify(parsed.raw) : null}::jsonb, ${parsed.lines.length},
         ${parsed.memo ?? null}, ${actorId}, ${actorId}
       )
@@ -686,7 +729,7 @@ export async function importSettlementBatch(
         dispute_account_id = coalesce(${accounts.disputeAccountId ?? null}, dispute_account_id),
         fx_account_id = coalesce(${accounts.fxAccountId ?? null}, fx_account_id),
         clearing_account_id = coalesce(${accounts.clearingAccountId ?? null}, clearing_account_id),
-        subsidiary_id = coalesce(${accounts.subsidiaryId ?? null}, subsidiary_id),
+        subsidiary_id = coalesce(${subsidiaryId}, subsidiary_id),
         source_payload = ${parsed.raw ? JSON.stringify(parsed.raw) : null}::jsonb,
         line_count = ${parsed.lines.length},
         memo = ${parsed.memo ?? null},
@@ -773,16 +816,6 @@ export async function postSettlementBatch(
       return { entryId: b.journal_entry_id };
     }
     if (b.status === "void") throw new PspSettlementError("batch is void");
-    if (
-      !b.bank_account_id ||
-      !b.clearing_account_id ||
-      !b.fee_account_id ||
-      !b.subsidiary_id
-    ) {
-      throw new PspSettlementError(
-        "bank, clearing, fee accounts and subsidiary are required to post",
-      );
-    }
     const controls = (await db.execute<{ c: Record<string, string> | null }>(sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId} for share
     `));
@@ -790,7 +823,33 @@ export async function postSettlementBatch(
     // Keep hierarchy and functional currency stable through validation and posting.
     await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     const ctx = await loadSubsidiaryContext(db, orgId);
-    const subsidiary = ctx.byId.get(b.subsidiary_id);
+    // Only a genuinely ambiguous choice (a multi-entity org with none named)
+    // refuses, and then the refusal names exactly what is missing: the old
+    // combined check blamed accounts the batch already carried (F-t06-004).
+    // Either way the draft is repairable by re-importing the same provider
+    // reference with the missing details (the import path fills them in).
+    // The outer disjunct keeps every account narrowed past the refusal.
+    if (
+      !b.bank_account_id ||
+      !b.clearing_account_id ||
+      !b.fee_account_id ||
+      (!b.subsidiary_id && ctx.multi)
+    ) {
+      const missing: string[] = [];
+      if (!b.bank_account_id) missing.push("bank account");
+      if (!b.clearing_account_id) missing.push("clearing account");
+      if (!b.fee_account_id) missing.push("fee account");
+      if (!b.subsidiary_id) missing.push("subsidiary");
+      throw new PspSettlementError(
+        `settlement batch cannot post without ${missing.join(", ")}; re-import the same provider reference with the missing details to repair this draft`,
+      );
+    }
+    // An absent subsidiary resolves to the org root — the same contract the
+    // posting kernel gives every other document (posting.ts: docSubId ??
+    // root). Past the refusal above this is unambiguous: a named subsidiary,
+    // or a single-entity org whose only choice is the root.
+    const subsidiaryId: string = b.subsidiary_id ?? ctx.rootId;
+    const subsidiary = ctx.byId.get(subsidiaryId);
     if (!subsidiary?.baseCurrency) {
       throw new PspSettlementError("settlement subsidiary is missing");
     }
@@ -819,7 +878,7 @@ export async function postSettlementBatch(
       orgId,
       periodId,
       bookId,
-      subsidiaryIds: [b.subsidiary_id],
+      subsidiaryIds: [subsidiaryId],
       modules: ["banking"],
     });
 
@@ -913,7 +972,6 @@ export async function postSettlementBatch(
         `settlement posting account is not a postable account in this organization`,
       );
     }
-    const subsidiaryId = b.subsidiary_id;
     try {
       await validateSubsidiaryRestrictions(db, {
         orgId, ctx, docSubsidiaryId: subsidiaryId,
@@ -930,7 +988,7 @@ export async function postSettlementBatch(
     await db.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${entryId}, ${orgId}, ${bookId}, ${b.subsidiary_id}, ${entryNumber}, ${b.settlement_date}, ${periodId},
+      values (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId}, ${entryNumber}, ${b.settlement_date}, ${periodId},
               ${b.memo ?? `PSP ${b.provider} ${b.external_ref}`}, 'draft', 'document', ${actorId}, ${actorId})
     `);
     let ln = 0;
@@ -939,7 +997,7 @@ export async function postSettlementBatch(
       await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-        values (${orgId}, ${entryId}, ${ln}, ${l.accountId}, ${b.subsidiary_id}, ${l.amount},
+        values (${orgId}, ${entryId}, ${ln}, ${l.accountId}, ${subsidiaryId}, ${l.amount},
                 ${b.currency}, ${l.amount}, 1, ${l.memo})
       `);
     }
@@ -948,7 +1006,7 @@ export async function postSettlementBatch(
     );
     await db.execute(sql`
       update psp_settlement_batches set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(),
-             updated_at = now(), updated_by = ${actorId}
+             subsidiary_id = ${subsidiaryId}, updated_at = now(), updated_by = ${actorId}
        where id = ${batchId} and org_id = ${orgId}
     `);
     await db.execute(sql`

@@ -7,8 +7,9 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { page, pageHeader, frame, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, getAuthz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import { getMoneyFormatter } from '@/lib/money-server'
-import type { PspSettlementRow } from './sections'
+import type { PspSettlementRow, PspSubsidiaryOption } from './sections'
 
 /**
  * PSP settlement import + batches, split into a loader and a spec.
@@ -47,6 +48,9 @@ export interface PspSettlementsStrings {
   bankAccountId: string
   feeAccountId: string
   clearingAccountId: string
+  subsidiaryLabel: string
+  noneLabel: string
+  payloadShapeHint: string
   uuidPlaceholder: string
   importDraft: string
   recentBatches: string
@@ -71,6 +75,7 @@ export interface PspSettlementsData {
   description: string
   strings: PspSettlementsStrings
   rows: PspSettlementRow[]
+  subsidiaries: PspSubsidiaryOption[]
 }
 
 interface BatchRow extends Record<string, unknown> {
@@ -106,6 +111,13 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
      where org_id = ${authz.user.orgId}${subsidiaryFilter}
      order by settlement_date desc, created_at desc limit 50
   `)
+  // The import form's subsidiary picker: same flag gate and caller scope as
+  // the document drawers (F-t06-004). Empty keeps all subsidiary UI hidden
+  // and the batch posts to the root like every other document.
+  const subsidiaryScope = await subsidiaryUiOptions(authz.user.orgId)
+  const subsidiaries = subsidiaryScope
+    .filter((option) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(option.id))
+    .map((option) => ({ id: option.id, name: option.name, baseCurrency: option.baseCurrency }))
 
   const dateLabel = (value: string) =>
     new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
@@ -128,6 +140,9 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       bankAccountId: t('bankAccountId'),
       feeAccountId: t('feeAccountId'),
       clearingAccountId: t('clearingAccountId'),
+      subsidiaryLabel: common('labels.subsidiary'),
+      noneLabel: common('labels.none'),
+      payloadShapeHint: t('payloadShapeHint'),
       uuidPlaceholder: t('uuidPlaceholder'),
       importDraft: t('importDraft'),
       recentBatches: t('recentBatches'),
@@ -146,6 +161,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       loadFailedLabel: common('feedback.loadFailed'),
       retryLabel: common('actions.retry'),
     },
+    subsidiaries,
     rows: batches.rows.map((b) => ({
       id: String(b.id),
       providerLabel: t(`providers.${b.provider}`),
@@ -188,6 +204,7 @@ export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
             // is already wired.
             strings: data.strings,
             initialRows: data.rows,
+            initialSubsidiaries: data.subsidiaries,
           }),
         ],
         { className: 'space-y-6' },

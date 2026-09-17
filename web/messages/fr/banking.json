@@ -632,6 +632,7 @@
     "uuidPlaceholder": "UUID",
     "stripePayloadLabel": "Tableau JSON des opérations de solde",
     "genericPayloadLabel": "Objet JSON du règlement",
+    "payloadShapeHint": "Chaque ligne requiert id, type, amount en plus petites unités, fee, net et currency — p. ex. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Sans type, la ligne ne peut pas être classée.",
     "importDraft": "Importer le brouillon",
     "recentBatches": "Lots récents",
     "reversalDate": "Date de contrepassation",

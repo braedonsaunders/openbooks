@@ -632,6 +632,7 @@
     "uuidPlaceholder": "UUID",
     "stripePayloadLabel": "Array JSON de transacciones de saldo",
     "genericPayloadLabel": "Objeto JSON de la liquidación",
+    "payloadShapeHint": "Cada fila requiere id, type, amount en unidades mínimas, fee, net y currency — p. ej. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Sin type, la fila no se puede clasificar.",
     "importDraft": "Importar borrador",
     "recentBatches": "Lotes recientes",
     "reversalDate": "Fecha de reversión",

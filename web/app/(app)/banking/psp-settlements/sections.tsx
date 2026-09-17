@@ -24,6 +24,12 @@ export interface PspSettlementRow {
   status: 'draft' | 'posted' | 'void'
 }
 
+export interface PspSubsidiaryOption {
+  id: string
+  name: string
+  baseCurrency: string
+}
+
 const STATUS_MESSAGE: Record<SettlementStatus, 'draft' | 'posted' | 'voided'> = {
   draft: 'draft',
   posted: 'posted',
@@ -54,29 +60,54 @@ function isSettlementBatch(value: unknown): value is SettlementBatch {
   )
 }
 
-async function fetchSettlements(signal?: AbortSignal): Promise<SettlementBatch[] | null> {
+function isSubsidiaryOption(value: unknown): value is PspSubsidiaryOption {
+  if (!value || typeof value !== 'object') return false
+  const option = value as Record<string, unknown>
+  return (
+    typeof option.id === 'string' &&
+    typeof option.name === 'string' &&
+    typeof option.baseCurrency === 'string'
+  )
+}
+
+async function fetchSettlements(
+  signal?: AbortSignal,
+): Promise<{ batches: SettlementBatch[]; subsidiaries: PspSubsidiaryOption[] } | null> {
   try {
     const response = await fetch('/api/psp/settlements', { signal })
     if (!response.ok) return null
-    const data = (await response.json()) as { batches?: unknown }
+    const data = (await response.json()) as { batches?: unknown; subsidiaries?: unknown }
     if (!Array.isArray(data.batches) || !data.batches.every(isSettlementBatch)) return null
-    return data.batches
+    const subsidiaries = Array.isArray(data.subsidiaries)
+      ? data.subsidiaries.filter(isSubsidiaryOption)
+      : []
+    return { batches: data.batches, subsidiaries }
   } catch {
     return null
   }
 }
 
-async function requestSettlement<T>(body: Record<string, unknown>): Promise<T | null> {
+// Mutations resolve to the server's typed reason on refusal: the previous
+// shape discarded the error body, so every 422 read as a generic
+// "could not import/post" with the real message only in the network log
+// (F-t06-004). The pinned alert below shows the reason until the next action.
+async function requestSettlement<T>(
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: T } | { ok: false; error: string | null }> {
   try {
     const response = await fetch('/api/psp/settlements', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!response.ok) return null
-    return (await response.json()) as T
+    const data = (await response.json().catch(() => null)) as (T & { error?: unknown }) | null
+    if (!response.ok) {
+      const message = (data as { error?: unknown } | null)?.error
+      return { ok: false, error: typeof message === 'string' && message ? message : null }
+    }
+    return { ok: true, data: (data ?? {}) as T }
   } catch {
-    return null
+    return { ok: false, error: null }
   }
 }
 
@@ -102,6 +133,7 @@ async function requestSettlement<T>(body: Record<string, unknown>): Promise<T | 
 export function PspSettlementsWorkspace({
   strings,
   initialRows,
+  initialSubsidiaries,
 }: {
   strings: {
     acceptanceNote: string
@@ -113,6 +145,9 @@ export function PspSettlementsWorkspace({
     bankAccountId: string
     feeAccountId: string
     clearingAccountId: string
+    subsidiaryLabel: string
+    noneLabel: string
+    payloadShapeHint: string
     uuidPlaceholder: string
     importDraft: string
     recentBatches: string
@@ -132,6 +167,7 @@ export function PspSettlementsWorkspace({
     retryLabel: string
   }
   initialRows: PspSettlementRow[] | null
+  initialSubsidiaries?: PspSubsidiaryOption[] | null
 }) {
   const t = useTranslations('banking.pspSettlements')
   // Client-fetched rows (native path, and spec-path reloads after a mutation)
@@ -140,6 +176,7 @@ export function PspSettlementsWorkspace({
   const { money } = useMoney()
   const today = useBusinessToday()
   const [batches, setBatches] = useState<SettlementBatch[]>([])
+  const [subsidiaries, setSubsidiaries] = useState<PspSubsidiaryOption[]>(initialSubsidiaries ?? [])
   const [provider, setProvider] = useState<ImportProvider>('stripe')
   const [externalRef, setExternalRef] = useState('')
   const [settlementDate, setSettlementDate] = useState(today)
@@ -147,6 +184,7 @@ export function PspSettlementsWorkspace({
   const [bankAccountId, setBankAccountId] = useState('')
   const [feeAccountId, setFeeAccountId] = useState('')
   const [clearingAccountId, setClearingAccountId] = useState('')
+  const [subsidiaryId, setSubsidiaryId] = useState('')
   const [reversalDate, setReversalDate] = useState(today)
   const [reversalReason, setReversalReason] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
@@ -160,12 +198,13 @@ export function PspSettlementsWorkspace({
       return
     }
     const controller = new AbortController()
-    void fetchSettlements(controller.signal).then((loadedBatches) => {
+    void fetchSettlements(controller.signal).then((loaded) => {
       if (controller.signal.aborted) return
-      if (loadedBatches === null) {
+      if (loaded === null) {
         setLoadFailed(true)
       } else {
-        setBatches(loadedBatches)
+        setBatches(loaded.batches)
+        setSubsidiaries(loaded.subsidiaries)
       }
       setLoading(false)
     })
@@ -175,14 +214,26 @@ export function PspSettlementsWorkspace({
   const load = async () => {
     setLoading(true)
     setLoadFailed(false)
-    const loadedBatches = await fetchSettlements()
-    if (loadedBatches === null) {
+    const loaded = await fetchSettlements()
+    if (loaded === null) {
       setLoadFailed(true)
     } else {
-      setBatches(loadedBatches)
+      setBatches(loaded.batches)
+      setSubsidiaries(loaded.subsidiaries)
+      // A subsidiary the picker offered can leave scope between loads; never
+      // hold a selection the list no longer contains.
+      if (subsidiaryId && !loaded.subsidiaries.some((s) => s.id === subsidiaryId)) {
+        setSubsidiaryId('')
+      }
     }
     setLoading(false)
   }
+
+  // Multi-entity orgs must name the posting entity before the draft exists:
+  // an unnamed draft used to strand at Post with a refusal that blamed the
+  // accounts the import already carried (F-t06-004). Single-entity orgs get
+  // no options and post to the root like every other document.
+  const needsSubsidiaryChoice = subsidiaries.length > 0
 
   const importBatch = async () => {
     setErr(null)
@@ -202,6 +253,7 @@ export function PspSettlementsWorkspace({
       bankAccountId: bankAccountId || undefined,
       feeAccountId: feeAccountId || undefined,
       clearingAccountId: clearingAccountId || undefined,
+      subsidiaryId: subsidiaryId || undefined,
     }
     if (provider === 'stripe') {
       body.transactions = parsed
@@ -210,22 +262,23 @@ export function PspSettlementsWorkspace({
       body.payload = parsed
     }
     const d = await requestSettlement<{ batchId?: string }>(body)
-    if (!d || typeof d.batchId !== 'string') {
-      setErr(t('importFailed'))
+    if (!d.ok || typeof d.data.batchId !== 'string') {
+      setErr(!d.ok && d.error ? d.error : t('importFailed'))
       return
     }
-    setMsg(t('importedToast', { id: d.batchId }))
+    setMsg(t('importedToast', { id: d.data.batchId }))
     void load()
   }
 
   const post = async (batchId: string) => {
     setErr(null)
+    setMsg(null)
     const d = await requestSettlement<{ entryId?: string }>({ action: 'post', batchId })
-    if (!d || typeof d.entryId !== 'string') {
-      setErr(t('postFailed'))
+    if (!d.ok || typeof d.data.entryId !== 'string') {
+      setErr(!d.ok && d.error ? d.error : t('postFailed'))
       return
     }
-    setMsg(t('postedToast', { id: d.entryId }))
+    setMsg(t('postedToast', { id: d.data.entryId }))
     void load()
   }
 
@@ -241,11 +294,11 @@ export function PspSettlementsWorkspace({
       reversalDate,
       reason: reversalReason,
     })
-    if (!d || typeof d.entryId !== 'string') {
-      setErr(t('reversalFailed'))
+    if (!d.ok || typeof d.data.entryId !== 'string') {
+      setErr(!d.ok && d.error ? d.error : t('reversalFailed'))
       return
     }
-    setMsg(t('reversedToast', { id: d.entryId }))
+    setMsg(t('reversedToast', { id: d.data.entryId }))
     setReversalReason('')
     void load()
   }
@@ -345,6 +398,19 @@ export function PspSettlementsWorkspace({
               placeholder={strings.uuidPlaceholder}
             />
           </div>
+          {needsSubsidiaryChoice && (
+            <div>
+              <Label>{strings.subsidiaryLabel}</Label>
+              <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
+                <option value="">{strings.noneLabel}</option>
+                {subsidiaries.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.baseCurrency})
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
         </div>
         <div>
           <Label>{provider === 'stripe' ? t('stripePayloadLabel') : t('genericPayloadLabel')}</Label>
@@ -353,8 +419,15 @@ export function PspSettlementsWorkspace({
             value={payload}
             onChange={(e) => setPayload(e.target.value)}
           />
+          {provider === 'stripe' && (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{strings.payloadShapeHint}</p>
+          )}
         </div>
-        <Button size="sm" disabled={!externalRef} onClick={() => void importBatch()}>
+        <Button
+          size="sm"
+          disabled={!externalRef || (needsSubsidiaryChoice && !subsidiaryId)}
+          onClick={() => void importBatch()}
+        >
           {strings.importDraft}
         </Button>
       </Card>

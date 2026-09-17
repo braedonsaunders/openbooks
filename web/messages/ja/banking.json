@@ -635,6 +635,7 @@
     "uuidPlaceholder": "UUID",
     "stripePayloadLabel": "残高取引の JSON 配列",
     "genericPayloadLabel": "決済明細の JSON オブジェクト",
+    "payloadShapeHint": "各行に id、type、最小単位の amount、fee、net、currency が必要です — 例: {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}。type がない行は分類できません。",
     "importDraft": "下書きとしてインポート",
     "recentBatches": "最近のバッチ",
     "reversalDate": "取消日",

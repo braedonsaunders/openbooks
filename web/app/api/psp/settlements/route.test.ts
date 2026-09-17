@@ -14,6 +14,8 @@ interface PspRouteState {
   allowedSubsidiaryIds: Set<string> | null;
   batchSubsidiaryId: string | null | undefined;
   batchRows: Array<Record<string, unknown>>;
+  subsidiaryRows: Array<Record<string, unknown>>;
+  multiSubsidiary: boolean;
   permissionChecks: string[];
   domainCalls: DomainCall[];
 }
@@ -24,6 +26,8 @@ const routeState: PspRouteState = {
   allowedSubsidiaryIds: null,
   batchSubsidiaryId: undefined,
   batchRows: [],
+  subsidiaryRows: [],
+  multiSubsidiary: true,
   permissionChecks: [],
   domainCalls: [],
 };
@@ -55,6 +59,12 @@ const mockSources = new Map<string, string>([
           const text = (query?.queryChunks ?? []).map(staticText).join('')
           if (text.includes('select subsidiary_id as "subsidiaryId"')) {
             return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
+          }
+          if (text.includes('from subsidiaries')) {
+            if (state.allowedSubsidiaryIds) {
+              return { rows: state.subsidiaryRows.filter((row) => state.allowedSubsidiaryIds.has(row.id)) }
+            }
+            return { rows: state.subsidiaryRows }
           }
           if (text.includes('from psp_settlement_batches')) {
             if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id = any')) return { rows: state.batchRows }
@@ -103,7 +113,12 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:features",
-    `export async function isFeatureEnabled() { return true }`,
+    `
+      export async function isFeatureEnabled() { return true }
+      export async function subsidiaryFeatureEnabled() {
+        return globalThis[Symbol.for('openbooks.psp-settlement-route-test')].multiSubsidiary !== false
+      }
+    `,
   ],
   [
     "mock:business-date",
@@ -209,6 +224,8 @@ function reset(permissions: string[]): void {
   routeState.allowedSubsidiaryIds = null;
   routeState.batchSubsidiaryId = undefined;
   routeState.batchRows = [];
+  routeState.subsidiaryRows = [];
+  routeState.multiSubsidiary = true;
   routeState.permissionChecks.length = 0;
   routeState.domainCalls.length = 0;
 }
@@ -236,6 +253,36 @@ test("GET hides batches and provider configs from other subsidiaries", async () 
   const payload = await response.json() as { batches: Array<{ id: string }>; configs: unknown[] };
   assert.deepEqual(payload.batches.map((batch) => batch.id), ["batch-a"]);
   assert.deepEqual(payload.configs, []);
+});
+
+// F-t06-004: the import form asks for the posting subsidiary up front, so
+// GET carries the picker's options under the same scope as the batches.
+test("GET lists in-scope subsidiaries for the import picker", async () => {
+  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.batchRows = [];
+  routeState.subsidiaryRows = [
+    { id: "sub-a", name: "Main Co", baseCurrency: "USD" },
+    { id: "sub-b", name: "Second Co", baseCurrency: "USD" },
+  ];
+
+  const response = await GET();
+
+  assert.equal(response.status, 200);
+  const payload = await response.json() as { subsidiaries: Array<{ id: string }> };
+  assert.deepEqual(payload.subsidiaries.map((sub) => sub.id), ["sub-a"]);
+});
+
+test("GET omits subsidiary options for single-entity orgs", async () => {
+  routeState.allowedSubsidiaryIds = null;
+  routeState.batchRows = [];
+  routeState.subsidiaryRows = [{ id: "sub-a", name: "Main Co", baseCurrency: "USD" }];
+  routeState.multiSubsidiary = false;
+
+  const response = await GET();
+
+  assert.equal(response.status, 200);
+  const payload = await response.json() as { subsidiaries: unknown[] };
+  assert.deepEqual(payload.subsidiaries, []);
 });
 
 test("saveConfig rejects reconciliation authority without setup authority", async () => {
