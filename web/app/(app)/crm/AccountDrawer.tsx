@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { buildAccountIdentityPatch } from './account-identity-patch'
+import { displayAccountStatusName } from '../../../lib/crm-status-display'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
 
@@ -65,7 +66,7 @@ export function AccountDrawer({ data, statuses, owners, territories, sources, ba
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={t('fields.accountName')}><Input value={form.displayName} onChange={(e) => set('displayName', e.target.value)} disabled={!canManage} /></Field>
       <Field label={t('fields.lifecycleStage')}><Select value={form.lifecycleStage} onChange={(e) => set('lifecycleStage', e.target.value)} disabled={!canManage}><option value="lead">{t('stages.lead')}</option><option value="prospect">{t('stages.prospect')}</option><option value="customer">{t('stages.customer')}</option></Select></Field>
-      <Field label={t('fields.status')}><Select value={form.statusId} onChange={(e) => set('statusId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{filteredStatuses.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
+      <Field label={t('fields.status')}><Select value={form.statusId} onChange={(e) => set('statusId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{filteredStatuses.map((o) => <option key={o.id} value={o.id}>{displayAccountStatusName(o.name, (key) => t(`accounts.statuses.${key}`))}</option>)}</Select></Field>
       <Field label={t('fields.owner')}><Select value={form.ownerUserId} onChange={(e) => set('ownerUserId', e.target.value)} disabled={!canManage}><option value="">{t('fields.unassigned')}</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.territory')}><Select value={form.territoryId} onChange={(e) => set('territoryId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{territories.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.leadSource')}><Select value={form.leadSourceId} onChange={(e) => set('leadSourceId', e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{sources.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>

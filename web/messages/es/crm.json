@@ -72,6 +72,17 @@
       "new": "Nuevo prospecto",
       "emptyTitle": "No hay prospectos",
       "emptyDescription": "Los clientes potenciales calificados y las cuentas de oportunidades aparecen aquí."
+    },
+    "statuses": {
+      "new": "Nuevo",
+      "working": "En curso",
+      "qualified": "Calificado",
+      "disqualified": "Descalificado",
+      "open": "Abierto",
+      "nurturing": "En maduración",
+      "closedLost": "Perdido",
+      "active": "Activo",
+      "inactive": "Inactivo"
     }
   },
   "activities": {

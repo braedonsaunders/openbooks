@@ -68,6 +68,17 @@
       "new": "Nouveau prospect",
       "emptyTitle": "Aucun prospect",
       "emptyDescription": "Les pistes qualifiées et les comptes d’occasion apparaissent ici."
+    },
+    "statuses": {
+      "new": "Nouveau",
+      "working": "En cours",
+      "qualified": "Qualifié",
+      "disqualified": "Disqualifié",
+      "open": "Ouvert",
+      "nurturing": "En maturation",
+      "closedLost": "Perdu",
+      "active": "Actif",
+      "inactive": "Inactif"
     }
   },
   "activities": {
