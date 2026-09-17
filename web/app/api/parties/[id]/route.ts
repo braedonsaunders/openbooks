@@ -255,11 +255,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
+  // Draft-completion sentinels: the parties draft flow stores 'New party',
+  // the CRM lead/prospect draft flow stores 'New lead'. Naming either
+  // inactive placeholder without an explicit status change completes (and
+  // activates) it reason-free; an explicit isActive flip still needs the
+  // change reason below.
+  const isPlaceholderName =
+    existingParty.display_name === 'New party' || existingParty.display_name === 'New lead'
   const completesPlaceholder =
     body.isActive === undefined &&
     existingParty.is_active === false &&
-    existingParty.display_name === 'New party' &&
-    Boolean(displayName && displayName !== 'New party')
+    isPlaceholderName &&
+    Boolean(displayName && displayName !== 'New party' && displayName !== 'New lead')
   if (!isDocumentRevisionToken(body.expectedUpdatedAt) || body.expectedUpdatedAt !== existingParty.updated_at) {
     return NextResponse.json(
       {
