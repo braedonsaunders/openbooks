@@ -15,7 +15,9 @@
     },
     "folderRow": "Carpeta"
   },
-  "systemFolders": { "apCapture": "Captura de compras" },
+  "systemFolders": {
+    "apCapture": "Captura de compras"
+  },
   "columns": {
     "name": "Nombre",
     "size": "Tamaño",
@@ -48,6 +50,11 @@
       "parentLabel": "Carpeta principal",
       "submit": "Crear carpeta"
     },
+    "tabs": {
+      "details": "Detalles",
+      "sharing": "Uso compartido",
+      "activity": "Actividad"
+    },
     "edit": {
       "title": "Editar carpeta",
       "nameLabel": "Nombre de la carpeta",
@@ -62,6 +69,7 @@
       "title": "¿Eliminar esta carpeta?",
       "body": "Todos los archivos de esta carpeta se eliminarán permanentemente. Esta acción no se puede deshacer."
     },
+    "downloadZip": "Descargar como ZIP",
     "systemNoDelete": "Las carpetas del sistema no se pueden eliminar ni renombrar.",
     "subfolderCount": "{count, plural, one {# carpeta} other {# carpetas}}",
     "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
@@ -70,6 +78,12 @@
   "file": {
     "drawer": {
       "title": "Detalles del archivo",
+      "tabs": {
+        "preview": "Vista previa",
+        "details": "Detalles",
+        "sharing": "Uso compartido",
+        "activity": "Actividad"
+      },
       "name": "Nombre",
       "folder": "Carpeta",
       "type": "Tipo",
@@ -115,7 +129,82 @@
     "attachExisting": "Adjuntar archivo existente",
     "uploadNew": "Subir archivo nuevo"
   },
+  "share": {
+    "title": "Uso compartido",
+    "subtitle": "Todos en tu organización pueden ver {kind} de forma predeterminada. Otorga aquí a personas o roles acceso adicional (edición o administración); haz privada una carpeta en Detalles para restringir quién puede verla.",
+    "kindFolder": "esta carpeta",
+    "kindFile": "este archivo",
+    "noGrants": "Visible para todos en tu organización. Agrega personas o roles abajo para otorgar acceso de Editor o Administrador.",
+    "addPrincipal": "Agregar persona o rol",
+    "selectPrincipal": "Elige una persona o un rol…",
+    "usersGroup": "Personas",
+    "rolesGroup": "Roles",
+    "add": "Agregar",
+    "remove": "Quitar",
+    "you": "tú",
+    "inheritedHint": "El acceso a la carpeta lo heredan los archivos y subcarpetas que contiene.",
+    "tiers": {
+      "viewer": "Visor",
+      "editor": "Editor",
+      "manager": "Administrador",
+      "viewerHint": "Ver y descargar",
+      "editorHint": "Subir, renombrar, mover, reemplazar",
+      "managerHint": "Control total, incluidas la eliminación y el uso compartido"
+    }
+  },
+  "bulk": {
+    "selected": "{count, plural, one {# seleccionado} other {# seleccionados}}",
+    "download": "Descargar",
+    "delete": "Eliminar",
+    "clear": "Limpiar",
+    "selectAll": "Seleccionar todo",
+    "deleteConfirm": {
+      "title": "¿Mover los elementos seleccionados a la Papelera?",
+      "body": "Los archivos y carpetas seleccionados se moverán a la Papelera. Puedes restaurarlos más tarde."
+    },
+    "deleted": "{count} movidos a la Papelera",
+    "deleteFailed": "No se pudo eliminar la selección",
+    "downloadFailed": "No se pudo descargar la selección",
+    "nothingDownloadable": "Selecciona archivos para descargar"
+  },
+  "trash": {
+    "title": "Papelera",
+    "link": "Papelera",
+    "description": "Archivos y carpetas eliminados. Restáuralos o elimínalos permanentemente.",
+    "empty": "La Papelera está vacía.",
+    "back": "Volver al gestor de documentos",
+    "restore": "Restaurar",
+    "deleteForever": "Eliminar permanentemente",
+    "purgeConfirm": {
+      "title": "¿Eliminar permanentemente?",
+      "body": "Este elemento y su contenido se eliminarán permanentemente. No se puede deshacer."
+    },
+    "folderLabel": "Carpeta",
+    "inLocation": "en {location}",
+    "restored": "Restaurado",
+    "restoreFailed": "No se pudo restaurar",
+    "purged": "Eliminado permanentemente",
+    "purgeFailed": "No se pudo eliminar"
+  },
+  "activity": {
+    "title": "Actividad",
+    "empty": "Aún no hay actividad registrada.",
+    "events": {
+      "create": "creado",
+      "upload": "subido",
+      "rename": "renombrado",
+      "move": "movido",
+      "replace": "subió una nueva versión",
+      "delete": "eliminado",
+      "restore": "restaurado",
+      "share": "compartido",
+      "unshare": "uso compartido eliminado"
+    }
+  },
   "toasts": {
+    "shareUpdated": "Uso compartido actualizado",
+    "shareFailed": "No se pudo actualizar el uso compartido",
+    "shareRemoved": "Acceso eliminado",
     "folderCreated": "Carpeta creada",
     "folderCreateFailed": "No se pudo crear la carpeta",
     "folderRenamed": "Carpeta renombrada",
@@ -153,6 +242,8 @@
   "rowMenu": {
     "open": "Abrir",
     "openFolder": "Abrir carpeta",
+    "properties": "Propiedades",
+    "manageAccess": "Gestionar acceso",
     "copyLink": "Copiar enlace"
   },
   "rename": {
