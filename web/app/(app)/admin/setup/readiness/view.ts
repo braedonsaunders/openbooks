@@ -129,7 +129,7 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
       description: org?.bank_accounts > 0
         ? t('setup.guide.bank.descReady', { count: org!.bank_accounts })
         : t('setup.guide.bank.descWaiting'),
-      href: '/admin/setup/accounts', action: t('setup.guide.bank.action'), state: org?.bank_accounts > 0 ? 'complete' : 'review',
+      href: '/accounts', action: t('setup.guide.bank.action'), state: org?.bank_accounts > 0 ? 'complete' : 'review',
     },
     {
       title: t('setup.guide.opening.title'),
