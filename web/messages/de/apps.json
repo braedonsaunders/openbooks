@@ -8,7 +8,8 @@
     "library": "App-Bibliothek",
     "documentation": "Dokumentation",
     "open": "App öffnen",
-    "openAria": "{name} öffnen"
+    "openAria": "{name} öffnen",
+    "manage": "Apps verwalten"
   },
   "empty": {
     "title": "Keine Apps installiert",
@@ -20,6 +21,10 @@
     "description": "Versuchen Sie es mit einem anderen Namen, Schlüssel oder einer anderen Beschreibung."
   },
   "library": {
+    "draftReady": "{name} ist bereit zur Prüfung.",
+    "preparing": "Wird vorbereitet…",
+    "reviewUpdate": "Aktualisierung prüfen",
+    "reviewInstall": "App prüfen",
     "title": "App-Bibliothek",
     "description": "Entdecken und installieren Sie Erweiterungen für Ihre Organisation.",
     "searchPlaceholder": "App-Bibliothek durchsuchen…",
@@ -37,7 +42,8 @@
     "noResults": {
       "title": "Keine Apps gefunden",
       "description": "Versuchen Sie es mit einem anderen Namen, Schlüssel oder einer anderen Beschreibung."
-    }
+    },
+    "approvalPending": "{name} wartet auf signierte Genehmigung."
   },
   "frame": {
     "loading": "Wird geladen…",
@@ -49,7 +55,10 @@
     "description": "Erstellen und installieren Sie App-Pakete mit einer isolierten Oberfläche und einem kontrollierten Backend.",
     "searchPlaceholder": "Apps durchsuchen…",
     "status": "Status",
-    "statuses": { "installed": "Installiert", "disabled": "Deaktiviert" },
+    "statuses": {
+      "installed": "Installiert",
+      "disabled": "Deaktiviert"
+    },
     "columns": {
       "name": "Name",
       "key": "Schlüssel",
@@ -60,5 +69,379 @@
       "updated": "Aktualisiert"
     },
     "empty": "Noch keine Apps. Erstellen Sie eine startbereite App oder importieren Sie ein ZIP-Paket."
+  },
+  "drawer": {
+    "toolbar": {
+      "newApp": "Neue App",
+      "newAppPromptTitle": "Neue App",
+      "newAppPromptLabel": "App-Name",
+      "newAppPromptPlaceholder": "Expense Insights",
+      "importZip": ".zip importieren"
+    },
+    "toasts": {
+      "createdApp": "„{name}“ erstellt",
+      "importedApp": "„{key}“ importiert",
+      "settingsSaved": "App-Einstellungen gespeichert",
+      "appDisabled": "App deaktiviert",
+      "appEnabled": "App aktiviert",
+      "published": "Auf dem Marktplatz veröffentlicht",
+      "uninstalled": "Deinstalliert",
+      "fileSaved": "{path} gespeichert",
+      "fileCreated": "{path} erstellt",
+      "fileUploaded": "{path} hochgeladen",
+      "deleted": "Gelöscht"
+    },
+    "errors": {
+      "saveFailed": "Speichern fehlgeschlagen",
+      "updateFailed": "Aktualisieren fehlgeschlagen",
+      "publishFailed": "Veröffentlichen fehlgeschlagen",
+      "uninstallFailed": "Deinstallieren fehlgeschlagen",
+      "createFailed": "Erstellen fehlgeschlagen",
+      "uploadFailed": "Hochladen fehlgeschlagen",
+      "deleteFailed": "Löschen fehlgeschlagen"
+    },
+    "confirm": {
+      "uninstallTitle": "„{name}“ deinstallieren?",
+      "uninstallMessage": "Diese App deinstallieren? Bereitgestellte Datensätze und Felder bleiben erhalten. Code und Ausführungsnachweise werden im Prüfprotokoll archiviert; Pakete mit Plattform-Beitragsverlauf werden deaktiviert, damit ihre Referenzen intakt bleiben.",
+      "deleteFileMessage": "{path} löschen?"
+    },
+    "prompt": {
+      "newFileTitle": "Neue Datei",
+      "pathLabel": "Pfad"
+    },
+    "tabs": {
+      "overview": "Übersicht",
+      "files": "Dateien",
+      "runs": "Ausführungen"
+    },
+    "actions": {
+      "open": "Öffnen",
+      "saving": "Wird gespeichert…",
+      "saveSettings": "Einstellungen speichern",
+      "saveFile": "Datei speichern",
+      "saved": "Gespeichert",
+      "republish": "Erneut auf dem Marktplatz veröffentlichen",
+      "publish": "Auf dem Marktplatz veröffentlichen",
+      "disable": "Deaktivieren",
+      "enable": "Aktivieren",
+      "uninstall": "Deinstallieren",
+      "addEndpoint": "Endpunkt hinzufügen",
+      "manageNavigation": "Navigationsverknüpfungen verwalten",
+      "newFileTitleAttr": "Neue Datei",
+      "uploadFileTitleAttr": "Datei hochladen",
+      "deleteFileTitleAttr": "Datei löschen"
+    },
+    "labels": {
+      "name": "Name",
+      "status": "Status",
+      "description": "Beschreibung",
+      "capabilities": "Berechtigungen",
+      "navigation": "Navigation",
+      "endpoints": "Backend-Endpunkte"
+    },
+    "onMarketplace": "auf dem Marktplatz",
+    "capabilitiesHelp": "Alles andere ist standardmäßig verweigert; die Backend- und Bridge-Aufrufe der App werden gegen diese Berechtigungen geprüft (stets verschnitten mit den eigenen Berechtigungen des aufrufenden Benutzers).",
+    "navigationHelp": "Diese App bleibt unabhängig von ihren Menüverknüpfungen installiert. Fügen Sie in den Navigationseinstellungen eine Verknüpfung hinzu, entfernen, benennen oder verschieben Sie sie.",
+    "endpointsHelp": "Das Frontend ruft diese mit <call>openbooks.callBackend(name, payload)</call> auf; jeder Aufruf führt den <handler>handler(request)</handler> seiner Datei in der Sandbox aus.",
+    "noEndpoints": "Keine Endpunkte — diese App hat kein Backend.",
+    "endpointNamePlaceholder": "name",
+    "capabilities": {
+      "allowFallback": "{permission} zulassen",
+      "copy": {
+        "records": {
+          "read": {
+            "label": "Benutzerdefinierte Datensätze lesen",
+            "help": "Veröffentlichte benutzerdefinierte Datensatztypen lesen"
+          },
+          "create": {
+            "label": "Benutzerdefinierte Datensätze verwalten",
+            "help": "Benutzerdefinierte Datensätze erstellen, aktualisieren und löschen"
+          }
+        },
+        "gl": {
+          "read": {
+            "label": "Hauptbuch lesen",
+            "help": "Konten und gebuchte Buchungen lesen"
+          },
+          "post": {
+            "label": "Buchungen erstellen und buchen",
+            "help": "Gesteuerte, ausgeglichene Buchungen erstellen"
+          }
+        },
+        "ap": {
+          "read": {
+            "label": "Verbindlichkeiten lesen",
+            "help": "Eingangsrechnungen lesen"
+          },
+          "create": {
+            "label": "Eingangsrechnungen verwalten",
+            "help": "Rechnungen erstellen, aktualisieren, einreichen und löschen"
+          },
+          "post": {
+            "label": "Eingangsrechnungen buchen",
+            "help": "Gesteuerte Eingangsrechnungen ins Hauptbuch buchen"
+          },
+          "pay": {
+            "label": "Zahlungen lesen",
+            "help": "Zahlungsbelege lesen"
+          }
+        },
+        "ar": {
+          "read": {
+            "label": "Forderungen lesen",
+            "help": "Ausgangsrechnungen lesen"
+          },
+          "create": {
+            "label": "Ausgangsrechnungen verwalten",
+            "help": "Rechnungen erstellen, aktualisieren, einreichen und löschen"
+          },
+          "post": {
+            "label": "Ausgangsrechnungen buchen",
+            "help": "Gesteuerte Ausgangsrechnungen ins Hauptbuch buchen"
+          }
+        },
+        "parties": {
+          "read": {
+            "label": "Geschäftspartner lesen",
+            "help": "Kunden, Lieferanten und Mitarbeiter lesen"
+          },
+          "manage": {
+            "label": "Geschäftspartner verwalten",
+            "help": "Geschäftspartner erstellen, aktualisieren und löschen"
+          }
+        },
+        "items": {
+          "read": {
+            "label": "Artikel und Leistungen lesen",
+            "help": "Artikelkatalog lesen"
+          },
+          "manage": {
+            "label": "Artikel und Leistungen verwalten",
+            "help": "Katalogartikel erstellen, aktualisieren und löschen"
+          }
+        },
+        "projects": {
+          "read": {
+            "label": "Projekte lesen",
+            "help": "Projekte und Aufträge lesen"
+          },
+          "manage": {
+            "label": "Projekte verwalten",
+            "help": "Projekte erstellen, aktualisieren und löschen"
+          }
+        },
+        "assets": {
+          "read": {
+            "label": "Anlagevermögen lesen",
+            "help": "Anlagevermögen lesen"
+          },
+          "manage": {
+            "label": "Anlagevermögen verwalten",
+            "help": "Anlagevermögen erstellen, aktualisieren und löschen"
+          }
+        }
+      }
+    },
+    "files": {
+      "selectToEdit": "Wählen Sie eine Datei zum Bearbeiten.",
+      "loading": "Wird geladen…",
+      "binaryInfo": "Binärdatei · {contentType} · {size} Bytes"
+    },
+    "runs": {
+      "empty": "Noch keine Ausführungen — das Backend wurde noch nie aufgerufen.",
+      "units": "{units} Einheiten"
+    }
+  },
+  "editor": {
+    "tabsLabel": "Paketeditor",
+    "overview": "Konfiguration",
+    "sections": {
+      "general": "Allgemein",
+      "screens": "Screens",
+      "data": "Daten & Beiträge",
+      "actions": "Aktionen",
+      "access": "Zugriff"
+    },
+    "files": "Dateien",
+    "download": "Paket exportieren",
+    "draftHelp": "Bearbeiten Sie ein unveröffentlichtes Paket. Speichern bereitet einen Entwurf für Validierung, Vorschau und Aktivierung vor; die laufende App ändert sich dadurch nicht.",
+    "name": "App-Name",
+    "key": "App-Schlüssel",
+    "version": "Version",
+    "icon": "Symbol-Schlüssel",
+    "description": "Beschreibung",
+    "renderer": "Oberfläche",
+    "native": "Native OpenBooks-Screens (ViewSpec)",
+    "sandbox": "HTML, CSS und JavaScript",
+    "entry": "Frontend-Einstiegsdatei",
+    "navLabel": "Launcher-Beschriftung",
+    "navIcon": "Launcher-Symbol",
+    "endpoints": "Backend-Aktionen",
+    "endpointsHelp": "Jede Aktion führt ihren JavaScript-Handler über die gesteuerte App-Laufzeit aus. Bearbeiten Sie ihre Implementierung unter Dateien.",
+    "endpointName": "Aktionsname",
+    "endpointFile": "JavaScript-Datei",
+    "method": "HTTP-Methode",
+    "removeEndpoint": "Aktion entfernen",
+    "addEndpoint": "Aktion hinzufügen",
+    "permissions": "Angeforderte Berechtigungen",
+    "permissionsHelp": "Deklarieren Sie die Berechtigungen, die dieses Paket benötigt. Aufrufe bleiben zusätzlich durch die Berechtigungen des aktuellen Benutzers begrenzt.",
+    "grants": "Gewährte Berechtigungen",
+    "grantsHelp": "Wählen Sie, welche angeforderten Berechtigungen diese Version tatsächlich nutzen darf. Neue Berechtigungen werden bei der Aktivierung gegen Ihre Befugnisse geprüft.",
+    "definitions": "Native Screens und Quellen",
+    "definitionsHelp": "Bearbeiten Sie native Screen-Definitionen und alle Paketquellen unter Dateien. Benutzerdefinierte Datensätze und Felder werden über das bestehende OpenBooks-Objektsystem bereitgestellt, wenn die geprüfte Version aktiviert wird.",
+    "editDefinitions": "Oberflächendefinition öffnen",
+    "newFile": "Neue Datei",
+    "path": "Paketrelativer Pfad",
+    "renameFile": "Datei umbenennen oder verschieben",
+    "deleteFile": "Datei löschen",
+    "deleteConfirm": "{path} aus diesem Entwurf entfernen? Aktive Versionen bleiben unverändert.",
+    "invalidPath": "Verwenden Sie einen eindeutigen relativen Pfad mit Dateinamen, ohne Pfad-Traversierung.",
+    "uploadFiles": "Dateien hochladen",
+    "fileTooLarge": "Jede Datei muss kleiner als 2 MB sein.",
+    "replaceConfirm": "Diese Entwurfsdateien ersetzen: {paths}?",
+    "searchFiles": "Datei suchen…",
+    "binaryHelp": "Binärressource. Laden Sie diese Datei herunter, um sie zu prüfen, oder laden Sie einen Ersatz in ihren Ordner hoch.",
+    "invalidManifest": "Das Manifest ist ungültig. Korrigieren Sie es unter Dateien.",
+    "reason": "Grund für diese Version",
+    "reasonPlaceholder": "Beschreiben Sie, was sich geändert hat und warum.",
+    "saveDraft": "Entwurf zur Prüfung speichern",
+    "saving": "Entwurf wird vorbereitet…",
+    "unsaved": "Ungespeicherte Paketänderungen",
+    "notLive": "Änderungen werden erst nach der Aktivierung wirksam.",
+    "failed": "Das Paket konnte nicht gespeichert werden.",
+    "pendingDefinition": "Wenden Sie den offenen Definitionseditor an oder verwerfen Sie ihn, bevor Sie Tabs wechseln oder das Paket speichern.",
+    "uploadFolder": "Ordner hochladen",
+    "downloadFile": "Datei herunterladen"
+  },
+  "create": {
+    "title": "Neue App",
+    "ownPackage": "Mit eigenem Paket beginnen",
+    "help": "Erstellen Sie native Screens oder arbeiten Sie direkt mit HTML, CSS, JavaScript und weiteren Assets. Sie können auch ein bestehendes Paket importieren und vor der Aktivierung bearbeiten.",
+    "native": "Native App",
+    "files": "HTML- / CSS- / JS-App",
+    "import": "Paket importieren",
+    "importing": "Wird importiert…",
+    "tooLarge": "Wählen Sie ein ZIP- oder JSON-Paket unter 10 MB.",
+    "importReason": "App-Paket zur Prüfung importieren",
+    "failed": "Das Paket konnte nicht importiert werden.",
+    "discardEdits": "Ungespeicherte Paketänderungen verwerfen?"
+  },
+  "definitions": {
+    "title": "Datensätze, Felder und Plattformbeiträge",
+    "help": "Verwalten Sie die Definitionen, die diese App mitliefert. Jede Definition nutzt die bestehenden Plattformdienste und wird vor der Aktivierung mit dem Paket validiert. Das Entfernen einer Definition löscht keine historischen Datensätze.",
+    "edit": "Definition bearbeiten",
+    "remove": "Definition entfernen",
+    "removeConfirm": "Diesen Beitrag aus dem Entwurf entfernen? Die Prüfung zeigt die Änderung vor der Aktivierung.",
+    "type": "Definitionstyp",
+    "key": "Neuer Definitionsschlüssel",
+    "add": "Definition hinzufügen",
+    "apply": "Auf Entwurf anwenden",
+    "cancel": "Abbrechen",
+    "record_type": "Benutzerdefinierter Datensatztyp",
+    "custom_field": "Benutzerdefiniertes Feld",
+    "page": "Seitenanpassung",
+    "nav": "Navigationspunkt",
+    "setting": "App-Einstellung",
+    "permission": "Rollenberechtigung",
+    "invalidKey": "Verwenden Sie einen kleingeschriebenen Schlüssel mit einem Buchstaben am Anfang, aus Buchstaben, Ziffern und Bindestrichen.",
+    "duplicate": "Diese Definitionsdatei existiert bereits.",
+    "invalid": "Die Definition ist ungültig.",
+    "route": "Anzupassende registrierte Seite",
+    "chooseRoute": "Registrierte Seite wählen",
+    "pageHelp": "Seitendefinitionen passen bestehende registrierte Seiten an. Eigenständige App-Screens legen Sie in der nativen Oberflächendatei an."
+  },
+  "management": {
+    "workspace": "App-Arbeitsbereich",
+    "overview": "Übersicht",
+    "package": "Paket",
+    "versions": "Versionen",
+    "runs": "Ausführungen",
+    "audit": "Prüfverlauf",
+    "storage": "App-Speicher",
+    "installed": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "open": "App öffnen",
+    "editPackage": "Paket bearbeiten",
+    "download": "ZIP exportieren",
+    "assistant": "Mit Assistent überarbeiten",
+    "contents": "Paketinhalt",
+    "summary": "{files} Dateien · {actions} Backend-Aktionen · {definitions} Plattform-Beiträge",
+    "permissions": "Effektive Berechtigungen",
+    "permissionsHelp": "Diese Berechtigungen gelten für die laufende Version. Bearbeiten Sie das Paket, um eine geprüfte Berechtigungsänderung vorzubereiten.",
+    "noPermissions": "Keine Plattform-Berechtigungen gewährt.",
+    "configuration": "Organisationskonfiguration",
+    "navigation": "Navigationseinstellungen",
+    "settings": "App-Einstellungen",
+    "roles": "Rollen und Berechtigungen",
+    "lifecycle": "Verfügbarkeit und Vertrieb",
+    "lifecycleHelp": "Aktivieren oder deaktivieren Sie diese App für Ihre Organisation. Veröffentlichen gibt eine Kopie ihres aktiven Pakets über die App-Bibliothek weiter.",
+    "publish": "Auf dem Marktplatz veröffentlichen",
+    "updateListing": "Eintrag aktualisieren",
+    "unpublish": "Eintrag zurückziehen",
+    "disable": "App deaktivieren",
+    "enable": "App aktivieren",
+    "uninstall": "App deinstallieren",
+    "publishConfirm": "Das aktive Paket einschließlich seiner Quelldateien über die App-Bibliothek für andere Organisationen veröffentlichen? Prüfen Sie die Dateien vor dem Teilen auf private Informationen.",
+    "unpublishConfirm": "Diesen Eintrag aus der App-Bibliothek entfernen? Bestehende Installationen behalten ihre Kopien.",
+    "disableConfirm": "Diese App samt ihrer beigesteuerten Seiten und Navigation deaktivieren? Bestehende Datensätze und der Prüfverlauf bleiben erhalten.",
+    "enableConfirm": "Diese App und ihre genehmigten Beiträge für Ihre Organisation aktivieren?",
+    "uninstallConfirm": "Diese App deinstallieren? Bereitgestellte Datensätze und Felder bleiben erhalten. Code und Ausführungsnachweise werden im Prüfprotokoll archiviert; Pakete mit Plattform-Beitragsverlauf werden deaktiviert, damit ihre Referenzen intakt bleiben.",
+    "discardEdits": "Ungespeicherte Paketänderungen verwerfen?",
+    "failed": "Der Vorgang konnte nicht abgeschlossen werden.",
+    "loading": "Wird geladen…",
+    "refresh": "Aktualisieren",
+    "versionsHelp": "Prüfen und exportieren Sie jede installierte Version. Die Überarbeitung einer früheren Version erstellt einen neuen Entwurf auf Basis der aktuellen aktiven Version.",
+    "runsHelp": "Backend-Ausführungsverlauf mit Fehlern, Protokollen, Ressourcenverbrauch, Dauer und Akteur.",
+    "auditHelp": "Aufgezeichnete Konfigurations- und Lebenszyklusänderungen mit Akteur und Vorher-/Nachher-Nachweisen.",
+    "storageHelp": "Prüfen Sie den app-eigenen Zustand. Ändern Sie Geschäftsdaten über die gesteuerten Aktionen der App, die ihre Validierungs- und Prüfregeln wahren.",
+    "when": "Datum und Uhrzeit",
+    "version": "Version",
+    "key": "Speicherschlüssel",
+    "activity": "Aktivität",
+    "status": "Status",
+    "actions": "Aktionen",
+    "active": "Aktiv",
+    "details": "Details anzeigen",
+    "reviseVersion": "Überarbeitung vorbereiten",
+    "empty": "Noch keine Einträge.",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "page": "Seite {page}",
+    "fields": {
+      "id": "Datensatz (ID)",
+      "at": "Datum und Uhrzeit",
+      "actor_id": "Akteur (ID)",
+      "version_id": "Versions-ID",
+      "version": "Version",
+      "status": "Status",
+      "endpoint": "Aktion",
+      "units": "Verbrauchte Einheiten",
+      "duration_ms": "Dauer (ms)",
+      "logs": "Ausführungsprotokolle",
+      "error_message": "Fehler",
+      "changes": "Vorher-/Nachher-Nachweise",
+      "action": "Vorgang",
+      "namespace": "Namespace",
+      "key": "Schlüssel",
+      "value": "Gespeicherter Wert"
+    }
+  },
+  "screens": {
+    "title": "Native App-Screens",
+    "help": "Verwalten Sie Seiten, Datensatz-Arbeitsbereiche und Aktionsformulare. Screen-Definitionen nutzen die nativen ViewSpec- und Formularschemas; Datensatz- und Aktions-Screens sind mit gesteuerten Datensatztypen und Backend-Aktionen verbunden.",
+    "page": "Seite",
+    "records": "Datensatz-Arbeitsbereich",
+    "action": "Aktionsformular",
+    "type": "Screen-Typ",
+    "key": "Neuer Screen-Schlüssel",
+    "add": "Screen hinzufügen",
+    "edit": "Screen bearbeiten",
+    "remove": "Screen entfernen",
+    "removeConfirm": "Diesen Screen aus dem Entwurf entfernen?",
+    "apply": "Auf Entwurf anwenden",
+    "cancel": "Abbrechen",
+    "invalid": "Die native Screen-Definition muss korrigiert werden.",
+    "invalidKey": "Verwenden Sie einen kleingeschriebenen Schlüssel mit einem Buchstaben am Anfang, aus Buchstaben, Ziffern und Bindestrichen.",
+    "openSource": "Screen-Quelle öffnen"
   }
 }
