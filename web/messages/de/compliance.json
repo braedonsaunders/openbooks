@@ -1,0 +1,362 @@
+{
+  "title": "Subunternehmer-Compliance",
+  "description": "Versicherungszertifikate, Verzichtserklärungen und Jahresend-Informationsmeldungen für die Personen, die Sie bezahlen.",
+  "tabs": {
+    "overview": "Übersicht",
+    "vendors": "Subunternehmer",
+    "lienWaivers": "Verzichtserklärungen",
+    "informationReturns": "Informationsmeldungen"
+  },
+  "setup": {
+    "prompt": "Noch wird nichts durchgesetzt. Legen Sie die Gegenparteiklassen und die Nachweise fest, die jede Klasse führen muss.",
+    "action": "Compliance konfigurieren"
+  },
+  "stats": {
+    "tracked": "Erfasste Subunternehmer",
+    "trackedHint": "{count} Policen in Kraft",
+    "compliant": "Abgedeckt",
+    "compliantHint": "{expiring} laufen bald ab",
+    "blocked": "Blockiert",
+    "blockedHint": "{bills} Eingangsrechnungen betroffen",
+    "exposure": "Blockiertes Volumen",
+    "exposureHint": "Verbindlichkeit, die nicht freigegeben werden kann"
+  },
+  "panels": {
+    "blocked": "Zahlungen, die die Kontrolle zurückhält",
+    "blockedHint": "Live neu bewertet anhand der heutigen Nachweise",
+    "blockedEmpty": "Nichts wird zurückgehalten. Jede offene Subunternehmerrechnung passiert die Kontrolle.",
+    "expiring": "Laufen diesen Monat ab",
+    "expiringHint": "Fordern Sie diese an, bevor sie verfallen",
+    "expiringEmpty": "Kein Zertifikat befindet sich im Warnfenster.",
+    "waivers": "Ausstehende Verzichtserklärungen",
+    "waiversHint": "Angefordert oder erhalten, aber noch nicht unterschrieben",
+    "waiversEmpty": "Keine Verzichtserklärung wartet auf Unterschrift.",
+    "waiversAction": "Alle Verzichtserklärungen",
+    "readiness": "1099-Bereitschaft — {year}",
+    "readinessHint": "Bereinigen Sie diese vor Januar",
+    "readinessEmpty": "Jeder meldepflichtige Lieferant hat, was eine Meldung braucht.",
+    "readinessAction": "Meldungen"
+  },
+  "empty": {
+    "title": "Noch werden keine Subunternehmer erfasst",
+    "description": "Weisen Sie einem Lieferanten eine Compliance-Klasse zu, um Nachweise von ihm zu verlangen."
+  },
+  "states": {
+    "compliant": "Abgedeckt",
+    "expiring": "Läuft ab",
+    "waived": "Ausgenommen",
+    "missing": "Fehlt",
+    "expired": "Abgelaufen",
+    "insufficient": "Unzureichend",
+    "awaiting_verification": "Ungeprüft",
+    "rejected": "Abgelehnt"
+  },
+  "reasons": {
+    "no_evidence": "nichts hinterlegt",
+    "rejected": "abgelehnt",
+    "awaiting_verification": "wartet auf Prüfung",
+    "not_yet_effective": "noch nicht wirksam",
+    "expired": "abgelaufen",
+    "coverage_below_minimum": "Deckungssumme je Schadenfall unter dem Minimum",
+    "aggregate_below_minimum": "Deckungssumme gesamt unter dem Minimum",
+    "coverage_currency_mismatch": "Deckungssumme in anderer Währung angegeben",
+    "coverage_amount_missing": "keine Deckungssumme auf dem Zertifikat",
+    "missing_additional_insured": "nicht als zusätzlicher Versicherter benannt",
+    "missing_waiver_of_subrogation": "kein Regressverzicht",
+    "missing_primary_noncontributory": "nicht primär und nicht beitragend"
+  },
+  "decision": {
+    "cleared": "Freigegeben",
+    "warned": "Warnung",
+    "blocked": "Blockiert",
+    "overridden": "Überstimmt"
+  },
+  "certificateStatus": {
+    "pending_review": "Prüfung ausstehend",
+    "active": "Verifiziert",
+    "rejected": "Abgelehnt",
+    "superseded": "Ersetzt"
+  },
+  "waiverStatus": {
+    "draft": "Entwurf",
+    "requested": "Angefordert",
+    "received": "Erhalten",
+    "signed": "Unterschrieben",
+    "rejected": "Abgelehnt",
+    "void": "Storniert"
+  },
+  "filingStatus": {
+    "draft": "Entwurf",
+    "computed": "Berechnet",
+    "finalized": "Finalisiert",
+    "filed": "Eingereicht",
+    "void": "Storniert"
+  },
+  "recipientStatus": {
+    "included": "Wird gemeldet",
+    "excluded": "Ausgeschlossen",
+    "corrected": "Korrigiert",
+    "void": "Storniert"
+  },
+  "filingChannel": {
+    "iris": "IRS IRIS",
+    "fire": "IRS FIRE",
+    "provider": "Meldedienstleister",
+    "paper": "Papier",
+    "other": "Sonstige"
+  },
+  "direction": {
+    "received": "Vom Subunternehmer",
+    "issued": "Von uns ausgestellt"
+  },
+  "waiverType": {
+    "conditional_progress": "Bedingt — Abschlag",
+    "unconditional_progress": "Unbedingt — Abschlag",
+    "conditional_final": "Bedingt — Schlusszahlung",
+    "unconditional_final": "Unbedingt — Schlusszahlung"
+  },
+  "waiverTypeHint": {
+    "conditional_progress": "Gibt die Leistung bis zum Stichtag erst frei, wenn die Zahlung bei der Bank eingegangen ist.",
+    "unconditional_progress": "Gibt die Leistung bis zum Stichtag sofort frei — auch wenn die Zahlung nie eingelöst wird.",
+    "conditional_final": "Gibt den gesamten Vertrag einschließlich Einbehalt frei, sobald die Schlusszahlung eingegangen ist.",
+    "unconditional_final": "Gibt den gesamten Vertrag einschließlich Einbehalt sofort und unbedingt frei."
+  },
+  "taxClassification": {
+    "individual": "Privatperson",
+    "sole_proprietor": "Einzelunternehmer",
+    "partnership": "Personengesellschaft",
+    "c_corp": "C-Corporation",
+    "s_corp": "S-Corporation",
+    "llc": "LLC",
+    "trust_estate": "Trust oder Nachlass",
+    "government": "Behörde",
+    "nonprofit": "Gemeinnützig",
+    "other": "Sonstige"
+  },
+  "tinType": {
+    "ein": "EIN",
+    "ssn": "SSN",
+    "itin": "ITIN",
+    "atin": "ATIN",
+    "sin": "SIN (Kanada)",
+    "bn": "Unternehmensnummer (Kanada)",
+    "unknown": "Unbekannt"
+  },
+  "readiness": {
+    "unflagged": "Über dem Schwellenwert bezahlt, aber nicht als meldepflichtig gekennzeichnet",
+    "missingTin": "Keine Steuernummer hinterlegt",
+    "noForm": "Keine Informationsmeldung zugeordnet"
+  },
+  "vendors": {
+    "title": "Subunternehmer-Compliance-Matrix",
+    "description": "Eine Zeile je erfasstem Subunternehmer, eine Spalte je Richtlinie. Dieselbe Bewertung, die der Zahlungslauf vornimmt.",
+    "columns": {
+      "vendor": "Subunternehmer",
+      "class": "Klasse",
+      "status": "Status",
+      "exposure": "Offene Verbindlichkeit"
+    },
+    "filters": {
+      "class": "Klasse",
+      "allClasses": "Alle Klassen",
+      "state": "Status",
+      "allStates": "Alle Status",
+      "attention": "Handlungsbedarf",
+      "expiring": "Laufen bald ab"
+    },
+    "empty": {
+      "title": "Keine erfassten Subunternehmer passend",
+      "description": "Weisen Sie einem Lieferanten auf dessen Compliance-Register eine Compliance-Klasse zu, um ihn in die Matrix aufzunehmen."
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "certificates": "Zertifikate",
+      "identification": "Steueridentifikation",
+      "exceptions": "Ausnahmen",
+      "aria": "Compliance-Bereiche"
+    }
+  },
+  "certificates": {
+    "empty": "Für diesen Subunternehmer ist noch nichts hinterlegt.",
+    "recordTitle": "Zertifikat erfassen",
+    "record": "Zertifikat erfassen",
+    "recordHint": "Wird als prüfungspflichtig erfasst. Eine andere Person muss es verifizieren, damit es zählt.",
+    "noPolicies": "Für die Klasse dieses Subunternehmers gilt noch keine Richtlinie.",
+    "noExpiry": "ohne Ablauf",
+    "limits": "Je Schadenfall {occurrence} · gesamt {aggregate}",
+    "additionalInsured": "Zusätzlicher Versicherter",
+    "waiverOfSubrogation": "Regressverzicht",
+    "primaryNoncontributory": "Primär und nicht beitragend",
+    "verify": "Verifizieren",
+    "reject": "Ablehnen",
+    "rejectTitle": "Dieses Zertifikat ablehnen",
+    "rejectReason": "Warum wird es abgelehnt?",
+    "verifiedBy": "Verifiziert von {who} am {when}",
+    "selfVerifyBlocked": "Ein Zertifikat muss von einer anderen Person verifiziert werden als der, die es erfasst hat."
+  },
+  "exceptions": {
+    "intro": "Eine Ausnahme ist der einzige Weg an einer blockierenden Anforderung vorbei. Sie läuft immer ab und wird immer protokolliert.",
+    "empty": "Keine Ausnahme in Kraft.",
+    "grantTitle": "Ausnahme gewähren",
+    "grant": "Ausnahme gewähren",
+    "grantHint": "Maximal 120 Tage. Eine längere Aussetzung ist eine Richtlinienänderung, keine Ausnahme.",
+    "revoke": "Widerrufen",
+    "revokeTitle": "Diese Ausnahme widerrufen",
+    "revokeReason": "Warum wird sie widerrufen?",
+    "window": "{from} → {to}"
+  },
+  "lienWaivers": {
+    "title": "Verzichtserklärungen",
+    "description": "Gesetzliche Verzichtserklärungen im Austausch gegen Bauzahlungen — von Subunternehmern erhalten, an Auftraggeber ausgestellt.",
+    "new": "Neue Verzichtserklärung",
+    "create": "Verzichtserklärung erstellen",
+    "columns": {
+      "number": "Verzichtserklärung",
+      "direction": "Richtung",
+      "party": "Partei",
+      "project": "Projekt",
+      "type": "Typ",
+      "through": "Bis",
+      "amount": "Betrag",
+      "status": "Status",
+      "jurisdiction": "Rechtsordnung",
+      "bill": "Abgedeckte Rechnung",
+      "requested": "Angefordert"
+    },
+    "filters": {
+      "direction": "Richtung",
+      "allDirections": "Alle Richtungen",
+      "status": "Status",
+      "allStatuses": "Alle Status"
+    },
+    "empty": {
+      "title": "Noch keine Verzichtserklärungen",
+      "description": "Erstellen Sie eine, wenn Sie einen Verzicht von einem Subunternehmer anfordern oder mit einem Zahlungsantrag einen ausstellen."
+    },
+    "jurisdictionHint": "Das Gesetz, dessen Formular sie folgt, z. B. US-CA oder CA-ON. Auf dem Dokument aufgedruckt.",
+    "editTitle": "Verzichtsbedingungen",
+    "notesHint": "Ausnahmen und strittige Forderungen, die auf der Verzichtserklärung aufgedruckt werden.",
+    "copyFromBill": "Betrag aus einer Rechnung übernehmen…",
+    "request": "Als angefordert markieren",
+    "receive": "Als erhalten markieren",
+    "reject": "Ablehnen",
+    "rejectTitle": "Diese Verzichtserklärung ablehnen",
+    "rejectReason": "Warum wird sie abgelehnt?",
+    "void": "Stornieren",
+    "voidTitle": "Diese Verzichtserklärung stornieren",
+    "voidReason": "Warum wird sie storniert?",
+    "recordSignature": "Die vollzogene Verzichtserklärung erfassen",
+    "recordSignatureHint": "Erst die Markierung als unterschrieben gibt eine blockierte Zahlung frei. Tun Sie dies nur, wenn das vollzogene Dokument vorliegt.",
+    "signedByName": "Unterschrieben von",
+    "signedByTitle": "Funktion",
+    "signedAt": "Unterschriftsdatum",
+    "notarized": "Notariell beglaubigt",
+    "markSigned": "Als unterschrieben markieren",
+    "signedBy": "Unterschrieben von {who} {title} am {when}",
+    "printForm": "Formular drucken",
+    "executedCopy": "Vollzogenes Exemplar",
+    "executedCopyHint": "Heften Sie hier die eingescannte unterschriebene Verzichtserklärung an. Sie bleibt in der Dateiablage und ist mit diesem Datensatz verknüpft.",
+    "errors": {
+      "partyAndProject": "Wählen Sie Partei und Projekt — ein Pfandrecht lastet auf einem bestimmten Projekt."
+    }
+  },
+  "informationReturns": {
+    "title": "Informationsmeldungen",
+    "description": "1099-NEC, 1099-MISC und T4A, berechnet aus den tatsächlich im Kalenderjahr gezahlten Beträgen.",
+    "new": "Meldung eröffnen",
+    "create": "Meldung eröffnen",
+    "orgRoot": "Gesamte Organisation",
+    "columns": {
+      "year": "Jahr",
+      "form": "Formular",
+      "entity": "Meldende Einheit",
+      "recipients": "Empfänger",
+      "total": "Gemeldet",
+      "status": "Status",
+      "attention": "Handlungsbedarf",
+      "vendor": "Lieferant",
+      "issue": "Problem",
+      "classification": "Klassifizierung",
+      "paid": "Gezahlt",
+      "recipient": "Empfänger",
+      "tin": "TIN"
+    },
+    "empty": {
+      "title": "Noch keine Meldungen",
+      "description": "Eröffnen Sie eine Meldung für ein abgeschlossenes Kalenderjahr und berechnen Sie sie aus dem Hauptbuch."
+    },
+    "excluded": "+{count} ausgeschlossen",
+    "missingTin": "{count} ohne Steuernummer",
+    "readinessTitle": "Bereitschaft — {year}",
+    "readinessDescription": "Lieferanten, die eine Meldung falsch machen, wenn niemand sie zuvor einfordert.",
+    "readinessClear": "Jeder meldepflichtige Lieferant hat eine Steuernummer und ein zugeordnetes Formular.",
+    "detailDescription": "{entity} · Meldeschwelle {threshold}",
+    "compute": "Aus Hauptbuch berechnen",
+    "recompute": "Neu berechnen",
+    "computed": "{count} Empfänger berechnet, {exceptions} Ausnahmen zu prüfen.",
+    "finalize": "Finalisieren",
+    "markFiled": "Als eingereicht erfassen",
+    "printCopies": "Empfängerexemplare",
+    "exportTransmittal": "Übermittlungsdatei",
+    "void": "Meldung stornieren",
+    "voidTitle": "Diese Meldung stornieren",
+    "voidReason": "Warum wird sie storniert?",
+    "frozenNotice": "Diese Meldung ist eingefroren. Beträge und Ausschlüsse entsprechen dem Übermittelten; Korrekturen erfolgen in einer neuen Meldung.",
+    "noRecipients": "Noch nichts berechnet. Berechnen Sie die Meldung, um die Zahlungen des Jahres nachzuverfolgen.",
+    "computedNoRecipients": "Berechnet — kein Empfänger hat die Meldeschwelle erreicht.",
+    "adjust": "Anpassen",
+    "adjustDescription": "Anpassungen sind vorzeichenbehaftete Abweichungen vom Hauptbuchwert, sodass die Nachverfolgung nie überschrieben wird.",
+    "adjustReason": "Grund der Anpassung",
+    "delta": "Abweichung",
+    "ledgerFigure": "Hauptbuch: {value}",
+    "exclude": "Diesen Empfänger aus der Meldung ausschließen",
+    "exclusionReason": "Grund des Ausschlusses",
+    "channel": "Meldekanal",
+    "reference": "Bestätigungsreferenz",
+    "referenceHint": "Die Empfangs- oder Einreichungsnummer, die der Kanal zurückgegeben hat.",
+    "filedVia": "Eingereicht via {channel} · {reference}",
+    "footnote": "Beträge sind die im Kalenderjahr gezahlten Gelder, nachverfolgt über Anträge bis zu den Aufwandskonten jeder Rechnung. Ein Sternchen kennzeichnet einen von einer Person angepassten Wert."
+  },
+  "fields": {
+    "requirement": "Anforderung",
+    "select": "Auswählen…",
+    "none": "Keine",
+    "issuer": "Versicherer oder ausstellende Stelle",
+    "policyNumber": "Policen- oder Zertifikatsnummer",
+    "effectiveFrom": "Wirksam ab",
+    "expiresOn": "Läuft ab am",
+    "expiryRequired": "Diese Anforderung braucht ein Ablaufdatum.",
+    "coverageAmount": "Deckungssumme je Schadenfall",
+    "aggregateAmount": "Deckungssumme gesamt",
+    "coverageCurrency": "Währung der Deckungssumme",
+    "coverageCurrencyHint": "Muss {currency} sein — Deckungssummen werden zum Vergleich nie umgerechnet.",
+    "project": "Projekt",
+    "allProjects": "Alle Projekte",
+    "supersedes": "Erneuert",
+    "notes": "Notizen",
+    "reason": "Grund",
+    "save": "Speichern",
+    "complianceClass": "Compliance-Klasse",
+    "complianceClassHint": "Ohne Klasse wird dieser Lieferant nicht erfasst und blockiert nie eine Zahlung.",
+    "notTracked": "Nicht erfasst",
+    "taxClassification": "Steuerklassifizierung",
+    "unknown": "Unbekannt",
+    "reportable": "Auf einer Informationsmeldung meldepflichtig",
+    "informationReturnForm": "Formular",
+    "inheritClass": "Von Klasse übernehmen",
+    "notReportable": "Nicht meldepflichtig",
+    "informationReturnBox": "Standardfeld",
+    "defaultBox": "Formularstandard",
+    "tinType": "TIN-Art",
+    "tin": "Steueridentifikationsnummer",
+    "tinPlaceholder": "9 Ziffern",
+    "tinHint": "Verschlüsselt gespeichert. Nur die letzten vier Ziffern werden je wieder angezeigt.",
+    "backupWithholding": "Unterliegt dem Sicherungssteuerabzug"
+  },
+  "errors": {
+    "saveFailed": "Das konnte nicht gespeichert werden.",
+    "pickRequirement": "Wählen Sie die Anforderung, die dieses Zertifikat erfüllt.",
+    "exceptionIncomplete": "Eine Ausnahme braucht eine Anforderung und ein Enddatum."
+  }
+}
