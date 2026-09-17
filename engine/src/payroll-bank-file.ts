@@ -522,7 +522,6 @@ export interface PayRunBankFileCredit extends PayRunBankFileEntry {
  */
 export async function loadCredits(
   orgId: string,
-  documentId: string,
   population: PayRunBankFilePopulation,
   format: PayRunBankFileFormat,
 ): Promise<PayRunBankFileCredit[]> {
@@ -710,7 +709,7 @@ export async function preparePayRunBankFile(
   format: PayRunBankFileFormat,
 ): Promise<PayRunBankFileInputs> {
   const population = await payRunBankFilePopulation(orgId, documentId);
-  const credits = await loadCredits(orgId, documentId, population, format);
+  const credits = await loadCredits(orgId, population, format);
   return { format, population, credits };
 }
 

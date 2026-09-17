@@ -82,7 +82,7 @@ async function main(): Promise<number> {
     const golden = JSON.parse(readFileSync(join(dir, "golden.json"), "utf8")) as GoldenSnapshot;
     const f = parseFlags(argv.slice(2));
 
-    const { report, world } = await rebuildDataset(dataset, golden, {
+    const { report } = await rebuildDataset(dataset, golden, {
       log: (msg) => console.error(`[replay] ${msg}`),
     });
 

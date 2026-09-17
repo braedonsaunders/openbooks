@@ -690,7 +690,9 @@ export function ohPercentageMethod(input: {
 
 function computeOh(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const periodEnd = requirePeriodEnd(input);
-  const edition = ohEditionFor(periodEnd);
+  // Year gate: throws for periods past the transcribed tables even though the
+  // optional computer formula below annualizes without edition data.
+  ohEditionFor(periodEnd);
 
   // Form IT 4 line 4 — the total of lines 1, 2 and 3. With no IT 4 on file the
   // declared default is zero exemptions, which is the certificate's statutory

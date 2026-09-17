@@ -133,7 +133,7 @@ export async function processCloseDeliveryJobData(
   data: CloseDeliveryJobData,
   queueJobId: string | null = null,
 ): Promise<unknown> {
-      const { orgId, runId, packageId } = data;
+      const { orgId, runId } = data;
       // Queue callbacks carry no request store; the package's tenant is the
       // only legal scope for the context load, catalog ensure, and close event.
       return await withOrgContext(orgId, async () => {

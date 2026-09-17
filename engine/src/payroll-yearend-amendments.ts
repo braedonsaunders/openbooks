@@ -608,7 +608,7 @@ async function withRepeatableRead<T>(orgId: string, fn: () => Promise<T>): Promi
 export async function recordFilingIssue(
   input: RecordFilingIssueInput,
 ): Promise<RecordFilingIssueResult> {
-  const { orgId, actorId, country, filingKey, taxYear, revision } = input;
+  const { orgId, country, filingKey, taxYear, revision } = input;
   const cancellationReason = input.reason?.trim() || input.note?.trim() || null;
   const filing = yearEndFiling(country, filingKey);
 

@@ -9,7 +9,6 @@ import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import {
   accreteToZero,
-  periodInterest,
   periodRateFromAnnualPercent,
   presentValueOfLevelStream,
   type AccretionPeriod,
