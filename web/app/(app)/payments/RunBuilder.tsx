@@ -75,6 +75,10 @@ export function RunBuilder({
   const [captureDiscounts, setCaptureDiscounts] = useState(true)
   const [applyCredits, setApplyCredits] = useState(true)
   const [busy, setBusy] = useState(false)
+  // A blocked create that only fires a transient toast reads as "nothing
+  // happened" once it dismisses (F-t04-005): the failure also persists as a
+  // form-level alert naming the typed server reason, cleared on the next edit.
+  const [fieldError, setFieldError] = useState<string | null>(null)
 
   const selectedList = Object.values(selected)
   const selectedTotals = selectedList.reduce((totals, bill) => {
@@ -89,6 +93,7 @@ export function RunBuilder({
   const allOnPage = bills.length > 0 && bills.every((b) => selected[b.id])
 
   function toggle(bill: RunBill) {
+    setFieldError(null)
     setSelected((prev) => {
       const next = { ...prev }
       if (next[bill.id]) delete next[bill.id]
@@ -97,6 +102,7 @@ export function RunBuilder({
     })
   }
   function toggleAll() {
+    setFieldError(null)
     setSelected((prev) => {
       const next = { ...prev }
       if (allOnPage) for (const b of bills) delete next[b.id]
@@ -107,27 +113,38 @@ export function RunBuilder({
 
   async function createRun() {
     setBusy(true)
-    const res = await fetch(mode === 'collections' ? '/api/receipts/runs' : '/api/payments/runs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        paymentBankProfileId,
-        ...(mode === 'collections' ? { invoiceDocumentIds: selectedList.map((b) => b.id) } : { billDocumentIds: selectedList.map((b) => b.id) }),
-        scheduledFor: scheduledFor || null,
-        ...(mode === 'payments' ? { selectionCriteria: { captureDiscounts, applyCredits } } : {}),
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('toasts.createFailed'))
+    try {
+      const res = await fetch(mode === 'collections' ? '/api/receipts/runs' : '/api/payments/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentBankProfileId,
+          ...(mode === 'collections' ? { invoiceDocumentIds: selectedList.map((b) => b.id) } : { billDocumentIds: selectedList.map((b) => b.id) }),
+          scheduledFor: scheduledFor || null,
+          ...(mode === 'payments' ? { selectionCriteria: { captureDiscounts, applyCredits } } : {}),
+        }),
+      })
+      // The error body may not be JSON (proxy 5xx pages): never let the read
+      // itself throw, or the failure goes silent with an unhandled rejection.
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message = data.error ?? t('toasts.createFailed')
+        setFieldError(message)
+        toast.error(message)
+        return
+      }
+      setFieldError(null)
+      toast.success(t('toasts.created', { number: data.runNumber }))
+      setSelected({})
+      router.push((`${basePath}?view=runs&run=${data.id}`))
+      router.refresh()
+    } catch {
+      toast.error(t('toasts.createFailed'))
+    } finally {
+      // A rejected transport must not wedge the button on: without this,
+      // every later click silently dies on the stuck disabled button.
       setBusy(false)
-      return
     }
-    toast.success(t('toasts.created', { number: data.runNumber }))
-    setSelected({})
-    setBusy(false)
-    router.push((`${basePath}?view=runs&run=${data.id}`))
-    router.refresh()
   }
 
   const thProps = {
@@ -154,14 +171,24 @@ export function RunBuilder({
                 label: `${profile.name} · ${`${profile.bank_number ?? ''} ${profile.bank_name}`.trim()} · ${profile.currency} · ${profile.format_name}`,
               }))}
               value={paymentBankProfileId}
-              onChange={(v) => setPaymentBankProfileId(v ?? '')}
+              onChange={(v) => {
+                setFieldError(null)
+                setPaymentBankProfileId(v ?? '')
+              }}
               placeholder={bankProfiles.length > 0 ? t('selectBankAccountPlaceholder') : t('noBankAccounts')}
               disabled={bankProfiles.length === 0}
             />
           </div>
           <div className="space-y-1.5">
             <Label>{t('fundsDate')}</Label>
-            <Input type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+            <Input
+              type="date"
+              value={scheduledFor}
+              onChange={(e) => {
+                setFieldError(null)
+                setScheduledFor(e.target.value)
+              }}
+            />
           </div>
           <div className="flex min-h-10 flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 dark:border-teal-900 dark:bg-teal-950/40">
             <div>
@@ -182,6 +209,17 @@ export function RunBuilder({
           </div>
         </div>
       </div>
+
+      {fieldError ? (
+        <div className="shrink-0 px-4 pt-3 sm:px-6">
+          <p
+            role="alert"
+            className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+          >
+            {fieldError}
+          </p>
+        </div>
+      ) : null}
 
       <div className="shrink-0 px-4 py-3 sm:px-6">{toolbar}</div>
 
