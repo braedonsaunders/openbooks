@@ -191,7 +191,7 @@ export function AssistantApp({
   // Re-render whenever the viewed conversation's turn entry changes. The
   // snapshot closes over this render's key (a primitive revision number, so
   // no caching hazard); the subscription itself is stable.
-  useSyncExternalStore(subscribeTurns, () => turnRevision(viewKey))
+  useSyncExternalStore(subscribeTurns, () => turnRevision(viewKey), () => -1)
   const live = readTurn(viewKey)
   const visibleMessages = composeVisible(messages, live)
   const streaming = live?.streaming ?? false
