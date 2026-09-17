@@ -12,7 +12,8 @@ export function EmptyState({
   className,
 }: {
   icon?: React.ReactNode
-  title: string
+  /** Optional: route-state bodies render title-less under their PageHeader. */
+  title?: string
   description?: string
   action?: React.ReactNode
   className?: string
@@ -38,7 +39,9 @@ export function EmptyState({
           <span className="[&_svg]:h-7 [&_svg]:w-7">{icon}</span>
         </motion.div>
       ) : null}
-      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+      {title ? (
+        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+      ) : null}
       {description ? (
         <p className="mt-1.5 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           {description}
