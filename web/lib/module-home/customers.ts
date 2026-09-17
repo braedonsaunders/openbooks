@@ -146,34 +146,37 @@ export async function customersHome(
   const q = calendarQuarterBounds(today)
 
   const [arRes, dsoStats, topRes, trendRes, badgeRes, collectedRowsRes, forecast, orgRes] = (await Promise.all([
-    // Open receivables aggregate — open customer-invoice items with remaining
-    // balance (the same open-item shape the cash engine reads, aggregated).
-    // Legs are stamped in their line entity's functional: aggregate per
-    // functional and translate to presentation below.
+    // Open receivables aggregate — the cash engine's openItems population,
+    // aggregated (F-t02-008: one open-receivables definition — the as-of
+    // book — across dashboard, workspace, hub and aging). Legs are stamped
+    // in their line entity's functional: aggregate per functional and
+    // translate to presentation below.
     db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date, sub.base_currency as func,
-               abs(jl.amount) - coalesce((
+               (case when d.kind = 'customer_credit' then -1 else 1 end) * (abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
                   where x.org_id = ${orgId}
                     and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                    and x.unapplied_at is null
-               ), 0) as remaining
+                    and x.applied_on <= ${today}
+                    and (x.unapplied_at is null or x.unapplied_at::date > ${today}::date)
+               ), 0)) as remaining
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
+           and je.posting_date <= ${today}
           join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
-           and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
-           and d.open_balance > 0
+           and d.posted_entry_id = je.id and d.status = 'posted' and d.kind in ('customer_invoice', 'customer_credit')
           left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
+         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable'
+           and ((d.kind = 'customer_credit' and jl.amount < 0) or (d.kind <> 'customer_credit' and jl.amount > 0))${lineScope}
       )
       select oi.func,
              coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
-             count(*) filter (where remaining > 0) as open_count,
-             count(*) filter (where remaining > 0 and due_date < ${today}) as overdue_count
-        from oi where remaining > 0 group by oi.func
+             count(*) filter (where remaining <> 0) as open_count,
+             count(*) filter (where remaining <> 0 and due_date < ${today}) as overdue_count
+        from oi where remaining <> 0 group by oi.func
     `),
     // Days-sales-outstanding is the ONE org DSO from the cash engine's
     // maintained settlement rollup — the same reader the cash cockpit,
@@ -186,20 +189,22 @@ export async function customersHome(
     db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date, sub.base_currency as func,
-               abs(jl.amount) - coalesce((
+               (case when d.kind = 'customer_credit' then -1 else 1 end) * (abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
                   where x.org_id = ${orgId}
                     and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                    and x.unapplied_at is null
-               ), 0) as remaining
+                    and x.applied_on <= ${today}
+                    and (x.unapplied_at is null or x.unapplied_at::date > ${today}::date)
+               ), 0)) as remaining
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
+           and je.posting_date <= ${today}
           join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
-           and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
-           and d.open_balance > 0
+           and d.posted_entry_id = je.id and d.status = 'posted' and d.kind in ('customer_invoice', 'customer_credit')
           left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
+         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable'
+           and ((d.kind = 'customer_credit' and jl.amount < 0) or (d.kind <> 'customer_credit' and jl.amount > 0))${lineScope}
       )
       select oi.party_id, oi.func, coalesce(p.display_name, 'Unspecified') as name,
              sum(oi.remaining) as open,
@@ -215,7 +220,7 @@ export async function customersHome(
             join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
            where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed
              and o.party_id = oi.party_id) opp on true` : sql``}
-       where oi.remaining > 0
+       where oi.remaining <> 0
        group by oi.party_id, oi.func, p.display_name${crmOn ? sql`, opp.n` : sql``}
     `),
     // 13-week collections trend (posted customer payments by week). `total`
