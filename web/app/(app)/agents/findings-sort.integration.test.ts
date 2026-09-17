@@ -25,7 +25,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { getAuthz } = await import('../../../lib/authz');
 const { loadAgentInbox } = await import('../../../lib/agents/inbox');
@@ -40,25 +40,30 @@ const T3 = new Date(Date.now() - 1 * 86_400_000).toISOString();
 
 async function seedFinding(orgId: string, row: { materiality: string; severity: string; lastDetected: string; dueAt?: string }): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into ai_work_items
+  // Fixture seeding runs under bypass (exactly what the pooled fixture path
+  // does): the shared cluster enforces RLS and CI's superuser role hides it.
+  await withBypassContext(() => db.execute(sql`insert into ai_work_items
     (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, status,
      confidence, materiality, summary, first_detected_at, last_detected_at, due_at)
     values (${id}, ${orgId}, 'accounting', 'unmatched_bank_activity', 'test', ${`fp-${id}`},
       ${row.severity}, 'open', '1', ${row.materiality}, '{}'::jsonb,
       ${FIRST}::timestamptz, ${row.lastDetected}::timestamptz,
-      ${row.dueAt ?? null}::timestamptz)`);
+      ${row.dueAt ?? null}::timestamptz)`));
   return id;
 }
 
 async function asReader(orgId: string) {
-  const actor = await createScratchUser(orgId, 'Reader', 'c01_sort_reader');
-  await db.execute(sql`update app_roles set permissions=${JSON.stringify(['assistant.use', 'gl.read'])}::jsonb where org_id=${orgId} and key='c01_sort_reader'`);
+  const actor = await withBypassContext(async () => {
+    const id = await createScratchUser(orgId, 'Reader', 'c01_sort_reader');
+    await db.execute(sql`update app_roles set permissions=${JSON.stringify(['assistant.use', 'gl.read'])}::jsonb where org_id=${orgId} and key='c01_sort_reader'`);
+    return id;
+  });
   state.user = { id: actor, orgId, name: 'Reader', email: 'c01sort@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
 }
 
 test('findings sort by rank, columns, and page deterministically', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  const other = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
+  const other = await withBypassContext(() => createScratchOrg());
   try {
     // Same age factor for all three, so rank == materiality order (A > C > B).
     const aId = await seedFinding(org.orgId, { materiality: '5000', severity: 'info', lastDetected: T1 });
@@ -101,7 +106,7 @@ test('findings sort by rank, columns, and page deterministically', { skip: !proc
 });
 
 test('workbench loader serves the list source sort, filters, and row shape', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const moment = Date.now();
     const hourAgo = new Date(moment - 3_600_000).toISOString();

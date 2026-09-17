@@ -29,28 +29,33 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { businessToday } = await import('@openbooks/engine/src/business-date.ts');
 const { loadAgents, agentsSpec } = await import('./view');
 
 async function seedFinding(orgId: string, summary: unknown = {}): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into ai_work_items
+  // Fixture seeding runs under bypass (exactly what the pooled fixture path
+  // does): the shared cluster enforces RLS and CI's superuser role hides it.
+  await withBypassContext(() => db.execute(sql`insert into ai_work_items
     (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, confidence, materiality, summary)
     values (${id}, ${orgId}, 'accounting', 'unmatched_bank_activity', 'test', ${`fp-${id}`},
-      'warning', '1', '1000', ${JSON.stringify(summary)}::jsonb)`);
+      'warning', '1', '1000', ${JSON.stringify(summary)}::jsonb)`));
   return id;
 }
 
 async function asUser(orgId: string, name: string, roleKey: string, perms: string[]) {
-  const actor = await createScratchUser(orgId, name, roleKey);
-  await db.execute(sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`);
+  const actor = await withBypassContext(async () => {
+    const id = await createScratchUser(orgId, name, roleKey);
+    await db.execute(sql`update app_roles set permissions=${JSON.stringify(perms)}::jsonb where org_id=${orgId} and key=${roleKey}`);
+    return id;
+  });
   state.user = { id: actor, orgId, name, email: `${roleKey}@scratch.test`, roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
 }
 
 test('agents home serves the ranked snapshot with facets', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const findingId = await seedFinding(org.orgId);
     await asUser(org.orgId, 'Reader', 'b06_home_reader', ['assistant.use', 'gl.read']);
@@ -80,7 +85,7 @@ test('agents home serves the ranked snapshot with facets', { skip: !process.env.
 });
 
 test('briefing tab serves cache state without the inbox', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     await seedFinding(org.orgId);
     await asUser(org.orgId, 'Reader', 'b06_brief_tab', ['assistant.use', 'gl.read']);
@@ -103,7 +108,7 @@ test('briefing tab serves cache state without the inbox', { skip: !process.env.O
 });
 
 test('briefing body strips the duplicated title H1 in the loader', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     await seedFinding(org.orgId);
     await asUser(org.orgId, 'Reader', 'c01_brief_h1', ['assistant.use', 'gl.read']);
@@ -131,7 +136,7 @@ test('briefing body strips the duplicated title H1 in the loader', { skip: !proc
 });
 
 test('proposals tab filters carriers and the drawer resolves governed cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const UID = '11111111-2222-4333-8444-555555555555';
     const goodId = await seedFinding(org.orgId, {

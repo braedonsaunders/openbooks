@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { db, pool, orgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
+import { db, pool, orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
 
 const state: { authz: {
@@ -31,12 +31,18 @@ const request = (method: string, body: object) => new Request("http://localhost/
 const call = (body: object) => POST(request("POST", body));
 
 async function seed() {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Control actor", "control_actor");
-  const targetId = await createScratchUser(org.orgId, "Control target", "control_target");
-  const firstRole = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${org.orgId} and key = 'control_target'`)).rows[0]!.id;
-  const extraRole = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-    values (${org.orgId}, 'control_extra', 'Extra', false, '[]'::jsonb) returning id`)).rows[0]!.id;
+  // Fixture seeding runs under bypass (exactly what the pooled fixture path
+  // does): the shared cluster enforces RLS and CI's superuser role hides it.
+  const seeded = await withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Control actor", "control_actor");
+    const targetId = await createScratchUser(org.orgId, "Control target", "control_target");
+    const firstRole = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${org.orgId} and key = 'control_target'`)).rows[0]!.id;
+    const extraRole = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+      values (${org.orgId}, 'control_extra', 'Extra', false, '[]'::jsonb) returning id`)).rows[0]!.id;
+    return { org, actorId, targetId, firstRole, extraRole };
+  });
+  const { org, actorId, targetId, firstRole, extraRole } = seeded;
   state.authz = { user: { orgId: org.orgId, id: actorId, isSuperAdmin: false },
     permissions: new Set(["admin.users.manage", "admin.roles.manage"]), allowedSubsidiaryIds: null };
   return { orgId: org.orgId, actorId, targetId, firstRole, extraRole };
@@ -44,8 +50,10 @@ async function seed() {
 type Fixture = Awaited<ReturnType<typeof seed>>;
 
 async function assignments(f: Fixture, userId = f.targetId) {
-  return (await db.execute<{ role_id: string }>(sql`select role_id from role_assignments
-    where org_id = ${f.orgId} and user_id = ${userId} order by role_id`)).rows.map((row) => row.role_id);
+  // Reads stay tenant-scoped via withOrgContext — the production read path.
+  // (Never called inside a transaction, so this cannot detach snapshot reads.)
+  return (await withOrgContext(f.orgId, () => db.execute<{ role_id: string }>(sql`select role_id from role_assignments
+    where org_id = ${f.orgId} and user_id = ${userId} order by role_id`))).rows.map((row) => row.role_id);
 }
 
 async function waitForBlocked(pid: number, minimum = 1) {
@@ -67,13 +75,13 @@ test("UUID case cannot bypass self-grant or self-deactivation, and unassignment 
     assert.equal((await call({ action: "assign", userId: f.actorId.toUpperCase(), roleId: f.extraRole.toUpperCase() })).status, 403);
     assert.equal((await call({ action: "set-active", userId: f.actorId.toUpperCase(), isActive: false })).status, 400);
     assert.deepEqual(await assignments(f, f.actorId), before);
-    assert.equal((await db.execute(sql`select is_active from users where id = ${f.actorId}`)).rows[0]!.is_active, true);
+    assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select is_active from users where id = ${f.actorId}`))).rows[0]!.is_active, true);
     assert.equal((await call({ action: "assign", userId: f.targetId.toUpperCase(), roleId: f.extraRole.toUpperCase() })).status, 200);
     assert.ok((await assignments(f)).includes(f.extraRole));
     assert.equal((await call({ action: "unassign", userId: f.targetId.toUpperCase(), roleId: f.extraRole.toUpperCase() })).status, 200);
     assert.deepEqual(await assignments(f), [f.firstRole]);
-    const evidence = await db.execute<{ changes: { userId: unknown[]; roleId: unknown[] } }>(sql`select changes from audit_log
-      where org_id = ${f.orgId} and table_name = 'role_assignments' order by at, id`);
+    const evidence = await withOrgContext(f.orgId, () => db.execute<{ changes: { userId: unknown[]; roleId: unknown[] } }>(sql`select changes from audit_log
+      where org_id = ${f.orgId} and table_name = 'role_assignments' order by at, id`));
     assert.equal(evidence.rows.length, 2);
     assert.ok(evidence.rows.every((row) => row.changes.userId.includes(f.targetId) && row.changes.roleId.includes(f.extraRole)));
     assert.equal((await call({ action: "assign", userId: [f.targetId], roleId: f.extraRole })).status, 400);
@@ -117,7 +125,7 @@ test(`concurrent role deletion and unassignment preserve the last role (${repeat
   const pending: Promise<Response>[] = [];
   let installed = false;
   try {
-    await db.execute(sql`insert into role_assignments(org_id, user_id, role_id) values (${f.orgId}, ${f.targetId}, ${f.extraRole})`);
+    await withBypassContext(() => db.execute(sql`insert into role_assignments(org_id, user_id, role_id) values (${f.orgId}, ${f.targetId}, ${f.extraRole})`));
     // Pause commits after the existing deferred guard has run. The old paths
     // both passed that guard against mutually stale assignment snapshots.
     await db.execute(sql.raw(`create function ${trigger}() returns trigger language plpgsql as $$ begin
@@ -174,7 +182,7 @@ for (const action of ["assign", "unassign", "set-active"] as const) {
     const trigger = `user_audit_${randomUUID().replaceAll("-", "")}`;
     let installed = false;
     try {
-      if (action === "unassign") await db.execute(sql`insert into role_assignments(org_id, user_id, role_id) values (${f.orgId}, ${f.targetId}, ${f.extraRole})`);
+      if (action === "unassign") await withBypassContext(() => db.execute(sql`insert into role_assignments(org_id, user_id, role_id) values (${f.orgId}, ${f.targetId}, ${f.extraRole})`));
       const snapshot = async () => ({
         users: (await db.execute(sql`select * from users where org_id = ${f.orgId} order by id`)).rows,
         assignments: (await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`)).rows,
@@ -194,12 +202,12 @@ for (const action of ["assign", "unassign", "set-active"] as const) {
         await assert.rejects(call(body));
         assert.deepEqual(await snapshot(), before);
       });
-      assert.equal((await db.execute(sql`select description from app_roles where id = ${f.extraRole}`)).rows[0]!.description, "earlier caller work");
+      assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select description from app_roles where id = ${f.extraRole}`))).rows[0]!.description, "earlier caller work");
       await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`)); installed = false;
       assert.equal((await call(body)).status, 200);
-      const evidence = await db.execute(sql`select action from audit_log where org_id = ${f.orgId}`);
+      const evidence = await withOrgContext(f.orgId, () => db.execute(sql`select action from audit_log where org_id = ${f.orgId}`));
       assert.equal(evidence.rows.length, 1, "successful retry has exactly one audit entry");
-      if (action === "set-active") assert.equal((await db.execute(sql`select is_active from users where id = ${f.targetId}`)).rows[0]!.is_active, false);
+      if (action === "set-active") assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select is_active from users where id = ${f.targetId}`))).rows[0]!.is_active, false);
       else assert.equal((await assignments(f)).includes(f.extraRole), action === "assign");
     } finally {
       if (installed) await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`));
