@@ -9,6 +9,12 @@ import {
   payrollSubsidiaryScopeFilter,
   type PayrollSubsidiaryScope,
 } from '@openbooks/engine/src/payroll-run.ts'
+import { installedPayrollCountries } from '@openbooks/engine/src/payroll-readiness.ts'
+import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
+import {
+  missingPayrollControlAccounts,
+  type MissingPayrollControlAccount,
+} from '../payroll-setup-checklist.ts'
 
 /**
  * Payroll module home — one light round trip for the /payroll landing cockpit:
@@ -18,16 +24,6 @@ import {
  * derive from the SAME nextPeriodAfter the engine uses at run creation, so the
  * card and the Start action always agree.
  */
-
-/** Control accounts the commit projection cannot post without. */
-export const REQUIRED_PAYROLL_SETTING_KEYS = [
-  'wageExpenseAccountId',
-  'netPayAccountId',
-  'cppPayableAccountId',
-  'eiPayableAccountId',
-  'taxPayableAccountId',
-  'vacationPayableAccountId',
-] as const
 
 export interface ScheduleCardRun {
   documentId: string
@@ -85,8 +81,8 @@ export interface PayrollHome {
     missingWages: { id: string; name: string }[]
     missingWagesTotal: number
   }
-  /** Control accounts still unconfigured (setup checklist). */
-  missingSettings: string[]
+  /** Control accounts still unconfigured (setup checklist, pack-driven). */
+  missingSettings: MissingPayrollControlAccount[]
 }
 
 const EXCEPTION_LIMIT = 6
@@ -113,7 +109,7 @@ export async function payrollHome(
   const today = await businessToday(orgId)
   const taxYear = Number(today.slice(0, 4))
 
-  const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
+  const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings, blobRes] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.
     db.execute(sql`
       select s.id, s.name, s.frequency, s.periods_per_year,
@@ -218,6 +214,9 @@ export async function payrollHome(
       ) return null
       throw error
     }),
+    // Raw payroll settings blob: installed-pack marker for the checklist walk.
+    db.execute<{ p: Record<string, unknown> | null }>(sql`
+      select settings->'payroll' as p from orgs where id = ${orgId}`),
   ]))
 
   const schedules: PayrollScheduleCard[] = schedulesRes.rows.map((s: any) => {
@@ -271,6 +270,25 @@ export async function payrollHome(
   const ytd = ytdRes.rows[0] ?? {}
   const defaultSchedule = schedules.find((s) => s.isDefault) ?? schedules[0]
 
+  // Setup checklist (F-t08-016): the same packSlotState walk the run
+  // pre-flight performs — every statutory slot of every installed pack must
+  // resolve to a liability account — plus the two country-free accounts.
+  // Legacy CA keys must never drive this banner: a US-only tenant has no
+  // CPP/EI slots anywhere in its setup.
+  let missingSettings: MissingPayrollControlAccount[] = []
+  if (settings) {
+    const blob = blobRes.rows[0]?.p ?? {}
+    const installed = await installedPayrollCountries(orgId, blob, allowedSubsidiaryIds)
+    const states = await packSlotState(orgId, installed, settings as unknown as Record<string, unknown>)
+    missingSettings = missingPayrollControlAccounts({
+      wageExpenseAccountId: settings.wageExpenseAccountId,
+      netPayAccountId: settings.netPayAccountId,
+      slots: states.flatMap((pack) =>
+        pack.slots.map((slot) => ({ country: pack.country, key: slot.key, accountId: slot.accountId })),
+      ),
+    })
+  }
+
   return {
     taxYear,
     activeEmployees: Number(stats.active_employees ?? 0),
@@ -305,8 +323,6 @@ export async function payrollHome(
       missingWages: noWageRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
       missingWagesTotal: Number(noWageRes.rows[0]?.total ?? 0),
     },
-    missingSettings: settings
-      ? REQUIRED_PAYROLL_SETTING_KEYS.filter((key) => !settings[key])
-      : [],
+    missingSettings,
   }
 }
