@@ -37,6 +37,7 @@ import {
   type DefinitionForm,
   type GeneralForm,
 } from './rule-drawer-form'
+import { ComputationView, type Computation } from './runs-tab'
 
 type DrawerTab = 'general' | 'definition' | 'versions' | 'test'
 
@@ -1397,12 +1398,14 @@ function TestTab({
   const [documentKind, setDocumentKind] = useState('')
   const [dims, setDims] = useState<Record<string, string>>({})
   const [periodId, setPeriodId] = useState(options.periods[0]?.id ?? '')
+  const [bookId, setBookId] = useState(options.books[0]?.id ?? '')
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [verdict, setVerdict] = useState<{ matched: boolean; specificity: number } | null>(null)
   const [preview, setPreview] = useState<TestPreviewRow[]>([])
   const [basisNote, setBasisNote] = useState<string | null>(null)
   const [runsUrl, setRunsUrl] = useState<string | null>(null)
+  const [computation, setComputation] = useState<Computation | null>(null)
   const isPeriod = detail.rule.mode === 'period'
   const accountOptions = options.accounts.map((account) => ({ value: account.id, label: account.label }))
   const dimSources: { key: string; label: string; values: Option[] }[] = [
@@ -1422,12 +1425,32 @@ function TestTab({
     setPreview([])
     setBasisNote(null)
     setRunsUrl(null)
+    setComputation(null)
+    // Period rules do not match lines: compute the sweep preview inline
+    // (rule + period + book) instead of linking onto an empty Runs table.
+    if (isPeriod) {
+      const { status, body } = await fetchJson('/api/allocations/runs/preview', {
+        method: 'POST',
+        body: JSON.stringify({ ruleId, periodId, bookId }),
+      })
+      setTesting(false)
+      if (status !== 200) {
+        setError(apiError(status, body, t('rules.errors.load')).message)
+        return
+      }
+      const payload = body as { computation?: Computation }
+      if (payload.computation) {
+        setComputation(payload.computation)
+        setRunsUrl(`/admin/setup/allocations?tab=runs&rule=${encodeURIComponent(ruleId)}&period=${encodeURIComponent(periodId)}`)
+      } else {
+        setError(t('rules.errors.load'))
+      }
+      return
+    }
     const { status, body } = await fetchJson(`/api/allocations/rules/${encodeURIComponent(ruleId)}/test-match`, {
       method: 'POST',
       body: JSON.stringify(
-        isPeriod
-          ? { versionId: versionId === '' ? undefined : versionId, periodId }
-          : { versionId: versionId === '' ? undefined : versionId, line: testLinePayload({ accountId, documentKind, dims }) },
+        { versionId: versionId === '' ? undefined : versionId, line: testLinePayload({ accountId, documentKind, dims }) },
       ),
     })
     setTesting(false)
@@ -1436,16 +1459,10 @@ function TestTab({
       return
     }
     const payload = body as {
-      kind?: string
-      runsUrl?: string
       matched?: boolean
       specificity?: number
       preview?: TestPreviewRow[]
       basisNote?: string | null
-    }
-    if (payload.kind === 'period' && typeof payload.runsUrl === 'string') {
-      setRunsUrl(payload.runsUrl)
-      return
     }
     setVerdict({ matched: payload.matched === true, specificity: Number(payload.specificity ?? 0) })
     setPreview(payload.preview ?? [])
@@ -1482,7 +1499,17 @@ function TestTab({
               ariaLabel={t('rules.test.period')}
             />
           </Field>
-          <Button type="button" onClick={() => void run()} disabled={testing || periodId === ''}>
+          <Field label={t('rules.test.book')}>
+            <SearchSelect
+              value={bookId}
+              onChange={(value) => setBookId(value ?? '')}
+              options={options.books.map((book) => ({ value: book.id, label: book.label }))}
+              placeholder={t('rules.test.book')}
+              sheetTitle={t('rules.test.book')}
+              ariaLabel={t('rules.test.book')}
+            />
+          </Field>
+          <Button type="button" onClick={() => void run()} disabled={testing || periodId === '' || bookId === ''}>
             {testing ? t('rules.test.testing') : t('rules.test.run')}
           </Button>
           {runsUrl ? (
@@ -1490,6 +1517,7 @@ function TestTab({
               {t('rules.test.openRuns')}
             </a>
           ) : null}
+          {computation ? <ComputationView computation={computation} /> : null}
         </>
       ) : (
         <>
