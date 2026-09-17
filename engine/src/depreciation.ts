@@ -7,6 +7,7 @@ import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./deprec
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
 import { assertFinalKernelBalance } from "./posting.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "./close.ts";
 import { loadSubsidiaryContext, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
@@ -854,6 +855,7 @@ export async function recordDepreciationInput(
         method: DepreciationMethod;
         units_total: string | null;
         book_id: string;
+        subsidiary_id: string;
         acquisition_cost: string;
         salvage_value: string;
         status: string;
@@ -861,14 +863,12 @@ export async function recordDepreciationInput(
         opening_accumulated_depreciation: string | null;
         period_id: string;
         period_name: string;
-        period_closed: boolean;
       }>(sql`
       select s.id, s.method, s.units_total, s.book_id,
+             a.subsidiary_id,
              a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
              a.opening_accumulated_depreciation::text as opening_accumulated_depreciation,
-             p.id as period_id, p.name as period_name,
-             (period_module_is_closed(${args.orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
-               or period_module_is_closed(${args.orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
+             p.id as period_id, p.name as period_name
         from depreciation_schedules s
         join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
         join accounting_periods p on p.org_id = s.org_id and not p.is_adjustment
@@ -881,7 +881,22 @@ export async function recordDepreciationInput(
     if (!row) throw new Error("no depreciation schedule or accounting period covers the effective date");
     if (row.status !== "in_service") throw new Error("depreciation inputs require an in-service asset");
     if (args.effectiveDate < row.in_service_on) throw new Error("depreciation cannot precede the in-service date");
-    if (row.period_closed) throw new Error("the asset or GL period is closed");
+    // One period gate: the shared assets+GL check replaces the raw
+    // period_module_is_closed projection. Recording new evidence is local
+    // activity, not historical replay, so source-owned imported locks refuse
+    // exactly like user locks.
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId: args.orgId,
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryIds: [row.subsidiary_id],
+        modules: ["assets"],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) throw new Error("the asset or GL period is closed");
+      throw error;
+    }
     const expectedMethod = args.kind === "manual" ? "manual" : "units_of_production";
     if (row.method !== expectedMethod) throw new Error(`schedule method is ${row.method}, not ${expectedMethod}`);
     const evidence = (await tx.execute(sql`
@@ -1210,7 +1225,6 @@ export async function runDepreciation(
           book_id: string;
           period_name: string;
           period_ends_on: string;
-          period_closed: boolean;
           asset_id: string;
           subsidiary_id: string;
           base_currency: string;
@@ -1232,8 +1246,6 @@ export async function runDepreciation(
                  s.book_id,
                  p.name as period_name,
                  p.ends_on as period_ends_on,
-                 (period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'assets')
-                   or period_module_is_closed(${orgId}, p.id, s.book_id, a.subsidiary_id, 'gl')) as period_closed,
                  a.id as asset_id,
                  a.subsidiary_id,
                  sub.base_currency,
@@ -1265,7 +1277,17 @@ export async function runDepreciation(
         const claimed = claim.rows[0];
         if (!claimed) return null;
 
-        if (claimed.period_closed) {
+        // One period gate: the shared assets+GL check replaces the raw
+        // period_module_is_closed projection. Discovery stays advisory — a
+        // closed line is skipped, not fatal — and source-owned imported
+        // locks skip exactly like user locks.
+        if (!(await arePeriodModulesOpen(tx, {
+          orgId,
+          periodId: claimed.period_id,
+          bookId: claimed.book_id,
+          subsidiaryIds: [claimed.subsidiary_id],
+          modules: ["assets"],
+        }))) {
           return {
             entryId: null,
             amount: String(claimed.planned_amount),
