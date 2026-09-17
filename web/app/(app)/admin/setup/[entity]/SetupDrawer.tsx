@@ -187,8 +187,8 @@ export function SetupDrawer({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setFieldError(errorMessage(data?.error))
-        toast.error(errorMessage(data?.error))
+        setFieldError(errorMessage(data?.code ?? data?.error))
+        toast.error(errorMessage(data?.code ?? data?.error))
         return
       }
       toast.success(creating ? t('created') : t('updated'))
@@ -211,7 +211,7 @@ export function SetupDrawer({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) {
-      toast.error(errorMessage(data?.error))
+      toast.error(errorMessage(data?.code ?? data?.error))
       return
     }
     toast.success(t('deleted'))

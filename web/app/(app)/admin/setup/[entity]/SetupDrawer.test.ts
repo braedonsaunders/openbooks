@@ -38,3 +38,14 @@ test('a failed transport cannot wedge the save button on (F-t06-018)', () => {
   // clicks. Busy must reset even when the transport throws.
   assert.match(saveBlock(), /finally/, 'save() must reset busy in a finally block')
 })
+
+test('typed server conflicts resolve through their code, never the raw message (F-t06-019)', () => {
+  // Setup 409s carry {error: <human message>, code: 'duplicate'}: the drawer
+  // must map through the code so a server-worded message still resolves to
+  // the localized copy instead of echoing English into every locale.
+  assert.match(
+    source,
+    /data\?\.code \?\? data\?\.error/,
+    'conflict mapping must prefer the typed code over the message',
+  )
+})
