@@ -1437,8 +1437,10 @@ export function DocumentDrawer({
     setMode('view')
   }
 
+  const [actionError, setActionError] = useState<string | null>(null)
   async function act(action: 'submit' | 'post') {
     setBusy(true)
+    setActionError(null)
     try {
       const res = await fetch('/api/documents/actions', {
         method: 'POST',
@@ -1446,7 +1448,15 @@ export function DocumentDrawer({
         body: JSON.stringify({ action, documentId: doc.id }),
       })
       const result = await readDocumentActionResult(res)
-      if (!result.ok) toast.error(result.message ?? t('toasts.actionFailed'))
+      // Lifecycle refusals (period locks, missing control accounts, kernel
+      // guards) must stay visible in the drawer: a transient toast alone is
+      // too easy to miss, so the message also pins as an inline banner until
+      // the next action or edit.
+      if (!result.ok) {
+        const message = result.message ?? t('toasts.actionFailed')
+        setActionError(message)
+        toast.error(message)
+      }
       else if (result.pendingApproval) toast.success(t('toasts.submitted'))
       else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
       router.refresh()
@@ -2142,6 +2152,11 @@ export function DocumentDrawer({
       }
     >
       <div className="space-y-6 p-1">
+        {actionError ? (
+          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {actionError}
+          </p>
+        ) : null}
         {isTransfer ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>

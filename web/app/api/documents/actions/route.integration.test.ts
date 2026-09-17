@@ -131,3 +131,43 @@ test('documents/actions double submit: one winner, one 422, never a 500', { skip
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * F-t02-005: the audit trail showed only Created+Updated for a document the
+ * server had submitted and auto-approved, because neither the auto-release
+ * nor a gated submission wrote a documents row to audit_log. The route now
+ * records the lifecycle transition itself, so the trail evidences submit
+ * (always) plus the auto-release approval it performed.
+ */
+test('documents/actions submit evidences the transition in the audit trail', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Sales rep', 'sales_rep'))
+    const invoiceId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions='["ar.read","ar.create"]'::jsonb where org_id=${org.orgId} and key='sales_rep'`)
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${`AUD-${invoiceId.slice(0, 8)}`},
+                ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date},
+                'CAD', '1', '100', '0', '100', ${actor})`)
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`)
+    })
+    state.user = { id: actor, orgId: org.orgId, name: 'Sales rep', email: 'rep@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+
+    await withOrgContext(org.orgId, async () => {
+      const submitted = await POST(request({ action: 'submit', documentId: invoiceId }))
+      assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
+    })
+    const trail = (await withBypassContext(() => db.execute<{ action: string }>(sql`
+      select action from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${invoiceId} order by action`))).rows.map((r) => r.action)
+    assert.ok(trail.includes('submit'), `audit trail evidences submit, got [${trail}]`)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
