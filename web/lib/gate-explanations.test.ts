@@ -45,6 +45,7 @@ const AVAILABILITY_MOCK = `
 const DB_MOCK = `
   export const db = { execute: async () => ({ rows: [] }) }
   export async function withBypassContext(fn) { return fn() }
+  export function registerRequestOrgResolver() {}
   export async function withOrgContext(_org, fn) { return fn() }
 `;
 const FEATURES_MOCK = `

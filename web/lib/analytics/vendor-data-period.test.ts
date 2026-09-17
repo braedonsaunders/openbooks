@@ -44,6 +44,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.vendor-data-period-test')]
       export async function withBypassContext(fn) { return fn() }
+      export function registerRequestOrgResolver() {}
 
       function billRows(query) {
         const values = query.values

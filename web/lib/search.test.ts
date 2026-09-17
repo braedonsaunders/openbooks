@@ -213,6 +213,7 @@ const mockSources = new Map<string, string>([
         return fn()
       }
       export function ambientTenantOrgId() { return null }
+      export function registerRequestOrgResolver() {}
     `,
   ],
   [

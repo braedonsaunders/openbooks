@@ -64,6 +64,7 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       export async function withBypassContext(work) { return work() }
+      export function registerRequestOrgResolver() {}
       export function ambientTenantOrgId() { return null }
       const state = globalThis[Symbol.for('openbooks.financial-health-test')]
       export const db = {
