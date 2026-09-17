@@ -760,7 +760,7 @@ test('catalog completeness counts missing and declared fallback keys as untransl
       fr: 11,
       ja: 1,
       'pt-BR': 165,
-      zh: 164,
+      zh: 1,
     }
     assert.equal(
       declaredFallbacks.filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX)).length,

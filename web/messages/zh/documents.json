@@ -15,7 +15,9 @@
     },
     "folderRow": "文件夹"
   },
-  "systemFolders": { "apCapture": "应付采集" },
+  "systemFolders": {
+    "apCapture": "应付采集"
+  },
   "columns": {
     "name": "名称",
     "size": "大小",
@@ -48,6 +50,11 @@
       "parentLabel": "上级文件夹",
       "submit": "创建文件夹"
     },
+    "tabs": {
+      "details": "详情",
+      "sharing": "共享",
+      "activity": "活动"
+    },
     "edit": {
       "title": "编辑文件夹",
       "nameLabel": "文件夹名称",
@@ -62,6 +69,7 @@
       "title": "删除此文件夹？",
       "body": "此文件夹中的所有文件将被永久删除。此操作无法撤销。"
     },
+    "downloadZip": "下载为 ZIP",
     "systemNoDelete": "系统文件夹无法删除或重命名。",
     "subfolderCount": "{count, plural, one {# 个文件夹} other {# 个文件夹}}",
     "fileCount": "{count, plural, one {# 个文件} other {# 个文件}}",
@@ -70,6 +78,12 @@
   "file": {
     "drawer": {
       "title": "文件详情",
+      "tabs": {
+        "preview": "预览",
+        "details": "详情",
+        "sharing": "共享",
+        "activity": "活动"
+      },
       "name": "名称",
       "folder": "文件夹",
       "type": "类型",
@@ -115,7 +129,82 @@
     "attachExisting": "附加现有文件",
     "uploadNew": "上传新文件"
   },
+  "share": {
+    "title": "共享",
+    "subtitle": "默认情况下，公司所有人都可以查看此{kind}。在此向个人或角色授予额外访问权限（编辑或管理）；若要限制可见范围，请在“详情”中将文件夹设为私有。",
+    "kindFolder": "文件夹",
+    "kindFile": "文件",
+    "noGrants": "公司所有人可见。在下方添加个人或角色以授予编辑者或管理员访问权限。",
+    "addPrincipal": "添加个人或角色",
+    "selectPrincipal": "选择个人或角色…",
+    "usersGroup": "人员",
+    "rolesGroup": "角色",
+    "add": "添加",
+    "remove": "移除",
+    "you": "您",
+    "inheritedHint": "文件夹的访问权限将由其中的文件和子文件夹继承。",
+    "tiers": {
+      "viewer": "查看者",
+      "editor": "编辑者",
+      "manager": "管理员",
+      "viewerHint": "查看和下载",
+      "editorHint": "上传、重命名、移动、替换",
+      "managerHint": "完全控制，包括删除和共享"
+    }
+  },
+  "bulk": {
+    "selected": "{count, plural, one {已选 #} other {已选 #}}",
+    "download": "下载",
+    "delete": "删除",
+    "clear": "清除",
+    "selectAll": "全选",
+    "deleteConfirm": {
+      "title": "将所选项目移入回收站？",
+      "body": "所选文件和文件夹将移入回收站。您可以稍后将其恢复。"
+    },
+    "deleted": "已将 {count} 移入回收站",
+    "deleteFailed": "无法删除所选内容",
+    "downloadFailed": "无法下载所选内容",
+    "nothingDownloadable": "请选择要下载的文件"
+  },
+  "trash": {
+    "title": "回收站",
+    "link": "回收站",
+    "description": "已删除的文件和文件夹。可以将其恢复，或永久删除。",
+    "empty": "回收站为空。",
+    "back": "返回文件柜",
+    "restore": "恢复",
+    "deleteForever": "永久删除",
+    "purgeConfirm": {
+      "title": "永久删除？",
+      "body": "此项目及其内容将被永久删除。此操作无法撤销。"
+    },
+    "folderLabel": "文件夹",
+    "inLocation": "位于 {location}",
+    "restored": "已恢复",
+    "restoreFailed": "无法恢复",
+    "purged": "已永久删除",
+    "purgeFailed": "无法删除"
+  },
+  "activity": {
+    "title": "活动",
+    "empty": "暂无活动记录。",
+    "events": {
+      "create": "创建",
+      "upload": "上传",
+      "rename": "重命名",
+      "move": "移动",
+      "replace": "上传了新版本",
+      "delete": "删除",
+      "restore": "恢复",
+      "share": "共享",
+      "unshare": "取消共享"
+    }
+  },
   "toasts": {
+    "shareUpdated": "共享已更新",
+    "shareFailed": "无法更新共享",
+    "shareRemoved": "已移除访问权限",
     "folderCreated": "文件夹已创建",
     "folderCreateFailed": "无法创建文件夹",
     "folderRenamed": "文件夹已重命名",
@@ -153,6 +242,8 @@
   "rowMenu": {
     "open": "打开",
     "openFolder": "打开文件夹",
+    "properties": "属性",
+    "manageAccess": "管理访问权限",
     "copyLink": "复制链接"
   },
   "rename": {

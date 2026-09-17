@@ -1,5 +1,27 @@
 {
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "操作失败",
+      "camPoolCreated": "公区费用池已创建",
+      "camPoolReopened": "公区费用池已重新开放以更正",
+      "camPoolUpdated": "公区费用池已更新",
+      "chargeAdded": "已添加费用",
+      "couldNotLoad": "无法加载物业",
+      "depositPosted": "已记录押金",
+      "depositReversed": "已冲销押金",
+      "escalationApplied": "已应用递增",
+      "escalationScheduled": "已安排递增",
+      "lateFeesAssessed": "已计收组合滞纳金",
+      "leaseCreated": "租约已创建",
+      "leaseUpdated": "租约已更新",
+      "propertyCreated": "物业已创建",
+      "propertyDeleted": "物业已删除",
+      "propertyUpdated": "物业已更新",
+      "rentBilled": "已开具组合租金账单",
+      "unitAdded": "单元已添加",
+      "unitDeleted": "单元已删除",
+      "unitUpdated": "单元已更新"
+    },
     "workspace": {
       "title": "物业管理",
       "description": "管理物业、租赁、租金、公共区域费用对账和租户押金。",
@@ -57,6 +79,201 @@
         "occupancy": "入住率",
         "currency": "货币",
         "status": "状态"
+      }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "charge": "费用",
+          "frequency": "频率",
+          "effective": "生效",
+          "amount": "金额",
+          "open": "未结"
+        },
+        "addTitle": "添加周期性费用",
+        "labels": {
+          "type": "类型",
+          "description": "说明",
+          "amount": "金额",
+          "frequency": "频率",
+          "effectiveFrom": "生效自",
+          "effectiveTo": "生效至",
+          "incomeAccount": "收入科目"
+        },
+        "types": {
+          "cam": "公共区域费用",
+          "parking": "停车位",
+          "storage": "仓储",
+          "utility": "水电",
+          "other": "其他"
+        },
+        "frequencies": {
+          "monthly": "每月",
+          "quarterly": "每季度",
+          "annually": "每年",
+          "one_time": "一次性"
+        },
+        "propertyDefault": "物业默认值",
+        "addCharge": "添加费用"
+      },
+      "escalations": {
+        "table": {
+          "effective": "生效",
+          "method": "方式",
+          "value": "数值",
+          "result": "结果",
+          "status": "状态"
+        },
+        "apply": "应用",
+        "emptyTitle": "暂无租金递增",
+        "emptyDetail": "安排合同约定的按比例、固定金额或重置租金调整。",
+        "scheduleTitle": "安排递增",
+        "labels": {
+          "effectiveOn": "生效日期",
+          "method": "方式",
+          "value": "数值"
+        },
+        "methods": {
+          "percent": "按百分比递增",
+          "fixed": "按固定金额递增",
+          "new_amount": "新月租金额"
+        },
+        "schedule": "安排"
+      },
+      "deposits": {
+        "required": "必填",
+        "held": "持有",
+        "notice": "押金分录将即时过账，不能编辑或删除。请先冲销错误分录，然后在下方过账更正后的分录。",
+        "emptyTitle": "暂无押金动态",
+        "emptyDetail": "记录收款以确认租户押金负债。",
+        "reverseTitle": "冲销押金交易",
+        "reverseLabels": {
+          "reversalDate": "冲销日期",
+          "reason": "原因"
+        },
+        "cancel": "取消",
+        "postReversal": "过账冲销",
+        "recordTitle": "记录押金交易",
+        "labels": {
+          "transaction": "交易",
+          "date": "日期",
+          "amount": "金额",
+          "bankAccount": "银行账户",
+          "tenantInvoice": "租户发票",
+          "offsetAccount": "对方科目",
+          "memo": "备注"
+        },
+        "kinds": {
+          "received": "已收到",
+          "interest": "利息",
+          "applied": "冲抵租户发票",
+          "refunded": "已退款",
+          "adjustment_increase": "调增",
+          "adjustment_decrease": "调减"
+        },
+        "propertyDefault": "物业默认值",
+        "selectPostedInvoice": "选择已过账发票",
+        "selectAccount": "选择科目",
+        "postTransaction": "过账交易"
+      },
+      "toasts": {
+        "chargeAdded": "已添加租约费用",
+        "escalationApplied": "已应用租金递增",
+        "escalationScheduled": "已安排递增",
+        "depositReversed": "已冲销押金交易",
+        "depositPosted": "已过账押金交易"
+      }
+    },
+    "detail": {
+      "selectEmpty": "未关联",
+      "fields": {
+        "name": "名称",
+        "code": "编码",
+        "propertyType": "类型",
+        "status": "状态",
+        "subsidiary": "子公司",
+        "location": "位置",
+        "fixedAsset": "固定资产",
+        "currency": "货币",
+        "street": "街道",
+        "city": "城市",
+        "region": "省 / 州",
+        "postalCode": "邮政编码",
+        "rentIncomeAccount": "租金收入科目",
+        "camIncomeAccount": "公共区域维护费收入科目",
+        "depositLiabilityAccount": "押金负债科目",
+        "defaultBankAccount": "默认银行账户"
+      },
+      "selectSubsidiary": "选择子公司",
+      "tabsLabelMap": {
+        "overview": "概览",
+        "units": "单元",
+        "leases": "租约",
+        "rent": "租金",
+        "deposits": "押金",
+        "cam": "公共区域费用"
+      },
+      "tabsAria": "物业详情",
+      "noLocation": "无位置",
+      "cancel": "取消",
+      "saving": "保存中…",
+      "save": "保存",
+      "edit": "编辑",
+      "actions": "操作",
+      "customForm": "自定义表单",
+      "customizeForm": "自定义表单",
+      "deactivate": "停用物业",
+      "reactivate": "重新启用物业",
+      "deleteConfirm": "删除 {name}？仅可永久删除未使用的物业。",
+      "deleteProperty": "删除物业",
+      "units": {
+        "title": "可出租单元",
+        "description": "入住率、可出租面积和各单元租赁容量。",
+        "addUnit": "添加单元",
+        "table": {
+          "unit": "单元",
+          "type": "类型",
+          "rentableArea": "可出租面积",
+          "bedrooms": "卧室数",
+          "status": "状态"
+        },
+        "emptyTitle": "暂无单元",
+        "emptyDetail": "从此物业记录添加首个可出租单元。"
+      },
+      "leases": {
+        "title": "物业租约",
+        "description": "此物业当前和历史租户协议。",
+        "newLease": "新建租约",
+        "table": {
+          "lease": "租约",
+          "unit": "单元",
+          "tenant": "租户",
+          "term": "期限",
+          "status": "状态"
+        },
+        "wholeProperty": "整个物业",
+        "openTerm": "开放式",
+        "emptyTitle": "暂无租约",
+        "emptyDetail": "从“租约”工作区选项卡创建租约。"
+      },
+      "rent": {
+        "title": "租金计划",
+        "description": "此物业各租约的计划租金和已开票租金。",
+        "assessLateFees": "计收滞纳金",
+        "billDueRent": "开具到期租金账单"
+      },
+      "depositsTab": {
+        "title": "押金",
+        "description": "此物业下所有租户押金动态（仅可追加）。"
+      },
+      "cam": {
+        "title": "公共区域费用对账",
+        "description": "此物业的运营费用池、分摊和租户结算。",
+        "newPool": "新建公区费用池"
+      },
+      "toasts": {
+        "lateFeesAssessed": "已计收物业滞纳金",
+        "rentBilled": "已开具物业租金账单"
       }
     },
     "propertyDrawer": {
