@@ -204,6 +204,7 @@
     "systemActor": "システム",
     "metadata": "レコードのメタデータ",
     "viewChanges": "変更を表示",
+    "noChanges": "記録された変更はありません",
     "changeCount": "{count, plural, one {#件の変更} other {#件の変更}}",
     "pageStatus": "ページ {page}/{pages} · {total}件のイベント",
     "previous": "前へ",

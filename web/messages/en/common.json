@@ -230,6 +230,7 @@
     "systemActor": "System",
     "metadata": "Record metadata",
     "viewChanges": "View changes",
+    "noChanges": "No changes recorded",
     "changeCount": "{count, plural, one {# change} other {# changes}}",
     "pageStatus": "Page {page} of {pages} · {total} events",
     "previous": "Previous",

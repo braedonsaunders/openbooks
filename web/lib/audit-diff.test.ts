@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { auditEventDiffs } from './audit-diff.ts'
+import { auditEventDiffs, hasInspectableChanges } from './audit-diff.ts'
 
 test('journal line changes are expanded to the specific line and field', () => {
   const diffs = auditEventDiffs({
@@ -34,4 +34,18 @@ test('field-pair events produce before and after values', () => {
   }), [
     { path: 'status', before: 'draft', after: 'posted' },
   ])
+})
+
+// F-t06-009: the API synthesizes Created events from record metadata with no
+// field data ({source, event} only). The trail must not promise "View
+// changes" for events with nothing inspectable.
+test('synthesized creation events with no field data are not inspectable', () => {
+  const changes = { source: 'record_metadata', event: 'record_created' }
+  assert.deepEqual(auditEventDiffs(changes), [])
+  assert.equal(hasInspectableChanges(changes), false)
+})
+
+test('events with snapshots or diffs are inspectable even when nothing changed', () => {
+  assert.equal(hasInspectableChanges({ status: ['draft', 'posted'] }), true)
+  assert.equal(hasInspectableChanges({ before: { memo: 'Same' }, after: { memo: 'Same' } }), true)
 })

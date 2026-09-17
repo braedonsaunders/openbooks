@@ -204,6 +204,7 @@
     "systemActor": "System",
     "metadata": "Datensatz-Metadaten",
     "viewChanges": "Änderungen anzeigen",
+    "noChanges": "Keine Änderungen erfasst",
     "changeCount": "{count, plural, one {# Änderung} other {# Änderungen}}",
     "pageStatus": "Seite {page} von {pages} · {total} Ereignisse",
     "previous": "Zurück",
