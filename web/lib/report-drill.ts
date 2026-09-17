@@ -42,6 +42,8 @@ export type ReportDrillTarget =
       scope: 'actual' | 'budget' | 'variance'
       accountIds?: string[]
       accountTypes?: string[]
+      /** Revenue less debit-normal costs, used by profit subtotals. */
+      profitSigned?: boolean
       dims?: StatementDimFilter
       /** Report window the drill must tie to; absent keeps the scenario year. */
       from?: string
@@ -241,6 +243,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       scope: input.scope as 'actual' | 'budget' | 'variance',
       accountIds,
       accountTypes,
+      profitSigned: input.profitSigned === true,
       dims: dimsValue(input.dims),
       from,
       to,
