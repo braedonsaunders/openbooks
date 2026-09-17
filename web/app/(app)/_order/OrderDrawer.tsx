@@ -292,6 +292,9 @@ export function OrderDrawer({
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+  // A convert refusal pins here (role=alert) until the next action —
+  // a toast alone never survives attention (F-t03-001).
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Optimistic-concurrency token (documents.updated_at). Every mutating
   // request echoes it; the server refuses any mutation whose view of the
@@ -575,6 +578,7 @@ export function OrderDrawer({
     creditOverrideReason?: string,
   ) {
     setBusy(true)
+    setActionError(null)
     const res = await fetch(`${apiBase}/${doc.id}/convert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -602,7 +606,9 @@ export function OrderDrawer({
         if (overrideReason) await convert(targetKind, label, overrideReason)
         return
       }
-      toast.error(data.error ?? t('convertFailed'))
+      const message = data.error ?? t('convertFailed')
+      setActionError(message)
+      toast.error(message)
       return
     }
     toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
@@ -836,6 +842,11 @@ export function OrderDrawer({
       }
     >
       <div className="space-y-6 p-1">
+        {actionError ? (
+          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {actionError}
+          </p>
+        ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
