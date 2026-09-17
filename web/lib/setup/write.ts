@@ -742,7 +742,12 @@ export async function createSetupRecord(
   const built = buildRow(createEntity, body, { forCreate: true })
   if ('error' in built) return { status: 400, body: { error: built.error } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
-  if (integrityError) return { status: integrityError === 'not found' ? 404 : 400, body: { error: integrityError } }
+  if (integrityError) {
+    if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
+    // Typed user-correctable failure (F-t06-023): the code lets surfaces map
+    // stably while the message reads as user language.
+    return { status: 400, body: { error: integrityError, code: 'invalid' } }
+  }
 
   if (entity.key === 'accounting-books') {
     try {
@@ -951,7 +956,12 @@ export async function updateSetupRecord(
   const built = buildRow(patchEntity, body, { forCreate: false })
   if ('error' in built) return { status: 400, body: { error: built.error } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
-  if (integrityError) return { status: integrityError === 'not found' ? 404 : 400, body: { error: integrityError } }
+  if (integrityError) {
+    if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
+    // Typed user-correctable failure (F-t06-023): the code lets surfaces map
+    // stably while the message reads as user language.
+    return { status: 400, body: { error: integrityError, code: 'invalid' } }
+  }
 
   if (entity.key === 'accounting-books') {
     try {

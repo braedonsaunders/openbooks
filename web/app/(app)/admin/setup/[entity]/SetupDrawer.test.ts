@@ -60,7 +60,18 @@ test('typed server conflicts resolve through their code, never the raw message (
   // the localized copy instead of echoing English into every locale.
   assert.match(
     source,
-    /data\?\.code \?\? data\?\.error/,
-    'conflict mapping must prefer the typed code over the message',
+    /const code = record\?\.code/,
+    'conflict mapping must read the typed code',
   )
+})
+
+test('typed validation failures render their message verbatim (F-t06-023)', () => {
+  // Setup 400s carry {error: <user-language message>, code: 'invalid'}: the
+  // drawer must render the message (naming the fix) rather than the code.
+  assert.match(
+    source,
+    /const message = record\?\.error/,
+    'validation mapping must read the server message',
+  )
+  assert.match(source, /errorMessage\(data\)/, 'call sites pass the whole body')
 })

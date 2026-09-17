@@ -666,3 +666,44 @@ test("duplicate FX rates answer a typed conflict with a human message, not a bar
     await dropScratchOrgReporting(org.orgId);
   }
 });
+
+test("intercompany pairs missing elimination flags answer a typed message, never silence (F-t06-023)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "IC Setup Admin", "admin");
+  try {
+    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) ||
+      '{"features":{"multiSubsidiary":true}}'::jsonb where id = ${org.orgId}`);
+    const childId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values
+        (${childId},${org.orgId},${org.subsidiaryId},'T06 Canada Sub','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
+    const dueFromId = randomUUID();
+    const dueToId = randomUUID();
+    const tag = randomUUID().slice(0, 4);
+    await db.execute(sql`
+      insert into accounts
+        (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+      values
+        (${dueFromId},${org.orgId},${`1410${tag}`},'Due from Subsidiaries','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true),
+        (${dueToId},${org.orgId},${`2150${tag}`},'Due to Parent','liability_current',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
+    authenticate({ orgId: org.orgId, actorId });
+    const res = await POST(
+      postRequest("intercompany-pairs", {
+        fromSubsidiaryId: org.subsidiaryId,
+        toSubsidiaryId: childId,
+        dueFromAccountId: dueFromId,
+        dueToAccountId: dueToId,
+      }),
+      call("intercompany-pairs", {}),
+    );
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { error?: unknown; code?: unknown };
+    assert.equal(body.code, "invalid");
+    assert.equal(body.error, "Both intercompany accounts must be marked for elimination");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
