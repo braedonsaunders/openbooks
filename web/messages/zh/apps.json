@@ -8,7 +8,8 @@
     "library": "应用库",
     "documentation": "文档",
     "open": "打开应用",
-    "openAria": "打开 {name}"
+    "openAria": "打开 {name}",
+    "manage": "管理应用"
   },
   "empty": {
     "title": "尚未安装应用",
@@ -20,6 +21,10 @@
     "description": "请尝试其他名称、键或说明。"
   },
   "library": {
+    "draftReady": "{name} 已就绪，可供审核。",
+    "preparing": "正在准备…",
+    "reviewUpdate": "审核更新",
+    "reviewInstall": "审核应用",
     "title": "应用库",
     "description": "发现并为您的组织安装扩展功能。",
     "searchPlaceholder": "搜索应用库…",
@@ -37,7 +42,8 @@
     "noResults": {
       "title": "未找到应用",
       "description": "请尝试其他名称、键或说明。"
-    }
+    },
+    "approvalPending": "{name} 正在等待签署的批准。"
   },
   "frame": {
     "loading": "加载中…",
@@ -49,7 +55,10 @@
     "description": "构建和安装应用包；每个应用都拥有隔离的前端和受控的后端。",
     "searchPlaceholder": "搜索应用…",
     "status": "状态",
-    "statuses": { "installed": "已安装", "disabled": "已禁用" },
+    "statuses": {
+      "installed": "已安装",
+      "disabled": "已禁用"
+    },
     "columns": {
       "name": "名称",
       "key": "键",
@@ -60,5 +69,379 @@
       "updated": "更新时间"
     },
     "empty": "还没有应用。您可以创建一个可直接打开的初始应用，或导入 .zip 包。"
+  },
+  "drawer": {
+    "toolbar": {
+      "newApp": "新建应用",
+      "newAppPromptTitle": "新建应用",
+      "newAppPromptLabel": "应用名称",
+      "newAppPromptPlaceholder": "Expense Insights",
+      "importZip": "导入 .zip"
+    },
+    "toasts": {
+      "createdApp": "已创建“{name}”",
+      "importedApp": "已导入“{key}”",
+      "settingsSaved": "应用设置已保存",
+      "appDisabled": "应用已禁用",
+      "appEnabled": "应用已启用",
+      "published": "已发布到应用市场",
+      "uninstalled": "已卸载",
+      "fileSaved": "已保存 {path}",
+      "fileCreated": "已创建 {path}",
+      "fileUploaded": "已上传 {path}",
+      "deleted": "已删除"
+    },
+    "errors": {
+      "saveFailed": "保存失败",
+      "updateFailed": "更新失败",
+      "publishFailed": "发布失败",
+      "uninstallFailed": "卸载失败",
+      "createFailed": "创建失败",
+      "uploadFailed": "上传失败",
+      "deleteFailed": "删除失败"
+    },
+    "confirm": {
+      "uninstallTitle": "卸载“{name}”？",
+      "uninstallMessage": "卸载此应用？已置备的记录和字段将保留。代码与执行证据将存档于审计历史；有平台贡献历史的包将被禁用，以保持其引用不变。",
+      "deleteFileMessage": "删除 {path}？"
+    },
+    "prompt": {
+      "newFileTitle": "新建文件",
+      "pathLabel": "路径"
+    },
+    "tabs": {
+      "overview": "概览",
+      "files": "文件",
+      "runs": "运行"
+    },
+    "actions": {
+      "open": "打开",
+      "saving": "正在保存…",
+      "saveSettings": "保存设置",
+      "saveFile": "保存文件",
+      "saved": "已保存",
+      "republish": "重新发布到应用市场",
+      "publish": "发布到应用市场",
+      "disable": "禁用",
+      "enable": "启用",
+      "uninstall": "卸载",
+      "addEndpoint": "添加端点",
+      "manageNavigation": "管理导航快捷方式",
+      "newFileTitleAttr": "新建文件",
+      "uploadFileTitleAttr": "上传文件",
+      "deleteFileTitleAttr": "删除文件"
+    },
+    "labels": {
+      "name": "名称",
+      "status": "状态",
+      "description": "说明",
+      "capabilities": "能力",
+      "navigation": "导航",
+      "endpoints": "后端端点"
+    },
+    "onMarketplace": "已在应用市场上架",
+    "capabilitiesHelp": "其余能力默认一律拒绝；应用的后端与桥接调用将依据这些授权进行检查（始终与调用用户自身的权限取交集）。",
+    "navigationHelp": "此应用独立于其菜单快捷方式保持安装状态。请在导航设置中添加、删除、重命名或移动快捷方式。",
+    "endpointsHelp": "前端通过 <call>openbooks.callBackend(name, payload)</call> 调用这些端点；每次调用在其文件的沙箱中运行 <handler>handler(request)</handler>。",
+    "noEndpoints": "没有端点——此应用仅有前端。",
+    "endpointNamePlaceholder": "name",
+    "capabilities": {
+      "allowFallback": "允许 {permission}",
+      "copy": {
+        "records": {
+          "read": {
+            "label": "读取自定义记录",
+            "help": "读取已发布的自定义记录类型"
+          },
+          "create": {
+            "label": "管理自定义记录",
+            "help": "创建、更新和删除自定义记录"
+          }
+        },
+        "gl": {
+          "read": {
+            "label": "读取总账",
+            "help": "读取科目和已过账凭证"
+          },
+          "post": {
+            "label": "创建并过账凭证",
+            "help": "创建受治理的平衡凭证"
+          }
+        },
+        "ap": {
+          "read": {
+            "label": "读取应付款",
+            "help": "读取供应商账单"
+          },
+          "create": {
+            "label": "管理供应商账单",
+            "help": "创建、更新、提交和删除账单"
+          },
+          "post": {
+            "label": "过账供应商账单",
+            "help": "将受治理的供应商账单过账到总账"
+          },
+          "pay": {
+            "label": "读取付款",
+            "help": "读取付款单据"
+          }
+        },
+        "ar": {
+          "read": {
+            "label": "读取应收款",
+            "help": "读取客户发票"
+          },
+          "create": {
+            "label": "管理客户发票",
+            "help": "创建、更新、提交和删除发票"
+          },
+          "post": {
+            "label": "过账客户发票",
+            "help": "将受治理的客户发票过账到总账"
+          }
+        },
+        "parties": {
+          "read": {
+            "label": "读取往来方",
+            "help": "读取客户、供应商和员工"
+          },
+          "manage": {
+            "label": "管理往来方",
+            "help": "创建、更新和删除往来方"
+          }
+        },
+        "items": {
+          "read": {
+            "label": "读取物料和服务",
+            "help": "读取物料目录"
+          },
+          "manage": {
+            "label": "管理物料和服务",
+            "help": "创建、更新和删除目录物料"
+          }
+        },
+        "projects": {
+          "read": {
+            "label": "读取项目",
+            "help": "读取项目和任务"
+          },
+          "manage": {
+            "label": "管理项目",
+            "help": "创建、更新和删除项目"
+          }
+        },
+        "assets": {
+          "read": {
+            "label": "读取固定资产",
+            "help": "读取固定资产"
+          },
+          "manage": {
+            "label": "管理固定资产",
+            "help": "创建、更新和删除固定资产"
+          }
+        }
+      }
+    },
+    "files": {
+      "selectToEdit": "选择要编辑的文件。",
+      "loading": "加载中…",
+      "binaryInfo": "二进制文件 · {contentType} · {size} 字节"
+    },
+    "runs": {
+      "empty": "尚无运行记录——后端从未被调用过。",
+      "units": "{units} 单位"
+    }
+  },
+  "editor": {
+    "tabsLabel": "包编辑器",
+    "overview": "配置",
+    "sections": {
+      "general": "常规",
+      "screens": "界面",
+      "data": "数据与贡献",
+      "actions": "操作",
+      "access": "访问"
+    },
+    "files": "文件",
+    "download": "导出包",
+    "draftHelp": "编辑未发布的包。保存将准备用于验证、预览和激活的草稿；不会改变正在运行的应用。",
+    "name": "应用名称",
+    "key": "应用键",
+    "version": "版本",
+    "icon": "图标键",
+    "description": "说明",
+    "renderer": "界面",
+    "native": "原生 OpenBooks 界面（ViewSpec）",
+    "sandbox": "HTML、CSS 和 JavaScript",
+    "entry": "前端入口文件",
+    "navLabel": "启动器标签",
+    "navIcon": "启动器图标",
+    "endpoints": "后端操作",
+    "endpointsHelp": "每个操作都经由受治理的应用运行时执行其 JavaScript 处理程序。请在“文件”中编辑其实现。",
+    "endpointName": "操作名称",
+    "endpointFile": "JavaScript 文件",
+    "method": "HTTP 方法",
+    "removeEndpoint": "移除操作",
+    "addEndpoint": "添加操作",
+    "permissions": "请求的能力",
+    "permissionsHelp": "声明此包所需的能力。调用仍受当前用户权限的限制。",
+    "grants": "已授予的能力",
+    "grantsHelp": "选择此版本实际可使用的已请求能力。新授权将在激活时依据您的权限进行检查。",
+    "definitions": "原生界面与源码",
+    "definitionsHelp": "在“文件”中编辑原生界面定义及包内全部源码。自定义记录和字段将在审核版本激活时，通过 OpenBooks 现有对象系统进行置备。",
+    "editDefinitions": "打开界面定义",
+    "newFile": "新建文件",
+    "path": "包相对路径",
+    "renameFile": "重命名或移动文件",
+    "deleteFile": "删除文件",
+    "deleteConfirm": "从此草稿中移除 {path}？活动版本不受影响。",
+    "invalidPath": "请使用包含文件名的唯一相对路径，且不含目录遍历。",
+    "uploadFiles": "上传文件",
+    "fileTooLarge": "每个文件必须小于 2 MB。",
+    "replaceConfirm": "替换以下草稿文件：{paths}？",
+    "searchFiles": "查找文件…",
+    "binaryHelp": "二进制资源。请下载该文件进行检查，或向其文件夹上传替换文件。",
+    "invalidManifest": "清单无效。请打开“文件”进行修正。",
+    "reason": "此版本的原因",
+    "reasonPlaceholder": "请描述变更内容及原因。",
+    "saveDraft": "保存草稿以供审核",
+    "saving": "正在准备草稿…",
+    "unsaved": "应用包有未保存的更改",
+    "notLive": "更改仅在激活后生效。",
+    "failed": "无法保存应用包。",
+    "pendingDefinition": "切换选项卡或保存包之前，请先应用或取消打开的定义编辑器。",
+    "uploadFolder": "上传文件夹",
+    "downloadFile": "下载文件"
+  },
+  "create": {
+    "title": "新建应用",
+    "ownPackage": "从您自己的包开始",
+    "help": "构建原生界面，或直接使用 HTML、CSS、JavaScript 及其他资源。您也可以导入现有包，在激活前进行编辑。",
+    "native": "原生应用",
+    "files": "HTML / CSS / JS 应用",
+    "import": "导入包",
+    "importing": "正在导入…",
+    "tooLarge": "请选择小于 10 MB 的 ZIP 或 JSON 包。",
+    "importReason": "导入应用包以供审核",
+    "failed": "无法导入应用包。",
+    "discardEdits": "放弃应用包未保存的更改？"
+  },
+  "definitions": {
+    "title": "记录、字段与平台贡献",
+    "help": "管理此应用附带的定义。每个定义使用平台现有服务，并在激活前随包一起校验。移除定义不会删除历史记录。",
+    "edit": "编辑定义",
+    "remove": "移除定义",
+    "removeConfirm": "从草稿中移除此贡献？审核时将在激活前显示该变更。",
+    "type": "定义类型",
+    "key": "新定义键",
+    "add": "添加定义",
+    "apply": "应用到草稿",
+    "cancel": "取消",
+    "record_type": "自定义记录类型",
+    "custom_field": "自定义字段",
+    "page": "页面定制",
+    "nav": "导航项",
+    "setting": "应用设置",
+    "permission": "角色权限",
+    "invalidKey": "请使用以字母开头的小写键，仅含字母、数字和连字符。",
+    "duplicate": "该定义文件已存在。",
+    "invalid": "该定义无效。",
+    "route": "要定制的已注册页面",
+    "chooseRoute": "选择已注册页面",
+    "pageHelp": "页面贡献用于定制现有已注册页面。请在原生界面文件中添加独立的应用界面。"
+  },
+  "management": {
+    "workspace": "应用工作区",
+    "overview": "概览",
+    "package": "包",
+    "versions": "版本",
+    "runs": "运行",
+    "audit": "审计历史",
+    "storage": "应用存储",
+    "installed": "已启用",
+    "disabled": "已禁用",
+    "open": "打开应用",
+    "editPackage": "编辑包",
+    "download": "导出 ZIP",
+    "assistant": "使用助手修订",
+    "contents": "包内容",
+    "summary": "{files} 个文件 · {actions} 个后端操作 · {definitions} 项平台贡献",
+    "permissions": "实际生效的能力",
+    "permissionsHelp": "这些授权适用于正在运行的版本。请编辑包以准备经过审核的权限变更。",
+    "noPermissions": "未授予任何平台能力。",
+    "configuration": "组织配置",
+    "navigation": "导航设置",
+    "settings": "应用设置",
+    "roles": "角色与权限",
+    "lifecycle": "可用性与分发",
+    "lifecycleHelp": "为您的组织启用或禁用此应用。发布将通过应用库与他人共享其活动包的副本。",
+    "publish": "发布到应用库",
+    "updateListing": "更新上架",
+    "unpublish": "下架",
+    "disable": "禁用应用",
+    "enable": "启用应用",
+    "uninstall": "卸载应用",
+    "publishConfirm": "将活动包（含源文件）发布到应用库，供其他组织使用？请在共享前检查文件中是否含有隐私信息。",
+    "unpublishConfirm": "将此上架从应用库下架？现有安装保留其副本。",
+    "disableConfirm": "禁用此应用及其贡献的页面和导航？现有记录和审计历史将保留。",
+    "enableConfirm": "为您的组织启用此应用及其已批准的贡献？",
+    "uninstallConfirm": "卸载此应用？已置备的记录和字段将保留。代码与执行证据将存档于审计历史；有平台贡献历史的包将被禁用，以保持其引用不变。",
+    "discardEdits": "放弃应用包未保存的更改？",
+    "failed": "无法完成该操作。",
+    "loading": "加载中…",
+    "refresh": "刷新",
+    "versionsHelp": "检查并导出任何已安装版本。修订历史版本将基于当前活动版本创建新草稿。",
+    "runsHelp": "后端执行历史，包括错误、日志、资源用量、耗时和操作者。",
+    "auditHelp": "已记录的配置与生命周期变更，含操作者及变更前后证据。",
+    "storageHelp": "检查应用自有状态。请通过应用的受治理操作变更业务数据，以保留其验证与审计规则。",
+    "when": "日期和时间",
+    "version": "版本",
+    "key": "存储键",
+    "activity": "活动",
+    "status": "状态",
+    "actions": "操作",
+    "active": "活动",
+    "details": "查看详情",
+    "reviseVersion": "准备修订",
+    "empty": "尚无条目。",
+    "previous": "上一页",
+    "next": "下一页",
+    "page": "第 {page} 页",
+    "fields": {
+      "id": "记录（ID）",
+      "at": "日期和时间",
+      "actor_id": "操作者（ID）",
+      "version_id": "版本（ID）",
+      "version": "版本",
+      "status": "状态",
+      "endpoint": "操作",
+      "units": "已消耗单位",
+      "duration_ms": "持续时间（ms）",
+      "logs": "执行日志",
+      "error_message": "错误",
+      "changes": "变更前后证据",
+      "action": "操作",
+      "namespace": "命名空间",
+      "key": "键",
+      "value": "存储值"
+    }
+  },
+  "screens": {
+    "title": "原生应用界面",
+    "help": "管理页面、记录工作区和操作表单。界面定义使用原生 ViewSpec 与表单架构；记录界面和操作界面连接到受治理的记录类型和后端操作。",
+    "page": "页面",
+    "records": "记录工作区",
+    "action": "操作表单",
+    "type": "界面类型",
+    "key": "新界面键",
+    "add": "添加界面",
+    "edit": "编辑界面",
+    "remove": "移除界面",
+    "removeConfirm": "从草稿中移除此界面？",
+    "apply": "应用到草稿",
+    "cancel": "取消",
+    "invalid": "原生界面定义需要修正。",
+    "invalidKey": "请使用以字母开头的小写键，仅含字母、数字和连字符。",
+    "openSource": "打开界面源码"
   }
 }
