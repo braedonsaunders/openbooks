@@ -3415,3 +3415,108 @@ test('budget approval rows carry a translated kind label in every locale', () =>
     }
   }
 })
+
+// F-i8-001: the 286 apps leaves per locale (drawer, management, editor,
+// definitions, screens, create, plus library/actions additions) existed only
+// in en — every non-English locale rendered English inside otherwise
+// translated apps screens. Every leaf must exist, keep its ICU placeholders
+// and plural/select arms, and differ from English except for reviewed
+// cognates and code/example keeps, pinned to the exact term.
+const I8_APPS_IDENTICAL_BY_FACT = new Set([
+  'fr:apps.version|Version {version}',
+  'fr:apps.actions.documentation|Documentation',
+  'fr:apps.admin.columns.version|Version',
+  'es:apps.admin.columns.endpoints|Endpoints',
+  'de:apps.title|Apps',
+  'de:apps.version|Version {version}',
+  'de:apps.admin.title|Apps',
+  'de:apps.admin.status|Status',
+  'de:apps.admin.columns.name|Name',
+  'de:apps.admin.columns.version|Version',
+  'de:apps.admin.columns.status|Status',
+  'pt-BR:apps.title|Apps',
+  'pt-BR:apps.admin.title|Apps',
+  'pt-BR:apps.admin.status|Status',
+  'pt-BR:apps.admin.columns.endpoints|Endpoints',
+  'pt-BR:apps.admin.columns.status|Status',
+  'fr:apps.drawer.toolbar.newAppPromptPlaceholder|Expense Insights',
+  'fr:apps.drawer.labels.description|Description',
+  'fr:apps.drawer.labels.navigation|Navigation',
+  'fr:apps.drawer.endpointNamePlaceholder|name',
+  'fr:apps.editor.overview|Configuration',
+  'fr:apps.editor.sections.actions|Actions',
+  'fr:apps.editor.version|Version',
+  'fr:apps.editor.description|Description',
+  'fr:apps.editor.renderer|Interface',
+  'fr:apps.management.versions|Versions',
+  'fr:apps.management.version|Version',
+  'fr:apps.management.actions|Actions',
+  'fr:apps.management.active|Active',
+  'fr:apps.management.page|Page {page}',
+  'fr:apps.management.fields.version|Version',
+  'fr:apps.management.fields.endpoint|Action',
+  'fr:apps.screens.page|Page',
+  'es:apps.drawer.toolbar.newAppPromptPlaceholder|Expense Insights',
+  'es:apps.drawer.endpointNamePlaceholder|name',
+  'es:apps.editor.sections.general|General',
+  'es:apps.management.fields.error_message|Error',
+  'de:apps.drawer.toolbar.newAppPromptPlaceholder|Expense Insights',
+  'de:apps.drawer.labels.name|Name',
+  'de:apps.drawer.labels.status|Status',
+  'de:apps.drawer.labels.navigation|Navigation',
+  'de:apps.drawer.endpointNamePlaceholder|name',
+  'de:apps.editor.sections.screens|Screens',
+  'de:apps.editor.version|Version',
+  'de:apps.management.version|Version',
+  'de:apps.management.status|Status',
+  'de:apps.management.fields.version|Version',
+  'de:apps.management.fields.status|Status',
+  'de:apps.management.fields.namespace|Namespace',
+  'ja:apps.drawer.toolbar.newAppPromptPlaceholder|Expense Insights',
+  'ja:apps.drawer.endpointNamePlaceholder|name',
+  'zh:apps.drawer.toolbar.newAppPromptPlaceholder|Expense Insights',
+  'zh:apps.drawer.endpointNamePlaceholder|name',
+  'pt-BR:apps.drawer.toolbar.newAppPromptPlaceholder|Expense Insights',
+  'pt-BR:apps.drawer.labels.status|Status',
+  'pt-BR:apps.drawer.endpointNamePlaceholder|name',
+  'pt-BR:apps.editor.renderer|Interface',
+  'pt-BR:apps.management.status|Status',
+  'pt-BR:apps.management.fields.status|Status',
+  'pt-BR:apps.management.fields.namespace|Namespace',
+])
+
+test('I8 apps copy ships translated in fr, es, de, ja, zh and pt-BR', () => {
+  const I8_source = flattenCatalog('en')
+  const I8_wanted = [...I8_source.keys()].filter((I8_key) => I8_key.startsWith('apps.'))
+  assert.equal(I8_wanted.length, 331, 'apps source inventory changed; translate the new keys in fr/es/de/ja/zh/pt-BR and re-pin')
+  const I8_tokens = (I8_value: string): Set<string> =>
+    new Set(I8_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I8_arms = (I8_value: string): string[] => I8_value.match(/, +(plural|select)/g) ?? []
+  for (const I8_locale of ['fr', 'es', 'de', 'ja', 'zh', 'pt-BR']) {
+    const I8_catalog = flattenCatalog(I8_locale)
+    for (const I8_key of I8_wanted) {
+      const I8_value = I8_catalog.get(I8_key)
+      assert.ok(I8_value && I8_value.trim(), `${I8_locale} is missing ${I8_key}`)
+      const I8_identical = [...I8_APPS_IDENTICAL_BY_FACT].find((I8_entry) =>
+        I8_entry.startsWith(`${I8_locale}:${I8_key}|`),
+      )
+      if (I8_identical) {
+        assert.equal(I8_value, I8_identical.split('|')[1], `${I8_locale}:${I8_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I8_value, I8_source.get(I8_key), `${I8_locale} must not copy English ${I8_key}`)
+      }
+    }
+    const I8_drift = I8_wanted.filter((I8_key) => {
+      const I8_expected = I8_tokens(I8_source.get(I8_key) ?? '')
+      const I8_actual = I8_tokens(I8_catalog.get(I8_key) ?? '')
+      return I8_expected.size !== I8_actual.size || [...I8_expected].some((I8_token) => !I8_actual.has(I8_token))
+    })
+    assert.deepEqual(I8_drift, [], `${I8_locale} apps translations drop or rename ICU placeholders`)
+    const I8_armsDrift = I8_wanted.filter((I8_key) => {
+      const I8_expected = I8_arms(I8_source.get(I8_key) ?? '').join(',')
+      const I8_actual = I8_arms(I8_catalog.get(I8_key) ?? '').join(',')
+      return I8_expected !== I8_actual
+    })
+    assert.deepEqual(I8_armsDrift, [], `${I8_locale} apps translations drop ICU plural/select arms`)
+  }
+})
