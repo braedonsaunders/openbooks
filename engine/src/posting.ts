@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema } from "./db.ts";
-import { assertExpenseEmployee } from "./expense-validation.ts";
+import { assertExpenseEmployee, assertExpenseSettlement } from "./expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "./billing-source-integrity.ts";
 import {
   add,
@@ -128,13 +128,18 @@ export interface PostingDeps {
     taxCollected?: string;
     taxPaid?: string;
     employeePayable?: string;
+    /** Debit control for personal-on-corporate-card lines (0171). Resolved
+     * lazily like the tax fallbacks: required only when a personal line
+     * actually posts, so orgs that never file one need not configure it. */
+    employeeReceivable?: string;
     fxRealizedGainLoss?: string;
   };
   /** Resolved by postDocument when the document has a payment card. */
   cardLiabilityAccountId?: string;
   /**
    * Accounts whose journal lines are OPEN ITEMS (all asset_receivable /
-   * liability_payable accounts). Resolved lazily by postDocument /
+   * liability_payable accounts, plus the designated employeePayable and
+   * employeeReceivable controls). Resolved lazily by postDocument /
    * regenerateGlImpactTx for journal, deposit, expense report and check
    * documents; lets their AR/AP legs participate in payment applications —
    * openbooks' model applies ANY crediting document (journal, credit memo,
@@ -265,6 +270,71 @@ async function resolveTaxAccounts(
     if (row.paid_account_id) paid.set(row.id, row.paid_account_id);
   }
   return { collected, paid };
+}
+
+/**
+ * The employee-receivable control for personal expense lines (0171), loaded at
+ * the posting boundary like the tax fallbacks. Only read when a personal line
+ * actually posts — orgs that never file one need not configure it — and
+ * validated against the account's type here, so a misconfigured mapping fails
+ * closed at the boundary instead of debiting a random account.
+ */
+async function resolveEmployeeReceivable(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<string | undefined> {
+  // The regex gate keeps a malformed stored id from dying as a raw 22P02
+  // cast error: it surfaces as a domain refusal instead. Same UUID shape the
+  // control-accounts reader enforces.
+  const r = await runner.execute<{
+    raw: string | null; id: string | null; type: string | null;
+    isActive: boolean | null; isSummary: boolean | null;
+  }>(sql`
+    select (o.settings->'controlAccounts'->>'employeeReceivable') as raw,
+           a.id::text as id, a.type as type,
+           a.is_active as "isActive", a.is_summary as "isSummary"
+      from orgs o
+      left join accounts a on a.org_id = o.id
+       and coalesce(o.settings->'controlAccounts'->>'employeeReceivable', '') ~
+           '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+       and a.id = (o.settings->'controlAccounts'->>'employeeReceivable')::uuid
+     where o.id = ${orgId}`);
+  const row = r.rows[0];
+  if (!row?.raw) return undefined;
+  if (!row.id) {
+    throw new PostingError("employee-receivable control account does not exist in this organization");
+  }
+  if (row.isActive !== true) throw new PostingError("employee-receivable control account is inactive");
+  if (row.isSummary === true) throw new PostingError("employee-receivable control account is a summary account");
+  if (row.type !== "asset_receivable" && row.type !== "asset_current_other") {
+    throw new PostingError(
+      `employee-receivable control account type ${row.type} is incompatible; expected asset_receivable, asset_current_other`,
+    );
+  }
+  return row.id;
+}
+
+/**
+ * Attach the employee-receivable control when an expense report actually has
+ * personal lines (0171). One probe, only for expense reports missing the dep:
+ * orgs that never file a personal line pay no query and need no configuration.
+ * Explicit caller values still win. Shared by postDocument and
+ * regenerateGlImpactTx — the two sites that default posting deps.
+ */
+async function resolveExpenseReceivableDeps(
+  runner: Pick<typeof db, "execute">,
+  doc: Doc,
+  deps: PostingDeps,
+): Promise<PostingDeps> {
+  if (doc.kind !== "expense_report" || deps.control.employeeReceivable) return deps;
+  const probe = await runner.execute<{ one: number }>(sql`
+    select 1 as one from document_lines
+     where org_id = ${doc.orgId} and document_id = ${doc.id}
+       and settlement_type = 'personal'
+     limit 1`);
+  if (!probe.rows[0]) return deps;
+  const employeeReceivable = await resolveEmployeeReceivable(runner, doc.orgId);
+  return { ...deps, control: { ...deps.control, employeeReceivable } };
 }
 
 /** Org-level tax fallbacks are loaded at the posting boundary, not trusted to
@@ -827,6 +897,43 @@ function signed(amount: string, direction: 1 | -1): string {
   return direction === 1 ? amount : neg(amount);
 }
 
+export type ExpenseSettlement = "out_of_pocket" | "company_paid" | "personal";
+
+/**
+ * Who fronted the money for an expense line (0171). Fail closed on anything
+ * outside the migration's CHECK values: a future settlement kind must be
+ * taught to the kernel deliberately, never defaulted into the wrong
+ * counterparty. Non-expense kinds never call this (their lines ignore the
+ * column), so an unexpected value here is always a real data fault.
+ */
+export function settlementOf(line: Pick<DocLine, "lineNumber" | "settlementType">): ExpenseSettlement {
+  const s: unknown = line.settlementType ?? "out_of_pocket";
+  if (s === "out_of_pocket" || s === "company_paid" || s === "personal") return s;
+  throw new PostingError(
+    `document line ${line.lineNumber} has unknown settlement type ${JSON.stringify(s)}`,
+  );
+}
+
+/**
+ * What a personal line debits to the employee receivable: the full economic
+ * amount (net + nonrecoverable + every recoverable input component). Only
+ * standard calculation is supportable — withholding and reverse charge have
+ * no meaning on a non-business charge, so they fail closed here instead of
+ * posting a tax leg the receivable must never carry.
+ */
+function personalReceivableAmount(line: DocLine, deps: PostingDeps): string {
+  let recoverable = "0";
+  for (const c of componentsForLine(line, deps)) {
+    if (c.calculationType !== "standard") {
+      throw new PostingError(
+        `personal expense line ${line.lineNumber} cannot carry ${c.calculationType} tax`,
+      );
+    }
+    recoverable = add(recoverable, c.recoverableAmount);
+  }
+  return add(purchaseBaseAmount(line, deps), recoverable);
+}
+
 /** Expense/inventory basis includes only the nonrecoverable purchase tax. */
 function purchaseBaseAmount(line: DocLine, deps: PostingDeps): string {
   const nonrecoverable = sum(
@@ -1064,36 +1171,104 @@ export const RULES: Record<string, RuleFn> = {
   },
 
   expense_report: (doc, lines, deps) => {
-    const expense: KernelLine[] = lines.map((l) => ({
-      accountId: resolvedLineAccount(l),
-      amount: purchaseBaseAmount(l, deps),
-      memo: l.description,
-      partyId: l.partyId ?? doc.partyId,
-      ...dims(doc, l),
-    }));
-    const tax = purchaseTaxLines(doc, lines, deps, 1);
-    const total = sum([...expense, ...tax].map((l) => l.amount));
-    const controlAccountId =
+    // Who fronted the money, per line (0171). The three settlements are three
+    // different pieces of accounting and post to three different counterparties:
+    // out_of_pocket → employee payable (a genuine payable, AP aging);
+    // company_paid → card liability (the company already paid; the employee is
+    // owed nothing, so this must never become an employee open item);
+    // personal → employee receivable (not an expense at all; the sign flips).
+    const oop = lines.filter((l) => settlementOf(l) === "out_of_pocket");
+    const card = lines.filter((l) => settlementOf(l) === "company_paid");
+    const personal = lines.filter((l) => settlementOf(l) === "personal");
+    const cardFunded = [...card, ...personal];
+    if (cardFunded.length > 0 && !deps.cardLiabilityAccountId) {
+      throw new PostingError(
+        "company-paid and personal expense lines require a payment card on the report",
+      );
+    }
+    if (personal.length > 0 && !deps.control.employeeReceivable) {
+      throw new PostingError(
+        "personal expense lines require an employee-receivable control account (orgs.settings.controlAccounts.employeeReceivable)",
+      );
+    }
+    const bookExpense = (ls: DocLine[], cardStamp: boolean): KernelLine[] =>
+      ls.map((l) => ({
+        accountId: resolvedLineAccount(l),
+        amount: purchaseBaseAmount(l, deps),
+        memo: l.description,
+        partyId: l.partyId ?? doc.partyId,
+        ...(cardStamp ? { paymentCardId: doc.paymentCardId } : {}),
+        ...dims(doc, l),
+      }));
+    const oopExpense = bookExpense(oop, false);
+    const oopTax = purchaseTaxLines(doc, oop, deps, 1);
+    const oopTotal = sum([...oopExpense, ...oopTax].map((l) => l.amount));
+    const oopControlId =
       controlOverride(doc) ??
       deps.control.employeePayable ??
       deps.control.ap;
+    const cardExpense = bookExpense(card, true);
+    const cardTax = purchaseTaxLines(doc, card, deps, 1);
+    // Personal lines post gross (net + every recoverable input component) to
+    // the receivable with no recoverable-tax leg: a non-business charge
+    // generates no input tax credit, and claiming one would be a compliance
+    // exposure, not a rounding question. Anything but standard calculation on
+    // a personal line fails closed rather than posting wrong tax math.
+    const personalDebit = personal.map((l) => ({
+      accountId: deps.control.employeeReceivable!,
+      amount: personalReceivableAmount(l, deps),
+      memo: l.description,
+      partyId: l.partyId ?? doc.partyId,
+      isOpenItem: controlLineIsOpenItem(
+        deps.control.employeeReceivable!,
+        (l.partyId ?? doc.partyId),
+        deps.openItemAccountIds,
+      ),
+      ...dims(doc, l),
+    }));
+    const personalTotal = sum(personalDebit.map((l) => l.amount));
+    const cardSubtotal = sum([...cardExpense, ...cardTax].map((l) => l.amount));
     return [
-      ...expense,
-      ...tax,
-      {
-        accountId: controlAccountId,
-        amount: neg(total),
-        partyId: doc.partyId,
-        // Expense reports can be charged directly to a corporate-card
-        // liability. Only a genuine AR/AP control account belongs in aging;
-        // card liabilities remain GL/card-subledger balances.
-        isOpenItem: controlLineIsOpenItem(
-          controlAccountId,
-          doc.partyId,
-          deps.openItemAccountIds,
-        ),
-        ...dims(doc),
-      },
+      ...oopExpense,
+      ...oopTax,
+      ...cardExpense,
+      ...cardTax,
+      ...personalDebit,
+      // The out-of-pocket control leg is UNCHANGED from the pre-0171 rule —
+      // same account precedence, same party, same open-item derivation — so a
+      // report with no card lines regenerates byte-identical math.
+      ...(isZero(oopTotal)
+        ? []
+        : [
+            {
+              accountId: oopControlId,
+              amount: neg(oopTotal),
+              partyId: doc.partyId,
+              isOpenItem: controlLineIsOpenItem(
+                oopControlId,
+                doc.partyId,
+                deps.openItemAccountIds,
+              ),
+              ...dims(doc),
+            },
+          ]),
+      // Card-clearing legs NEVER carry the employee party and are NEVER open
+      // items (the cardRule precedent: card legs carry card detail, not party).
+      // This one invariant is what keeps company-paid and personal amounts out
+      // of every is_open_item reader at once — the dashboard tile, AP aging,
+      // openItemsForParty, and the reimbursement run selection — so neither
+      // kind can ever reach a reimbursement payment run.
+      ...(isZero(sum([cardSubtotal, personalTotal]))
+        ? []
+        : [
+            {
+              accountId: deps.cardLiabilityAccountId!,
+              amount: neg(sum([cardSubtotal, personalTotal])),
+              paymentCardId: doc.paymentCardId,
+              isOpenItem: false,
+              ...dims(doc),
+            },
+          ]),
     ];
   },
 
@@ -1429,7 +1604,10 @@ async function resolveOpenItemAccounts(
   // control (settings.controlAccounts.employeePayable) to a
   // liability_current_other account, and an expense report's control line
   // must still be an open item there or it can never be settled through the
-  // payment-application engine.
+  // payment-application engine. The employee-receivable control (0171) joins
+  // it for the same reason: personal lines debit it, and the balance must be
+  // collectible through the application engine rather than stranded as a
+  // non-open GL balance nobody can settle.
   const r = (await runner.execute<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and type in ('asset_receivable', 'liability_payable')
@@ -1437,7 +1615,12 @@ async function resolveOpenItemAccounts(
     select (settings->'controlAccounts'->>'employeePayable')::uuid as id
       from orgs
      where id = ${orgId}
-       and settings->'controlAccounts'->>'employeePayable' is not null`));
+       and settings->'controlAccounts'->>'employeePayable' is not null
+    union
+    select (settings->'controlAccounts'->>'employeeReceivable')::uuid as id
+      from orgs
+     where id = ${orgId}
+       and settings->'controlAccounts'->>'employeeReceivable' is not null`));
   return new Set(r.rows.map((x) => x.id));
 }
 
@@ -1699,6 +1882,7 @@ export async function postDocument(
       openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId),
     };
   }
+  deps = await resolveExpenseReceivableDeps(db, doc, deps);
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(db, doc.orgId);
     const fallback = await resolveOrgTaxAccounts(db, doc.orgId);
@@ -1955,6 +2139,7 @@ export async function postDocument(
   // approved reports that never passed the current submission boundary.
   try {
     await assertExpenseEmployee(db, effectiveDoc);
+    await assertExpenseSettlement(db, effectiveDoc);
   } catch (error) {
     throw new PostingError((error as Error).message);
   }
@@ -2974,6 +3159,7 @@ export async function regenerateGlImpactTx(
       openItemAccountIds: await resolveOpenItemAccounts(tx, doc.orgId),
     };
   }
+  deps = await resolveExpenseReceivableDeps(tx, doc, deps);
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(tx, doc.orgId);
     const fallback = await resolveOrgTaxAccounts(tx, doc.orgId);
