@@ -1,18 +1,29 @@
-import { ModuleView } from "../../../../../components/viewspec/module-view"
-import { loadPlatformUser, platformUserSpec } from "./view"
+import { notFound } from 'next/navigation'
+import { isUuid } from '../../../../../lib/list-params'
+import { platformGrantOptions, platformUser } from '../../../../../lib/platform-admin'
+import { requireSuperAdmin } from '../../../../../lib/super-admin'
+import { PlatformUserDetailClient } from '../../_components/PlatformUserDetailClient'
 
-export const dynamic = "force-dynamic";
-
+export const dynamic = 'force-dynamic'
 
 export default async function PlatformUserPage({
   params,
-  searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  params: Promise<{ id: string }>
 }) {
-  const { id } = await params;
-  const sp = (await searchParams) ?? {};
-  const data = await loadPlatformUser(id);
-  return <ModuleView spec={platformUserSpec(data)} data={data} searchParams={sp} trusted />;
+  const { id } = await params
+  if (!isUuid(id)) notFound()
+  const authz = await requireSuperAdmin()
+  const [record, options] = await Promise.all([platformUser(id), platformGrantOptions()])
+  if (!record) notFound()
+  return (
+    <PlatformUserDetailClient
+      user={record.user}
+      grants={record.grants}
+      members={options.members}
+      organizations={options.organizations.filter((org) => org.id !== record.user.orgId)}
+      actingUsers={options.actingUsers}
+      isSelf={record.user.id === authz.user.homeUserId}
+    />
+  )
 }

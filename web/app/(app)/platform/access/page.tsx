@@ -1,16 +1,24 @@
-import { ModuleView } from "../../../../components/viewspec/module-view"
-import { loadPlatformAccess, platformAccessSpec } from "./view"
+import { platformGrantOptions, platformGrants } from '../../../../lib/platform-admin'
+import { PlatformAccessClient } from '../_components/PlatformAccessClient'
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic'
 
-
-
-export default async function PlatformAccessPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const sp = await searchParams;
-  const data = await loadPlatformAccess(sp);
-  return <ModuleView spec={platformAccessSpec(data)} data={data} searchParams={sp} trusted />;
+export default async function PlatformAccessPage() {
+  const [result, options] = await Promise.all([
+    platformGrants({
+      page: 1,
+      perPage: 500,
+      dir: 'desc',
+      sort: 'updated',
+    }),
+    platformGrantOptions(),
+  ])
+  return (
+    <PlatformAccessClient
+      grants={result.rows}
+      members={options.members}
+      organizations={options.organizations}
+      actingUsers={options.actingUsers}
+    />
+  )
 }
