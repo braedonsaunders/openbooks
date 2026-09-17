@@ -33,7 +33,10 @@
     "tax": "Fiscalité",
     "gl": "GL"
   },
-  "status": { "closed": "fermée", "open": "ouverte" },
+  "status": {
+    "closed": "fermée",
+    "open": "ouverte"
+  },
   "runStatus": {
     "not_started": "Non démarrée",
     "draft": "Brouillon",
@@ -67,8 +70,10 @@
     "approve": "Approuver",
     "requestChanges": "Demander des modifications",
     "addEvidence": "Ajouter une preuve",
+    "resolveException": "Ouvrir l’espace de travail",
     "takeAction": "Agir",
     "requestApproval": "Demander l’approbation",
+    "attest": "Attester et approuver la clôture",
     "reviewApprovals": "Examiner les approbations",
     "configureApprovalFlow": "Configurer le flux d’approbation",
     "documentation": "Documentation",
@@ -76,10 +81,13 @@
     "publish": "Publier le dossier",
     "downloadBinder": "Télécharger le dossier d’audit immuable"
   },
-  "errors": { "actionFailed": "L’action de clôture n’a pas pu être effectuée" },
+  "errors": {
+    "actionFailed": "L’action de clôture n’a pas pu être effectuée"
+  },
   "messages": {
     "refresh": "État de clôture actualisé",
     "request_approval": "Clôture soumise à approbation",
+    "attest": "Attestation du responsable enregistrée",
     "close": "Période verrouillée",
     "publish": "Dossier de clôture publié",
     "taskUpdated": "Tâche mise à jour",
@@ -127,6 +135,10 @@
       "title": "Des activités non comptabilisées subsistent",
       "message": "{count, plural, one {# opération provisoire ou en attente subsiste dans la période.} other {# opérations provisoires ou en attente subsistent dans la période.}}"
     },
+    "posting-period-missing": {
+      "title": "Des opérations ont besoin d’une période comptable",
+      "message": "{count, plural, one {# opération n’a pas de période comptable exacte. Affectez-la avant de clôturer une période.} other {# opérations n’ont pas de période comptable exacte. Affectez-les avant de clôturer une période.}}"
+    },
     "bank-unreconciled": {
       "title": "Des comptes de trésorerie doivent être rapprochés",
       "message": "{count, plural, one {# compte rapprochable n’est pas validé jusqu’à la fin de période.} other {# comptes rapprochables ne sont pas validés jusqu’à la fin de période.}}"
@@ -134,6 +146,10 @@
     "depreciation-unposted": {
       "title": "Des amortissements restent à comptabiliser",
       "message": "{count, plural, one {# ligne d’amortissement planifiée reste à comptabiliser.} other {# lignes d’amortissement planifiées restent à comptabiliser.}}"
+    },
+    "recognition-unposted": {
+      "title": "La constatation des produits reste à comptabiliser",
+      "message": "{count, plural, one {# ligne de constatation planifiée reste à comptabiliser.} other {# lignes de constatation planifiées restent à comptabiliser.}}"
     },
     "fx-missing": {
       "title": "Des taux de change manquent",
@@ -143,9 +159,17 @@
       "title": "Les soldes en devises ne sont pas réévalués",
       "message": "{count, plural, one {# solde monétaire en devise n’a pas été réévalué au taux de fin de période.} other {# soldes monétaires en devises n’ont pas été réévalués au taux de fin de période.}}"
     },
+    "fx-reversal-period-missing": {
+      "title": "Aucune période suivante pour l’extourne de réévaluation",
+      "message": "Les soldes en devises doivent être réévalués, mais aucune période comptable ultérieure n’existe pour y loger l’extourne obligatoire. Générez la période fiscale suivante, puis exécutez la réévaluation."
+    },
     "intercompany-residual": {
       "title": "L’activité intersociétés ne s’élimine pas",
       "message": "{count, plural, one {# compte d’élimination présente un solde de groupe non nul.} other {# comptes d’élimination présentent un solde de groupe non nul.}}"
+    },
+    "consolidated-rates-missing": {
+      "title": "Des taux de change consolidés manquent",
+      "message": "{count, plural, one {# compte d’élimination porte une activité d’entité étrangère sans taux consolidé pour la période. Calculez les taux consolidés avant d’éliminer.} other {# comptes d’élimination portent une activité d’entités étrangères sans taux consolidé pour la période. Calculez les taux consolidés avant d’éliminer.}}"
     },
     "material-variances": {
       "title": "Les fluctuations significatives exigent une explication",
@@ -197,6 +221,11 @@
     "blockedDescription": "{count, plural, one {# tâche à contrôle strict reste} other {# tâches à contrôle strict restent}}.",
     "approvalTitle": "Approbation indépendante et verrouillage",
     "approvalDescription": "La personne ayant lancé l’exécution ne peut pas l’approuver définitivement. Toute modification du grand livre rouvre la révision.",
+    "ownerTitle": "Attestation du responsable et verrouillage",
+    "ownerDescription": "Pour une clôture gérée par le responsable, vérifiez les états et indiquez pourquoi la période est prête. L’attestation est liée à cet état exact du grand livre.",
+    "attestationLabel": "Pourquoi ces livres sont-ils prêts à clôturer ?",
+    "attestationPlaceholder": "Exemple : balance de vérification, bilan et résultat révisés ; l’activité bancaire est rapprochée et toutes les opérations connues de la période sont comptabilisées.",
+    "confirmLock": "Verrouiller CC, CF, banque, immobilisations, fiscalité et grand livre pour cette période ? Les nouvelles comptabilisations seront refusées jusqu’à l’approbation d’une réouverture contrôlée.",
     "complete": "Période verrouillée par {name}"
   },
   "lockStates": {
@@ -207,9 +236,13 @@
   "publish": {
     "package": "Dossier de rapports de clôture",
     "description": "Vérifiez les sorties configurées, puis figez le dossier de preuves et publiez-le.",
+    "confirm": "Publier et figer ce dossier de clôture avec son dossier d’audit immuable ?",
     "complete": "Dossier publié par {name}",
     "lockFirst": "Appliquez les verrous de période approuvés avant de publier.",
-    "awaitingApproval": "Terminez la révision et le flux d’approbation avant de publier."
+    "awaitingApproval": "Terminez la révision et le flux d’approbation avant de publier.",
+    "noteLabel": "Note de publication",
+    "notePlaceholder": "Ajoutez une note sur cette publication…",
+    "noteRequired": "Republier un dossier corrigé constitue un retraitement : décrivez ce qui a changé."
   },
   "timeline": {
     "title": "Chronologie immuable",
@@ -221,6 +254,7 @@
       "started": "Exécution démarrée",
       "data_changed": "Une modification du grand livre a invalidé des travaux",
       "approval_requested": "Approbation de clôture demandée",
+      "owner_attested": "Le responsable a attesté que les livres sont prêts",
       "approval_rejected": "Approbation de clôture refusée",
       "approved": "Clôture approuvée définitivement",
       "closed": "Verrous de période appliqués",
@@ -248,7 +282,9 @@
     "general-ledger": "Grand livre"
   },
   "defaultData": {
-    "calendar": { "name": "Calendrier fiscal standard" },
+    "calendar": {
+      "name": "Calendrier fiscal standard"
+    },
     "blueprint": {
       "name": "Clôture standard",
       "description": "Clôture native du grand livre pour les fins de mois, de trimestre et d’exercice"
@@ -265,6 +301,10 @@
       "controlledReopen": {
         "name": "Réouverture contrôlée",
         "description": "Toute réouverture exige un motif, une approbation indépendante et une échéance."
+      },
+      "sourceReconciliationEvidence": {
+        "name": "Preuve de rapprochement du système source",
+        "description": "Le miroir peut valider les comptes bancaires jusqu’à la date rapprochée du système source. Désactivez pour exiger des relevés importés."
       }
     },
     "package": {
@@ -293,6 +333,10 @@
       "title": "Comptabiliser l’amortissement",
       "description": "Exécuter l’amortissement planifié et résoudre les exceptions."
     },
+    "recognition-posted": {
+      "title": "Comptabiliser la constatation des produits",
+      "description": "Exécuter la constatation planifiée des produits et résoudre les exceptions."
+    },
     "fx-ready": {
       "title": "Valider la couverture de change",
       "description": "Chaque devise d’opération doit avoir un taux de fin de période utilisable."
@@ -317,6 +361,10 @@
       "title": "Approbation du contrôleur",
       "description": "Réviser indépendamment la préparation, les exceptions, les preuves et les rapports."
     },
+    "financial-review": {
+      "title": "Réviser les états financiers",
+      "description": "Réviser la balance de vérification, le bilan et le résultat avant d’attester : exhaustivité et soldes inattendus."
+    },
     "lock-subledgers": {
       "title": "Verrouiller les livres auxiliaires",
       "description": "Verrouiller CC, CF, banque, immobilisations et fiscalité avant le GL."
@@ -333,6 +381,8 @@
   "setup": {
     "title": "Périodes et clôture",
     "description": "Concevez les calendriers, générez les périodes, gouvernez les verrous et réouvertures, versionnez les modèles et configurez contrôles, automatisations et dossiers.",
+    "simpleMode": "La clôture gérée par le responsable est active. Calendriers, périodes, verrous, attestations et publication immuable restent disponibles sans la complexité des flux d’entreprise.",
+    "enableAdvanced": "Voir la clôture avancée",
     "tabs": {
       "calendars": "Calendriers",
       "periods": "Périodes",
@@ -378,7 +428,8 @@
       "title": "Politiques de clôture",
       "description": "Configurez l’importance relative, les verrous, la révision, la séparation des tâches et les exceptions.",
       "formTitle": "Configuration de politique",
-      "rulesHint": "Les règles JSON avancées permettent des seuils et conditions propres au locataire sans déploiement."
+      "rulesHint": "Les règles JSON avancées permettent des seuils et conditions propres au locataire sans déploiement.",
+      "materialityFormTitle": "Politique d’importance relative"
     },
     "automation": {
       "title": "Automatisation de clôture",
@@ -390,7 +441,17 @@
       "description": "Définissez les états, destinataires et paramètres de livraison publiés avec la clôture.",
       "formTitle": "Dossier de rapports",
       "reportCount": "{count, plural, one {# rapport} other {# rapports}}",
-      "recipientsHint": "Un destinataire par ligne."
+      "recipientsHint": "Un destinataire par ligne.",
+      "addReport": "Ajouter un rapport…",
+      "noReports": "Aucun rapport joint pour l’instant.",
+      "sendNowTitle": "Envoyer maintenant",
+      "sendNowHint": "Livrer immédiatement le dossier enregistré pour une période choisie, sans attendre la publication d’une clôture.",
+      "sendNow": "Envoyer maintenant",
+      "sending": "Envoi…",
+      "sendQueued": "Envoi en file — le dossier sera transmis par courriel aux destinataires.",
+      "sendPeriod": "Période",
+      "selectPeriod": "Sélectionner une période…",
+      "sendNoPeriods": "Générez les périodes comptables avant l’envoi."
     },
     "actions": {
       "newCalendar": "Nouveau calendrier",
@@ -413,7 +474,8 @@
       "reject": "Refuser",
       "cancel": "Annuler",
       "manageBooks": "Gérer les livres",
-      "managePeriod": "Gérer {period}"
+      "managePeriod": "Gérer {period}",
+      "addRow": "Ajouter"
     },
     "fields": {
       "name": "Nom",
@@ -569,7 +631,12 @@
       "trial-balance": "Balance de vérification",
       "general-ledger": "Grand livre"
     },
-    "table": { "period": "Période", "range": "Plage", "entries": "Écritures", "status": "Statut" },
+    "table": {
+      "period": "Période",
+      "range": "Plage",
+      "entries": "Écritures",
+      "status": "Statut"
+    },
     "empty": {
       "calendars": "Aucun calendrier fiscal ne correspond à cette recherche.",
       "periods": "Aucune période comptable ne correspond à ces filtres.",
@@ -593,28 +660,150 @@
     "errors": {
       "actionFailed": "La modification n’a pas pu être enregistrée",
       "invalidConfiguration": "La configuration doit être valide et complète"
+    },
+    "policyRules": {
+      "materialityIntro": "Un mouvement de compte d’une période à l’autre n’est signalé pour révision que s’il dépasse LES DEUX seuils.",
+      "amount": "Seuil de montant",
+      "amountHint": "Variation absolue en devise de base (p. ex. 10 000).",
+      "percent": "Seuil de pourcentage",
+      "percentHint": "Variation relative par rapport à la période précédente.",
+      "approvalRequired": "Exiger une approbation indépendante pour rouvrir une période verrouillée",
+      "defaultHours": "Fenêtre de réouverture par défaut (heures)",
+      "maxHours": "Fenêtre de réouverture maximale (heures)",
+      "prohibitSelfApproval": "Empêcher l’approbation de son propre travail",
+      "advancedIntro": "Ce type de politique n’a aucun paramètre intégré. Ajoutez des paramètres clé/valeur personnalisés si votre flux l’exige.",
+      "noSettings": "Ce type de politique ne requiert aucun paramètre supplémentaire."
+    },
+    "conditions": {
+      "intro": "La règle ne s’exécute que si toutes les conditions ci-dessous sont remplies. Laissez une condition vide pour l’ignorer.",
+      "runStatus": "Le statut de l’exécution est",
+      "workstream": "Le volet est",
+      "taskStatus": "Le statut de la tâche est",
+      "severity": "La gravité de l’exception est",
+      "taskKey": "La clé de tâche est l’une de",
+      "taskKeyHint": "Clés de tâche stables séparées par des virgules.",
+      "minReadiness": "Le score de préparation est d’au moins",
+      "maxReadiness": "Le score de préparation est d’au plus",
+      "withinDays": "Jours restants avant la cible : au plus",
+      "readinessHint": "0–100.",
+      "any": "Tous"
+    },
+    "automationConfig": {
+      "notifyUsers": "Notifier ces personnes",
+      "notifyRoles": "…et tous les membres de ces rôles",
+      "notifyHint": "Si personne n’est sélectionné, la personne ayant lancé l’exécution est notifiée.",
+      "title": "Titre de la notification",
+      "titlePlaceholder": "Par défaut : le nom de la règle",
+      "body": "Message",
+      "bodyPlaceholder": "Par défaut : la période et le livre",
+      "owner": "Responsable assigné (personne)",
+      "ownerRole": "…ou premier disponible dans le rôle",
+      "reviewer": "Réviseur assigné (personne)",
+      "reviewerRole": "…ou premier disponible dans le rôle",
+      "assignHint": "Les automatisations d’affectation s’exécutent sur les événements de tâche.",
+      "taskKey": "Clé de tâche",
+      "taskKeyPlaceholder": "en minuscules avec traits d’union, p. ex. late-accrual-review",
+      "taskTitle": "Titre de la tâche",
+      "taskDescription": "Description de la tâche",
+      "gate": "Contrôle",
+      "evidenceRequired": "Exiger une preuve avant achèvement",
+      "report": "Rapport à figer",
+      "label": "Étiquette de preuve",
+      "subjectKind": "Type d’objet du flux",
+      "subjectId": "Exécuter le flux sur",
+      "buttonId": "Identifiant du bouton de flux",
+      "none": "Cette action ne requiert aucune configuration supplémentaire.",
+      "allocHint": "Prévisualiser chaque règle périodique sélectionnée pour la période et le livre de cette exécution. La comptabilisation enregistre aussi les lignes calculées.",
+      "allocAllRules": "Toutes les règles périodiques actives",
+      "allocRuleIds": "Identifiants de règles",
+      "allocRuleIdsHint": "UUID de règles de répartition séparés par des virgules. Utilisé uniquement quand « Toutes les règles périodiques actives » est désactivé.",
+      "allocPost": "Comptabiliser les exécutions calculées (sinon aperçu seulement)",
+      "sectionConditions": "Quand (conditions)",
+      "sectionConfig": "Alors (configuration)"
+    },
+    "subjectRefs": {
+      "$run": "L’exécution de clôture",
+      "$task": "La tâche déclenchante"
+    },
+    "reportGroups": {
+      "built_in": "Rapports standard",
+      "custom": "Rapports personnalisés"
+    },
+    "reportsEmpty": "Aucun rapport défini pour l’instant.",
+    "delivery": {
+      "title": "Livraison",
+      "intro": "La façon dont ce dossier est assemblé et envoyé à la publication d’une clôture.",
+      "format": "Format de fichier",
+      "formats": {
+        "pdf": "PDF",
+        "xlsx": "Excel",
+        "both": "PDF + Excel"
+      },
+      "combine": "Regrouper tous les rapports en un seul PDF",
+      "coverPage": "Inclure une page de garde",
+      "cadence": "Fréquence de livraison",
+      "cadences": {
+        "on_publish": "À la publication de la clôture",
+        "manual": "Manuellement seulement"
+      },
+      "advanced": "Paramètres de livraison avancés"
+    },
+    "kv": {
+      "key": "Paramètre",
+      "value": "Valeur",
+      "add": "Ajouter un paramètre",
+      "empty": "Aucun paramètre personnalisé."
+    },
+    "reportParams": {
+      "dateRange": "Plage de dates",
+      "closePeriod": "La période de clôture",
+      "custom": "Plage personnalisée",
+      "from": "Du",
+      "to": "Au",
+      "breakout": "Ventiler par",
+      "breakouts": {
+        "none": "Aucune ventilation",
+        "department": "Département",
+        "location": "Emplacement",
+        "class": "Classe",
+        "project": "Projet",
+        "month": "Mois",
+        "quarter": "Trimestre"
+      },
+      "filters": "Filtres",
+      "department": "Département",
+      "location": "Emplacement",
+      "class": "Classe",
+      "project": "Projet",
+      "subsidiary": "Filiale",
+      "anyValue": "Tous",
+      "definedDate": "Plage de dates",
+      "definedBreakouts": "Ventilations",
+      "definedFilters": "Filtres",
+      "definedMeasures": "Mesures",
+      "noDefined": "Ce rapport prend sa plage de dates et ses filtres au moment de la livraison."
     }
   },
   "postingPeriods": {
-      "title": "Affecter les périodes comptables",
-      "description": "Documents approuvés sans période comptable, déduite de la date d'effet de chaque document. Vérifiez l'aperçu, puis affectez.",
-      "backToClose": "Retour à la clôture",
-      "previewTitle": "{count, plural, one {# document} other {# documents}}",
-      "previewDescription": "Seuls les documents affectables sont validés. Les documents bloqués conservent leur motif et ne sont jamais forcés.",
-      "loading": "Chargement de l'aperçu…",
-      "empty": "Aucun document approuvé ne manque de période comptable.",
-      "document": "Document",
-      "kind": "Type",
-      "effectiveDate": "Date d'effet",
-      "period": "Période",
-      "status": "Statut",
-      "assignable": "Affectable",
-      "assign": "Affecter {count, plural, one {# période} other {# périodes}}",
-      "blockedNote": "{count, plural, one {# document est} other {# documents sont}} bloqué(s) et sera(ont) ignoré(s).",
-      "refusedNote": "{count, plural, one {# document a été} other {# documents ont été}} refusé(s) à la validation.",
-      "previewFailed": "Impossible de charger l'aperçu.",
-      "commitFailed": "Impossible d'affecter les périodes comptables.",
-      "committed": "{count, plural, one {# période comptable affectée} other {# périodes comptables affectées}}.",
-      "needsBook": "Ouvrez cette page depuis une clôture pour choisir un livre comptable et affecter les périodes comptables."
+    "title": "Affecter les périodes comptables",
+    "description": "Documents approuvés sans période comptable, déduite de la date d'effet de chaque document. Vérifiez l'aperçu, puis affectez.",
+    "backToClose": "Retour à la clôture",
+    "previewTitle": "{count, plural, one {# document} other {# documents}}",
+    "previewDescription": "Seuls les documents affectables sont validés. Les documents bloqués conservent leur motif et ne sont jamais forcés.",
+    "loading": "Chargement de l'aperçu…",
+    "empty": "Aucun document approuvé ne manque de période comptable.",
+    "document": "Document",
+    "kind": "Type",
+    "effectiveDate": "Date d'effet",
+    "period": "Période",
+    "status": "Statut",
+    "assignable": "Affectable",
+    "assign": "Affecter {count, plural, one {# période} other {# périodes}}",
+    "blockedNote": "{count, plural, one {# document est} other {# documents sont}} bloqué(s) et sera(ont) ignoré(s).",
+    "refusedNote": "{count, plural, one {# document a été} other {# documents ont été}} refusé(s) à la validation.",
+    "previewFailed": "Impossible de charger l'aperçu.",
+    "commitFailed": "Impossible d'affecter les périodes comptables.",
+    "committed": "{count, plural, one {# période comptable affectée} other {# périodes comptables affectées}}.",
+    "needsBook": "Ouvrez cette page depuis une clôture pour choisir un livre comptable et affecter les périodes comptables."
   }
 }
