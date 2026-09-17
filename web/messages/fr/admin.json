@@ -2400,6 +2400,7 @@
       "categoryId": "Catégorie d’immobilisation",
       "convention": "Convention",
       "lifeMonths": "Durée (mois)",
+      "depreciationMethodId": "Formule personnalisée",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultDepreciationMethodId": "Formule par défaut",

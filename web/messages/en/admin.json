@@ -2467,6 +2467,7 @@
       "categoryId": "Asset category",
       "convention": "Convention",
       "lifeMonths": "Life (months)",
+      "depreciationMethodId": "Custom formula",
       "departmentId": "Department",
       "defaultMethod": "Default method",
       "defaultDepreciationMethodId": "Default formula",

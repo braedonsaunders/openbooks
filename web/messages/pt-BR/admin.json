@@ -2467,6 +2467,7 @@
       "categoryId": "Categoria de ativo",
       "convention": "Convenção",
       "lifeMonths": "Vida útil (meses)",
+      "depreciationMethodId": "Fórmula personalizada",
       "departmentId": "Departamento",
       "defaultMethod": "Método padrão",
       "defaultDepreciationMethodId": "Fórmula padrão",
