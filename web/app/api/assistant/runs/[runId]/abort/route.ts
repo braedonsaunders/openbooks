@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../../lib/authz";
 import { createDbOwnedRunStore } from "../../../../../../lib/assistant/owned-runs-db";
@@ -11,7 +12,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * navigating away never stops them — only this endpoint (the Stop button)
  * or deleting the conversation does.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ runId: string }> }) {
+  const parsed = await parseJsonBody(req, jsonObject);
+  if (!parsed.ok) return parsed.response;
   const gate = await guardPermission("assistant.use");
   if (gate instanceof NextResponse) return gate;
   const { runId } = await params;
