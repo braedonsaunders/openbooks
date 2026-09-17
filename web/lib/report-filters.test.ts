@@ -6,7 +6,7 @@ import {
   type ReportRule,
   type ReportRuleGroup,
 } from '@openbooks/reports'
-import { buildDrillTarget, isReportUuidParam, parseReportQuery, toSearchParams } from './report-filters'
+import { buildDrillTarget, isReportUuidParam, parseReportQuery, resolveAgingCurrencyParams, toSearchParams } from './report-filters'
 import { encodeReportDrillTarget, parseReportDrillTarget } from './report-drill'
 
 const CUSTOMER_ID = '018f47aa-7c11-7a12-8bc3-1234567890ad'
@@ -117,4 +117,31 @@ test('dimension filter params must be uuids — malformed values are dropped, ne
   assert.equal(isReportUuidParam('abc'), false)
   assert.equal(isReportUuidParam(null), false)
   assert.equal(isReportUuidParam(undefined), false)
+})
+
+test('aging currency params default to the base basis in the org base', () => {
+  const scope = { baseCurrency: 'CAD', currencies: ['CAD', 'EUR'] }
+  assert.deepEqual(resolveAgingCurrencyParams({}, scope), { basis: 'base', currency: 'CAD' })
+  assert.deepEqual(
+    resolveAgingCurrencyParams(new URLSearchParams({ currencyBasis: 'transaction', currency: 'EUR' }), scope),
+    { basis: 'transaction', currency: 'EUR' },
+  )
+})
+
+test('aging transaction basis is opt-in and out-of-scope currencies fall back', () => {
+  const scope = { baseCurrency: 'CAD', currencies: ['CAD', 'EUR'] }
+  // The shared filter bar's `basis` (accrual/cash) must never leak across:
+  // only the literal `transaction` opts in.
+  assert.equal(resolveAgingCurrencyParams({ currencyBasis: 'cash' }, scope).basis, 'base')
+  assert.equal(resolveAgingCurrencyParams({ currencyBasis: 'accrual' }, scope).basis, 'base')
+  assert.equal(resolveAgingCurrencyParams({ currencyBasis: 'TRANSACTION' }, scope).basis, 'base')
+  // A hand-edited currency no document uses falls back to base (ruling 1).
+  assert.deepEqual(
+    resolveAgingCurrencyParams({ currencyBasis: 'transaction', currency: 'JPY' }, scope),
+    { basis: 'transaction', currency: 'CAD' },
+  )
+  assert.deepEqual(
+    resolveAgingCurrencyParams({ currency: 'eur' }, scope),
+    { basis: 'base', currency: 'CAD' },
+  )
 })

@@ -1,5 +1,5 @@
 import type { StatementBasis, StatementDimFilter, StatementMode } from './statement-matrix'
-import type { AgingBucket, AgingSide } from './reports'
+import type { AgingBucket, AgingCurrencyBasis, AgingSide } from './reports'
 
 export type ReportDrillTarget =
   | {
@@ -34,6 +34,10 @@ export type ReportDrillTarget =
       subsidiaryId?: string
       partyId?: string
       bucket?: AgingBucket
+      /** Currency basis the report was viewed under; absent reads base. */
+      currencyBasis?: AgingCurrencyBasis
+      /** Reporting currency the report was viewed under; absent reads org base. */
+      currency?: string
     }
   | {
       kind: 'budget'
@@ -210,6 +214,14 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     const bucket = typeof input.bucket === 'string' && AGING_BUCKETS.has(input.bucket as AgingBucket)
       ? (input.bucket as AgingBucket)
       : undefined
+    // An unrecognized currency falls back the same way the report does (base
+    // basis, org base) — a hand-edited drill URL must never refuse or guess.
+    const currencyBasis = input.currencyBasis === 'transaction' || input.currencyBasis === 'base'
+      ? input.currencyBasis
+      : undefined
+    const currency = typeof input.currency === 'string' && /^[A-Z]{3}$/.test(input.currency)
+      ? input.currency
+      : undefined
     if (!asOf || !ISO_DATE.test(asOf) || !side) return null
     return {
       kind: 'aging',
@@ -220,6 +232,8 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       subsidiaryId: uuidValue(input.subsidiaryId),
       partyId: uuidValue(input.partyId),
       bucket,
+      currencyBasis,
+      currency,
     }
   }
 

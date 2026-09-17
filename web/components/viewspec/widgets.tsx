@@ -15,6 +15,7 @@ import { AccountHeading, EntryCell } from '../../app/(app)/reports/general-ledge
 import { ResourceCell, RowCountsCell } from '../../app/(app)/data/import/history/sections'
 import { PartyHeading } from '../../app/(app)/reports/registers/sections'
 import { PartyLinkCell } from '../../app/(app)/reports/aging/sections'
+import { CurrencyBasisControl, type CurrencyOption } from '../../app/(app)/reports/aging/currency-basis'
 import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/sections'
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { ViewNameCell, ViewActionsCell } from '../../app/(app)/knowledge/views/sections'
@@ -3624,6 +3625,17 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
     if (!studio) return null
     return <ViewStudio {...studio} />
   },
+  'currency-basis': (props) => (
+    <CurrencyBasisControl
+      currencies={(props.currencies as CurrencyOption[]) ?? []}
+      currency={str(props, 'currency') ?? ''}
+      currencyBasis={str(props, 'currencyBasis') === 'transaction' ? 'transaction' : 'base'}
+      currencyLabel={str(props, 'currencyLabel') ?? ''}
+      basisLabel={str(props, 'basisLabel') ?? ''}
+      baseLabel={str(props, 'baseLabel') ?? ''}
+      transactionLabel={str(props, 'transactionLabel') ?? ''}
+    />
+  ),
   'save-view': () => <SaveViewButton />,
   'export-menu': (props) => (
     <ExportMenu kind={str(props, 'kind')} params={stringRecord(props, 'params')} baseHref={str(props, 'baseHref')} />

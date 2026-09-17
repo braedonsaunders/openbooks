@@ -35,10 +35,14 @@ export {
 export { type FinancialTrendRow, financialTrends } from "./reports/trends";
 
 export {
+  type AgingCurrencyBasis,
+  type AgingOptions,
   type AgingResult,
   type AgingRow,
   type AgingSide,
   agingByParty,
+  agingCurrenciesInScope,
+  AgingRatesUnavailableError,
   resolveAgingAsOf,
 } from "./reports/aging";
 

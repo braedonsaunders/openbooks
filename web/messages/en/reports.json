@@ -239,7 +239,9 @@
       "total": "Total",
       "due": "Due",
       "age": "Age (days)",
-      "bucket": "Bucket"
+      "bucket": "Bucket",
+      "currency": "Ccy",
+      "txnOpen": "Open (txn)"
     },
     "buckets": {
       "current": "Current",
@@ -249,7 +251,14 @@
       "b4": "90+"
     },
     "summary": "Summary",
-    "detail": "Detail"
+    "detail": "Detail",
+    "fromBase": "from base currency",
+    "fromTransaction": "from transaction currency",
+    "inCurrency": "in {currency}",
+    "currency": "Currency",
+    "convertFrom": "Convert from",
+    "baseOption": "Base currency",
+    "transactionOption": "Transaction currency"
   },
   "cashFlow": {
     "title": "Cash Flow Statement",
