@@ -6,6 +6,27 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.14] - 2026-09-17
+
+First fleet-7 batch on top of alpha.13. Requires migration 0170.
+
+### Locale remediation
+
+- Admin and analytics catalogs are fully translated in fr, es, de, ja,
+  zh, and pt-BR, each namespace pinned so English cannot be pasted back.
+- Payroll catalogs land in all six non-English locales (848 keys each).
+
+### CRM, banking, drawers, and PDF
+
+- Lead stage changes persist; new prospects start at the right stage.
+- Forecast snapshots file at the displayed scope, including the whole
+  organization (0170 relaxes the target CHECK).
+- Banking overview uses one reconcilable-account reader even when
+  consolidated rates are underived.
+- Dirty document drawers keep a header Save and confirm before close.
+- PDF template duplication no longer collides on default names; a taken
+  name is a typed 409.
+
 ## [0.1.0-alpha.13] - 2026-09-17
 
 Fleet-6 closeout on top of alpha.12. No new migration.
