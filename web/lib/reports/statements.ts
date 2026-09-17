@@ -226,6 +226,9 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   if (glSummaryEligibleDims(dims)) {
     // Whole months from gl_month_activity, boundary sliver from lines.
+    // The heading promises "accounts with activity": keep zero-balance
+    // accounts whose debit/credit legs are real (F-t08-002) instead of
+    // filtering on the net balance alone.
     const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [], bookId });
     const r = (await reportDb.execute(sql`
       select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
@@ -234,7 +237,8 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
                  sum(b.amount) as balance
             from ${buckets} b
            where b.d <= ${asOf} ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
-           group by b.account_id having abs(sum(b.amount)) > 0
+           group by b.account_id
+          having abs(sum(b.amount)) > 0 or sum(b.debit_total) > 0 or sum(b.credit_total) > 0
         ) s
         join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
        order by a.number nulls last, a.name
@@ -258,7 +262,10 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId} and ${dimWhere(dims)}
-     group by a.id having abs(sum(l.amount)) > 0
+     group by a.id
+    having abs(sum(l.amount)) > 0
+        or sum(case when l.amount > 0 then l.amount else 0 end) > 0
+        or sum(case when l.amount < 0 then -l.amount else 0 end) > 0
      order by a.number nulls last, a.name
   `));
   return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
