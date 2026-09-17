@@ -639,25 +639,6 @@ export function assertContributorBalance(
   }
 }
 
-/**
- * Contribute post-mode allocation lines for one posting.
- *
- * Rules in effect on the posting date with mode 'post' (A4
- * listRulesInEffect), matched per kernel line through A4's selectRule. The
- * most specific rule wins each line; its targets are apportioned exactly and
- * built per impact. posting.ts asserts contributor balance, unions with the
- * kernel, and writes lineage rows in the same posting transaction.
- */
-export async function contributePostingAllocations(
-  runner: PostRunner,
-  doc: PostableDocument,
-  kernelLines: PostSourceLine[],
-  deps: PostContributionDeps,
-  opts: PostContributionOpts,
-): Promise<ContributedLineWithSource[]> {
-  return (await collectPostContributions(runner, doc, kernelLines, deps, opts)).lines;
-}
-
 export async function collectPostContributions(
   runner: PostRunner,
   doc: PostableDocument,

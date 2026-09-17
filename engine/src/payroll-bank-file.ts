@@ -735,27 +735,6 @@ function localDate(iso: string): Date {
 }
 
 /**
- * Build the run's direct-deposit file.
- *
- * Callers must come through ./payroll-bank-file-artifact.ts, which holds the
- * entitlement checks (committed, approval released, not already paid, not a
- * sandbox), allocates the bank-facing file number, and freezes the result.
- * This function assumes none of that and asserts everything it can prove from
- * the bytes it just produced.
- */
-export async function buildPayRunBankFile(
-  input: PayRunBankFileBuildInput,
-): Promise<PayRunBankFileResult> {
-  const format = input.format ?? input.originator.format;
-  const spec = PAYROLL_BANK_FILE_FORMATS[format];
-  if (!spec) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
-  return renderPayRunBankFile(
-    await preparePayRunBankFile(input.orgId, input.documentId, format),
-    input,
-  );
-}
-
-/**
  * Render the file and verify it. Pure: no database, no clock, no randomness —
  * the same inputs always produce the same characters, which is what makes the
  * stored artifact reproducible evidence and the golden tests meaningful.

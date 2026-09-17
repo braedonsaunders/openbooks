@@ -26,15 +26,6 @@ const BANK_ACCOUNT_STATUSES = [
   { value: "rejected", label: "Rejected" },
 ] as const;
 
-/** source platform's material fields: editing any of these re-enters approval. */
-export const BANK_ACCOUNT_MATERIAL_FIELDS = [
-  "bankName",
-  "country",
-  "currency",
-  "routing",
-  "accountNumber",
-] as const;
-
 const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
   rejected: ["pending"],
   pending: ["approved", "rejected"], // material edit / resubmit re-enters approval

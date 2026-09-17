@@ -94,7 +94,6 @@ export {
 } from "./entity-list-query/inventory"
 
 export {
-  BUDGET_BASE_JOINS,
   budgetBaseJoins,
   BUDGET_BUILT_IN_EXPR,
   BUDGET_SORTS,

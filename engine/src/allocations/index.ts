@@ -165,7 +165,6 @@ export {
   previewAllocationRun,
   rerunAllocationRun,
   reverseAllocationRun,
-  staticDriverResolver,
   type AllocationRunRecord,
   type PeriodRunDeps,
   type PostAllocationRunOptions,

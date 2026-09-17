@@ -36,7 +36,3 @@ export async function renderFlowPdf(args: {
   if (!renderer) return null;
   return renderer(args);
 }
-
-export function hasFlowPdfRenderer(): boolean {
-  return renderer !== null;
-}

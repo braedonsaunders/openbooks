@@ -61,7 +61,6 @@ export { userRoleKeys } from "./targets.ts";
 export {
   registerFlowPdfRenderer,
   renderFlowPdf,
-  hasFlowPdfRenderer,
   type FlowPdfAttachment,
   type FlowPdfRenderer,
 } from "./pdf-hook.ts";
@@ -73,7 +72,6 @@ export {
 } from "./approval-release-hook.ts";
 export {
   BANK_ACCOUNT_SUBJECT_KIND,
-  BANK_ACCOUNT_MATERIAL_FIELDS,
   bankAccountsFlowAdapter,
   bankAccountSubjectProfile,
 } from "./bank-accounts-adapter.ts";

@@ -28,7 +28,4 @@ export async function guardProjectSchedulingFeature(orgId: string): Promise<Next
   return NextResponse.json({ error: 'project scheduling feature is disabled' }, { status: 404 })
 }
 
-/** Page-boundary equivalent for scheduling surfaces. */
-export async function requireProjectSchedulingFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'projectScheduling'))) redirect('/admin/setup/features')
-}
+
