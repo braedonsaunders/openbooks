@@ -47,6 +47,7 @@
     "list": {
       "heading": "Umlageregeln",
       "new": "Neue Regel",
+      "emptyTitle": "Noch keine Umlageregeln",
       "empty": "Noch keine Umlageregeln. Legen Sie die erste Regel an, um Kosten zu verteilen.",
       "columns": {
         "name": "Name",
@@ -60,7 +61,9 @@
       "noVersion": "Keine veröffentlichte Version",
       "inactive": "Inaktiv",
       "active": "Aktiv",
-      "searchPlaceholder": "Regeln suchen…"
+      "searchPlaceholder": "Regeln suchen…",
+      "emptyDescription": "Legen Sie die erste Regel an, um Kosten zu verteilen.",
+      "blurb": "Versionierte Regeln, die bei Erfassung, bei Buchung oder als Periodenumlage greifen. Eine neue Regel öffnet eine geführte Einrichtung."
     },
     "modes": {
       "entry": "Bei Erfassung",
@@ -114,6 +117,8 @@
       },
       "applicabilityHeading": "Welche Zeilen die Regel betrachtet",
       "documentKinds": "Belegarten (leer bedeutet alle)",
+      "documentKindAdd": "Hinzufügen",
+      "noOptions": "Hier ist noch nichts.",
       "accountScope": "Kontenbereich",
       "accountScopes": {
         "any": "Jedes Konto",
@@ -179,6 +184,7 @@
       "lineDescriptionTemplate": "Vorlage für Zeilenbeschreibung",
       "approvalFlow": "Genehmigungsablauf",
       "approvalFlowHint": "Optionale Ablauf-UUID, erforderlich bevor ein Lauf bucht.",
+      "approvalFlowNone": "Kein Genehmigungsablauf",
       "driverAsOfs": {
         "period": "Periode",
         "document_date": "Belegdatum",
@@ -283,6 +289,7 @@
       "basisNote": "Anteile werden zur Laufzeit aus dem Schlüsselvektor aufgelöst.",
       "periodHeading": "Periodenumlage vorschauen",
       "period": "Periode",
+      "book": "Buch",
       "openRuns": "In Läufen öffnen",
       "noVersion": "Diese Regel hat noch keine testbare Version.",
       "version": "Version",
@@ -316,12 +323,15 @@
     "key": "Schlüssel",
     "keyHint": "Kleingeschriebener Kurzname, eindeutig je Organisation",
     "name": "Name",
+    "fieldDescription": "Beschreibung",
     "dimension": "Dimension",
     "sourceKind": "Quelle",
     "unit": "Einheit",
     "active": "Aktiv",
+    "inactive": "Inaktiv",
     "showInactive": "Inaktive anzeigen",
     "empty": "Noch keine Schlüssel.",
+    "emptyTitle": "Noch keine Schlüssel",
     "deleteConfirm": "Schlüssel {name} löschen? Manuelle Werte werden mitgelöscht.",
     "sourceKinds": {
       "statistical_journal": "Statistisches Journal",
@@ -372,6 +382,7 @@
     "note": "Notiz",
     "addValue": "Wert hinzufügen",
     "noValues": "Noch keine Werte für diesen Schlüssel.",
+    "noDimensionValues": "Noch keine aktiven {dimension}-Werte — legen Sie einen an, bevor Sie Schlüsselwerte hinzufügen.",
     "endValue": "Enddatum setzen",
     "deleteValueConfirm": "Diesen Wert löschen?",
     "preview": "Vektor vorschauen",
@@ -385,7 +396,10 @@
     "loadFailed": "Schlüssel konnten nicht geladen werden.",
     "saveFailed": "Schlüssel konnte nicht gespeichert werden.",
     "deleteFailed": "Schlüssel konnte nicht gelöscht werden.",
-    "previewFailed": "Vektor konnte nicht vorgeschaut werden."
+    "previewFailed": "Vektor konnte nicht vorgeschaut werden.",
+    "manualCreateHint": "Speichern Sie den Schlüssel zuerst — seine stichtagsbezogenen Werte werden hier gleich danach pflegbar.",
+    "valuesAfterSave": "Schlüssel gespeichert. Legen Sie unten seine stichtagsbezogenen Werte an.",
+    "emptyDescription": "Legen Sie den ersten Schlüssel an, um Kosten zu verteilen."
   },
   "runs": {
     "title": "Läufe",
@@ -395,6 +409,7 @@
     "filterStatus": "Status",
     "all": "Alle",
     "empty": "Noch keine Läufe. Rechnen Sie eine Regel zur Vorschau.",
+    "emptyTitle": "Noch keine Läufe",
     "columns": {
       "rule": "Regel",
       "period": "Periode",
@@ -419,6 +434,7 @@
     },
     "previewRun": "Lauf vorschauen",
     "runDetail": "Laufdetails",
+    "summary": "Zusammenfassung",
     "sources": "Quellen",
     "driverVector": "Schlüsselvektor",
     "targets": "Ziele",
@@ -450,7 +466,125 @@
     "journalEntry": "Journalbeleg",
     "reversalEntry": "Stornobeleg",
     "loadFailed": "Läufe konnten nicht geladen werden.",
-    "detailFailed": "Lauf konnte nicht geladen werden."
+    "detailFailed": "Lauf konnte nicht geladen werden.",
+    "pendingApprovalNotice": "Dieser Lauf wartet auf Genehmigung und kann von hier aus nicht gebucht werden.",
+    "viewApproval": "Genehmigung öffnen",
+    "emptyDescription": "Sehen Sie sich eine Regel in der Vorschau an, um einen Lauf zu berechnen."
+  },
+  "wizard": {
+    "untitled": "Unbenannte Umlage",
+    "loadFailed": "Abteilungen und Schlüssel für die Einrichtungsanleitung konnten nicht geladen werden.",
+    "createFailed": "Umlageregel konnte nicht angelegt werden.",
+    "publishFailed": "Die Regel wurde als Entwurf gespeichert — veröffentlichen Sie sie, sobald Sie die Definition fertig haben.",
+    "created": "Umlageregel als Entwurf gespeichert. Veröffentlichen Sie sie unter Versionen, sobald Sie bereit sind.",
+    "published": "Umlageregel ist veröffentlicht und in Kraft.",
+    "creating": "Wird angelegt…",
+    "finish": "Regel anlegen",
+    "skipGuide": "Anleitung überspringen — mit leerer Regel starten",
+    "publishNow": "Jetzt veröffentlichen, damit die Regel greifen kann",
+    "publishNowHint": "Ein Entwurf trifft nie eine Zeile oder einen Periodenlauf. Lassen Sie dies eingeschaltet, außer Sie wollen die Definition erst prüfen.",
+    "advancedAfter": "Nach dem Anlegen stehen weiterhin alle erweiterten Felder zur Verfügung — Bücher, eigene Segmente, Gegenbuchungen und Test.",
+    "when": {
+      "title": "Wann soll sie greifen?",
+      "description": "Gleiches Regelmodell, drei Zeitpunkte. Wählen Sie den, der zum Aufteilungszeitpunkt passt.",
+      "advanced": "Erweitert",
+      "entry": {
+        "title": "Bei Erfassung einer Zeile",
+        "description": "Das Speichern einer passenden Rechnungs-, Spesen- oder Journalzeile ersetzt sie durch die aufgeteilten Kindzeilen.",
+        "example": "Eine Gemeinkostenrechnung über 1.000,00 wird zu vier Abteilungszeilen im Verhältnis 1 : 2 : 3 : 4."
+      },
+      "period": {
+        "title": "Zum Monatsende",
+        "description": "Eine Periodenumlage liest einen Pool, verteilt ihn und bucht ein eigenes Umlagejournal.",
+        "example": "Nicht zugeordneter IT-Aufwand wird nach Periodenschluss per Kopfzahl auf alle Abteilungen umgebucht."
+      },
+      "post": {
+        "title": "Bei Buchung des Belegs",
+        "description": "Zusätzliche Journalzeilen landen auf demselben Beleg, gestempelt mit dieser Regel als Beiträger.",
+        "example": "Nutzen Sie dies, wenn der Quellbeleg ganz bleiben soll und die Umlage nur das Hauptbuch betrifft."
+      }
+    },
+    "source": {
+      "title": "Welche Zeilen soll sie erfassen?",
+      "description": "Benennen Sie die Regel, und filtern Sie dann nach Transaktionsart und passenden Dimensionen. Leere Transaktionsarten bedeuten alle Arten.",
+      "kinds": "Transaktionsarten",
+      "kindsHint": "Das sind Belegarten. Lassen Sie alle ausgeschaltet, um jede Art zu treffen.",
+      "anyKind": "Nichts ausgewählt bedeutet jede Transaktionsart.",
+      "filters": "Quelldimensionen",
+      "filtersHint": "Per UND mit den Transaktionsarten verknüpft. Lassen Sie eine Dimension auf Alle, um sie zu ignorieren. Periodenumlagen sammeln oft den nicht zugeordneten Pool ein.",
+      "filtersAny": "Jede Dimension beginnt auf Alle. Schalten Sie nur die Klassifikatoren auf Ausgewählte, die den Treffer einschränken sollen.",
+      "modeAny": "Alle",
+      "modeUntagged": "Nicht zugeordnet",
+      "modeSpecific": "Ausgewählte",
+      "pickValue": "Wert hinzufügen…",
+      "noValues": "Noch keine aktiven Werte für diese Dimension."
+    },
+    "split": {
+      "title": "Wie soll der Betrag aufgeteilt werden?",
+      "description": "Ein festes Verhältnis ist eine benannte Aufteilung (1, 2, 3, 4). Ein Schlüssel ist eine wiederverwendbare Kennzahl, die Sie hier anhängen — Schlüssel sind keine Regeln.",
+      "ratio": {
+        "title": "Festes Verhältnis",
+        "description": "Relative Gewichte wie 1 : 2 : 3 : 4. Gespeichert als Prozente, die stets 100 ergeben.",
+        "example": "1 + 2 + 3 + 4 = 10 Teile, die Anteile sind also 10 %, 20 %, 30 % und 40 %."
+      },
+      "percent": {
+        "title": "Fester Prozentsatz",
+        "description": "Geben Sie die Prozente selbst ein. Sie müssen 100 ergeben."
+      },
+      "driver": {
+        "title": "Bestehender Schlüssel",
+        "description": "Kopfzahl, Stunden, eine manuelle Tabelle oder ein gespeicherter Bericht. Legen Sie den Schlüssel auf der Registerkarte Schlüssel an und wählen Sie ihn hier."
+      },
+      "driverEmpty": "Noch keine Schlüssel. Ein festes Verhältnis braucht keinen. Legen Sie einen Schlüssel nur an, wenn sich die Gewichte je Periode ändern sollen.",
+      "driverHint": "Der Schlüssel misst eine Dimension. Dynamische Ziele folgen dieser Dimension zur Laufzeit."
+    },
+    "targets": {
+      "title": "Wohin fließt das Geld?",
+      "description": "Wählen Sie die Zieldimension und geben Sie jedem Wert einen Anteil. Ein leeres Konto behält das Quellkonto.",
+      "dimension": "Aufteilen auf",
+      "value": "Ziel",
+      "weight": "Verhältnis",
+      "percent": "Prozent",
+      "pickValue": "Wert wählen…",
+      "add": "Ziel hinzufügen",
+      "noValues": "Noch keine aktiven Werte für diese Dimension.",
+      "needOne": "Wählen Sie mindestens zwei Ziele mit positivem Anteil.",
+      "example": "Eine Zeile über 1.000,00 würde zu {amounts}.",
+      "driverDynamic": "{driver} teilt auf jede {dimension} mit Gewicht auf.",
+      "driverDynamicHint": "Keine Ziele auflisten nötig — der Schlüsselvektor ist die Zielmenge."
+    },
+    "policy": {
+      "title": "Was sollen die Bücher tun?",
+      "description": "Ob die Aufteilung automatisch erfolgt, und ob Kosten wandern oder nur eine dimensionale Zuordnung hinzukommt.",
+      "applyAutomatic": "Automatisch",
+      "applyAutomaticHint": "Passende Zeilen werden beim Speichern aufgeteilt.",
+      "applySuggest": "Vorschlagen",
+      "applySuggestHint": "Das Zeilenraster bietet einen Chip an; per Klick wird aufgeteilt.",
+      "applyManual": "Manuell",
+      "applyManualHint": "Die Aufteilung erscheint nur in der Verteilungsauswahl der Zeile.",
+      "impactReclass": "Kosten umbuchen",
+      "impactReclassHint": "Schreiben Sie die Quellkoordinate gut und jede Zielkoordinate last. Die Summenbilanz bleibt bestehen.",
+      "impactNetZero": "Zuordnen ohne GuV-Verschiebung",
+      "impactNetZeroHint": "Nullsummenpaar: Der Unternehmensgewinn ändert sich nicht; die Dimensionen schon.",
+      "periodActivityHint": "Buchen Sie die gebuchten Bewegungen dieser Periode um, ohne die eigenen Zeilen dieser Regel.",
+      "periodBalanceHint": "Legen Sie den Periodenschlusssaldo des Quellpools um.",
+      "runManualHint": "Vorschau und Buchung erfolgen auf der Registerkarte Läufe.",
+      "runAutoPreviewHint": "Nach Periodenende automatisch eine Vorschau berechnen. Gebucht wird sie trotzdem von Ihnen."
+    },
+    "review": {
+      "title": "Diese Regel anlegen?",
+      "description": "Dies legt dieselbe versionierte Regel an, die danach bearbeitet werden kann. Alles lässt sich nachträglich ändern.",
+      "when": "Greift {mode}",
+      "sourceAnyKind": "Trifft jede Transaktionsart",
+      "sourceKinds": "Trifft {kinds}",
+      "sourceAnyDims": "Kein zusätzlicher Quelldimensionsfilter",
+      "sourceUntagged": "Nur nicht zugeordnete {dimension}",
+      "sourceValues": "{dimension}: {values}",
+      "splitRatio": "Aufteilung {weights} → {percents}",
+      "splitPercent": "Aufteilung {percents}",
+      "splitDriver": "Aufteilung per Schlüssel {driver}",
+      "targets": "Auf {dimension}: {names}"
+    }
   },
   "lineage": {
     "title": "Umlageherkunft",
