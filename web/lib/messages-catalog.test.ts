@@ -2319,3 +2319,276 @@ test('admin setup and permissions copy ships translated in fr and es', () => {
     assert.deepEqual(drift, [], `${locale} admin scattered translations drop or rename ICU placeholders`)
   }
 })
+
+test('analytics copy ships translated in fr, es and de', () => {
+  // i4: the analytics namespace (1883 keys) rendered English for the
+  // customer, vendor, utilization, spendVelocity, sentinel, cashWeek and
+  // categoryManager sections in fr/es/de. Every leaf must exist, keep its
+  // ICU placeholders, and differ from English except for reviewed cognates,
+  // pinned to the exact term. ja/zh/pt-BR are owned by sibling shards and
+  // extend this pin when they land.
+  const identicalByFact = new Set([
+    "de:analytics.cashWeek.actionBar.summary|{count} {kind} · {total}",
+    "de:analytics.cashWeek.meta.paymentTrend|Trend",
+    "de:analytics.cashWeek.table.id|ID",
+    "de:analytics.cashWeek.table.status|Status",
+    "de:analytics.cashflow.vitals.arHint|(Cash + AR) / AP",
+    "de:analytics.cashflow.vitals.cashCycleHint|DSO / DPO",
+    "de:analytics.categoryManager.form.name|Name",
+    "de:analytics.charts.bridge.start|Start",
+    "de:analytics.common.monthYear|{month} ''{yy}",
+    "de:analytics.common.monthsShort.apr|Apr",
+    "de:analytics.common.monthsShort.aug|Aug",
+    "de:analytics.common.monthsShort.feb|Feb",
+    "de:analytics.common.monthsShort.jan|Jan",
+    "de:analytics.common.monthsShort.jul|Jul",
+    "de:analytics.common.monthsShort.jun|Jun",
+    "de:analytics.common.monthsShort.nov|Nov",
+    "de:analytics.common.monthsShort.sep|Sep",
+    "de:analytics.customer.csv.segment|Segment",
+    "de:analytics.customer.panels.segmentCustomers|{segment} ({count})",
+    "de:analytics.customer.profitTier.marginal|Marginal",
+    "de:analytics.customer.table.f|F",
+    "de:analytics.customer.table.mom|MoM",
+    "de:analytics.customer.table.m|M",
+    "de:analytics.customer.table.r|R",
+    "de:analytics.customer.table.segment|Segment",
+    "de:analytics.customer.tier.bronze|Bronze",
+    "de:analytics.customer.tier.gold|Gold",
+    "de:analytics.financialHealth.budget.columns.budget|Budget",
+    "de:analytics.financialHealth.budget.columns.status|Status",
+    "de:analytics.financialHealth.budget.csv|CSV",
+    "de:analytics.financialHealth.ratios.rule_of_40.label|Rule of 40",
+    "de:analytics.financialHealth.subKpi.roic|ROIC",
+    "de:analytics.financialHealth.subKpi.rule40|Rule of 40",
+    "de:analytics.financialHealth.tabs.budget|Budget",
+    "de:analytics.hub.cards.sentinelTitle|Sentinel",
+    "de:analytics.sentinel.coverage.benfordBold|Benford",
+    "de:analytics.sentinel.flag.rsf|RSF",
+    "de:analytics.sentinel.kind.journal|Journal",
+    "de:analytics.sentinel.kpi.benford|Benford",
+    "de:analytics.sentinel.kpi.signal|Signal",
+    "de:analytics.sentinel.sub.twoD|2D: {value}",
+    "de:analytics.sentinel.table.z|Z",
+    "de:analytics.sentinel.tabs.benford|Benford",
+    "de:analytics.sentinel.title|Sentinel",
+    "de:analytics.spendVelocity.detectors.zombie.label|Zombies",
+    "de:analytics.spendVelocity.table.details|Details",
+    "de:analytics.spendVelocity.table.sparkline|Sparkline",
+    "de:analytics.spendVelocity.table.trend|Trend",
+    "de:analytics.spendVelocity.tabs.trends|Trends",
+    "de:analytics.trueCost.absorption.monthCell|M{n}",
+    "de:analytics.trueCost.config.categoryCount|{count, number}",
+    "de:analytics.trueCost.config.departmentCount|{count, number}",
+    "de:analytics.trueCost.matrix.csv|CSV",
+    "de:analytics.trueCost.presets.rate_hours|50/50",
+    "de:analytics.trueCost.selling.aggregation|Aggregation",
+    "de:analytics.trueCost.selling.median|Median",
+    "de:analytics.trueCost.selling.namePlaceholder|Name",
+    "de:analytics.trueCost.tabs.matrix|Matrix",
+    "de:analytics.trueCost.tabs.trends|Trends",
+    "de:analytics.utilization.heatmap|Heatmap",
+    "de:analytics.utilization.outlook.neutral|Neutral",
+    "de:analytics.utilization.sources.introTail|:",
+    "de:analytics.utilization.subTabs.treemap|Treemap",
+    "de:analytics.utilization.table.max|Maximum",
+    "de:analytics.utilization.table.min|Minimum",
+    "es:analytics.cashWeek.actionBar.summary|{count} {kind} · {total}",
+    "es:analytics.cashWeek.table.id|ID",
+    "es:analytics.cashflow.vitals.cashCycleHint|DSO / DPO",
+    "es:analytics.common.monthYear|{month} ''{yy}",
+    "es:analytics.customer.panels.segmentCustomers|{segment} ({count})",
+    "es:analytics.customer.profitTier.marginal|Marginal",
+    "es:analytics.customer.table.f|F",
+    "es:analytics.customer.table.mom|MoM",
+    "es:analytics.customer.table.m|M",
+    "es:analytics.customer.table.r|R",
+    "es:analytics.financialHealth.budget.csv|CSV",
+    "es:analytics.financialHealth.subKpi.roic|ROIC",
+    "es:analytics.financialHealth.tabs.ratios|Ratios",
+    "es:analytics.hub.cards.sentinelTitle|Sentinel",
+    "es:analytics.sentinel.coverage.benfordBold|Benford",
+    "es:analytics.sentinel.drill.top|top {count}",
+    "es:analytics.sentinel.flag.rsf|RSF",
+    "es:analytics.sentinel.kpi.benford|Benford",
+    "es:analytics.sentinel.no|No",
+    "es:analytics.sentinel.sequential.runTotal| — total {total} ({first} → {last})",
+    "es:analytics.sentinel.sub.twoD|2D: {value}",
+    "es:analytics.sentinel.table.doc1|Doc 1",
+    "es:analytics.sentinel.table.doc2|Doc 2",
+    "es:analytics.sentinel.table.z|Z",
+    "es:analytics.sentinel.tabs.benford|Benford",
+    "es:analytics.sentinel.title|Sentinel",
+    "es:analytics.spendVelocity.table.detector|Detector",
+    "es:analytics.spendVelocity.table.sparkline|Sparkline",
+    "es:analytics.trueCost.absorption.monthCell|M{n}",
+    "es:analytics.trueCost.allocation.base|Base",
+    "es:analytics.trueCost.allocation.perFte|{currency}/FTE",
+    "es:analytics.trueCost.cards.base|Base",
+    "es:analytics.trueCost.cellFlyout.colTotal|Total",
+    "es:analytics.trueCost.config.categoryCount|{count, number}",
+    "es:analytics.trueCost.config.departmentCount|{count, number}",
+    "es:analytics.trueCost.custom.typeManual|Manual",
+    "es:analytics.trueCost.matrix.csv|CSV",
+    "es:analytics.trueCost.presets.rate_hours|50/50",
+    "es:analytics.trueCost.selling.defaultAdditionalName|G&A",
+    "es:analytics.trueCost.selling.manual|Manual",
+    "es:analytics.utilization.no|No",
+    "es:analytics.utilization.outlook.favorable|Favorable",
+    "es:analytics.utilization.outlook.neutral|Neutral",
+    "es:analytics.utilization.sources.introTail|:",
+    "es:analytics.utilization.subTabs.treemap|Treemap",
+    "es:analytics.utilization.whatif.na|N/A",
+    "fr:analytics.cashWeek.actionBar.summary|{count} {kind} · {total}",
+    "fr:analytics.cashWeek.csvHeaders.date|Date",
+    "fr:analytics.cashWeek.csvHeaders.type|Type",
+    "fr:analytics.cashWeek.table.date|Date",
+    "fr:analytics.cashWeek.table.id|ID",
+    "fr:analytics.cashWeek.table.type|Type",
+    "fr:analytics.cashflow.horizon.label|Horizon",
+    "fr:analytics.cashflow.kpi.netSub|{change} net",
+    "fr:analytics.cashflow.vitals.cashCycleHint|DSO / DPO",
+    "fr:analytics.categoryManager.form.type|Type",
+    "fr:analytics.charts.weekly.net|Net",
+    "fr:analytics.common.monthYear|{month} ''{yy}",
+    "fr:analytics.customer.csv.segment|Segment",
+    "fr:analytics.customer.insights.scoreExcellent|Excellent",
+    "fr:analytics.customer.kpi.champions|Champions",
+    "fr:analytics.customer.kpi.excellent|Excellent",
+    "fr:analytics.customer.margin.excellent|Excellent",
+    "fr:analytics.customer.panels.segmentCustomers|{segment} ({count})",
+    "fr:analytics.customer.profitTier.marginal|Marginal",
+    "fr:analytics.customer.segment.champions|Champions",
+    "fr:analytics.customer.sub.score40to59|score 40–59",
+    "fr:analytics.customer.sub.score80Plus|score ≥ 80",
+    "fr:analytics.customer.sub.scoreBelow40|score < 40",
+    "fr:analytics.customer.table.f|F",
+    "fr:analytics.customer.table.mom|MoM",
+    "fr:analytics.customer.table.m|M",
+    "fr:analytics.customer.table.r|R",
+    "fr:analytics.customer.table.score|Score",
+    "fr:analytics.customer.table.segment|Segment",
+    "fr:analytics.customer.tabs.configuration|Configuration",
+    "fr:analytics.customer.tabs.segmentation|Segmentation",
+    "fr:analytics.customer.tier.bronze|Bronze",
+    "fr:analytics.financialHealth.budget.columns.budget|Budget",
+    "fr:analytics.financialHealth.budget.columns.type|Type",
+    "fr:analytics.financialHealth.budget.csv|CSV",
+    "fr:analytics.financialHealth.score.excellent|Excellent",
+    "fr:analytics.financialHealth.subKpi.roic|ROIC",
+    "fr:analytics.financialHealth.tabs.budget|Budget",
+    "fr:analytics.financialHealth.tabs.configuration|Configuration",
+    "fr:analytics.financialHealth.tabs.ratios|Ratios",
+    "fr:analytics.financialHealth.tabs.segments|Segments",
+    "fr:analytics.hub.cards.sentinelTitle|Sentinel",
+    "fr:analytics.sentinel.benford.acceptable|Acceptable",
+    "fr:analytics.sentinel.benford.excellent|Excellent",
+    "fr:analytics.sentinel.coverage.benfordBold|Benford",
+    "fr:analytics.sentinel.drill.documentsTotal|{count} documents · {total}",
+    "fr:analytics.sentinel.drill.top|top {count}",
+    "fr:analytics.sentinel.flag.rsf|RSF",
+    "fr:analytics.sentinel.kind.journal|Journal",
+    "fr:analytics.sentinel.kpi.benford|Benford",
+    "fr:analytics.sentinel.kpi.signal|Signal",
+    "fr:analytics.sentinel.sequential.runTotal| — total {total} ({first} → {last})",
+    "fr:analytics.sentinel.sub.documents|documents",
+    "fr:analytics.sentinel.table.action|Action",
+    "fr:analytics.sentinel.table.date|Date",
+    "fr:analytics.sentinel.table.doc1|Doc 1",
+    "fr:analytics.sentinel.table.doc2|Doc 2",
+    "fr:analytics.sentinel.table.document|Document",
+    "fr:analytics.sentinel.table.members|Documents",
+    "fr:analytics.sentinel.table.z|Z",
+    "fr:analytics.sentinel.tabs.benford|Benford",
+    "fr:analytics.sentinel.tabs.config|Configuration",
+    "fr:analytics.sentinel.title|Sentinel",
+    "fr:analytics.spendVelocity.config.fragmentation.label|Fragmentation",
+    "fr:analytics.spendVelocity.detectors.anomaly.label|Anomalies",
+    "fr:analytics.spendVelocity.detectors.concentration.label|Concentration",
+    "fr:analytics.spendVelocity.detectors.fragmentation.label|Fragmentation",
+    "fr:analytics.spendVelocity.detectors.zombie.label|Zombies",
+    "fr:analytics.spendVelocity.sub.anomaliesCount|{count} anomalies",
+    "fr:analytics.spendVelocity.table.impact|Impact",
+    "fr:analytics.spendVelocity.table.sparkline|Sparkline",
+    "fr:analytics.spendVelocity.tabs.config|Configuration",
+    "fr:analytics.spendVelocity.trend.stable|Stable",
+    "fr:analytics.trueCost.absorption.monthCell|M{n}",
+    "fr:analytics.trueCost.allocation.base|Base",
+    "fr:analytics.trueCost.cards.base|Base",
+    "fr:analytics.trueCost.cards.source|Source",
+    "fr:analytics.trueCost.cards.type|Type",
+    "fr:analytics.trueCost.cellFlyout.colTotal|Total",
+    "fr:analytics.trueCost.config.categoryCount|{count, number}",
+    "fr:analytics.trueCost.config.departmentCount|{count, number}",
+    "fr:analytics.trueCost.matrix.csv|CSV",
+    "fr:analytics.trueCost.presets.rate_hours|50/50",
+    "fr:analytics.trueCost.tabs.config|Configuration",
+    "fr:analytics.utilization.outlook.favorable|Favorable",
+    "fr:analytics.utilization.subTabs.anomalies|Anomalies",
+    "fr:analytics.utilization.subTabs.treemap|Treemap",
+    "fr:analytics.utilization.table.date|Date",
+    "fr:analytics.utilization.table.max|Maximum",
+    "fr:analytics.utilization.table.min|Minimum",
+    "fr:analytics.utilization.tabs.config|Configuration",
+    "fr:analytics.utilization.tabs.intelligence|Intelligence",
+    "fr:analytics.utilization.whatif.na|N/A",
+    "fr:analytics.vendor.kpi.hhi|Concentration (HHI)",
+    "fr:analytics.vendor.quadrant.niche.label|Niche",
+    "fr:analytics.vendor.table.score|Score",
+  ])
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()].filter((key) => key.startsWith('analytics.'))
+  // ICU parity is pinned for the seven sections owned by shard i4; the
+  // pre-existing sections carry select-branch prose braces (trueCost
+  // scenarios render Reducing/Adding words, correctly translated)
+  // that a brace-counting check cannot distinguish from placeholders.
+  const icuOwned = [
+    'analytics.customer.',
+    'analytics.vendor.',
+    'analytics.utilization.',
+    'analytics.spendVelocity.',
+    'analytics.sentinel.',
+    'analytics.cashWeek.',
+    'analytics.categoryManager.',
+  ]
+  const icuWanted = wanted.filter((key) => icuOwned.some((prefix) => key.startsWith(prefix)))
+  assert.equal(icuWanted.length, 1251, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 1883, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
+  for (const key of wanted) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const arms = (value: string): string[] => value.match(/, +(plural|select)/g) ?? []
+  for (const locale of ['de', 'es', 'fr']) {
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...identicalByFact].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const drift = icuWanted.filter((key) => {
+      // de:analytics.utilization.hotspot.others is the one deliberate
+      // exception: the English-only `{s}` is a literal plural suffix with
+      // no German counterpart ("weitere" is invariant) — the one/other arms
+      // are still asserted below.
+      if (locale === 'de' && key === 'analytics.utilization.hotspot.others') return false
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} analytics translations drop or rename ICU placeholders`)
+    const armsDrift = icuWanted.filter((key) => {
+      const expected = arms(source.get(key) ?? '').join(',')
+      const actual = arms(catalog.get(key) ?? '').join(',')
+      return expected !== actual
+    })
+    assert.deepEqual(armsDrift, [], `${locale} analytics translations drop ICU plural/select arms`)
+  }
+})
