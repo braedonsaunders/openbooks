@@ -627,6 +627,8 @@
         "unit": "単位",
         "due_date": "期日",
         "is_open_item": "未消込項目",
+        "open_amount": "未消込金額（基軸通貨）",
+        "has_open_balance": "未消込残高あり",
         "reconciled_at": "消込日時",
         "entry_id": "仕訳（ID）",
         "account_id": "勘定（ID）",

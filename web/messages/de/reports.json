@@ -627,6 +627,8 @@
         "unit": "Einheit",
         "due_date": "Fälligkeitsdatum",
         "is_open_item": "Offener Posten",
+        "open_amount": "Offener Betrag (Basis)",
+        "has_open_balance": "Offener Saldo",
         "reconciled_at": "Abgestimmt am",
         "entry_id": "Buchung (ID)",
         "account_id": "Konto (ID)",

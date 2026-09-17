@@ -631,6 +631,8 @@
         "unit": "Unit",
         "due_date": "Due date",
         "is_open_item": "Open item",
+        "open_amount": "Open amount (base)",
+        "has_open_balance": "Has open balance",
         "reconciled_at": "Reconciled at",
         "entry_id": "Entry (id)",
         "account_id": "Account (id)",

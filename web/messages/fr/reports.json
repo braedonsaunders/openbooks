@@ -627,6 +627,8 @@
         "unit": "Unité",
         "due_date": "Date d’échéance",
         "is_open_item": "Poste ouvert",
+        "open_amount": "Montant ouvert (base)",
+        "has_open_balance": "Solde ouvert",
         "reconciled_at": "Rapproché le",
         "entry_id": "Écriture (id)",
         "account_id": "Compte (id)",
