@@ -1506,7 +1506,9 @@
       "primaryActiveRequired": "The primary accounting book must remain active.",
       "archiveOnly": "Accounting books are retained for ledger history and can only be archived.",
       "invalidUrl": "Enter a valid http:// or https:// government filing URL.",
-      "invalidDepreciationFormula": "Enter a valid depreciation formula using the documented variables and operators."
+      "invalidDepreciationFormula": "Enter a valid depreciation formula using the documented variables and operators.",
+      "overlap": "An active rate already covers this jurisdiction for this period.",
+      "saveTimedOut": "The save timed out. Check the table before retrying — the record may already exist."
     },
     "groups": {
       "company": "Company",

@@ -23,6 +23,9 @@ import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
 
+/** Bound for one setup save before the drawer surfaces a timeout (F-t09-016). */
+const SAVE_TIMEOUT_MS = 30_000
+
 export function NewSetupButton({
   entityKey,
   label,
@@ -169,6 +172,12 @@ export function SetupDrawer({
       return
     }
     setBusy(true)
+    // A response that never arrives wedges the drawer open with zero feedback
+    // and invites blind duplicate retries (F-t09-016): bound the request and
+    // surface a timeout as a persistent error. The row may already exist, so
+    // the copy points at the table instead of inviting a retry.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
     try {
       const body: Record<string, unknown> = { ...form, ...fixedValues }
       // A field the form stopped showing must not persist behind the UI: a pay
@@ -188,6 +197,7 @@ export function SetupDrawer({
         method: creating ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -198,7 +208,15 @@ export function SetupDrawer({
       toast.success(creating ? t('created') : t('updated'))
       router.push(closeHref)
       router.refresh()
+    } catch (e) {
+      // A rejected transport previously escaped with zero feedback (F-t09-016:
+      // drawer open, no toast, button wedged until remount). Name it inline.
+      const timedOut = e instanceof DOMException && e.name === 'AbortError'
+      const message = timedOut ? t('errors.saveTimedOut') : tCommon('feedback.saveFailed')
+      setFieldError(message)
+      toast.error(message)
     } finally {
+      clearTimeout(timer)
       // A rejected transport must not wedge the button on: without this,
       // every later click silently dies on the stuck disabled button.
       setBusy(false)
@@ -231,6 +249,7 @@ export function SetupDrawer({
     const code = record?.code
     const message = record?.error
     if (code === 'duplicate') return t('errors.duplicate')
+    if (code === 'overlap') return t('errors.overlap')
     if (code === 'in-use') return t('errors.inUse')
     if (code === 'primary-required') return t('errors.primaryRequired')
     if (code === 'primary-active-required') return t('errors.primaryActiveRequired')
