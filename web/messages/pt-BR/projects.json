@@ -36,6 +36,7 @@
     "unbilledDetail": "{entries} lançamentos de horas · {hours}h · {lines} linhas de custo",
     "requestCreated": "Solicitação de faturamento criada",
     "requestFailed": "Não foi possível criar a solicitação de faturamento",
+    "applicationsPermissionRequired": "É necessário acesso ao Contas a Receber para ver as medições a pagar deste projeto.",
     "invoiceCreated": "Fatura {number} criada",
     "invoiceFailed": "Não foi possível criar a fatura",
     "invoiceType": "Etapa da fatura",
@@ -253,7 +254,10 @@
     "billedYes": "Faturado",
     "created": "Apropriação lançada",
     "failed": "Não foi possível lançar a apropriação",
-    "pickItem": "Escolha um item primeiro"
+    "pickItem": "Escolha um item primeiro",
+    "operator": "Operador",
+    "selectOperator": "Selecionar um operador…",
+    "operatorNeedsEquipment": "Somente linhas de equipamento"
   },
   "recognition": {
     "title": "Reconhecimento de receita",
@@ -285,7 +289,6 @@
     "margin_pct": "Margem",
     "revenue_posted": "Receita lançada",
     "labor_cost": "Custo de mão de obra",
-    "overhead": "Encargos",
     "billable_value": "Valor faturável",
     "unbilled_billable": "Faturável não faturado",
     "hints": {
@@ -297,7 +300,8 @@
       "gross_profit": "Lucro sobre custos lançados — exclui estimativas.",
       "overhead": "Incluído no custo total da obra e, portanto, já deduzido do lucro bruto.",
       "overhead_informational": "Não incluído no custo total da obra nem deduzido do lucro bruto."
-    }
+    },
+    "overhead": "Encargos"
   },
   "invoicingPref": {
     "heading": "Preferências de faturamento",
@@ -311,9 +315,176 @@
     "customerHint": "Substitua o tipo de projeto para este cliente.",
     "projectHint": "Substitua o tipo/cliente para este projeto."
   },
+  "schedule": {
+    "status": {
+      "not_started": "Não iniciado",
+      "in_progress": "Em andamento",
+      "complete": "Concluído",
+      "on_hold": "Suspenso"
+    },
+    "view": {
+      "gantt": "Gantt",
+      "list": "Lista",
+      "board": "Quadro"
+    },
+    "empty": {
+      "title": "Nenhum trabalho programado ainda",
+      "description": "Adicione a primeira atividade para começar a montar o cronograma deste projeto.",
+      "action": "Adicionar atividade"
+    },
+    "leveling": {
+      "heading": "Nivelamento de recursos",
+      "description": "Atrase atividades para que nenhuma equipe, máquina ou subcontratada ultrapasse sua capacidade diária. Revise as movimentações propostas antes de aplicá-las."
+    }
+  },
   "invoicing": {
     "rateCardLapse": "Quando a tabela de preços expirou",
     "block": "Bloquear o faturamento",
     "carry_forward": "Faturar pela última tabela"
+  },
+  "wipBilling": {
+    "wipHealthAria": "Saúde do WIP",
+    "tiles": {
+      "availableWip": "WIP disponível",
+      "availableWipSub": "Elegível e sem trava",
+      "over90": "Mais de 90 dias",
+      "over90Sub": "{amount} com 61–90 dias",
+      "realization": "Realização",
+      "realizationSub": "{amount} faturado",
+      "leakage": "Vazamento",
+      "leakageSub": "{amount} travado há mais de 90 dias"
+    },
+    "list": {
+      "title": "Planilhas de pré-fatura",
+      "description": "Revise o trabalho de projeto elegível, os ajustes de faturamento e o status de aprovação.",
+      "newPrebill": "Nova pré-fatura"
+    },
+    "empty": {
+      "noProjectsTitle": "Crie primeiro um projeto",
+      "noPrebillsTitle": "Nenhuma planilha de pré-fatura ainda",
+      "noProjectsDescription": "A revisão de trabalhos em curso parte de um projeto ativo com horas ou custos faturáveis.",
+      "noPrebillsDescription": "Crie uma planilha para congelar o trabalho de projeto não faturado elegível até uma data de corte.",
+      "createPrebill": "Criar pré-fatura",
+      "goToProjects": "Ir para projetos"
+    },
+    "table": {
+      "worksheet": "Planilha",
+      "project": "Projeto",
+      "status": "Status",
+      "proposed": "Proposto",
+      "through": "Até {periodEnd}",
+      "noCustomer": "Sem cliente"
+    },
+    "createDrawer": {
+      "title": "Nova planilha de pré-fatura",
+      "description": "Congele o trabalho não faturado elegível até uma data de corte.",
+      "cancel": "Cancelar",
+      "creating": "Criando…",
+      "submit": "Criar pré-fatura",
+      "projectLabel": "Projeto",
+      "projectHelp": "Somente tipos de projeto ativos com faturamento fonte padrão por tempo e materiais ou custo mais margem são listados.",
+      "configureProjectTypes": "Configurar tipos de projeto",
+      "startLabel": "Início (opcional)",
+      "cutoffLabel": "Data de corte",
+      "notesLabel": "Notas de revisão",
+      "notesPlaceholder": "Escopo, instruções de faturamento ou contexto para o revisor"
+    },
+    "detail": {
+      "description": "{projectName} · até {periodEnd}",
+      "sendForReview": "Enviar para revisão",
+      "return": "Devolver",
+      "approve": "Aprovar",
+      "converting": "Convertendo…",
+      "createInvoice": "Criar fatura",
+      "void": "Anular",
+      "openInvoice": "Abrir {invoiceNumber}"
+    },
+    "workflow": {
+      "returnTitle": "Devolver planilha a rascunho",
+      "voidTitle": "Anular planilha",
+      "returnDescription": "Explique o que o preparador precisa corrigir. Isso passa a fazer parte da trilha de revisão.",
+      "voidDescription": "Explique por que esta planilha não deve seguir. O WIP fonte continua disponível para uma planilha futura.",
+      "reasonLabel": "Motivo",
+      "saving": "Salvando…",
+      "returnSubmit": "Devolver a rascunho",
+      "voidSubmit": "Anular planilha",
+      "cancel": "Cancelar"
+    },
+    "metrics": {
+      "original": "Original",
+      "proposed": "Proposto",
+      "adjustment": "Ajuste",
+      "cost": "Custo"
+    },
+    "lockedAlert": "Este instantâneo de aprovação está bloqueado. Converta-o como aprovado, ou anule-o e prepare uma nova planilha.",
+    "linesTable": {
+      "source": "Origem",
+      "date": "Data",
+      "description": "Descrição",
+      "cost": "Custo",
+      "original": "Original",
+      "proposedSupport": "Proposto / suporte"
+    },
+    "trail": {
+      "title": "Trilha de revisão",
+      "system": "Sistema"
+    },
+    "toasts": {
+      "created": "{worksheetNumber} criada com {sourceCount} linhas fonte",
+      "sentForReview": "Enviada para revisão",
+      "approved": "Pré-fatura aprovada",
+      "returnedToDraft": "Devolvida a rascunho",
+      "voided": "Pré-fatura anulada",
+      "converted": "{documentNumber} criada como fatura rascunho"
+    },
+    "lineToasts": {
+      "saved": "Valor de faturamento salvo",
+      "holdApplied": "Trava de faturamento aplicada",
+      "holdReleased": "Trava de faturamento liberada"
+    },
+    "line": {
+      "held": "Travada",
+      "time": "Tempo",
+      "cost": "Custo",
+      "amountAria": "Valor de faturamento proposto",
+      "reasonAria": "Motivo do ajuste",
+      "evidencePlaceholder": "Referências de evidência, separadas por vírgula",
+      "saving": "Salvando…",
+      "save": "Salvar",
+      "hold": "Travar",
+      "holdReason": "Motivo da trava",
+      "evidenceReferences": "Referências de evidência",
+      "applyHold": "Aplicar trava",
+      "releaseHold": "Destravar",
+      "releaseReason": "Motivo da liberação",
+      "release": "Liberar"
+    }
+  },
+  "duplicates": {
+    "title": "Projetos duplicados",
+    "description": "Projetos com mesma referência de origem, mesmo nome e cliente, ou mesmo número de obra. Escolha o sobrevivente por grupo, pré-visualize o impacto e unifique.",
+    "loading": "Carregando duplicadas…",
+    "empty": "Nenhum projeto duplicado encontrado.",
+    "kind": {
+      "source_ref": "Mesma referência de origem ({key})",
+      "name_customer": "Mesmo nome e cliente ({key})",
+      "job_number": "Mesmo número de obra ({key})"
+    },
+    "chooseSurvivor": "Selecione o projeto sobrevivente. Todas as referências dos demais passam para ele em uma transação.",
+    "survivor": "Sobrevivente",
+    "code": "Código",
+    "name": "Nome",
+    "status": "Status",
+    "action": "Ação",
+    "preview": "Pré-visualizar",
+    "merge": "Unificar ({count, plural, one {# referência} other {# referências}})",
+    "alreadyMerged": "Já unificado.",
+    "moveCount": "{count, plural, one {# referência será movida} other {# referências serão movidas}}.",
+    "kept": "Mantido",
+    "impactNote": "Unificações são recusadas quando há linhas em documentos não rascunhos, números de aditivos ou células orçamentárias em conflito. O projeto unificado é desativado com um apontamento para seu sucessor.",
+    "loadFailed": "Não foi possível carregar as duplicadas.",
+    "previewFailed": "Não foi possível pré-visualizar a unificação.",
+    "mergeFailed": "Não foi possível unificar os projetos.",
+    "merged": "Projetos unificados."
   }
 }

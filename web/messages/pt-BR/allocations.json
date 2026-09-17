@@ -47,6 +47,7 @@
     "list": {
       "heading": "Regras de rateio",
       "new": "Nova regra",
+      "emptyTitle": "Ainda não há regras de rateio",
       "empty": "Ainda não há regras de rateio. Crie a primeira para começar a distribuir custos.",
       "columns": {
         "name": "Nome",
@@ -60,7 +61,9 @@
       "noVersion": "Sem versão publicada",
       "inactive": "Inativa",
       "active": "Ativa",
-      "searchPlaceholder": "Pesquisar regras…"
+      "searchPlaceholder": "Pesquisar regras…",
+      "emptyDescription": "Crie a primeira regra para começar a ratear custos.",
+      "blurb": "Regras versionadas que disparam no lançamento, na contabilização ou como varredura do período. Regra nova abre uma configuração guiada."
     },
     "modes": {
       "entry": "No lançamento",
@@ -114,6 +117,8 @@
       },
       "applicabilityHeading": "Quais linhas a regra considera",
       "documentKinds": "Tipos de documento (vazio significa todos)",
+      "documentKindAdd": "Adicionar",
+      "noOptions": "Nada aqui ainda.",
       "accountScope": "Escopo de contas",
       "accountScopes": {
         "any": "Qualquer conta",
@@ -179,6 +184,7 @@
       "lineDescriptionTemplate": "Modelo de descrição da linha",
       "approvalFlow": "Fluxo de aprovação",
       "approvalFlowHint": "UUID de fluxo opcional, exigido antes que uma execução contabilize.",
+      "approvalFlowNone": "Sem fluxo de aprovação",
       "driverAsOfs": {
         "period": "Período",
         "document_date": "Data do documento",
@@ -283,6 +289,7 @@
       "basisNote": "Parcelas se resolvem ao executar a partir do vetor do critério.",
       "periodHeading": "Prévia de um rateio do período",
       "period": "Período",
+      "book": "Livro",
       "openRuns": "Abrir em Execuções",
       "noVersion": "Esta regra ainda não tem versão para testar.",
       "version": "Versão",
@@ -316,12 +323,15 @@
     "key": "Chave",
     "keyHint": "Apelido em minúsculas, único por organização",
     "name": "Nome",
+    "fieldDescription": "Descrição",
     "dimension": "Dimensão",
     "sourceKind": "Fonte",
     "unit": "Unidade",
     "active": "Ativo",
+    "inactive": "Inativo",
     "showInactive": "Mostrar inativos",
     "empty": "Ainda não há critérios.",
+    "emptyTitle": "Ainda não há critérios",
     "deleteConfirm": "Excluir o critério {name}? Os valores manuais vão junto.",
     "sourceKinds": {
       "statistical_journal": "Diário estatístico",
@@ -372,6 +382,7 @@
     "note": "Nota",
     "addValue": "Adicionar valor",
     "noValues": "Ainda não há valores para este critério.",
+    "noDimensionValues": "Ainda não há valores ativos de {dimension} — crie um antes de adicionar valores do critério.",
     "endValue": "Datar o fim",
     "deleteValueConfirm": "Excluir este valor?",
     "preview": "Prévia do vetor",
@@ -385,7 +396,10 @@
     "loadFailed": "Não foi possível carregar os critérios.",
     "saveFailed": "Não foi possível salvar o critério.",
     "deleteFailed": "Não foi possível excluir o critério.",
-    "previewFailed": "Não foi possível previsualizar o vetor."
+    "previewFailed": "Não foi possível previsualizar o vetor.",
+    "manualCreateHint": "Salve o critério primeiro — seus valores com vigência ficam editáveis aqui logo depois.",
+    "valuesAfterSave": "Critério salvo. Adicione seus valores com vigência abaixo.",
+    "emptyDescription": "Crie o primeiro critério para começar a ratear custos."
   },
   "runs": {
     "title": "Execuções",
@@ -395,6 +409,7 @@
     "filterStatus": "Status",
     "all": "Todos",
     "empty": "Ainda não há execuções. Previsualize uma regra para calcular uma.",
+    "emptyTitle": "Ainda não há execuções",
     "columns": {
       "rule": "Regra",
       "period": "Período",
@@ -419,6 +434,7 @@
     },
     "previewRun": "Previsualizar execução",
     "runDetail": "Detalhe da execução",
+    "summary": "Resumo",
     "sources": "Fontes",
     "driverVector": "Vetor do critério",
     "targets": "Destinos",
@@ -450,7 +466,125 @@
     "journalEntry": "Lançamento",
     "reversalEntry": "Lançamento de estorno",
     "loadFailed": "Não foi possível carregar as execuções.",
-    "detailFailed": "Não foi possível carregar a execução."
+    "detailFailed": "Não foi possível carregar a execução.",
+    "pendingApprovalNotice": "Esta execução aguarda aprovação e não pode ser contabilizada daqui.",
+    "viewApproval": "Abrir a aprovação",
+    "emptyDescription": "Pré-visualize uma regra para calcular uma."
+  },
+  "wizard": {
+    "untitled": "Rateio sem título",
+    "loadFailed": "Não foi possível carregar departamentos e critérios para o guia de configuração.",
+    "createFailed": "Não foi possível criar a regra de rateio.",
+    "publishFailed": "A regra foi salva como rascunho — publique-a quando terminar a definição.",
+    "created": "Regra de rateio salva como rascunho. Publique-a em Versões quando estiver pronta.",
+    "published": "A regra de rateio está publicada e vigente.",
+    "creating": "Criando…",
+    "finish": "Criar regra",
+    "skipGuide": "Pular o guia — abrir uma regra em branco",
+    "publishNow": "Publicar agora para a regra poder disparar",
+    "publishNowHint": "Rascunho nunca coincide com linha nem com execução do período. Deixe ligado salvo se quiser revisar antes a definição.",
+    "advancedAfter": "Após criar, a regra mantém todos os campos avançados — livros, segmentos personalizados, contrapartidas e teste.",
+    "when": {
+      "title": "Quando ela deve disparar?",
+      "description": "Mesmo modelo de regra, três momentos. Escolha o que combina com quando a divisão deve ocorrer.",
+      "advanced": "Avançado",
+      "entry": {
+        "title": "Ao lançar uma linha",
+        "description": "Salvar uma linha coincidente de fatura, despesa ou diário a substitui pelas linhas filhas divididas.",
+        "example": "Uma fatura de overhead de 1.000,00 vira quatro linhas de departamento na proporção 1 : 2 : 3 : 4."
+      },
+      "period": {
+        "title": "No fim do mês",
+        "description": "Uma varredura do período lê um fundo, rateia e contabiliza seu próprio diário de rateio.",
+        "example": "Gasto de TI sem vínculo é reclassificado para cada departamento por headcount após o fechamento."
+      },
+      "post": {
+        "title": "Ao contabilizar o documento",
+        "description": "Linhas extra do diário caem no mesmo lançamento, carimbadas com esta regra como contribuinte.",
+        "example": "Use quando o documento fonte deve ficar íntegro e o rateio é só contábil."
+      }
+    },
+    "source": {
+      "title": "Quais linhas ela deve captar?",
+      "description": "Dê nome à regra, depois filtre por tipo de transação e dimensões coincidentes. Tipos vazios significam todos.",
+      "kinds": "Tipos de transação",
+      "kindsHint": "São classes de documento. Deixe todos desligados para coincidir com todos os tipos.",
+      "anyKind": "Nada selecionado significa todo tipo de transação.",
+      "filters": "Dimensões de origem",
+      "filtersHint": "Combinados com E com os tipos de transação. Deixe uma dimensão em Qualquer para ignorá-la. Varreduras do período costumam recolher o fundo sem vínculo.",
+      "filtersAny": "Cada dimensão começa em Qualquer. Mude para Estas só nos classificadores que devem restringir a coincidência.",
+      "modeAny": "Qualquer",
+      "modeUntagged": "Sem vínculo",
+      "modeSpecific": "Estas",
+      "pickValue": "Adicionar um valor…",
+      "noValues": "Ainda não há valores ativos para esta dimensão."
+    },
+    "split": {
+      "title": "Como o valor deve se dividir?",
+      "description": "Uma proporção fixa é uma divisão nomeada (1, 2, 3, 4). Um critério é uma medida reutilizável que se anexa aqui — critérios não são regras.",
+      "ratio": {
+        "title": "Proporção fixa",
+        "description": "Pesos relativos como 1 : 2 : 3 : 4. Guardados como percentuais que sempre somam 100.",
+        "example": "1 + 2 + 3 + 4 = 10 partes, então as parcelas são 10 %, 20 %, 30 % e 40 %."
+      },
+      "percent": {
+        "title": "Percentual fixo",
+        "description": "Digite você os percentuais. Precisam somar 100."
+      },
+      "driver": {
+        "title": "Critério existente",
+        "description": "Headcount, horas, tabela manual ou relatório salvo. Crie o critério na aba Critérios e escolha-o aqui."
+      },
+      "driverEmpty": "Ainda não há critérios. Uma proporção fixa não precisa de um. Crie um critério só quando os pesos devam mudar a cada período.",
+      "driverHint": "O critério mede uma dimensão. Destinos dinâmicos seguem essa dimensão na execução."
+    },
+    "targets": {
+      "title": "Para onde vai o dinheiro?",
+      "description": "Escolha a dimensão destino e dê a cada valor uma parcela. Conta vazia mantém a conta de origem.",
+      "dimension": "Dividir entre",
+      "value": "Destino",
+      "weight": "Proporção",
+      "percent": "Percentual",
+      "pickValue": "Escolher um valor…",
+      "add": "Adicionar destino",
+      "noValues": "Ainda não há valores ativos para essa dimensão.",
+      "needOne": "Escolha ao menos dois destinos com parcela positiva.",
+      "example": "Uma linha de 1.000,00 viraria {amounts}.",
+      "driverDynamic": "{driver} vai dividir entre cada {dimension} com peso.",
+      "driverDynamicHint": "Sem listar destinos — o vetor do critério é o conjunto-alvo."
+    },
+    "policy": {
+      "title": "O que os livros devem fazer?",
+      "description": "Se a divisão é automática, e se o custo se move ou só se adiciona atribuição dimensional.",
+      "applyAutomatic": "Automático",
+      "applyAutomaticHint": "Linhas correspondentes se dividem ao salvar.",
+      "applySuggest": "Sugerir",
+      "applySuggestHint": "A grade de linhas oferece um chip; a divisão se aplica ao clicar.",
+      "applyManual": "Manual",
+      "applyManualHint": "A divisão só aparece no seletor de distribuição da linha.",
+      "impactReclass": "Mover o custo",
+      "impactReclassHint": "Credite a coordenada de origem e debite cada destino. O total do balancete se mantém.",
+      "impactNetZero": "Atribuir sem mover o resultado",
+      "impactNetZeroHint": "Par líquido zero: o lucro da empresa não muda; as dimensões, sim.",
+      "periodActivityHint": "Rateie o movimento contabilizado deste período, sem as linhas próprias desta regra.",
+      "periodBalanceHint": "Rateie o saldo de fim de período do fundo de origem.",
+      "runManualHint": "Pré-visualize e contabilize na aba Execuções.",
+      "runAutoPreviewHint": "Após o fechamento, calcule uma prévia automaticamente. A contabilização continua sua."
+    },
+    "review": {
+      "title": "Criar esta regra?",
+      "description": "Isto grava a mesma regra versionada que o painel edita. Dá para mudar tudo depois.",
+      "when": "Dispara {mode}",
+      "sourceAnyKind": "Coincide com todo tipo de transação",
+      "sourceKinds": "Coincide com {kinds}",
+      "sourceAnyDims": "Sem filtro extra de dimensão de origem",
+      "sourceUntagged": "Somente {dimension} sem vínculo",
+      "sourceValues": "{dimension}: {values}",
+      "splitRatio": "Divisão {weights} → {percents}",
+      "splitPercent": "Divisão {percents}",
+      "splitDriver": "Divisão pelo critério {driver}",
+      "targets": "Para {dimension}: {names}"
+    }
   },
   "lineage": {
     "title": "Origem do rateio",
