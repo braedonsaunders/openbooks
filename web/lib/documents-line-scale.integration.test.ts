@@ -25,22 +25,28 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { applyDocumentEdit, DocumentEditError, loadDocumentEditCurrent } = await import("./documents.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("applyDocumentEdit round-trips a stored 8dp unit price", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, "Line scale keeper", "line_scale_keeper");
-    const id = randomUUID();
-    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
-      values (${id},${org.orgId},'customer_invoice','draft','SCALE-INV-1',${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
-    const first = await loadDocumentEditCurrent(id, org.orgId);
+    const { actor, id } = await withBypassContext(async () => {
+      const actor = await createScratchUser(org.orgId, "Line scale keeper", "line_scale_keeper");
+      const id = randomUUID();
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+        values (${id},${org.orgId},'customer_invoice','draft','SCALE-INV-1',${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
+      return { actor, id };
+    });
+    // The edit service and its readers issue bare queries with explicit org
+    // predicates, which pooled RLS denies outside an explicit scope (reads see
+    // zero rows) once ./documents.ts pulls in the web request-org resolver.
+    const first = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
     assert.ok(first);
-    await applyDocumentEdit(
+    await withOrgContext(org.orgId, () => applyDocumentEdit(
       id,
       first,
       {
@@ -48,16 +54,16 @@ test("applyDocumentEdit round-trips a stored 8dp unit price", { skip: !DB }, asy
         lines: [{ accountId: org.accounts.revenue, quantity: "2", unitPrice: "200.00", amount: "400.00" }],
       },
       { orgId: org.orgId, userId: actor, source: "api" },
-    );
-    const stored = (await db.execute<{ quantity: string; unit_price: string }>(sql`
+    ));
+    const stored = await withOrgContext(org.orgId, async () => (await db.execute<{ quantity: string; unit_price: string }>(sql`
       select quantity::text, unit_price::text from document_lines
-       where document_id = ${id} and org_id = ${org.orgId}`)).rows[0]!;
+       where document_id = ${id} and org_id = ${org.orgId}`)).rows[0]!);
     // Premise: storage pads to the column scale.
     assert.equal(stored.unit_price, "200.00000000");
     // The drawer sends back exactly what it read; that must save.
-    const second = await loadDocumentEditCurrent(id, org.orgId);
+    const second = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
     assert.ok(second);
-    await applyDocumentEdit(
+    await withOrgContext(org.orgId, () => applyDocumentEdit(
       id,
       second,
       {
@@ -65,13 +71,13 @@ test("applyDocumentEdit round-trips a stored 8dp unit price", { skip: !DB }, asy
         lines: [{ accountId: org.accounts.revenue, quantity: stored.quantity, unitPrice: stored.unit_price, amount: "400.00" }],
       },
       { orgId: org.orgId, userId: actor, source: "api" },
-    );
-    const doc = (await db.execute<{ subtotal: string; total: string }>(sql`
-      select subtotal::text, total::text from documents where id = ${id} and org_id = ${org.orgId}`)).rows[0]!;
+    ));
+    const doc = await withOrgContext(org.orgId, async () => (await db.execute<{ subtotal: string; total: string }>(sql`
+      select subtotal::text, total::text from documents where id = ${id} and org_id = ${org.orgId}`)).rows[0]!);
     assert.equal(doc.subtotal, "400.0000");
     assert.equal(doc.total, "400.0000");
   } finally {
-    await dropScratchOrg(org.orgId);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -80,17 +86,22 @@ test("applyDocumentEdit refuses junk quantities with a named error, not a storag
   // numeric(28,8) column: "abc", a blank cell, or a 26-digit paste died in
   // Postgres with a driver error (a 500). The edit service must fail closed
   // with the line number instead.
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, "Quantity guard", "quantity_guard");
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, "Quantity guard", "quantity_guard"));
     for (const [index, bad] of ["abc", "", "99999999999999999999999999"].entries()) {
-      const id = randomUUID();
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
-        values (${id},${org.orgId},'customer_invoice','draft',${`QTY-${index}-${id.slice(0, 8)}`},${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
-      const current = await loadDocumentEditCurrent(id, org.orgId);
+      const { id, current } = await withOrgContext(org.orgId, async () => {
+        const id = randomUUID();
+        await withBypassContext(async () => {
+          await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+            values (${id},${org.orgId},'customer_invoice','draft',${`QTY-${index}-${id.slice(0, 8)}`},${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
+        });
+        const current = await loadDocumentEditCurrent(id, org.orgId);
+        return { id, current };
+      });
       assert.ok(current);
       await assert.rejects(
-        applyDocumentEdit(
+        withOrgContext(org.orgId, () => applyDocumentEdit(
           id,
           current,
           {
@@ -98,13 +109,13 @@ test("applyDocumentEdit refuses junk quantities with a named error, not a storag
             lines: [{ accountId: org.accounts.revenue, quantity: bad, unitPrice: "200.00", amount: "400.00" }],
           },
           { orgId: org.orgId, userId: actor, source: "api" },
-        ),
+        )),
         (e: Error) => e instanceof DocumentEditError && (e as { status?: number }).status === 422 && /quantity/i.test(e.message),
         `quantity ${JSON.stringify(bad)} should fail closed with a named error`,
       );
     }
   } finally {
-    await dropScratchOrg(org.orgId);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -113,21 +124,26 @@ test("applyDocumentEdit refuses line money wider than its column with a named er
   // pasted figure wider than the column cleared the format checks and died in
   // Postgres with a driver error (a 500). The edit service must fail closed
   // with the line number instead.
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, "Money range guard", "money_range_guard");
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, "Money range guard", "money_range_guard"));
     const cases = [
       { unitPrice: "200.00", amount: "9999999999999999" },
       { unitPrice: "99999999999999999999999", amount: "400.00" },
     ];
     for (const [index, line] of cases.entries()) {
-      const id = randomUUID();
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
-        values (${id},${org.orgId},'customer_invoice','draft',${`RNG-${index}-${id.slice(0, 8)}`},${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
-      const current = await loadDocumentEditCurrent(id, org.orgId);
+      const { id, current } = await withOrgContext(org.orgId, async () => {
+        const id = randomUUID();
+        await withBypassContext(async () => {
+          await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+            values (${id},${org.orgId},'customer_invoice','draft',${`RNG-${index}-${id.slice(0, 8)}`},${org.subsidiaryId},${org.customerId},${org.date},'CAD','0','0','0',${actor})`);
+        });
+        const current = await loadDocumentEditCurrent(id, org.orgId);
+        return { id, current };
+      });
       assert.ok(current);
       await assert.rejects(
-        applyDocumentEdit(
+        withOrgContext(org.orgId, () => applyDocumentEdit(
           id,
           current,
           {
@@ -135,12 +151,12 @@ test("applyDocumentEdit refuses line money wider than its column with a named er
             lines: [{ accountId: org.accounts.revenue, quantity: "2", ...line }],
           },
           { orgId: org.orgId, userId: actor, source: "api" },
-        ),
+        )),
         (e: Error) => e instanceof DocumentEditError && (e as { status?: number }).status === 422 && /Line 1/.test(e.message),
         `line ${JSON.stringify(line)} should fail closed with a named error`,
       );
     }
   } finally {
-    await dropScratchOrg(org.orgId);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
