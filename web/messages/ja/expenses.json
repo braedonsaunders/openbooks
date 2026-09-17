@@ -23,6 +23,9 @@
     "deleteTitle": "この経費精算書を削除しますか?",
     "deleteDraftBody": "下書きの経費精算書を完全に削除します。この操作は取り消せません。",
     "deletePostedBody": "経費精算書を完全に削除し、元帳への影響を取り消します。この操作は取り消せません。",
+    "recallTitle": "このレポートを編集しますか？",
+    "recallBodyPending": "編集すると、保留中の承認リクエストがキャンセルされ、レポートは下書きに戻ります。承認履歴は保持されます。",
+    "recallBodyApproved": "編集すると、この承認済みレポートは下書きとして再度開かれます。承認履歴は保持されます。",
     "columns": {
       "taxAmount": "税額"
     },
@@ -36,6 +39,7 @@
   "toasts": {
     "submitted": "承認のために提出しました",
     "posted": "元帳に記帳しました",
+    "recalled": "下書きに戻しました",
     "actionFailed": "アクションに失敗しました",
     "autosaveFailed": "自動保存に失敗しました",
     "deleted": "経費精算書を削除しました",

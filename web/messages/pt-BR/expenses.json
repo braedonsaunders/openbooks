@@ -23,6 +23,9 @@
     "deleteTitle": "Excluir este relatório de despesas?",
     "deleteDraftBody": "Isso exclui permanentemente o relatório de despesas rascunho. Isso não pode ser desfeito.",
     "deletePostedBody": "Isso exclui permanentemente o relatório de despesas e remove seu impacto no razão. Isso não pode ser desfeito.",
+    "recallTitle": "Editar este relatório?",
+    "recallBodyPending": "Ao editar, a solicitação de aprovação pendente é cancelada e o relatório volta a rascunho. O histórico de aprovações é mantido.",
+    "recallBodyApproved": "Ao editar, este relatório aprovado é reaberto como rascunho. O histórico de aprovações é mantido.",
     "columns": {
       "taxAmount": "Val. imposto"
     },
@@ -36,6 +39,7 @@
   "toasts": {
     "submitted": "Enviado para aprovação",
     "posted": "Lançado no razão",
+    "recalled": "Devolvido a rascunho",
     "actionFailed": "Falha na ação",
     "autosaveFailed": "Falha ao salvar automaticamente",
     "deleted": "Relatório de despesas excluído",

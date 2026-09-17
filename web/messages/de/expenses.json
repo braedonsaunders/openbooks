@@ -23,6 +23,9 @@
     "deleteTitle": "Diese Spesenabrechnung löschen?",
     "deleteDraftBody": "Dadurch wird der Entwurf der Spesenabrechnung dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "deletePostedBody": "Dadurch wird die Spesenabrechnung dauerhaft gelöscht und ihre Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
+    "recallTitle": "Diesen Bericht bearbeiten?",
+    "recallBodyPending": "Durch die Bearbeitung wird die ausstehende Genehmigung abgebrochen und der Bericht zurück in den Entwurf versetzt. Der Genehmigungsverlauf bleibt erhalten.",
+    "recallBodyApproved": "Durch die Bearbeitung wird dieser genehmigte Bericht erneut als Entwurf geöffnet. Der Genehmigungsverlauf bleibt erhalten.",
     "columns": {
       "taxAmount": "Steuerbetr."
     },
@@ -36,6 +39,7 @@
   "toasts": {
     "submitted": "Zur Genehmigung eingereicht",
     "posted": "In das Hauptbuch gebucht",
+    "recalled": "Zurück in den Entwurf versetzt",
     "actionFailed": "Aktion fehlgeschlagen",
     "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
     "deleted": "Spesenabrechnung gelöscht",

@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
   ControlAccountsIncompleteError,
@@ -9,6 +9,11 @@ import {
 } from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
+import {
+  DocumentEditError,
+  documentRevisionCounterSql,
+  requireDocumentEditRevision,
+} from '../../../../lib/documents'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -16,7 +21,8 @@ export const runtime = 'nodejs'
 
 /**
  * Expense report lifecycle: draft → submit (Flows approval) → approved → post.
- * Per-action permission gates: submit = expenses.create, post = ap.post.
+ * Per-action permission gates: submit = expenses.create, post = ap.post,
+ * recall = expenses.create plus submitter-or-admin on the report.
  * Approval decisions are owned by the Flows engine (via the /approvals worklist
  * and the record flyout → /api/flows/gates/decide), not this route.
  */
@@ -38,6 +44,94 @@ async function expenseReport(id: string, authz: Authz) {
   return guardSubsidiaryScope(authz, row.subsidiaryId) ? null : row
 }
 
+/**
+ * Recall a submitted or approved-but-unposted expense report to draft,
+ * cancelling its open approval gates and runs. Decided gates stand as
+ * history; only open ('pending'/'escalated') gates and live
+ * ('running'/'waiting') runs are cancelled, so a concurrent approver either
+ * wins first (their decision persists as evidence) or fails closed on the
+ * cancelled gate ("already resolved"). Only the submitter (or document
+ * author for legacy rows) or an org admin may recall.
+ */
+async function recallExpenseReport(input: {
+  documentId: string
+  orgId: string
+  actorId: string
+  expectedUpdatedAt: unknown
+  isAdmin: boolean
+}): Promise<{ cancelledGates: number; cancelledRuns: number }> {
+  const expectedRevision = requireDocumentEditRevision(input.expectedUpdatedAt)
+  return withOrgTransaction(input.orgId, async () => {
+    const locked = (await db.execute<{
+      status: string
+      submittedBy: string | null
+      createdBy: string | null
+      voidRequestedAt: string | null
+      revision: string
+    }>(sql`
+      select status, submitted_by as "submittedBy", created_by as "createdBy",
+             void_requested_at as "voidRequestedAt",
+             ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "revision"
+        from documents
+       where id = ${input.documentId} and kind = 'expense_report' and org_id = ${input.orgId}
+       for update
+    `)).rows[0]
+    if (!locked) throw new DocumentEditError(404, 'expense report not found')
+    if (locked.status !== 'pending_approval' && locked.status !== 'approved') {
+      throw new DocumentEditError(
+        422,
+        `expense report is ${locked.status}; only a submitted or approved report can be recalled to draft`,
+      )
+    }
+    if (locked.voidRequestedAt) {
+      throw new DocumentEditError(422, 'a void is already in flight for this report — complete it first')
+    }
+    if (expectedRevision !== locked.revision) {
+      throw new DocumentEditError(409, 'this document changed after you opened it; reload and review the latest revision')
+    }
+    if (locked.submittedBy !== input.actorId && locked.createdBy !== input.actorId && !input.isAdmin) {
+      throw new DocumentEditError(403, 'only the submitter or an admin can recall this report to draft')
+    }
+    const gates = (await db.execute<{ id: string }>(sql`
+      update flow_gates
+         set status = 'cancelled', updated_at = now(), updated_by = ${input.actorId}
+       where org_id = ${input.orgId} and subject_kind = 'expense_report' and subject_id = ${input.documentId}
+         and status in ('pending', 'escalated')
+      returning id
+    `)).rows
+    const runs = (await db.execute<{ id: string }>(sql`
+      update flow_runs
+         set status = 'cancelled', finished_at = now(), error = 'recalled to draft',
+             updated_at = now(), updated_by = ${input.actorId}
+       where org_id = ${input.orgId} and subject_kind = 'expense_report' and subject_id = ${input.documentId}
+         and status in ('running', 'waiting')
+      returning id
+    `)).rows
+    await db.execute(sql`
+      update documents
+         set status = 'draft',
+             updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+             updated_by = ${input.actorId}
+       where id = ${input.documentId} and org_id = ${input.orgId}
+    `)
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${input.orgId}, 'documents', ${input.documentId}, 'update',
+        ${JSON.stringify({
+          mode: 'approval_recall',
+          before: { status: locked.status },
+          after: { status: 'draft' },
+          cancelledGates: gates.length,
+          cancelledRuns: runs.length,
+        })}::jsonb,
+        ${input.actorId}, 'ui'
+      )
+    `)
+    return { cancelledGates: gates.length, cancelledRuns: runs.length }
+  })
+}
+
 export async function POST(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -52,8 +146,9 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
-    action: 'submit' | 'post'
+    action: 'submit' | 'post' | 'recall'
     documentId?: string
+    expectedUpdatedAt?: string
   }
 
   try {
@@ -96,6 +191,29 @@ export async function POST(req: Request) {
         })
         return NextResponse.json({ ok: true, entryId })
       }
+      case 'recall': {
+        if (!can(authz, 'expenses.create')) {
+          return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
+        }
+        if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
+          return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
+        }
+        try {
+          const outcome = await recallExpenseReport({
+            documentId: body.documentId,
+            orgId: user.orgId,
+            actorId: user.id,
+            expectedUpdatedAt: body.expectedUpdatedAt,
+            isAdmin: user.isSuperAdmin || user.roles.some((role) => role.key === 'admin'),
+          })
+          return NextResponse.json({ ok: true, ...outcome })
+        } catch (e) {
+          if (e instanceof DocumentEditError) {
+            return NextResponse.json({ error: e.message }, { status: e.status })
+          }
+          throw e
+        }
+      }
       default:
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
@@ -103,11 +221,13 @@ export async function POST(req: Request) {
     // Posting refusals (kernel rules or unconfigured org control accounts)
     // and submission lifecycle refusals (a double-clicked or replayed submit
     // on a report that already left draft) are request-state failures, not
-    // server defects.
+    // server defects. Revision-fence refusals carry their own status.
     const status =
       e instanceof PostingError || e instanceof ControlAccountsIncompleteError || e instanceof SubmitError
         ? 422
-        : 500
+        : e instanceof DocumentEditError
+          ? e.status
+          : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
 }

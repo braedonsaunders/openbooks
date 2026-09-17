@@ -14,7 +14,7 @@ import {
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { loadExpenseReport } from '../../../../lib/expenses'
+import { canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
@@ -61,6 +61,8 @@ export interface ExpenseReportsDrawer {
   segments: unknown
   canSubmit: boolean
   canPost: boolean
+  /** The open report is recallable to draft by this viewer (F-user-003). */
+  canRecall: boolean
   layout: unknown
   closeHref: string
 }
@@ -122,6 +124,14 @@ export async function loadExpenseReports(
         })
       : null
 
+  // F-user-003: recall eligibility (submitter-or-admin, void-free) is
+  // shared with the related-transaction drawer; the actions route
+  // re-checks authoritatively.
+  const canRecall = canRecallExpenseReport(
+    (openReport?.doc ?? {}) as Parameters<typeof canRecallExpenseReport>[0],
+    authz.user,
+  )
+
   const drawer: ExpenseReportsDrawer | null =
     openReport && pickers && resolvedForm
       ? {
@@ -139,6 +149,7 @@ export async function loadExpenseReports(
           segments: pickers[8] as unknown as ExpenseDrawerProps['segments'],
           canSubmit,
           canPost,
+          canRecall,
           layout: resolvedForm.layout,
           closeHref: '/expenses/reports',
         }
