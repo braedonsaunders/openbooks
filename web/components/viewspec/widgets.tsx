@@ -821,6 +821,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   },
   'form-drawer': (props) => (
     <FormDesigner
+      // Session remount key (F-t10-002): a duplicate opened after an edit
+      // must not inherit the edit's mount-only state (notably isDefault).
+      key={str(props, 'drawerKey') ?? 'form-drawer'}
       recordType={str(props, 'recordType') ?? ''}
       def={(props.def as ComponentProps<typeof FormDesigner>['def']) ?? null}
       headerDefs={(props.headerDefs as ComponentProps<typeof FormDesigner>['headerDefs']) ?? null}
