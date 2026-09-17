@@ -13,6 +13,7 @@ gl-dump/
 web/.env.local
 
 web/.next/
+web/.next-*/
 .next/
 *.tsbuildinfo
 

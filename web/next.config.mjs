@@ -45,6 +45,9 @@ const config = {
   // Docker image: self-contained server bundle. The tracing root is the
   // monorepo root so workspace deps (@openbooks/*) land in the output.
   output: "standalone",
+  // Local blue/green rebuilds: build into a staging dir (NEXT_DIST_DIR=.next-stage)
+  // while `next start` keeps serving the live .next, then swap. Unset = default.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   outputFileTracingRoot: join(dirname(fileURLToPath(import.meta.url)), ".."),
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
