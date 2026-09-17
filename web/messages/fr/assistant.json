@@ -10,6 +10,7 @@
   "noConversations": "Aucune conversation pour l'instant.",
   "welcomeTitle": "Comment puis-je aider avec les livres ?",
   "welcome": "Interrogez vos livres — soldes, états financiers, chronologie, factures ou écritures précises. L'assistant ne voit que ce que vos permissions autorisent.",
+  "notConfiguredTitle": "Assistant pas encore configuré",
   "placeholder": "Posez une question sur vos comptes, transactions ou rapports…",
   "context": { "attached": "Contexte du constat joint", "remove": "Retirer le contexte" },
   "send": "Envoyer",

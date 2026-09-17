@@ -10,6 +10,7 @@
   "noConversations": "Aún no hay conversaciones.",
   "welcomeTitle": "¿Cómo puedo ayudar con los libros?",
   "welcome": "Pregunte sobre sus libros: saldos, estados financieros, antigüedad, facturas o asientos concretos. El asistente solo ve lo que sus permisos permiten.",
+  "notConfiguredTitle": "Asistente aún sin configurar",
   "placeholder": "Pregunte sobre sus cuentas, transacciones o informes…",
   "context": { "attached": "Contexto del hallazgo adjunto", "remove": "Quitar el contexto" },
   "send": "Enviar",
