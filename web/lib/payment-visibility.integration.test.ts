@@ -37,7 +37,7 @@ registerHooks({
     if (specifier === 'server-only') return moduleSource('export {}')
     if (specifier === 'next-intl/server')
       return moduleSource(
-        'export async function getTranslations(){ const t=(key)=>key; t.rich=(key)=>key; return t }',
+        'export async function getTranslations(){ const t=(key)=>key; t.rich=(key)=>key; return t }; export async function getLocale(){ return "en" }',
       )
     if (
       (specifier === './auth' || specifier.endsWith('/lib/auth')) &&

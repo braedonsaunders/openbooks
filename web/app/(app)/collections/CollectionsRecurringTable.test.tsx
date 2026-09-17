@@ -30,7 +30,6 @@ registerHooks({
   },
 })
 
-const React = await import('react')
 const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('@/components/money-provider')
@@ -44,15 +43,11 @@ const { CollectionsClient } = await import('./CollectionsClient')
 // of jamming.
 function panelHtml() {
   return renderToString(
-    React.createElement(
-      MoneyProvider,
-      { currency: 'CAD' },
-      React.createElement(
-        NextIntlClientProvider,
-        { locale: 'en', messages: {} },
-        React.createElement(CollectionsClient, {}),
-      ),
-    ),
+    <MoneyProvider currency="CAD">
+      <NextIntlClientProvider locale="en" messages={{}}>
+        <CollectionsClient />
+      </NextIntlClientProvider>
+    </MoneyProvider>,
   )
 }
 
