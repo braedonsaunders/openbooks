@@ -174,10 +174,6 @@ export function riRatesForPayDate(payDate: string): RiYearRates {
   return rates;
 }
 
-export function riPeriodTable(period: RiPeriod): RiPeriodTable {
-  return RI_TABLES_2026[period];
-}
-
 export function riPeriodTax(taxable: bigint, period: RiPeriod): bigint {
   if (taxable <= 0n) return 0n;
   const table = RI_TABLES_2026[period];

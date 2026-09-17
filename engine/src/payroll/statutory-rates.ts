@@ -67,10 +67,6 @@ import { US_PACK_RATES } from "./us/rates.ts";
  */
 export type PayrollRateScope = "org" | "region" | "sub_region" | "filing_account";
 
-export const PAYROLL_RATE_SCOPES: readonly PayrollRateScope[] = [
-  "org", "region", "sub_region", "filing_account",
-];
-
 /** One number inside a rate slot, and the shape it is accepted in. */
 export interface PayrollRateField {
   /** Key inside the stored value object. */
@@ -155,33 +151,8 @@ export interface PayrollPackRates {
  */
 const BUILT_INS: readonly PayrollPackRates[] = [CA_PACK_RATES, US_PACK_RATES];
 
-const EXTRA = new Map<string, PayrollPackRates>();
-
 export function declaredPackRates(): PayrollPackRates[] {
-  return [...BUILT_INS, ...EXTRA.values()];
-}
-
-/** Register an out-of-tree pack's rate declaration. One per country. */
-export function registerPackRates(declaration: PayrollPackRates): void {
-  if (!declaration.country) {
-    throw new PayrollPackError("a payroll rate declaration must name its country");
-  }
-  if (declaredPackRates().some((declared) => declared.country === declaration.country)) {
-    throw new PayrollPackError(
-      `payroll statutory rates for ${declaration.country} are already declared — a country has `
-      + "exactly one rate declaration",
-    );
-  }
-  const keys = declaration.slots.map((slot) => slot.key);
-  if (new Set(keys).size !== keys.length) {
-    throw new PayrollPackError(`the ${declaration.country} rate declaration repeats a slot key`);
-  }
-  EXTRA.set(declaration.country, declaration);
-}
-
-/** Remove a non-built-in registration (test isolation only). */
-export function unregisterPackRates(country: string): void {
-  EXTRA.delete(country);
+  return [...BUILT_INS];
 }
 
 /** A pack's rate declaration, or a refusal naming the packs that have one. */

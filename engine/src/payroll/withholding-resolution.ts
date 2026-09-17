@@ -112,7 +112,6 @@
 import {
   type PayrollLevyReach,
   type PayrollRegionWithholding,
-  type PayrollSubRegionLevy,
   regionWithholding,
   subRegionLevy,
 } from "./withholding-jurisdictions.ts";
@@ -648,12 +647,4 @@ export function compareRates(a: string, b: string): number {
 /** Blocking gaps only — the ones a run must stop for. */
 export function blockingGaps(resolution: WithholdingResolution): WithholdingGap[] {
   return resolution.gaps.filter((gap) => gap.severity === "blocking");
-}
-
-/** The declared sub-region levies inside a region, for the setup surface. */
-export function declaredSubRegions(
-  country: string,
-  region: string,
-): readonly PayrollSubRegionLevy[] {
-  return regionWithholding(country, region).subRegions;
 }

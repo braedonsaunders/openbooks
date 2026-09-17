@@ -41,7 +41,7 @@
  */
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  certificateAmount, certificateCode, certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -404,18 +404,6 @@ export const IN_WITHHOLDING: UsStateWithholdingEngine = {
   printedPeriods: null,
   compute,
 };
-
-/** Resolve the WH-4 county answers the way Departmental Notice #1 directs. */
-export function inCountyFromCertificate(
-  payDate: string,
-  certificate: UsStateWithholdingInput["certificate"],
-): InCounty | null {
-  return inApplicableCounty(
-    payDate,
-    certificateCode(certificate, "residence_county"),
-    certificateCode(certificate, "work_county"),
-  );
-}
 
 // ===========================================================================
 // Declarations

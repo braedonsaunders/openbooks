@@ -1284,10 +1284,6 @@ export interface HolidayDayEvidence {
   paidHolidays: readonly string[];
 }
 
-export const emptyHolidayDayEvidence = (): HolidayDayEvidence => ({
-  workedOn: [], paidPeriodsWithoutHours: [], paidHolidays: [],
-});
-
 /**
  * How many days of `window` satisfy the statute's own predicate — PURE, so the
  * three sentences are verifiable side by side with no database.

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, fromUnits, mulRatio, roundMoney, sum, toUnits } from "./money.ts";
+import { add, cmp, mulRatio, roundMoney, sum } from "./money.ts";
 
 /**
  * Scheduled hours — the hours and days an employee is NORMALLY scheduled to
@@ -97,9 +97,6 @@ export const daysApart = (from: string, to: string): number =>
 
 export const shiftDay = (date: string, days: number): string =>
   isoDay(new Date(at(date).getTime() + days * DAY_MS));
-
-/** 0 = Sunday … 6 = Saturday. */
-export const weekdayIndex = (date: string): number => at(date).getUTCDay();
 
 // ---------------------------------------------------------------------------
 // The model

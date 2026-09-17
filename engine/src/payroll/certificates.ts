@@ -315,11 +315,6 @@ export function registerPayrollCertificates(
   target.set(declaration.country, declaration);
 }
 
-/** Remove a non-built-in registration (test isolation only). */
-export function unregisterPayrollCertificates(country: string): void {
-  EXTRA.delete(country);
-}
-
 export function declaredPayrollCertificates(): PayrollPackCertificates[] {
   materializeSources();
   return [...BUILT_INS.values(), ...EXTRA.values()];
@@ -349,17 +344,6 @@ export function payrollCertificate(country: string, key: string): PayrollCertifi
     );
   }
   return found;
-}
-
-/** Certificates filed for one jurisdiction scope point. */
-export function certificatesForScope(
-  country: string,
-  scope: PayrollCertificateScope,
-): PayrollCertificate[] {
-  return packCertificates(country).certificates.filter((certificate) =>
-    certificate.scope.level === scope.level
-    && (certificate.scope.region ?? null) === (scope.region ?? null)
-    && (certificate.scope.subRegion ?? null) === (scope.subRegion ?? null));
 }
 
 // ---------------------------------------------------------------------------
@@ -702,98 +686,4 @@ function declaredField(
     );
   }
   return field;
-}
-
-// ---------------------------------------------------------------------------
-// Write-side validation
-// ---------------------------------------------------------------------------
-
-/**
- * Canonicalize submitted answers against the declaration, or throw naming the
- * field and the reason. Unknown keys are REFUSED rather than dropped, for the
- * reason `canonicalStatutoryRateValues` refuses them: silently discarding a
- * number an operator typed on a tax form is how an exemption goes missing.
- */
-export function canonicalCertificateAnswers(
-  certificate: PayrollCertificate,
-  submitted: Record<string, unknown>,
-): Record<string, string> {
-  const clean: Record<string, string> = {};
-  for (const key of Object.keys(submitted)) {
-    if (!certificate.fields.some((field) => field.key === key)) {
-      throw new PayrollCertificateError(
-        `${certificate.form} declares no "${key}" field — it declares `
-        + certificate.fields.map((field) => field.key).join(", "),
-      );
-    }
-  }
-  for (const field of certificate.fields) {
-    const raw = submitted[field.key];
-    const blank = raw == null || (typeof raw === "string" && raw.trim() === "");
-    if (blank) {
-      if (field.required && field.default == null) {
-        throw new PayrollCertificateError(`${certificate.form}: ${field.label} is required`);
-      }
-      continue;
-    }
-    clean[field.key] = canonicalAnswer(certificate, field, raw);
-  }
-  return clean;
-}
-
-function canonicalAnswer(
-  certificate: PayrollCertificate,
-  field: PayrollCertificateField,
-  raw: unknown,
-): string {
-  const where = `${certificate.form}: ${field.label}`;
-  switch (field.kind) {
-    case "choice": {
-      const value = String(raw);
-      if (!field.choices!.some((choice) => choice.value === value)) {
-        throw new PayrollCertificateError(
-          `${where} must be one of ${field.choices!.map((choice) => choice.value).join(", ")}`,
-        );
-      }
-      return value;
-    }
-    case "count": {
-      const value = String(raw).trim();
-      if (!/^\d+$/.test(value)) {
-        throw new PayrollCertificateError(`${where} is a whole number of allowances`);
-      }
-      const count = Number(value);
-      if (field.min != null && count < Number(field.min)) {
-        throw new PayrollCertificateError(`${where} must be at least ${field.min}`);
-      }
-      if (field.max != null && count > Number(field.max)) {
-        throw new PayrollCertificateError(`${where} must be at most ${field.max}`);
-      }
-      return String(count);
-    }
-    case "amount": {
-      let value: string;
-      try {
-        value = normalizeDecimal(raw as string | number, field.decimals!);
-      } catch (error) {
-        throw new PayrollCertificateError(
-          `${where} — ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      if (field.min != null && Number(value) < Number(field.min)) {
-        throw new PayrollCertificateError(`${where} must be at least ${field.min}`);
-      }
-      if (field.max != null && Number(value) > Number(field.max)) {
-        throw new PayrollCertificateError(`${where} must be at most ${field.max}`);
-      }
-      return value;
-    }
-    case "flag":
-      return raw === true || raw === "true" || raw === "1" || raw === "yes" ? "true" : "false";
-    case "code": {
-      const value = String(raw).trim();
-      if (value.length > 64) throw new PayrollCertificateError(`${where} is too long`);
-      return value;
-    }
-  }
 }

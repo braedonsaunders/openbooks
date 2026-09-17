@@ -150,39 +150,6 @@ export interface EmployeePaymentMethodRow extends ResolvedPaymentMethod {
 }
 
 /**
- * Every employee on a pay schedule with their resolved rail. Used by the
- * scope roster; the run's own population predicates are applied by the caller.
- */
-export async function schedulePaymentMethods(
-  orgId: string,
-  payScheduleId: string,
-): Promise<EmployeePaymentMethodRow[]> {
-  const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
-  const rows = (await db.execute<{ id: string; name: string; profile_method: string | null; party_method: string | null; has_bank: boolean }>(sql`
-    select p.id, p.display_name as name, prof.payment_method as profile_method,
-           p.payment_method as party_method,
-           exists (
-             select 1 from party_bank_accounts b
-              where b.org_id = prof.org_id and b.party_id = p.id
-                and b.is_active and b.approval_status = 'approved') as has_bank
-      from employee_payroll_profiles prof
-      join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-     where prof.org_id = ${orgId} and prof.pay_schedule_id = ${payScheduleId} and prof.is_active
-     order by p.display_name
-  `));
-  return rows.rows.map((row) => ({
-    employeePartyId: row.id,
-    name: row.name,
-    ...resolvePayrollPaymentMethod({
-      profileMethod: row.profile_method,
-      partyMethod: row.party_method,
-      hasApprovedBankDetails: row.has_bank,
-      fallbackToCheque: eftFallbackToCheque,
-    }),
-  }));
-}
-
-/**
  * The rail each CALCULATED stub went out on.
  *
  * Prefers the snapshot written at calculate time; a stub calculated before this

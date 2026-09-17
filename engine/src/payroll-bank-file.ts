@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { cmp, formatMoney, fromUnits, sum, toUnits } from "./money.ts";
+import { cmp, formatMoney, sum, toUnits } from "./money.ts";
 import {
   buildCpa005File,
   buildNachaFile,
@@ -43,8 +43,6 @@ import { unsealJson } from "./secrets.ts";
 
 /** Export is live; individual formats are gated by PAYROLL_BANK_FILE_FORMATS. */
 export const PAYROLL_BANK_FILE_EXPORT_ENABLED = true;
-export const PAYROLL_BANK_FILE_EXPORT_DISABLED_MESSAGE =
-  "payroll bank-file export is unavailable until immutable artifact, approval, and download-audit controls are enabled";
 
 export type PayRunBankFileFormat = "cpa005" | "nacha";
 
@@ -907,9 +905,4 @@ function buildNachaPayroll(
     fileIdModifier: input.fileIdModifier,
     entries,
   });
-}
-
-/** Money-safe cents → numeric(19,4) string, for reporting a parsed trailer. */
-export function centsToMoney(cents: bigint): string {
-  return fromUnits(cents * 100n);
 }

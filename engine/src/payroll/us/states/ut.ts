@@ -215,11 +215,6 @@ export const UT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 const DOLLAR = 10_000n;
 const RATE6 = 1_000_000n;
 
-/** "Round off" each printed multiplication to the nearest whole dollar. */
-export function utRoundToDollar(units: bigint): bigint {
-  return roundDiv(units, DOLLAR) * DOLLAR;
-}
-
 /** amount × rate, rounded half-up to the dollar — the unit Pub 14 prints. */
 export function utMulRateDollars(units: bigint, rate: string): bigint {
   return roundDiv(units * rate6(rate), RATE6 * DOLLAR) * DOLLAR;

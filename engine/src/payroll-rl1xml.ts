@@ -3,7 +3,7 @@ import { db } from "./db.ts";
 import { unsealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-error.ts";
 import { isCanadianSin } from "./payroll-roexml.ts";
-import { rl1Slips, type Rl1Slip } from "./payroll-rl1.ts";
+import { rl1Slips } from "./payroll-rl1.ts";
 
 /**
  * RL-1 electronic transmission — the Revenu Québec side of what
@@ -196,9 +196,6 @@ export const RL1_AMENDMENT_REFUSAL =
   + "cancel the RL-1 through Revenu Québec's online services (or authorized software), and "
   + "correct the underlying payroll data in OpenBooks so the RL-1 box data on this page "
   + "matches what was refiled.";
-
-/** A slip carrying the unsealed SIN the eventual file must print. */
-export type Rl1SlipWithSin = Rl1Slip & { sin: string };
 
 /**
  * Validate everything an RL-1 transmission needs — transmitter identity,

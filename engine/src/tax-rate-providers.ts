@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "./db.ts";
-import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
+import { fromUnits, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { businessToday, isIsoCalendarDate } from "./business-date.ts";
@@ -20,16 +20,6 @@ export class TaxRateProviderError extends Error {}
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
 function wholeDigits(canonical: string): number {
   return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
-}
-
-function persistRatePercent(value: unknown): string {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new TaxRateProviderError("rate percent must be an exact decimal");
-  try {
-    return normalizeMoney(exact);
-  } catch {
-    throw new TaxRateProviderError("rate percent must be an exact decimal");
-  }
 }
 
 export interface Address {
@@ -378,8 +368,7 @@ export function quoteFromRate(
   name?: string,
 ): TaxQuoteResult {
   // Fail closed with the module error type (which the route maps to 422),
-  // never a raw decimal-coercion fault: the sibling persistRatePercent above
-  // keeps the same contract.
+  // never a raw decimal-coercion fault.
   let percentText: string;
   try {
     percentText = normalizeDecimal(ratePercent, 4);
@@ -816,126 +805,3 @@ export async function quoteExternalTax(
     throw e;
   }
 }
-
-/**
- * Locale pack rate-band seeds used when provisioning depth packs (UK reduced/zero,
- * AU GST-free, CA HST combined rates, US placeholder for sealed provider).
- */
-export const LOCALE_RATE_BANDS: Record<string, { code: string; name: string; ratePercent: number }[]> = {
-  CA_GST34: [
-    { code: "CA-GST", name: "GST 5%", ratePercent: 5 },
-    { code: "CA-HST-ON", name: "Ontario HST 13%", ratePercent: 13 },
-    { code: "CA-HST-NB", name: "New Brunswick HST 15%", ratePercent: 15 },
-    { code: "CA-HST-NL", name: "Newfoundland and Labrador HST 15%", ratePercent: 15 },
-    { code: "CA-HST-NS", name: "Nova Scotia HST 14%", ratePercent: 14 },
-    { code: "CA-HST-PE", name: "Prince Edward Island HST 15%", ratePercent: 15 },
-    { code: "CA-ZERO", name: "Zero-rated", ratePercent: 0 },
-    { code: "CA-EXEMPT", name: "Exempt", ratePercent: 0 },
-  ],
-  GB_VAT100: [
-    { code: "GB-VAT-STD", name: "VAT standard 20%", ratePercent: 20 },
-    { code: "GB-VAT-RED", name: "VAT reduced 5%", ratePercent: 5 },
-    { code: "GB-VAT-ZERO", name: "VAT zero-rated 0%", ratePercent: 0 },
-    { code: "GB-VAT-EXEMPT", name: "VAT exempt", ratePercent: 0 },
-  ],
-  AU_BAS_GST: [
-    { code: "AU-GST", name: "GST 10%", ratePercent: 10 },
-    { code: "AU-GST-FREE", name: "GST-free", ratePercent: 0 },
-    { code: "AU-INPUT-TAXED", name: "Input-taxed", ratePercent: 0 },
-  ],
-  US_SALES_TAX_WORKPAPER: [
-    { code: "US-SALES", name: "US sales (provider or state pack)", ratePercent: 0 },
-  ],
-};
-
-export const LOCALE_FILING_CHANNELS: Record<
-  string,
-  { channel: string; digitalSubmissionReady: boolean; notes: string }
-> = {
-  CA_GST34: {
-    channel: "ca_cra_gst34",
-    digitalSubmissionReady: false,
-    notes: "CRA GST/HST NETFILE / GST34 workpaper; HST bands seed as separate codes under the federal return.",
-  },
-  GB_VAT100: {
-    channel: "uk_mtd_vat",
-    digitalSubmissionReady: true,
-    notes: "VAT100 boxes map 1–9 for Making Tax Digital. Submit via compatible MTD software using efile_api channel.",
-  },
-  AU_BAS_GST: {
-    channel: "au_bas_sbr",
-    digitalSubmissionReady: true,
-    notes: "BAS G1–G11 / 1A–1B labels for ATO Online or SBR-enabled software.",
-  },
-  US_SALES_TAX_WORKPAPER: {
-    channel: "us_streamlined_or_provider",
-    digitalSubmissionReady: false,
-    notes: "Wire Avalara or TaxJar for destination rates; state return packs remain per-state workpapers.",
-  },
-};
-
-/** Idempotently seed rate-band tax codes + locale meta after a pack install. */
-export async function provisionLocaleDepth(
-  orgId: string,
-  packCode: string,
-  country: string,
-  actorId: string | null,
-): Promise<{ bandsCreated: number }> {
-  const bands = LOCALE_RATE_BANDS[packCode] ?? [];
-  let bandsCreated = 0;
-  for (const b of bands) {
-    const ratePercent = persistRatePercent(b.ratePercent);
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into tax_codes (org_id, code, name, country, applies_to, is_active, created_by, updated_by)
-      select ${orgId}, ${b.code}, ${b.name}, ${country}, 'both', true, ${actorId}, ${actorId}
-       where not exists (select 1 from tax_codes where org_id = ${orgId} and code = ${b.code})
-      returning id
-    `));
-    const codeId = inserted.rows[0]?.id;
-    if (codeId) {
-      bandsCreated++;
-      await db.execute(sql`
-        insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
-        values (${orgId}, ${codeId}, ${ratePercent}, '2000-01-01', ${actorId}, ${actorId})
-      `);
-    } else {
-      const existing = (await db.execute<{ id: string }>(sql`
-        select id from tax_codes where org_id = ${orgId} and code = ${b.code} limit 1
-      `));
-      const id = existing.rows[0]?.id;
-      if (id) {
-        const has = (await db.execute(sql`
-          select 1 from tax_rates where org_id = ${orgId} and tax_code_id = ${id} limit 1
-        `));
-        if (!has.rows.length) {
-          await db.execute(sql`
-            insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
-            values (${orgId}, ${id}, ${ratePercent}, '2000-01-01', ${actorId}, ${actorId})
-          `);
-        }
-      }
-    }
-  }
-
-  const filing = LOCALE_FILING_CHANNELS[packCode];
-  if (filing) {
-    await db.execute(sql`
-      insert into tax_locale_pack_meta
-        (org_id, pack_code, country, filing_channel, digital_submission_ready, rate_bands, notes, created_by, updated_by)
-      values (${orgId}, ${packCode}, ${country}, ${filing.channel}, ${filing.digitalSubmissionReady},
-              ${JSON.stringify(bands)}::jsonb, ${filing.notes}, ${actorId}, ${actorId})
-      on conflict (org_id, pack_code) do update set
-        filing_channel = excluded.filing_channel,
-        digital_submission_ready = excluded.digital_submission_ready,
-        rate_bands = excluded.rate_bands,
-        notes = excluded.notes,
-        updated_at = now(), updated_by = ${actorId}
-      where tax_locale_pack_meta.org_id = ${orgId}
-    `);
-  }
-  return { bandsCreated };
-}
-
-// silence unused import if add not used firefoxman's souls
-void add;
-void mul;
