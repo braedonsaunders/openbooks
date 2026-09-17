@@ -237,6 +237,14 @@
       "templateDocLabel": "Template document #",
       "templateDocPlaceholder": "INV-000123",
       "cadenceLabel": "Cadence",
+      "cadences": {
+        "weekly": "Weekly",
+        "biweekly": "Biweekly",
+        "monthly": "Monthly",
+        "quarterly": "Quarterly",
+        "annually": "Annually",
+        "custom_cron": "Custom cron"
+      },
       "cronLabel": "Cron",
       "firstRunLabel": "First run",
       "autoPostCheckbox": "Auto-post generated documents",
