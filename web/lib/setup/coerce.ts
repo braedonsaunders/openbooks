@@ -9,7 +9,7 @@
  */
 
 import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money.ts'
-import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupField } from './registry'
+import { SETUP_ENTITY_BY_KEY, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
 
@@ -75,14 +75,19 @@ export function multirefField(entity: SetupEntity): SetupField | undefined {
  * `{ column, value }` pair, or an error string. Absent optional fields resolve
  * to null (so the column is written with its explicit empty value).
  */
-export function coerceField(field: SetupField, raw: unknown): Coerced | { error: string } {
+export function coerceField(field: SetupField, raw: unknown, fieldVisible = true): Coerced | { error: string } {
   const present = raw !== undefined && raw !== null && raw !== ''
   // keepDefault columns are NOT NULL WITH a database default (F-t06-022): a
   // blank is legal input that falls through to the default (each kind's
   // absent branch below resolves to null/undefined, which buildRow omits),
   // never a missing requirement. Without this the server refused the exact
   // blanks the drawer deliberately sends for untouched keepDefault inputs.
-  if (field.required && !present && field.kind !== 'boolean' && !field.keepDefault) {
+  // A field hidden by showWhen is likewise not required (F-t03-007): the
+  // drawer hides the default waiver form while enforcement is None and
+  // clears it on save, so the server must accept the same blank — the
+  // merged-row integrity rule still refuses a blank that is actually in
+  // force.
+  if (field.required && fieldVisible && !present && field.kind !== 'boolean' && !field.keepDefault) {
     return { error: `${field.key} is required` }
   }
   const column = toSnake(field.key)
@@ -222,7 +227,7 @@ export function buildRow(
     const raw = opts.forCreate && body[field.key] === undefined
       ? field.defaultValue
       : body[field.key]
-    const res = coerceField(field, raw)
+    const res = coerceField(field, raw, setupFieldVisible(field, body))
     if ('error' in res) return { error: res.error }
     if (res.value === undefined) continue // required select left unset on edit → skip
     // Never write null to a NOT-NULL-with-default column: on create, omit it so
