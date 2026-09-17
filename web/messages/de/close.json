@@ -33,7 +33,10 @@
     "tax": "Steuer",
     "gl": "Hauptbuch"
   },
-  "status": { "closed": "geschlossen", "open": "offen" },
+  "status": {
+    "closed": "geschlossen",
+    "open": "offen"
+  },
   "runStatus": {
     "not_started": "Nicht begonnen",
     "draft": "Entwurf",
@@ -67,8 +70,10 @@
     "approve": "Genehmigen",
     "requestChanges": "Änderungen anfordern",
     "addEvidence": "Nachweis hinzufügen",
+    "resolveException": "Arbeitsbereich öffnen",
     "takeAction": "Maßnahme ergreifen",
     "requestApproval": "Genehmigung anfordern",
+    "attest": "Abschluss bestätigen und genehmigen",
     "reviewApprovals": "Genehmigungen prüfen",
     "configureApprovalFlow": "Genehmigungsablauf konfigurieren",
     "documentation": "Dokumentation",
@@ -76,10 +81,13 @@
     "publish": "Paket veröffentlichen",
     "downloadBinder": "Unveränderlichen Prüfungsordner herunterladen"
   },
-  "errors": { "actionFailed": "Die Abschlussaktion konnte nicht abgeschlossen werden" },
+  "errors": {
+    "actionFailed": "Die Abschlussaktion konnte nicht abgeschlossen werden"
+  },
   "messages": {
     "refresh": "Abschlussstatus aktualisiert",
     "request_approval": "Abschluss zur Genehmigung eingereicht",
+    "attest": "Inhaberbestätigung erfasst",
     "close": "Periode gesperrt",
     "publish": "Abschlusspaket veröffentlicht",
     "taskUpdated": "Aufgabe aktualisiert",
@@ -127,6 +135,10 @@
       "title": "Ungebuchte Bewegungen verbleiben",
       "message": "{count, plural, one {# Entwurf oder ausstehende Transaktion verbleibt in der Periode.} other {# Entwürfe oder ausstehende Transaktionen verbleiben in der Periode.}}"
     },
+    "posting-period-missing": {
+      "title": "Transaktionen benötigen eine Buchungsperiode",
+      "message": "{count, plural, one {# Transaktion hat keine exakte Buchungsperiodenreferenz. Ordnen Sie sie zu, bevor Sie eine Periode schließen.} other {# Transaktionen haben keine exakte Buchungsperiodenreferenz. Ordnen Sie sie zu, bevor Sie eine Periode schließen.}}"
+    },
     "bank-unreconciled": {
       "title": "Zahlungsmittelkonten müssen abgestimmt werden",
       "message": "{count, plural, one {# abstimmbares Konto ist nicht bis zum Periodenende freigegeben.} other {# abstimmbare Konten sind nicht bis zum Periodenende freigegeben.}}"
@@ -134,6 +146,10 @@
     "depreciation-unposted": {
       "title": "Abschreibung bleibt ungebucht",
       "message": "{count, plural, one {# geplante Abschreibungszeile bleibt ungebucht.} other {# geplante Abschreibungszeilen bleiben ungebucht.}}"
+    },
+    "recognition-unposted": {
+      "title": "Umsatzrealisierung bleibt ungebucht",
+      "message": "{count, plural, one {# geplante Realisierungszeile bleibt ungebucht.} other {# geplante Realisierungszeilen bleiben ungebucht.}}"
     },
     "fx-missing": {
       "title": "Wechselkurse fehlen",
@@ -143,9 +159,17 @@
       "title": "Fremdwährungssalden sind nicht neu bewertet",
       "message": "{count, plural, one {# monetärer Fremdwährungssaldo wurde nicht zum Periodenendkurs neu bewertet.} other {# monetäre Fremdwährungssalden wurden nicht zum Periodenendkurs neu bewertet.}}"
     },
+    "fx-reversal-period-missing": {
+      "title": "Keine Folgeperiode für das Neubewertungsstorno",
+      "message": "Fremdwährungssalden müssen neu bewertet werden, aber es existiert keine spätere Buchungsperiode, in die das obligatorische Storno fallen kann. Generieren Sie die nächste Geschäftsjahresperiode und führen Sie dann die Neubewertung durch."
+    },
     "intercompany-residual": {
       "title": "Konzerninterne Bewegungen gleichen sich nicht aus",
       "message": "{count, plural, one {# Eliminierungskonto weist einen von null abweichenden Konzernrestbetrag auf.} other {# Eliminierungskonten weisen einen von null abweichenden Konzernrestbetrag auf.}}"
+    },
+    "consolidated-rates-missing": {
+      "title": "Konsolidierte Wechselkurse fehlen",
+      "message": "{count, plural, one {# Eliminierungskonto führt Fremdgesellschaftsbewegungen ohne konsolidierten Kurs für die Periode. Leiten Sie vor dem Eliminieren konsolidierte Kurse ab.} other {# Eliminierungskonten führen Fremdgesellschaftsbewegungen ohne konsolidierten Kurs für die Periode. Leiten Sie vor dem Eliminieren konsolidierte Kurse ab.}}"
     },
     "material-variances": {
       "title": "Wesentliche Schwankungen erfordern eine Erläuterung",
@@ -171,7 +195,11 @@
     "review": "Prüfung",
     "publish": "Veröffentlichung"
   },
-  "gates": { "none": "Kein Gate", "soft": "Weiches Gate", "hard": "Hartes Gate" },
+  "gates": {
+    "none": "Kein Gate",
+    "soft": "Weiches Gate",
+    "hard": "Hartes Gate"
+  },
   "taskStatus": {
     "blocked": "Blockiert",
     "ready": "Bereit",
@@ -193,6 +221,11 @@
     "blockedDescription": "{count, plural, one {# Aufgabe mit hartem Gate verbleibt} other {# Aufgaben mit hartem Gate verbleiben}}.",
     "approvalTitle": "Unabhängige Genehmigung und Sperrung",
     "approvalDescription": "Der Initiator des Laufs kann die endgültige Genehmigung nicht erteilen. Jede Hauptbuchänderung nach der Genehmigung öffnet die Prüfung erneut.",
+    "ownerTitle": "Inhaberbestätigung und Sperrung",
+    "ownerDescription": "Prüfen Sie bei einem inhabergeführten Abschluss die Berichte und dokumentieren Sie, warum die Periode bereit ist. Die Bestätigung ist mit genau diesem Hauptbuchstand verknüpft.",
+    "attestationLabel": "Warum sind diese Bücher bereit zum Abschluss?",
+    "attestationPlaceholder": "Beispiel: Summen- und Saldenliste, Bilanz sowie Gewinn- und Verlustrechnung geprüft; Bankbewegungen sind abgestimmt und alle bekannten Periodentransaktionen gebucht.",
+    "confirmLock": "Debitoren, Kreditoren, Bank, Anlagen, Steuer und Hauptbuch für diese Periode sperren? Neue Buchungen werden abgewiesen, bis eine kontrollierte Wiedereröffnung genehmigt ist.",
     "complete": "Periode gesperrt durch {name}"
   },
   "lockStates": {
@@ -203,9 +236,13 @@
   "publish": {
     "package": "Abschluss-Berichtspaket",
     "description": "Prüfen Sie die konfigurierten Ausgaben, frieren Sie dann den Nachweisordner ein und veröffentlichen Sie das Paket.",
+    "confirm": "Dieses Abschlusspaket mit seinem unveränderlichen Prüfungsordner veröffentlichen und einfrieren?",
     "complete": "Paket veröffentlicht durch {name}",
     "lockFirst": "Wenden Sie vor der Veröffentlichung die genehmigten Periodensperren an.",
-    "awaitingApproval": "Schließen Sie Prüfung und Genehmigungsablauf vor der Veröffentlichung ab."
+    "awaitingApproval": "Schließen Sie Prüfung und Genehmigungsablauf vor der Veröffentlichung ab.",
+    "noteLabel": "Veröffentlichungshinweis",
+    "notePlaceholder": "Fügen Sie einen Hinweis zu dieser Veröffentlichung hinzu…",
+    "noteRequired": "Das erneute Veröffentlichen eines korrigierten Pakets ist eine rückwirkende Anpassung: beschreiben Sie, was sich geändert hat."
   },
   "timeline": {
     "title": "Unveränderliche Abschlusschronik",
@@ -217,6 +254,7 @@
       "started": "Abschlusslauf gestartet",
       "data_changed": "Hauptbuchänderung machte frühere Arbeit ungültig",
       "approval_requested": "Abschlussgenehmigung angefordert",
+      "owner_attested": "Inhaber hat bestätigt, dass die Bücher bereit sind",
       "approval_rejected": "Abschlussgenehmigung abgelehnt",
       "approved": "Abschluss hat endgültige Genehmigung erhalten",
       "closed": "Periodensperren angewendet",
@@ -244,7 +282,9 @@
     "general-ledger": "Hauptbuch"
   },
   "defaultData": {
-    "calendar": { "name": "Standard-Geschäftskalender" },
+    "calendar": {
+      "name": "Standard-Geschäftskalender"
+    },
     "blueprint": {
       "name": "Standardabschluss",
       "description": "Hauptbuchnativer Monats-, Quartals- und Jahresabschluss"
@@ -261,6 +301,10 @@
       "controlledReopen": {
         "name": "Kontrollierte Wiedereröffnung",
         "description": "Wiedereröffnungen erfordern einen Grund, eine unabhängige Genehmigung und ein Ablaufdatum."
+      },
+      "sourceReconciliationEvidence": {
+        "name": "Abstimmungsnachweis des Quellsystems",
+        "description": "Die Spiegelung kann Bankkonten bis zum abgestimmten Datum des Quellsystems freigeben. Deaktivieren Sie dies, um importierte Kontoauszüge zu verlangen."
       }
     },
     "package": {
@@ -289,6 +333,10 @@
       "title": "Anlagenabschreibung buchen",
       "description": "Führen Sie die geplante Abschreibung durch und lösen Sie Ausnahmen auf."
     },
+    "recognition-posted": {
+      "title": "Umsatzrealisierung buchen",
+      "description": "Führen Sie die geplante Umsatzrealisierung durch und lösen Sie Ausnahmen auf."
+    },
     "fx-ready": {
       "title": "Wechselkursabdeckung validieren",
       "description": "Jede Transaktionswährung muss einen verwendbaren Periodenendkurs haben."
@@ -313,6 +361,10 @@
       "title": "Controller-Freigabe",
       "description": "Prüfen Sie Bereitschaft, Ausnahmen, Nachweise und Berichtsausgaben unabhängig."
     },
+    "financial-review": {
+      "title": "Finanzberichte prüfen",
+      "description": "Prüfen Sie Summen- und Saldenliste, Bilanz sowie Gewinn- und Verlustrechnung vor der Bestätigung auf Vollständigkeit und unerwartete Salden."
+    },
     "lock-subledgers": {
       "title": "Operative Nebenbücher sperren",
       "description": "Sperren Sie Forderungen, Verbindlichkeiten, Bank, Anlagen und Steuer vor dem Hauptbuch."
@@ -329,6 +381,8 @@
   "setup": {
     "title": "Perioden & Abschluss",
     "description": "Entwerfen Sie Geschäftskalender, generieren Sie Perioden, steuern Sie Sperrungen und Wiedereröffnungen, versionieren Sie Abschlussblaupausen und konfigurieren Sie Kontrollen, Automatisierung und Berichtspakete.",
+    "simpleMode": "Inhabergeführter Abschluss ist aktiv. Kalender, Perioden, Sperren, Bestätigungen und unveränderliche Veröffentlichung bleiben ohne Enterprise-Workflow-Overhead verfügbar.",
+    "enableAdvanced": "Erweiterten Abschluss prüfen",
     "tabs": {
       "calendars": "Kalender",
       "periods": "Perioden",
@@ -374,7 +428,8 @@
       "title": "Abschlussrichtlinien",
       "description": "Konfigurieren Sie Kontrollen für Wesentlichkeit, Sperrung, Prüfung, Funktionstrennung und Ausnahmen.",
       "formTitle": "Richtlinienkonfiguration",
-      "rulesHint": "Legen Sie benutzerdefinierte Wesentlichkeitsschwellen fest und steuern Sie, wo jede Richtlinie gilt – ohne Beteiligung von Entwicklern."
+      "rulesHint": "Legen Sie benutzerdefinierte Wesentlichkeitsschwellen fest und steuern Sie, wo jede Richtlinie gilt – ohne Beteiligung von Entwicklern.",
+      "materialityFormTitle": "Wesentlichkeitsrichtlinie"
     },
     "automation": {
       "title": "Abschlussautomatisierung",
@@ -386,7 +441,17 @@
       "description": "Definieren Sie die Berichte, Empfänger und Zustellungskonfiguration, die mit einem Abschluss veröffentlicht werden.",
       "formTitle": "Berichtspaket",
       "reportCount": "{count, plural, one {# Bericht} other {# Berichte}}",
-      "recipientsHint": "Ein Empfänger pro Zeile."
+      "recipientsHint": "Ein Empfänger pro Zeile.",
+      "addReport": "Bericht hinzufügen…",
+      "noReports": "Noch keine Berichte angehängt.",
+      "sendNowTitle": "Jetzt senden",
+      "sendNowHint": "Liefern Sie das gespeicherte Paket sofort für eine gewählte Periode, ohne auf die Veröffentlichung eines Abschlusses zu warten.",
+      "sendNow": "Jetzt senden",
+      "sending": "Wird gesendet…",
+      "sendQueued": "Versand in Warteschlange — das Paket wird per E-Mail an die Empfänger gesendet.",
+      "sendPeriod": "Periode",
+      "selectPeriod": "Periode auswählen…",
+      "sendNoPeriods": "Generieren Sie Buchungsperioden vor dem Senden."
     },
     "actions": {
       "newCalendar": "Neuer Kalender",
@@ -409,7 +474,8 @@
       "reject": "Ablehnen",
       "cancel": "Abbrechen",
       "manageBooks": "Bücher verwalten",
-      "managePeriod": "{period} verwalten"
+      "managePeriod": "{period} verwalten",
+      "addRow": "Hinzufügen"
     },
     "fields": {
       "name": "Name",
@@ -515,7 +581,11 @@
       "review": "Prüfung",
       "publish": "Veröffentlichung"
     },
-    "gates": { "none": "Kein Gate", "soft": "Weiches Gate", "hard": "Hartes Gate" },
+    "gates": {
+      "none": "Kein Gate",
+      "soft": "Weiches Gate",
+      "hard": "Hartes Gate"
+    },
     "completionModes": {
       "manual": "Manuell",
       "computed": "Hauptbuchberechnet",
@@ -561,7 +631,12 @@
       "trial-balance": "Summen- und Saldenliste",
       "general-ledger": "Hauptbuch"
     },
-    "table": { "period": "Periode", "range": "Zeitraum", "entries": "Buchungen", "status": "Status" },
+    "table": {
+      "period": "Periode",
+      "range": "Zeitraum",
+      "entries": "Buchungen",
+      "status": "Status"
+    },
     "empty": {
       "calendars": "Keine Geschäftskalender entsprechen dieser Suche.",
       "periods": "Keine Buchungsperioden entsprechen diesen Filtern.",
@@ -585,6 +660,150 @@
     "errors": {
       "actionFailed": "Die Einrichtungsänderung konnte nicht gespeichert werden",
       "invalidConfiguration": "Die Konfiguration muss gültig und vollständig sein"
+    },
+    "policyRules": {
+      "materialityIntro": "Eine Kontobewegung zwischen Perioden wird nur dann zur Prüfung markiert, wenn sie BEIDE Schwellen überschreitet.",
+      "amount": "Betragsschwelle",
+      "amountHint": "Absolute Veränderung in Basiswährung (z. B. 10.000).",
+      "percent": "Prozentschwelle",
+      "percentHint": "Relative Veränderung gegenüber der Vorperiode.",
+      "approvalRequired": "Unabhängige Genehmigung zum Wiedereröffnen einer gesperrten Periode verlangen",
+      "defaultHours": "Standard-Wiedereröffnungsfenster (Stunden)",
+      "maxHours": "Maximales Wiedereröffnungsfenster (Stunden)",
+      "prohibitSelfApproval": "Verhindern, dass Personen ihre eigene Arbeit genehmigen",
+      "advancedIntro": "Dieser Richtlinientyp hat keine integrierten Einstellungen. Fügen Sie bei Bedarf benutzerdefinierte Schlüssel/Wert-Einstellungen hinzu.",
+      "noSettings": "Dieser Richtlinientyp benötigt keine zusätzlichen Einstellungen."
+    },
+    "conditions": {
+      "intro": "Die Regel wird nur ausgeführt, wenn alle folgenden Bedingungen erfüllt sind. Lassen Sie eine Bedingung leer, um sie zu ignorieren.",
+      "runStatus": "Abschlusslaufstatus ist",
+      "workstream": "Arbeitsbereich ist",
+      "taskStatus": "Aufgabenstatus ist",
+      "severity": "Schweregrad der Ausnahme ist",
+      "taskKey": "Aufgabenschlüssel ist einer von",
+      "taskKeyHint": "Kommasgetrennte stabile Aufgabenschlüssel.",
+      "minReadiness": "Bereitschaftswert ist mindestens",
+      "maxReadiness": "Bereitschaftswert ist höchstens",
+      "withinDays": "Verbleibende Tage bis zum Abschlussziel höchstens",
+      "readinessHint": "0–100.",
+      "any": "Alle"
+    },
+    "automationConfig": {
+      "notifyUsers": "Diese Personen benachrichtigen",
+      "notifyRoles": "…und alle in diesen Rollen",
+      "notifyHint": "Wenn niemand ausgewählt ist, wird die Person benachrichtigt, die den Lauf gestartet hat.",
+      "title": "Benachrichtigungstitel",
+      "titlePlaceholder": "Standard: der Regelname",
+      "body": "Nachricht",
+      "bodyPlaceholder": "Standard: Periode und Buch",
+      "owner": "Verantwortlichen zuweisen (Person)",
+      "ownerRole": "…oder erste verfügbare Person in Rolle",
+      "reviewer": "Prüfer zuweisen (Person)",
+      "reviewerRole": "…oder erste verfügbare Person in Rolle",
+      "assignHint": "Zuweisungsautomatisierungen laufen auf Aufgabenereignissen.",
+      "taskKey": "Aufgabenschlüssel",
+      "taskKeyPlaceholder": "klein mit Bindestrichen, z. B. late-accrual-review",
+      "taskTitle": "Aufgabentitel",
+      "taskDescription": "Aufgabenbeschreibung",
+      "gate": "Gate",
+      "evidenceRequired": "Nachweis vor Abschluss verlangen",
+      "report": "Bericht zum Einfrieren",
+      "label": "Nachweisbezeichnung",
+      "subjectKind": "Flow-Subjektart",
+      "subjectId": "Flow ausführen gegen",
+      "buttonId": "Flow-Schaltflächen-ID",
+      "none": "Diese Aktion benötigt keine zusätzliche Konfiguration.",
+      "allocHint": "Vorschau jeder ausgewählten Periodenregel für Periode und Buch dieses Laufs. Das Buchen schreibt auch die berechneten Zeilen.",
+      "allocAllRules": "Alle aktiven Periodenregeln",
+      "allocRuleIds": "Regel-IDs",
+      "allocRuleIdsHint": "Kommasgetrennte Umlageregel-UUIDs. Nur verwendet, wenn „Alle aktiven Periodenregeln“ ausgeschaltet ist.",
+      "allocPost": "Berechnete Läufe buchen (sonst nur Vorschau)",
+      "sectionConditions": "Wenn (Bedingungen)",
+      "sectionConfig": "Dann (Konfiguration)"
+    },
+    "subjectRefs": {
+      "$run": "Der Abschlusslauf",
+      "$task": "Die auslösende Aufgabe"
+    },
+    "reportGroups": {
+      "built_in": "Standardberichte",
+      "custom": "Benutzerdefinierte Berichte"
+    },
+    "reportsEmpty": "Noch keine Berichte definiert.",
+    "delivery": {
+      "title": "Zustellung",
+      "intro": "Wie dieses Paket verpackt und gesendet wird, wenn ein Abschluss veröffentlicht wird.",
+      "format": "Dateiformat",
+      "formats": {
+        "pdf": "PDF",
+        "xlsx": "Excel",
+        "both": "PDF + Excel"
+      },
+      "combine": "Alle Berichte in einem PDF zusammenfassen",
+      "coverPage": "Deckblatt einfügen",
+      "cadence": "Wann zustellen",
+      "cadences": {
+        "on_publish": "Wenn der Abschluss veröffentlicht wird",
+        "manual": "Nur manuell"
+      },
+      "advanced": "Erweiterte Zustellungseinstellungen"
+    },
+    "kv": {
+      "key": "Einstellung",
+      "value": "Wert",
+      "add": "Einstellung hinzufügen",
+      "empty": "Keine benutzerdefinierten Einstellungen."
+    },
+    "reportParams": {
+      "dateRange": "Zeitraum",
+      "closePeriod": "Die Abschlussperiode",
+      "custom": "Benutzerdefinierter Zeitraum",
+      "from": "Von",
+      "to": "Bis",
+      "breakout": "Aufgliedern nach",
+      "breakouts": {
+        "none": "Keine Aufgliederung",
+        "department": "Abteilung",
+        "location": "Standort",
+        "class": "Klasse",
+        "project": "Projekt",
+        "month": "Monat",
+        "quarter": "Quartal"
+      },
+      "filters": "Filter",
+      "department": "Abteilung",
+      "location": "Standort",
+      "class": "Klasse",
+      "project": "Projekt",
+      "subsidiary": "Tochtergesellschaft",
+      "anyValue": "Alle",
+      "definedDate": "Zeitraum",
+      "definedBreakouts": "Aufgliederungen",
+      "definedFilters": "Filter",
+      "definedMeasures": "Kennzahlen",
+      "noDefined": "Dieser Bericht übernimmt Zeitraum und Filter zum Zustellungszeitpunkt."
     }
+  },
+  "postingPeriods": {
+    "title": "Buchungsperioden zuordnen",
+    "description": "Genehmigte Dokumente ohne Buchungsperiode, abgeleitet aus dem jeweiligen Leistungsdatum. Prüfen Sie die Vorschau und ordnen Sie dann zu.",
+    "backToClose": "Zurück zum Periodenabschluss",
+    "previewTitle": "{count, plural, one {# Dokument} other {# Dokumente}}",
+    "previewDescription": "Nur zuordenbare Dokumente werden übernommen. Blockierte Dokumente behalten ihren Grund und werden niemals zwangsweise zugeordnet.",
+    "loading": "Vorschau wird geladen…",
+    "empty": "Keine genehmigten Dokumente ohne Buchungsperiode.",
+    "document": "Dokument",
+    "kind": "Art",
+    "effectiveDate": "Leistungsdatum",
+    "period": "Periode",
+    "status": "Status",
+    "assignable": "Zuordenbar",
+    "assign": "{count, plural, one {# Periode zuordnen} other {# Perioden zuordnen}}",
+    "blockedNote": "{count, plural, one {# Dokument ist} other {# Dokumente sind}} blockiert und wird übersprungen.",
+    "refusedNote": "{count, plural, one {# Dokument wurde} other {# Dokumente wurden}} bei der Übernahme abgelehnt.",
+    "previewFailed": "Vorschau konnte nicht geladen werden.",
+    "commitFailed": "Buchungsperioden konnten nicht zugeordnet werden.",
+    "committed": "{count, plural, one {# Buchungsperiode zugeordnet} other {# Buchungsperioden zugeordnet}}.",
+    "needsBook": "Öffnen Sie diese Seite aus einem Abschlusslauf, um ein Buch auszuwählen und Buchungsperioden zuzuordnen."
   }
 }
