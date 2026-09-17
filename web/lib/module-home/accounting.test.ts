@@ -51,6 +51,7 @@ const mockSources = new Map<string, string>([
       export const schema = {}
       export function ambientTenantOrgId() { return null }
       export async function withBypassContext(work) { return work() }
+      export function registerRequestOrgResolver() {}
     `,
   ],
   ['mock:business-date', `export async function businessToday() { return '2026-08-28' }; export function addCalendarDays(date, days) { return date }`],
