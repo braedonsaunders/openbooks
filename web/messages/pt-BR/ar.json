@@ -87,7 +87,8 @@
       "next30": "Próximos 30 dias",
       "dso": "Prazo médio de recebimento (DSO)",
       "dsoSub": "Média de dias para receber",
-      "days": "{n} d"
+      "days": "{n} d",
+      "asOf": "Em {date}"
     },
     "panels": {
       "worklist": "Lista de trabalho de cobranças",

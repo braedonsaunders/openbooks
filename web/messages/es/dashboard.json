@@ -37,7 +37,8 @@
     "pastDue": "Vencido",
     "agentProposals": "{count} con propuestas",
     "agentLastRun": "última ejecución {date}",
-    "agentClear": "Sin pendientes"
+    "agentClear": "Sin pendientes",
+    "asOf": "Al {date}"
   },
   "categories": {
     "kpi": "Indicadores clave",

@@ -87,7 +87,8 @@
       "next30": "未来30天",
       "dso": "应收账款周转天数（DSO）",
       "dsoSub": "平均收款天数",
-      "days": "{n}天"
+      "days": "{n}天",
+      "asOf": "截至 {date}"
     },
     "panels": {
       "worklist": "收款工作清单",

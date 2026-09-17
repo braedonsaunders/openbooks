@@ -33,7 +33,8 @@
     "awaitingDecision": "Aguardando uma decisão",
     "baseCurrency": "Moeda base · {currency}",
     "outstanding": "Em aberto",
-    "pastDue": "Vencido"
+    "pastDue": "Vencido",
+    "asOf": "Em {date}"
   },
   "categories": {
     "kpi": "Destaques",

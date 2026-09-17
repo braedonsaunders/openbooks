@@ -87,7 +87,8 @@
       "next30": "今後30日",
       "dso": "売掛金回転日数（DSO）",
       "dsoSub": "平均回収日数",
-      "days": "{n}日"
+      "days": "{n}日",
+      "asOf": "{date} 時点"
     },
     "panels": {
       "worklist": "回収作業リスト",

@@ -30,6 +30,18 @@ export function WidgetCard({
   const { money } = useMoney()
   const t = useTranslations('dashboard')
   const locale = useLocale()
+  // The cut-off the as-of readers used, so a tile that excludes
+  // future-dated documents says which day it is cut at (F-t02-007).
+  // Noon-anchored: a bare YYYY-MM-DD parses as UTC midnight and would
+  // render a day early west of Greenwich.
+  const asOf = data.asOfDate
+    ? t('metricContext.asOf', {
+        date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+          new Date(`${data.asOfDate}T12:00:00Z`),
+        ),
+      })
+    : null
+  const withAsOf = (hint: string) => (asOf ? `${hint} · ${asOf}` : hint)
 
   switch (widgetId) {
     case 'kpi-journal-lines':
@@ -62,15 +74,15 @@ export function WidgetCard({
     case 'kpi-ledger-balance':
       return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, { currency: data.baseCurrency })} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
-      return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={t('metricContext.baseCurrency', { currency: data.baseCurrency })} />
+      return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={withAsOf(t('metricContext.baseCurrency', { currency: data.baseCurrency }))} />
     case 'kpi-open-receivables':
-      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={t('metricContext.outstanding')} />
+      return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value={money(data.openReceivables, { currency: data.baseCurrency })} href="/ar" tone="sky" hint={withAsOf(t('metricContext.outstanding'))} />
     case 'kpi-overdue-receivables':
-      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={t('metricContext.pastDue')} />
+      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-open-payables':
-      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={t('metricContext.outstanding')} />
+      return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value={money(data.openPayables, { currency: data.baseCurrency })} href="/ap" tone="violet" hint={withAsOf(t('metricContext.outstanding'))} />
     case 'kpi-overdue-payables':
-      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={t('metricContext.pastDue')} />
+      return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':

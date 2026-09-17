@@ -33,7 +33,8 @@
     "awaitingDecision": "Wartet auf Entscheidung",
     "baseCurrency": "Basiswährung · {currency}",
     "outstanding": "Ausstehend",
-    "pastDue": "Überfällig"
+    "pastDue": "Überfällig",
+    "asOf": "Stand {date}"
   },
   "categories": {
     "kpi": "Kennzahlen",

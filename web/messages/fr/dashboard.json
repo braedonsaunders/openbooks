@@ -37,7 +37,8 @@
     "pastDue": "Échu",
     "agentProposals": "{count} avec propositions",
     "agentLastRun": "dernière exécution {date}",
-    "agentClear": "Rien en attente"
+    "agentClear": "Rien en attente",
+    "asOf": "Au {date}"
   },
   "categories": {
     "kpi": "Indicateurs clés",

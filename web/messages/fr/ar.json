@@ -87,7 +87,8 @@
       "next30": "30 prochains jours",
       "dso": "Délai moyen de paiement (DSO)",
       "dsoSub": "Jours moyens avant encaissement",
-      "days": "{n} j"
+      "days": "{n} j",
+      "asOf": "Au {date}"
     },
     "panels": {
       "worklist": "Liste de travail des encaissements",

@@ -87,7 +87,8 @@
       "next30": "Próximos 30 días",
       "dso": "Días de ventas pendientes (DSO)",
       "dsoSub": "Promedio de días para cobrar",
-      "days": "{n} d"
+      "days": "{n} d",
+      "asOf": "Al {date}"
     },
     "panels": {
       "worklist": "Lista de trabajo de cobros",
