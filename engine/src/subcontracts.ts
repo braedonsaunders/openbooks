@@ -777,6 +777,13 @@ async function computeApplicationTx(tx: SqlExecutor, orgId: string, payApplicati
   `)).rows[0];
   if (!meta) throw new SubcontractError("Vendor application not found");
   if (!meta.currency) throw new SubcontractError("Retainage settlement requires a subcontract currency");
+  // Serialize the replay on the subcontract row: two concurrent submits must
+  // not read the same settled history, or both settle the same residual and
+  // strand a minor unit of dust. The inner join above already proves the row
+  // exists.
+  await tx.execute(sql`
+    select 1 from subcontracts where org_id = ${orgId} and id = ${meta.subcontract_id} for update
+  `);
   const minorUnits = await retainageCurrencyMinorUnits(tx, meta.currency);
   // Replay the exact retainage of already-settled draws, oldest first, so the
   // residual carries across draws. The replay set (lower application numbers,
