@@ -151,7 +151,7 @@ export function ProjectDrawer({
     canInvoice: boolean
   }
 }) {
-  const { currency } = useMoney()
+  const { currency, money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -396,7 +396,7 @@ export function ProjectDrawer({
             {editable ? <div className="flex items-center">
               <span className="mr-1 text-slate-500">{currency}</span>
               <Input inputMode="decimal" className="text-right tabular-nums" value={contractValue} onChange={(e) => setContractValue(e.target.value)} />
-            </div> : <ReadOnlyValue value={contractValue ? `${currency} ${contractValue}` : ''} className="text-right tabular-nums" />}
+            </div> : <ReadOnlyValue value={contractValue ? money(contractValue) : ''} className="text-right tabular-nums" />}
           </>
         )
       case 'foreman_id':
