@@ -182,7 +182,8 @@
     "deleteTitle": "このレコードを削除しますか？",
     "deleteBody": "この操作は取り消せません。",
     "confirm": "確認",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "discardChanges": "変更を破棄する"
   },
   "billingMethods": {
     "timeAndMaterials": "実費精算",

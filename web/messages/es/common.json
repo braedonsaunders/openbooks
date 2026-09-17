@@ -202,7 +202,8 @@
     "deleteTitle": "¿Eliminar este registro?",
     "deleteBody": "Esta acción no se puede deshacer.",
     "confirm": "Confirmar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "discardChanges": "Descartar cambios"
   },
   "billingMethods": {
     "timeAndMaterials": "Tiempo y materiales",

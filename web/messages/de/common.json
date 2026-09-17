@@ -182,7 +182,8 @@
     "deleteTitle": "Diesen Datensatz löschen?",
     "deleteBody": "Dies kann nicht rückgängig gemacht werden.",
     "confirm": "Bestätigen",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "discardChanges": "Änderungen verwerfen"
   },
   "billingMethods": {
     "timeAndMaterials": "Aufwand nach Zeit und Material",

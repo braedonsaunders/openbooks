@@ -10,6 +10,8 @@ import { AuditTrailPanel } from './audit-trail-panel'
 
 interface TransactionDrawerProps {
   closeHref: string
+  /** Optional guard for unsaved edits, forwarded to the UrlDrawer shell. */
+  beforeClose?: () => boolean | Promise<boolean>
   recordId: string
   title: ReactNode
   description?: ReactNode
@@ -45,6 +47,7 @@ interface TransactionDrawerProps {
  */
 export function TransactionDrawer({
   closeHref,
+  beforeClose,
   recordId,
   title,
   description,
@@ -89,6 +92,7 @@ export function TransactionDrawer({
     <UrlDrawer
       open
       closeHref={nestedReturn ?? closeHref}
+      beforeClose={beforeClose}
       stacked={nestedReturn != null && (searchParams.has('relatedParty') || searchParams.has('reportRecord') || searchParams.has('projectTxn'))}
       size="2xl"
       panelClassName={panelClassName}

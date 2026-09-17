@@ -182,7 +182,8 @@
     "deleteTitle": "删除此记录？",
     "deleteBody": "此操作无法撤销。",
     "confirm": "确认",
-    "cancel": "取消"
+    "cancel": "取消",
+    "discardChanges": "放弃更改"
   },
   "billingMethods": {
     "timeAndMaterials": "工时与材料",
