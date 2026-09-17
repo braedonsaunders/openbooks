@@ -7,7 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { documentDrawerHref } from '../lib/document-drawer-navigation'
-import { displayDocumentNumber } from '../lib/document-display'
+import { displayDocumentNumber, displayFormName } from '../lib/document-display'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
@@ -668,7 +668,7 @@ export interface DocumentDrawerProps {
    *  defensive loading fallback used while a page is resolving. */
   layout?: FormLayoutConfig
   /** Available org form layouts (for the per-record "Custom Form" picker). */
-  availableLayouts?: { id: string; name: string }[]
+  availableLayouts?: { id: string; name: string; isDefault?: boolean }[]
   currentLayoutId?: string | null
   /** Record-type key (for the form-preference API). */
   recordType?: string
@@ -2118,7 +2118,7 @@ export function DocumentDrawer({
             triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
           >
             {availableLayouts!.map((availableLayout) => (
-              <option key={availableLayout.id} value={availableLayout.id}>{availableLayout.name}</option>
+              <option key={availableLayout.id} value={availableLayout.id}>{displayFormName(availableLayout.name, availableLayout.isDefault, tCommon('labels.defaultForm'))}</option>
             ))}
           </Select>
           <Button

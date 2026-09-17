@@ -223,6 +223,61 @@ const INVENTORY_VIEW_TAB_EXPECTATIONS: Record<string, Record<InventoryViewTabKey
     'view.bom': '物料清单',
   },
 }
+
+/**
+ * Reviewed "Default form" labels (F-t02-013: the seeded built-in form name
+ * leaked English into localized drawers). The drawers render this key only
+ * for the default layout that still carries the seed name; a renamed default
+ * or a same-named custom layout shows its stored name.
+ */
+const DEFAULT_FORM_NAME_EXPECTATIONS: Record<string, string> = {
+  en: 'Default form',
+  de: 'Standardformular',
+  es: 'Formulario predeterminado',
+  fr: 'Formulaire par défaut',
+  ja: '既定のフォーム',
+  'pt-BR': 'Formulário padrão',
+  zh: '默认表单',
+}
+
+/**
+ * Reviewed Spanish shared status labels (F-t02-014: "Factura … Aprobado"
+ * disagreed in gender). The shared common.status labels cannot know their
+ * noun, so the inflecting participles use gender-neutral o/a forms; the
+ * invariant noun phrases (draft, pendingApproval) and non-words (error, ok)
+ * stay untouched. Other locales keep their current reviewed values, pinned
+ * here so a regression of the filed key is caught in every locale.
+ */
+const ES_NEUTRAL_STATUS_EXPECTATIONS: Record<string, string> = {
+  'status.draft': 'Borrador',
+  'status.pendingApproval': 'Pendiente de aprobación',
+  'status.approved': 'Aprobado/a',
+  'status.rejected': 'Rechazado/a',
+  'status.posted': 'Contabilizado/a',
+  'status.paid': 'Pagado/a',
+  'status.partiallyPaid': 'Pagado/a parcialmente',
+  'status.open': 'Abierto/a',
+  'status.closed': 'Cerrado/a',
+  'status.voided': 'Anulado/a',
+  'status.reversed': 'Revertido/a',
+  'status.cancelled': 'Cancelado/a',
+  'status.active': 'Activo/a',
+  'status.inactive': 'Inactivo/a',
+  'status.error': 'Error',
+  'status.ok': 'OK',
+  'status.pending_approval': 'Enviado/a',
+}
+
+/** The filed agreement key, pinned in every locale. */
+const STATUS_APPROVED_EXPECTATIONS: Record<string, string> = {
+  en: 'Approved',
+  de: 'Genehmigt',
+  es: 'Aprobado/a',
+  fr: 'Approuvé',
+  ja: '承認済み',
+  'pt-BR': 'Aprovado',
+  zh: '已批准',
+}
 const REMEASURE_BUTTON_SOURCE = readFileSync(
   new URL('../app/(app)/assets/RemeasureButton.tsx', import.meta.url),
   'utf8',
@@ -412,6 +467,48 @@ test('setup save-failure copy ships localized in every locale', () => {
       assert.ok(value && value.trim(), `${locale} is missing ${key}`)
       assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
     }
+  }
+})
+
+test('the seeded default-form label is translated in every locale', () => {
+  const source = flattenCatalog('en')
+  assert.equal(source.get('common.labels.defaultForm'), DEFAULT_FORM_NAME_EXPECTATIONS.en)
+
+  for (const locale of locales) {
+    const catalog = flattenCatalog(locale)
+    const expected = DEFAULT_FORM_NAME_EXPECTATIONS[locale]
+    assert.ok(expected, `${locale} has no reviewed default-form expectation`)
+    const value = catalog.get('common.labels.defaultForm')
+    assert.ok(value && value.trim(), `${locale}/common.json is missing common.labels.defaultForm`)
+    assert.equal(value, expected, `${locale}/common.json has an unreviewed common.labels.defaultForm`)
+  }
+})
+
+test('spanish shared status labels use gender-neutral forms', () => {
+  const source = flattenCatalog('en')
+  const catalog = flattenCatalog('es')
+
+  for (const [key, expected] of Object.entries(ES_NEUTRAL_STATUS_EXPECTATIONS)) {
+    const fullKey = `common.${key}`
+    assert.ok(source.has(fullKey), `English source is missing ${fullKey}`)
+    const value = catalog.get(fullKey)
+    assert.ok(value && value.trim(), `es/common.json is missing ${fullKey}`)
+    assert.equal(value, expected, `es/common.json has an unreviewed ${fullKey}`)
+  }
+  // No other Spanish status key may exist outside the reviewed set: a new
+  // masculine participle would reintroduce the filed disagreement silently.
+  const esStatusKeys = [...catalog.keys()].filter((key) => key.startsWith('common.status.')).sort()
+  assert.deepEqual(esStatusKeys, Object.keys(ES_NEUTRAL_STATUS_EXPECTATIONS).map((key) => `common.${key}`).sort())
+})
+
+test('the filed agreement key is pinned in every locale', () => {
+  for (const locale of locales) {
+    const catalog = flattenCatalog(locale)
+    const expected = STATUS_APPROVED_EXPECTATIONS[locale]
+    assert.ok(expected, `${locale} has no reviewed status.approved expectation`)
+    const value = catalog.get('common.status.approved')
+    assert.ok(value && value.trim(), `${locale}/common.json is missing common.status.approved`)
+    assert.equal(value, expected, `${locale}/common.json has an unreviewed common.status.approved`)
   }
 })
 
