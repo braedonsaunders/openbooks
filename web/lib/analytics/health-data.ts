@@ -108,7 +108,7 @@ export interface BudgetRow {
   variance: number; // actual − budget (income sign-normalised positive)
   variancePct: number | null;
   favorable: boolean;
-  status: "on-track" | "watch" | "over" | "no-budget";
+  status: "on-track" | "watch" | "over" | "under" | "no-budget";
 }
 
 export interface BudgetVariance {
@@ -747,13 +747,33 @@ export async function healthData(
 }
 
 /**
+ * Budget-line status rule (F-t09-004): on-track when favorable or within
+ * 10%, watch to 25%, and beyond that the direction keeps its meaning —
+ * overspent cost lines read "over", missed revenue lines read "under".
+ * Flagging a revenue shortfall as over-budget spend inverts the story, so
+ * income and cost have distinct unfavorable-beyond-tolerance statuses while
+ * sharing the neutral watch band. Exported for unit tests.
+ */
+export function budgetLineStatus(
+  type: string,
+  variance: number,
+  variancePct: number | null,
+  budget: number,
+): BudgetRow["status"] {
+  const favorable = type === "income" || type === "income_other" ? variance >= 0 : variance <= 0;
+  if (budget === 0) return "no-budget";
+  if (favorable || Math.abs(variancePct ?? 0) <= 0.1) return "on-track";
+  if (Math.abs(variancePct ?? 0) <= 0.25) return "watch";
+  return type === "income" || type === "income_other" ? "under" : "over";
+}
+
+/**
  * Real budget-vs-actual from budget_scenarios / budget_lines (dimensional,
  * account × period). Scenario choice: the newest approved budget covering the
  * range. Drafts never masquerade as official targets; null renders a direct
  * link to the budget authoring workflow.
- * Statuses use a ±10% variance rule: on-track when favorable or within
- * 10%, watch to 25%, over beyond; income favours actual ≥ budget, cost
- * accounts the reverse.
+ * Statuses follow budgetLineStatus above; income favours actual ≥ budget,
+ * cost accounts the reverse.
  */
 async function budgetVariance(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<BudgetVariance> {
   const scen = (await db.execute(sql`
@@ -857,11 +877,7 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
       const variance = actual - budget;
       const variancePct = Math.abs(budget) > 0 ? variance / Math.abs(budget) : null;
       const favorable = isIncome(v.type) ? variance >= 0 : variance <= 0;
-      let status: BudgetRow["status"];
-      if (budget === 0) status = "no-budget";
-      else if (favorable || Math.abs(variancePct ?? 0) <= 0.1) status = "on-track";
-      else if (Math.abs(variancePct ?? 0) <= 0.25) status = "watch";
-      else status = "over";
+      const status = budgetLineStatus(v.type, variance, variancePct, budget);
       return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
     })
     .sort((a, b) => Math.abs(b.actual - b.budget) - Math.abs(a.actual - a.budget));

@@ -109,6 +109,7 @@
       "onWatch": "{count} on watch",
       "coverage": "Coverage",
       "coverageSub": "accounts with a budget line",
+      "toleranceNote": "On Track: favorable or within ±10% of budget · Watch: within ±25% · Over (spend) / Under (revenue): beyond ±25%",
       "tableTitle": "Budget vs Actual ({count})",
       "search": "Search accounts…",
       "csv": "CSV",
@@ -117,6 +118,7 @@
         "on-track": "On Track",
         "watch": "Watch",
         "over": "Over",
+        "under": "Under",
         "no-budget": "No Budget"
       },
       "columns": {
