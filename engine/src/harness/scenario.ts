@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../db.ts";
 import { abs, cmp, fromUnits, toUnits } from "../money.ts";
 
 /**
@@ -116,6 +116,44 @@ export async function runScenario(
        group by e.id having abs(sum(l.amount)) >= 0.005) x`);
   checks.push({ name: "per-entry-balance", ok: Number(unbal.n) === 0, detail: `${unbal.n} posted entries do not balance (want 0)` });
 
+  // -- CHECK 2b: every book balances (functional amount grouped by book) -----
+  // Lines carry no book of their own — the book lives on the entry — so this
+  // is implied by per-entry balance today. It is asserted anyway, explicitly,
+  // because the invariant is per-book ("in every book"): the day a line can
+  // carry a different book than its entry, the global sum can still net to
+  // zero across books while one book drifts. One grouped scan.
+  const bookBal = await all<{ code: string; s: string }>(sql`
+    select b.code, coalesce(sum(l.amount), 0)::text as s
+      from accounting_books b
+      left join journal_entries e on e.book_id = b.id and e.status in ('posted','reversed')
+      left join journal_lines l on l.entry_id = e.id
+     where b.org_id = ${orgId}
+     group by b.code`);
+  const worstBook = bookBal.reduce(
+    (worst, row) => cmp(abs(row.s), abs(worst.s)) > 0 ? row : worst,
+    { code: "", s: "0" },
+  );
+  checks.push({
+    name: "per-book-balance",
+    ok: bookBal.every((row) => cmp(abs(row.s), "0.0050") < 0),
+    detail: `${bookBal.length} books; worst |Σ| = ${worstBook.s} on ${worstBook.code || "(none)"} (want < 0.005)`,
+  });
+
+  // -- CHECK 2c: every posted entry balances in transaction currency --------
+  // The storage trigger pins the functional amount; the txn_amount side is
+  // only pinned per line (jl_fx_consistent: amount = round(txn × fx)). Every
+  // entry on every cluster today is single-currency AND single-rate, so the
+  // txn sums are all exactly zero — this check pins that second dimension so
+  // a future mixed-rate line cannot silently move value between currencies
+  // while the functional sum still nets to zero.
+  const tunbal = await one<{ n: string }>(sql`
+    select count(*) n from (
+      select e.id from journal_lines l
+        join journal_entries e on e.id = l.entry_id
+       where l.org_id = ${orgId} and e.status in ('posted','reversed')
+       group by e.id having abs(sum(l.txn_amount)) >= 0.005) x`);
+  checks.push({ name: "per-entry-txn-balance", ok: Number(tunbal.n) === 0, detail: `${tunbal.n} posted entries do not balance in txn currency (want 0)` });
+
   // -- CHECK 3: open_balance is fresh (stored == recomputed) -------------------
   const drift = await one<{ n: string }>(sql`
     with calc as (
@@ -133,6 +171,191 @@ export async function runScenario(
          and exists (select 1 from journal_entries e2 where e2.id = d.posted_entry_id and e2.posting_date <= ${cutoff}))
     select count(*) n from calc where stored is distinct from recomputed`);
   checks.push({ name: "open-balance-fresh", ok: Number(drift.n) === 0, detail: `${drift.n} closed-period documents have stale open_balance (want 0)` });
+
+  // -- CHECK 3b: header arithmetic — total == subtotal + tax_total ----------
+  // Holds for every document of every kind and status on every cluster: the
+  // header is a pure function of its two components (migration 0017 pins the
+  // line tie; this pins the header sum). Half-cent tolerance for per-line
+  // rounding carried into the header.
+  const hdrArith = await one<{ n: string; worst: string | null }>(sql`
+    select count(*) n, max(abs(total - (subtotal + tax_total)))::text as worst
+      from documents
+     where org_id = ${orgId} and abs(total - (subtotal + tax_total)) > 0.005`);
+  checks.push({
+    name: "document-header-arithmetic",
+    ok: Number(hdrArith.n) === 0,
+    detail: `${hdrArith.n} documents with total ≠ subtotal + tax_total (want 0; worst ${hdrArith.worst ?? "—"})`,
+  });
+
+  // -- CHECK 3c: header↔lines — the 0017 storage tie, over state ------------
+  // Mirrors assert_document_totals_match_lines EXACTLY (same formulas, same
+  // exact numeric equality, same line-org scoping, same journal-shaped kinds,
+  // same lineless vacuity) so storage and state can never disagree about what
+  // the invariant IS:
+  // - commercial kinds: subtotal = Σ amounts, tax_total = Σ tax_amounts,
+  //   total = subtotal + tax_total.
+  // - journal-shaped kinds ('journal', 'pay_run'): lines are signed legs
+  //   balancing to zero; total = Σ positive amounts (the debit-side view),
+  //   tax_total = Σ tax_amounts, subtotal = total − tax_total.
+  // - documents with no lines are vacuously conforming (counted, not gated):
+  //   payments and manual journals carry header-only amounts, and empty
+  //   drafts exist before their first line.
+  // No tolerance: numeric(19,4) arithmetic is exact. The refresh trigger
+  // maintains the header after every line mutation and the assert trigger
+  // rejects any contradiction at commit — both unconditional since 0078, so
+  // a mismatch is unplantable through any writer and this check is entailed
+  // rather than independent. It stays as the state-side mirror so storage
+  // and state can never disagree about what the invariant IS.
+  const lineTie = await one<{ n: string; skipped: string }>(sql`
+    with t as (
+      select d.id, d.kind, d.subtotal, d.tax_total, d.total,
+             count(dl.id) as nlines,
+             coalesce(sum(dl.amount), 0) as asum,
+             coalesce(sum(dl.tax_amount), 0) as tsum,
+             coalesce(sum(dl.amount) filter (where dl.amount > 0), 0) as dsum
+        from documents d
+        left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+       where d.org_id = ${orgId}
+       group by d.id
+    )
+    select count(*) filter (
+             where nlines > 0 and (
+               case when kind in ('journal', 'pay_run')
+                 then tax_total <> tsum or total <> dsum or subtotal <> dsum - tsum
+                 else subtotal <> asum or tax_total <> tsum or total <> asum + tsum
+               end))::text as n,
+           count(*) filter (where nlines = 0)::text as skipped
+      from t`);
+  let lineTieDetail = `${lineTie.n} documents with headers ≠ own lines (want 0; ${lineTie.skipped} lineless docs skipped)`;
+  if (Number(lineTie.n) > 0) {
+    const worstLines = await all<{ document_number: string; kind: string }>(sql`
+      with t as (
+        select d.id, d.document_number, d.kind
+          from documents d
+          left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+         where d.org_id = ${orgId}
+         group by d.id
+        having count(dl.id) > 0 and (
+          case when d.kind in ('journal', 'pay_run')
+            then d.tax_total <> coalesce(sum(dl.tax_amount), 0)
+              or d.total <> coalesce(sum(dl.amount) filter (where dl.amount > 0), 0)
+              or d.subtotal <> coalesce(sum(dl.amount) filter (where dl.amount > 0), 0) - coalesce(sum(dl.tax_amount), 0)
+            else d.subtotal <> coalesce(sum(dl.amount), 0)
+              or d.tax_total <> coalesce(sum(dl.tax_amount), 0)
+              or d.total <> coalesce(sum(dl.amount), 0) + coalesce(sum(dl.tax_amount), 0)
+          end)
+      )
+      select document_number, kind from t order by document_number limit 5`);
+    lineTieDetail += ` — e.g. ${worstLines.map((w) => `${w.document_number}(${w.kind})`).join(", ")}`;
+  }
+  checks.push({ name: "document-lines-tieout", ok: Number(lineTie.n) === 0, detail: lineTieDetail });
+
+  // -- CHECK 3d: header↔journal — the header amount must be traceable -------
+  // "Header total equals the debit sum" is the loose slogan; the ledger is
+  // subtler. A retainage invoice's gross debit sum EXCEEDS its total (the
+  // holdback leg inflates both sides while the AR leg equals the total); a
+  // check paying down cards nets adjustments INSIDE the entry so neither side
+  // equals the total while the bank leg does; a pay run splits the money side
+  // across five liability accounts so no single leg equals the total while
+  // the side sums do. Each granularity below is a real posting shape, and the
+  // header must appear at one of them — as the open-item (claim) total, as a
+  // whole journal side, as one account's net, or as a single settlement leg:
+  // - docs WITH open-item legs (invoices, bills, payments, credits): the
+  //   claim legs are the header, converted at the doc fx rate.
+  // - cash docs with NO open-item legs (checks, transfers, journals,
+  //   pay runs, deposits): min over debit side / credit side / best single
+  //   account net / largest single leg.
+  // What this deliberately does NOT assert: leg completeness (a netted
+  // adjustment pair inside a legacy import entry is invisible here — balance
+  // and the subledger ties still cover the money). Tolerance is half a cent
+  // per document line: rounding only. Zero-total cash docs with no open legs
+  // claim nothing and are counted, not gated.
+  const docTie = await one<{ bad: string; skipped: string }>(sql`
+    with docs as (
+      select d.id, abs(d.total * d.fx_rate) as ht,
+             (select count(*) from document_lines dl where dl.document_id = d.id) as nlines
+        from documents d
+       where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
+    ),
+    legs as (
+      select l.entry_id,
+             count(*) filter (where l.is_open_item) as nopen,
+             coalesce(sum(case when l.is_open_item then l.amount else 0 end), 0) as osum,
+             coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as dside,
+             coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as cside,
+             coalesce(max(abs(l.amount)), 0) as bigleg
+        from journal_lines l
+       where l.org_id = ${orgId}
+       group by l.entry_id
+    ),
+    acct_nets as (
+      select d.id, abs(d.ht - abs(sum(l.amount))) as acct_gap
+        from docs d
+        join journal_lines l on l.entry_id = (select posted_entry_id from documents where id = d.id)
+       group by d.id, d.ht, l.account_id
+    ),
+    acct_min as (
+      select id, min(acct_gap) as g from acct_nets group by id
+    ),
+    gap as (
+      select d.id,
+             case when legs.nopen > 0 then abs(d.ht - abs(legs.osum)) end as g_open,
+             abs(d.ht - legs.dside) as g_debit,
+             abs(d.ht - legs.cside) as g_credit,
+             abs(d.ht - legs.bigleg) as g_leg,
+             acct_min.g as g_acct,
+             d.ht, d.nlines, legs.nopen
+        from docs d
+        join legs on legs.entry_id = (select posted_entry_id from documents where id = d.id)
+        left join acct_min on acct_min.id = d.id
+    )
+    select count(*) filter (
+             where not (ht < 0.005 and nopen = 0)
+               and least(coalesce(g_open, 1e18), g_debit, g_credit, g_leg, coalesce(g_acct, 1e18))
+                   > 0.005 * greatest(nlines, 1))::text as bad,
+           count(*) filter (where ht < 0.005 and nopen = 0)::text as skipped
+      from gap`);
+  let docTieDetail = `${docTie.bad} posted documents with untraceable header totals (want 0; ${docTie.skipped} zero-total cash docs skipped)`;
+  if (Number(docTie.bad) > 0) {
+    const worstDocs = await all<{ document_number: string; kind: string }>(sql`
+      with docs as (
+        select d.id, d.document_number, d.kind, abs(d.total * d.fx_rate) as ht,
+               (select count(*) from document_lines dl where dl.document_id = d.id) as nlines
+          from documents d
+         where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
+      ),
+      legs as (
+        select l.entry_id,
+               count(*) filter (where l.is_open_item) as nopen,
+               coalesce(sum(case when l.is_open_item then l.amount else 0 end), 0) as osum,
+               coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as dside,
+               coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as cside,
+               coalesce(max(abs(l.amount)), 0) as bigleg
+          from journal_lines l
+         where l.org_id = ${orgId}
+         group by l.entry_id
+      ),
+      acct_nets as (
+        select d.id, abs(d.ht - abs(sum(l.amount))) as acct_gap
+          from docs d
+          join journal_lines l on l.entry_id = (select posted_entry_id from documents where id = d.id)
+         group by d.id, d.ht, l.account_id
+      ),
+      acct_min as (
+        select id, min(acct_gap) as g from acct_nets group by id
+      )
+      select d.document_number, d.kind
+        from docs d
+        join legs on legs.entry_id = (select posted_entry_id from documents where id = d.id)
+        left join acct_min on acct_min.id = d.id
+       where not (d.ht < 0.005 and legs.nopen = 0)
+         and least(coalesce(case when legs.nopen > 0 then abs(d.ht - abs(legs.osum)) end, 1e18),
+                   abs(d.ht - legs.dside), abs(d.ht - legs.cside), abs(d.ht - legs.bigleg),
+                   coalesce(acct_min.g, 1e18)) > 0.005 * greatest(d.nlines, 1)
+       order by d.ht desc limit 5`);
+    docTieDetail += ` — worst: ${worstDocs.map((w) => `${w.document_number}(${w.kind})`).join(", ")}`;
+  }
+  checks.push({ name: "document-journal-tieout", ok: Number(docTie.bad) === 0, detail: docTieDetail });
 
   // -- CHECK 4: overhead net-zero pairs never move any account -----------------
   // The application mechanism (DR overhead acct [project] / CR same acct
@@ -313,6 +536,98 @@ export async function runScenario(
     ok: cmp(worstInvTie, "0.0000") === 0,
     detail: `${inventoryTieOut.length} control-account/entity ties across ${new Set(inventoryTieOut.map((r) => r.methods)).size} method sets; worst |GL − Σ open layers| = ${worstInvTie}`,
   });
+
+  // -- CHECK 5: gl_month_activity == direct sum over journal lines -----------
+  // Dashboards and the cash tile read the maintained aggregate, not the
+  // lines. The triggers keep it exact (verified: zero drift on every org on
+  // the shared cluster, including 8,101 aggregate rows on production), so ANY
+  // nonzero diff is a real maintenance bug — a skipped trigger, a
+  // sandbox_wipe that never rebuilt, a bulk path that bypassed the line
+  // trigger. Compared per (account, month, subsidiary), the aggregate's own
+  // grain: debit_total, credit_total exact to half a cent, line_count exact.
+  const monthAgg = await one<{ rows_: string; bad: string }>(sql`
+    with direct as (
+      select l.org_id, l.account_id, date_trunc('month', e.posting_date)::date as month, l.subsidiary_id,
+             sum(case when l.amount > 0 then l.amount else 0 end) as d,
+             sum(case when l.amount < 0 then -l.amount else 0 end) as c,
+             count(*) as n
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id
+       where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
+       group by 1, 2, 3, 4
+    )
+    select count(*)::text as rows_,
+           count(*) filter (
+             where abs(coalesce(g.debit_total, 0) - coalesce(x.d, 0)) > 0.005
+                or abs(coalesce(g.credit_total, 0) - coalesce(x.c, 0)) > 0.005
+                or coalesce(g.line_count, 0) <> coalesce(x.n, 0))::text as bad
+      from gl_month_activity g
+      full outer join direct x
+        on x.account_id = g.account_id and x.month = g.month
+       and x.subsidiary_id is not distinct from g.subsidiary_id
+     where coalesce(g.org_id, x.org_id) = ${orgId}`);
+  checks.push({
+    name: "gl-month-activity-tieout",
+    ok: Number(monthAgg.bad) === 0,
+    detail: `${monthAgg.rows_} aggregate rows; ${monthAgg.bad} drifted from a direct sum over journal lines (want 0)`,
+  });
+
+  // -- CHECK 6: org isolation (RLS), catalog + live probe --------------------
+  // "An org's data is never readable from another org, by any reader." Two
+  // layers, both non-destructive:
+  // (a) catalog: every public table carrying org_id must have RLS enabled +
+  //     FORCED (so table owners are gated too) + at least one policy. A new
+  //     org-scoped table without all three is the defect class this pins.
+  // (b) live: from inside THIS org's read scope, another org's document must
+  //     be invisible through the base table AND through the openbooks_query
+  //     view web readers use. The probe also reads its own documents in the
+  //     same scope so a silently-failed-closed scope cannot pass vacuously —
+  //     except on an org with no documents yet, which the detail says aloud
+  //     (the committed RLS red-test covers that case with two scratch orgs).
+  const rlsCatalog = await all<{ tbl: string; rls: boolean; force: boolean; npol: string }>(sql`
+    with t as (
+      select c.relname as tbl, c.relrowsecurity as rls, c.relforcerowsecurity as force,
+             count(pol.polname) as npol
+        from pg_class c
+        join pg_namespace nsp on nsp.oid = c.relnamespace
+        left join pg_policy pol on pol.polrelid = c.oid
+       where nsp.nspname = 'public' and c.relkind = 'r'
+         and exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'org_id')
+       group by 1, 2, 3
+    )
+    select * from t where not (rls and force and npol > 0)`);
+  let rlsOk = rlsCatalog.length === 0;
+  let rlsDetail = rlsCatalog.length === 0
+    ? "catalog clean"
+    : `catalog gaps: ${rlsCatalog.map((r) => r.tbl).join(", ")}`;
+  if (rlsOk) {
+    const foreign = await withBypassContext(async () => {
+      const r = await db.execute<{ id: string }>(sql`
+        select id from documents where org_id <> ${orgId} limit 1`);
+      return r.rows[0] ?? null;
+    });
+    if (!foreign) {
+      rlsDetail += "; no foreign-org rows anywhere on this cluster — live probe vacuous, catalog-only";
+    } else {
+      const seenDirect = await withOrgContext(orgId, async () => {
+        const r = await db.execute(sql`select id from documents where id = ${foreign.id}`);
+        return r.rows;
+      });
+      const seenView = await withOrgContext(orgId, async () => {
+        const r = await db.execute(sql`select id from openbooks_query.documents where id = ${foreign.id}`);
+        return r.rows;
+      });
+      const own = await withOrgContext(orgId, async () => {
+        const r = await db.execute<{ n: string }>(sql`
+          select count(*) n from documents where org_id = ${orgId}`);
+        return Number(r.rows[0]!.n);
+      });
+      rlsOk = seenDirect.length === 0 && seenView.length === 0;
+      rlsDetail += `; foreign doc invisible via table=${seenDirect.length === 0} view=${seenView.length === 0}, own docs visible=${own}`;
+      if (own === 0) rlsDetail += " (empty org — own-visibility half of the probe not provable here; see the committed RLS red-test)";
+    }
+  }
+  checks.push({ name: "rls-org-isolation", ok: rlsOk, detail: rlsDetail });
 
   // -- Report-latency benchmark (the inception-to-cutoff aggregation hot path) -
   const bench = async (name: string, q: ReturnType<typeof sql>) => {
