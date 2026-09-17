@@ -585,3 +585,47 @@ test(
     assert.equal(payrollCertificate("CA", "ca_td1_ON").form, "TD1ON");
   },
 );
+
+test(
+  "employer burden: each component posts its own labeled expense debit",
+  { skip: !DB },
+  async () => {
+    // F-t08-014 residual: a committed US run merged every employer share
+    // into one burden debit labeled with the first component's name
+    // ("Social Security (employer)" for the whole SS-ER + MED-ER aggregate).
+    // Each component keeps its own labeled debit.
+    const fx = await usPayrollOrg();
+    try {
+      await usEmployee(fx, "Burden Bella", { state: "TX" });
+      const { run, result } = await runPayroll(fx);
+      assert.deepEqual(result.errors, []);
+      await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+      const stubBurden = (await db.execute<{ description: string; amount: string }>(sql`
+        select l.description, l.amount::text as amount
+          from pay_stub_lines l
+          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+         where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
+           and l.kind = 'employer_contribution'
+         order by l.description`)).rows;
+      assert.ok(stubBurden.length >= 2, "the stub carries multiple employer shares");
+      const debits = (await db.execute<{ description: string; amount: string }>(sql`
+        select dl.description, dl.amount::text as amount
+          from document_lines dl
+          join accounts a on a.id = dl.account_id
+         where dl.org_id = ${fx.orgId} and dl.document_id = ${run.documentId}
+           and a.number = '6010' and dl.amount::numeric > 0
+         order by dl.description`)).rows;
+      assert.deepEqual(
+        debits.map((leg) => leg.description),
+        stubBurden.map((line) => line.description),
+        "one burden debit per employer component, each correctly labeled",
+      );
+      assert.deepEqual(
+        debits.map((leg) => leg.amount),
+        stubBurden.map((line) => line.amount),
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
