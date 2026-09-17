@@ -191,8 +191,8 @@ export function SetupDrawer({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setFieldError(errorMessage(data?.code ?? data?.error))
-        toast.error(errorMessage(data?.code ?? data?.error))
+        setFieldError(errorMessage(data))
+        toast.error(errorMessage(data))
         return
       }
       toast.success(creating ? t('created') : t('updated'))
@@ -215,7 +215,7 @@ export function SetupDrawer({
     const data = await res.json().catch(() => ({}))
     setBusy(false)
     if (!res.ok) {
-      toast.error(errorMessage(data?.code ?? data?.error))
+      toast.error(errorMessage(data))
       return
     }
     toast.success(t('deleted'))
@@ -223,7 +223,13 @@ export function SetupDrawer({
     router.refresh()
   }
 
-  function errorMessage(code: unknown): string {
+  function errorMessage(body: unknown): string {
+    // Typed server bodies (F-t06-019, F-t06-023): the code maps stably to
+    // localized copy while a user-language message renders verbatim, so an
+    // 'invalid' 400 names its fix instead of echoing a code.
+    const record = body as { code?: unknown; error?: unknown } | null | undefined
+    const code = record?.code
+    const message = record?.error
     if (code === 'duplicate') return t('errors.duplicate')
     if (code === 'in-use') return t('errors.inUse')
     if (code === 'primary-required') return t('errors.primaryRequired')
@@ -231,6 +237,7 @@ export function SetupDrawer({
     if (code === 'archive-only') return t('errors.archiveOnly')
     if (code === 'invalid-url') return t('errors.invalidUrl')
     if (code === 'invalid-depreciation-formula') return t('errors.invalidDepreciationFormula')
+    if (typeof message === 'string' && message) return message
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
   }
