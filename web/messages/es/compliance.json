@@ -304,6 +304,7 @@
     "voidReason": "¿Por qué motivo?",
     "frozenNotice": "Esta declaración está congelada. Los importes y exclusiones reflejan lo transmitido; las correcciones van en una declaración nueva.",
     "noRecipients": "Todavía no se ha calculado nada. Calcule la declaración para rastrear los pagos del año.",
+    "computedNoRecipients": "Calculado — ningún beneficiario alcanzó el umbral de declaración.",
     "adjust": "Ajustar",
     "adjustDescription": "Los ajustes son diferencias con signo sobre el importe del libro mayor, así la trazabilidad nunca se sobrescribe.",
     "adjustReason": "Motivo del ajuste",

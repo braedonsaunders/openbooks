@@ -304,6 +304,7 @@
     "voidReason": "Why is it being voided?",
     "frozenNotice": "This filing is frozen. Amounts and exclusions reflect what was transmitted; corrections go on a new filing.",
     "noRecipients": "Nothing computed yet. Compute the filing to trace the year's payments.",
+    "computedNoRecipients": "Computed — no recipients met the reporting threshold.",
     "adjust": "Adjust",
     "adjustDescription": "Adjustments are signed deltas against the ledger figure, so the trace is never overwritten.",
     "adjustReason": "Reason for the adjustment",
