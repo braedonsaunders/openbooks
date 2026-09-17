@@ -149,6 +149,39 @@ test(
 );
 
 test(
+  "a second approval names the prior approval instead of misreporting an unsubmitted week",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    // F-t08-009: re-approving an approved week failed with a causeless
+    // conflict — nothing identified the prior approval (who/when) or named
+    // the way back (reopen/amend). The refusal must carry both.
+    runIntegrationSource(`
+      ${SEED}
+      const fixture = await seedWeek({ withSubmittedEntry: true });
+      try {
+        await approveSubmittedTimeEntries({
+          orgId: fixture.org.orgId,
+          actorId: fixture.actorId,
+          employeePartyId: fixture.employeeId,
+          weekStart: "2026-07-12",
+        });
+        await assert.rejects(
+          approveSubmittedTimeEntries({
+            orgId: fixture.org.orgId,
+            actorId: fixture.actorId,
+            employeePartyId: fixture.employeeId,
+            weekStart: "2026-07-12",
+          }),
+          /already approved by .+ on \\d{4}-\\d{2}-\\d{2}.*reopen or amend/i,
+        );
+      } finally {
+        await dropScratchOrg(fixture.org.orgId);
+      }
+    `);
+  },
+);
+
+test(
   "direct approval refuses a week owned by pending flow gates",
   { skip: !env.OPENBOOKS_DB_URL },
   () => {

@@ -48,6 +48,9 @@ export async function POST(req: Request) {
     // Guard rejections carry their own sentence: nothing submitted (422), or
     // the week's approval workflow still owns it (409). Anything else is a
     // failed financial-effects unit, rolled back together.
+    if (/already approved/i.test(message)) {
+      return NextResponse.json({ error: message }, { status: 409 })
+    }
     if (/no submitted entries|timesheet week not found/i.test(message)) {
       return NextResponse.json({ error: message }, { status: 422 })
     }
