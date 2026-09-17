@@ -6,7 +6,12 @@
 
 import Link from 'next/link'
 import { UiLinkProvider } from '@openbooks/ui'
+import { UiLinkProvider as AppkitUiLinkProvider } from '@braedonsaunders/appkit-ui'
 
 export function AppLinkProvider({ children }: { children: React.ReactNode }) {
-  return <UiLinkProvider link={Link}>{children}</UiLinkProvider>
+  return (
+    <UiLinkProvider link={Link}>
+      <AppkitUiLinkProvider link={Link}>{children}</AppkitUiLinkProvider>
+    </UiLinkProvider>
+  )
 }

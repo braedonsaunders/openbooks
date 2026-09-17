@@ -1,16 +1,14 @@
-import { ModuleView } from "../../../../components/viewspec/module-view"
-import { loadPlatformUsers, platformUsersSpec } from "./view"
+import { platformUsers } from '../../../../lib/platform-admin'
+import { PlatformUsersClient } from '../_components/PlatformUsersClient'
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic'
 
-
-
-export default async function PlatformUsersPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const sp = await searchParams;
-  const data = await loadPlatformUsers(sp);
-  return <ModuleView spec={platformUsersSpec(data)} data={data} searchParams={sp} trusted />;
+export default async function PlatformUsersPage() {
+  const result = await platformUsers({
+    page: 1,
+    perPage: 500,
+    dir: 'asc',
+    sort: 'name',
+  })
+  return <PlatformUsersClient rows={result.rows} />
 }
