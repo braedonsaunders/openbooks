@@ -136,3 +136,31 @@ test("a non-JSON post failure still releases the button with an error", async (t
   const post = [...host.querySelectorAll("button")][0] as HTMLButtonElement;
   assert.equal(post.disabled, false, "the post button must release after the failure");
 });
+
+/** Posting-refusal persistence (coordinator follow-up on F-t04-006): the
+ * typed 422 reason must persist as a row-inline role=alert until the next
+ * action — a 4s toast alone reads as "nothing happened". */
+test("a 422 post refusal persists as a row-inline alert until the next action", async (t) => {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    Response.json({ error: "AP is closed for this period and accounting book" }, { status: 422 })) as typeof fetch;
+  const { host, root } = await mountApprovedRow();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await clickPost(host);
+  await tick();
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused post must persist a row-inline alert");
+  assert.match(alert.textContent ?? "", /AP is closed/i);
+
+  // The next action clears it: a successful post leaves no stale refusal.
+  globalThis.fetch = (async () => Response.json({ ok: true }, { status: 200 })) as typeof fetch;
+  await clickPost(host);
+  await tick();
+  assert.equal(host.querySelector('[role="alert"]'), null, "a later action must clear the refusal alert");
+});
