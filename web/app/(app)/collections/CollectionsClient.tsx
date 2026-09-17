@@ -313,7 +313,7 @@ function RecurringPanel() {
           <div>
             <Label>{t("cadenceLabel")}</Label>
             <Select value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>
-              {CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {CADENCES.map((c) => <option key={c} value={c}>{t(`cadences.${c}`)}</option>)}
             </Select>
           </div>
           {form.cadence === "custom_cron" && (
@@ -350,7 +350,7 @@ function RecurringPanel() {
               <tr key={s.id} className="border-t">
                 <td className="whitespace-nowrap px-3 py-2 font-medium">{s.templateNumber}</td>
                 <td className="whitespace-nowrap px-3 py-2">{s.partyName ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2">{s.cadence}{s.cron ? ` (${s.cron})` : ""}</td>
+                <td className="whitespace-nowrap px-3 py-2">{t(`cadences.${s.cadence}`)}{s.cron ? ` (${s.cron})` : ""}</td>
                 <td className="whitespace-nowrap px-3 py-2">{s.nextRunOn}</td>
                 <td className="whitespace-nowrap px-3 py-2">{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</td>
                 <td className="whitespace-nowrap px-3 py-2">{s.autoPost ? t("yes") : t("no")}</td>

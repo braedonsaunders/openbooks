@@ -72,3 +72,19 @@ for (const [locale, sections] of Object.entries(sectionsByLocale)) {
     })
   }
 }
+
+// F-x6-002 residual: recurring cadence option values (select options and
+// table cells) rendered raw English in fr/es. Every cadence ships a real
+// translation in both locales — none may equal the English source.
+const CADENCE_VALUES = ['weekly', 'biweekly', 'monthly', 'quarterly', 'annually', 'custom_cron'] as const
+for (const locale of ['fr', 'es'] as const) {
+  test(`collections.recurring.cadences is translated in ${locale}`, () => {
+    const en = at(catalog('en'), 'collections.recurring.cadences') as Record<string, string> | undefined
+    const target = at(catalog(locale), 'collections.recurring.cadences') as Record<string, string> | undefined
+    for (const value of CADENCE_VALUES) {
+      assert.equal(typeof en?.[value], 'string', `en cadence reference ${value} must exist`)
+      assert.equal(typeof target?.[value], 'string', `${locale} cadence ${value} must be translated`)
+      assert.notEqual(target?.[value], en?.[value], `${locale} cadence ${value} must not be English`)
+    }
+  })
+}
