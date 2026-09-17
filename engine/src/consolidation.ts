@@ -44,7 +44,33 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  * they consume.
  */
 
-export class ConsolidationError extends Error {}
+/**
+ * Stable machine-readable refusal reason (F-t06-026). Surfaces map the code
+ * (localized copy, retry policy) while the message stays the user-language
+ * explanation. New refusal sites must pick the narrowest fitting code, never
+ * the default.
+ */
+export type ConsolidationCode =
+  | 'invalid'
+  | 'not-found'
+  | 'not-configured'
+  | 'period-closed'
+  | 'rates-missing'
+  | 'rates-not-derived'
+  | 'ownership-gap'
+  | 'period-conflict'
+  | 'needs-reconciliation'
+  | 'out-of-balance'
+  | 'conflict-retry';
+
+export class ConsolidationError extends Error {
+  readonly code: ConsolidationCode;
+  constructor(message: string, code: ConsolidationCode = 'invalid') {
+    super(message);
+    this.name = 'ConsolidationError';
+    this.code = code;
+  }
+}
 
 /**
  * Postgres serialization failures (code 40001) surface wrapped in
@@ -72,13 +98,13 @@ type Runner = Pick<typeof db, "execute">;
  */
 async function withOwnershipSourceTransaction<T>(orgId: string, work: (tx: Runner) => Promise<T>): Promise<T> {
   if (orgContext.getStore()?.txDb) {
-    throw new ConsolidationError("ownership consolidation must own its source-snapshot transaction");
+    throw new ConsolidationError("ownership consolidation must own its source-snapshot transaction", 'invalid');
   }
   try {
     return await withOrgContext(orgId, () => db.transaction(work, { isolationLevel: "serializable" }));
   } catch (error) {
     if (isSerializationConflict(error)) {
-      throw new ConsolidationError("consolidation sources changed concurrently (could not serialize access); retry the complete consolidation");
+      throw new ConsolidationError("consolidation sources changed concurrently (could not serialize access); retry the complete consolidation", 'conflict-retry');
     }
     throw error;
   }
@@ -90,7 +116,7 @@ function persistDerivedFxRate(value: unknown): string {
   } catch (error) {
     throw new ConsolidationError(
       error instanceof CurrencyError ? error.message : "derived exchange rate must be an exact decimal",
-    );
+    'invalid');
   }
 }
 
@@ -127,7 +153,7 @@ async function runOwnershipConsolidationIn(
   userId: string,
   tx: Runner,
 ): Promise<{ runId: string; entryIds: string[] }> {
-  if (!userId) throw new ConsolidationError("an attributable actor is required");
+  if (!userId) throw new ConsolidationError("an attributable actor is required", 'invalid');
   // Journal phases honor the same close fence as rate derivation: a closed GL
   // must refuse with a ConsolidationError here, not with the kernel guard's
   // raw Postgres failure at the first draft→posted flip.
@@ -135,17 +161,17 @@ async function runOwnershipConsolidationIn(
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
   const context = await loadSubsidiaryContext(tx, orgId);
   const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
-  if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
+  if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments", 'not-configured');
   const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number }>(sql`
     select id, starts_on, ends_on, name, is_adjustment, fiscal_calendar_id, period_number from accounting_periods where id=${periodId} and org_id=${orgId}
   `));
   const period = periodResult.rows[0];
-  if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+  if (!period) throw new ConsolidationError(`period ${periodId} not found`, 'not-found');
   const bookResult = (await tx.execute<{ id: string }>(sql`
     select id from accounting_books where org_id=${orgId} and is_primary and is_active and posts_gl limit 1 for share
   `));
   const bookId = bookResult.rows[0]?.id;
-  if (!bookId) throw new ConsolidationError("no active primary posting book is configured");
+  if (!bookId) throw new ConsolidationError("no active primary posting book is configured", 'not-configured');
   // FOR SHARE pins every policy row this generation consumes for the whole
   // transaction: a material policy edit (ownership_interest_guard's
   // immutability tuple) must own the row exclusively, so it waits until the
@@ -214,12 +240,12 @@ async function runOwnershipConsolidationIn(
     const prev = idx > 0 ? group[idx - 1]! : null;
     if (prev && prev.effective_from < here.effective_from && prev.effective_to
         && here.effective_from !== nextDay(prev.effective_to)) {
-      throw new ConsolidationError(gap(prev.effective_to, nextDay(prev.effective_to), here.effective_from));
+      throw new ConsolidationError(gap(prev.effective_to, nextDay(prev.effective_to), here.effective_from), 'ownership-gap');
     }
     const succ = idx + 1 < group.length ? group[idx + 1]! : null;
     if (succ && succ.is_active && succ.effective_from > here.effective_from && here.effective_to
         && succ.effective_from !== nextDay(here.effective_to)) {
-      throw new ConsolidationError(gap(here.effective_to, nextDay(here.effective_to), succ.effective_from));
+      throw new ConsolidationError(gap(here.effective_to, nextDay(here.effective_to), succ.effective_from), 'ownership-gap');
     }
   }
   const run = (await tx.execute<{ id: string }>(sql`
@@ -327,7 +353,7 @@ async function runOwnershipConsolidationIn(
       const source = context.byId.get(interest.subsidiary_id);
       throw new ConsolidationError(
         `no consolidated rate for ${source?.baseCurrency ?? "unknown"}→${elimination.baseCurrency} in period ${periodId} — derive rates first`,
-      );
+      'rates-not-derived');
     }
     const profit = periodActivity.rows[0]!.profit;
     const distributions = periodActivity.rows[0]!.distributions;
@@ -382,10 +408,10 @@ async function runOwnershipConsolidationIn(
       if (acquisitionExists.some((row) => !row.in_scope || row.balance !== 1)) {
         throw new ConsolidationError(
           "acquisition elimination affects a later period; reconcile its original and reversal period assignments before consolidating the earlier period",
-        );
+        'period-conflict');
       }
       if (acquisitionExists.length > 1) {
-        throw new ConsolidationError("multiple effective acquisition eliminations require reconciliation before consolidation");
+        throw new ConsolidationError("multiple effective acquisition eliminations require reconciliation before consolidation", 'needs-reconciliation');
       }
       if (!acquisitionExists[0] && interest.acquisition_date <= period.ends_on) {
         const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
@@ -546,7 +572,7 @@ async function assertConsolidatedRatesOpen(
   const book = (await exec.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active limit 1`));
   const bookId = book.rows[0]?.id;
-  if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
+  if (!bookId) throw new ConsolidationError("no active primary accounting book is configured", 'not-configured');
   const locks = (await exec.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
     select state, reopen_expires_at as "reopenExpiresAt", reason
       from period_locks
@@ -554,7 +580,7 @@ async function assertConsolidatedRatesOpen(
   if (locks.rows.some((lock) => periodLockBlocksPosting(lock, false))) {
     throw new ConsolidationError(
       "GL is closed for this period — consolidated exchange rates are close evidence and cannot be re-derived until the period is reopened",
-    );
+    'period-closed');
   }
 }
 
@@ -583,7 +609,7 @@ async function deriveConsolidatedRatesIn(
       from accounting_periods
      where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
-  if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+  if (!period) throw new ConsolidationError(`period ${periodId} not found`, 'not-found');
   await assertConsolidatedRatesOpen(orgId, periodId, exec);
 
   const pairs = await neededPairs(orgId, exec);
@@ -623,7 +649,7 @@ async function deriveConsolidatedRatesIn(
     if (!r?.current) {
       throw new ConsolidationError(
         `no spot rate for ${pair.from}→${pair.to} on or before ${period.ends_on} — load fx_rates first`,
-      );
+      'rates-missing');
     }
     const current = persistDerivedFxRate(r.current);
     const average = persistDerivedFxRate(r.average ?? r.current);
@@ -729,13 +755,13 @@ async function runAutoEliminationIn(
   userId: string,
   tx: Runner,
 ): Promise<{ entryId: string | null; lineCount: number }> {
-  if (!userId) throw new ConsolidationError("an attributable actor is required");
+  if (!userId) throw new ConsolidationError("an attributable actor is required", 'invalid');
   const ctx = await loadSubsidiaryContext(tx, orgId);
   const elim = [...ctx.byId.values()].find((s) => s.isElimination && s.isActive);
   if (!elim) {
     throw new ConsolidationError(
       "no active elimination subsidiary — create one under Setup → Subsidiaries",
-    );
+    'not-configured');
   }
 
   // Same close fence as rate derivation and the ownership phase: a closed GL
@@ -747,11 +773,11 @@ async function runAutoEliminationIn(
   const periodRes = (await tx.execute<{ ends_on: string; name: string }>(sql`
     select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
-  if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+  if (!period) throw new ConsolidationError(`period ${periodId} not found`, 'not-found');
   const bookRes = (await tx.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`));
   const book = bookRes.rows[0];
-  if (!book) throw new ConsolidationError("no active primary posting book is configured");
+  if (!book) throw new ConsolidationError("no active primary posting book is configured", 'not-configured');
 
   // Source scope = the destination book: only primary-book entries feed the
   // consolidated elimination.
@@ -791,7 +817,7 @@ async function runAutoEliminationIn(
     const source = ctx.byId.get(missing.subsidiaryId);
     throw new ConsolidationError(
       `no consolidated current rate for ${source?.baseCurrency ?? "unknown"}→${elim.baseCurrency} in period ${periodId}`,
-    );
+    'rates-not-derived');
   }
   const translatedActivity = activity.rows as { accountId: string; subsidiaryId: string; total: string }[];
 
@@ -820,7 +846,7 @@ async function runAutoEliminationIn(
   if (!isZero(residual)) {
     throw new ConsolidationError(
       `intercompany activity does not net to zero for the period (residual ${residual}) — reconcile due-to/due-from before eliminating`,
-    );
+    'out-of-balance');
   }
 
   if (translatedActivity.length > 0) {
