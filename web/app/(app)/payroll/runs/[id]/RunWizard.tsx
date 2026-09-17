@@ -1363,6 +1363,13 @@ function ReviewStep({
   const [openStub, setOpenStub] = useState<StubRow | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkOpen, setBulkOpen] = useState(false)
+  // Recalculation deletes every pay_stubs row and inserts fresh ones with new
+  // ids, so a held snapshot goes stale (amounts) and its PDF link 404s after
+  // any adjust. Re-resolve the open employee against the live stubs on every
+  // render; a vanished employee (excluded) closes the drawer.
+  const liveStub = openStub
+    ? (stubs.find((s) => s.employee_party_id === openStub.employee_party_id) ?? null)
+    : null
 
   const changeByEmployee = new Map(changes.map((c) => [c.employeePartyId, c]))
 
@@ -1593,15 +1600,15 @@ function ReviewStep({
         </div>
       </div>
 
-      {openStub && (
+      {liveStub && (
         <StubDrawer
-          stub={openStub}
-          variance={variance(openStub)}
-          change={changeByEmployee.get(openStub.employee_party_id) ?? null}
+          stub={liveStub}
+          variance={variance(liveStub)}
+          change={changeByEmployee.get(liveStub.employee_party_id) ?? null}
           onClose={() => setOpenStub(null)}
           fmt={fmt}
           adjustments={adjustments.filter(
-            (a) => a.adjustment_type === 'line' && a.employee_party_id === openStub.employee_party_id,
+            (a) => a.adjustment_type === 'line' && a.employee_party_id === liveStub.employee_party_id,
           )}
           components={components}
           canAdjust={canAdjust}
