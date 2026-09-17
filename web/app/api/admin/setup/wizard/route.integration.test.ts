@@ -141,6 +141,20 @@ async function ensureCanonicalIndex(): Promise<void> {
   );
 }
 
+/**
+ * Drop the index these two tests create. It is a GLOBAL schema object on a
+ * database shared with every other suite, and it is not in any migration —
+ * only this file makes it. Left behind, its (org_id, fiscal_year,
+ * period_number) uniqueness forbids two fiscal calendars in one org holding
+ * the same year and period number, so unrelated calendar-scoped suites fail
+ * on a pristine tree with an error that looks like a product regression.
+ */
+async function dropCanonicalIndex(): Promise<void> {
+  await withBypassContext(() =>
+    db.execute(sql`drop index if exists periods_org_year_num`),
+  );
+}
+
 async function periodState(fixture: Fixture): Promise<{
   fiscalYear: number;
   periodNumber: number;
@@ -321,6 +335,7 @@ test(
       await removePause?.();
       await dropScratchOrg(first.orgId);
       await dropScratchOrg(second.orgId);
+      await dropCanonicalIndex();
     }
   },
 );
@@ -349,6 +364,7 @@ test(
       routeState.authzQueue = [];
       await removeFailure?.();
       await dropScratchOrg(fixture.orgId);
+      await dropCanonicalIndex();
     }
   },
 );
