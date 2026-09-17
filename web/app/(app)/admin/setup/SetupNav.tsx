@@ -120,7 +120,10 @@ export function SetupNav({
 
   return (
     <nav className="w-full" aria-label={t('title')}>
-      <div className="space-y-5">
+      {/* Below sm the rail is a horizontal strip above the content: groups
+          sit side by side and scroll sideways instead of squeezing the
+          panel. sm and up restore the grouped vertical rail exactly. */}
+      <div className="flex flex-row items-start gap-6 overflow-x-auto pb-1 sm:flex-col sm:gap-0 sm:space-y-5 sm:overflow-visible sm:pb-0">
         {SETUP_GROUPS.map((group) => {
           if (!canManageSetup && group.key !== 'company') return null
           const items: NavItem[] =
@@ -241,15 +244,15 @@ export function SetupNav({
           const visibleItems = canManageSetup ? items : items.filter((item) => item.href === '/admin/setup/crm')
           if (visibleItems.length === 0) return null
           return (
-            <div key={group.key} className="space-y-1">
-              <h3 className="px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+            <div key={group.key} className="shrink-0 space-y-1">
+              <h3 className="hidden px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500">
                 {t(`groups.${group.key}`)}
               </h3>
-              <ul className="space-y-0.5">
+              <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
                 {visibleItems.map((item) => {
                   const active = pathname === item.href
                   return (
-                    <li key={item.href}>
+                    <li key={item.href} className="shrink-0">
                       <Link
                         href={item.href}
                         aria-current={active ? 'page' : undefined}
@@ -274,15 +277,15 @@ export function SetupNav({
         })}
 
         {dataItems.length > 0 && (
-          <div className="space-y-1">
-            <h3 className="px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+          <div className="shrink-0 space-y-1">
+            <h3 className="hidden px-2 text-xs font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500">
               {td('nav.group')}
             </h3>
-            <ul className="space-y-0.5">
+            <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
               {dataItems.map((item) => {
                 const active = pathname === item.href
                 return (
-                  <li key={item.href}>
+                  <li key={item.href} className="shrink-0">
                     <Link
                       href={item.href}
                       aria-current={active ? 'page' : undefined}

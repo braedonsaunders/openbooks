@@ -38,9 +38,10 @@ export default async function SetupLayout({ children }: { children: ReactNode })
         />
       </div>
 
-      {/* Body — two panes, each scrolls independently within the viewport */}
-      <div className="flex min-h-0 flex-1">
-        <aside className="app-scroll w-44 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-3 sm:w-52 lg:w-60 dark:border-slate-800 dark:bg-slate-900">
+      {/* Body — the rail stacks above the content below sm so a 390px panel
+          gets full width; sm and up keep the side-by-side rail untouched. */}
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <aside className="app-scroll w-full shrink-0 overflow-x-auto border-b border-slate-200 bg-white p-2 sm:w-52 sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3 lg:w-60 dark:border-slate-800 dark:bg-slate-900">
           <SetupNav
             canExport={canExport}
             canImport={canImport}
