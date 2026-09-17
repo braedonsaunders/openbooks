@@ -1854,7 +1854,7 @@ test('admin backups/layouts/extensions copy ships translated in fr and es', () =
   )
   assert.equal(wanted.length, 219, 'admin section source inventory changed; translate the new keys in fr/es and re-pin')
   const tokens = (value: string): Set<string> =>
-    new Set(value.match(/\\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   for (const locale of ['fr', 'es']) {
     const catalog = flattenCatalog(locale)
     for (const key of wanted) {
@@ -2298,7 +2298,7 @@ test('admin setup and permissions copy ships translated in fr and es', () => {
     assert.ok(english && english.trim(), `English source is missing ${key}`)
   }
   const tokens = (value: string): Set<string> =>
-    new Set(value.match(/\\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   for (const locale of ['fr', 'es']) {
     const catalog = flattenCatalog(locale)
     for (const key of wanted) {
