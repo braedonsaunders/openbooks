@@ -7,7 +7,7 @@
   "empty": { "title": "対象プロジェクトがありません", "description": "支払申請を使用するプロジェクトタイプを有効にし、プロジェクトに割り当ててください。", "manageProjectTypes": "プロジェクトタイプを管理" },
   "summary": { "contractSum": "契約総額", "retainageHeld": "保留金残高", "committedCost": "確定原価（未決済発注）" },
   "sov": {
-    "title": "出来高明細", "item": "項目", "itemPlaceholder": "項目番号", "description": "説明", "scheduledValue": "契約価額", "retainagePercent": "保留率 %", "default": "既定", "delete": "削除", "deleteConfirm": "明細「{description}」を削除しますか？", "empty": "出来高明細はまだありません。", "defaultIncomeAccount": "既定の収益勘定", "addLine": "行を追加"
+    "title": "出来高明細", "item": "項目", "itemPlaceholder": "項目番号", "description": "説明", "scheduledValue": "契約価額", "retainagePercent": "保留率 %", "default": "既定", "delete": "削除", "deleteConfirm": "明細「{description}」を削除しますか？", "empty": "出来高明細はまだありません。", "defaultIncomeAccount": "既定の収益勘定", "addLine": "行を追加", "editLine": "明細行を編集", "lockedValuesHint": "請求開始後は金額項目が統制対象となるため、ここでは収益勘定のみ変更できます。"
   },
   "changeOrders": {
     "title": "変更注文", "number": "変更注文番号", "description": "説明", "amount": "金額", "applyTo": "適用先", "newScheduleLine": "新規明細行（増額変更）", "deductiveHint": "減額変更は既存の明細行を減額する必要があります。", "additiveHint": "変更する明細行を選択するか、新しい増額行を作成します。", "adjusts": "{description} を調整", "approve": "承認", "void": "無効化", "voidConfirm": "変更注文 {number} を無効にしますか？監査履歴は保持されます。", "add": "変更注文を追加", "empty": "変更注文はありません。", "status": { "draft": "下書き", "approved": "承認済み", "void": "無効" }

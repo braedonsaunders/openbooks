@@ -35,6 +35,8 @@ interface SovLine {
   retainagePercent: string | null;
   incomeAccountId: string | null;
   changeOrderId: string | null;
+  /** Referenced by any application row: value fields are change-order controlled. */
+  usedByApplication?: boolean;
 }
 
 interface ChangeOrder {
@@ -296,10 +298,14 @@ function ScheduleSection({
   onChange: (payload: Record<string, unknown>) => Promise<unknown>;
   canCreate: boolean;
   busy: boolean;
+  /** Any application row exists (even voided): contract value is controlled. */
+  billingBegan: boolean;
 }) {
   const { money } = useMoney();
   const t = useTranslations("applications.sov");
+  const tc = useTranslations("common");
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<SovLine | null>(null);
   const [form, setForm] = useState({
     itemNo: "",
     description: "",
@@ -307,6 +313,13 @@ function ScheduleSection({
     retainagePercent: "",
     incomeAccountId: "",
   });
+  const editingLocked = editing != null && (editing.changeOrderId != null || editing.usedByApplication === true);
+
+  function closeForm() {
+    setForm({ itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" });
+    setEditing(null);
+    setFormOpen(false);
+  }
 
   async function addLine() {
     const result = await onChange({
@@ -318,8 +331,23 @@ function ScheduleSection({
       sortOrder: lines.length + 1,
     });
     if (result) {
-      setForm({ itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" });
-      setFormOpen(false);
+      closeForm();
+    }
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    const result = await onChange({
+      action: "updateSov",
+      id: editing.id,
+      itemNo: form.itemNo.trim() === "" ? null : form.itemNo,
+      description: form.description,
+      scheduledValue: form.scheduledValue,
+      retainagePercent: form.retainagePercent || null,
+      incomeAccountId: form.incomeAccountId || null,
+    });
+    if (result) {
+      closeForm();
     }
   }
 
@@ -352,19 +380,41 @@ function ScheduleSection({
                 <TableCell className="text-right tabular-nums">{money(line.scheduledValue)}</TableCell>
                 <TableCell className="text-right tabular-nums">{line.retainagePercent ?? t("default")}</TableCell>
                 <TableCell className="text-right">
-                  {canCreate && !line.changeOrderId ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => {
-                        if (window.confirm(t("deleteConfirm", { description: line.description }))) {
-                          void onChange({ action: "deleteSov", id: line.id });
-                        }
-                      }}
-                    >
-                      {t("delete")}
-                    </Button>
+                  {canCreate ? (
+                    <span className="inline-flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          setForm({
+                            itemNo: line.itemNo ?? "",
+                            description: line.description,
+                            scheduledValue: line.scheduledValue,
+                            retainagePercent: line.retainagePercent ?? "",
+                            incomeAccountId: line.incomeAccountId ?? "",
+                          });
+                          setEditing(line);
+                          setFormOpen(true);
+                        }}
+                      >
+                        {tc("actions.edit")}
+                      </Button>
+                      {!line.changeOrderId ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            if (window.confirm(t("deleteConfirm", { description: line.description }))) {
+                              void onChange({ action: "deleteSov", id: line.id });
+                            }
+                          }}
+                        >
+                          {t("delete")}
+                        </Button>
+                      ) : null}
+                    </span>
                   ) : null}
                 </TableCell>
               </TableRow>
@@ -380,21 +430,25 @@ function ScheduleSection({
         open={formOpen}
         stacked
         size="md"
-        onClose={() => setFormOpen(false)}
-        title={t("addLine")}
-        description={t("formHint")}
+        onClose={closeForm}
+        title={editing ? t("editLine") : t("addLine")}
+        description={editing ? (editingLocked ? t("lockedValuesHint") : t("formHint")) : t("formHint")}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={() => setFormOpen(false)}>{t("cancel")}</Button>
-            <Button disabled={busy || !form.description || !form.scheduledValue} onClick={addLine}>{t("addLine")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeForm}>{t("cancel")}</Button>
+            {editing ? (
+              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={saveEdit}>{tc("actions.save")}</Button>
+            ) : (
+              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={addLine}>{t("addLine")}</Button>
+            )}
           </div>
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("item")}><Input value={form.itemNo} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} /></Field>
-          <Field label={t("description")}><Input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
-          <Field label={t("scheduledValue")}><Input type="number" inputMode="decimal" value={form.scheduledValue} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} /></Field>
-          <Field label={t("retainagePercent")}><Input type="number" inputMode="decimal" value={form.retainagePercent} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} /></Field>
+          <Field label={t("item")}><Input value={form.itemNo} disabled={editingLocked} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} /></Field>
+          <Field label={t("description")}><Input value={form.description} disabled={editingLocked} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
+          <Field label={t("scheduledValue")}><Input type="number" inputMode="decimal" value={form.scheduledValue} disabled={editingLocked} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} /></Field>
+          <Field label={t("retainagePercent")}><Input type="number" inputMode="decimal" value={form.retainagePercent} disabled={editingLocked} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} /></Field>
           <div className="sm:col-span-2">
             <Field label={t("incomeAccount")}>
               <Select value={form.incomeAccountId} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>

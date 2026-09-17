@@ -59,10 +59,11 @@ export async function GET(req: Request) {
 
   const [sov, cos, apps, held, committed] = await Promise.all([
     db.execute(sql`
-      select id, item_no as "itemNo", description, scheduled_value as "scheduledValue",
-             retainage_percent as "retainagePercent", income_account_id as "incomeAccountId",
-             sort_order as "sortOrder", change_order_id as "changeOrderId"
-        from sov_lines where org_id = ${orgId} and project_id = ${projectId} order by sort_order
+      select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
+             l.retainage_percent as "retainagePercent", l.income_account_id as "incomeAccountId",
+             l.sort_order as "sortOrder", l.change_order_id as "changeOrderId",
+             exists(select 1 from pay_application_lines pal where pal.org_id = ${orgId} and pal.sov_line_id = l.id) as "usedByApplication"
+        from sov_lines l where l.org_id = ${orgId} and l.project_id = ${projectId} order by l.sort_order
     `),
     db.execute(sql`
       select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
@@ -253,29 +254,62 @@ export async function POST(req: Request) {
         await db.transaction(async (tx) => {
           const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
+          const stored = before.rows[0];
           const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
-          if (used.rows.length) throw new ConstructionBillingError("A schedule line used by an application is immutable; use a change order");
-          if (before.rows[0].change_order_id) throw new ConstructionBillingError("A controlled schedule line is immutable; use a change order");
-          const description = String(body.description ?? "").trim();
-          const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
-          if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
-          const scheduledValue = normalizeMoney(scheduledRaw);
-          if (wholeDigits(scheduledValue) > 15) throw new ConstructionBillingError("Scheduled value is out of range — at most 15 whole digits fit the ledger");
-          const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
-          if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
-            throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
-          }
-          const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
-          if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
-          if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
+          const locked = used.rows.length > 0 || stored.change_order_id != null;
           const incomeAccountId = await pinIncomeAccount(tx, orgId, body.incomeAccountId);
-          const after = (await tx.execute(sql`
-            update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
-                   retainage_percent = ${retainagePercent}, income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
-             where id = ${body.id} and org_id = ${orgId} returning *
-          `));
-          await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'sov_lines', ${body.id}, 'update', ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}::jsonb, ${userId})`);
+          if (locked) {
+            // Contract value stays controlled once billing begins, but the
+            // income account is posting metadata, not a contract term, so a
+            // locked line still accepts an income-account-only change (the
+            // recovery path an approved application needs to reach invoicing).
+            // Anything beyond the income account still goes through a change
+            // order.
+            const reqItemNo = body.itemNo == null || body.itemNo === "" ? null : String(body.itemNo);
+            const storedItemNo = stored.item_no == null || stored.item_no === "" ? null : String(stored.item_no);
+            const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
+            const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
+            const storedRetainage = stored.retainage_percent == null ? null : String(stored.retainage_percent);
+            const onlyIncome =
+              reqItemNo === storedItemNo &&
+              String(body.description ?? "").trim() === String(stored.description ?? "") &&
+              scheduledRaw !== null && cmp(normalizeMoney(scheduledRaw), String(stored.scheduled_value ?? "0")) === 0 &&
+              (retainageRaw === null ? storedRetainage === null : storedRetainage !== null && cmp(normalizeMoney(retainageRaw), storedRetainage) === 0) &&
+              !(body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null);
+            if (!onlyIncome) {
+              throw new ConstructionBillingError(used.rows.length > 0
+                ? "A schedule line used by an application is immutable; use a change order"
+                : "A controlled schedule line is immutable; use a change order");
+            }
+            if ((incomeAccountId ?? null) !== (stored.income_account_id ?? null)) {
+              await tx.execute(sql`
+                update sov_lines set income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
+                 where id = ${body.id} and org_id = ${orgId}
+              `);
+              await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+                values (${orgId}, 'sov_lines', ${body.id}, 'income_account_update', ${JSON.stringify({ before: { incomeAccountId: stored.income_account_id }, after: { incomeAccountId: incomeAccountId } })}::jsonb, ${userId})`);
+            }
+          } else {
+            const description = String(body.description ?? "").trim();
+            const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
+            if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
+            const scheduledValue = normalizeMoney(scheduledRaw);
+            if (wholeDigits(scheduledValue) > 15) throw new ConstructionBillingError("Scheduled value is out of range — at most 15 whole digits fit the ledger");
+            const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
+            if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
+              throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+            }
+            const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
+            if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
+            if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
+            const after = (await tx.execute(sql`
+              update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
+                     retainage_percent = ${retainagePercent}, income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
+               where id = ${body.id} and org_id = ${orgId} returning *
+            `));
+            await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+              values (${orgId}, 'sov_lines', ${body.id}, 'update', ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}::jsonb, ${userId})`);
+          }
         });
         return NextResponse.json({ ok: true });
       }
