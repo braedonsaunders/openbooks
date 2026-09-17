@@ -347,6 +347,7 @@ export async function HolidaysTabSlot({
         searchParams={sp}
         basePath={basePath}
         canManage={can(authz, 'admin.setup.manage')}
+        allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
       />
     </>
   )
@@ -383,6 +384,7 @@ export async function DerivedTabSlot({
       searchParams={sp}
       basePath={basePath}
       canManage={can(authz, 'admin.setup.manage')}
+      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
     />
   )
 }
@@ -408,6 +410,7 @@ export async function EntityTabSlot({
       searchParams={sp}
       basePath={basePath}
       canManage={can(authz, 'admin.setup.manage')}
+      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
     />
   )
 }

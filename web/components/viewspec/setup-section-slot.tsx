@@ -35,6 +35,7 @@ export async function SetupSectionSlot({
       searchParams={sp}
       basePath={basePath}
       canManage={can(authz, 'admin.setup.manage')}
+      allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
     />
   )
 }

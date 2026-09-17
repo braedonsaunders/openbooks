@@ -167,7 +167,7 @@ export async function SetupDrawerSlot({
     return <SetupDrawer entity={extensionSettingDrawerEntity(entity, row)} row={row} members={[]} refOptions={{}} closeHref={closeHref} />
   }
   if (rowParam === 'new' && entity.allowCreate === false) return null
-  const refOptions = await loadRefOptions(entity, orgId)
+  const refOptions = await loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds)
 
   const idColumn = entity.idColumn ?? 'id'
   const open = rowParam
@@ -227,7 +227,7 @@ export async function SetupDrawerSlot({
          order by effective_from desc
          limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`) as any,
       (db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`)),
-      loadRefOptions(taxRateEntity, orgId),
+      loadRefOptions(taxRateEntity, orgId, authz.allowedSubsidiaryIds),
     ])
     taxRateRows = rateRowsRes.rows as TaxRateRow[]
     taxRateTotal = Number(rateCountRes.rows[0]?.n ?? 0)
@@ -289,7 +289,7 @@ export async function SetupDrawerSlot({
          order by report_code, sequence, line_code
          limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`) as any,
       (db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`)),
-      loadRefOptions(taxBoxEntity, orgId),
+      loadRefOptions(taxBoxEntity, orgId, authz.allowedSubsidiaryIds),
     ])
     taxBoxRows = boxRowsRes.rows as TaxReturnBoxRow[]
     taxBoxTotal = Number(boxCountRes.rows[0]?.n ?? 0)
@@ -357,7 +357,7 @@ export async function SetupDrawerSlot({
          order by name
          limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`) as any,
       (db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`)),
-      loadRefOptions(segValEntity, orgId),
+      loadRefOptions(segValEntity, orgId, authz.allowedSubsidiaryIds),
     ])
     segValRows = valRowsRes.rows as SegmentValueRow[]
     segValTotal = Number(valCountRes.rows[0]?.n ?? 0)

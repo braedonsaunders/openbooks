@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
@@ -25,9 +26,37 @@ export async function loadAccounts(orgId: string): Promise<RefOption[]> {
   }))
 }
 
+/**
+ * Active vendors for a remittance-party picker: active parties holding an
+ * active vendor role. A NULL subsidiary is org-wide (visible to every scoped
+ * caller), matching the payroll settings picker and the accounts-tab vendor
+ * query — a subsidiary-scoped operator must still see the org-wide
+ * statutory remittance vendors (F-t08-015).
+ */
+export async function loadVendors(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<RefOption[]> {
+  const vendors = (await db.execute(sql`
+    select p.id as value, p.display_name as label from parties p
+     join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
+     where p.org_id = ${orgId} and p.is_active
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     order by p.display_name`))
+  return vendors.rows as RefOption[]
+}
+
 /** Options for a setup-entity ref source (id + code/name label). */
-export async function loadEntityOptions(source: string, orgId: string): Promise<RefOption[]> {
+export async function loadEntityOptions(
+  source: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<RefOption[]> {
   if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
+  // `vendors` names the parties+vendor_roles picker, not a registry entity:
+  // without this branch the generic lookup below finds no entry and every
+  // remittance-vendor listbox renders only None (F-t08-015).
+  if (source === 'vendors') return loadVendors(orgId, allowedSubsidiaryIds)
   if (source === 'accounting-periods') {
     const periods = (await db.execute(sql`
       select id as value, name as label from accounting_periods
@@ -119,10 +148,13 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
 export async function loadRefOptions(
   entity: SetupEntity,
   orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<Record<string, RefOption[]>> {
   const out: Record<string, RefOption[]> = {}
   for (const source of refSources(entity)) {
-    out[source] = source === 'accounts' ? await loadAccounts(orgId) : await loadEntityOptions(source, orgId)
+    out[source] = source === 'accounts'
+      ? await loadAccounts(orgId)
+      : await loadEntityOptions(source, orgId, allowedSubsidiaryIds)
   }
   return out
 }
