@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/project-financials.ts'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import type { ListViewConfig } from '@openbooks/customization'
+import { displayOpportunityStatusName } from '../crm-status-display'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
   CUSTOMER_BASE_JOINS,
@@ -154,6 +155,16 @@ export interface EntityListSource {
   currencyField?: string
   /** Record-specific status semantics layered over the shared badge palette. */
   statusVariant?: (row: Record<string, unknown>, value: unknown, columnKey: string) => 'default' | 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'
+  /**
+   * Translate DB-seeded status names for display (status cells + the status
+   * quick-filter options). Some statuses live in the tenant database in
+   * English; unrenamed seeds render through the catalog while tenant
+   * renames keep their stored names.
+   */
+  statusDisplayName?: (storedName: string, translate: (fullKey: string) => string) => string
+  /** Quick-filter key whose option labels are status names (translated via
+   *  statusDisplayName). Unset when no quick filter carries status options. */
+  statusFilterKey?: string
   /** Source-specific drawer target when rows do not all use one URL param. */
   drawerTarget?: (row: Record<string, unknown>) => { param: string; id: string }
   /** Full row href for read-only aggregate rows that do not own a drawer. */
@@ -387,6 +398,16 @@ const SOURCES: Record<string, EntityListSource> = {
     extraSelect: sql`o.currency, s.is_closed, s.is_won`,
     currencyField: 'currency',
     statusVariant: (row) => row.is_won ? 'success' : row.is_closed ? 'outline' : 'default',
+    // The status column selects s.name — the English seed row — so the list
+    // translates it through the same catalog the drawer pill uses. A locale
+    // without the subtree keeps the stored name, never a raw message key.
+    statusFilterKey: 'status_id',
+    statusDisplayName: (storedName, translate) =>
+      displayOpportunityStatusName(storedName, (key) => {
+        const fullKey = `crm.opportunities.statuses.${key}`
+        const out = translate(fullKey)
+        return out === fullKey ? storedName : out
+      }),
   },
   fixed_asset: {
     recordType: 'fixed_asset',

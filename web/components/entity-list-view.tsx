@@ -241,15 +241,23 @@ export async function EntityListView({
   }
 
   const statusCountByValue = new Map(statusCounts.rows.map((r) => [String(r.status), Number(r.n)]))
+  // DB-seeded status names (opportunity stages) reach the picker as English
+  // labels; render them through the source's catalog hook when it names this
+  // filter, so the picker button matches the translated table cells.
+  const translateStatusOption = (rawLabel: string): string =>
+    source.statusDisplayName ? source.statusDisplayName(rawLabel, label) : rawLabel
   const quickFilters = source.quickFilters.map((quick, index) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
     const options = loadedQuickOptions[index] ?? []
+    const named = source.statusFilterKey && quick.filterKey === source.statusFilterKey
+      ? options.map((option) => ({ ...option, label: translateStatusOption(String(option.label)) }))
+      : options
     return {
       ...quick,
       label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, ' '),
       options: quick.filterKey === countFilterKey
-        ? options.map((option) => ({ ...option, count: Number(statusCountByValue.get(option.value) ?? 0) }))
-        : options,
+        ? named.map((option) => ({ ...option, count: Number(statusCountByValue.get(option.value) ?? 0) }))
+        : named,
     }
   })
 
@@ -286,7 +294,7 @@ export async function EntityListView({
       case 'status':
         return (
           <TableCell key={c.key}>
-            <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{optionLabel(c.key, String(v))}</Badge>
+            <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{source.statusDisplayName ? source.statusDisplayName(String(v), label) : optionLabel(c.key, String(v))}</Badge>
           </TableCell>
         )
       case 'date':
