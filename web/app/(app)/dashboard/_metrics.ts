@@ -2,22 +2,21 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
-import {
-  dashboardFinancialMetricsQuery,
-  type DashboardFinancialMetricsRow,
-} from '@openbooks/engine/src/dashboard-reporting.ts'
 import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { openItems } from '@/lib/cash/open-items'
 import {
+  bankBalances,
   compareMoney,
   parseISO,
   subtractMoney,
   summariseSide,
+  sumMoney,
   ZERO_MONEY,
   type OpenItem,
 } from '@/lib/cash/core'
+import { presentationCurrency } from '@/lib/fx-presentation'
 
 export type DashboardMetrics = {
   baseCurrency: string
@@ -99,7 +98,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   // a caller scoped to some subsidiaries tiles exactly what the hubs show
   // them, never the org-wide total.
   const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
-  const [totals, financials, arItems, apItems, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const [totals, banks, baseCurrency, arItems, apItems, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -110,7 +109,15 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = ${today}) as entries_today,
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
     `),
-    db.execute(dashboardFinancialMetricsQuery(orgId, today)),
+    // Cash at bank is the cockpit's per-account reader, summed — the same
+    // doorway as the /banking cockpit and the forecast's startingCash, so
+    // same-labeled figures tie by construction. It is subsidiary-scoped,
+    // excludes inactive/summary bank accounts, and translates each leg at the
+    // closing spot; the previous org-wide asset_bank sum counted those
+    // accounts and added mixed functionals raw (F-u1-P4). Missing FX coverage
+    // fails closed inside (the hub contract), never a silently mixed tile.
+    bankBalances(today, subIds, orgId),
+    presentationCurrency(orgId),
     // The AR/AP tiles read the shared open-item reader — the same doorway as
     // the /ar and /ap hubs and the aging report — so same-labeled figures tie
     // by construction. Missing FX coverage fails closed inside (the hub
@@ -159,7 +166,6 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   ])
 
   const t = (totals as any).rows[0]
-  const financial = (financials as unknown as { rows: DashboardFinancialMetricsRow[] }).rows[0]!
   // Hub KPI arithmetic, exactly as arPosition/apPosition derive it from the
   // same items: outstanding minus the Current bucket (null/future due),
   // floored at zero.
@@ -221,7 +227,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     })
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   return {
-    baseCurrency: financial.base_currency,
+    baseCurrency,
     journalLineCount: Number(t.journal_lines),
     accountCount: Number(t.accounts),
     entriesToday: Number(t.entries_today),
@@ -230,7 +236,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     agentFindingsProposals: Number(agent.proposals),
     agentFindingsLastRun: agent.last_run ? new Date(agent.last_run).toISOString() : null,
     ledgerSum: t.ledger_sum,
-    cashBalance: financial.cash_balance,
+    cashBalance: sumMoney(banks.map((b) => b.balance)),
     openReceivables: arTile.open,
     overdueReceivables: arTile.overdue,
     openPayables: apTile.open,

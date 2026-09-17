@@ -1013,7 +1013,7 @@ export async function categoryWeekly(
   };
 }
 
-export async function bankBalances(asOf: string, subIds?: string[]) {
+export async function bankBalances(asOf: string, subIds?: string[], explicitOrgId?: string) {
   if (subIds?.length === 0) return [];
   // Inception-to-date cash per bank account: whole months from the
   // gl_month_activity summary, the as-of month from the lines. Summing every
@@ -1023,7 +1023,11 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
   // bank accounts: RLS alone scopes rows correctly but its current_setting()
   // comparison is not sargable, so an unqualified leg degrades to a full scan
   // of every journal line in the table.
-  const orgId = await resolveOrgId();
+  //
+  // Prefer the explicit org id (the dashboard tile threads its caller's org):
+  // ambient request/session resolution is absent in non-request callers, and
+  // an unscoped call there fails instead of reading the caller's tenant.
+  const orgId = await resolveOrgId(explicitOrgId);
   const r = (await db.execute(sql`
     with bank_accounts as (
       select id from accounts
