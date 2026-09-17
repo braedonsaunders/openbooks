@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { listReconcilableBankAccounts } from '../../../../lib/banking-accounts'
+import { listReconcilableBankAccounts, openingCarryStartDate } from '../../../../lib/banking-accounts'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
 import type { MatchWorkspace } from './MatchWorkspace'
 import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
@@ -142,9 +142,11 @@ export async function loadMatch(
     const stmtWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId}
       and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.posted_on <= ${session.through_date}
       ${stmtParams.q ? sql` and (l.description ilike ${'%' + stmtParams.q + '%'} or l.counterparty_ref ilike ${'%' + stmtParams.q + '%'} or l.amount::text ilike ${'%' + stmtParams.q + '%'})` : sql``}`
+    const carryStart = await openingCarryStartDate(orgId, account.id)
     const glWhere = sql`jl.account_id = ${account.id} and jl.org_id = ${orgId}
       and je.book_id = ${bookId} and jl.currency = ${session.currency}
       and je.status = 'posted' and je.posting_date <= ${session.through_date}
+      ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
       and jl.reconciled_at is null
       and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
       ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.txn_amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`

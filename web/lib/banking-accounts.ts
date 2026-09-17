@@ -66,3 +66,38 @@ export async function reconcilableBankAccount(
   const a = res.rows[0]
   return a ? { id: a.id, number: a.number, name: a.name, type: a.type } : null
 }
+
+interface OpeningCarryRow extends Record<string, unknown> {
+  start_date: string | null
+}
+
+/**
+ * The ONE opening-carry read every GL candidate list agrees on (F-t06-003).
+ *
+ * The engine persists the first reconciliation's proven statement opening in
+ * that sign-off's audit record (see `firstReconciliationCarry` in
+ * engine/src/banking.ts); pre-coverage ledger lines are cleared by that
+ * carry, so candidate lists must stop offering them for matching. The
+ * earliest signed-off session wins, matching the engine's reuse rule.
+ */
+export async function openingCarryStartDate(
+  orgId: string,
+  accountId: string,
+): Promise<string | null> {
+  const res = await db.execute<OpeningCarryRow>(sql`
+    select al.changes->>'openingCarryStartDate' as start_date
+      from audit_log al
+      join reconciliations r on r.id = al.row_id and r.org_id = al.org_id
+     where al.org_id = ${orgId}
+       and al.table_name = 'reconciliations'
+       and al.action = 'approve'
+       and r.account_id = ${accountId}
+       and r.status = 'signed_off'
+       and (al.changes->>'openingCarriedForward') is not null
+       and (al.changes->>'openingCarriedForward')::numeric <> 0
+       and (al.changes->>'openingCarryStartDate') is not null
+     order by r.through_date asc, r.created_at asc, r.id asc
+     limit 1
+  `)
+  return res.rows[0]?.start_date ?? null
+}

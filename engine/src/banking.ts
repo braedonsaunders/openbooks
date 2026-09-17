@@ -1364,9 +1364,100 @@ export async function startReconciliation(
   });
 }
 
+interface FirstReconciliationCarry {
+  /** First imported statement line covered by the session. */
+  startDate: string;
+  /** Imported opening balance proven by the pre-coverage ledger. */
+  amount: string;
+}
+
+/**
+ * Opening carry-forward for an account's first reconciliation. The earliest
+ * imported statement's opening balance counts only when the ledger that
+ * predates its first covered line proves the same amount; nothing on or
+ * after coverage starts is carried. The first sign-off persists the proven
+ * amount and coverage start in its audit record so later sessions reuse the
+ * same opening instead of re-proving (or double-counting) it.
+ */
+async function firstReconciliationCarry(
+  executor: BankingSqlExecutor,
+  recon: ReconciliationRow,
+  ctx: BankingContext,
+  bookId: string,
+): Promise<FirstReconciliationCarry | null> {
+  const earliestSigned = (await executor.execute<{ id: string }>(sql`
+    select id from reconciliations
+     where org_id = ${ctx.orgId} and account_id = ${recon.account_id}
+       and status = 'signed_off' and id <> ${recon.id}
+     order by through_date asc, created_at asc, id asc
+     limit 1
+  `)).rows[0];
+  if (earliestSigned) {
+    const approval = (await executor.execute<{ changes: { openingCarriedForward?: unknown; openingCarryStartDate?: unknown } }>(sql`
+      select changes from audit_log
+       where org_id = ${ctx.orgId} and table_name = 'reconciliations'
+         and row_id = ${earliestSigned.id} and action = 'approve'
+       order by at asc limit 1
+    `)).rows[0]?.changes;
+    const amount = typeof approval?.openingCarriedForward === "string" ? approval.openingCarriedForward : null;
+    const startDate = typeof approval?.openingCarryStartDate === "string" ? approval.openingCarryStartDate : null;
+    if (!amount || !startDate || isZero(amount)) return null;
+    return { startDate, amount: fromUnits(toUnits(amount)) };
+  }
+
+  const coverage = (await executor.execute<{ opening_balance: string | null; start_date: string }>(sql`
+    with coverage as (
+      select s.opening_balance,
+             min(l.posted_on)::text as start_date,
+             s.statement_date,
+             s.id
+        from bank_statements s
+        join bank_statement_lines l
+          on l.statement_id = s.id and l.org_id = s.org_id
+       where s.org_id = ${ctx.orgId}
+         and s.account_id = ${recon.account_id}
+         and s.statement_date <= ${recon.through_date}
+         and l.currency = ${recon.currency}
+         and l.posted_on <= ${recon.through_date}
+       group by s.id, s.statement_date, s.opening_balance
+    )
+    select opening_balance, start_date
+      from coverage
+     order by statement_date asc, start_date asc, id asc
+     limit 1
+  `)).rows[0];
+  if (!coverage || coverage.opening_balance === null) return null;
+
+  const openingUnits = toUnits(coverage.opening_balance);
+  const history = (await executor.execute<{ carry: string; matched_old: string }>(sql`
+    select
+      coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is null), 0) as carry,
+      coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is not null), 0) as matched_old
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      left join reconciliation_matches m
+        on m.journal_line_id = jl.id and m.org_id = jl.org_id
+       and m.reconciliation_id = ${recon.id} and m.org_id = ${ctx.orgId}
+     where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+       and je.book_id = ${bookId}
+       and jl.currency = ${recon.currency}
+       and je.posting_date <= ${recon.through_date}
+       and je.posting_date < ${coverage.start_date}
+       and (jl.reconciled_at is null or m.journal_line_id is not null)
+       and not exists (
+         select 1 from reconciliation_matches other
+          where other.journal_line_id = jl.id and other.org_id = jl.org_id
+            and other.reconciliation_id <> ${recon.id}
+       )
+  `)).rows[0]!;
+  const carryUnits = toUnits(history.carry);
+  if (openingUnits !== carryUnits + toUnits(history.matched_old)) return null;
+  return { startDate: coverage.start_date, amount: fromUnits(openingUnits) };
+}
+
 export interface ReconciliationTotals {
   statementBalance: string;
-  /** GL balance of previously-reconciled lines + lines matched in this session. */
+  /** Previously-reconciled lines, this session's matches, and a proven first-statement opening carry. */
   clearedBalance: string;
   /** statementBalance − clearedBalance; sign-off requires exactly 0. */
   difference: string;
@@ -1400,6 +1491,9 @@ async function reconciliationTotalsUsing(
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
   const bookId = await reconciliationBookId(executor, ctx.orgId);
+  const carry = await firstReconciliationCarry(executor, recon, ctx, bookId);
+  const carryStart = carry?.startDate ?? null;
+  const carryUnits = carry ? toUnits(carry.amount) : 0n;
   const r = (await executor.execute<{ cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }>(sql`
     select
       coalesce((
@@ -1410,6 +1504,7 @@ async function reconciliationTotalsUsing(
            and je.book_id = ${bookId}
            and jl.currency = ${recon.currency}
            and je.posting_date <= ${recon.through_date}
+           and (${carryStart}::date is null or je.posting_date >= ${carryStart}::date)
            and (jl.reconciled_at is not null
                 or jl.id in (select journal_line_id from reconciliation_matches
                               where reconciliation_id = ${recon.id}
@@ -1425,8 +1520,8 @@ async function reconciliationTotalsUsing(
           and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}) as unmatched_stmt
   `));
   const row = r.rows[0]!;
-  const clearedBalance = fromUnits(toUnits(row.cleared));
-  const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(row.cleared));
+  const clearedBalance = fromUnits(carryUnits + toUnits(row.cleared));
+  const difference = fromUnits(toUnits(recon.statement_balance) - carryUnits - toUnits(row.cleared));
   return {
     statementBalance: fromUnits(toUnits(recon.statement_balance)),
     clearedBalance,
@@ -1560,6 +1655,9 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     const recon = reconResult.rows[0];
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+    // Lines covered by a proven statement opening are cleared by the carry,
+    // not by matching: claiming one would double-count the opening.
+    const carryStart = (await firstReconciliationCarry(tx, recon, ctx, bookId))?.startDate ?? null;
 
     const stmtRes = (await tx.execute<{ id: string; posted_on: string; amount: string }>(sql`
       select l.id, l.posted_on, l.amount
@@ -1578,6 +1676,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          and je.book_id = ${bookId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
+         and (${carryStart}::date is null or je.posting_date >= ${carryStart}::date)
          and jl.reconciled_at is null
          and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
        order by je.posting_date, jl.line_number
@@ -1699,8 +1798,8 @@ async function createMatchInTransaction(
   )];
   if (journalLineIds.length === 0) throw new BankingError("Select at least one journal line");
 
-  const gl = (await tx.execute<{ id: string; amount: string }>(sql`
-    select jl.id, jl.txn_amount as amount
+  const gl = (await tx.execute<{ id: string; amount: string; posting_date: string }>(sql`
+    select jl.id, jl.txn_amount as amount, je.posting_date
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
      where jl.id = any(${sql.param(journalLineIds)}::uuid[])
@@ -1719,6 +1818,12 @@ async function createMatchInTransaction(
   if (gl.rows.length !== journalLineIds.length) {
     throw new BankingError(
       "One or more journal lines are unavailable, outside the cutoff, already reconciled, or already matched",
+    );
+  }
+  const carryStart = (await firstReconciliationCarry(tx, recon, ctx, bookId))?.startDate ?? null;
+  if (carryStart && gl.rows.some((line) => line.posting_date < carryStart)) {
+    throw new BankingError(
+      "One or more journal lines predate the carried statement opening balance and cannot be matched",
     );
   }
   const journalTotal = sum(gl.rows.map((line) => line.amount));
@@ -2092,6 +2197,9 @@ export async function markReconciled(
       );
     }
 
+    const carry = await firstReconciliationCarry(tx, recon, ctx, bookId);
+    const carryStart = carry?.startDate ?? null;
+    const carryUnits = carry ? toUnits(carry.amount) : 0n;
     const bal = (await tx.execute<{ cleared: string }>(sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
@@ -2100,12 +2208,13 @@ export async function markReconciled(
          and je.book_id = ${bookId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
+         and (${carryStart}::date is null or je.posting_date >= ${carryStart}::date)
          and (jl.reconciled_at is not null
               or jl.id in (select journal_line_id from reconciliation_matches rm
                             where rm.reconciliation_id = ${recon.id}
                               and rm.org_id = ${ctx.orgId}))
     `));
-    const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(bal.rows[0]!.cleared));
+    const difference = fromUnits(toUnits(recon.statement_balance) - carryUnits - toUnits(bal.rows[0]!.cleared));
     if (!isZero(difference)) {
       throw new BankingError(
         `Cannot sign off: difference is ${difference}, not 0.0000 — match or unmatch lines until it balances`,
@@ -2152,6 +2261,8 @@ export async function markReconciled(
            currency: recon.currency,
            throughDate: recon.through_date,
            matchedJournalLines: stamped.rows.length,
+           openingCarriedForward: carry?.amount ?? "0.0000",
+           openingCarryStartDate: carry?.startDate ?? null,
            excludedStatementLines: excluded.rows[0]!.count,
            difference: "0.0000",
          })}::jsonb,
