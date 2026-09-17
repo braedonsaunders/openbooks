@@ -223,7 +223,11 @@ function RecentEntriesList({
         {entries.map((e) => (
           <li key={e.id}>
             <Link
-              href={`/journal?entry=${e.id}`}
+              // The posted-entry route resolves every origin to the drawer
+              // that owns it (source-document, journal, or txn drawer).
+              // ?entry= drives the manual-journal drawer over DOCUMENT ids
+              // only, so entry ids linked there opened nothing (F-t06-005).
+              href={`/journal/${e.id}`}
               className="flex items-center justify-between gap-2 px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
             >
               <div className="min-w-0">
