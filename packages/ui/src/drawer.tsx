@@ -379,6 +379,7 @@ export function UrlDrawer({
   initialFullscreen,
   contextualReturn = true,
   beforeClose,
+  syncUrlOnClose = false,
 }: {
   open: boolean
   closeHref: string
@@ -399,6 +400,13 @@ export function UrlDrawer({
   contextualReturn?: boolean
   /** Optional guard for unsaved edits, before navigation or exit animation. */
   beforeClose?: () => boolean | Promise<boolean>
+  /** Sync the address bar the moment close begins (replaceState to the
+   *  resolved close href) instead of waiting for the exit animation's
+   *  deferred navigation — so a synchronous URL read at close time already
+   *  matches the dismissed state (F-t06-002). The deferred router navigation
+   *  still re-runs the server after the animation; default false preserves
+   *  the historic close-then-navigate timing everywhere else. */
+  syncUrlOnClose?: boolean
 }) {
   const navigate = React.useContext(DrawerNavigateContext)
   const [nestedContext, setNestedContext] = React.useState<{ closeHref: string; stacked: boolean } | null>(null)
@@ -448,6 +456,9 @@ export function UrlDrawer({
   React.useEffect(() => setShow(open), [open])
   async function close() {
     if (beforeClose && !(await beforeClose())) return
+    if (syncUrlOnClose && typeof window !== 'undefined') {
+      window.history.replaceState(null, '', resolvedCloseHref)
+    }
     setShow(false)
   }
   function afterExit() {
