@@ -168,5 +168,125 @@
       "void": "anulado",
       "expired": "caducado"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "Facturas recurrentes",
+      "subscriptions": "Suscripciones",
+      "advanced": "Ciclo de vida avanzado",
+      "dunning": "Cobranza"
+    },
+    "errors": {
+      "actionFailed": "La acción no se pudo completar",
+      "couldNotCreate": "No se pudo crear"
+    },
+    "subscriptions": {
+      "mrr": "Ingresos recurrentes mensuales",
+      "summary": "{active} activas · {plans, plural, one {# plan} other {# planes}}",
+      "plansTitle": "Planes",
+      "plansTable": {
+        "plan": "Plan",
+        "price": "Precio",
+        "billing": "Facturación"
+      },
+      "archived": "(archivado)",
+      "every": "cada {count}{unit}",
+      "delete": "Eliminar",
+      "noPlans": "Aún no hay planes.",
+      "planNamePlaceholder": "Nombre del plan",
+      "pricePlaceholder": "Precio",
+      "everyNPlaceholder": "cada N",
+      "defaultIncomeAccount": "Cuenta de ingresos predeterminada",
+      "addPlan": "Añadir plan",
+      "subsTitle": "Suscripciones",
+      "subsTable": {
+        "customer": "Cliente",
+        "plan": "Plan",
+        "qty": "Cant.",
+        "mrr": "MRR",
+        "nextBill": "Próxima factura",
+        "status": "Estado"
+      },
+      "noSubs": "Aún no hay suscripciones.",
+      "customerPlaceholder": "Cliente…",
+      "planPlaceholder": "Plan…",
+      "qtyPlaceholder": "Cant.",
+      "priceOverridePlaceholder": "Precio manual (opcional)",
+      "firstFullBill": "Primera factura completa",
+      "prorateFirstPeriod": "Prorratear el primer período",
+      "autoPostInvoices": "Contabilizar facturas automáticamente",
+      "addSubscription": "Añadir suscripción",
+      "prorateHint": "Indique una fecha de primera factura posterior al inicio y marque «prorrateo» para facturar ahora solo el primer período parcial.",
+      "apply": "Aplicar",
+      "billNow": "Facturar ahora",
+      "changeQty": "Cambiar cantidad",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "cancelSub": "Cancelar",
+      "cancelConfirmTitle": "¿Cancelar la suscripción?",
+      "cancelConfirmBody": "Cancelar pone fin a la facturación recurrente de esta suscripción. No se puede deshacer.",
+      "toasts": {
+        "prorated": "Prorrateo {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "Cantidad actualizada (sin prorrateo)",
+        "billed": "Facturado {documentNumber}",
+        "firstInvoiceProrated": "Primera factura prorrateada {documentNumber} por {amount}"
+      }
+    },
+    "recurring": {
+      "newSchedule": "Nueva programación recurrente",
+      "templateDocLabel": "Documento modelo n.º",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "Cadencia",
+      "cronLabel": "Cron",
+      "firstRunLabel": "Primera ejecución",
+      "autoPostCheckbox": "Contabilizar automáticamente los documentos generados",
+      "createSchedule": "Crear la programación",
+      "table": {
+        "template": "Modelo",
+        "customer": "Cliente",
+        "cadence": "Cadencia",
+        "nextRun": "Próxima ejecución",
+        "runs": "Ejecuciones",
+        "autoPost": "Contab. auto",
+        "status": "Estado"
+      },
+      "yes": "Sí",
+      "no": "No",
+      "active": "Activo",
+      "paused": "En pausa",
+      "runNow": "Ejecutar ahora",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "delete": "Eliminar",
+      "actionFailed": "La acción sobre la programación recurrente no se pudo completar.",
+      "generatedDocumentsDeleteConflict": "Esta programación recurrente no se puede eliminar porque ya generó documentos. Su historial de origen debe conservarse.",
+      "noneYet": "Aún no hay programaciones recurrentes."
+    },
+    "dunning": {
+      "blankStageName": "Primer recordatorio",
+      "newPolicy": "Nueva política de cobranza",
+      "policyNameLabel": "Nombre de la política",
+      "policyNamePlaceholder": "Cobranza estándar neto 30",
+      "gracePeriodLabel": "Período de gracia (días de atraso)",
+      "reminderLadder": "Escalera de recordatorios",
+      "addStage": "+ Añadir etapa",
+      "newStageName": "Recordatorio {n}",
+      "stageLabels": {
+        "name": "Nombre",
+        "daysPastDue": "Días de atraso",
+        "sequence": "Orden"
+      },
+      "subjectLabel": "Asunto",
+      "bodyLabel": "Cuerpo",
+      "removeStage": "Quitar etapa",
+      "tokensHint": "Tokens:",
+      "createPolicy": "Crear política",
+      "policySummary": "{count, plural, one {# etapa} other {# etapas}} · gracia {grace} d",
+      "off": "Desactivado",
+      "delete": "Eliminar",
+      "stageDay": "· Día {day}: {name}",
+      "noneYet": "Aún no hay políticas de cobranza.",
+      "activeBadge": "Activo"
+    }
   }
 }
