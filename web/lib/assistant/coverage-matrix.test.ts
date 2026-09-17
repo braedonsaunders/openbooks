@@ -64,6 +64,8 @@ const MATRIX: Entry[] = [
   { prefix: "approvals", tools: ["list_approvals"] },
   { prefix: "assistant", uncovered: "assistant surface: the chat/commit/conversation surface itself" },
   { prefix: "login", uncovered: "transport-only: session establishment, no data view" },
+  { prefix: "access-denied", tools: ["whoami", "list_roles"], note: "permission-refusal explanation; no writes" },
+  { prefix: "feature-required", tools: ["update_features"], note: "feature-gate explanation; enable path is Company Settings → Features" },
   { prefix: "auth", uncovered: "transport-only: credentials, MFA, OIDC, session cookies" },
   { prefix: "password-reset", uncovered: "transport-only: credential reset flow" },
   { prefix: "pay", uncovered: "transport-only: external payer link, no authenticated data view" },

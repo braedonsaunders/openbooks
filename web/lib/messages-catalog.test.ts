@@ -1686,7 +1686,7 @@ test('ar collections copy ships translated in every locale', () => {
 })
 
 test('agent workbench copy ships translated in every locale', () => {
-  // F-x6-002: the agents namespace (89 keys) existed only in en/fr/es —
+  // F-x6-002: the agents namespace (92 keys) existed only in en/fr/es —
   // de/ja/zh/pt-BR rendered English inside otherwise translated screens.
   // Every leaf must exist, keep its ICU placeholders, and differ from
   // English except for reviewed cognates, pinned to the exact term.
@@ -1706,7 +1706,7 @@ test('agent workbench copy ships translated in every locale', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('agents.'))
-  assert.equal(wanted.length, 89, 'agents source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 92, 'agents source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
