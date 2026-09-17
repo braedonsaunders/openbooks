@@ -74,6 +74,10 @@
     "resource": "Tabla",
     "format": "Formato",
     "status": "Estado",
+    "jobStatus": {
+      "committed": "Importado",
+      "failed": "Fallido"
+    },
     "rows": "Filas",
     "by": "Por"
   }

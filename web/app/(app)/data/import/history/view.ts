@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
@@ -78,6 +78,7 @@ export interface ImportHistoryData {
 export async function loadImportHistory(): Promise<ImportHistoryData> {
   const authz = await requirePermission('data.import')
   const t = await getTranslations('data')
+  const locale = await getLocale()
 
   const result = await db.execute<JobRow>(sql`
     select j.id, j.resource_key, j.resource_label, j.format, j.file_name, j.status,
@@ -103,11 +104,19 @@ export async function loadImportHistory(): Promise<ImportHistoryData> {
     columnBy: t('history.by'),
     rows: result.rows.map((j) => ({
       id: j.id,
-      when: dateTime(j.created_at),
+      when: dateTime(j.created_at, locale),
       resourceLabel: j.resource_label ?? j.resource_key,
       fileName: j.file_name,
       format: j.format,
-      status: j.status,
+      // Raw import_jobs.status values ever written are committed/failed (see
+      // the import commit route). Localised here; anything else passes
+      // through verbatim so a future status never blanks the badge.
+      status:
+        j.status === 'committed'
+          ? t('history.jobStatus.committed')
+          : j.status === 'failed'
+            ? t('history.jobStatus.failed')
+            : j.status,
       statusVariant: j.status === 'failed' ? 'outline' : 'success',
       created: j.created_count,
       updated: j.updated_count,
