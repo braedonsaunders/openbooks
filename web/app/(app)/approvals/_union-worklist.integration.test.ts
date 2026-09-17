@@ -6,7 +6,7 @@ import test from "node:test";
 // F-t01-007 — the dashboard tile counts the unified approval worklist
 // (Flows gates + gateless document approvals + pay runs) while the
 // approvals center mine/all tabs read gates-only queries: 97 gateless
-// pending documents on Rassaun show as tile 97 vs empty tabs. The center
+// pending documents on a live tenant show as tile 97 vs empty tabs. The center
 // must read the same union reader as the tile.
 const stateKey = Symbol.for("openbooks.approvals-union-test");
 const state: { authz: unknown } = { authz: null };

@@ -8,7 +8,7 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–20: setup, banking, assistant, payroll, CRM, reports,
+Fleet-6 batches 9–22: setup, banking, assistant, payroll, CRM, reports,
 dashboard, documents, and allocations UX on top of alpha.11.
 
 ### Setup and shell
@@ -48,6 +48,11 @@ dashboard, documents, and allocations UX on top of alpha.11.
   ownership create refuses a full-method write with a typed error.
 - Data-io re-imports exported party kinds; PDF responses keep a strict
   CSP; pack-driven stubs re-resolve the open stub against live rows.
+- Approvals center tabs read the same union worklist as the dashboard
+  tile; API-key fingerprints stay stable across revoke; users accept
+  last_sign_in sort; agent finding hrefs resolve through the nav
+  registry; period lists show locked modules and book; journal Origin=All
+  includes migration entries; document drawer post fails closed.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 
