@@ -98,6 +98,8 @@ export interface AgentsData {
    *  last run as a relative instant. */
   kpis: { label: string; value: string; tone?: 'good' | 'bad' }[]
   searchPlaceholder: string
+  /** Request locale for client islands that format dates (never the browser). */
+  locale: string
   currentParams: Record<string, string | string[] | undefined>
   packLabel: string
   statusLabel: string
@@ -297,6 +299,7 @@ export async function loadAgents(
       },
     ],
     searchPlaceholder: t('search'),
+    locale,
     currentParams: sp,
     packLabel: t('facets.pack'),
     statusLabel: tcc('labels.status'),
@@ -506,6 +509,7 @@ export function agentsSpec(data: AgentsData): PageSpec {
           rows: data.triage.rows,
           canWrite: data.triage.canWrite,
           orgId: data.triage.orgId,
+          locale: data.locale,
         }),
         when: f('showInboxChrome'),
       },

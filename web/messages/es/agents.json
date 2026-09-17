@@ -77,6 +77,15 @@
       "team": "Equipo",
       "nobody": "Nadie",
       "noTeam": "Sin equipo",
+      "roles": {
+        "accountant": "Contador",
+        "administrator": "Administrador",
+        "approver": "Aprobador",
+        "controller": "Controlador",
+        "salesManager": "Gerente de ventas",
+        "salesRepresentative": "Representante de ventas",
+        "viewer": "Visor"
+      },
       "due": "Vence",
       "overdue": "Vencido",
       "save": "Guardar",

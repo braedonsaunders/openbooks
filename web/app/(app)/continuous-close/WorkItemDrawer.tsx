@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Textarea, UrlDrawer } from '@openbooks/ui'
 import { ApplicationCommandCard } from '@/components/assistant/application-command-card'
 import type { FindingProposalCommand } from '@/lib/agents/proposals'
+import { displayRoleName } from '@/lib/role-display'
 type Evidence = {
   id: string
   kind: string
@@ -278,7 +279,7 @@ export function WorkItemDrawer({
                 <label className="block text-xs font-medium text-slate-500">{ta('drawer.assignment.team')}
                   <select value={assigneeRole} onChange={(event) => setAssigneeRole(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                     <option value="">{ta('drawer.assignment.noTeam')}</option>
-                    {assignees.roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+                    {assignees.roles.map((role) => <option key={role.id} value={role.id}>{displayRoleName(role.name, (key) => ta(`drawer.assignment.roles.${key}`))}</option>)}
                   </select>
                 </label>
                 <label className="block text-xs font-medium text-slate-500">{ta('drawer.assignment.due')}
