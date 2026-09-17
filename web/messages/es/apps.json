@@ -8,7 +8,8 @@
     "library": "Biblioteca de aplicaciones",
     "documentation": "Documentación",
     "open": "Abrir aplicación",
-    "openAria": "Abrir {name}"
+    "openAria": "Abrir {name}",
+    "manage": "Gestionar aplicaciones"
   },
   "empty": {
     "title": "No hay aplicaciones instaladas",
@@ -20,6 +21,10 @@
     "description": "Pruebe con otro nombre, clave o descripción."
   },
   "library": {
+    "draftReady": "{name} está lista para revisión.",
+    "preparing": "Preparando…",
+    "reviewUpdate": "Revisar actualización",
+    "reviewInstall": "Revisar aplicación",
     "title": "Biblioteca de aplicaciones",
     "description": "Descubra e instale appes para su organización.",
     "searchPlaceholder": "Buscar en la Biblioteca de aplicaciones…",
@@ -37,7 +42,8 @@
     "noResults": {
       "title": "No se encontraron aplicaciones",
       "description": "Pruebe con otro nombre, clave o descripción."
-    }
+    },
+    "approvalPending": "{name} está pendiente de aprobación firmada."
   },
   "frame": {
     "loading": "Cargando…",
@@ -63,5 +69,379 @@
       "updated": "Actualizada"
     },
     "empty": "Aún no hay aplicaciones. Cree una para obtener una base lista para abrir o importe un paquete .zip."
+  },
+  "drawer": {
+    "toolbar": {
+      "newApp": "Nueva aplicación",
+      "newAppPromptTitle": "Nueva aplicación",
+      "newAppPromptLabel": "Nombre de la aplicación",
+      "newAppPromptPlaceholder": "Expense Insights",
+      "importZip": "Importar .zip"
+    },
+    "toasts": {
+      "createdApp": "Se creó «{name}»",
+      "importedApp": "Se importó «{key}»",
+      "settingsSaved": "Ajustes de la aplicación guardados",
+      "appDisabled": "Aplicación desactivada",
+      "appEnabled": "Aplicación activada",
+      "published": "Publicada en el mercado",
+      "uninstalled": "Desinstalada",
+      "fileSaved": "Se guardó {path}",
+      "fileCreated": "Se creó {path}",
+      "fileUploaded": "Se subió {path}",
+      "deleted": "Eliminado"
+    },
+    "errors": {
+      "saveFailed": "No se pudo guardar",
+      "updateFailed": "No se pudo actualizar",
+      "publishFailed": "No se pudo publicar",
+      "uninstallFailed": "No se pudo desinstalar",
+      "createFailed": "No se pudo crear",
+      "uploadFailed": "No se pudo subir",
+      "deleteFailed": "No se pudo eliminar"
+    },
+    "confirm": {
+      "uninstallTitle": "¿Desinstalar «{name}»?",
+      "uninstallMessage": "¿Desinstalar esta app? Los registros y campos aprovisionados se conservan. El código y la evidencia de ejecución se archivan en el registro de auditoría; los paquetes con historial de contribuciones a la plataforma se desactivan para que sus referencias queden intactas.",
+      "deleteFileMessage": "¿Eliminar {path}?"
+    },
+    "prompt": {
+      "newFileTitle": "Nuevo archivo",
+      "pathLabel": "Ruta"
+    },
+    "tabs": {
+      "overview": "Vista general",
+      "files": "Archivos",
+      "runs": "Ejecuciones"
+    },
+    "actions": {
+      "open": "Abrir",
+      "saving": "Guardando…",
+      "saveSettings": "Guardar ajustes",
+      "saveFile": "Guardar archivo",
+      "saved": "Guardado",
+      "republish": "Volver a publicar en el mercado",
+      "publish": "Publicar en el mercado",
+      "disable": "Desactivar",
+      "enable": "Activar",
+      "uninstall": "Desinstalar",
+      "addEndpoint": "Añadir endpoint",
+      "manageNavigation": "Gestionar accesos directos de navegación",
+      "newFileTitleAttr": "Nuevo archivo",
+      "uploadFileTitleAttr": "Subir archivo",
+      "deleteFileTitleAttr": "Eliminar archivo"
+    },
+    "labels": {
+      "name": "Nombre",
+      "status": "Estado",
+      "description": "Descripción",
+      "capabilities": "Capacidades",
+      "navigation": "Navegación",
+      "endpoints": "Endpoints del backend"
+    },
+    "onMarketplace": "en el mercado",
+    "capabilitiesHelp": "Todo lo demás está denegado por defecto; las llamadas al backend y al puente de la app se verifican contra estas concesiones (siempre cruzadas con los propios permisos del usuario que llama).",
+    "navigationHelp": "Esta app sigue instalada con independencia de sus accesos directos de menú. Añada, quite, renombre o mueva un acceso directo en la configuración de navegación.",
+    "endpointsHelp": "La interfaz los invoca con <call>openbooks.callBackend(name, payload)</call>; cada uno ejecuta el <handler>handler(request)</handler> de su archivo en el sandbox.",
+    "noEndpoints": "Sin endpoints — esta aplicación solo tiene interfaz.",
+    "endpointNamePlaceholder": "name",
+    "capabilities": {
+      "allowFallback": "Permitir {permission}",
+      "copy": {
+        "records": {
+          "read": {
+            "label": "Consultar registros personalizados",
+            "help": "Consultar tipos de registros personalizados publicados"
+          },
+          "create": {
+            "label": "Gestionar registros personalizados",
+            "help": "Crear, actualizar y eliminar registros personalizados"
+          }
+        },
+        "gl": {
+          "read": {
+            "label": "Consultar el libro mayor",
+            "help": "Consultar cuentas y asientos contabilizados"
+          },
+          "post": {
+            "label": "Crear y contabilizar asientos",
+            "help": "Crear asientos equilibrados y gobernados"
+          }
+        },
+        "ap": {
+          "read": {
+            "label": "Consultar cuentas por pagar",
+            "help": "Consultar facturas de proveedor"
+          },
+          "create": {
+            "label": "Gestionar facturas de proveedor",
+            "help": "Crear, actualizar, enviar y eliminar facturas"
+          },
+          "post": {
+            "label": "Contabilizar facturas de proveedor",
+            "help": "Contabilizar facturas de proveedor gobernadas al libro mayor"
+          },
+          "pay": {
+            "label": "Consultar pagos",
+            "help": "Consultar documentos de pago"
+          }
+        },
+        "ar": {
+          "read": {
+            "label": "Consultar cuentas por cobrar",
+            "help": "Consultar facturas de cliente"
+          },
+          "create": {
+            "label": "Gestionar facturas de cliente",
+            "help": "Crear, actualizar, enviar y eliminar facturas"
+          },
+          "post": {
+            "label": "Contabilizar facturas de cliente",
+            "help": "Contabilizar facturas de cliente gobernadas al libro mayor"
+          }
+        },
+        "parties": {
+          "read": {
+            "label": "Consultar terceros",
+            "help": "Consultar clientes, proveedores y empleados"
+          },
+          "manage": {
+            "label": "Gestionar terceros",
+            "help": "Crear, actualizar y eliminar terceros"
+          }
+        },
+        "items": {
+          "read": {
+            "label": "Consultar artículos y servicios",
+            "help": "Consultar el catálogo de artículos"
+          },
+          "manage": {
+            "label": "Gestionar artículos y servicios",
+            "help": "Crear, actualizar y eliminar artículos del catálogo"
+          }
+        },
+        "projects": {
+          "read": {
+            "label": "Consultar proyectos",
+            "help": "Consultar proyectos y trabajos"
+          },
+          "manage": {
+            "label": "Gestionar proyectos",
+            "help": "Crear, actualizar y eliminar proyectos"
+          }
+        },
+        "assets": {
+          "read": {
+            "label": "Consultar activos fijos",
+            "help": "Consultar activos fijos"
+          },
+          "manage": {
+            "label": "Gestionar activos fijos",
+            "help": "Crear, actualizar y eliminar activos fijos"
+          }
+        }
+      }
+    },
+    "files": {
+      "selectToEdit": "Seleccione un archivo para editar.",
+      "loading": "Cargando…",
+      "binaryInfo": "Archivo binario · {contentType} · {size} bytes"
+    },
+    "runs": {
+      "empty": "Aún no hay ejecuciones — el backend nunca ha sido invocado.",
+      "units": "{units} unidades"
+    }
+  },
+  "editor": {
+    "tabsLabel": "Editor del paquete",
+    "overview": "Configuración",
+    "sections": {
+      "general": "General",
+      "screens": "Pantallas",
+      "data": "Datos y contribuciones",
+      "actions": "Acciones",
+      "access": "Acceso"
+    },
+    "files": "Archivos",
+    "download": "Exportar paquete",
+    "draftHelp": "Edite un paquete sin publicar. Al guardar se prepara un borrador para validación, vista previa y activación; no cambia la aplicación en ejecución.",
+    "name": "Nombre de la aplicación",
+    "key": "Clave de la aplicación",
+    "version": "Versión",
+    "icon": "Clave de icono",
+    "description": "Descripción",
+    "renderer": "Interfaz",
+    "native": "Pantallas nativas de OpenBooks (ViewSpec)",
+    "sandbox": "HTML, CSS y JavaScript",
+    "entry": "Archivo de entrada de la interfaz",
+    "navLabel": "Etiqueta del lanzador",
+    "navIcon": "Icono del lanzador",
+    "endpoints": "Acciones del backend",
+    "endpointsHelp": "Cada acción ejecuta su manejador JavaScript en el tiempo de ejecución gobernado de la app. Edite su implementación en Archivos.",
+    "endpointName": "Nombre de la acción",
+    "endpointFile": "Archivo JavaScript",
+    "method": "Método HTTP",
+    "removeEndpoint": "Quitar acción",
+    "addEndpoint": "Añadir acción",
+    "permissions": "Capacidades solicitadas",
+    "permissionsHelp": "Declare las capacidades que requiere este paquete. Las llamadas también siguen limitadas por los permisos del usuario actual.",
+    "grants": "Capacidades concedidas",
+    "grantsHelp": "Elija qué capacidades solicitadas podrá usar realmente esta versión. Las nuevas concesiones se verifican contra su autoridad durante la activación.",
+    "definitions": "Pantallas nativas y fuentes",
+    "definitionsHelp": "Edite las definiciones de pantallas nativas y todas las fuentes del paquete en Archivos. Los registros y campos personalizados se aprovisionan con el sistema de objetos OpenBooks existente cuando se activa la versión revisada.",
+    "editDefinitions": "Abrir la definición de interfaz",
+    "newFile": "Nuevo archivo",
+    "path": "Ruta relativa al paquete",
+    "renameFile": "Renombrar o mover el archivo",
+    "deleteFile": "Eliminar archivo",
+    "deleteConfirm": "¿Quitar {path} de este borrador? Las versiones activas no cambian.",
+    "invalidPath": "Use una ruta relativa única, con nombre de archivo, sin referencias al directorio padre.",
+    "uploadFiles": "Subir archivos",
+    "fileTooLarge": "Cada archivo debe pesar menos de 2 MB.",
+    "replaceConfirm": "¿Reemplazar estos archivos del borrador: {paths}?",
+    "searchFiles": "Buscar un archivo…",
+    "binaryHelp": "Recurso binario. Descargue este archivo para inspeccionarlo o suba un reemplazo a su carpeta.",
+    "invalidManifest": "El manifiesto no es válido. Abra Archivos para corregirlo.",
+    "reason": "Motivo de esta versión",
+    "reasonPlaceholder": "Describa qué cambió y por qué.",
+    "saveDraft": "Guardar borrador para revisión",
+    "saving": "Preparando el borrador…",
+    "unsaved": "Cambios del paquete sin guardar",
+    "notLive": "Los cambios solo surten efecto tras la activación.",
+    "failed": "No se pudo guardar el paquete.",
+    "pendingDefinition": "Aplique o cancele el editor de definición abierto antes de cambiar de pestaña o guardar el paquete.",
+    "uploadFolder": "Subir carpeta",
+    "downloadFile": "Descargar archivo"
+  },
+  "create": {
+    "title": "Nueva aplicación",
+    "ownPackage": "Empiece con su propio paquete",
+    "help": "Cree pantallas nativas o trabaje directamente con HTML, CSS, JavaScript y otros recursos. También puede importar un paquete existente y editarlo antes de la activación.",
+    "native": "Aplicación nativa",
+    "files": "Aplicación HTML / CSS / JS",
+    "import": "Importar paquete",
+    "importing": "Importando…",
+    "tooLarge": "Elija un paquete ZIP o JSON de menos de 10 MB.",
+    "importReason": "Importar el paquete de la aplicación para revisión",
+    "failed": "No se pudo importar el paquete.",
+    "discardEdits": "¿Descartar los cambios sin guardar del paquete?"
+  },
+  "definitions": {
+    "title": "Registros, campos y contribuciones a la plataforma",
+    "help": "Gestione las definiciones que incluye esta app. Cada definición usa los servicios existentes de la plataforma y se valida con el paquete antes de la activación. Quitar una definición no elimina los registros históricos.",
+    "edit": "Editar definición",
+    "remove": "Quitar definición",
+    "removeConfirm": "¿Quitar esta contribución del borrador? La revisión mostrará el cambio antes de la activación.",
+    "type": "Tipo de definición",
+    "key": "Nueva clave de definición",
+    "add": "Añadir definición",
+    "apply": "Aplicar al borrador",
+    "cancel": "Cancelar",
+    "record_type": "Tipo de registro personalizado",
+    "custom_field": "Campo personalizado",
+    "page": "Personalización de página",
+    "nav": "Elemento de navegación",
+    "setting": "Ajuste de la aplicación",
+    "permission": "Permiso de rol",
+    "invalidKey": "Use una clave en minúsculas que empiece por una letra, con letras, números y guiones.",
+    "duplicate": "Ese archivo de definición ya existe.",
+    "invalid": "La definición no es válida.",
+    "route": "Página registrada que personalizar",
+    "chooseRoute": "Elija una página registrada",
+    "pageHelp": "Las contribuciones de página personalizan páginas registradas existentes. Añada las pantallas independientes de la app en el archivo de interfaz nativa."
+  },
+  "management": {
+    "workspace": "Espacio de trabajo de la aplicación",
+    "overview": "Vista general",
+    "package": "Paquete",
+    "versions": "Versiones",
+    "runs": "Ejecuciones",
+    "audit": "Historial de auditoría",
+    "storage": "Almacenamiento",
+    "installed": "Activada",
+    "disabled": "Desactivada",
+    "open": "Abrir aplicación",
+    "editPackage": "Editar el paquete",
+    "download": "Exportar ZIP",
+    "assistant": "Revisar con el asistente",
+    "contents": "Contenido del paquete",
+    "summary": "{files} archivos · {actions} acciones del backend · {definitions} contribuciones a la plataforma",
+    "permissions": "Capacidades efectivas",
+    "permissionsHelp": "Estas concesiones se aplican a la versión en ejecución. Edite el paquete para preparar un cambio de permisos revisado.",
+    "noPermissions": "Ninguna capacidad de plataforma concedida.",
+    "configuration": "Configuración de la organización",
+    "navigation": "Configuración de navegación",
+    "settings": "Configuración de la aplicación",
+    "roles": "Roles y permisos",
+    "lifecycle": "Disponibilidad y distribución",
+    "lifecycleHelp": "Active o desactive esta app para su organización. Al publicar se comparte una copia de su paquete activo en la Biblioteca de aplicaciones.",
+    "publish": "Publicar en el mercado",
+    "updateListing": "Actualizar la ficha",
+    "unpublish": "Retirar la ficha",
+    "disable": "Desactivar aplicación",
+    "enable": "Activar aplicación",
+    "uninstall": "Desinstalar aplicación",
+    "publishConfirm": "¿Publicar el paquete activo, incluidos sus archivos fuente, en la Biblioteca de aplicaciones para otras organizaciones? Revise que los archivos no contengan información privada antes de compartirlos.",
+    "unpublishConfirm": "¿Quitar esta ficha de la Biblioteca de aplicaciones? Las instalaciones existentes conservan sus copias.",
+    "disableConfirm": "¿Desactivar esta app y sus páginas y navegación aportadas? Los registros existentes y el historial de auditoría se conservan.",
+    "enableConfirm": "¿Activar esta app y sus contribuciones aprobadas para su organización?",
+    "uninstallConfirm": "¿Desinstalar esta app? Los registros y campos aprovisionados se conservan. El código y la evidencia de ejecución se archivan en el registro de auditoría; los paquetes con historial de contribuciones a la plataforma se desactivan para que sus referencias queden intactas.",
+    "discardEdits": "¿Descartar los cambios sin guardar del paquete?",
+    "failed": "No se pudo completar la operación.",
+    "loading": "Cargando…",
+    "refresh": "Actualizar",
+    "versionsHelp": "Inspeccione y exporte cualquier versión instalada. Revisar una versión anterior crea un borrador nuevo sobre la versión activa actual.",
+    "runsHelp": "Historial de ejecución del backend, con errores, registros, uso de recursos, duración y autor.",
+    "auditHelp": "Cambios de configuración y ciclo de vida registrados, con autor y evidencia de antes / después.",
+    "storageHelp": "Inspeccione el estado propio de la app. Cambie los datos de negocio con las acciones gobernadas de la app, que preservan sus reglas de validación y auditoría.",
+    "when": "Fecha y hora",
+    "version": "Versión",
+    "key": "Clave de almacenamiento",
+    "activity": "Actividad",
+    "status": "Estado",
+    "actions": "Acciones",
+    "active": "Activa",
+    "details": "Ver detalles",
+    "reviseVersion": "Preparar revisión",
+    "empty": "Aún no hay entradas.",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "page": "Página {page}",
+    "fields": {
+      "id": "Registro (id)",
+      "at": "Fecha y hora",
+      "actor_id": "Actor (id)",
+      "version_id": "Versión (id)",
+      "version": "Versión",
+      "status": "Estado",
+      "endpoint": "Acción",
+      "units": "Unidades consumidas",
+      "duration_ms": "Duración (ms)",
+      "logs": "Registros de ejecución",
+      "error_message": "Error",
+      "changes": "Evidencia de antes / después",
+      "action": "Operación",
+      "namespace": "Espacio de nombres",
+      "key": "Clave",
+      "value": "Valor almacenado"
+    }
+  },
+  "screens": {
+    "title": "Pantallas nativas de la aplicación",
+    "help": "Gestione páginas, espacios de trabajo de registros y formularios de acción. Las definiciones de pantalla usan los esquemas nativos ViewSpec y de formulario; las pantallas de registro y de acción se conectan a tipos de registro gobernados y acciones del backend.",
+    "page": "Página",
+    "records": "Espacio de trabajo de registros",
+    "action": "Formulario de acción",
+    "type": "Tipo de pantalla",
+    "key": "Nueva clave de pantalla",
+    "add": "Añadir pantalla",
+    "edit": "Editar pantalla",
+    "remove": "Quitar pantalla",
+    "removeConfirm": "¿Quitar esta pantalla del borrador?",
+    "apply": "Aplicar al borrador",
+    "cancel": "Cancelar",
+    "invalid": "La definición de pantalla nativa necesita corrección.",
+    "invalidKey": "Use una clave en minúsculas que empiece por una letra, con letras, números y guiones.",
+    "openSource": "Abrir fuente de la pantalla"
   }
 }
