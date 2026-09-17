@@ -107,23 +107,36 @@ export function FxProviderForm({
   }
 
   async function action(kind: 'test' | 'sync') {
+    // The page hint says it: with no foreign currencies there is nothing to
+    // test or sync. Say so locally instead of round-tripping into a 422 the
+    // user cannot act on.
+    if (form.currencies.length === 0) {
+      toast.error(t('noCurrencies'))
+      return
+    }
     setBusy(kind)
     if (!(await persist())) { setBusy(null); return }
-    const res = await fetch('/api/admin/fx-provider', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: kind }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t(`${kind}Failed`))
-    else {
-      toast.success(t(kind === 'test' ? 'testPassed' : 'syncPassed', {
-        observations: data.result?.observationsReceived ?? 0,
-        rates: data.result?.normalizedRates ?? 0,
-      }))
-      router.refresh()
+    try {
+      const res = await fetch('/api/admin/fx-provider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: kind }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) toast.error(data.error ?? t(`${kind}Failed`))
+      else {
+        toast.success(t(kind === 'test' ? 'testPassed' : 'syncPassed', {
+          observations: data.result?.observationsReceived ?? 0,
+          rates: data.result?.normalizedRates ?? 0,
+        }))
+        router.refresh()
+      }
+    } catch {
+      // Transport failure: name it and always release the button.
+      toast.error(t(`${kind}Failed`))
+    } finally {
+      setBusy(null)
     }
-    setBusy(null)
   }
 
   function addCurrency(value: string | null) {
