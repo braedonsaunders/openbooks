@@ -129,6 +129,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const [header, setHeader] = useState<string[] | null>(null)
   const [mapping, setMapping] = useState<Mapping>(EMPTY_MAPPING)
   const [preview, setPreview] = useState<StatementPreview | null>(null)
+  // A refused preview/import that only fires a transient toast reads as
+  // "nothing happened" once it dismisses (F-t05-012): the typed refusal also
+  // persists as a dialog-level alert, cleared on the next edit.
+  const [actionError, setActionError] = useState<string | null>(null)
   const [statementDate, setStatementDate] = useState('')
   const [openingBalance, setOpeningBalance] = useState('')
   const [closingBalance, setClosingBalance] = useState('')
@@ -136,6 +140,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   function reset() {
     fileReadVersion.current += 1
     sourceRevision.current += 1
+    setActionError(null)
     setText('')
     setUploadEvidence(null)
     setHeader(null)
@@ -149,6 +154,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   function onTextChanged(next: string) {
     fileReadVersion.current += 1
     sourceRevision.current += 1
+    setActionError(null)
     setText(next)
     setUploadEvidence(null)
     setHeader(null)
@@ -182,15 +188,38 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     }
   }
 
-  async function post(body: Record<string, unknown>) {
+  /** Surface a refusal persistently (dialog alert) and transiently (toast). */
+  function fail(message: string) {
+    setActionError(message)
+    toast.error(message)
+  }
+
+  interface ImportResponse {
+    header?: string[]
+    text?: unknown
+    lines?: PreviewLine[]
+    imported?: number
+    duplicates?: number
+    statementDate?: string
+    closingBalance?: string
+  }
+
+  async function post(body: Record<string, unknown>): Promise<ImportResponse> {
     const res = await fetch('/api/banking/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error ?? tBanking('errors.requestFailed'))
-    return data
+    // The error body may not be JSON (proxy 5xx pages): never let the read
+    // itself throw, or the failure surfaces a SyntaxError instead of the
+    // typed reason (F-t05-012).
+    const data = (await res.json().catch(() => null)) as (ImportResponse & { error?: unknown }) | null
+    if (!res.ok) {
+      throw new Error(
+        typeof data?.error === 'string' && data.error ? data.error : tBanking('errors.requestFailed'),
+      )
+    }
+    return data ?? {}
   }
 
   const sourcePayload = uploadEvidence
@@ -205,6 +234,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   async function detectColumns() {
     const requestRevision = sourceRevision.current
     setBusy(true)
+    setActionError(null)
     try {
       const data = (await post({ source: 'csv', ...sourcePayload, mode: 'columns' })) as { header: string[] }
       if (requestRevision !== sourceRevision.current) return
@@ -220,7 +250,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         bankTransactionId: guessColumn(data.header, [/transaction ?id|fitid/i]),
       })
     } catch (e) {
-      if (requestRevision === sourceRevision.current) toast.error((e as Error).message)
+      if (requestRevision === sourceRevision.current) fail((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -231,6 +261,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   async function runPreview() {
     const requestRevision = sourceRevision.current
     setBusy(true)
+    setActionError(null)
     try {
       const data = await post({
         accountId,
@@ -242,16 +273,17 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       if (requestRevision !== sourceRevision.current) return
       setPreview({
         lines: data.lines ?? [],
-        imported: data.imported,
-        duplicates: data.duplicates,
+        imported: data.imported ?? 0,
+        duplicates: data.duplicates ?? 0,
         sourceRevision: requestRevision,
       })
-      if (data.statementDate) setStatementDate((current) => current || data.statementDate)
-      if (data.closingBalance) setClosingBalance((current) => current || data.closingBalance)
+      const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
+      if (previewStatementDate) setStatementDate((current) => current || previewStatementDate)
+      if (previewClosingBalance) setClosingBalance((current) => current || previewClosingBalance)
     } catch (e) {
       if (requestRevision === sourceRevision.current) {
         setPreview(null)
-        toast.error((e as Error).message)
+        fail((e as Error).message)
       }
     } finally {
       setBusy(false)
@@ -264,6 +296,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       return
     }
     setBusy(true)
+    setActionError(null)
     try {
       const data = await post({
         accountId,
@@ -275,12 +308,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         closingBalance: closingBalance || null,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
-      toast.success(t('importedToast', { imported: data.imported, duplicates: data.duplicates }))
+      toast.success(t('importedToast', { imported: data.imported ?? 0, duplicates: data.duplicates ?? 0 }))
       setOpen(false)
       reset()
       router.refresh()
     } catch (e) {
-      toast.error((e as Error).message)
+      fail((e as Error).message)
     } finally {
       setBusy(false)
     }
@@ -299,6 +332,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           value={mapping[key]}
           onChange={(e) => {
             sourceRevision.current += 1
+            setActionError(null)
             setMapping((m) => ({ ...m, [key]: e.target.value }))
             setPreview(null)
           }}
@@ -347,6 +381,14 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         }
       >
         <div className="space-y-5">
+          {actionError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+            >
+              {actionError}
+            </p>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
               <Label>{t('format')}</Label>
@@ -356,6 +398,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 onChange={(e) => {
                   fileReadVersion.current += 1
                   sourceRevision.current += 1
+                  setActionError(null)
                   setSource(e.target.value as StatementTextSource)
                   setHeader(null)
                   setPreview(null)
