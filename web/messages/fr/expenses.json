@@ -23,6 +23,9 @@
     "deleteTitle": "Supprimer cette note de frais?",
     "deleteDraftBody": "Cela supprime définitivement la note de frais brouillon. Cette action est irréversible.",
     "deletePostedBody": "Cela supprime définitivement la note de frais et son impact au grand livre. Cette action est irréversible.",
+    "recallTitle": "Modifier ce rapport ?",
+    "recallBodyPending": "La modification annule la demande d'approbation en cours et renvoie le rapport à l'état de brouillon. L'historique des approbations est conservé.",
+    "recallBodyApproved": "La modification rouvre ce rapport approuvé comme brouillon. L'historique des approbations est conservé.",
     "columns": {
       "taxAmount": "Mt taxe"
     },
@@ -36,6 +39,7 @@
   "toasts": {
     "submitted": "Soumis pour approbation",
     "posted": "Comptabilisé au grand livre",
+    "recalled": "Renvoyé à l'état de brouillon",
     "actionFailed": "Échec de l’action",
     "autosaveFailed": "Échec de l’enregistrement automatique",
     "deleted": "Note de frais supprimée",

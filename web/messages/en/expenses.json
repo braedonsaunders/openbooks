@@ -23,6 +23,9 @@
     "deleteTitle": "Delete this expense report?",
     "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",
     "deletePostedBody": "This permanently deletes the expense report and removes its ledger impact. This cannot be undone.",
+    "recallTitle": "Edit this report?",
+    "recallBodyPending": "Editing cancels the pending approval request and returns the report to draft. The approval history is kept.",
+    "recallBodyApproved": "Editing reopens this approved report as a draft. The approval history is kept.",
     "columns": {
       "taxAmount": "Tax amt"
     },
@@ -36,6 +39,7 @@
   "toasts": {
     "submitted": "Submitted for approval",
     "posted": "Posted to the ledger",
+    "recalled": "Returned to draft",
     "actionFailed": "Action failed",
     "autosaveFailed": "Autosave failed",
     "deleted": "Expense report deleted",

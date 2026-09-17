@@ -23,6 +23,9 @@
     "deleteTitle": "删除此费用报销单？",
     "deleteDraftBody": "此操作将永久删除该草稿费用报销单。无法撤销。",
     "deletePostedBody": "此操作将永久删除该费用报销单并移除其总账影响。无法撤销。",
+    "recallTitle": "编辑此报告？",
+    "recallBodyPending": "编辑将取消待处理的审批请求，并将报告退回草稿。审批历史将保留。",
+    "recallBodyApproved": "编辑将把这份已批准的报告重新打开为草稿。审批历史将保留。",
     "columns": {
       "taxAmount": "税额"
     },
@@ -36,6 +39,7 @@
   "toasts": {
     "submitted": "已提交审批",
     "posted": "已过账至总账",
+    "recalled": "已退回草稿",
     "actionFailed": "操作失败",
     "autosaveFailed": "自动保存失败",
     "deleted": "费用报销单已删除",

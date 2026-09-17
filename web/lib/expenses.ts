@@ -4,6 +4,35 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
 
 /**
+ * Recall eligibility for an expense report (F-user-003): a pending_approval
+ * or approved-but-unposted report is editable via recall — Edit cancels the
+ * open gates and returns it to draft. Only the submitter (or document
+ * author for legacy rows) or an org admin may recall; the recall action
+ * re-checks authoritatively. A report with a void in flight stays with the
+ * void flow. Shared by the reports page and the related-transaction drawer.
+ */
+export function canRecallExpenseReport(
+  doc: {
+    status?: unknown
+    submitted_by?: unknown
+    created_by?: unknown
+    void_requested_at?: unknown
+  },
+  user: {
+    id: string
+    roles: ReadonlyArray<{ key: string }>
+    isSuperAdmin?: boolean
+  },
+): boolean {
+  const isSubmitter = doc.submitted_by === user.id || doc.created_by === user.id
+  return (
+    (doc.status === 'pending_approval' || doc.status === 'approved') &&
+    doc.void_requested_at == null &&
+    (isSubmitter || user.isSuperAdmin === true || user.roles.some(({ key }) => key === 'admin'))
+  )
+}
+
+/**
  * One statement gives the drawer one MVCC snapshot of its header, lines and
  * exact revision. A later token lookup could bless stale content with a
  * concurrent writer's revision and defeat optimistic concurrency.

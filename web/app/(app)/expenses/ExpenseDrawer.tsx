@@ -162,6 +162,7 @@ export function ExpenseDrawer({
   lineDefs,
   canSubmit,
   canPost,
+  canRecall,
   layout,
   closeHref = '/expenses/reports',
 }: {
@@ -178,6 +179,8 @@ export function ExpenseDrawer({
   lineDefs: CustomFieldDefClient[]
   canSubmit: boolean
   canPost: boolean
+  /** The open report is recallable to draft by this viewer (F-user-003). */
+  canRecall: boolean
   layout?: FormLayoutConfig
   closeHref?: string
 }) {
@@ -188,13 +191,21 @@ export function ExpenseDrawer({
   const doc = report.doc
   const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
   const isDraft = doc.status === 'draft'
+  const isPendingApproval = doc.status === 'pending_approval'
+  const isApproved = doc.status === 'approved'
+  const isPosted = doc.status === 'posted'
   // Existing records default to read-only; newly created drafts can explicitly
-  // request edit mode. Draft, approved,
-  // and POSTED reports are all editable (provided the viewer can enter
-  // expenses) — saving a posted report re-materializes its GL-Impact projection
-  // (the server blocks only GL changes into a closed period). pending_approval
-  // and voided reports are read-only. Save is EXPLICIT — no per-field autosave.
-  const canEditStatus = doc.status === 'draft' && canSubmit
+  // request edit mode. Drafts edit in place. pending_approval and
+  // approved-but-unposted reports edit via recall — Edit cancels the open
+  // gates and returns the report to draft (submitter or admin, behind a
+  // visible confirm; canRecall is computed by the loader and re-checked by
+  // the recall action). Posted reports edit via the correction workflow —
+  // saving creates the correcting revision and voids the source under
+  // control. Voided reports are read-only. Save is EXPLICIT.
+  const canEditStatus =
+    (isDraft && canSubmit) ||
+    ((isPendingApproval || isApproved) && canRecall && canSubmit) ||
+    (isPosted && canSubmit && canPost)
   const [mode, setMode] = useState<DrawerMode>(
     initialDrawerMode(initialMode, canEditStatus),
   )
@@ -365,6 +376,11 @@ export function ExpenseDrawer({
   }, [doc.id])
 
   async function save() {
+    // A posted report never saves in place — it corrects (bill parity).
+    if (isPosted) {
+      await savePostedCorrection()
+      return
+    }
     setBusy(true)
     setSaveState('saving')
     if (documentRevisionRef.current == null) {
@@ -423,6 +439,116 @@ export function ExpenseDrawer({
     setDirty(false)
     setSaveState('saved')
     setMode('view')
+  }
+
+  /**
+   * Enter edit mode. For a submitted or approved-but-unposted report this
+   * first recalls it to draft — cancelling the open approval gates behind a
+   * visible confirm — then adopts the fresh draft baseline before editing.
+   */
+  async function beginEdit() {
+    if (isDraft || isPosted) {
+      setMode('edit')
+      return
+    }
+    const confirmed = await confirmDialog({
+      title: t('drawer.recallTitle'),
+      message: t(isPendingApproval ? 'drawer.recallBodyPending' : 'drawer.recallBodyApproved'),
+      confirmLabel: tCommon('actions.edit'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setBusy(true)
+    try {
+      if (documentRevisionRef.current == null) {
+        const refreshed = await refreshFromServer().catch(() => null)
+        if (refreshed !== 'pin' && documentRevisionRef.current == null) {
+          toast.error(tCommon('toasts.actionFailed'))
+          return
+        }
+      }
+      const res = await fetch('/api/expenses/actions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'recall',
+          documentId: doc.id,
+          expectedUpdatedAt: documentRevisionRef.current,
+        }),
+      })
+      const data = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        if (res.status === 409) {
+          await refreshFromServer().catch(() => {})
+        }
+        toast.error(data?.error ?? tCommon('toasts.actionFailed'))
+        return
+      }
+      toast.success(t('toasts.recalled'))
+      // Adopt the fresh draft baseline (resets the form, clears dirty), then edit it.
+      await refreshFromServer(false).catch(() => {})
+      setMode('edit')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Save a posted report through the correction workflow: the server creates
+   * the correcting revision and voids the source atomically, then the drawer
+   * navigates to the correction draft for continued editing (bill parity).
+   */
+  async function savePostedCorrection() {
+    const reason = await promptDialog({
+      title: tCommon('amendment.title'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.placeholder'),
+      confirmLabel: tCommon('actions.save'),
+    })
+    if (reason == null) return
+    if (documentRevisionRef.current == null) {
+      const refreshAction = await refreshFromServer().catch(() => null)
+      if (refreshAction !== 'pin' && documentRevisionRef.current == null) {
+        toast.error(tCommon('toasts.actionFailed'))
+        return
+      }
+    }
+    setBusy(true)
+    setSaveState('saving')
+    try {
+      const res = await fetch(`/api/expenses/${doc.id}/correct`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          expectedUpdatedAt: documentRevisionRef.current,
+          amendmentReason: reason,
+        }),
+      })
+      const data = (await res.json().catch(() => null)) as {
+        error?: string
+        correctionId?: string
+        voidStatus?: string
+      } | null
+      if (!res.ok) {
+        // No partial state exists server-side (the replacement and the void
+        // are one atomic unit), so a plain failure toast is exact — except a
+        // 409, where the drawer adopts the latest revision like saves do.
+        if (res.status === 409) {
+          await refreshFromServer().catch(() => {})
+        }
+        toast.error(data?.error ?? tCommon('toasts.actionFailed'))
+        setSaveState('error')
+        return
+      }
+      toast.success(
+        data?.voidStatus === 'pending_approval' ? t('toasts.submitted') : tCommon('amendment.correctionCreated'),
+      )
+      router.push(`/expenses/reports?expense=${data?.correctionId}&mode=edit`)
+      router.refresh()
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function act(action: 'submit' | 'post') {
@@ -613,7 +739,7 @@ export function ExpenseDrawer({
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.employee_name ?? undefined)}
       primaryAction={
         canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : void beginEdit()}>
             {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null

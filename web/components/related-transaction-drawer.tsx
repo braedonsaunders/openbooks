@@ -36,7 +36,7 @@ import {
   taxCodeOptions,
   taxGroupOptions,
 } from '../lib/documents'
-import { loadExpenseReport } from '../lib/expenses'
+import { canRecallExpenseReport, loadExpenseReport } from '../lib/expenses'
 import { loadJournalDoc } from '../lib/journals'
 import { customSegmentOptions } from '../lib/segments'
 import { isMultiSubsidiary, subsidiaryOptions } from '../lib/subsidiaries'
@@ -273,6 +273,7 @@ export async function loadRelatedTransactionDrawerData({
         lineDefs: lineDefs as ExpenseProps['lineDefs'],
         canSubmit: can(authz, 'expenses.create'),
         canPost: can(authz, 'ap.post'),
+        canRecall: canRecallExpenseReport(report.doc as Parameters<typeof canRecallExpenseReport>[0], authz.user),
         layout: resolvedForm.layout,
       },
     }
