@@ -454,6 +454,10 @@ export function JournalDrawer({
       setBusy(false)
       return
     }
+    // Posting commits a new documents.revision_seq (migration 0167 bumps it
+    // on EVERY update): re-pin the canonical token now, or the next fenced
+    // write in this session (void) 409s on the pre-post revision (F-t06-008).
+    await refreshFromServer(false).catch(() => {})
     if (data.pendingApproval) toast.success(tc('actions.submitForApproval'))
     else toast.success(t('postedToast'))
     setBusy(false)
