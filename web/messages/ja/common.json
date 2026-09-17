@@ -230,6 +230,7 @@
     "alreadyDecided": "この承認はすでに決定されています — 更新しています",
     "decisionFailed": "決定に失敗しました",
     "historyTitle": "承認",
+    "historyEmpty": "このレコードに必要な承認はありません。",
     "events": {
       "submitted": "承認申請しました",
       "requested": "承認を依頼しました",

@@ -230,6 +230,7 @@
     "alreadyDecided": "Esta aprovação já foi decidida — atualizando",
     "decisionFailed": "Falha na decisão",
     "historyTitle": "Aprovações",
+    "historyEmpty": "Nenhuma aprovação necessária para este registro.",
     "events": {
       "submitted": "Enviado para aprovação",
       "requested": "Aprovação solicitada",
