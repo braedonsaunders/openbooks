@@ -389,7 +389,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'timesheet-drawer': { props: ['drawer'] },
   'trash-back-link': { props: ['href', 'label'] },
   'trash-list': { props: ['rows'] },
-  'trend-chart': { props: ['area', 'height', 'labels', 'series'] },
+  'trend-chart': { props: ['area', 'height', 'labels', 'maxTicks', 'series'] },
   'true-cost-view': { props: ['data'] },
   'type-builder-drawer': { props: ['drawer'] },
   'unmatched-count-cell': { props: ['display', 'isZero'] },
