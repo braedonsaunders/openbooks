@@ -21,7 +21,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
 const { loadReportDrillData } = await import('./report-drill-data.ts');
 const { budgetVsActualView } = await import('./budget-report.ts');
@@ -62,32 +62,38 @@ async function postExpense(org: ScratchOrg, subsidiaryId: string, currency: stri
 }
 
 test('budget drill ties to the report window and currency', { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  // Fixture seeds under explicit bypass: importing the drill reader pulls in
+  // the web request-org resolver, which denies every unscoped query under
+  // pooled RLS (bare createScratchOrg dies with 42501). Reads below already
+  // run under withOrgContext.
+  const org = await withBypassContext(() => createScratchOrg());
+  const usdSub = randomUUID();
+  const augPeriod = randomUUID();
+  const scenarioId = randomUUID();
   try {
-    const usdSub = randomUUID();
-    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-      values (${usdSub}, ${org.orgId}, ${org.subsidiaryId}, 'US entity', 'USD', 'US')`);
-    await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
-      values (${org.orgId}, 'USD', 'CAD', '2026-07-01', 'spot', 1.5, 'test')`);
-    const calendar = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id;
-    const augPeriod = randomUUID();
-    await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${augPeriod}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar})`);
-    const scenarioId = randomUUID();
-    await db.execute(sql`insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-      values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Tie probe', 'budget', 'draft')`);
-    // July (in the report window) and August (outside it) lines per entity.
-    await db.execute(sql`insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
-      values (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, 1000),
-             (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${usdSub}, 2000),
-             (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${augPeriod}, ${org.subsidiaryId}, 100),
-             (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${augPeriod}, ${usdSub}, 5000)`);
-    // Actuals mirror the budget shape: CAD legs at par, USD legs translated.
-    await postExpense(org, org.subsidiaryId, 'CAD', '100', '2026-07-15');
-    await postExpense(org, usdSub, 'USD', '200', '2026-07-15');
-    await postExpense(org, org.subsidiaryId, 'CAD', '10', '2026-08-15');
-    await postExpense(org, usdSub, 'USD', '500', '2026-08-15');
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${usdSub}, ${org.orgId}, ${org.subsidiaryId}, 'US entity', 'USD', 'US')`);
+      await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+        values (${org.orgId}, 'USD', 'CAD', '2026-07-01', 'spot', 1.5, 'test')`);
+      const calendar = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id;
+      await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${augPeriod}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar})`);
+      await db.execute(sql`insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
+        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Tie probe', 'budget', 'draft')`);
+      // July (in the report window) and August (outside it) lines per entity.
+      await db.execute(sql`insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
+        values (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, 1000),
+               (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${usdSub}, 2000),
+               (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${augPeriod}, ${org.subsidiaryId}, 100),
+               (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${augPeriod}, ${usdSub}, 5000)`);
+      // Actuals mirror the budget shape: CAD legs at par, USD legs translated.
+      await postExpense(org, org.subsidiaryId, 'CAD', '100', '2026-07-15');
+      await postExpense(org, usdSub, 'USD', '200', '2026-07-15');
+      await postExpense(org, org.subsidiaryId, 'CAD', '10', '2026-08-15');
+      await postExpense(org, usdSub, 'USD', '500', '2026-08-15');
+    });
 
     const authz = authzFor(org.orgId, randomUUID());
     const { reportActual, reportBudget, drillActual, drillBudget, drillListTotal } = await withOrgContext(org.orgId, async () => {
@@ -117,6 +123,6 @@ test('budget drill ties to the report window and currency', { skip: !DB }, async
     assert.equal(drillBudget, reportBudget, 'drill budget must tie to the report budget');
     assert.equal(drillListTotal, reportBudget, 'drill budget list must tie to the report budget');
   } finally {
-    await dropScratchOrg(org.orgId);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
