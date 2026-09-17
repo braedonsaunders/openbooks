@@ -63,7 +63,7 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
       open={open}
       onOpenChange={setOpen}
       trigger={
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => setOpen((v) => !v)}>
           <Scale size={15} className="mr-1.5" />
           {t('remeasure.label')}
         </Button>
