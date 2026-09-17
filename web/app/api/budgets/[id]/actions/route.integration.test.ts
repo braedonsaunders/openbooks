@@ -160,3 +160,50 @@ test('submitting a line-less draft is refused with budget_requires_lines', { ski
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * F-coord-003: a submitter holding budgets.approve must not approve their own
+ * budget — the document and close paths both refuse self-approval, and the
+ * budget path is the outlier. The refusal names the reason; a different
+ * approver can still decide the same budget.
+ */
+test('a submitter cannot approve their own budget', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'Budget maker', 'budget_manager'))
+    const checker = await withBypassContext(() => createScratchUser(org.orgId, 'Budget checker', 'budget_approver'))
+    const scenarioId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`)
+      // One role holding both grants: the maker/checker who triggers the gap.
+      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_manager'`)
+      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_approver'`)
+      await db.execute(sql`
+        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
+        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Self approval probe', 'budget', 'draft', ${maker}, ${maker})`)
+      await db.execute(sql`
+        insert into budget_lines (org_id, scenario_id, account_id, period_id, amount, created_by, updated_by)
+        values (${org.orgId}, ${scenarioId}, ${org.accounts.revenue}, ${org.periodId}, '-900.0000', ${maker}, ${maker})`)
+    })
+    state.user = asUser(maker, org.orgId, 'maker')
+    const submitted = await withOrgContext(org.orgId, () =>
+      POST(request(scenarioId, { action: 'submit', expectedRevision: 1 }), params(scenarioId)))
+    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
+    // Self-approval is refused with a reason, and the budget stays pending.
+    const selfApproved = await withOrgContext(org.orgId, () =>
+      POST(request(scenarioId, { action: 'approve', expectedRevision: 2 }), params(scenarioId)))
+    assert.equal(selfApproved.status, 409, `expected a self-approval refusal, got ${selfApproved.status}`)
+    assert.deepEqual(await selfApproved.json(), { error: 'self_approval_forbidden' })
+    const still = await scenarioState(org.orgId, scenarioId)
+    assert.equal(still.status, 'pending_approval')
+    assert.equal(still.approved_by, null)
+    // A different approver decides the same budget without friction.
+    state.user = asUser(checker, org.orgId, 'checker')
+    const approved = await withOrgContext(org.orgId, () =>
+      POST(request(scenarioId, { action: 'approve', expectedRevision: 2 }), params(scenarioId)))
+    assert.equal(approved.status, 200, JSON.stringify(await approved.clone().json()))
+    assert.deepEqual(await approved.json(), { revision: 3, status: 'approved' })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

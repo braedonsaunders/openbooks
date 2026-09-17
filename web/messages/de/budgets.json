@@ -116,7 +116,8 @@
     "rejected": "Budget in den Entwurf zurückgegeben.",
     "budgetRequiresLines": "Fügen Sie mindestens eine Budgetzeile ungleich null hinzu, bevor Sie zur Genehmigung einreichen.",
     "actionFailed": "Die Budgetaktion ist fehlgeschlagen.",
-    "revisionConflict": "Dieses Budget wurde anderweitig geändert. Laden Sie neu, um fortzufahren."
+    "revisionConflict": "Dieses Budget wurde anderweitig geändert. Laden Sie neu, um fortzufahren.",
+    "selfApprovalForbidden": "Sie können ein von Ihnen eingereichtes Budget nicht genehmigen. Bitten Sie eine andere approbierende Person um eine Entscheidung."
   },
   "import": {
     "button": "Importieren",

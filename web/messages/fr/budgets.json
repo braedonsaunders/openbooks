@@ -116,7 +116,8 @@
     "rejected": "Budget renvoyé en brouillon.",
     "budgetRequiresLines": "Ajoutez au moins une ligne budgétaire non nulle avant de soumettre pour approbation.",
     "actionFailed": "L’action budgétaire a échoué.",
-    "revisionConflict": "Ce budget a été modifié ailleurs. Rechargez la page pour continuer."
+    "revisionConflict": "Ce budget a été modifié ailleurs. Rechargez la page pour continuer.",
+    "selfApprovalForbidden": "Vous ne pouvez pas approuver un budget que vous avez soumis. Demandez à un autre approbateur de statuer."
   },
   "import": {
     "button": "Importer",

@@ -101,19 +101,21 @@ function workspace() {
   };
 }
 
-async function mountDrawer() {
+async function mountDrawer(overrides?: { status?: string; canApprove?: boolean }) {
   globalThis.__budgetTestRouter = { push() {}, refresh() {} };
   globalThis.__budgetTestToasts = [];
   (window as unknown as Record<string, unknown>).confirm = () => true;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
+  const initial = workspace() as never as { scenario: { status: string } };
+  if (overrides?.status) initial.scenario.status = overrides.status;
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="CAD">
           <BudgetDrawer
-            initial={workspace() as never}
+            initial={initial as never}
             currentParams={{}}
             dims={{ departmentId: null, projectId: null, locationId: null, classId: null }}
             closeHref="/budgets"
@@ -122,7 +124,7 @@ async function mountDrawer() {
             sources={[]}
             newlyCreated={false}
             canManage
-            canApprove={false}
+            canApprove={overrides?.canApprove ?? false}
             canExport={false}
           />
         </MoneyProvider>
@@ -172,4 +174,46 @@ test("a line-less submit pins the typed refusal on the drawer", async (t) => {
     /at least one non-zero budget line/i,
     "the pinned refusal must explain the missing-lines reason",
   );
+});
+
+/** F-coord-003: a refused self-approval must pin its typed reason on the
+ * record, not vanish behind a transient toast. */
+test("a refused self-approval pins the typed refusal on the drawer", async (t) => {
+  const priorFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(`${(init?.method ?? "GET").toUpperCase()} ${String(input)}`);
+    if (String(input).includes("/actions")) {
+      return Response.json({ error: "self_approval_forbidden" }, { status: 409 });
+    }
+    return Response.json({}, { status: 404 });
+  }) as typeof fetch;
+  const { host, root } = await mountDrawer({ status: "pending_approval", canApprove: true });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = priorFetch;
+  });
+  const approve = [...document.querySelectorAll("button")].find((el) =>
+    el.textContent?.trim().startsWith("Approve"),
+  ) as HTMLButtonElement;
+  assert.ok(approve, "pending drawer must offer Approve to an approver");
+  await act(async () => {
+    approve.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  await tick();
+  assert.ok(
+    calls.some((call) => call.includes(`/api/budgets/${SCENARIO_ID}/actions`)),
+    "approve must reach the actions API",
+  );
+  // The read-only drawer also renders a static "locked" info banner with
+  // role=alert, so select the pin by its content, not by first match.
+  const alert = [...document.querySelectorAll('[role="alert"]')].find((el) =>
+    /cannot approve a budget you submitted/i.test(el.textContent ?? ""),
+  );
+  assert.ok(alert, "the typed refusal must persist inline on the drawer");
 });
