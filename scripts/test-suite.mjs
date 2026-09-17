@@ -34,7 +34,6 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'engine/src/conformance/conformance.test.ts',
   'engine/src/conformance/controls.test.ts',
   'engine/src/control-accounts.test.ts',
-  'engine/src/dashboard-reporting.test.ts',
   'engine/src/direct-debit.test.ts',
   'engine/src/dunning.test.ts',
   'engine/src/fx-providers.test.ts',
