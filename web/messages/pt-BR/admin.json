@@ -7,6 +7,7 @@
       "company": "Empresa",
       "people": "Pessoas e acesso",
       "workspace": "Espaço de trabalho",
+      "platform": "Plataforma e desenvolvimento",
       "activity": "Atividade e dados",
       "data": "Integrações e dados"
     },
@@ -67,6 +68,14 @@
         "title": "Documentação da API",
         "description": "Navegue pela referência da API REST para cada tipo de registro e transação"
       },
+      "flows": {
+        "title": "Fluxos",
+        "description": "Crie automações governadas, portões de aprovação, condições e ações"
+      },
+      "queryConsole": {
+        "title": "Console de consultas",
+        "description": "Execute consultas com controle de permissão para análises e integrações"
+      },
       "audit": {
         "title": "Log de auditoria",
         "description": "Cada gravação capturada com autor e diffs de antes/depois"
@@ -86,6 +95,10 @@
       "email": {
         "title": "Entrega de e-mail",
         "description": "Configure seu provedor de e-mail para que relatórios agendados possam ser enviados"
+      },
+      "agentsSetup": {
+        "title": "Agentes",
+        "description": "Pacotes de agentes em segundo plano: instale, configure agendas e verificações, revise execuções"
       }
     }
   },
@@ -103,6 +116,7 @@
   "audit": {
     "title": "Log de auditoria",
     "description": "Um histórico completo e à prova de adulteração de cada alteração, com detalhes completos de antes/depois e impacto no razão para emendas e exclusões lançadas.",
+    "documentation": "Documentação",
     "searchPlaceholder": "Buscar tipo de registro, usuário ou referência…",
     "actionFilter": "Ação",
     "empty": {
@@ -116,6 +130,46 @@
       "tableName": "Tipo de registro",
       "row": "Referência",
       "changes": "Alterações"
+    },
+    "openEventAria": "Abrir evento de {action} para {recordType} de {when}",
+    "summaries": {
+      "snapshot": "Instantâneo completo de antes e depois",
+      "metadata": "Metadados do registro",
+      "changeCount": "{count, plural, =0 {Detalhes do evento} one {# campo alterado} other {# campos alterados}}"
+    },
+    "drawer": {
+      "description": "Registrado por {actor} · {when}",
+      "tabsAria": "Visões do evento de auditoria",
+      "tabs": {
+        "changes": "Alterações",
+        "before": "Antes",
+        "after": "Depois"
+      },
+      "when": "Registrado em",
+      "actor": "Usuário",
+      "recordType": "Tipo de registro",
+      "reference": "Referência do registro",
+      "changedFields": "Campos alterados",
+      "eventContext": "Contexto do evento",
+      "technicalDetails": "Detalhes técnicos",
+      "beforeSnapshot": "Registro antes deste evento",
+      "afterSnapshot": "Registro depois deste evento",
+      "recordRemoved": "Registro excluído",
+      "recordRemovedDescription": "Este evento excluiu o registro, portanto não há instantâneo de depois.",
+      "field": "Campo",
+      "before": "Antes",
+      "after": "Depois",
+      "notSet": "Não definido",
+      "yes": "Sim",
+      "no": "Não",
+      "emptyCollection": "Sem valores",
+      "item": "Item",
+      "lineItem": "Linha {line}",
+      "itemCount": "{count, plural, one {# item} other {# itens}}",
+      "propertyCount": "{count, plural, one {# propriedade} other {# propriedades}}",
+      "itemPosition": "{current} de {total}",
+      "changeCount": "{count, plural, one {# alteração} other {# alterações}}",
+      "noDifferences": "Nenhuma diferença de campos de antes e depois foi registrada para este evento."
     },
     "systemActor": "sistema",
     "actions": {
@@ -381,7 +435,9 @@
       "subsidiaryPlaceholder": "Escolha uma subsidiária…",
       "subsidiarySearchPlaceholder": "Buscar subsidiárias…",
       "subsidiaryRequired": "Escolha uma subsidiária",
-      "subsidiaryListRequired": "Selecione ao menos uma subsidiária"
+      "subsidiaryListRequired": "Selecione ao menos uma subsidiária",
+      "permissionsLoadFailed": "Não foi possível carregar as permissões do app",
+      "inactivePermissions": "Permissões inativas do app"
     }
   },
   "scripts": {
@@ -406,6 +462,7 @@
       "beforePost": "antes do lançamento",
       "afterPost": "após o lançamento",
       "beforeVoid": "antes do cancelamento",
+      "customGlLines": "linhas contábeis personalizadas do razão",
       "scheduled": "agendado",
       "endpoint": "endpoint",
       "bulk": "em massa",
@@ -534,6 +591,8 @@
     "organization": {
       "title": "Organização",
       "description": "Como esta empresa é identificada em todo o aplicativo.",
+      "perEntityNote": "Esta empresa é sua entidade de nível superior — nome jurídico, país e moeda ficam aqui. Adicione subsidiárias abaixo dela, cada uma com os seus.",
+      "subsidiariesLink": "Abrir subsidiárias",
       "displayName": "Nome de exibição",
       "displayNamePlaceholder": "Acme Manufacturing",
       "displayNameHint": "O nome da empresa exibido no OpenBooks. Não precisa ser igual à razão social registrada.",
@@ -585,6 +644,7 @@
     "controlAccounts": {
       "title": "Contas de controle",
       "description": "As contas do livro-razão pelas quais os subrazões e impostos lançam. Apenas contas lançáveis (não sintéticas) aparecem.",
+      "defaultsNote": "Estes são os padrões de toda a empresa. Qualquer subsidiária pode substituí-los no próprio cadastro; substituições em branco voltam a estes.",
       "selectPlaceholder": "Selecione uma conta…",
       "searchPlaceholder": "Buscar contas…",
       "fields": {
@@ -619,6 +679,10 @@
         "fxRealizedGainLoss": {
           "label": "Ganho/perda cambial realizado",
           "hint": "Conta das diferenças cambiais na liquidação de pagamentos em moeda estrangeira"
+        },
+        "retainagePayable": {
+          "label": "Retenções a pagar",
+          "hint": "Retenção de medições de fornecedores, mantida até uma liberação aprovada"
         },
         "laborWip": {
           "label": "Mão de obra em WIP / custo",
@@ -712,6 +776,7 @@
       "lastSignIn": "Último login"
     },
     "you": "você",
+    "unassignedRole": "sem papel atribuído",
     "statusActive": "ativo",
     "statusInactive": "inativo",
     "requestFailed": "Falha na requisição",
@@ -751,10 +816,12 @@
       "ar": "Contas a receber",
       "reports": "Relatórios",
       "budgets": "Orçamentos e previsões",
+      "allocations": "Rateios",
       "insights": "Insights",
       "items": "Itens e serviços",
       "projects": "Projetos e apropriação de custos",
       "time": "Tempo e planilhas de horas",
+      "payroll": "Folha de pagamento",
       "records": "Registros personalizados",
       "assistant": "Assistente de IA",
       "sql": "Bancada de consultas",
@@ -766,7 +833,8 @@
       "admin": "Administração",
       "assets": "Ativos imobilizados e depreciação",
       "data": "Importação e exportação",
-      "crm": "Gestão de relacionamento com o cliente"
+      "crm": "Gestão de relacionamento com o cliente",
+      "compliance": "Conformidade"
     },
     "gl_read": "Ver lançamentos e saldos",
     "gl_manage": "Gerenciar o plano de contas",
@@ -792,6 +860,10 @@
     "budgets_read": "Ver orçamentos e previsões",
     "budgets_manage": "Criar e editar rascunhos de orçamento",
     "budgets_approve": "Aprovar e arquivar orçamentos oficiais",
+    "allocations_read": "Ver regras, execuções e linhagem de rateios",
+    "allocations_manage": "Criar e editar regras e direcionadores de rateio",
+    "allocations_run": "Visualizar, lançar, estornar e reexecutar rateios",
+    "allocations_approve": "Aprovar execuções de rateio aguardando aprovação",
     "insights_read": "Ver insights e a biblioteca",
     "insights_create": "Criar cartões e painéis",
     "insights_publish": "Publicar na biblioteca compartilhada",
@@ -805,6 +877,9 @@
     "time_manage": "Registrar e editar tempo",
     "time_approve": "Aprovar planilhas de horas",
     "time_reopen": "Reabrir folhas de ponto aprovadas",
+    "payroll_read": "Ver folhas e holerites",
+    "payroll_manage": "Configurar folha e perfis de funcionários",
+    "payroll_run": "Criar, calcular e confirmar folhas",
     "records_read": "Ver registros personalizados",
     "records_create": "Criar e editar registros personalizados",
     "records_manage_types": "Projetar tipos de registro personalizados",
@@ -853,12 +928,20 @@
     "crm_forecasts_read": "Ver previsões de vendas",
     "crm_forecasts_manage": "Criar snapshots de previsão",
     "crm_forecasts_override": "Sobrepor previsões da equipe",
-    "crm_setup_manage": "Gerenciar configuração de CRM"
+    "crm_setup_manage": "Gerenciar configuração de CRM",
+    "compliance_read": "Ver conformidade de subcontratados",
+    "compliance_manage": "Registrar certificados, isenções e declarações",
+    "compliance_verify": "Verificar certificados",
+    "compliance_waive": "Conceder exceções de conformidade",
+    "compliance_file": "Finalizar e entregar declarações informativas"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
     "title": "Configurações de IA",
     "description": "Escolha o provedor de IA que o assistente usa. Sua chave de API é criptografada em repouso e nunca é exibida novamente após você salvá-la.",
+    "manageAgentsTitle": "Agentes em segundo plano",
+    "manageAgentsDescription": "Agendas, verificações e roteamento de achados ficam em Configurações → Agentes.",
+    "manageAgentsLink": "Abrir configuração de agentes",
     "enabledLabel": "Ativar recursos de IA",
     "providerLabel": "Provedor",
     "baseUrlLabel": "URL base",
@@ -947,19 +1030,36 @@
         "count": "itens",
         "percent": "%",
         "multiple": "× materialidade",
-        "points": "pontos percentuais"
+        "points": "pontos percentuais",
+        "weeks": "semanas"
       },
       "parameters": {
         "criticalAgeDays": "Crítico após",
         "criticalItemCount": "Contagem crítica de itens",
         "criticalMaterialityMultiple": "Múltiplo crítico de materialidade",
         "staleAfterDays": "Desatualizado após",
+        "lookbackDays": "Retrospectiva",
+        "duplicateDays": "Janela de duplicadas",
+        "dueWithinDays": "Vence em",
+        "unbilledDays": "Não faturado após",
+        "forecastWeeks": "Horizonte da previsão",
         "minimumVariancePercent": "Variação desfavorável mínima",
         "criticalVariancePercent": "Variação desfavorável crítica",
         "minimumDeclinePercent": "Queda de receita mínima",
         "criticalDeclinePercent": "Queda de receita crítica",
         "minimumDropPoints": "Queda de margem mínima",
-        "criticalDropPoints": "Queda de margem crítica"
+        "criticalDropPoints": "Queda de margem crítica",
+        "criticalCustomerCount": "Qtd. de clientes críticos",
+        "breachToleranceDays": "Tolerância de quebra",
+        "holdOverdueDays": "Idade de atraso p/ bloqueio",
+        "holdMaterialityMultiple": "Múltiplo de exposição p/ bloqueio",
+        "minOverdueInvoices": "Mínimo de faturas vencidas",
+        "duplicateWindowDays": "Janela de duplicadas",
+        "criticalPairCount": "Qtd. de pares críticos",
+        "payRunHorizonDays": "Horizonte da folha",
+        "minimumDiscountPercent": "Desconto mínimo",
+        "matchWindowDays": "Janela de conciliação",
+        "minimumConfidencePercent": "Confiança mínima"
       },
       "detectors": {
         "unmatched_bank_activity": {
@@ -973,6 +1073,78 @@
         "stale_accounting_documents": {
           "title": "Documentos contábeis desatualizados",
           "description": "Encontra contas a pagar, faturas, créditos, despesas e lançamentos em rascunho ou pendentes que ultrapassaram a idade configurada."
+        },
+        "forensic_weekend_postings": {
+          "title": "Lançamentos de fim de semana",
+          "description": "Lançamentos datados em fins de semana dentro da janela de retrospectiva."
+        },
+        "forensic_round_dollar": {
+          "title": "Lançamentos de valores redondos",
+          "description": "Lançamentos suspeitosamente redondos dentro da janela de retrospectiva."
+        },
+        "forensic_threshold_trap": {
+          "title": "Armadilhas de limite",
+          "description": "Valores estacionados logo abaixo dos limites de aprovação."
+        },
+        "forensic_duplicate_bills": {
+          "title": "Faturas forenses duplicadas",
+          "description": "Faturas quase duplicadas que as verificações de contas a pagar podem ter perdido."
+        },
+        "tax_missing_codes": {
+          "title": "Documentos sem códigos fiscais",
+          "description": "Localiza documentos lançados com linhas sem tributação que a declaração não verá."
+        },
+        "tax_missing_registration": {
+          "title": "Registro fiscal ausente",
+          "description": "Sinaliza formulários ativos sem número de inscrição arquivado."
+        },
+        "tax_return_blocked": {
+          "title": "Declaração fiscal bloqueada",
+          "description": "Sinaliza declarações configuradas que o motor de apuração não consegue calcular."
+        },
+        "tax_unlocked_period": {
+          "title": "Período fiscal destravado",
+          "description": "Sinaliza o último período encerrado sem trava fiscal."
+        },
+        "payroll_remittance_due": {
+          "title": "Recolhimento vencendo",
+          "description": "Sinaliza retenções provisionadas com vencimento dentro do horizonte e sem fatura de cobertura."
+        },
+        "payroll_unknown_accounts": {
+          "title": "Contas desconhecidas na folha",
+          "description": "Sinaliza folhas confirmadas cujos holerites nunca foram atribuídos a conta de declaração ou de passivo."
+        },
+        "payroll_missing_elections": {
+          "title": "Opções legais ausentes",
+          "description": "Sinaliza funcionários ativos sem opções de TD1 ou W-4 arquivadas."
+        },
+        "payroll_yearend_gaps": {
+          "title": "Lacunas de fim de ano",
+          "description": "Sinaliza SINs ausentes e alíquotas legais não configuradas de que os informes precisam."
+        },
+        "project_negative_margin": {
+          "title": "Margem de projeto negativa",
+          "description": "Sinaliza projetos ativos cuja margem lançada está negativa, notando inversão desde a última execução."
+        },
+        "project_budget_overrun": {
+          "title": "Estouro de orçamento do projeto",
+          "description": "Sinaliza projetos em que custo lançado mais compromissos abertos passou o orçamento aprovado."
+        },
+        "project_stale_unbilled": {
+          "title": "Trabalho não faturado antigo",
+          "description": "Sinaliza trabalho faturável aprovado ainda não faturado após o corte de aging."
+        },
+        "cash_low_balance": {
+          "title": "Saldo de caixa baixo",
+          "description": "Sinaliza caixa bancário abaixo do piso, com o valor da falta."
+        },
+        "cash_bill_crunch": {
+          "title": "Aperto de faturas",
+          "description": "Sinaliza contas a pagar vencendo dentro da janela que superam o caixa disponível."
+        },
+        "cash_forecast_shortfall": {
+          "title": "Falta prevista",
+          "description": "Sinaliza a linha de previsão caindo abaixo de zero dentro do horizonte."
         },
         "missing_approved_budget": {
           "title": "Orçamento aprovado ausente",
@@ -989,6 +1161,70 @@
         "gross_margin_decline": {
           "title": "Queda da margem bruta",
           "description": "Compara a margem bruta de períodos concluídos e sinaliza compressão relevante em pontos percentuais."
+        },
+        "overdue_customer_balance": {
+          "title": "Saldos de clientes vencidos",
+          "description": "Clientes fora do prazo com exposição total, comportamento de pagamento e concentrações de aging."
+        },
+        "broken_payment_promise": {
+          "title": "Promessas de pagamento quebradas",
+          "description": "Promessas além da tolerância de quebra, ordenadas por idade e exposição."
+        },
+        "credit_hold_candidate": {
+          "title": "Candidatos a bloqueio de crédito",
+          "description": "Clientes além da idade e da exposição de bloqueio com faturas vencidas repetidas."
+        },
+        "duplicate_bills": {
+          "title": "Faturas duplicadas",
+          "description": "Faturas de fornecedor que parecem cópias redigitadas dentro da janela de duplicadas."
+        },
+        "bills_due_before_payrun": {
+          "title": "Faturas vencendo antes da folha",
+          "description": "Faturas aprovadas vencendo dentro do horizonte da folha, com medição de cobertura."
+        },
+        "early_pay_discount_opportunity": {
+          "title": "Descontos por antecipação",
+          "description": "Faturas oferecendo ao menos o desconto mínimo por pagar antecipado."
+        },
+        "bills_missing_approval": {
+          "title": "Faturas sem aprovação",
+          "description": "Faturas esperando além da idade de antiguidade sem aprovação."
+        },
+        "bank_line_match_candidate": {
+          "title": "Candidatos a conciliação",
+          "description": "Linhas bancárias não conciliadas com candidata confiante dentro da janela."
+        },
+        "stale_reconciliation": {
+          "title": "Conciliações paradas",
+          "description": "Conciliações em andamento intocadas além da idade de antiguidade."
+        },
+        "never_reconciled_account": {
+          "title": "Contas nunca conciliadas",
+          "description": "Contas bancárias com movimento na janela de retrospectiva e nenhuma conciliação."
+        },
+        "control_account_type_mismatch": {
+          "title": "Divergências de conta de controle",
+          "description": "Contas cuja função de controle discorda do tipo."
+        },
+        "duplicate_party_identity": {
+          "title": "Identidades de parte duplicadas",
+          "description": "Partes compartilhando nome ou CNPJ/CPF."
+        },
+        "item_missing_tax_code": {
+          "title": "Itens sem código fiscal",
+          "description": "Itens sem código fiscal para dirigir o imposto do documento."
+        },
+        "project_missing_cost_budget": {
+          "title": "Projetos sem orçamento de custo",
+          "description": "Projetos sem orçamento de custo contra o qual medir a margem."
+        },
+        "budget_scenario_without_lines": {
+          "title": "Cenários de orçamento vazios",
+          "description": "Cenários de orçamento sem linhas."
+        },
+        "unmapped_payroll_component": {
+          "title": "Componentes da folha sem mapeamento",
+          "description": "Componentes da folha sem mapeamento de lançamento."
         }
       },
       "accounting": {
@@ -996,10 +1232,55 @@
         "description": "Controles contínuos de escrituração e prontidão para o fechamento.",
         "coverage": "Verifica atividade bancária não conciliada, diferenças de conciliação e documentos contábeis em rascunho ou pendentes desatualizados."
       },
+      "collections": {
+        "title": "Agente de cobrança",
+        "description": "Controles contínuos de recebíveis.",
+        "coverage": "Verifica saldos de clientes vencidos com comportamento de pagamento, promessas de pagamento quebradas e candidatos a bloqueio de crédito."
+      },
       "finance": {
         "title": "Agente financeiro",
         "description": "Controles contínuos de variação e desempenho.",
         "coverage": "Verifica variações de orçamento aprovado, queda de receita, queda da margem bruta e cobertura orçamentária ausente."
+      },
+      "forensics": {
+        "title": "Agente forense",
+        "description": "Controles contínuos de anomalias de gastos.",
+        "coverage": "Verifica lançamentos de fim de semana, gastos redondos, valores logo abaixo do limite e faturas duplicadas."
+      },
+      "hygiene": {
+        "title": "Agente de higiene de dados",
+        "description": "Controles contínuos de dados mestres.",
+        "coverage": "Verifica divergências de contas de controle, partes duplicadas e registros sem os códigos, orçamentos ou mapeamentos de que precisam."
+      },
+      "payables": {
+        "title": "Agente de contas a pagar",
+        "description": "Controles contínuos de contas a pagar.",
+        "coverage": "Verifica faturas duplicadas, faturas vencendo antes da próxima folha, descontos por antecipação e aprovações ausentes."
+      },
+      "tax": {
+        "title": "Agente fiscal",
+        "description": "Controles contínuos de prontidão declaratória.",
+        "coverage": "Verifica códigos fiscais ausentes, inscrições, declarações calculáveis e travas de período."
+      },
+      "payroll": {
+        "title": "Agente de folha",
+        "description": "Controles contínuos de conformidade da folha.",
+        "coverage": "Verifica recolhimentos vencendo, contas desconhecidas, opções ausentes e lacunas de fim de ano."
+      },
+      "reconciliation": {
+        "title": "Agente de conciliação",
+        "description": "Controles contínuos de conciliação bancária.",
+        "coverage": "Verifica linhas bancárias não conciliadas com candidata confiante, conciliações paradas e contas nunca conciliadas."
+      },
+      "projects": {
+        "title": "Agente de projetos",
+        "description": "Controles contínuos de margem de projetos.",
+        "coverage": "Verifica margens negativas, estouros de orçamento e trabalho não faturado antigo."
+      },
+      "cash": {
+        "title": "Agente de caixa",
+        "description": "Controles contínuos de liquidez.",
+        "coverage": "Verifica saldos baixos, apertos de faturas e faltas previstas."
       },
       "lastRun": "Última execução: {date} · {status}",
       "nextRun": "Próxima execução agendada: {date}",
@@ -1043,6 +1324,11 @@
       "loading": "Carregando…",
       "loaded": "{count, plural, one {# modelo disponível} other {# modelos disponíveis}}",
       "loadError": "Não foi possível carregar os modelos.",
+      "result": {
+        "empty": "O provedor não retornou modelos — digite o id manualmente.",
+        "missingKey": "Digite uma chave de API deste provedor para carregar seus modelos.",
+        "unauthorized": "A chave de API foi rejeitada ({status}). Confira a chave e tente de novo."
+      },
       "none": "Nenhum modelo",
       "pick": "Escolha um modelo…",
       "loadFirst": "Carregue os modelos primeiro ou digite o id manualmente",
@@ -1056,128 +1342,6 @@
   "setup": {
     "title": "Configuração",
     "description": "Configure impostos, dimensões, prazos e os dados de referência sobre os quais sua contabilidade opera.",
-    "laborCosting": {
-      "rates": {
-        "hint": "As taxas alternativas são resolvidas por cargo, ofício, departamento, subsidiária e padrão da organização. O histórico individual permanece no funcionário.",
-        "scopeJobTitle": "Cargo",
-        "scopeDepartment": "Departamento",
-        "scopeSubsidiary": "Subsidiária",
-        "currency": "Moeda",
-        "drawerNewDescription": "Adicione uma taxa salarial com vigência para um escopo da força de trabalho.",
-        "select": {
-          "job_title": "Selecionar um cargo",
-          "trade": "Selecionar um ofício",
-          "department": "Selecionar um departamento",
-          "subsidiary": "Selecionar uma subsidiária"
-        }
-      },
-      "reconciliation": {
-        "subsidiary": "Subsidiária"
-      },
-      "billing": {
-        "title": "Tabelas de faturamento",
-        "hint": "Preços de mão de obra por cliente e projeto, com vigência e moeda, taxas normal/extra/dobra por item, ajustes gerais, termos negociados e histórico de atribuições.",
-        "search": "Pesquisar tabelas…",
-        "add": "Nova tabela",
-        "card": "Tabela",
-        "currency": "Moeda",
-        "period": "Período de vigência",
-        "items": "Itens",
-        "assignments": "Atribuições",
-        "status": "Status",
-        "empty": "Nenhuma tabela corresponde aos filtros.",
-        "newTitle": "Nova tabela de faturamento",
-        "newDescription": "Crie primeiro o livro compartilhado e depois as taxas com vigência.",
-        "createInItemHint": "A criação usa o espaço compartilhado de tabelas para manter um único mecanismo de preços para mão de obra, serviços e equipamentos. Volte aqui para revisar termos e atribuições.",
-        "openRateBooks": "Abrir tabelas de tarifas",
-        "effectiveFrom": "Vigente desde",
-        "effectiveTo": "Vigente até",
-        "derivation": "Nível ausente",
-        "scopes": "Escopos de dimensão",
-        "allScopes": "Sem restrição de dimensão",
-        "itemRates": "Taxas por item e tipo de tempo",
-        "item": "Item",
-        "regular": "Normal",
-        "adjustments": "Ajustes",
-        "appliesTo": "Aplica-se a",
-        "wholeCard": "Tabela inteira",
-        "revise": "Criar revisão",
-        "reviseHint": "Uma revisão preserva esta versão e inicia uma nova cópia com vigência.",
-        "historicalHint": "Esta é uma versão histórica. Abra a mais recente para criar uma revisão.",
-        "revisionTitle": "Nova revisão da tabela",
-        "revisionDescription": "Taxas básicas, escopos e termos são copiados. Cada ajuste pode valer para toda a tabela ou para um item.",
-        "revisionEffectiveFrom": "Nova versão vigente desde",
-        "adjustmentNumber": "Ajuste {number}",
-        "removeAdjustment": "Remover ajuste",
-        "adjustmentName": "Nome",
-        "adjustmentCode": "Código",
-        "category": "Categoria",
-        "calculation": "Cálculo",
-        "presentation": "Apresentação na fatura",
-        "adjustmentValue": "Valor",
-        "adjustmentUnit": "Unidade",
-        "referenceText": "Descrição ou referência contratual",
-        "addAdjustment": "Adicionar ajuste",
-        "saveRevision": "Salvar revisão",
-        "revisionSaved": "Revisão salva",
-        "categories": {
-          "markup": "Margem",
-          "travel": "Viagem",
-          "allowance": "Ajuda de custo",
-          "minimum": "Mínimo",
-          "surcharge": "Sobretaxa",
-          "other": "Outro"
-        },
-        "calculations": {
-          "percent": "Percentual",
-          "fixed": "Valor fixo",
-          "per_hour": "Por hora",
-          "per_day": "Por dia",
-          "distance": "Distância",
-          "time": "Tempo",
-          "text": "Texto informativo"
-        },
-        "presentations": {
-          "included": "Incluído na taxa",
-          "separate": "Linha separada",
-          "informational": "Informativo"
-        },
-        "errors": {
-          "notFound": "Tabela não encontrada.",
-          "effectiveDate": "Escolha uma data de vigência.",
-          "adjustments": "Os ajustes são inválidos.",
-          "item": "Escolha um item ativo válido.",
-          "name": "Cada ajuste precisa de nome e código.",
-          "duplicateCode": "Os códigos devem ser únicos por item.",
-          "category": "Escolha uma categoria válida.",
-          "calculation": "Escolha um cálculo válido.",
-          "presentation": "Escolha uma apresentação válida.",
-          "value": "Informe um valor não negativo.",
-          "latestOnly": "Abra a versão mais recente.",
-          "afterLatest": "A data deve ser posterior à versão mais recente.",
-          "save": "Não foi possível salvar a revisão."
-        },
-        "terms": "Termos negociados",
-        "none": "Nenhum",
-        "derivations": {
-          "explicit": "Taxas explícitas",
-          "time_type_multipliers": "Multiplicadores de tipo de tempo"
-        },
-        "scopeTypes": {
-          "department": "Departamento",
-          "subsidiary": "Subsidiária",
-          "location": "Localização",
-          "class": "Classe",
-          "trade": "Ofício",
-          "job_title": "Cargo",
-          "other": "Outro"
-        }
-      },
-      "tabs": {
-        "billing": "Tarifas faturadas"
-      },
-      "navTitle": "Custo de mão de obra"
-    },
     "taxLibrary": {
       "title": "Biblioteca de declarações fiscais",
       "open": "Biblioteca",
@@ -1199,14 +1363,59 @@
       "confirmReset": "Restaurar {name} para os padrões mantidos da biblioteca? Isso substitui as caixas de declaração configuradas.",
       "usNotice": "Os Estados Unidos não têm declaração federal de imposto sobre vendas. Este papel de trabalho deve ser personalizado para cada jurisdição estadual e local de apuração."
     },
+    "taxSetup": {
+      "navTitle": "Configuração fiscal",
+      "title": "Configuração fiscal",
+      "subtitle": "Escolha cada país, província, território, estado ou distrito onde obrigações fiscais possam surgir. Canadá e Estados Unidos incluem cobertura completa de jurisdições de primeiro nível.",
+      "searchPlaceholder": "Pesquisar países ou jurisdições…",
+      "provisioning": "Configurando…",
+      "provisionSelected": "{count, plural, =0 {Realizar configuração} one {Configurar # jurisdição} other {Configurar # jurisdições}}",
+      "provisionSuccess": "Criadas {jurisdictions} jurisdições, {codes} códigos fiscais e {groups} grupos fiscais; preparados {nexus} registros de nexo",
+      "provisionHint": "Pacotes detalhados criam conteúdo mantido de jurisdição, código fiscal, alíquota, declaração e nexo. A configuração fiscal do país instala a declaração principal e as alíquotas com vigência definidas por aquele pacote de país versionado. A configuração de jurisdição cria dados de referência controlados e um rascunho de nexo inativo sem inventar conteúdo legal ausente. Revise cada registro antes de entrar em produção.",
+      "installed": "Configurado",
+      "detailedPack": "Pacote detalhado",
+      "countryTaxSetup": "Configuração fiscal do país",
+      "jurisdictionSetup": "Configuração de jurisdição",
+      "countryPackReady": "Pacote de país com fontes",
+      "packInDevelopment": "Pacote de país em desenvolvimento",
+      "statesAvailable": "{count, plural, one {# jurisdição disponível} other {# jurisdições disponíveis}}",
+      "statesSelected": "{count, plural, one {# jurisdição selecionada} other {# jurisdições selecionadas}}",
+      "toggleStates": "Mostrar jurisdições de {country}",
+      "step1": {
+        "title": "Escolha onde você opera",
+        "description": "Escolha países e expanda para cobertura completa de províncias, territórios, estados e distritos. Cada opção mostra se há pacote declaratório detalhado mantido."
+      },
+      "step2": {
+        "title": "Revise as jurisdições",
+        "description": "Os países, estados e localidades que seus pacotes criaram. Adicione ou aninhe mais à mão.",
+        "stat": "{count, plural, =0 {Nenhuma jurisdição ainda} one {# jurisdição} other {# jurisdições}}",
+        "cta": "Abrir jurisdições"
+      },
+      "step3": {
+        "title": "Declare seu nexo",
+        "description": "Registre onde a empresa está inscrita para recolher e repassar, sua periodicidade e a declaração que entrega.",
+        "stat": "{count, plural, =0 {Nenhum registro ainda} one {# registro} other {# registros}}",
+        "cta": "Configurar nexo"
+      }
+    },
+    "taxOfficial": {
+      "title": "Formulário oficial de apuração",
+      "description": "Envie um PDF oficial preenchível somente quando a jurisdição aceitar ou exigir esse formulário. Mapeie seus campos em Caixas da Declaração Fiscal.",
+      "upload": "Enviar PDF oficial",
+      "uploading": "Enviando…",
+      "uploaded": "Formulário oficial enviado",
+      "remove": "Remover",
+      "removed": "Formulário oficial removido",
+      "none": "Nenhum PDF oficial enviado"
+    },
     "assetDepreciationSetup": {
       "navTitle": "Depreciação contábil",
-      "title": "Book Depreciation",
-      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
-      "tabsAria": "Book depreciation setup sections",
+      "title": "Depreciação contábil",
+      "description": "Configure métodos de depreciação reutilizáveis e o método, a vida útil e a convenção que cada livro aplica a uma categoria de ativo.",
+      "tabsAria": "Seções de depreciação contábil",
       "tabs": {
-        "methods": "Methods",
-        "books": "Book policies"
+        "methods": "Métodos",
+        "books": "Políticas por livro"
       }
     },
     "taxDepreciationSetup": {
@@ -1262,16 +1471,6 @@
         }
       }
     },
-    "taxOfficial": {
-      "title": "Formulário oficial de apuração",
-      "description": "Envie um PDF oficial preenchível somente quando a jurisdição aceitar ou exigir esse formulário. Mapeie seus campos em Caixas da Declaração Fiscal.",
-      "upload": "Enviar PDF oficial",
-      "uploading": "Enviando…",
-      "uploaded": "Formulário oficial enviado",
-      "remove": "Remover",
-      "removed": "Formulário oficial removido",
-      "none": "Nenhum PDF oficial enviado"
-    },
     "taxBoxes": {
       "description": "Caixas mapeadas, calculadas e manuais de {code}.",
       "calculatedNote": "Cada caixa pertence a esta declaração; as caixas mapeadas selecionam o código de imposto cuja atividade resumem.",
@@ -1288,6 +1487,16 @@
       "new": "Nova alíquota de imposto",
       "searchPlaceholder": "Pesquisar alíquotas…",
       "empty": "Nenhuma alíquota corresponde a este código e à pesquisa."
+    },
+    "segmentValues": {
+      "description": "Valores selecionáveis para o segmento {name}.",
+      "new": "Novo valor",
+      "searchPlaceholder": "Pesquisar valores…",
+      "empty": "Sem valores ainda — adicione o primeiro.",
+      "builtinTitle": "Dimensão nativa",
+      "builtinNotice": "{name} é uma dimensão nativa. Seus valores são gerenciados na aba {name}.",
+      "builtinNoticeNoLink": "{name} é uma dimensão nativa. Seus valores são gerenciados em aba dedicada própria.",
+      "builtinLink": "Abrir {name}"
     },
     "new": "Novo",
     "learnMore": "Saiba mais.",
@@ -1337,6 +1546,210 @@
       "projects": "Projetos",
       "compliance": "Conformidade",
       "agents": "Agentes"
+    },
+    "agents": {
+      "nav": {
+        "overview": "Visão geral",
+        "library": "Biblioteca",
+        "activity": "Atividade"
+      },
+      "overview": {
+        "title": "Agentes",
+        "description": "Agentes em segundo plano que vigiam os livros e propõem próximos passos revisáveis. Eles nunca lançam nem editam registros sozinhos.",
+        "configure": "Configurar",
+        "runNow": "Executar agora",
+        "enabled": "Ativado",
+        "disabled": "Desativado",
+        "controlsEnabled": "{count} de {total} verificações ativadas",
+        "manualOnly": "Somente execuções manuais",
+        "cadences": {
+          "daily": "Diária",
+          "weekly": "Semanal"
+        },
+        "materialitySummary": "Materialidade {amount}",
+        "lastRun": "Última execução {date} · {status}",
+        "runStatus": {
+          "completed": "concluída",
+          "failed": "falhou",
+          "skipped": "ignorada",
+          "running": "em execução"
+        },
+        "neverRun": "Nunca executado",
+        "nextRun": "Próxima {date}",
+        "openFindings": "{count, plural, one {# achado aberto} other {# achados abertos}}",
+        "reviewWork": "Revisar trabalho",
+        "featureOff": "O módulo Monitor de Fechamento está desligado, então os pacotes não podem ser ativados nem executados.",
+        "enableModule": "Ative em Funcionalidades",
+        "featureOffError": "Ative o módulo Monitor de Fechamento antes de ativar um pacote.",
+        "toggleFailed": "Não foi possível salvar a configuração do pacote.",
+        "scanComplete": "{count, plural, one {# achado detectado} other {# achados detectados}}",
+        "scanFailed": "A varredura falhou ao iniciar.",
+        "scanAlreadyRunning": "Já há uma varredura em execução.",
+        "guideLink": "Guia de configuração",
+        "columns": {
+          "pack": "Pacote",
+          "status": "Status",
+          "schedule": "Agenda",
+          "lastRun": "Última execução",
+          "findings": "Achados",
+          "actions": "Ações"
+        },
+        "kpis": {
+          "enabled": "Pacotes ativos",
+          "enabledValue": "{count} de {total}",
+          "openFindings": "Achados abertos",
+          "runs7d": "Execuções · 7 dias",
+          "failed7d": "Falhas · 7 dias"
+        }
+      },
+      "library": {
+        "title": "Biblioteca",
+        "description": "Todos os pacotes do registro — o que cada um lê, propõe e exige. Instalar ativa um pacote com suas verificações padrão.",
+        "install": "Instalar",
+        "installed": "Instalado",
+        "configure": "Configurar",
+        "readsLabel": "Lê",
+        "proposesLabel": "Propõe",
+        "needsLabel": "Exige",
+        "checksTitle": "Verificações ({count})",
+        "checksNote": "{count} de {total} ativadas por padrão",
+        "moduleRequires": "Exige o módulo {feature}",
+        "registryNote": "Pacote {key} · {count} verificações · declarado no registro de agentes",
+        "installFailed": "Não foi possível instalar o pacote.",
+        "installedToast": "{name} instalado com verificações padrão."
+      },
+      "policy": {
+        "backLabel": "Todos os agentes",
+        "notificationsTitle": "Notificações de achados",
+        "notificationsDescription": "Quem recebe os achados deste pacote e como. O roteamento fica na política — os achados sempre aparecem em Atividade.",
+        "modes": {
+          "findings_only": {
+            "title": "Só achados",
+            "description": "Sem notificações — revise os achados em Atividade."
+          },
+          "digest": {
+            "title": "Resumo diário",
+            "description": "Um resumo de novos achados por dia."
+          },
+          "immediate": {
+            "title": "Imediata",
+            "description": "Uma notificação para cada novo achado."
+          }
+        },
+        "rolesLabel": "Papéis",
+        "usersLabel": "Pessoas",
+        "noTargets": "Nenhum",
+        "usersTruncatedNote": "Mostrando as primeiras 200 pessoas.",
+        "deliveryNote": "O envio por e-mail ainda não está ligado — aqui fica quem deve receber o quê. Os achados aparecem em Atividade enquanto isso.",
+        "rolesPlaceholder": "Adicionar um papel…",
+        "usersPlaceholder": "Adicionar uma pessoa…"
+      },
+      "activity": {
+        "title": "Atividade",
+        "description": "Cada varredura dos agentes em todos os pacotes — status, duração, achados e erros. Execute qualquer pacote de novo daqui.",
+        "allPacks": "Todos os pacotes",
+        "allStatuses": "Todos os status",
+        "sinceColumn": "Desde",
+        "sinceAll": "Todo o período",
+        "since": {
+          "day": "Últimas 24 horas",
+          "week": "Últimos 7 dias"
+        },
+        "packColumn": "Pacote",
+        "triggerColumn": "Gatilho",
+        "triggers": {
+          "manual": "Manual",
+          "scheduler": "Agendada"
+        },
+        "statusColumn": "Status",
+        "startedColumn": "Início",
+        "durationColumn": "Duração",
+        "detectedColumn": "Detectados",
+        "resolvedColumn": "Resolvidos",
+        "actionsColumn": "Ações",
+        "rerun": "Executar de novo",
+        "viewFindings": "Achados",
+        "empty": "Sem execuções ainda.",
+        "emptyHint": "Execute um pacote na visão geral para ver sua primeira varredura aqui.",
+        "truncatedNote": "Mostrando as {shown} mais recentes de {total} execuções.",
+        "totalNote": "{count, plural, one {# execução} other {# execuções}}",
+        "showMore": "Mostrar mais",
+        "loadFailed": "Não foi possível carregar as execuções."
+      },
+      "packs": {
+        "accounting": {
+          "title": "Controles contábeis",
+          "description": "Movimento bancário sem conciliação, conciliações desequilibradas e rascunhos antigos que impedem o fechamento.",
+          "reads": "Extratos e conciliações bancárias, documentos contábeis abertos.",
+          "proposes": "Uma lista de condições a sanar — nunca lança nem edita registros."
+        },
+        "finance": {
+          "title": "Controles financeiros",
+          "description": "Orçamentos aprovados ausentes, variações desfavoráveis e quedas de desempenho do período.",
+          "reads": "Cenários de orçamento aprovados, realizado e receita do período.",
+          "proposes": "Apontamentos de variação com as contas exatas — só revisão, sem lançamentos."
+        },
+        "collections": {
+          "title": "Cobrança",
+          "description": "Saldos de clientes em atraso com comportamento de pagamento, promessas quebradas e candidatos a bloqueio de crédito.",
+          "reads": "Contas a receber abertas, promessas e histórico de pagamentos.",
+          "proposes": "Rascunhos de lembretes e uma lista de ligações prioritárias para revisão."
+        },
+        "payables": {
+          "title": "Contas a pagar",
+          "description": "Faturas duplicadas, faturas antes do próximo ciclo de pagamento, descontos por antecipação e aprovações ausentes.",
+          "reads": "Faturas de fornecedores, aprovações e o calendário de pagamentos.",
+          "proposes": "Um ciclo de pagamento como cartão de revisão — nada é pago automaticamente."
+        },
+        "reconciliation": {
+          "title": "Conciliação bancária",
+          "description": "Linhas bancárias sem conciliação com candidato confiante, conciliações antigas e contas nunca conciliadas.",
+          "reads": "Linhas de extrato e status de conciliação.",
+          "proposes": "Comandos de conciliação para confirmar um a um."
+        },
+        "hygiene": {
+          "title": "Higiene de dados",
+          "description": "Divergências em contas de controle, parceiros duplicados e registros sem os códigos, orçamentos ou vínculos de que precisam.",
+          "reads": "Plano de contas, parceiros, itens, projetos, orçamentos e componentes de folha.",
+          "proposes": "Cartões de correção onde o remédio é uma configuração."
+        },
+        "forensics": {
+          "title": "Forense",
+          "description": "Lançamentos de fim de semana, gastos redondos, valores logo abaixo do limite e faturas duplicadas.",
+          "reads": "Documentos de gasto e o painel sentinela.",
+          "proposes": "Links de revisão sentinela em cada achado — só revisão, sem lançamentos."
+        },
+        "tax": {
+          "title": "Fiscal",
+          "description": "Códigos fiscais ausentes, formulários sem registro, apurações incalculáveis e períodos de entrega destravados.",
+          "reads": "Documentos lançados, formulários, registros e travas de período.",
+          "proposes": "Links de revisão da apuração em cada achado — só revisão, sem lançamentos."
+        },
+        "payroll": {
+          "title": "Folha de pagamento",
+          "description": "Guias devidas, contas desconhecidas, opções ausentes e lacunas de fim de ano.",
+          "reads": "Folhas comprometidas, grupos de guia, perfis de empregados e alíquotas legais.",
+          "proposes": "Links de revisão de guias e empregados — só revisão, sem lançamentos."
+        },
+        "projects": {
+          "title": "Projetos",
+          "description": "Margens negativas, estouros de orçamento e trabalho antigo não faturado.",
+          "reads": "Custos e receitas de projetos lançados, orçamentos aprovados, compromissos abertos e trabalho não faturado.",
+          "proposes": "Links de revisão de projetos — só revisão, sem lançamentos."
+        },
+        "cash": {
+          "title": "Caixa",
+          "description": "Saldos baixos, aperto de contas e quedas previstas.",
+          "reads": "Saldos bancários, contas a receber e a pagar abertas e a previsão de caixa.",
+          "proposes": "Links de revisão bancária — só revisão, sem lançamentos."
+        }
+      },
+      "runStatuses": {
+        "completed": "Concluída",
+        "failed": "Falhou",
+        "skipped": "Ignorada",
+        "running": "Em execução"
+      }
     },
     "fxProvider": {
       "title": "Provedor de taxas de câmbio",
@@ -1599,6 +2012,16 @@
         "title": "Empresa e Contabilidade",
         "description": "Identidade da organização, moeda base, ano fiscal e contas de controle."
       },
+      "tax-jurisdictions": {
+        "title": "Jurisdições de Imposto",
+        "singularTitle": "Jurisdição fiscal",
+        "description": "Os países, estados e localidades que cobram tributos indiretos — a espinha dorsal do seu nexo."
+      },
+      "tax-registrations": {
+        "title": "Nexo de Imposto",
+        "singularTitle": "Inscrição fiscal",
+        "description": "Onde a empresa está inscrita para recolher e repassar, sua periodicidade e a declaração que entrega."
+      },
       "tax-codes": {
         "title": "Códigos de Imposto",
         "singularTitle": "Código de Imposto",
@@ -1621,6 +2044,21 @@
         "title": "Caixas da Declaração Fiscal",
         "singularTitle": "Caixa da Declaração Fiscal",
         "description": "Mapeie códigos de imposto nas caixas de uma declaração fiscal, ou calcule uma caixa a partir de outras caixas."
+      },
+      "tax-regimes": {
+        "title": "Regimes de depreciação fiscal",
+        "singularTitle": "Regime de depreciação fiscal",
+        "description": "Regimes configuráveis de depreciação fiscal por pool. Nativos para Canadá (CCA), Reino Unido, Austrália e Nova Zelândia; adicione os seus ou sobrescreva um nativo."
+      },
+      "tax-pool-classes": {
+        "title": "Classes de depreciação fiscal",
+        "singularTitle": "Classe de depreciação fiscal",
+        "description": "Classes de pool por regime: alíquota, método, fração do primeiro ano e comportamento de recaptura. Sobrescreve a tabela de classes nativa."
+      },
+      "tax-first-year-rules": {
+        "title": "Regras do primeiro ano",
+        "singularTitle": "Regra de primeiro ano",
+        "description": "Regras de primeiro ano datadas por regime/classe (regra de meio ano, incentivo de investimento acelerado, despesa imediata)."
       },
       "classes": {
         "title": "Classes",
@@ -1654,14 +2092,21 @@
         "title": "Tipos de Tempo",
         "description": "Multiplicadores de custo e padrões de faturabilidade para folhas de horas."
       },
+      "pay-schedules": {
+        "title": "Cronogramas de folha",
+        "description": "Calendários de periodicidade de pagamento: períodos por ano, fim do período âncora e defasagem da data de pagamento."
+      },
+      "pay-components": {
+        "title": "Verbas",
+        "description": "Proventos, descontos e contribuições patronais com tratamento fiscal, contas contábeis e fornecedores de recolhimento."
+      },
+      "union-agreements": {
+        "title": "Acordos sindicais",
+        "description": "Acordos coletivos: o sindicato, a seccional e o fornecedor a quem os repasses sindicais são pagos."
+      },
       "worker-comp-groups": {
         "title": "Grupos de Seguro Acidentário",
         "description": "Grupos de alíquota de seguro acidentário para custeio de mão de obra."
-      },
-      "overhead-rates": {
-        "title": "Taxas de custos indiretos",
-        "description": "Taxas de custos indiretos com datas de vigência aplicadas ao custo de mão de obra.",
-        "singular": "Taxa de custo indireto"
       },
       "asset-categories": {
         "title": "Categorias de Ativo",
@@ -1698,10 +2143,20 @@
         "title": "Pares Intercompanhia",
         "description": "Mapeamentos de contas a receber de / a pagar a para transações que cruzam duas subsidiárias."
       },
+      "subsidiary-ownership-interests": {
+        "title": "Participações em subsidiárias",
+        "singularTitle": "Participação societária",
+        "description": "Participação, aquisição, NCI e política de equivalência patrimonial com vigência, para consolidação."
+      },
       "accounting-books": {
         "title": "Livros Contábeis",
         "singular": "livro contábil",
         "description": "Gerencie os livros principal, fiscal, estatutário e de relatório que detêm os lançamentos do razão e os controles de fechamento."
+      },
+      "allocations": {
+        "title": "Rateios",
+        "singular": "regra de rateio",
+        "description": "Distribui custos em pool aos destinos por um direcionador: divisões no lançamento, contribuições na contabilização e varreduras de período."
       },
       "fx-rates": {
         "title": "Taxas de Câmbio",
@@ -1739,106 +2194,209 @@
         "title": "Lista de Materiais",
         "description": "Componentes consumidos para montar cada item de montagem."
       },
+      "overhead-rates": {
+        "title": "Taxas de custos indiretos",
+        "description": "Taxas de custos indiretos com datas de vigência aplicadas ao custo de mão de obra.",
+        "singular": "Taxa de custo indireto"
+      },
+      "overhead-model": {
+        "title": "Custos indiretos",
+        "description": "O motor de taxas por trás dos custos indiretos de projetos — pools de custo, bases de rateio, matriz de taxas por departamento e perfis. Projetos que usam o método de motor de taxas aplicam essas taxas às suas horas de mão de obra.",
+        "docs": "Documentação",
+        "viewAnalytics": "Ver análises",
+        "publish": "Publicar taxas",
+        "wizard": "Assistente de configuração",
+        "publishTitle": "Publicar no cartão de taxas",
+        "publishHint": "Trava as taxas calculadas pelo motor em linhas com vigência no cartão de Taxas de custos indiretos. Projetos custeiam indiretos por essas taxas publicadas até você publicar de novo — períodos anteriores mantêm suas taxas originais.",
+        "publishConfirm": "Publicar",
+        "publishDone": "Taxas publicadas no cartão de taxas",
+        "cancel": "Cancelar",
+        "wizardTitle": "Configurar custos indiretos de projetos",
+        "wizardDone": "Custos indiretos configurados",
+        "wizardIntro": "O indireto dá a cada obra sua parte do custo de operar a empresa — um número gerencial no DRE do projeto, nunca um lançamento contábil. O indireto da obra é sempre custeado por taxas publicadas, com vigência, para que períodos encerrados nunca mudem. Escolha como as taxas são determinadas:",
+        "recommended": "Recomendado",
+        "effectiveFrom": "Vigente desde",
+        "liveNow": "Calculado pelo realizado: ${rate}/h",
+        "flatPercent": "% de indireto sobre mão de obra",
+        "flatPerHour": "$ de indireto por hora de mão de obra",
+        "applyHint": "Aplique este método de indiretos aos tipos de projeto selecionados. O DRE deles ganha uma linha de Indiretos incluída no custo total da obra.",
+        "stepOf": "Etapa {step} de {total}",
+        "back": "Voltar",
+        "next": "Avançar",
+        "finish": "Concluir",
+        "approach": {
+          "rate_card": {
+            "title": "Cartão de taxas por departamento",
+            "desc": "Taxas $/hora com vigência por departamento, publicadas pelo motor ou digitadas manualmente. Custos de obra estáveis e auditáveis — períodos passados sempre mantêm as taxas que vigoravam."
+          },
+          "per_hour": {
+            "title": "$ fixo por hora de mão de obra",
+            "desc": "Uma taxa em dólar por hora de mão de obra para a empresa toda. Simples, sem departamentos."
+          },
+          "percent": {
+            "title": "Percentual do custo de mão de obra",
+            "desc": "Indireto como % de acréscimo sobre o custo de mão de obra. Comum em serviços profissionais."
+          }
+        },
+        "current": "Configuração atual",
+        "ratesActive": "{count} taxas publicadas vigentes desde {date}",
+        "noRates": "Sem taxas publicadas ainda — execute o assistente ou publique taxas.",
+        "methodNone": "Sem indiretos",
+        "methodCard": "Cartão de taxas por departamento",
+        "methodPct": "{rate}% do custo de mão de obra",
+        "methodHr": "${rate}/hora de mão de obra",
+        "methodGl": "Razão lançado (grupo de contas)",
+        "working": "Salvando…",
+        "step1t": "Classifique os custos indiretos",
+        "step1d": "{count} categorias na aba Categorias abaixo; {unassigned} contas sem atribuição. Agrupe cada conta de despesa indireta para não perder nada.",
+        "step2t": "Revise as taxas calculadas",
+        "step2d": "A aba Matriz mostra a taxa de cada departamento pelo realizado — atualmente ${rate}/h composto. Só visualização; nunca custeia obras diretamente.",
+        "step3t": "Publique e aplique",
+        "application": {
+          "title": "Aplicação contábil",
+          "hint": "Como o indireto chega aos livros. Só relatório mantém estatístico. O par líquido-zero lança a parte de cada projeto na conta de indiretos COM a marca do projeto e reverte o mesmo valor sem ela — visões de custo da obra carregam indireto, a conta e o DRE da empresa zeram.",
+          "modes": {
+            "report_only": "Só relatório",
+            "net_zero_pair": "Par líquido-zero",
+            "off": "Desligado"
+          },
+          "account": "Conta de aplicação de indiretos",
+          "save": "Salvar",
+          "saved": "Aplicação de indiretos salva",
+          "entry": "Lançamento",
+          "date": "Data",
+          "projects": "Projetos",
+          "total": "Aplicado",
+          "status": "Status",
+          "autoHint": "O indireto aplica sozinho: ao aprovar horas, a parte de cada apontamento (horas × a taxa publicada do departamento no dia trabalhado) lança com a mesma aprovação — sem etapa de fim de mês, e nunca espera a folha.",
+          "backfillPrompt": "{entries} apontamentos aprovados (~{hours}h) antecedem este modo e ainda não carregam indireto.",
+          "backfill": "Aplicar a horas passadas",
+          "backfilled": "Aplicados ${total} de indiretos em {entries} apontamentos passados",
+          "systemRule": {
+            "title": "Regra central de rateio",
+            "body": "Cada lançamento acima é construído pela regra de rateio {key} do motor (versão {version}, vigente em {date}, definição {hash}). Ela espelha esta política e o cartão publicado, então não pode ser editada nem excluída aqui — mude a política ou publique novas taxas.",
+            "noVersion": "Sem versão de regra vigente: a política não é um par líquido-zero ativo ou o cartão de taxas horárias está vazio. Lançamentos retomam pelo núcleo quando ambos valerem.",
+            "viewRule": "Ver em Rateios"
+          }
+        },
+        "lifecycle": {
+          "title": "Ciclo de vida das taxas",
+          "hint": "Quem mantém o cartão publicado que o método padrão e o par líquido-zero leem.",
+          "modes": {
+            "manual": "Manual",
+            "scheduled": "Agendado",
+            "live": "Ao vivo"
+          },
+          "modeHints": {
+            "manual": "O motor calcula e recomenda; uma pessoa revisa a deriva abaixo e clica em Publicar.",
+            "scheduled": "A rotina fotografa as taxas compostas ao vivo para o cartão no início de cada período.",
+            "live": "Tipos de projeto leem o motor ao vivo diretamente (fonte de taxa \"ao vivo\"); o cartão publicado é só consultivo."
+          },
+          "cadences": {
+            "monthly": "Mensal",
+            "quarterly": "Trimestral"
+          },
+          "save": "Salvar",
+          "saved": "Ciclo de vida das taxas salvo",
+          "department": "Departamento",
+          "published": "$/h publicado",
+          "live": "$/h ao vivo",
+          "drift": "Deriva"
+        },
+        "laborCostingLink": "Custo de mão de obra",
+        "tabs": {
+          "model": "Modelo",
+          "rates": "Taxas",
+          "lifecycle": "Ciclo de vida das taxas",
+          "application": "Aplicação contábil"
+        }
+      },
+      "compliance-classes": {
+        "title": "Classes de contrapartes",
+        "singular": "Classe de contraparte",
+        "description": "Que tipo de contraparte um fornecedor é, e que controle de pagamento isso carrega."
+      },
+      "compliance-requirements": {
+        "title": "Requisitos de conformidade",
+        "singular": "Requisito de conformidade",
+        "description": "Uma linha por política: o que deve estar arquivado, os limites que deve mostrar e o que uma falta acarreta."
+      },
+      "information-return-box-rules": {
+        "title": "Campos de declarações informativas",
+        "singular": "Regra de campo",
+        "description": "Em qual campo de 1099/T4A cai o gasto de uma conta. Tudo sem mapeamento cai no campo padrão do fornecedor."
+      },
       "income-tax-rates": {
         "title": "Alíquotas de imposto de renda",
         "singularTitle": "Alíquota de IR",
         "description": "Alíquotas promulgadas por jurisdição, com vigência — alimentam a provisão ASC 740."
       },
-      "tax-jurisdictions": {
-        "title": "Jurisdições de Imposto"
-      },
-      "tax-registrations": {
-        "title": "Nexo de Imposto"
-      },
-      "tax-regimes": {
-        "title": "Regimes de depreciação fiscal"
-      },
-      "tax-pool-classes": {
-        "title": "Classes de depreciação fiscal"
-      },
-      "tax-first-year-rules": {
-        "title": "Regras do primeiro ano"
-      },
-      "pay-schedules": {
-        "title": "Cronogramas de folha"
-      },
-      "pay-components": {
-        "title": "Verbas"
-      },
-      "union-agreements": {
-        "title": "Acordos sindicais"
-      },
-      "subsidiary-ownership-interests": {
-        "title": "Participações em subsidiárias"
-      },
-      "allocations": {
-        "title": "Rateios"
-      },
-      "overhead-model": {
-        "title": "Custos indiretos",
-        "application": {
-          "systemRule": {
-            "title": "Regra central de rateio"
-          }
-        }
-      },
-      "compliance-classes": {
-        "title": "Classes de contrapartes"
-      },
-      "compliance-requirements": {
-        "title": "Requisitos de conformidade"
-      },
-      "information-return-box-rules": {
-        "title": "Campos de declarações informativas"
-      },
       "payroll-filing-accounts": {
-        "title": "Contas de recolhimento"
+        "title": "Contas de recolhimento",
+        "description": "Programa de folha, EIN e contas estaduais de seguro-desemprego sob os quais o empregador recolhe e declara. Funcionários recebem uma delas no perfil de folha."
       },
       "entitlement-plans": {
-        "title": "Planos de direitos"
+        "title": "Planos de direitos",
+        "singular": "Plano de direitos",
+        "description": "Bancos de remuneração — horas extras em banco, férias, bancos de licenças e ressarcimento de benefícios durante afastamentos. Saldos guardados em dinheiro e mostrados em horas ao salário atual."
       },
       "entitlement-plan-limits": {
-        "title": "Limites dos bancos"
+        "title": "Limites dos bancos",
+        "singular": "Limite do banco",
+        "description": "Quanto cada papel pode acumular. Limites resolvem pelo mais específico: funcionário, depois cargo, ofício, departamento, entidade jurídica e então o padrão do plano."
       },
       "entitlement-service-tiers": {
-        "title": "Cronogramas de tempo de serviço"
+        "title": "Cronogramas de tempo de serviço",
+        "singular": "Faixa por tempo de casa",
+        "description": "O que o tempo de casa rende: benefícios aos três meses, RRSP a um ano, percentual de férias maior aos cinco, dez e quinze."
       },
       "pay-derived-rules": {
-        "title": "Proventos calculados"
+        "title": "Proventos calculados",
+        "description": "Regras que transformam fatos operacionais em remuneração — diária por noites fora, dias de plantão, deslocamento ao primeiro serviço do dia, incentivos de obra e equipamento. Visualize uma regra antes de ativá-la."
       },
       "trades": {
-        "title": "Ofícios"
+        "title": "Ofícios",
+        "description": "Eletricista, mecânico montador, soldador — o ofício em que o funcionário trabalha, usado por faixa salarial, encargos e regras de proventos derivados."
       },
       "payroll-holidays": {
-        "title": "Feriados"
+        "title": "Feriados",
+        "singularTitle": "Feriado",
+        "description": "Quais feriados legais opcionais você observa, e os fechamentos que adiciona. Feriados legais obrigatórios vêm do pacote de país e não podem ser removidos aqui."
       },
       "extension-settings": {
-        "title": "Configurações de aplicativos"
+        "title": "Configurações de aplicativos",
+        "description": "Configure definições declaradas pelos apps instalados. Alterações preservam valores anteriores e suas vigências."
       }
     },
     "fields": {
       "accountId": "Conta",
-      "classAttribute": "Asset class attribute",
-      "countryCode": "Country",
-      "calculationModel": "Calculation model",
-      "regime": "Regime",
-      "classCode": "Class code",
-      "rate": "Taxa",
-      "method": "Método",
-      "firstYearFraction": "First-year fraction",
-      "allowRecapture": "Allow recapture",
-      "allowTerminalLoss": "Allow terminal loss",
-      "costCap": "Cost cap",
-      "depreciationSystem": "Depreciation system",
-      "macrsMethod": "MACRS method",
-      "recoveryPeriodYears": "Recovery period (years)",
-      "taxAttributes": "Tax attributes (JSON)",
-      "enhancedMultiplier": "Enhanced multiplier",
-      "acquiredFrom": "Acquired from",
-      "acquiredTo": "Acquired to",
       "code": "Código",
       "name": "Nome",
       "appliesTo": "Aplica-se a",
+      "jurisdictionId": "Jurisdição",
+      "level": "Nível",
+      "taxType": "Tipo de tributo",
+      "filingFrequency": "Periodicidade",
+      "registrationNumber": "Número de inscrição",
+      "returnFormCode": "Declaração",
+      "classAttribute": "Atributo de classe do ativo",
+      "countryCode": "País",
+      "calculationModel": "Modelo de cálculo",
+      "regime": "Regime",
+      "classCode": "Código da classe",
+      "rate": "Taxa",
+      "method": "Método",
+      "firstYearFraction": "Fração do primeiro ano",
+      "allowRecapture": "Permite recaptura",
+      "allowTerminalLoss": "Permite perda terminal",
+      "costCap": "Teto de custo",
+      "depreciationSystem": "Sistema de depreciação",
+      "macrsMethod": "Método MACRS",
+      "recoveryPeriodYears": "Período de recuperação (anos)",
+      "taxAttributes": "Atributos fiscais (JSON)",
+      "enhancedMultiplier": "Multiplicador ampliado",
+      "acquiredFrom": "Adquirido de",
+      "acquiredTo": "Adquirido até",
       "recoverablePercent": "% recuperável",
       "calculationType": "Tipo de cálculo",
       "withholdingAccountId": "Conta de retenção",
@@ -1882,6 +2440,22 @@
       "costMultiplier": "Multiplicador de custo",
       "isBillableDefault": "Faturável por padrão",
       "showOnFieldTicket": "Mostrar em apontamentos de campo",
+      "frequency": "Periodicidade",
+      "periodsPerYear": "Períodos por ano",
+      "anchorPeriodEnd": "Fim do período âncora",
+      "payDateOffsetDays": "Defasagem do pagamento (dias)",
+      "value": "Valor",
+      "taxable": "Tributável",
+      "pensionable": "Previdenciário",
+      "insurable": "Segurável",
+      "vacationable": "Conta p/ férias",
+      "nonPeriodic": "Não periódico (método de bônus)",
+      "taxTreatment": "Tratamento fiscal",
+      "expenseAccountId": "Conta de despesa",
+      "liabilityAccountId": "Conta de passivo",
+      "remittancePartyId": "Fornecedor de recolhimento",
+      "unionName": "Sindicato",
+      "localNumber": "Número da seccional",
       "category": "Categoria",
       "postsGl": "Lança no razão",
       "bookId": "Livro",
@@ -1909,6 +2483,22 @@
       "toSubsidiaryId": "Subsidiária de destino",
       "dueFromAccountId": "Conta a receber de",
       "dueToAccountId": "Conta a pagar a",
+      "parentSubsidiaryId": "Subsidiária mãe",
+      "ownershipPercent": "% de participação",
+      "acquisitionDate": "Data de aquisição",
+      "acquisitionCost": "Custo de aquisição",
+      "fairValueNetAssets": "Valor justo dos ativos líquidos",
+      "acquisitionRate": "Câmbio da aquisição",
+      "nciMeasurement": "Mensuração da NCI",
+      "nciFairValue": "Valor justo da NCI",
+      "investmentAccountId": "Conta de investimento",
+      "equityIncomeAccountId": "Conta de resultado de equivalência",
+      "distributionAccountId": "Conta de distribuição",
+      "distributionIncomeAccountId": "Conta de receita de distribuição",
+      "nciEquityAccountId": "Conta de PL da NCI",
+      "nciIncomeAccountId": "Conta de resultado da NCI",
+      "goodwillAccountId": "Conta de ágio",
+      "fairValueAdjustmentAccountId": "Conta de ajuste a valor justo",
       "asOf": "Na data de",
       "fromCurrency": "Moeda de origem",
       "toCurrency": "Moeda de destino",
@@ -1958,42 +2548,168 @@
       "assemblyItemId": "Item de montagem",
       "componentItemId": "Item componente",
       "quantityPer": "Quantidade por",
+      "rateKind": "Tipo de taxa",
       "rateBookId": "Tabela de tarifas",
       "customerId": "Cliente",
       "projectId": "Projeto",
-      "isDefault": "Padrão"
+      "isDefault": "Padrão",
+      "billMultiplier": "Multiplicador de faturamento",
+      "lienWaiverEnforcement": "Controle de quitações",
+      "defaultLienWaiverType": "Modelo de quitação padrão",
+      "defaultInformationReturn": "Declaração informativa padrão",
+      "classId": "Aplica-se à classe",
+      "enforcement": "Em caso de falta",
+      "requiresExpiry": "Exige vencimento",
+      "graceDays": "Dias de carência",
+      "expiryWarningDays": "Avisar antes do vencimento (dias)",
+      "minCoverageAmount": "Limite mínimo por ocorrência",
+      "minAggregateAmount": "Limite mínimo agregado",
+      "coverageCurrency": "Moeda do limite",
+      "requiresAdditionalInsured": "Exige segurado adicional",
+      "requiresWaiverOfSubrogation": "Exige renúncia à sub-rogação",
+      "requiresPrimaryNoncontributory": "Exige primário e não contributivo",
+      "requiresVerification": "Exige verificação por segunda pessoa",
+      "formType": "Formulário",
+      "box": "Campo",
+      "maxAssessable": "Máximo avaliável anual",
+      "protectionBase": "Base de rendimentos protegidos",
+      "protectionMaxPercent": "Parcela máxima da base",
+      "protectionPriority": "Prioridade de proteção",
+      "includeInDisposableEarnings": "Conta p/ a base protegida",
+      "basisCapHoursPerPeriod": "Teto da base — horas por período",
+      "basisCapAmountPerPeriod": "Teto da base — valor por período",
+      "basisCapAmountPerYear": "Teto da base — valor por ano",
+      "accountNumber": "Número da conta",
+      "programType": "Tipo de conta",
+      "remitterType": "Tipo de recolhedor",
+      "stateCode": "Estado",
+      "unit": "Unidade",
+      "direction": "Direção",
+      "accrualMethod": "Método de provisão",
+      "accrualValue": "Valor provisionado",
+      "accrualComponentId": "Componente de provisão",
+      "payoutComponentId": "Componente de pagamento",
+      "capBehavior": "Ao atingir o limite",
+      "planId": "Plano",
+      "employeePartyId": "Funcionário",
+      "jobTitle": "Cargo",
+      "tradeId": "Ofício",
+      "maxBalance": "Limite",
+      "notifyBalance": "Avisar em",
+      "componentId": "Componente da folha",
+      "afterMonths": "Após (meses de casa)",
+      "eligible": "Elegível",
+      "trigger": "Disparado por",
+      "timeTypeId": "Tipo de hora",
+      "billableOnly": "Só horas faturáveis",
+      "includedJobTitles": "Só estes cargos",
+      "excludedJobTitles": "Cargos excluídos",
+      "quantityMode": "Quantidade",
+      "rateMode": "Taxa",
+      "rateValue": "Valor da taxa",
+      "costingMode": "Custeio da obra",
+      "excludeFromWages": "Só evento (não hora trabalhada)",
+      "jurisdiction": "Jurisdição",
+      "packKey": "Feriado legal",
+      "ruleKind": "Recorrência",
+      "ruleMonth": "Mês",
+      "ruleDay": "Dia do mês",
+      "ruleWeekday": "Dia da semana",
+      "ruleNth": "Qual deles",
+      "ruleOffset": "Dias desde o domingo de Páscoa",
+      "observedOn": "Data",
+      "observance": "Se cair no fim de semana",
+      "isObserved": "Observado",
+      "isPaid": "Remunerado",
+      "equipmentUnitId": "Unidade de equipamento",
+      "extensionKey": "App",
+      "settingKey": "Definição",
+      "reason": "Motivo da alteração"
     },
     "fieldHelp": {
-      "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta."
+      "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
+      "lienWaiverEnforcement": "Bloquear significa que uma fatura desta classe não pode ser paga até que uma quitação assinada a cubra.",
+      "defaultLienWaiverType": "Pré-selecionado ao criar uma quitação para uma dessas contrapartes.",
+      "defaultInformationReturn": "Usado quando um fornecedor desta classe não nomeia um formulário.",
+      "complianceRequirementClass": "Deixe vazio para aplicar a todas as contrapartes acompanhadas.",
+      "complianceEnforcement": "Bloquear pagamento segura o dinheiro; bloquear fatura impede que a fatura seja registrada.",
+      "requiresExpiry": "Ligado para seguros; desligado para W-9, que não vence.",
+      "graceDaysHint": "0",
+      "expiryWarningDaysHint": "30",
+      "minCoverageAmount": "Certificados abaixo deste limite são recusados. Limites nunca são convertidos entre moedas.",
+      "coverageCurrency": "Obrigatório quando há limite mínimo — limite é dinheiro e precisa ser comparável.",
+      "requiresVerification": "Quem registra um certificado nunca pode ser quem o verifica.",
+      "informationReturnBox": "Os campos são legais. O que você configura é qual das suas contas alimenta qual campo.",
+      "maxAssessable": "O seguro de acidentes de trabalho para de tributar os ganhos do funcionário após este valor anual (o máximo segurável por trabalhador da junta). Em branco para sem teto.",
+      "protectionBase": "Contra o que o teto do desconto é medido. Salário líquido é o salário após todos os outros descontos. Rendimentos disponíveis contam só os proventos e descontos marcados para a base abaixo — é assim que um auxílio ou benefício fica fora da parcela.",
+      "protectionMaxPercent": "O máximo que este desconto pode tomar da base — 20% para uma penhora comum de Ontário, 50% para alimentos, 25% sob o CCPA dos EUA. O que não couber é reportado como falta na folha.",
+      "protectionPriority": "Que ordem vence quando vários descontos protegidos disputam o mesmo salário. Menor primeiro; ordens de alimentos normalmente superam credores comuns.",
+      "includeInDisposableEarnings": "Se este componente pertence à base protegida. Proventos na base somam, descontos na base subtraem. Desligue para auxílio ou benefício que deve ficar fora da parcela de uma penhora.",
+      "basisCapHoursPerPeriod": "Calcule este componente sobre no máximo estas horas por período — por exemplo RRSP sobre 40 horas semanais. Hora extra e hora dobrada cobradas da obra são isentas e nunca têm teto.",
+      "basisCapAmountPerPeriod": "Encerre este componente ao atingir este valor em um período de pagamento.",
+      "basisCapAmountPerYear": "Encerre este componente ao atingir este valor no ano fiscal — o limite de money-purchase da CRA ou o limite de elective-deferral 402(g) dos EUA. Valores já comprometidos este ano, saldos iniciais incluídos, contam.",
+      "stateCode": "Obrigatório só para tipos de programa registrados por estado ou região (como contas de seguro-desemprego estadual) — validado contra a declaração do pacote de país ao salvar a conta.",
+      "filingAccountDefault": "Funcionários cujo perfil não nomeia conta são declarados e recolhidos sob a conta padrão do seu país.",
+      "entitlementUnit": "Dinheiro é fortemente recomendado. Um banco denominado em horas se reavalia a cada aumento, o que custa silenciosamente a diferença ao empregador.",
+      "entitlementDirection": "Provisionar: o empregador deve ao funcionário. Dever: o funcionário deve ao empregador — o saldo fica negativo e é pago com salários futuros até chegar a exatamente zero.",
+      "entitlementAccrualValue": "Um percentual para planos de percentual de ganhos (4 = 4%), senão um valor por hora ou por período de pagamento.",
+      "entitlementPayoutComponent": "O provento que paga o banco. Para um plano de 'dever', é o desconto que o recupera.",
+      "entitlementLiabilityAccount": "Onde o banco fica no balanço. Vazio para manter o plano só em relatório.",
+      "entitlementCapBehavior": "Avisar registra a provisão e sinaliza. Bloquear para a folha daquele funcionário. Pagamento auto limita o banco e paga o excesso.",
+      "entitlementScope": "Defina no máximo um escopo. Deixe todos vazios para o padrão do plano.",
+      "entitlementMaxBalance": "O teto rígido, na unidade do plano.",
+      "entitlementNotifyBalance": "O limiar suave que marca um funcionário se aproximando do limite.",
+      "entitlementAfterMonths": "Meses de serviço contínuo desde a admissão. 36 = três anos.",
+      "entitlementTierTarget": "Defina um plano (para elevar seu valor provisionado) ou um componente (para elegê-lo) — não ambos.",
+      "includedJobTitles": "Só funcionários cujo cargo está listado aqui ganham esta regra — escolha entre os cargos do quadro ou digite um novo. Vazio paga a todos. A comparação ignora maiúsculas e espaços.",
+      "excludedJobTitles": "Funcionários cujo cargo está listado aqui nunca ganham esta regra. Exclusões vencem inclusões. A comparação ignora maiúsculas e espaços.",
+      "excludeFromWages": "O apontamento registra um evento de campo — um dia de plantão, uma noite de diária — não hora trabalhada. Regras de proventos derivados o leem; o cálculo do salário o pula.",
+      "holidayJurisdiction": "A jurisdição cujo calendário isto altera. Use a província que cobre seus funcionários, ou Canadá (federal) para empregador regulado federalmente.",
+      "holidayEffectiveTo": "Vazio para sem data final. Vigências são comparadas com a data do feriado, então folhas passadas mantêm o calendário sob o qual rodaram.",
+      "holidayPackKey": "O feriado legal a que esta opção se aplica, por exemplo boxing_day ou heritage_day. Vazio para adicionar um feriado próprio da empresa. Só opcionais podem ser desligados — um obrigatório é recusado.",
+      "holidayName": "O nome do feriado da empresa que você está adicionando. Vazio quando esta linha é uma opção sobre feriado legal.",
+      "holidayIsObserved": "Desligado suprime um feriado opcional antes escolhido.",
+      "holidayIsPaid": "Desligado torna este um fechamento sem remuneração no dia. Feriados legais são sempre remunerados.",
+      "holidayRuleWeekday": "0 é domingo até 6, sábado.",
+      "holidayRuleNth": "1 é o primeiro dia da semana do mês; -1 é o último.",
+      "holidayRuleOffset": "Negativo conta para trás. Sexta-feira Santa é -2 e a segunda de Páscoa é 1.",
+      "holidayObservance": "Feriados legais mantêm a data e a lei dá um dia de folga substituto. Escolha um deslocamento só para feriado da empresa que você realmente move.",
+      "equipmentUnitId": "Pague sobre uma máquina nomeada apenas. Deixe vazio e use o item de cobrança para cobrir uma classe inteira de equipamentos com uma regra.",
+      "itemId": "Pague sobre cada unidade que cobra por este item de catálogo — \"todas as escavadeiras\" como uma regra em vez de uma por máquina.",
+      "payScheduleAnchor": "A data de FIM de um período qualquer; todos os outros derivam dela. Quinzenal lê o dia do mês: dia 20 significa períodos terminando dia 5 e dia 20, e dia 15 (ou o último dia de mês de 30/31 dias) significa dia 15 e fim do mês. Dia 14, e o último dia de fevereiro, não nomeiam calendário e são recusados."
     },
     "options": {
+      "payFrequency": {
+        "weekly": "Semanal",
+        "biweekly": "Quinzenal",
+        "semiMonthly": "Meio-mês",
+        "monthly": "Mensal"
+      },
+      "payComponentKind": {
+        "earning": "Provento",
+        "deduction": "Desconto",
+        "employerContribution": "Contribuição patronal"
+      },
+      "payComponentBasis": {
+        "fixedAmount": "Valor fixo",
+        "perHour": "Por hora",
+        "percentOfGross": "Percentual do bruto"
+      },
+      "payTaxTreatment": {
+        "none": "Pós-imposto",
+        "pensionF": "Previdência (RPP/RRSP, fator F)",
+        "unionDues": "Mensalidade sindical (U1)",
+        "alimony": "Pensão alimentícia (F2)"
+      },
       "timeClassification": {
         "regular": "Normal",
         "overtime": "Hora extra",
         "doubleTime": "Hora dupla",
         "other": "Outro"
       },
-      "taxDepreciationModel": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
-      },
-      "macrsSystem": {
-        "gds": "GDS",
-        "ads": "ADS"
-      },
-      "macrsMethod": {
-        "200db": "200% declining balance",
-        "150db": "150% declining balance",
-        "straightLine": "Straight line"
-      },
-      "taxDepreciationConvention": {
-        "halfYear": "Half-year",
-        "midQuarter": "Mid-quarter",
-        "midMonth": "Mid-month"
-      },
-      "poolMethod": {
-        "declining": "Declining balance",
-        "straightLine": "Straight line"
+      "sourceKind": {
+        "builtin": "Nativo",
+        "custom": "Personalizado"
       },
       "appliesTo": {
         "sales": "Vendas",
@@ -2004,6 +2720,53 @@
         "standard": "Imposto padrão",
         "withholding": "Imposto retido",
         "reverseCharge": "Autoliquidação"
+      },
+      "jurisdictionLevel": {
+        "country": "País",
+        "state": "Estado / Província",
+        "county": "Condado",
+        "city": "Cidade",
+        "special": "Distrito especial",
+        "federal": "Federal"
+      },
+      "taxType": {
+        "vat": "IVA",
+        "gst": "GST",
+        "hst": "HST",
+        "pst": "PST",
+        "qst": "QST",
+        "salesUse": "Imposto sobre vendas e uso",
+        "consumption": "Imposto sobre consumo",
+        "other": "Outro"
+      },
+      "filingFrequency": {
+        "monthly": "Mensal",
+        "bimonthly": "Bimestral",
+        "quarterly": "Trimestral",
+        "semiannual": "Semestral",
+        "annual": "Anual"
+      },
+      "poolMethod": {
+        "declining": "Saldo decrescente",
+        "straightLine": "Linha reta"
+      },
+      "taxDepreciationModel": {
+        "pool": "Pool de classes",
+        "macrs": "MACRS por ativo"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "Saldo decrescente 200%",
+        "150db": "Saldo decrescente 150%",
+        "straightLine": "Linha reta"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Meio ano",
+        "midQuarter": "Meio do trimestre",
+        "midMonth": "Meio do mês"
       },
       "rateDateBasis": {
         "usageDate": "Data de uso",
@@ -2047,10 +2810,6 @@
         "fullyDepreciate": "Depreciar totalmente",
         "retainBalance": "Reter saldo"
       },
-      "overheadMethod": {
-        "live": "Ao vivo",
-        "standard": "Padrão"
-      },
       "fxRateType": {
         "spot": "À vista",
         "average": "Média",
@@ -2059,6 +2818,15 @@
       "rateSource": {
         "derived": "Derivada",
         "manual": "Manual"
+      },
+      "consolidationMethod": {
+        "full": "Consolidação integral",
+        "proportionate": "Consolidação proporcional",
+        "equity": "Equivalência patrimonial"
+      },
+      "nciMeasurement": {
+        "proportionate": "Parcela proporcional dos ativos líquidos",
+        "fairValue": "Valor justo"
       },
       "recognitionMethod": {
         "pointInTime": "Em um ponto no tempo",
@@ -2098,12 +2866,554 @@
         "staging": "Preparação",
         "transit": "Trânsito",
         "quarantine": "Quarentena"
+      },
+      "overheadMethod": {
+        "live": "Ao vivo",
+        "standard": "Padrão"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/hora",
+        "percent": "% de mão de obra"
+      },
+      "complianceCategory": {
+        "insurance": "Seguros",
+        "taxForm": "Formulário fiscal",
+        "licence": "Licenças",
+        "bond": "Garantias",
+        "safety": "Segurança",
+        "other": "Outros"
+      },
+      "complianceEnforcement": {
+        "advisory": "Só relatório",
+        "warn": "Avisar no pagamento",
+        "blockPayment": "Bloquear pagamento",
+        "blockBill": "Bloquear a fatura"
+      },
+      "lienWaiverEnforcement": {
+        "none": "Não acompanhado",
+        "warn": "Avisar",
+        "block": "Bloquear pagamento"
+      },
+      "lienWaiverType": {
+        "conditionalProgress": "Condicional — medição",
+        "unconditionalProgress": "Incondicional — medição",
+        "conditionalFinal": "Condicional — final",
+        "unconditionalFinal": "Incondicional — final"
+      },
+      "informationReturnForm": {
+        "none": "Não declarável",
+        "nec": "1099-NEC",
+        "misc": "1099-MISC",
+        "t4a": "T4A"
+      },
+      "informationReturnBox": {
+        "nec1": "NEC 1 — Remuneração de não empregado",
+        "nec2": "NEC 2 — Vendas diretas de US$ 5.000 ou mais",
+        "nec4": "NEC 4 — IR federal retido",
+        "misc1": "MISC 1 — Aluguéis",
+        "misc2": "MISC 2 — Royalties",
+        "misc3": "MISC 3 — Outras receitas",
+        "misc4": "MISC 4 — IR federal retido",
+        "misc5": "MISC 5 — Proventos de pesca",
+        "misc6": "MISC 6 — Pagamentos médicos e de saúde",
+        "misc8": "MISC 8 — Pagamentos substitutos",
+        "misc9": "MISC 9 — Proventos de seguro agrícola",
+        "misc10": "MISC 10 — Valores brutos pagos a advogado",
+        "misc11": "MISC 11 — Pescado comprado para revenda",
+        "misc12": "MISC 12 — Diferimentos da seção 409A",
+        "misc14": "MISC 14 — Pagamentos excessivos de golden parachute",
+        "misc15": "MISC 15 — Remuneração diferida não qualificada",
+        "t4a020": "T4A 020 — Comissões de autônomo",
+        "t4a048": "T4A 048 — Honorários por serviços",
+        "t4a022": "T4A 022 — Imposto retido"
+      },
+      "payComponentCountry": {
+        "CA": "Canadá",
+        "US": "Estados Unidos"
+      },
+      "payProtectionBase": {
+        "none": "Sem proteção",
+        "netPay": "Salário líquido",
+        "disposableEarnings": "Rendimentos disponíveis",
+        "gross": "Salário bruto"
+      },
+      "payrollProgramType": {
+        "caRp": "Programa de folha da CRA (RP)",
+        "usEin": "Número de identificação do empregador dos EUA (EIN)",
+        "usStateSui": "Seguro-desemprego estadual (SUI)"
+      },
+      "payrollRemitterType": {
+        "regular": "Regular (mensal)",
+        "quarterly": "Trimestral",
+        "accelerated1": "Acelerado — faixa 1",
+        "accelerated2": "Acelerado — faixa 2"
+      },
+      "entitlementUnit": {
+        "money": "Dinheiro",
+        "hours": "Horas"
+      },
+      "entitlementDirection": {
+        "accrue": "Empregador deve ao funcionário",
+        "owe": "Funcionário deve ao empregador"
+      },
+      "entitlementAccrualMethod": {
+        "percentOfEarnings": "Percentual dos ganhos",
+        "perHourWorked": "Por hora trabalhada",
+        "fixedPerPeriod": "Fixo por período de pagamento",
+        "manual": "Só manual"
+      },
+      "entitlementCapBehavior": {
+        "warn": "Avisar",
+        "block": "Bloquear a execução",
+        "autoPayout": "Pagar o excesso"
+      },
+      "derivedTrigger": {
+        "timeEntry": "Cada apontamento",
+        "distinctDay": "Cada dia trabalhado",
+        "distinctProjectDay": "Cada obra, cada dia",
+        "nightStayed": "Cada noite fora",
+        "monthEnd": "Mensal, após o fim do mês",
+        "equipmentCharge": "Mensal, sobre cobranças de equipamento"
+      },
+      "derivedQuantity": {
+        "count": "Número de unidades",
+        "sumHours": "Total de horas",
+        "countNights": "Número de noites",
+        "sumQuantity": "Total de unidades cobradas",
+        "sumBillAmount": "Valor total faturado"
+      },
+      "derivedRate": {
+        "fixedPerUnit": "Valor fixo por unidade",
+        "percentOfGross": "Percentual do bruto",
+        "rateCard": "Do componente da folha",
+        "percentOfQuantity": "Percentual do valor cobrado"
+      },
+      "derivedCosting": {
+        "source": "A obra de origem do fato",
+        "firstProjectOfDay": "A primeira obra do dia",
+        "none": "Sem custeio de obra"
+      },
+      "holidayJurisdiction": {
+        "ca": "Canadá (regulado federalmente)",
+        "caAb": "Alberta",
+        "caBc": "Colúmbia Britânica",
+        "caOn": "Ontário",
+        "caQc": "Quebec",
+        "caSk": "Saskatchewan",
+        "us": "Estados Unidos"
+      },
+      "holidayRuleKind": {
+        "date": "Uma data específica",
+        "fixed": "A mesma data todo ano",
+        "nthWeekday": "O enésimo dia da semana do mês",
+        "weekdayBefore": "O último dia útil antes de uma data",
+        "easterOffset": "Relativo ao domingo de Páscoa"
+      },
+      "holidayObservance": {
+        "none": "Mantém a data",
+        "nextMonday": "Passa p/ o próximo dia útil",
+        "nearestWeekday": "Passa p/ o dia útil mais próximo"
       }
+    },
+    "payroll": {
+      "navTitle": "Folha de pagamento"
+    },
+    "laborCosting": {
+      "navTitle": "Custo de mão de obra",
+      "title": "Custo de mão de obra",
+      "description": "Quanto custa uma hora de mão de obra: salários com vigência, os componentes de estimativa aplicados antes de chegarem os valores reais da folha, e como o custo-padrão é lançado nas obras. Indiretos se configuram à parte no Modelo de indiretos.",
+      "save": "Salvar definições",
+      "saved": "Definições de custo de mão de obra salvas",
+      "rateRequired": "Digite uma taxa",
+      "scopeRequired": "Escolha um funcionário ou ofício",
+      "rateSaved": "Taxa salva",
+      "tradePrefix": "Ofício:",
+      "orgDefault": "Padrão da organização",
+      "rates": {
+        "title": "Taxas salariais",
+        "hint": "As taxas alternativas são resolvidas por cargo, ofício, departamento, subsidiária e padrão da organização. O histórico individual permanece no funcionário.",
+        "scope": "Abrangência",
+        "scopeTrade": "Ofício",
+        "scopeJobTitle": "Cargo",
+        "scopeDepartment": "Departamento",
+        "scopeSubsidiary": "Subsidiária",
+        "scopeOrg": "Padrão da org.",
+        "who": "Quem",
+        "rate": "Taxa",
+        "currency": "Moeda",
+        "basis": "Base",
+        "perHour": "por hora",
+        "perYear": "por ano",
+        "from": "De",
+        "to": "Até",
+        "add": "Adicionar taxa",
+        "emptyFiltered": "Nenhuma taxa salarial corresponde a estes filtros.",
+        "hr": "h",
+        "yr": "ano",
+        "search": "Pesquisar taxas…",
+        "status": "Status",
+        "statusActive": "Vigentes e agendadas",
+        "statusCurrent": "Atual",
+        "statusScheduled": "Agendada",
+        "statusEnded": "Encerrada",
+        "openRate": "Abrir taxa salarial de {scope}",
+        "selectTrade": "Selecione um ofício",
+        "select": {
+          "job_title": "Selecionar um cargo",
+          "trade": "Selecionar um ofício",
+          "department": "Selecionar um departamento",
+          "subsidiary": "Selecionar uma subsidiária"
+        },
+        "annualHours": "Horas anuais",
+        "annualHoursRequired": "Digite horas anuais maiores que zero",
+        "hourlyEquivalent": "Equivalente horário: {amount}",
+        "notes": "Notas",
+        "endDateHint": "Em branco para manter esta taxa sem fim.",
+        "invalidEndDate": "A data final não pode ser anterior à inicial",
+        "drawerNewTitle": "Nova taxa salarial",
+        "drawerNewDescription": "Adicione uma taxa salarial com vigência para um escopo da força de trabalho.",
+        "drawerEditTitle": "Editar taxa salarial",
+        "drawerEditDescription": "Atualize a taxa salarial com vigência de {scope}.",
+        "rateUpdated": "Taxa salarial atualizada",
+        "rateDeleted": "Taxa salarial excluída",
+        "confirmDelete": "Excluir esta taxa? Custo já apurado mantém seu instantâneo; aprovações futuras resolverão sem ela.",
+        "employeeNote": "{covered} de {total} funcionários resolvem para um salário. Salários por funcionário e histórico de aumentos ficam no cadastro de cada um (Operações → Funcionários)."
+      },
+      "components": {
+        "title": "Componentes de estimativa de custo",
+        "hint": "Somados ao salário para tornar o custo da obra pré-folha realista (encargos legais, diária). Substituídos pelos custos reais da folha quando o realizado lança — nunca uma camada permanente.",
+        "name": "Nome",
+        "kind": "Tipo",
+        "value": "Valor",
+        "percentOfWage": "% do salário",
+        "perHour": "$ por hora",
+        "perDay": "$ por dia",
+        "scalesOt": "escala com HE",
+        "remove": "Remover componente",
+        "newBurden": "Encargos da folha (est.)",
+        "addBurden": "Adicionar % de encargos",
+        "newPerDiem": "Diária",
+        "addPerDiem": "Adicionar diária",
+        "hoursPerDay": "Horas por dia",
+        "annualHours": "Horas anuais (salário)",
+        "example": "Exemplo com salário de {wage}/h:",
+        "exampleReg": "Normal",
+        "exampleOt": "Extra ×1,5",
+        "exampleDt": "Dobrada ×2",
+        "presetLead": "Início rápido:",
+        "presetCa": "Canadá ~13%",
+        "presetCaName": "Encargos legais — CPP, EI, WSIB, EHT, férias (est.)",
+        "presetUs": "EUA ~30%",
+        "presetUsName": "Encargos da folha — FICA, FUTA/SUTA, workers comp (est.)",
+        "workerComp": "Workers comp (por grupo)",
+        "addWorkerComp": "Adicionar workers comp",
+        "newWorkerComp": "Workers comp (WSIB)",
+        "workerCompHint": "A taxa vem do grupo de workers-comp de cada funcionário (Configurações → Equipe → Grupos de workers comp; atribua no cadastro). O valor aqui é só o % reserva quando o funcionário não tem grupo."
+      },
+      "posting": {
+        "title": "Contabilização",
+        "hint": "Com a contabilização ligada, horas aprovadas lançam D: mão de obra em WIP (por obra) / C: compensação de mão de obra à taxa de custo-padrão. O realizado da folha depois zera a mesma conta; o resíduo é sua variação de folha.",
+        "modeOff": "Desligado — só foto das taxas",
+        "modePost": "Lançar custo-padrão nas obras",
+        "laborWip": "Conta de mão de obra em WIP / custo da obra",
+        "laborClearing": "Conta de compensação de mão de obra",
+        "overheadNote": "Indireto não faz parte desta taxa — é aplicado pelo Modelo de indiretos como camada própria.",
+        "payrollVariance": "Conta de variação de folha"
+      },
+      "reconciliation": {
+        "title": "Conciliação da folha",
+        "subsidiary": "Subsidiária",
+        "hint": "O padrão de mão de obra credita a conta de compensação na aprovação; o diário da folha (importado ou manual) debita a mesma conta. O resíduo é sua variação de folha — baixe-a ao fechar o período.",
+        "from": "De",
+        "to": "Até",
+        "load": "Carregar",
+        "standardPosted": "Mão de obra padrão lançada",
+        "payrollPosted": "Realizado da folha conciliado",
+        "periodVariance": "Variação do período",
+        "openBalance": "Saldo de compensação (todo o período)",
+        "postVariance": "Lançar variação",
+        "variancePosted": "Variação de folha de ${amount} lançada",
+        "project": "Projeto",
+        "standardCost": "Custo-padrão"
+      },
+      "billing": {
+        "title": "Tabelas de faturamento",
+        "hint": "Preços de mão de obra por cliente e projeto, com vigência e moeda, taxas normal/extra/dobra por item, ajustes gerais, termos negociados e histórico de atribuições.",
+        "search": "Pesquisar tabelas…",
+        "add": "Nova tabela",
+        "card": "Tabela",
+        "currency": "Moeda",
+        "period": "Período de vigência",
+        "items": "Itens",
+        "assignments": "Atribuições",
+        "status": "Status",
+        "empty": "Nenhuma tabela corresponde aos filtros.",
+        "newTitle": "Nova tabela de faturamento",
+        "newDescription": "Crie primeiro o livro compartilhado e depois as taxas com vigência.",
+        "createInItemHint": "A criação usa o espaço compartilhado de tabelas para manter um único mecanismo de preços para mão de obra, serviços e equipamentos. Volte aqui para revisar termos e atribuições.",
+        "openRateBooks": "Abrir tabelas de tarifas",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente até",
+        "derivation": "Nível ausente",
+        "scopes": "Escopos de dimensão",
+        "allScopes": "Sem restrição de dimensão",
+        "itemRates": "Taxas por item e tipo de tempo",
+        "item": "Item",
+        "regular": "Normal",
+        "adjustments": "Ajustes",
+        "appliesTo": "Aplica-se a",
+        "wholeCard": "Tabela inteira",
+        "revise": "Criar revisão",
+        "reviseHint": "Uma revisão preserva esta versão e inicia uma nova cópia com vigência.",
+        "historicalHint": "Esta é uma versão histórica. Abra a mais recente para criar uma revisão.",
+        "revisionTitle": "Nova revisão da tabela",
+        "revisionDescription": "Taxas básicas, escopos e termos são copiados. Cada ajuste pode valer para toda a tabela ou para um item.",
+        "revisionEffectiveFrom": "Nova versão vigente desde",
+        "adjustmentNumber": "Ajuste {number}",
+        "removeAdjustment": "Remover ajuste",
+        "adjustmentName": "Nome",
+        "adjustmentCode": "Código",
+        "category": "Categoria",
+        "calculation": "Cálculo",
+        "presentation": "Apresentação na fatura",
+        "adjustmentValue": "Valor",
+        "adjustmentUnit": "Unidade",
+        "referenceText": "Descrição ou referência contratual",
+        "addAdjustment": "Adicionar ajuste",
+        "saveRevision": "Salvar revisão",
+        "revisionSaved": "Revisão salva",
+        "categories": {
+          "markup": "Margem",
+          "travel": "Viagem",
+          "allowance": "Ajuda de custo",
+          "minimum": "Mínimo",
+          "surcharge": "Sobretaxa",
+          "other": "Outro"
+        },
+        "calculations": {
+          "percent": "Percentual",
+          "fixed": "Valor fixo",
+          "per_hour": "Por hora",
+          "per_day": "Por dia",
+          "distance": "Distância",
+          "time": "Tempo",
+          "text": "Texto informativo"
+        },
+        "presentations": {
+          "included": "Incluído na taxa",
+          "separate": "Linha separada",
+          "informational": "Informativo"
+        },
+        "errors": {
+          "notFound": "Tabela não encontrada.",
+          "effectiveDate": "Escolha uma data de vigência.",
+          "adjustments": "Os ajustes são inválidos.",
+          "item": "Escolha um item ativo válido.",
+          "name": "Cada ajuste precisa de nome e código.",
+          "duplicateCode": "Os códigos devem ser únicos por item.",
+          "category": "Escolha uma categoria válida.",
+          "calculation": "Escolha um cálculo válido.",
+          "presentation": "Escolha uma apresentação válida.",
+          "value": "Informe um valor não negativo.",
+          "latestOnly": "Abra a versão mais recente.",
+          "afterLatest": "A data deve ser posterior à versão mais recente.",
+          "save": "Não foi possível salvar a revisão."
+        },
+        "terms": "Termos negociados",
+        "none": "Nenhum",
+        "derivations": {
+          "explicit": "Taxas explícitas",
+          "time_type_multipliers": "Multiplicadores de tipo de tempo"
+        },
+        "scopeTypes": {
+          "department": "Departamento",
+          "subsidiary": "Subsidiária",
+          "location": "Localização",
+          "class": "Classe",
+          "trade": "Ofício",
+          "job_title": "Cargo",
+          "other": "Outro"
+        }
+      },
+      "docs": "Documentação",
+      "checklist": {
+        "wages": "Taxas salariais",
+        "burden": "Estimativa de encargos",
+        "posting": "Lançamento nas obras",
+        "trueup": "Ajuste da folha",
+        "wagesDetail": "{covered} de {total} funcionários resolvem para uma taxa",
+        "burdenDone": "{count} componente(s) configurado(s)",
+        "burdenNone": "Sem componentes — custo pré-folha = salário puro",
+        "postingOn": "Custo-padrão lança nas obras na aprovação",
+        "postingAccounts": "Ligar exige contas de WIP + compensação",
+        "postingOff": "Desligado — só foto das taxas",
+        "trueupReady": "Conta de variação mapeada — concilie abaixo",
+        "trueupNone": "Mapeie uma conta de variação para fechar períodos",
+        "launchWizard": "Guia de configuração"
+      },
+      "wizard": {
+        "title": "Configurar custo de mão de obra",
+        "description": "Uma configuração guiada de salários reserva, encargos da folha e contabilização.",
+        "back": "Voltar",
+        "next": "Avançar",
+        "apply": "Aplicar configuração",
+        "applying": "Aplicando…",
+        "done": "Custo de mão de obra configurado",
+        "q1": "Como você quer estimar os encargos da folha?",
+        "q1Hint": "Os custos patronais que seus salários causam — impostos, seguros, férias. Uma estimativa mantém custos de obra realistas antes da folha; a folha real a substitui.",
+        "burden": {
+          "canada": "Canadá — legal ~13%",
+          "canadaHint": "CPP, EI, WSIB, EHT, férias. Uma estimativa inicial sensata; refine quando quiser.",
+          "us": "Estados Unidos — construção ~30%",
+          "usHint": "FICA, FUTA/SUTA, workers comp. Faixa típica de 25–40%.",
+          "custom": "Percentual personalizado",
+          "customHint": "Você sabe seu número — digite-o.",
+          "customPct": "% do salário",
+          "skip": "Pular por ora",
+          "skipHint": "Custos de obra mostrarão só salários puros até você adicionar componentes."
+        },
+        "customBurdenName": "Encargos da folha (est.)",
+        "q2": "De onde vêm os salários?",
+        "q2Hint": "Cada funcionário tem seu salário. Pesquise e preencha a equipe — quem ficar em branco pode usar a reserva opcional abaixo, e mensalistas podem ser refinados depois no workspace.",
+        "orgRate": "Salário-hora padrão (para quem não tem taxa específica)",
+        "tradeRates": "Taxas por ofício (opcional — vence o padrão)",
+        "perEmployeeLater": "Você pode adicionar taxas exatas por funcionário no workspace a qualquer hora — elas vencem ofício e padrão.",
+        "q3": "Lançar custo de mão de obra nas obras?",
+        "q3Hint": "Com a contabilização ligada, aprovar horas escreve o custo-padrão de mão de obra no razão contra cada projeto, antecipando a folha.",
+        "posting": {
+          "off": "Ainda não — só acompanhar taxas",
+          "offHint": "Horas são custeadas para relatórios; nada lança no razão.",
+          "post": "Sim — lançar custo-padrão na aprovação",
+          "postHint": "D: mão de obra em WIP (por obra) / C: compensação de mão de obra. O realizado da folha zera a mesma conta depois.",
+          "wip": "Conta de mão de obra em WIP / custo da obra",
+          "clearing": "Conta de compensação de mão de obra",
+          "variance": "Conta de variação de folha (opcional — para o ajuste de fim de mês)",
+          "varianceLater": "Escolher depois"
+        },
+        "review": "Pronto para aplicar:",
+        "reviewBurden": "Estimativa de encargos: {name} a {pct}%",
+        "reviewNoBurden": "Sem estimativa de encargos (só salários puros)",
+        "reviewOrgRate": "Salário padrão ${rate}/h.",
+        "reviewNoOrgRate": "Sem salário padrão.",
+        "reviewTradeRates": "+ {count} taxa(s) por ofício.",
+        "reviewPosting": "Custo-padrão lançará nas obras na aprovação",
+        "reviewNoPosting": "Contabilização segue desligada — dá para ligar depois",
+        "reviewExample": "Exemplo com salário de {wage}/h:",
+        "exReg": "Normal",
+        "exOt": "HE ×1,5",
+        "exDt": "Dobrada ×2",
+        "reviewNote": "Tudo aqui é editável depois no workspace — o guia só preenche as mesmas definições.",
+        "nextSteps": "Depois disto: indiretos",
+        "nextOverhead": "Custo de mão de obra cobre salários e encargos legais. Os INDIRETOS da sua empresa (aluguel, administrativo, frota…) são camada à parte com configuração guiada própria — classifique custos, revise taxas calculadas e aplique-as aos tipos de projeto.",
+        "nextOverheadLink": "Abrir o Modelo de indiretos",
+        "searchEmployees": "Pesquisar funcionários…",
+        "ratePlaceholder": "0.00",
+        "ratedCount": "{rated} de {total} funcionários têm salário",
+        "fallbackRate": "Taxa reserva opcional para funcionários ainda sem salário",
+        "fallbackHint": "Mantém o custeio funcionando enquanto cadastros são preenchidos — a maioria deixa vazio.",
+        "reviewEmployeeRates": "Salários de {count} funcionário(s).",
+        "reviewFallback": "Reserva de {rate}/h para quem não tem taxa.",
+        "wagesOnRecord": "O salário de cada funcionário (e o histórico de aumentos) se define no cadastro dele — exatamente onde você gerencia todo o resto sobre ele. Nada a preencher aqui.",
+        "openEmployees": "Abrir funcionários",
+        "reviewWagesOnRecord": "Salários vêm do cadastro de cada funcionário."
+      },
+      "unsaved": "Alterações não salvas",
+      "discard": "Descartar",
+      "related": {
+        "overhead": "Modelo de indiretos",
+        "overheadHint": "A camada de custo da empresa — pools, taxas por departamento e como o indireto chega às obras.",
+        "rateBooks": "Tabelas de preços de itens",
+        "rateBooksHint": "O que você cobra — preços de venda por item e cliente, com faixas normal/HE/dobrada.",
+        "timeTypes": "Tipos de hora",
+        "timeTypesHint": "Normal, extra, dobrada — os multiplicadores de custo e faturamento que esta página usa."
+      },
+      "tabs": {
+        "rates": "Taxas salariais",
+        "billing": "Tarifas faturadas",
+        "components": "Estimativa de encargos",
+        "posting": "Contabilização",
+        "reconciliation": "Conciliação da folha"
+      }
+    },
+    "features": {
+      "navTitle": "Funcionalidades",
+      "title": "Funcionalidades",
+      "description": "Ligue ou desligue módulos opcionais para sua empresa. Desligar esconde em todo lugar — os dados nunca são excluídos.",
+      "runWizard": "Executar o assistente de configuração",
+      "enabled": "{name} ativado",
+      "disabled": "{name} desativado",
+      "countOn": "{n} de {total} ligados",
+      "childOptions": "{count, plural, one {# opção ao ativar} other {# opções ao ativar}}",
+      "blockedReason": "Não dá para desligar — {items}.",
+      "affectsNote": "Desligar esconde {items} — os dados ficam e voltam se você reativar.",
+      "confirmDisable": "Desligar {name}?\n\nIsto esconde {items}. Os dados ficam e voltam se você reativar.",
+      "impacts": {
+        "subsidiaryTxns": "{count, plural, one {# subsidiária tem} other {# subsidiárias têm}} lançamentos contabilizados",
+        "foreignTxns": "{count, plural, one {# lançamento em moeda estrangeira} other {# lançamentos em moeda estrangeira}}",
+        "reconciliations": "{count, plural, one {# conciliação} other {# conciliações}}",
+        "bankStatements": "{count, plural, one {# extrato bancário} other {# extratos bancários}}",
+        "assets": "{count, plural, one {# ativo imobilizado} other {# ativos imobilizados}}",
+        "inventoryMovements": "{count, plural, one {# movimento de estoque} other {# movimentos de estoque}}",
+        "activeSubscriptions": "{count, plural, one {# assinatura ativa} other {# assinaturas ativas}}",
+        "advancedSubscriptionContracts": "{count, plural, one {# contrato de assinatura versionado ativo} other {# contratos de assinatura versionados ativos}}",
+        "openOrders": "{count, plural, one {# pedido emitido com saldo não convertido} other {# pedidos emitidos com saldos não convertidos}}",
+        "postedPayRuns": "{count, plural, one {# folha contabilizada no razão} other {# folhas contabilizadas no razão}}",
+        "submittedTimeEntries": "{count, plural, one {# apontamento enviado aguardando revisão} other {# apontamentos enviados aguardando revisão}}",
+        "activeBankFeeds": "{count, plural, one {# conexão de feed bancário ativa} other {# conexões de feed bancário ativas}}",
+        "activeBankImportSchedules": "{count, plural, one {# agenda SFTP de importação bancária ativa} other {# agendas SFTP de importação bancária ativas}}",
+        "activeScripts": "{count, plural, one {# script ativo} other {# scripts ativos}}",
+        "activeApiKeys": "{count, plural, one {# chave de API ativa} other {# chaves de API ativas}}",
+        "projects": "{count, plural, one {# projeto} other {# projetos}}",
+        "activeProjects": "{count, plural, one {# projeto ativo} other {# projetos ativos}}",
+        "openProjectBillingRequests": "{count, plural, one {# pedido de faturamento de obra aberto} other {# pedidos de faturamento de obra abertos}}",
+        "openPayApplications": "{count, plural, one {# medição a pagar aberta} other {# medições a pagar abertas}}",
+        "outstandingRetainage": "retenções pendentes",
+        "openFieldTickets": "{count, plural, one {# boletim de campo aberto} other {# boletins de campo abertos}}",
+        "scheduledTasks": "{count, plural, one {# atividade agendada} other {# atividades agendadas}}",
+        "openProjectDocuments": "{count, plural, one {# documento de obra não lançado} other {# documentos de obra não lançados}}",
+        "openProjectTimeEntries": "{count, plural, one {# apontamento de obra não aprovado} other {# apontamentos de obra não aprovados}}",
+        "openChangeOrders": "{count, plural, one {# aditivo em rascunho} other {# aditivos em rascunho}}",
+        "activeSubcontracts": "{count, plural, one {# subcontrato ativo} other {# subcontratos ativos}}",
+        "openVendorPayApplications": "{count, plural, one {# medição de fornecedor em andamento} other {# medições de fornecedor em andamento}}",
+        "activeSubcontractPaymentControls": "{count, plural, one {# controle de pagamento de subcontrato ativo} other {# controles de pagamento de subcontrato ativos}}",
+        "openPrebills": "{count, plural, one {# pré-fatura aguardando conclusão} other {# pré-faturas aguardando conclusão}}",
+        "activeWipHolds": "{count, plural, one {# trava de WIP ativa} other {# travas de WIP ativas}}",
+        "activePropertyLeases": "{count, plural, one {# locação ativa} other {# locações ativas}}",
+        "securityDepositTransactions": "{count, plural, one {# transação de caução} other {# transações de caução}}",
+        "revenueSchedules": "{count, plural, one {# cronograma de receita diferida} other {# cronogramas de receita diferida}}",
+        "controlCheckUnavailable": "uma verificação de integridade que não pôde ser concluída",
+        "trackedVendors": "{count, plural, one {# subcontratado acompanhado} other {# subcontratados acompanhados}}",
+        "activeCertificates": "{count, plural, one {# certificado vigente} other {# certificados vigentes}}",
+        "blockingCompliancePolicies": "{count, plural, one {# política que bloqueia pagamento} other {# políticas que bloqueiam pagamento}}",
+        "openLienWaivers": "{count, plural, one {# quitação aguardando assinatura} other {# quitações aguardando assinatura}}",
+        "draftInformationReturns": "{count, plural, one {# declaração informativa em andamento} other {# declarações informativas em andamento}}",
+        "unfiledInformationReturns": "{count, plural, one {# declaração informativa finalizada não entregue} other {# declarações informativas finalizadas não entregues}}",
+        "activeAllocationRules": "{count, plural, one {# regra de rateio ativa} other {# regras de rateio ativas}}",
+        "previewedAllocationRuns": "{count, plural, one {# execução de rateio visualizada} other {# execuções de rateio visualizadas}}"
+      },
+      "errors": {
+        "blocked": "Este recurso não pode ser desativado — seus dados sustentam o razão.",
+        "dependency": "Ative primeiro o recurso necessário: {features}.",
+        "dependents": "Desative primeiro o recurso dependente: {features}."
+      },
+      "categories": {
+        "sales": "Vendas e clientes",
+        "operations": "Operações",
+        "accounting": "Contabilidade",
+        "platform": "Plataforma"
+      }
+    },
+    "readiness": {
+      "navTitle": "Guia de entrada em operação"
+    },
+    "invoicing": {
+      "navTitle": "Faturamento"
     },
     "bankFeeds": {
       "navTitle": "Feeds bancários"
     },
     "paymentProviders": {
+      "navTitle": "Provedores de pagamento",
       "title": "Provedores de pagamento",
       "description": "Provedores de checkout hospedado para links de pagamento em faturas. A reconciliação de repasses fica em Banco → Liquidações PSP.",
       "saved": "Salvo.",
@@ -2144,242 +3454,404 @@
       "copy": "Copiar",
       "copied": "Copiado",
       "testConnection": "Testar conexão",
-      "testing": "Testando…",
-      "navTitle": "Provedores de pagamento"
+      "testing": "Testando…"
     },
-    "agents": {
-      "nav": {
-        "overview": "Visão geral",
-        "library": "Biblioteca",
-        "activity": "Atividade"
+    "wizard": {
+      "skip": "Pular por ora",
+      "back": "Voltar",
+      "next": "Continuar",
+      "apply": "Montar minha contabilidade",
+      "error": "Algo deu errado. Tente de novo.",
+      "welcome": {
+        "title": "Vamos montar sua contabilidade",
+        "description": "Conte como sua empresa funciona e o OpenBooks molda um workspace inicial focado em torno dela. Você revisa cada escolha antes que qualquer coisa mude.",
+        "f1": "Plano de contas",
+        "f2": "Um workspace sob medida",
+        "f3": "Go-live guiado"
       },
-      "overview": {
-        "title": "Agentes",
-        "description": "Agentes em segundo plano que vigiam os livros e propõem próximos passos revisáveis. Eles nunca lançam nem editam registros sozinhos.",
-        "configure": "Configurar",
-        "runNow": "Executar agora",
-        "enabled": "Ativado",
-        "disabled": "Desativado",
-        "controlsEnabled": "{count} de {total} verificações ativadas",
-        "manualOnly": "Somente execuções manuais",
-        "cadences": {
-          "daily": "Diária",
-          "weekly": "Semanal"
-        },
-        "materialitySummary": "Materialidade {amount}",
-        "lastRun": "Última execução {date} · {status}",
-        "runStatus": {
-          "completed": "concluída",
-          "failed": "falhou",
-          "skipped": "ignorada",
-          "running": "em execução"
-        },
-        "neverRun": "Nunca executado",
-        "nextRun": "Próxima {date}",
-        "openFindings": "{count, plural, one {# achado aberto} other {# achados abertos}}",
-        "reviewWork": "Revisar trabalho",
-        "featureOff": "O módulo Monitor de Fechamento está desligado, então os pacotes não podem ser ativados nem executados.",
-        "enableModule": "Ative em Funcionalidades",
-        "featureOffError": "Ative o módulo Monitor de Fechamento antes de ativar um pacote.",
-        "toggleFailed": "Não foi possível salvar a configuração do pacote.",
-        "scanComplete": "{count, plural, one {# achado detectado} other {# achados detectados}}",
-        "scanFailed": "A varredura falhou ao iniciar.",
-        "scanAlreadyRunning": "Já há uma varredura em execução.",
-        "guideLink": "Guia de configuração",
-        "columns": {
-          "pack": "Pacote",
-          "status": "Status",
-          "schedule": "Agenda",
-          "lastRun": "Última execução",
-          "findings": "Achados",
-          "actions": "Ações"
-        },
-        "kpis": {
-          "enabled": "Pacotes ativos",
-          "enabledValue": "{count} de {total}",
-          "openFindings": "Achados abertos",
-          "runs7d": "Execuções · 7 dias",
-          "failed7d": "Falhas · 7 dias"
-        }
+      "company": {
+        "title": "Conte sobre seu negócio",
+        "description": "Estes dados estabelecem sua base contábil. Nome e dados jurídicos seguem editáveis; moeda-base, setor e calendário fiscal travam após o primeiro lançamento.",
+        "name": "Nome da empresa",
+        "namePlaceholder": "p.ex. Saunders Construction Ltda.",
+        "legalName": "Razão social (opcional)",
+        "legalNamePlaceholder": "Razão social registrada",
+        "country": "País",
+        "currency": "Moeda-base",
+        "fiscalYear": "Ano fiscal começa em"
       },
-      "library": {
-        "title": "Biblioteca",
-        "description": "Todos os pacotes do registro — o que cada um lê, propõe e exige. Instalar ativa um pacote com suas verificações padrão.",
-        "install": "Instalar",
-        "installed": "Instalado",
-        "configure": "Configurar",
-        "readsLabel": "Lê",
-        "proposesLabel": "Propõe",
-        "needsLabel": "Exige",
-        "checksTitle": "Verificações ({count})",
-        "checksNote": "{count} de {total} ativadas por padrão",
-        "moduleRequires": "Exige o módulo {feature}",
-        "registryNote": "Pacote {key} · {count} verificações · declarado no registro de agentes",
-        "installFailed": "Não foi possível instalar o pacote.",
-        "installedToast": "{name} instalado com verificações padrão."
+      "industry": {
+        "title": "Qual é seu setor?",
+        "description": "Vamos recomendar um plano de contas e recursos relevantes para o jeito do seu setor. Você revisa a recomendação antes de aplicar.",
+        "search": "Pesquisar setores…",
+        "locked": "Seu setor não pode mudar após lançamentos, mas dá para personalizar plano de contas e funcionalidades individualmente.",
+        "classificationOnly": "Seu plano atual e histórico lançado serão preservados. Esta primeira classificação só ajusta recomendações de workspace e funcionalidades."
       },
-      "policy": {
-        "backLabel": "Todos os agentes",
-        "notificationsTitle": "Notificações de achados",
-        "notificationsDescription": "Quem recebe os achados deste pacote e como. O roteamento fica na política — os achados sempre aparecem em Atividade.",
-        "modes": {
-          "findings_only": {
-            "title": "Só achados",
-            "description": "Sem notificações — revise os achados em Atividade."
+      "profile": {
+        "title": "Encontre sua empresa onde ela está",
+        "description": "O OpenBooks pode seguir lindamente simples hoje e revelar controles mais profundos conforme equipe e necessidades contábeis crescem.",
+        "teamQuestion": "Quantas pessoas vão trabalhar no OpenBooks?",
+        "complexityQuestion": "Como o trabalho financeiro é revisado?",
+        "adapting": "O OpenBooks usa estes hábitos concretos de trabalho — não um rótulo vago de porte — para recomendar controles. Você revisará cada recurso ativado antes de aplicar.",
+        "team": {
+          "solo": {
+            "title": "Só eu",
+            "description": "Dono, contador ou fundador"
           },
-          "digest": {
-            "title": "Resumo diário",
-            "description": "Um resumo de novos achados por dia."
+          "small": {
+            "title": "2–10 pessoas",
+            "description": "Time pequeno com trabalho compartilhado"
           },
-          "immediate": {
-            "title": "Imediata",
-            "description": "Uma notificação para cada novo achado."
+          "medium": {
+            "title": "11–50 pessoas",
+            "description": "Responsabilidades e revisores definidos"
+          },
+          "large": {
+            "title": "51+ pessoas",
+            "description": "Times especializados e controles mais fortes"
           }
         },
-        "rolesLabel": "Papéis",
-        "usersLabel": "Pessoas",
-        "noTargets": "Nenhum",
-        "usersTruncatedNote": "Mostrando as primeiras 200 pessoas.",
-        "deliveryNote": "O envio por e-mail ainda não está ligado — aqui fica quem deve receber o quê. Os achados aparecem em Atividade enquanto isso.",
-        "rolesPlaceholder": "Adicionar um papel…",
-        "usersPlaceholder": "Adicionar uma pessoa…"
+        "complexity": {
+          "essentials": {
+            "title": "Dono gerencia",
+            "description": "A mesma pessoa de confiança pode preparar, revisar, lançar e fechar."
+          },
+          "growing": {
+            "title": "Revisão em equipe",
+            "description": "Pessoas dividem o trabalho e lançamentos importantes devem ter revisor claro."
+          },
+          "advanced": {
+            "title": "Controles formais",
+            "description": "Funções segregadas e aprovações, evidências e sign-off de fechamento devem ser governados."
+          }
+        }
       },
-      "activity": {
-        "title": "Atividade",
-        "description": "Cada varredura dos agentes em todos os pacotes — status, duração, achados e erros. Execute qualquer pacote de novo daqui.",
-        "allPacks": "Todos os pacotes",
-        "allStatuses": "Todos os status",
-        "sinceColumn": "Desde",
-        "sinceAll": "Todo o período",
-        "since": {
-          "day": "Últimas 24 horas",
-          "week": "Últimos 7 dias"
+      "operations": {
+        "title": "Como você opera?",
+        "description": "Confirme o trabalho que você realmente faz e a estrutura financeira em que opera. Suas respostas de setor já estão refletidas abaixo.",
+        "workTitle": "Trabalho que sua empresa faz",
+        "structureTitle": "Estrutura financeira",
+        "structureDescription": "Responda diretamente. O OpenBooks nunca presume entidades jurídicas extras ou contabilidade em moeda estrangeira por número de funcionários ou setor.",
+        "note": "Isto é um ponto de partida revisável. Cada chave segue autoritativa e ajustável em Configurações da empresa → Funcionalidades, com verificações de segurança que preservam dados.",
+        "agentsNote": "Quando os livros estiverem rodando, pacotes de agentes que os vigiam ficam em Configurações da empresa → Agentes: instale pacotes, ajuste verificações e roteie achados por lá.",
+        "projects": {
+          "title": "Projetos e custeio de obras",
+          "description": "Acompanhe obras com orçamentos, custeio, faturamento e rentabilidade."
         },
-        "packColumn": "Pacote",
-        "triggerColumn": "Gatilho",
-        "triggers": {
-          "manual": "Manual",
-          "scheduler": "Agendada"
+        "timeTracking": {
+          "title": "Apontamento de horas",
+          "description": "Boletins com envio, aprovação e acompanhamento de taxas de custo/faturamento."
         },
-        "statusColumn": "Status",
-        "startedColumn": "Início",
-        "durationColumn": "Duração",
-        "detectedColumn": "Detectados",
-        "resolvedColumn": "Resolvidos",
-        "actionsColumn": "Ações",
-        "rerun": "Executar de novo",
-        "viewFindings": "Achados",
-        "empty": "Sem execuções ainda.",
-        "emptyHint": "Execute um pacote na visão geral para ver sua primeira varredura aqui.",
-        "truncatedNote": "Mostrando as {shown} mais recentes de {total} execuções.",
-        "totalNote": "{count, plural, one {# execução} other {# execuções}}",
-        "showMore": "Mostrar mais",
-        "loadFailed": "Não foi possível carregar as execuções."
-      },
-      "packs": {
-        "accounting": {
-          "title": "Controles contábeis",
-          "description": "Movimento bancário sem conciliação, conciliações desequilibradas e rascunhos antigos que impedem o fechamento.",
-          "reads": "Extratos e conciliações bancárias, documentos contábeis abertos.",
-          "proposes": "Uma lista de condições a sanar — nunca lança nem edita registros."
+        "inventory": {
+          "title": "Estoque",
+          "description": "Rastreio de estoque, locais, custeio de itens e kits."
         },
-        "finance": {
-          "title": "Controles financeiros",
-          "description": "Orçamentos aprovados ausentes, variações desfavoráveis e quedas de desempenho do período.",
-          "reads": "Cenários de orçamento aprovados, realizado e receita do período.",
-          "proposes": "Apontamentos de variação com as contas exatas — só revisão, sem lançamentos."
+        "subscriptionBilling": {
+          "title": "Faturamento de assinaturas",
+          "description": "Planos e assinaturas que geram faturas recorrentes automaticamente."
         },
-        "collections": {
-          "title": "Cobrança",
-          "description": "Saldos de clientes em atraso com comportamento de pagamento, promessas quebradas e candidatos a bloqueio de crédito.",
-          "reads": "Contas a receber abertas, promessas e histórico de pagamentos.",
-          "proposes": "Rascunhos de lembretes e uma lista de ligações prioritárias para revisão."
+        "orders": {
+          "title": "Orçamentos e pedidos",
+          "description": "Use orçamentos, pedidos de venda e de compra antes de faturas."
         },
-        "payables": {
-          "title": "Contas a pagar",
-          "description": "Faturas duplicadas, faturas antes do próximo ciclo de pagamento, descontos por antecipação e aprovações ausentes.",
-          "reads": "Faturas de fornecedores, aprovações e o calendário de pagamentos.",
-          "proposes": "Um ciclo de pagamento como cartão de revisão — nada é pago automaticamente."
+        "crm": {
+          "title": "Funil de vendas",
+          "description": "Acompanhe leads, oportunidades, atividades e previsões antes da venda."
         },
-        "reconciliation": {
-          "title": "Conciliação bancária",
-          "description": "Linhas bancárias sem conciliação com candidato confiante, conciliações antigas e contas nunca conciliadas.",
-          "reads": "Linhas de extrato e status de conciliação.",
-          "proposes": "Comandos de conciliação para confirmar um a um."
+        "multiSubsidiary": {
+          "title": "Múltiplas entidades",
+          "description": "Opere mais de uma entidade jurídica com consolidação e intercompany."
         },
-        "hygiene": {
-          "title": "Higiene de dados",
-          "description": "Divergências em contas de controle, parceiros duplicados e registros sem os códigos, orçamentos ou vínculos de que precisam.",
-          "reads": "Plano de contas, parceiros, itens, projetos, orçamentos e componentes de folha.",
-          "proposes": "Cartões de correção onde o remédio é uma configuração."
-        },
-        "forensics": {
-          "title": "Forense",
-          "description": "Lançamentos de fim de semana, gastos redondos, valores logo abaixo do limite e faturas duplicadas.",
-          "reads": "Documentos de gasto e o painel sentinela.",
-          "proposes": "Links de revisão sentinela em cada achado — só revisão, sem lançamentos."
-        },
-        "tax": {
-          "title": "Fiscal",
-          "description": "Códigos fiscais ausentes, formulários sem registro, apurações incalculáveis e períodos de entrega destravados.",
-          "reads": "Documentos lançados, formulários, registros e travas de período.",
-          "proposes": "Links de revisão da apuração em cada achado — só revisão, sem lançamentos."
+        "multiCurrency": {
+          "title": "Multimoeda",
+          "description": "Transacione em moedas estrangeiras com câmbio e reavaliação."
         },
         "payroll": {
           "title": "Folha de pagamento",
-          "description": "Guias devidas, contas desconhecidas, opções ausentes e lacunas de fim de ano.",
-          "reads": "Folhas comprometidas, grupos de guia, perfis de empregados e alíquotas legais.",
-          "proposes": "Links de revisão de guias e empregados — só revisão, sem lançamentos."
-        },
-        "projects": {
-          "title": "Projetos",
-          "description": "Margens negativas, estouros de orçamento e trabalho antigo não faturado.",
-          "reads": "Custos e receitas de projetos lançados, orçamentos aprovados, compromissos abertos e trabalho não faturado.",
-          "proposes": "Links de revisão de projetos — só revisão, sem lançamentos."
-        },
-        "cash": {
-          "title": "Caixa",
-          "description": "Saldos baixos, aperto de contas e quedas previstas.",
-          "reads": "Saldos bancários, contas a receber e a pagar abertas e a previsão de caixa.",
-          "proposes": "Links de revisão bancária — só revisão, sem lançamentos."
+          "description": "Rode a folha com pacotes de país de retenção legal."
         }
       },
-      "runStatuses": {
-        "completed": "Concluída",
-        "failed": "Falhou",
-        "skipped": "Ignorada",
-        "running": "Em execução"
+      "rhythm": {
+        "title": "Defina seu ritmo contábil",
+        "description": "Volume muda quanto a automação ajuda. Cadência de fechamento muda quais rotinas o OpenBooks deve pôr à sua frente.",
+        "activityQuestion": "Aproximadamente quanto movimento você trata por mês?",
+        "activityHint": "Conte documentos de clientes e fornecedores, despesas, pagamentos e transações bancárias ou de cartão — não linhas de diário.",
+        "activity": {
+          "light": {
+            "title": "Menos de 100",
+            "description": "Um fluxo focado com pouca carga de automação."
+          },
+          "steady": {
+            "title": "100–1.000",
+            "description": "Movimento suficiente para importações, regras e revisão contínua economizarem tempo."
+          },
+          "high": {
+            "title": "Mais de 1.000",
+            "description": "Automação e monitoramento contínuo devem estar prontos desde o início."
+          }
+        },
+        "closeQuestion": "Com que frequência você pretende fechar e reportar formalmente?",
+        "close": {
+          "monthly": {
+            "title": "Todo mês",
+            "description": "Recomendado para reporte gerencial em dia e detecção precoce de erros."
+          },
+          "quarterly": {
+            "title": "Todo trimestre",
+            "description": "Um ciclo formal mais leve, com bancos ainda conciliados ao longo do trimestre."
+          },
+          "annual": {
+            "title": "No fim do ano",
+            "description": "Cadência formal mínima; a conciliação de rotina segue importante."
+          }
+        },
+        "note": "São preferências iniciais, não limites. O OpenBooks nunca vai afrouxar integridade de lançamentos ou controles de fechamento porque o movimento é baixo."
+      },
+      "launch": {
+        "title": "Planeje sua entrada em produção",
+        "description": "Algumas respostas finais deixam o guia de prontidão focar no trabalho entre a configuração e seu primeiro lançamento real.",
+        "booksQuestion": "De onde partem os livros?",
+        "books": {
+          "fresh": {
+            "title": "Começando do zero",
+            "description": "Não há saldos anteriores a trazer; o razão parte do zero."
+          },
+          "migrate": {
+            "title": "Trazendo contabilidade existente",
+            "description": "Saldos iniciais, faturas e contas a pagar em aberto e data de virada precisam de verificação."
+          }
+        },
+        "taxQuestion": "Esta empresa recolhe sales tax, GST/HST ou IVA?",
+        "tax": {
+          "registered": "Sim, inscrita",
+          "not_registered": "Não, não exigido",
+          "unsure": "Ainda não sei"
+        },
+        "toolsQuestion": "Quais destes devem estar prontos desde o dia um?",
+        "features": {
+          "bankFeeds": {
+            "title": "Banco conectado",
+            "description": "Traga movimento bancário automaticamente."
+          },
+          "onlinePayments": {
+            "title": "Pagamentos online",
+            "description": "Deixe clientes pagarem pelas faturas."
+          },
+          "fixedAssets": {
+            "title": "Depreciação de ativos",
+            "description": "Acompanhe ativos e cronogramas de depreciação."
+          }
+        },
+        "sample": {
+          "question": "Quer uma empresa que dá para explorar já?",
+          "title": "Criar empresa de exemplo do setor",
+          "description": "Uma empresa realista com transações, projetos, relatórios e períodos fechados — combinando com o setor que você escolheu.",
+          "safety": "É um workspace separado e claramente marcado. Lançamentos de exemplo nunca entram nestes livros, e e-mail externo, pagamentos, APIs e integrações ficam desligados.",
+          "error": "Sua empresa real foi configurada, mas a empresa de exemplo opcional não pôde ser preparada. Você pode tentar de novo em Importação e exportação."
+        }
+      },
+      "review": {
+        "title": "Revise sua configuração",
+        "description": "Eis o que vamos configurar. Clique em 'Montar minha contabilidade' para aplicar tudo.",
+        "companyName": "Nome da empresa",
+        "legalName": "Razão social",
+        "notProvided": "Não informado",
+        "country": "País",
+        "currency": "Moeda",
+        "fiscalYear": "Ano fiscal começa em",
+        "teamSize": "Equipe no OpenBooks",
+        "complexity": "Workspace inicial",
+        "bookStart": "Ponto de partida",
+        "taxPosition": "Posição fiscal",
+        "monthlyActivity": "Movimento mensal",
+        "closeCadence": "Fechamento formal",
+        "sampleCompany": "Workspace de exploração",
+        "sampleCompanyYes": "Criar empresa de exemplo separada do setor",
+        "sampleCompanyNo": "Agora não",
+        "industry": "Setor",
+        "chartOfAccounts": "Plano de contas",
+        "chartPreserved": "Plano existente preservado",
+        "accounts": "contas",
+        "features": "Funcionalidades ativadas",
+        "note": "Isto cria sua base contábil e workspace inicial. O guia de prontidão mostra o que ainda falta antes do primeiro lançamento real. Cada recurso opcional segue ajustável em Configurações da empresa → Funcionalidades.",
+        "notePreserved": "Isto atualiza classificação da empresa e recomendações de workspace sem mudar o plano existente nem o histórico lançado. Cada recurso opcional segue ajustável em Configurações da empresa → Funcionalidades.",
+        "payrollPack": "Pacote de país da folha",
+        "payrollPackCanada": "Canadá (CRA T4127)",
+        "payrollPackNone": "Nenhum — instale depois pela configuração da Folha"
+      },
+      "applying": {
+        "title": "Montando seus livros…",
+        "description": "Criando seu plano de contas, configurando funcionalidades e mapeando contas de controle."
+      },
+      "done": {
+        "title": "Seu workspace inicial está pronto",
+        "description": "A seguir, o guia de entrada em produção vai verificar as decisões restantes de empresa, tributos, numeração, bancos e saldos iniciais antes de você lançar movimento real. Agentes de fundo podem ser instalados a qualquer hora em Configurações → Agentes."
+      },
+      "industries": {
+        "general_business": {
+          "title": "Negócios em geral",
+          "description": "Uma configuração padrão que serve para qualquer empresa. Sem premissas específicas de setor."
+        },
+        "construction_contractor": {
+          "title": "Construção e ofícios",
+          "description": "Empreiteiras, ofícios e construtoras. Custeio de obras, medições, retenções e boletins de campo."
+        },
+        "professional_services": {
+          "title": "Serviços profissionais",
+          "description": "Consultorias, agências e assessores. Apontamento de horas, rentabilidade de projetos e faturamento por contrato de avença."
+        },
+        "engineering_architecture": {
+          "title": "Engenharia e arquitetura",
+          "description": "Empresas EPC e AEC. EAP, faturamento por fase, custeio de equipamentos e medições."
+        },
+        "it_software_saas": {
+          "title": "Software e SaaS",
+          "description": "Faturamento de assinaturas, reconhecimento de receita ASC 606 e acompanhamento de receita diferida."
+        },
+        "accounting_firm": {
+          "title": "Escritório contábil",
+          "description": "Contabilidades e escritórios. Multiclientes, conta de terceiros e acompanhamento de trabalhos."
+        },
+        "wholesale_distribution": {
+          "title": "Atacado e distribuição",
+          "description": "Distribuidores e atacadistas. Estoque, custo de desembarque, GRNI e locais de estoque."
+        },
+        "property_management": {
+          "title": "Administração de imóveis",
+          "description": "Carteiras de aluguel e administradoras. Aluguel recorrente, CAM, cauções e imobilizado."
+        },
+        "nonprofit": {
+          "title": "Sem fins lucrativos",
+          "description": "Entidades beneficentes e sem fins lucrativos. Acompanhamento de subvenções, contabilidade por fundos, doações e patrimônio líquido restrito."
+        },
+        "manufacturing": {
+          "title": "Indústria",
+          "description": "Manufatura leve e discreta. BOMs, matérias-primas, WIP, produtos acabados e indiretos."
+        },
+        "healthcare_practice": {
+          "title": "Clínica de saúde",
+          "description": "Clínicas médicas e odontológicas. Contas a receber de pacientes, material médico e equipamentos."
+        }
+      },
+      "payroll": {
+        "title": "Configurar folha",
+        "description": "A folha roda em pacotes de país instaláveis — cada pacote traz o motor legal de retenção e os componentes daquela jurisdição.",
+        "packQuestion": "Qual pacote de país deve ser instalado?",
+        "packs": {
+          "canada": {
+            "title": "Canadá",
+            "description": "Motor legal CRA T4127, todas as províncias e territórios, verificado contra o PDOC da CRA."
+          },
+          "us": {
+            "title": "Estados Unidos",
+            "description": "Planejado — ainda indisponível."
+          }
+        },
+        "checklist": {
+          "title": "Terminando a folha após este passo a passo",
+          "pack": "O pacote de país escolhido instala sozinho ao aplicar esta configuração.",
+          "accounts": "Aponte as contas de lançamento (salários, líquido, passivos de retenção) para seu plano em",
+          "accountsLink": "Configuração da folha → Contas e lançamentos",
+          "schedule": "Crie seu primeiro calendário de pagamentos em",
+          "scheduleLink": "Configuração da folha → Calendários"
+        },
+        "installError": "A folha foi ativada, mas o pacote de país não pôde ser instalado. Instale em Configuração da folha → Pacotes de país."
       }
     },
-    "readiness": {
-      "navTitle": "Guia de entrada em operação"
+    "filterAll": "Todos",
+    "sections": {
+      "deductionProtection": "Proteção de descontos",
+      "basisCaps": "Tetos da base",
+      "holidayElection": "Opção sobre feriado legal",
+      "holidayCompanyDay": "Feriado da empresa"
     },
-    "features": {
-      "runWizard": "Executar o assistente de configuração",
-      "navTitle": "Funcionalidades",
-      "errors": {
-        "blocked": "Este recurso não pode ser desativado — seus dados sustentam o razão.",
-        "dependency": "Ative primeiro o recurso necessário: {features}.",
-        "dependents": "Desative primeiro o recurso dependente: {features}."
+    "guide": {
+      "hero": {
+        "kicker": "Guia de entrada em produção",
+        "title": "Faça o primeiro lançamento ser sem graça — no melhor sentido.",
+        "description": "O OpenBooks moldou o workspace em torno da sua empresa. Este guia verifica as decisões que tornam faturas, contas a pagar, bancos e fechamento confiáveis desde o dia um.",
+        "badgeReady": "Base contábil pronta",
+        "badgeNeeds": "Base precisa de atenção",
+        "progressLabel": "Progresso da configuração",
+        "progressOf": "{done} de {total} áreas preparadas"
+      },
+      "activity": {
+        "high": "mais de 1.000 movimentos mensais",
+        "steady": "100–1.000 movimentos mensais",
+        "light": "menos de 100 movimentos mensais"
+      },
+      "closeName": {
+        "monthly": "mensal",
+        "quarterly": "trimestral",
+        "annual": "de fim de ano"
+      },
+      "state": {
+        "complete": "concluído",
+        "review": "revisar",
+        "waiting": "aguardando"
+      },
+      "profile": {
+        "title": "Perfil da empresa e do workspace",
+        "descReady": "Setor, responsabilidades da equipe, {activity}, cadência de fechamento {close} e recomendações de funcionalidades foram revisados.",
+        "descWaiting": "Conte ao OpenBooks como sua empresa opera para o workspace começar no nível certo.",
+        "actionReady": "Revisar perfil",
+        "actionWaiting": "Executar passo a passo"
+      },
+      "foundation": {
+        "title": "Base contábil",
+        "descReady": "{count, plural, one {# conta ativa} other {# contas ativas}}, um livro principal, períodos fiscais, contas de controle e uma entidade raiz prontos.",
+        "descWaiting": "Termine plano de contas, livro, períodos, entidade raiz, moeda e mapeamento de contas de controle antes de lançar.",
+        "action": "Revisar base"
+      },
+      "invoicing": {
+        "title": "Faturas, contas a pagar e condições",
+        "descReady": "{count, plural, one {# condição ativa} other {# condições ativas}} disponíveis. Revise numeração e padrões de documentos.",
+        "descWaiting": "Escolha ao menos uma condição para não calcular vencimentos à mão.",
+        "action": "Revisar faturamento"
+      },
+      "tax": {
+        "title": "Tratamento fiscal",
+        "descReady": "{count, plural, one {# código fiscal ativo} other {# códigos fiscais ativos}} configurados. Confirme inscrições e obrigações.",
+        "descNotRegistered": "Você confirmou que esta empresa hoje não precisa recolher sales tax, GST/HST ou IVA. Revisite antes que as obrigações mudem.",
+        "descRegistered": "Você confirmou que a empresa é inscrita. Adicione jurisdição, inscrição, códigos e periodicidade antes de emitir documentos reais.",
+        "descUndecided": "A inscrição fiscal segue indecisa. Resolva antes de emitir faturas reais ou registrar tributo recuperável.",
+        "action": "Revisar fiscal"
+      },
+      "bank": {
+        "title": "Contas bancárias e de cartão",
+        "descReady": "{count, plural, one {# conta conciliável} other {# contas conciliáveis}} aparecerão em Bancos. Mantenha conciliáveis só contas reais.",
+        "descWaiting": "Marque cada conta real bancária ou de cartão no razão como conciliável antes de importar extratos.",
+        "action": "Revisar contas bancárias"
+      },
+      "opening": {
+        "title": "Saldos iniciais e virada",
+        "descFreshPosted": "Livros partiram do zero; {count, plural, one {# lançamento registra} other {# lançamentos registram}} movimento real em vez de saldo inicial migrado.",
+        "descFreshEmpty": "Você confirmou que os livros partem do zero, então nenhum diário de migração é esperado.",
+        "descMigratePosted": "{count, plural, one {Existe # lançamento} other {Existem # lançamentos}}. Concilie o diário inicial com o balancete de origem e o detalhe de itens abertos antes de declarar a virada concluída.",
+        "descMigrateEmpty": "Você está trazendo contabilidade existente. Digite um diário inicial balanceado e confira detalhe de clientes, fornecedores, bancos, tributos e lucros acumulados.",
+        "actionFreshLedger": "Revisar razão",
+        "actionMigrateJournal": "Revisar diário",
+        "actionMigrateEnter": "Digitar saldos iniciais"
+      },
+      "close": {
+        "titleMonthly": "Primeiro fechamento mensal",
+        "titleQuarterly": "Primeiro fechamento trimestral",
+        "titleAnnual": "Primeiro fechamento anual",
+        "descDone": "{count, plural, one {# fechamento concluído} other {# fechamentos concluídos}} com checklist preservado, sign-off, travas e pacote de fechamento.",
+        "descReview": "Há movimento real. Concilie o período, revise demonstrações, complete o checklist de {close}, ateste ou aprove, trave e publique.",
+        "descWaiting": "Quando o movimento real começar, o OpenBooks vai guiar o primeiro fechamento {close} da conciliação aos livros travados e pacote preservado.",
+        "actionDone": "Revisar fechamentos",
+        "actionReview": "Abrir workspace de fechamento"
       }
-    },
-    "invoicing": {
-      "navTitle": "Faturamento"
-    },
-    "taxSetup": {
-      "navTitle": "Configuração fiscal"
-    },
-    "payroll": {
-      "navTitle": "Folha de pagamento"
     }
   },
   "flows": {
-    "title": "Flows",
+    "title": "Fluxos",
     "description": "Automações visuais sobre seus registros — um gatilho inicia uma execução, condições ramificam, ações realizam o trabalho e portões de aprovação pausam para pessoas.",
     "searchPlaceholder": "Pesquisar flows…",
     "subjectFilter": "Tipo de registro",
     "table": {
-      "flow": "Flow",
+      "flow": "Fluxo",
       "subject": "Tipo de registro",
       "nodes": "Nós",
       "lastRun": "Última execução",
@@ -2621,70 +4093,436 @@
         "subject": "Registro",
         "started": "Iniciada",
         "finished": "Concluída",
-        "error": "Erro"
-      }
+        "error": "Erro",
+        "actions": "Ações"
+      },
+      "retry": "Tentar de novo",
+      "retrying": "Tentando de novo…",
+      "retried": "Execução reiniciada",
+      "retryFailed": "Nova tentativa falhou"
     }
   },
   "features": {
+    "crm": {
+      "title": "CRM",
+      "description": "Leads, prospects, oportunidades, atividades e previsões de vendas."
+    },
+    "orders": {
+      "title": "Orçamentos e pedidos",
+      "description": "Orçamentos, pedidos de venda e de compra com conversão em faturas."
+    },
+    "revenueRecognition": {
+      "title": "Reconhecimento de receita",
+      "description": "Regras, cronogramas e receita diferida de contratos."
+    },
+    "projects": {
+      "title": "Projetos e custeio de obras",
+      "description": "Obras com orçamentos, custeio, faturamento e rentabilidade."
+    },
+    "timeTracking": {
+      "title": "Apontamento de horas",
+      "description": "Boletins semanais pessoais com envio e aprovação."
+    },
+    "fieldTickets": {
+      "title": "Boletins de campo",
+      "description": "Boletins de equipe assinados para obra por administração: o encarregado registra as horas de toda a equipe mais equipamentos e materiais, o cliente assina, e as faturas nascem dos boletins assinados."
+    },
+    "payroll": {
+      "title": "Folha de pagamento",
+      "description": "Folhas, calendários, perfis de funcionários, pacotes de país de retenção legal e passivos de recolhimento. Canadá (CRA T4127) e Estados Unidos (49 estados suportados: 40 motores de tributação + 9 sem imposto; DC e NM recusados aguardando arquivos de referência oficiais)."
+    },
+    "projectScheduling": {
+      "title": "Cronograma de projetos",
+      "description": "Gráficos de Gantt, caminho crítico e nivelamento de recursos para cronogramas."
+    },
+    "inventory": {
+      "title": "Estoque",
+      "description": "Rastreio de estoque, locais, custeio de itens e kits."
+    },
+    "equipment": {
+      "title": "Equipamentos e locações",
+      "description": "Unidades de equipamento, escadas de taxas e cobranças de uso nas obras."
+    },
+    "expenses": {
+      "title": "Relatórios de despesas",
+      "description": "Captura, aprovação e reembolso de despesas de funcionários."
+    },
+    "multiSubsidiary": {
+      "title": "Multifiliais",
+      "description": "Opere mais de uma entidade jurídica com moeda e livros próprios, depois consolide. Liga subsidiárias, intercompany e câmbio consolidado."
+    },
+    "multiCurrency": {
+      "title": "Multimoeda",
+      "description": "Transacione em moedas além da base, com câmbio, reavaliação e ganhos e perdas cambiais realizados/não realizados. Liga o feed de câmbio e tabelas de taxas."
+    },
+    "banking": {
+      "title": "Bancos",
+      "description": "Feeds bancários, matching de extratos, conciliação e regras."
+    },
+    "fixedAssets": {
+      "title": "Imobilizado",
+      "description": "Registros de ativos, livros de depreciação e depreciação fiscal."
+    },
+    "budgets": {
+      "title": "Orçamentos",
+      "description": "Orçamento por conta e dimensão com comparação em relatórios."
+    },
+    "continuousClose": {
+      "title": "Fechamento contínuo",
+      "description": "Verificações de fechamento sempre ligadas além do fechamento do período."
+    },
+    "advancedClose": {
+      "title": "Governança avançada de fechamento",
+      "description": "Blueprints de fechamento com muitas evidências, roteamento de aprovação independente, travas controladas e publicação governada do pacote. O fechamento mensal núcleo segue disponível com isto desligado."
+    },
+    "flows": {
+      "title": "Fluxos e aprovações",
+      "description": "Automação de workflow: gatilhos, condições, portões de aprovação."
+    },
+    "apps": {
+      "title": "Apps",
+      "description": "Pacotes de apps e a Biblioteca de apps."
+    },
+    "scripts": {
+      "title": "Scripts",
+      "description": "Rode JavaScript em sandbox em pontos de gatilho controlados de transação, agenda, lote, cliente e endpoint."
+    },
+    "apiAccess": {
+      "title": "API REST",
+      "description": "Crie chaves de API com escopo e exponha a REST API versionada, ciente de tenant, e sua referência ao vivo."
+    },
+    "mcpAccess": {
+      "title": "Acesso MCP",
+      "description": "Exponha ferramentas governadas do OpenBooks a clientes MCP via autenticação de chave de API com escopo."
+    },
+    "queryConsole": {
+      "title": "Console de consultas",
+      "description": "Permita que usuários autorizados rodem SQL só-leitura, com escopo de tenant, contra o schema vivo de relatórios."
+    },
     "bankFeeds": {
       "title": "Bank Feeds",
-      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+      "description": "Conectividade bancária automatizada — entregas de arquivo SFTP e feeds ao vivo de Plaid, GoCardless e TrueLayer."
     },
     "subscriptionBilling": {
-      "title": "Subscription Billing",
-      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+      "title": "Faturamento de assinaturas",
+      "description": "Planos e assinaturas que geram faturas recorrentes automaticamente (SaaS / contrato de avença)."
+    },
+    "advancedSubscriptions": {
+      "title": "Ciclo de vida avançado de assinaturas",
+      "description": "Planos versionados, múltiplos componentes, trials, renovações, co-terminação, aditivos e faturamento antecipado ou postecipado."
+    },
+    "subcontracts": {
+      "title": "Subcontratos e faturamento de progresso",
+      "description": "Compromissos com fornecedores, alterações de subcontrato, SOVs e medições de fornecedores, retenções a pagar, liberações, cheques conjuntos e travas de pagamento."
+    },
+    "wipBilling": {
+      "title": "Trabalhos em curso e pré-faturamento",
+      "description": "Revise trabalho faturável de obras, trave ou ajuste linhas com evidência, aprove pré-faturas e monitore aging de WIP, realização e vazamento."
+    },
+    "propertyManagement": {
+      "title": "Gestão imobiliária",
+      "description": "Imóveis, unidades, locações, aluguel recorrente, reajustes, multas, cauções e conciliação de CAM."
     },
     "onlinePayments": {
       "title": "Pagamentos online",
       "description": "Links de pagamento hospedados nas faturas (Stripe / Adyen / débito GoCardless), regras de tarifa e webhooks que baixam recebimentos automaticamente."
     },
-    "advancedClose": {
-      "title": "Governança avançada de fechamento"
-    },
-    "advancedSubscriptions": {
-      "title": "Ciclo de vida avançado de assinaturas"
+    "subcontractorCompliance": {
+      "title": "Conformidade de subcontratados",
+      "description": "Certificados de seguro, quitações e declarações informativas 1099-NEC/MISC e T4A, com travas de pagamento quando a cobertura do subcontratado vence."
     },
     "allocations": {
-      "title": "Rateios"
+      "title": "Rateios",
+      "description": "Um modelo de regras versionado que distribui custo em pool aos destinos por um direcionador: chaves de distribuição no lançamento, linhas extras no razão na contabilização e varreduras agendadas de fim de período, com linhagem completa."
     },
     "allocationsAtEntry": {
-      "title": "Rateios no lançamento"
+      "title": "Rateios no lançamento",
+      "description": "Deixe regras de rateio explodirem uma linha de documento salva num grupo de linhas filhas entre contas e dimensões."
     },
     "allocationsAtPosting": {
-      "title": "Rateios na contabilização"
+      "title": "Rateios na contabilização",
+      "description": "Deixe regras de rateio e scripts autorizados contribuírem linhas extras no razão para o lançamento contábil da transação na contabilização."
+    }
+  },
+  "backupsManager": {
+    "errors": {
+      "couldNotSave": "não foi possível salvar a política de backup",
+      "couldNotStart": "não foi possível iniciar o backup",
+      "couldNotDelete": "não foi possível excluir o backup"
     },
-    "apiAccess": {
-      "title": "API REST"
+    "toasts": {
+      "scheduleSaved": "Agenda de backup salva",
+      "scheduleOff": "Backups agendados desligados",
+      "started": "Backup iniciado — aparecerá abaixo",
+      "deleted": "Backup excluído"
     },
-    "mcpAccess": {
-      "title": "Acesso MCP"
+    "deleteConfirm": "Excluir o backup armazenado{fileName}? Não dá para desfazer.",
+    "alerts": {
+      "noObjectStorageTitle": "Armazenamento de objetos não configurado",
+      "noObjectStorageBody": "Este deploy não tem armazenamento de objetos S3 (S3_ENDPOINT / S3_BUCKET / credenciais), então backups armazenados e agendados estão indisponíveis. O download direto pelo navegador é propositalmente desativado porque não entrega evidência hash de nível de restauração. Use o fluxo de operador <cli>backup-local-cli.ts</cli>.",
+      "workerOfflineTitle": "Worker de fundo offline",
+      "workerOfflineBody": "Backups armazenados e agendados rodam no worker de fundo, que não reporta há um tempo. Novas execuções ficam na fila até ele iniciar."
     },
-    "multiCurrency": {
-      "title": "Multimoeda"
+    "exportsCard": {
+      "title": "Exportações nível-restauração",
+      "body": "Crie um backup armazenado abaixo, depois baixe seu <archive>Archive</archive> e <manifest>Manifest</manifest>. O manifesto carrega o SHA-256 completo e as contagens exigidas pela CLI de restauração; mantenha os dois arquivos juntos. Um arquivo cru baixado pelo navegador sem essa evidência não é aceito como entrada de restauração."
     },
-    "multiSubsidiary": {
-      "title": "Multifiliais"
+    "autoCard": {
+      "title": "Backups automáticos",
+      "body": "Backup para o armazenamento de objetos S3 do deploy numa agenda. Só os <keep>keep</keep> backups mais novos são mantidos — os mais antigos rodam para fora sozinhos após cada execução com sucesso.",
+      "enabled": "Ativado",
+      "frequency": "Periodicidade",
+      "daily": "Diário",
+      "weekly": "Semanal",
+      "monthly": "Mensal",
+      "dayOfWeek": "Dia da semana",
+      "dayOfMonth": "Dia do mês",
+      "timeUtc": "Hora (UTC)",
+      "keepNewest": "Manter mais novos",
+      "saveSchedule": "Salvar agenda",
+      "nextRun": "Próxima execução agendada: {when} (agenda UTC)",
+      "off": "Backups agendados desligados.",
+      "lastSuccess": " · Último backup com sucesso: {when}"
     },
-    "payroll": {
-      "title": "Folha de pagamento"
+    "storedCard": {
+      "title": "Backups armazenados",
+      "body": "Os {count} backups concluídos mais novos ficam no armazenamento de objetos; o resto roda para fora. Excluir um backup o remove do armazenamento na hora.",
+      "backUpNow": "Fazer backup agora",
+      "noneYet": "Sem backups armazenados ainda."
     },
-    "projectScheduling": {
-      "title": "Cronograma de projetos"
+    "weekdays": {
+      "0": "domingo",
+      "1": "segunda-feira",
+      "2": "terça-feira",
+      "3": "quarta-feira",
+      "4": "quinta-feira",
+      "5": "sexta-feira",
+      "6": "sábado"
     },
-    "propertyManagement": {
-      "title": "Gestão imobiliária"
+    "table": {
+      "created": "Criado em",
+      "kind": "Tipo",
+      "status": "Status",
+      "size": "Tamanho",
+      "contents": "Conteúdo",
+      "sha256": "SHA-256",
+      "retention": "Retenção",
+      "actionsSr": "Ações",
+      "rowsTables": "{rows} linhas · {tables} tabelas",
+      "purged": "expurgado ({reason}) · {when}",
+      "kept": "mantido",
+      "archive": "Arquivo",
+      "manifest": "Manifesto",
+      "delete": "Excluir",
+      "inProgress": "em andamento…"
+    }
+  },
+  "pageLayouts": {
+    "title": "Layouts de página",
+    "description": "Mude o que uma página mostra para todos nesta organização, ou volte ao layout que o app traz.",
+    "searchPlaceholder": "Pesquisar rotas e módulos",
+    "empty": "Nenhuma página corresponde à pesquisa.",
+    "summary": "{customized} de {total} páginas personalizadas.",
+    "columns": {
+      "route": "Rota",
+      "module": "Módulo",
+      "status": "Status",
+      "updated": "Atualizado em",
+      "note": "Nota"
     },
-    "queryConsole": {
-      "title": "Console de consultas"
+    "status": {
+      "filter": "Status",
+      "customized": "Personalizado",
+      "builtIn": "Nativo",
+      "personal": "Pessoal"
     },
-    "scripts": {
-      "title": "Scripts"
+    "tabs": {
+      "aria": "Seções do editor de layout",
+      "structure": "Estrutura",
+      "json": "Avançado",
+      "fields": "Campos disponíveis",
+      "preview": "Prévia",
+      "history": "Histórico"
     },
-    "subcontracts": {
-      "title": "Subcontratos e faturamento de progresso"
+    "outline": {
+      "header": "Cabeçalho",
+      "body": "Corpo",
+      "count": "{count, plural, one {# parte} other {# partes}}",
+      "conditional": "Às vezes oculto",
+      "moveUp": "Mover para cima",
+      "moveDown": "Mover para baixo",
+      "hide": "Ocultar este bloco"
     },
-    "wipBilling": {
-      "title": "Trabalhos em curso e pré-faturamento"
+    "blocks": {
+      "page-header": "Cabeçalho da página",
+      "filter-bar": "Barra de filtros",
+      "summary-line": "Linha de resumo",
+      "paper": "Folha de relatório",
+      "table": "Tabela",
+      "pagination": "Paginação",
+      "text": "Texto",
+      "widget": "Componente",
+      "grid": "Grupo",
+      "heading": "Título",
+      "panel": "Painel",
+      "stat-tile": "Cartão de indicador",
+      "repeat": "Grupo repetido",
+      "frame": "Moldura"
+    },
+    "fields": {
+      "help": "Caminhos que um layout pode vincular, vindos dos dados da própria página. Caminhos recuados pertencem a uma linha da lista acima deles.",
+      "truncated": "Alguns campos mais fundos ficaram de fora para manter a lista legível.",
+      "count": "{count, plural, one {# linha} other {# linhas}}"
+    },
+    "drawer": {
+      "builtIn": "Esta página renderiza o layout que o app traz.",
+      "customized": "Esta página renderiza o layout da sua organização.",
+      "replacesWarning": "Um layout salvo substitui a página nativa em vez de remendá-la, então melhorias futuras desta página não aparecem até você remover a personalização.",
+      "note": "Nota",
+      "notePlaceholder": "Por que esta página mudou",
+      "customizedByYou": "Esta página renderiza seu layout pessoal."
+    },
+    "unavailable": {
+      "segment": "Esta rota precisa de um registro para mostrar — adicione ?param.{segment}=… ao endereço para editá-la.",
+      "redirect": "Esta página manda você para {href} em vez de renderizar. Em geral é uma permissão que você não tem ou uma funcionalidade desligada.",
+      "notFound": "Esta página responde “não encontrado” para você, então não há layout para ler.",
+      "empty": "Esta página não renderiza nada para você, então não há layout para ler."
+    },
+    "errors": {
+      "json": "Isto não é JSON válido: {message}"
+    },
+    "actions": {
+      "save": "Salvar layout",
+      "validate": "Verificar",
+      "undo": "Desfazer",
+      "remove": "Remover personalização",
+      "saved": "Layout salvo.",
+      "validated": "Este layout é válido.",
+      "removed": "Personalização removida; a página renderiza o layout nativo.",
+      "openPreview": "Abrir prévia",
+      "restore": "Restaurar",
+      "restored": "Essa versão voltou a valer."
+    },
+    "preview": {
+      "help": "Abre a página real renderizada com seu layout não salvo. Só você vê, e para de valer após 30 minutos.",
+      "newTab": "Abre em nova aba: o app se recusa a aparecer dentro de um frame, que é a proteção que impede outro site de embutir suas páginas.",
+      "opened": "Aberto"
+    },
+    "history": {
+      "help": "Cada layout salvo para esta rota. Salvamentos nunca apagam o anterior, então dá para desfazer uma edição depois.",
+      "empty": "Esta página nunca foi personalizada.",
+      "active": "Valendo agora",
+      "loading": "Carregando…"
+    },
+    "scope": {
+      "legend": "Para quem é este layout?",
+      "org": "Todos nesta organização",
+      "user": "Só eu",
+      "orgHelp": "Muda a página para cada pessoa aqui. É a escolha usual.",
+      "userHelp": "Muda a página só para você, e deixa todos os outros no layout da organização."
+    }
+  },
+  "extensions": {
+    "title": "Apps",
+    "description": "Crie, importe, edite e gerencie apps para sua organização.",
+    "searchPlaceholder": "Pesquisar apps…",
+    "status": "Status",
+    "statuses": {
+      "installed": "Instalado",
+      "disabled": "Desativado",
+      "awaitingApproval": "Aguardando aprovação"
+    },
+    "columns": {
+      "name": "Nome",
+      "key": "Chave",
+      "version": "Versão",
+      "contents": "Conteúdo",
+      "status": "Status",
+      "updated": "Atualizado em"
+    },
+    "empty": "Sem apps correspondentes. Crie um app para começar.",
+    "actions": {
+      "new": "Novo app",
+      "deactivate": "Desativar",
+      "reactivate": "Reativar",
+      "publish": "Publicar na biblioteca",
+      "advanced": "Origem avançada do pacote",
+      "updateListing": "Atualizar vitrine da biblioteca",
+      "drafts": "Rascunhos aguardando revisão"
+    },
+    "request": {
+      "help": "Descreva o app de que você precisa e construa com o assistente, ou parta de um pacote abaixo.",
+      "brief": "O que você gostaria de construir?",
+      "placeholder": "Por exemplo: um workspace de inspeção de equipamentos com checklists, notas e histórico de inspeções.",
+      "reviewHelp": "Dá para visualizar e pedir mudanças antes de ativar qualquer coisa. Agentes conectados também podem preparar rascunhos pelas ferramentas de app.",
+      "start": "Construir com assistente",
+      "agentInstruction": "Construa um app para este pedido. Comece por describe_app_vocabulary. Use draft_app para preparar um pacote não publicado e me dê seus links de revisão e prévia. Peça só requisitos de negócio ausentes. Não ative até eu revisar.",
+      "agentHelp": "Guia de autoria de apps"
+    },
+    "draft": {
+      "title": "Revisão de rascunho",
+      "pending": "Aguardando revisão",
+      "proposalNotes": "Notas da proposta",
+      "reviewTab": "Mudanças e acesso",
+      "nativeApp": "App nativo",
+      "customApp": "Interface personalizada",
+      "screenCount": "Telas",
+      "workspaceCount": "Tipos de registro",
+      "actionCount": "Ações",
+      "explore": "Explorar o app",
+      "exploreHelp": "Abra uma tela para testar layout e formulários com dados de exemplo.",
+      "reviewReady": "Revise antes de ativar",
+      "screenKind": {
+        "records": "Workspace de registros",
+        "action": "Formulário de ação",
+        "page": "Página"
+      },
+      "failed": "O app não pôde ser ativado.",
+      "previewNotice": "Prévia não publicada · Só dados de exemplo. Teste a lista e os formulários; mudanças não são salvas e ações de backend não rodam.",
+      "unpublished": "Esta proposta não está ativa. Revise telas, acesso pedido e mudanças antes de ativar.",
+      "preview": "Prévia",
+      "revise": "Pedir mudanças",
+      "contents": "Conteúdo do pacote",
+      "recordType": "Workspace de registros: {name}",
+      "field": "Campo personalizado: {name}",
+      "action": "Ação de backend: {name}",
+      "files": "{count} arquivos no pacote",
+      "permissions": "Acesso pedido",
+      "noPermissions": "Nenhuma permissão de plataforma pedida.",
+      "source": "Avançado: origem e fingerprint do pacote",
+      "confirm": "Revisei esta versão e seu acesso pedido.",
+      "activate": "Ativar app",
+      "closed": "Este rascunho já foi aplicado ou substituído.",
+      "changes": "Mudanças desde a versão instalada",
+      "newPackage": "Novo app",
+      "added": "Adicionado",
+      "changed": "Alterado",
+      "removed": "Removido",
+      "retainedData": "Remover uma definição do pacote não apaga registros existentes nem histórico de auditoria.",
+      "discard": "Descartar rascunho",
+      "page": "Personalização de página: {name}",
+      "nav": "Entrada de navegação: {name}",
+      "setting": "Definição: {name}",
+      "permission": "Permissão: {name}",
+      "previewPage": "Página de prévia: {route}",
+      "editPackage": "Editar pacote",
+      "backToReview": "Voltar à revisão",
+      "discardEdits": "Descartar mudanças não salvas do pacote?",
+      "discardConfirm": "Descartar este rascunho? O pacote pendente é excluído. Nada ativo muda.",
+      "saveEditsFirst": "Salve suas mudanças do pacote como novo rascunho antes de ativar.",
+      "grants": "Concessões desta versão: {permissions}"
+    },
+    "native": {
+      "sampleValue": "{field} de exemplo {number}",
+      "sampleNumber": "Exemplo {number}",
+      "sampleReference": "Referência de exemplo",
+      "sampleOnly": "Mudanças da prévia não são salvas.",
+      "actionFailed": "A ação não pôde ser concluída. Tente de novo para conferir o mesmo envio.",
+      "actionComplete": "Ação concluída.",
+      "actionRunning": "Trabalhando…",
+      "previewAction": "Só prévia do formulário. Ações de backend rodam após a ativação, usando a versão instalada e suas permissões.",
+      "previewRecords": "Prévia do formulário usando a definição de registro proposta. Após a ativação, este workspace usa a lista compartilhada, filtros e painéis laterais.",
+      "existingRecordsPreview": "Esta tela referencia um tipo de registro existente. Registros reais ficam disponíveis após a ativação para usuários com acesso."
     }
   }
 }
