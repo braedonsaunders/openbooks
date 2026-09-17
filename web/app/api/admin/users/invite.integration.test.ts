@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
 
 // Invite-user vertical slice: POST action=invite → user row with an
@@ -92,13 +92,18 @@ const skip = !process.env.OPENBOOKS_DB_URL;
 const NEW_EMAIL = "new.member@scratch.test";
 
 async function seed(rolePermissions: string[] = []) {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Invite actor", "invite_actor");
-  const roleId = (
-    await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-      values (${org.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`)
-  ).rows[0]!.id;
-  await db.execute(sql`update orgs set env_kind = 'production' where id = ${org.orgId}`);
+  // Fixture seeding runs under bypass (exactly what the pooled fixture path
+  // does): the shared cluster enforces RLS and CI's superuser role hides it.
+  const { org, actorId, roleId } = await withBypassContext(async () => {
+    const scratch = await createScratchOrg();
+    const actor = await createScratchUser(scratch.orgId, "Invite actor", "invite_actor");
+    const role = (
+      await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${scratch.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`)
+    ).rows[0]!.id;
+    await db.execute(sql`update orgs set env_kind = 'production' where id = ${scratch.orgId}`);
+    return { org: scratch, actorId: actor, roleId: role };
+  });
   state.authz = {
     user: { orgId: org.orgId, id: actorId, isSuperAdmin: false },
     permissions: new Set(["admin.users.manage"]),
@@ -121,8 +126,9 @@ const invite = (body: object) =>
   );
 
 async function userRow(f: Fixture, email: string = NEW_EMAIL) {
+  // Reads stay tenant-scoped via withOrgContext — the production read path.
   return (
-    await db.execute<{
+    await withOrgContext(f.orgId, () => db.execute<{
       id: string;
       name: string;
       email: string;
@@ -130,7 +136,7 @@ async function userRow(f: Fixture, email: string = NEW_EMAIL) {
       is_active: boolean;
       last_login_at: string | null;
     }>(sql`select id, name, email, password_hash, is_active, last_login_at
-      from users where org_id = ${f.orgId} and lower(email) = ${email}`)
+      from users where org_id = ${f.orgId} and lower(email) = ${email}`))
   ).rows[0];
 }
 
@@ -152,25 +158,27 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
     assert.equal(user.password_hash, "unusable");
 
     const assignment = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from role_assignments
-        where org_id = ${f.orgId} and user_id = ${user!.id} and role_id = ${f.roleId}`)
+      await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from role_assignments
+        where org_id = ${f.orgId} and user_id = ${user!.id} and role_id = ${f.roleId}`))
     ).rows[0]!.n;
     assert.equal(assignment, 1);
     const userAudit = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
-        where org_id = ${f.orgId} and table_name = 'users' and row_id = ${user!.id} and action = 'insert'`)
+      await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
+        where org_id = ${f.orgId} and table_name = 'users' and row_id = ${user!.id} and action = 'insert'`))
     ).rows[0]!.n;
     const assignmentAudit = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
+      await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
         where org_id = ${f.orgId} and table_name = 'role_assignments' and action = 'insert'
-          and row_id in (select id from role_assignments where org_id = ${f.orgId} and user_id = ${user!.id})`)
+          and row_id in (select id from role_assignments where org_id = ${f.orgId} and user_id = ${user!.id})`))
     ).rows[0]!.n;
     assert.equal(userAudit, 1, "user creation is audited");
     assert.equal(assignmentAudit, 1, "role assignment is audited");
 
+    // auth_password_resets carries no org_id, so this read keeps the
+    // bypass CI runs under rather than a tenant scope it cannot express.
     const resets = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
-        where user_id = ${user!.id} and used_at is null and expires_at > now()`)
+      await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
+        where user_id = ${user!.id} and used_at is null and expires_at > now()`))
     ).rows[0]!.n;
     assert.equal(resets, 1);
     assert.equal(state.deliveries.length, 1);
@@ -183,7 +191,9 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
 
     // The real Users loader shows the invite as pending while the
     // set-password link is outstanding.
-    const pending = await loadAdminUsers({});
+    // The loader resolves its tenant from the request scope in production;
+    // standalone there is none, so the test supplies it explicitly.
+    const pending = await withOrgContext(f.orgId, () => loadAdminUsers({}));
     const pendingRow = pending.users.find((row) => row.email === NEW_EMAIL);
     assert.ok(pendingRow, "the invited user is listed");
     assert.equal(pendingRow.isPending, true);
@@ -194,8 +204,8 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
     const token = new URL(state.deliveries[0]!.text, "https://books.example.test").searchParams.get("token")!;
     assert.deepEqual(await completePasswordReset(token, "A brand new password 1042"), { ok: true });
 
-    await db.execute(sql`update users set last_login_at = now() where id = ${user!.id}`);
-    const settled = await loadAdminUsers({});
+    await withBypassContext(() => db.execute(sql`update users set last_login_at = now() where id = ${user!.id}`));
+    const settled = await withOrgContext(f.orgId, () => loadAdminUsers({}));
     const settledRow = settled.users.find((row) => row.email === NEW_EMAIL);
     assert.equal(settledRow!.isPending, false);
     assert.equal(settledRow!.statusLabel, "statusActive");
@@ -239,8 +249,8 @@ test("a second invite for the same address conflicts without duplicating the use
     const retry = await invite({ action: "invite", email: "New.Member@scratch.test", roleId: f.roleId });
     assert.equal(retry.status, 409);
     const count = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from users
-        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`)
+      await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from users
+        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`))
     ).rows[0]!.n;
     assert.equal(count, 1);
   } finally {
@@ -258,8 +268,8 @@ test("concurrent invites for one address create a single user", { skip }, async 
     ]);
     assert.deepEqual([first.status, second.status].sort(), [200, 409]);
     const count = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from users
-        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`)
+      await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from users
+        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`))
     ).rows[0]!.n;
     assert.equal(count, 1);
   } finally {
