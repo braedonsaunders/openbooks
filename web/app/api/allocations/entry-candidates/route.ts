@@ -55,14 +55,15 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
  * engine/src/allocations/match.ts), with the winner flagged `recommended`.
  * Without it — the header-level "Apply distributions" presence check — every
  * entry rule in effect is returned with its policy and no matching runs.
+ *
+ * A named kind no rule in effect covers answers `{ rules: [] }` without
+ * consulting the feature gates, so editors for out-of-domain kinds never
+ * 404; kinds with candidates still refuse when entry is off.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   const gate = await guardPermission('allocations.read')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-
-  if (!(await isFeatureEnabled(user.orgId, 'allocations'))) return refused()
-  if (!(await isFeatureEnabled(user.orgId, 'allocationsAtEntry'))) return refused()
 
   const query = new URL(request.url).searchParams
   const param = (name: string): string | undefined => {
@@ -96,6 +97,25 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const inEffect = await listEntryRulesInEffect({ orgId: user.orgId, mode: 'entry', asOf: documentDate })
   const inPolicy = policy === undefined ? inEffect : inEffect.filter((c) => c.version.applyPolicy === policy)
+
+  // A kind no entry rule covers has no candidates whatever the gate says:
+  // answer the empty set instead of refusing, so draft editors for
+  // out-of-domain kinds (checks, vendor bills, deposits…) never litter
+  // the console with 404s. Kinds with candidates still pass through the
+  // feature gates below, which keep refusing when entry is off.
+  if (
+    documentKind !== undefined &&
+    inPolicy.length > 0 &&
+    !inPolicy.some((candidate) => {
+      const kinds = candidate.version.documentKinds
+      return !kinds || kinds.length === 0 || kinds.includes(documentKind)
+    })
+  ) {
+    return NextResponse.json({ rules: [] })
+  }
+
+  if (!(await isFeatureEnabled(user.orgId, 'allocations'))) return refused()
+  if (!(await isFeatureEnabled(user.orgId, 'allocationsAtEntry'))) return refused()
 
   if (ids.accountId === undefined) {
     return NextResponse.json({ rules: inPolicy.map((candidate) => toCandidate(candidate, false)) })
