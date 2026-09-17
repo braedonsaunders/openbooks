@@ -31,6 +31,7 @@ import accountingHome from './accounting.json'
 import customersHome from './customers.json'
 import purchasingHome from './purchasing.json'
 import continuousClose from './continuous-close.json'
+import agents from './agents.json'
 import customization from './customization.json'
 import pdfTemplates from './pdfTemplates.json'
 import entities from './entities.json'
@@ -89,6 +90,7 @@ export default {
   customers: customersHome,
   purchasing: purchasingHome,
   continuousClose,
+  agents,
   customization,
   pdfTemplates,
   entities,

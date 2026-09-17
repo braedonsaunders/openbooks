@@ -1685,6 +1685,55 @@ test('ar collections copy ships translated in every locale', () => {
   }
 })
 
+test('agent workbench copy ships translated in every locale', () => {
+  // F-x6-002: the agents namespace (89 keys) existed only in en/fr/es —
+  // de/ja/zh/pt-BR rendered English inside otherwise translated screens.
+  // Every leaf must exist, keep its ICU placeholders, and differ from
+  // English except for reviewed cognates, pinned to the exact term.
+  const identicalByFact = new Set([
+    'de:agents.facets.pack|Pack',
+    'de:agents.facets.status|Status',
+    'de:agents.tabs.briefing|Briefing',
+    'de:agents.drawer.assignment.team|Team',
+    'de:agents.drawer.assignment.roles.administrator|Administrator',
+    'de:agents.drawer.assignment.roles.controller|Controller',
+    'pt-BR:agents.drawer.assignment.roles.controller|Controller',
+    'pt-BR:agents.facets.status|Status',
+    'fr:agents.metaTitle|Agents',
+    'fr:agents.title|Agents',
+    'fr:agents.tabs.briefing|Briefing',
+    'fr:agents.drawer.notes.title|Notes',
+  ])
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()].filter((key) => key.startsWith('agents.'))
+  assert.equal(wanted.length, 89, 'agents source inventory changed; translate the new keys everywhere and re-pin')
+  for (const key of wanted) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...identicalByFact].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const drift = wanted.filter((key) => {
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} agents translations drop or rename ICU placeholders`)
+  }
+})
+
 test('payroll navigation chrome is translated in every locale', () => {
   // F-t08-018: the payroll module rendered fully English under fr while the
   // shell translated — the namespace had 5 keys per locale against 1077 in

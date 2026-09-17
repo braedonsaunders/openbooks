@@ -1,0 +1,123 @@
+{
+  "metaTitle": "Agentes",
+  "title": "Agentes",
+  "description": "Todos os achados dos agentes em uma caixa de entrada priorizada — faça a triagem, aplique propostas e comece o dia informado.",
+  "configure": "Configurar agentes",
+  "search": "Buscar achados…",
+  "facets": {
+    "pack": "Agente",
+    "severity": "Severidade",
+    "status": "Status",
+    "subsidiary": "Subsidiária",
+    "proposal": "Proposta",
+    "all": "Todos",
+    "withProposal": "Com proposta",
+    "unresolved": "Sem subsidiária vinculada",
+    "assignment": "Atribuição",
+    "assignedToMe": "Atribuídos a mim",
+    "unassigned": "Não atribuído",
+    "overdue": "Vencido",
+    "since": "Desde"
+  },
+  "subsidiaryHelp": "A subsidiária é resolvida a partir de achados vinculados a contas; os demais ficam sem atribuição.",
+  "lastVisit": "Novidades desde {date}",
+  "markSeen": "Marcar como visto",
+  "triage": {
+    "hint": "j/k mover · Enter abrir · x selecionar · a aplicar (painel) · d dispensar (painel) · s guardar em revisão",
+    "selected": "{count, plural, one {# selecionado} other {# selecionados}}",
+    "review": "Iniciar revisão",
+    "resolve": "Resolver",
+    "clear": "Limpar"
+  },
+  "empty": {
+    "title": "Caixa de entrada vazia",
+    "description": "Nenhum achado corresponde a estes filtros.",
+    "action": "Limpar filtros"
+  },
+  "proposal": {
+    "badge": "Proposta"
+  },
+  "tabs": {
+    "ariaLabel": "Seções dos agentes",
+    "inbox": "Caixa de entrada",
+    "proposals": "Propostas",
+    "briefing": "Resumo",
+    "activity": "Atividade"
+  },
+  "briefing": {
+    "title": "Resumo matinal",
+    "generate": "Gerar resumo",
+    "generating": "Gerando…",
+    "send": "Enviar por e-mail",
+    "sent": "Resumo enviado.",
+    "sendFailed": "Não foi possível enfileirar o e-mail.",
+    "empty": "Ainda não há resumo hoje.",
+    "noAi": "O resumo precisa de um modelo de IA configurado.",
+    "generatedAt": "Gerado em {date}",
+    "errors": {
+      "failed": "Não foi possível concluir a ação.",
+      "ai_not_configured": "A IA não está configurada para esta organização.",
+      "briefing_empty": "O modelo devolveu um resumo vazio.",
+      "briefing_failed": "Falha na geração do resumo.",
+      "no_briefing": "Ainda não há resumo para enviar.",
+      "invalid_action": "Ação desconhecida."
+    }
+  },
+  "lane": {
+    "emptyTitle": "Sem propostas",
+    "emptyDescription": "Nenhum achado traz proposta no momento."
+  },
+  "drawer": {
+    "askAboutThis": "Perguntar sobre isto",
+    "askAboutThisHint": "Abrir o chat com a evidência deste achado anexada",
+    "assignment": {
+      "title": "Atribuição",
+      "unassigned": "Sem atribuição — escolha um responsável ou equipe abaixo.",
+      "owner": "Responsável",
+      "team": "Equipe",
+      "nobody": "Ninguém",
+      "noTeam": "Sem equipe",
+      "roles": {
+        "accountant": "Contador",
+        "administrator": "Administrador",
+        "approver": "Aprovador",
+        "controller": "Controller",
+        "salesManager": "Gerente de vendas",
+        "salesRepresentative": "Representante de vendas",
+        "viewer": "Visualizador"
+      },
+      "due": "Vence",
+      "overdue": "Vencido",
+      "save": "Salvar",
+      "clear": "Limpar",
+      "saved": "Atribuição atualizada.",
+      "saveFailed": "Não foi possível atualizar a atribuição."
+    },
+    "notes": {
+      "title": "Notas",
+      "empty": "Ainda não há notas.",
+      "placeholder": "Adicione uma nota…",
+      "add": "Adicionar nota",
+      "added": "Nota adicionada.",
+      "addFailed": "Não foi possível adicionar a nota."
+    }
+  },
+  "assignment": {
+    "unassigned": "Não atribuído"
+  },
+  "since": {
+    "day": "Últimas 24 horas",
+    "week": "Últimos 7 dias"
+  },
+  "columns": {
+    "age": "Idade",
+    "due": "Vencimento"
+  },
+  "kpis": {
+    "open": "Achados abertos",
+    "proposals": "Propostas pendentes",
+    "overdue": "Atribuições vencidas",
+    "lastRun": "Última execução",
+    "never": "Nunca"
+  }
+}
