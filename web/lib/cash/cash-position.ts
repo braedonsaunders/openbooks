@@ -57,8 +57,10 @@ export function buildTimeline(args: {
   apByWeek: Map<string, ForecastEntry[]>;
   categories: CategoryWeekly[];
   apSettings: ApSettings;
+  /** BCP-47 locale for week labels (F-t04-010); defaults to en-US. */
+  locale?: string;
 }): TimelineResult {
-  const { weekStarts, startingCash, arByWeek, apByWeek, categories, apSettings } = args;
+  const { weekStarts, startingCash, arByWeek, apByWeek, categories, apSettings, locale = "en-US" } = args;
   const weeklyCap = normalizeMoneyValue(apSettings.weeklyCap);
   const schedulingOn = compareMoney(weeklyCap, ZERO_MONEY) > 0 || apSettings.restrictToSafe;
 
@@ -124,7 +126,7 @@ export function buildTimeline(args: {
     weeks.push({
       weekStart: k,
       weekEnd: toISO(addDays(cur, 6)),
-      label: `${weekLabel(cur)} – ${weekLabel(addDays(cur, 6))}`,
+      label: `${weekLabel(cur, locale)} – ${weekLabel(addDays(cur, 6), locale)}`,
       inflow,
       outflow,
       net,

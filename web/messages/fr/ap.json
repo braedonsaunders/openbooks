@@ -97,5 +97,56 @@
     "createDraftFailed": "Impossible de créer un brouillon",
     "deleted": "Document supprimé",
     "deleteFailed": "Échec de la suppression"
+  },
+  "cockpit": {
+    "title": "Comptes fournisseurs",
+    "description": "Votre centre de contrôle des dettes — ce que vous devez, ce qui est en retard et ce qu’il faut payer cette semaine.",
+    "tabs": {
+      "overview": "Aperçu",
+      "bills": "Factures"
+    },
+    "current": "à jour",
+    "vendor": "Fournisseur",
+    "overdueCol": "En retard",
+    "openCol": "Ouvert",
+    "noPayables": "Aucune dette ouverte. Vous êtes à jour.",
+    "stats": {
+      "openPayables": "Dettes ouvertes",
+      "overdue": "En retard",
+      "overdueSub": "{count} factures · {pct} des dettes",
+      "dueThisWeek": "Échéance cette semaine",
+      "next30": "30 prochains jours",
+      "dpo": "Délai de paiement (DPO)",
+      "dpoSub": "Jours moyens de paiement",
+      "days": "{n} j"
+    },
+    "panels": {
+      "payRun": "Planificateur de paiements",
+      "payRunHint": "Factures prévues cette semaine — sélectionnez et créez un lot de paiement",
+      "payRunHintScheduled": "Recommandé selon votre capacité hebdomadaire — les plus anciennes d’abord",
+      "aging": "Ancienneté des dettes",
+      "schedule": "Calendrier des décaissements",
+      "scheduleHint": "Paiements prévus sur {weeks} semaines",
+      "byVendor": "Dettes par fournisseur"
+    },
+    "payRun": {
+      "noCap": "Échéance cette semaine",
+      "weeklyCap": "Plafond hebdomadaire",
+      "safeCapacity": "Capacité sûre",
+      "startingCash": "Trésorerie disponible {amount}",
+      "overCap": "Capacité dépassée",
+      "deferred": "{amount} reporté aux semaines suivantes",
+      "selected": "{count} sélection(s)",
+      "build": "Créer un lot de paiement",
+      "empty": "Aucune facture prévue cette semaine."
+    },
+    "deferralNote": "{amount} de dettes ne peuvent pas être payées dans l’horizon avec les paramètres actuels — le retard dépasse la dernière semaine. Ajustez le plafond dans la configuration des prévisions de trésorerie.",
+    "forecastLink": {
+      "pre": "Envie de modéliser les semaines à venir ?",
+      "link": "Ouvrir les prévisions de trésorerie"
+    },
+    "configure": "Configurer",
+    "configTitle": "Règle de sélection des paiements",
+    "configDescription": "Comment le lot de paiement de cette semaine est choisi — le plafond hebdomadaire, le garde-fou de capacité sûre et le modèle de planification derrière la recommandation."
   }
 }

@@ -49,8 +49,8 @@ export const businessDay = (d: Date) => {
   if (day === 0) return addDays(d, 1);
   return d;
 };
-export const weekLabel = (d: Date) => {
-  const m = d.toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+export const weekLabel = (d: Date, locale = "en-US") => {
+  const m = d.toLocaleString(locale, { month: "short", day: "numeric", timeZone: "UTC" });
   return m;
 };
 
