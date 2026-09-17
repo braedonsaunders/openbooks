@@ -49,13 +49,16 @@ export interface AgingResult {
 }
 
 /**
- * Per-party document aging from the canonical maintained open balance. Source
- * migrations often contain complete remaining balances but not the historical
- * application rows needed to reconstruct them from gross ledger lines. Aging
- * those lines therefore wildly overstates imported AR/AP. `documents.open_balance`
- * is updated by native applications and imported from the source for cutover,
- * so it is the only source that is correct for both paths. Credits reduce the
- * party balance.
+ * Per-party document aging rebuilt from posted open-item journal lines, never
+ * from the live `documents.open_balance` cache: a later settlement must not
+ * rewrite a past aging, so gross lines minus applications dated on/before
+ * the report date is the only reconstruction that reproduces history.
+ * Imported cutover AR/AP is safe under this rebuild because a cache-only
+ * posted document cannot exist: the schema requires every posted document to
+ * carry a posted entry (`documents_posted_period_required`), `open_balance`
+ * itself is derived from that entry's lines (never imported as a bare
+ * value), and the sync mirror posts native documents through the same
+ * posting kernel. Credits reduce the party balance.
  *
  * Opens derive from STORED base amounts — the journal line's own `amount`
  * and the application's base carrying amount (`applications.amount`) — never

@@ -252,8 +252,9 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // statement views (stale/foreign ids throw via reportBookSelection), so an
   // explicit secondary-book export cannot silently return primary-book data
   // while the book-aware drill disagrees. When ?book= is absent the readers
-  // keep their primary-book default. Aging reads documents.open_balance and
-  // documents carry no book column, so it stays unscoped by design.
+  // keep their primary-book default. Aging rebuilds opens from posted journal
+  // lines rather than the documents.open_balance cache, and documents carry
+  // no book column, so it stays unscoped by design.
   const bookParam = p.get('book')
   const detailBookId = bookParam == null
     ? undefined
