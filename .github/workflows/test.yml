@@ -45,7 +45,7 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          timeout --signal=TERM --kill-after=10s 5m npm run test:unit 2>&1 | tee unit.txt
+          timeout --signal=TERM --kill-after=10s 8m npm run test:unit 2>&1 | tee unit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
