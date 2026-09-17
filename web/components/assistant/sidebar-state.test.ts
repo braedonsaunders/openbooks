@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  clearDeletedConversations,
+  forgetDeletedConversation,
+  isDeletedConversation,
   PROVISIONAL_TITLE_CHARS,
   provisionalTitle,
   reconcileConversations,
+  rememberDeletedConversation,
   removeConversationRow,
   renameConversationRow,
+  syncServerConversations,
   upsertProvisionalConversation,
+  withoutDeletedConversations,
   type SidebarConversation,
 } from "./sidebar-state";
 
@@ -67,6 +73,67 @@ test("a delete during streaming stays deleted after reconcile", () => {
   const local = removeConversationRow([row("new-9", "hello"), row("old-1")], "old-1");
   const { items } = reconcileConversations(local, [row("older-0")], new Set(["new-9"]));
   assert.deepEqual(items.map((c) => c.id), ["new-9", "older-0"]);
+});
+
+test("a tombstoned id is filtered from any server list, however stale", () => {
+  clearDeletedConversations();
+  try {
+    rememberDeletedConversation("gone-1");
+    const next = withoutDeletedConversations([row("gone-1"), row("kept-1")]);
+    assert.deepEqual(next.map((c) => c.id), ["kept-1"]);
+  } finally {
+    clearDeletedConversations();
+  }
+});
+
+test("forgetting a tombstone (failed delete) lets the server list show it again", () => {
+  clearDeletedConversations();
+  try {
+    rememberDeletedConversation("gone-1");
+    forgetDeletedConversation("gone-1");
+    const next = withoutDeletedConversations([row("gone-1"), row("kept-1")]);
+    assert.deepEqual(next.map((c) => c.id), ["gone-1", "kept-1"]);
+  } finally {
+    clearDeletedConversations();
+  }
+});
+
+test("sync drops a tombstoned id even when the server payload still carries it", () => {
+  clearDeletedConversations();
+  try {
+    rememberDeletedConversation("gone-1");
+    assert.ok(isDeletedConversation("gone-1"));
+    // Local state already dropped it; the stale server list still has it.
+    const { items } = syncServerConversations([row("kept-1")], [row("gone-1"), row("kept-1")], new Set(), null);
+    assert.deepEqual(items.map((c) => c.id), ["kept-1"]);
+  } finally {
+    clearDeletedConversations();
+  }
+});
+
+test("sync keeps the viewed thread outside the server window, never a tombstone", () => {
+  clearDeletedConversations();
+  try {
+    // Deep link into a long history: the server top-N omits the open chat.
+    const { items } = syncServerConversations(
+      [row("deep-1"), row("top-1")],
+      [row("top-1")],
+      new Set(),
+      "deep-1",
+    );
+    assert.deepEqual(items.map((c) => c.id), ["deep-1", "top-1"]);
+    // A tombstone on the viewed thread still wins: it stays gone.
+    rememberDeletedConversation("deep-1");
+    const { items: after } = syncServerConversations(
+      [row("top-1")],
+      [row("deep-1"), row("top-1")],
+      new Set(),
+      "deep-1",
+    );
+    assert.deepEqual(after.map((c) => c.id), ["top-1"]);
+  } finally {
+    clearDeletedConversations();
+  }
 });
 
 test("deleting the streaming thread itself drops its provisional pin", () => {

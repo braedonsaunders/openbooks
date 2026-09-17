@@ -31,11 +31,15 @@ import { Button, EmptyState, cn } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { MessageParts } from './message-parts'
 import {
+  forgetDeletedConversation,
   provisionalTitle,
   reconcileConversations,
+  rememberDeletedConversation,
   removeConversationRow,
   renameConversationRow,
+  syncServerConversations,
   upsertProvisionalConversation,
+  withoutDeletedConversations,
 } from './sidebar-state'
 import {
   anchorScrollTop,
@@ -156,7 +160,9 @@ export function AssistantApp({
   // turn store — never from view-local state — so switching chats,
   // remounting, or reloading re-adopts the same live progress.
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages.map(toChatMessage))
-  const [convos, setConvos] = useState(conversations)
+  // Seeded from the loader payload minus this tab's deletions: a remount may
+  // serve a stale prefetched list that still carries a deleted thread.
+  const [convos, setConvos] = useState(() => withoutDeletedConversations(conversations))
   const [currentId, setCurrentId] = useState<string | null>(activeId)
   // Provisional view key for a new chat until the server answers with its id.
   // (The begun store entry already renders the optimistic tail, so no
@@ -176,9 +182,11 @@ export function AssistantApp({
   // during render) so the viewed key is always current when handlers fire.
   const viewKeyRef = useRef<string | null>(null)
   const messagesRef = useRef<ChatMessage[]>([])
+  const convosRef = useRef<ConversationSummary[]>(convos)
   useEffect(() => {
     viewKeyRef.current = viewKey
     messagesRef.current = messages
+    convosRef.current = convos
   })
   // Re-render whenever the viewed conversation's turn entry changes. The
   // snapshot closes over this render's key (a primitive revision number, so
@@ -274,11 +282,12 @@ export function AssistantApp({
       const body = (await res.json()) as { items: ConversationSummary[] }
       // The server list is authoritative, except threads this client created
       // that the server does not know yet — a rename or delete issued
-      // mid-stream must not drop the streaming row.
+      // mid-stream must not drop the streaming row — and except threads this
+      // tab deleted, which a stale refetch may still carry.
       setConvos((prev) => {
         const { items, provisionalIds } = reconcileConversations(
           prev,
-          body.items,
+          withoutDeletedConversations(body.items),
           provisionalIdsRef.current,
         )
         provisionalIdsRef.current = provisionalIds
@@ -288,6 +297,25 @@ export function AssistantApp({
       // best-effort — the sidebar simply stays stale
     }
   }, [])
+
+  // Fold fresh loader payloads into the sidebar on navigation and refresh.
+  // State otherwise wins forever (useState seeds once), so a remount served
+  // from a stale prefetched payload would resurrect a thread this tab
+  // deleted — and the background revalidation that follows could never
+  // remove it. Tombstones make every payload honour the deletion; the
+  // provisional pins still protect a thread the server does not know yet.
+  useEffect(() => {
+    setConvos((prev) => {
+      const { items, provisionalIds } = syncServerConversations(
+        prev,
+        conversations,
+        provisionalIdsRef.current,
+        activeId,
+      )
+      provisionalIdsRef.current = provisionalIds
+      return items
+    })
+  }, [conversations, activeId])
 
   // Lightweight probe: is there any history above the given head? Resolves
   // the optimistic initial flag without loading a page.
@@ -665,24 +693,42 @@ export function AssistantApp({
   async function doDelete(id: string) {
     setMenuFor(null)
     if (!(await confirmDialog({ message: t('deleteConfirm'), tone: 'danger' }))) return
+    // Optimistic: the row leaves the sidebar now, and the tombstone lands
+    // before the round-trip so a stale refetch or a remount served from a
+    // prefetched payload cannot resurrect it while the DELETE is in flight.
+    const at = convosRef.current.findIndex((c) => c.id === id)
+    const snapshot = at >= 0 ? convosRef.current[at] : undefined
+    rememberDeletedConversation(id)
+    setConvos((items) => removeConversationRow(items, id))
     try {
       const res = await fetch(`/api/assistant/conversations/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
-      // Drop the provisional pin too, so the end-of-turn reconcile cannot
-      // resurrect a thread the user just deleted.
-      provisionalIdsRef.current.delete(id)
-      // This conversation's turn state only: other in-flight turns are
-      // untouched (different keys, different server runs).
-      dropTurn(id)
-      runIdsRef.current.delete(id)
-      setConvos((items) => removeConversationRow(items, id))
-      if (id === currentId) {
-        router.push('/assistant')
-      } else {
-        startTransition(() => router.refresh())
-      }
     } catch {
+      // Restore-on-failure: forget the tombstone first so the next sync or
+      // refetch may show the row again, then splice it back where it was.
+      forgetDeletedConversation(id)
+      if (snapshot) {
+        setConvos((items) => {
+          if (items.some((c) => c.id === id)) return items
+          const next = [...items]
+          next.splice(Math.min(at, next.length), 0, snapshot)
+          return next
+        })
+      }
       setError(t('errors.deleteFailed'))
+      return
+    }
+    // Drop the provisional pin too, so the end-of-turn reconcile cannot
+    // resurrect a thread the user just deleted.
+    provisionalIdsRef.current.delete(id)
+    // This conversation's turn state only: other in-flight turns are
+    // untouched (different keys, different server runs).
+    dropTurn(id)
+    runIdsRef.current.delete(id)
+    if (id === currentId) {
+      router.push('/assistant')
+    } else {
+      startTransition(() => router.refresh())
     }
   }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { clearDeletedConversations } from "./sidebar-state";
 
 declare global {
   var __assistantTestRouter:
@@ -502,4 +503,177 @@ test("deleting another conversation mid-stream leaves the active turn untouched"
   assert.ok(view.host.querySelector('[role="status"]'), "the streaming indicator must still show");
   openChats.get(a)?.close();
   openChats.delete(a);
+});
+
+async function openRowMenuAndDelete(host: HTMLElement, rowTitle: string) {
+  const rows = [...host.querySelectorAll("li")];
+  const row = rows.find((li) => li.textContent?.includes(rowTitle));
+  assert.ok(row, `${rowTitle} row must render`);
+  await act(async () => {
+    (row.querySelector('button[aria-label="Conversation actions"]') as HTMLButtonElement)?.click();
+    await tick();
+  });
+  const deleteButton = [...host.querySelectorAll("button")].find((el) =>
+    el.textContent?.includes("Delete conversation"),
+  );
+  assert.ok(deleteButton, "delete action must render");
+  await act(async () => {
+    deleteButton.click();
+    await tick();
+    await tick();
+  });
+}
+
+function sidebarTitles(host: HTMLElement): string[] {
+  return [...host.querySelectorAll("li")].map((li) => li.textContent ?? "");
+}
+
+/** F-user-002: a delete confirmed in the chat menu must survive switching chats. */
+test("a deleted thread stays gone when the next chat arrives with a stale server list", async (t) => {
+  const a = randomUUID();
+  const b = randomUUID();
+  transcripts.set(a, []);
+  transcripts.set(b, bTranscript);
+  deletedConversations.length = 0;
+  clearDeletedConversations();
+  const restoreFetch = installFetch({ a, b });
+  const first = mountWorkbench();
+  t.after(async () => {
+    for (const [, handle] of openChats) handle.close();
+    openChats.clear();
+    await first.unmount().catch(() => {});
+    restoreFetch();
+    clearDeletedConversations();
+  });
+  await first.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
+  assert.ok(sidebarTitles(first.host).some((s) => s.includes("Chat B")), "chat B must start listed");
+
+  await openRowMenuAndDelete(first.host, "Chat B");
+  assert.ok(deletedConversations.includes(b), "chat B must be deleted server-side");
+  assert.ok(!sidebarTitles(first.host).some((s) => s.includes("Chat B")), "chat B must leave the sidebar");
+
+  // Switch chats: App Router may remount the panel with a stale prefetched
+  // payload that still carries the deleted thread. It must not come back.
+  await first.unmount();
+  const second = mountWorkbench();
+  t.after(async () => {
+    await second.unmount().catch(() => {});
+  });
+  await second.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
+  assert.ok(
+    !sidebarTitles(second.host).some((s) => s.includes("Chat B")),
+    "a stale server list must not resurrect the deleted thread after switching chats",
+  );
+  assert.ok(sidebarTitles(second.host).some((s) => s.includes("Chat A")), "the surviving chat must stay listed");
+});
+
+test("a stale sidebar refetch on the same view must not resurrect a deleted thread", async (t) => {
+  const a = randomUUID();
+  const b = randomUUID();
+  transcripts.set(a, []);
+  transcripts.set(b, bTranscript);
+  deletedConversations.length = 0;
+  clearDeletedConversations();
+  const restoreFetch = installFetch({ a, b });
+  const view = mountWorkbench();
+  t.after(async () => {
+    for (const [, handle] of openChats) handle.close();
+    openChats.clear();
+    await view.unmount();
+    restoreFetch();
+    clearDeletedConversations();
+  });
+  await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
+  await openRowMenuAndDelete(view.host, "Chat B");
+  assert.ok(deletedConversations.includes(b), "chat B must be deleted server-side");
+
+  // The next props / refetch still carries the deleted id (stale cache): the
+  // sidebar must honour the deletion instead of re-adding the row.
+  await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
+  await act(tick);
+  assert.ok(
+    !sidebarTitles(view.host).some((s) => s.includes("Chat B")),
+    "a stale refetch must not resurrect the deleted thread",
+  );
+});
+
+test("the sidebar removes the thread optimistically while the delete is in flight", async (t) => {
+  const a = randomUUID();
+  const b = randomUUID();
+  transcripts.set(a, []);
+  transcripts.set(b, bTranscript);
+  deletedConversations.length = 0;
+  clearDeletedConversations();
+  const restoreFetch = installFetch({ a, b });
+  // Hold the DELETE open: the row must already be gone while it is pending.
+  const innerFetch = globalThis.fetch;
+  let resolveDelete!: (response: Response) => void;
+  const gate = new Promise<Response>((resolve) => {
+    resolveDelete = resolve;
+  });
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.includes("/api/assistant/conversations/") && (init?.method ?? "GET").toUpperCase() === "DELETE") {
+      return gate;
+    }
+    return innerFetch(input, init);
+  }) as typeof fetch;
+  const view = mountWorkbench();
+  t.after(async () => {
+    for (const [, handle] of openChats) handle.close();
+    openChats.clear();
+    await view.unmount();
+    globalThis.fetch = innerFetch;
+    restoreFetch();
+    clearDeletedConversations();
+  });
+  await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
+  await openRowMenuAndDelete(view.host, "Chat B");
+  assert.ok(
+    !sidebarTitles(view.host).some((s) => s.includes("Chat B")),
+    "the thread must leave the sidebar before the server answers",
+  );
+  await act(async () => {
+    resolveDelete(Response.json({ ok: true }));
+    await tick();
+    await tick();
+  });
+  assert.ok(
+    !sidebarTitles(view.host).some((s) => s.includes("Chat B")),
+    "the thread must stay gone once the server confirms",
+  );
+});
+
+test("a failed delete restores the row and surfaces the error", async (t) => {
+  const a = randomUUID();
+  const b = randomUUID();
+  transcripts.set(a, []);
+  transcripts.set(b, bTranscript);
+  deletedConversations.length = 0;
+  clearDeletedConversations();
+  const restoreFetch = installFetch({ a, b });
+  const innerFetch = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.includes("/api/assistant/conversations/") && (init?.method ?? "GET").toUpperCase() === "DELETE") {
+      return Promise.resolve(Response.json({ error: "boom" }, { status: 500 }));
+    }
+    return innerFetch(input, init);
+  }) as typeof fetch;
+  const view = mountWorkbench();
+  t.after(async () => {
+    for (const [, handle] of openChats) handle.close();
+    openChats.clear();
+    await view.unmount();
+    globalThis.fetch = innerFetch;
+    restoreFetch();
+    clearDeletedConversations();
+  });
+  await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
+  await openRowMenuAndDelete(view.host, "Chat B");
+  assert.ok(sidebarTitles(view.host).some((s) => s.includes("Chat B")), "a failed delete must restore the row");
+  assert.ok(
+    (view.host.textContent ?? "").includes("could not be deleted"),
+    "a failed delete must surface the error",
+  );
 });
