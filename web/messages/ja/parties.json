@@ -220,6 +220,25 @@
     "noBooks": "先にレートブックを作成してください。",
     "rateBookRequired": "レートブックを選択",
     "created": "レートブックを割り当てました",
-    "confirmDelete": "この割当を削除しますか？"
+    "confirmDelete": "この割当を削除しますか？",
+    "search": "割当済み料金表を検索…",
+    "statusFilter": "割当ステータス",
+    "status": {
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "all": "すべてのステータス"
+    },
+    "openPricing": "料金設定を開く",
+    "count": "{count, plural, one {# 件の割当} other {# 件の割当}}",
+    "errors": {
+      "invalidRecord": "有効なレコードを選択してください。",
+      "scope": "得意先またはプロジェクトを1件だけ選択してください。",
+      "dates": "有効な適用日を選択してください。",
+      "dateOrder": "終了日は開始日より前にできません。",
+      "dateBasis": "有効な基準日を選択してください。",
+      "references": "この組織のレコードを選択してください。",
+      "overlap": "このレコードには当該期間の一部に有効な労務料金がすでにあります。",
+      "save": "労務料金の割当てを保存できませんでした。"
+    }
   }
 }

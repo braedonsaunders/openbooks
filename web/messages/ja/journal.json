@@ -33,6 +33,13 @@
       "debit": "借方",
       "credit": "貸方",
       "openItem": "オープン項目"
+    },
+    "contributors": {
+      "standardLines": "標準明細行",
+      "locked": "ロック中",
+      "ruleGroup": "ルール：{name}",
+      "scriptGroup": "スクリプト：{name}",
+      "otherGroup": "{kind}：{name}"
     }
   },
   "newButton": {

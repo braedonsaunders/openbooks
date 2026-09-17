@@ -31,7 +31,8 @@
       "ordersTitle": "受注パイプライン",
       "ordersDescription": "未処理の見積、受注、発注書 — 件数、金額、転換率",
       "cashFlowIndirectTitle": "キャッシュ・フロー（間接法）",
-      "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）"
+      "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）",
+      "payrollDescription": "給与明細を対象とする組込み給与レポート — 賃金データには給与権限が必要です。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -40,7 +41,8 @@
       "budgeting": "予算管理",
       "custom": "カスタム・保存済み",
       "projects": "プロジェクト",
-      "orders": "販売・受注"
+      "orders": "販売・受注",
+      "payroll": "給与"
     },
     "customStudio": {
       "title": "カスタムレポートビルダー",
@@ -514,7 +516,9 @@
         "fri": "金曜日",
         "sat": "土曜日"
       }
-    }
+    },
+    "drawerDescription": "このレポートを定期的にメール送信します。スケジュールは作成時に保存されたフィルターで実行されます。",
+    "loading": "スケジュールを読み込んでいます…"
   },
   "catalog": {
     "entities": {
@@ -1113,7 +1117,22 @@
       "purchases": "仕入",
       "both": "両方",
       "true": "はい",
-      "false": "いいえ"
+      "false": "いいえ",
+      "earning": "支給",
+      "deduction": "控除",
+      "employer_contribution": "事業主負担分",
+      "match": "完全一致",
+      "within_tolerance": "許容範囲内",
+      "difference": "差異",
+      "prior_only": "旧システムのみ",
+      "our_only": "こちらのみ",
+      "employee_prior_only": "自社計算に従業員がいません",
+      "employee_our_only": "台帳に従業員がいません",
+      "unattributed": "いずれの項目でも説明できません",
+      "clean": "完全照合済み",
+      "clean_within_tolerance": "許容範囲内で照合済み",
+      "differences": "要解消の差異",
+      "no_comparable_data": "比較対象がありません"
     }
   },
   "operators": {
@@ -1172,7 +1191,9 @@
       "fiscal_year": "会計年度"
     },
     "csvSection": "セクション",
-    "exportTruncated": "全{total}行のうち最初の{shown}行を表示しています — すべてを見るには期間を絞り込むかフィルターを追加してください。"
+    "exportTruncated": "全{total}行のうち最初の{shown}行を表示しています — すべてを見るには期間を絞り込むかフィルターを追加してください。",
+    "subtotal": "{level} — 小計",
+    "grandTotals": "総合計"
   },
   "export": {
     "pdf": "PDF",
@@ -1211,6 +1232,30 @@
     "lot-recall": {
       "name": "ロットリコール",
       "description": "リコールとトレーサビリティのため、ロットに紐づくすべての在庫変動を品目、有効期限、数量、拠点、元書類、取引先とともに表示します。"
+    },
+    "payroll-journal": {
+      "name": "給与仕訳帳",
+      "description": "給与期間の完全な監査記録。従業員ごとに区分し、すべての支給・控除・事業主負担分を時間数・単価・当期金額・年累計付きで示します。計算に対応させるには期間メニューから単一の給与期間を選んでください。給与権限が必要です。"
+    },
+    "payroll-deductions-register": {
+      "name": "控除・負担金台帳",
+      "description": "すべての源泉徴収と事業主負担分を項目別に表示し、当期と年累計で誰が何を支払ったかを示します。納付と保険者の裏付け明細です。給与権限が必要です。"
+    },
+    "payroll-cost-by-department": {
+      "name": "部門別給与コスト",
+      "description": "労務費配分：部門別・項目種類別（支給・預り控除・事業主負担）の給与金額です。給与権限が必要です。"
+    },
+    "payroll-employee-totals": {
+      "name": "従業員別合計（年累計）",
+      "description": "従業員ごとに1行：選択期間の総支給・源泉所得税・手取額・事業主コスト合計と明細件数です。給与権限が必要です。"
+    },
+    "payroll-parallel-run": {
+      "name": "並行計算の照合",
+      "description": "導入時統制：1つの給与期間について、全従業員・全項目を旧給与ベンダーと比較し、結果別に区分して重要な差異と片側のみの従業員を先に、完全一致を後に読みます。設定済みの許容値は専用列に表示します。"
+    },
+    "payroll-parallel-run-totals": {
+      "name": "並行計算の項目別合計",
+      "description": "同じ照合の集計版：項目ごとに旧ベンダーの支払総額・自社計算額・差異を示し、期間差異を生んだ項目に帰属させます。"
     }
   },
   "generalLedger": {

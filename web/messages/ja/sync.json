@@ -16,7 +16,18 @@
       "unconfigured": "未設定"
     },
     "mirrorBadge": "ミラー: {schedule}",
-    "lastRun": "最終実行: {lastRun} · 同期完了: {cursor}"
+    "lastRun": "最終実行: {lastRun} · 同期完了: {cursor}",
+    "schedule": "ミラースケジュール",
+    "mirrorHealth": "ミラー",
+    "attachmentHealth": "添付ファイル",
+    "sourceDeletions": "ソースで削除された取引",
+    "sourceDeletionHint": "監査済み取引を保持するか、振り戻して無効化するかを選択してください。支払消込のある記帳済み証憑は先に消込を解除してください。",
+    "schedules": {
+      "hourly": "毎時",
+      "every_6_hours": "6時間ごと",
+      "daily": "毎日",
+      "weekly": "毎週"
+    }
   },
   "actions": {
     "connect": "接続",
@@ -30,7 +41,9 @@
     "pauseMirror": "ミラーを一時停止",
     "enableMirror": "ミラーを有効化",
     "edit": "編集",
-    "downloadQwc": "Web Connector をダウンロード"
+    "downloadQwc": "Web Connector をダウンロード",
+    "retainDeletion": "証跡付きで保持する",
+    "voidDeletion": "振り戻して無効化する"
   },
   "runs": {
     "heading": "最近の実行",
@@ -97,7 +110,8 @@
       "CONNECTION_UNCONFIGURED": "この接続を実行する前に認証情報を追加してください。",
       "INVALID_MODE": "有効な移行操作を選択してください。",
       "ATTACHMENTS_UNSUPPORTED": "この接続は添付ファイル移行に対応していません。",
-      "PROJECT_FINANCIALS_UNSUPPORTED": "この接続はプロジェクト財務入力の同期を提供していません。"
+      "PROJECT_FINANCIALS_UNSUPPORTED": "この接続はプロジェクト財務入力の同期を提供していません。",
+      "RUN_ALREADY_ACTIVE": "この接続では同種の実行がすでに動作中です。"
     },
     "testing": "接続をテスト中…",
     "connected": "接続しました",
@@ -108,7 +122,9 @@
     "created": "接続を作成しました",
     "updated": "接続を更新しました",
     "copied": "リダイレクトURIをコピーしました",
-    "copyFailed": "コピーできませんでした — テキストを手動で選択してコピーしてください"
+    "copyFailed": "コピーできませんでした — テキストを手動で選択してコピーしてください",
+    "deletionRetained": "ソースの削除を管理者証跡付きで保持しました",
+    "deletionVoided": "ソースで削除された取引を振り戻して無効化しました"
   },
   "confirmDelete": "接続「{name}」を削除しますか？移行済みのデータは残り、リンクのみが削除されます。",
   "drawer": {
@@ -124,7 +140,13 @@
     "name": "接続名",
     "select": "選択…",
     "credentials": "認証情報（保存時に暗号化され、二度と表示されません）",
-    "keepCurrent": "現在の値を維持するには空欄のままにしてください"
+    "keepCurrent": "現在の値を維持するには空欄のままにしてください",
+    "postedChanges": {
+      "label": "記帳済みソース取引の変更",
+      "review": "停止してレビューを求める",
+      "automatic": "振戻しと差替えを自動追加する",
+      "help": "自動修正で記帳済み履歴を書き換えることはありません。OpenBooksは原本を保持し、紐付きの振戻しと差替えを記帳し、対象の消込を引き継ぎますが、照合・締済期間・在庫・収益認識・後続証憑では停止します。"
+    }
   },
   "oauth": {
     "title": "<link>{portal}</link> での一度きりのアプリ設定",
@@ -192,5 +214,7 @@
         "クライアント ID をコピーし、クライアントシークレットを生成して、両方をこのフォームに貼り付け、保存してから、Connect をクリックします。"
       ]
     }
-  }
+  },
+  "confirmRetainSourceDeletion": "ソースで削除された取引 {ref} をOpenBooksに保持し、管理者の判断として記録しますか？",
+  "confirmVoidSourceDeletion": "ソースで削除された取引 {ref} を振り戻して無効化しますか？会計上の振戻仕訳が記帳され、この画面からは元に戻せません。"
 }

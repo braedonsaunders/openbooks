@@ -83,7 +83,8 @@
       "number_in_use": "その勘定番号はすでに使用されています。",
       "account_changed": "編集中に勘定が変更されました。開き直して再試行してください。",
       "invalid_idempotency_key": "勘定の作成要求を安全に再試行できませんでした。",
-      "save_failed": "勘定を保存できませんでした。"
+      "save_failed": "勘定を保存できませんでした。",
+      "reconcilable_currency_required": "照合可能な勘定には決済通貨が必要です — 保存前に選択してください。"
     },
     "monetary": "外貨再換算（貨幣性項目）",
     "monetaryDefault": "勘定タイプに従う",
