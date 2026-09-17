@@ -1041,7 +1041,6 @@ export async function replaceTargets(
 async function validationContext(
   orgId: string,
   ruleId: string,
-  mode: AllocationMode,
   version: AllocationRuleVersion,
 ): Promise<{ siblings: { id: string; effectiveFrom: string; effectiveTo: string | null }[]; driver: KnownDriver | null; activePostingBookIds: string[] }> {
   const siblingRows = await db.execute<{ id: string; effective_from: unknown; effective_to: unknown }>(
@@ -1089,7 +1088,7 @@ export async function publishVersion(
       throw new AllocationRuleError("FROZEN", `version ${id} is retired and cannot publish`);
     }
     const targets = await loadTargets(orgId, id);
-    const context = await validationContext(orgId, version.ruleId, head.mode, version);
+    const context = await validationContext(orgId, version.ruleId, version);
     const problems = validateRuleVersion(version, targets, {
       orgId,
       ruleId: version.ruleId,

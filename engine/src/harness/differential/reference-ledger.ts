@@ -70,7 +70,7 @@ export class ReferenceLedger {
   private accounts: Set<string>;
   private parties: Map<string, Set<string>>;
 
-  constructor(private corpus: Pick<Corpus, "accounts" | "parties">) {
+  constructor(corpus: Pick<Corpus, "accounts" | "parties">) {
     this.accounts = new Set(corpus.accounts.map((a) => a.key));
     this.parties = new Map(corpus.parties.map((p) => [p.key, new Set(p.roles)]));
     for (const required of ["ar", "ap", "bank"]) {

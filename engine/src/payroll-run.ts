@@ -550,11 +550,7 @@ export interface SemiMonthlyBoundaries {
   secondDay: number | "month_end";
 }
 
-const ORDINAL_SUFFIX = (day: number): string => {
-  if (day % 100 >= 11 && day % 100 <= 13) return "th";
-  return ["th", "st", "nd", "rd"][day % 10] ?? "th";
-};
-const ordinal = (day: number): string => `${day}${ORDINAL_SUFFIX(day)}`;
+
 
 const monthLengthOf = (d: Date): number =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();

@@ -53,10 +53,8 @@ import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import { certificateAmount, certificateCount, certificateFlag } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
-  payPeriodFor,
   refuseUnprintedPeriod,
   refuseUntranscribedYear,
-  type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,

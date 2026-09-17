@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import {
-  add, cmp, formatMoney, fromUnits, mul, mulPercent, neg, roundMoney, sum, toUnits,
+  add, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "./money.ts";
 
 /**

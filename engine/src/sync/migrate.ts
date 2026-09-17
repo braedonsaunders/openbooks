@@ -107,11 +107,6 @@ const migrationErrorMessage = (error: unknown): string => {
   }
   return head.slice(0, 1000);
 };
-const moneyOrNull = (v: unknown): string | null => {
-  if (v == null || v === "") return null;
-  return normalizeMoney(v as string | number);
-};
-
 /** Persist a migrated time-type cost multiplier through exact decimal then ledger money. Fail closed. */
 function persistTimeTypeCostMultiplier(value: unknown): string {
   const exact = canonicalDecimal(value, 4);

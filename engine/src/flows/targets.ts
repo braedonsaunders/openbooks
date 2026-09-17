@@ -27,8 +27,6 @@ export interface TargetResolutionCtx {
   values: Record<string, unknown>;
 }
 
-type Rows<T> = { rows: T[] };
-
 /** Active users explicitly assigned to `role`. */
 export async function roleUsers(orgId: string, role: string): Promise<ResolvedUser[]> {
   if (!role) return [];

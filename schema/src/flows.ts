@@ -1,6 +1,5 @@
 import {
   boolean,
-  check,
   index,
   integer,
   jsonb,
@@ -10,7 +9,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**

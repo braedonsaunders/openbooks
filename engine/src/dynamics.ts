@@ -164,7 +164,7 @@ export class DynamicsClient {
   private baseOrigin: string;
   constructor(
     private app: DynamicsApp,
-    private environment: string,
+    environment: string,
     private companyId: string,
     tokens: DynamicsTokens,
     private onRefresh?: (t: DynamicsTokens) => Promise<void> | void,

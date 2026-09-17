@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { cmp, sum } from "../../money.ts";
+import { cmp } from "../../money.ts";
 import { calculateT4127, type T4127Input } from "./t4127.ts";
 import { calculateTp1015 } from "./quebec/tp1015.ts";
 import type { Province } from "./rates.ts";
