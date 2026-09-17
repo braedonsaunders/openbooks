@@ -3,16 +3,34 @@
   "title": "Fechamento contínuo",
   "description": "Monitora continuamente a prontidão para o fechamento e destaca exceções contábeis e financeiras baseadas em evidências para revisão.",
   "search": "Buscar constatações…",
-  "tabs": { "ariaLabel": "Seções de fechamento contínuo", "findings": "Constatações", "reports": "Relatórios" },
+  "tabs": {
+    "ariaLabel": "Seções de fechamento contínuo",
+    "findings": "Constatações",
+    "reports": "Relatórios"
+  },
   "agents": {
     "accounting": "Contabilidade",
-    "finance": "Finanças"
+    "finance": "Finanças",
+    "forensics": "Forense",
+    "collections": "Cobrança",
+    "payables": "Contas a pagar",
+    "reconciliation": "Conciliação bancária",
+    "hygiene": "Higiene de dados",
+    "tax": "Impostos",
+    "payroll": "Folha de pagamento",
+    "projects": "Projetos",
+    "cash": "Caixa"
   },
   "metrics": {
     "active": "Ativas",
     "critical": "Críticas",
     "accounting": "Constatações contábeis",
-    "finance": "Constatações financeiras"
+    "finance": "Constatações financeiras",
+    "collections": "Constatações de cobrança",
+    "payables": "Constatações de contas a pagar",
+    "reconciliation": "Constatações de conciliação bancária",
+    "hygiene": "Constatações de higiene de dados",
+    "forensics": "Constatações forenses"
   },
   "filters": {
     "agent": "Agente",
@@ -49,6 +67,78 @@
       "title": "Documentos contábeis pendentes",
       "description": "Documentos contábeis em rascunho ou pendentes permaneceram inacabados além do tempo configurado."
     },
+    "forensic_weekend_postings": {
+      "title": "Lançamento de fim de semana",
+      "description": "Um documento de gasto foi lançado no fim de semana."
+    },
+    "forensic_round_dollar": {
+      "title": "Gasto redondo",
+      "description": "Um documento de gasto tem valor de milhar exato."
+    },
+    "forensic_threshold_trap": {
+      "title": "Valor logo abaixo do limite",
+      "description": "Um documento de gasto fica logo abaixo de um limite de aprovação redondo."
+    },
+    "forensic_duplicate_bills": {
+      "title": "Possível fatura duplicada",
+      "description": "Dois documentos a pagar compartilham contraparte, tipo e valor em dias próximos."
+    },
+    "tax_missing_codes": {
+      "title": "Documentos sem códigos fiscais",
+      "description": "Documentos lançados têm linhas sem tributação que a declaração não verá."
+    },
+    "tax_missing_registration": {
+      "title": "Registro fiscal ausente",
+      "description": "Um formulário de declaração não tem número de registro arquivado."
+    },
+    "tax_return_blocked": {
+      "title": "Declaração fiscal bloqueada",
+      "description": "Uma declaração configurada não pode ser calculada."
+    },
+    "tax_unlocked_period": {
+      "title": "Período fiscal desbloqueado",
+      "description": "O último período concluído não tem bloqueio fiscal fechado."
+    },
+    "payroll_remittance_due": {
+      "title": "Recolhimento vencendo",
+      "description": "Há retenções vencendo sem fatura que as cubra."
+    },
+    "payroll_unknown_accounts": {
+      "title": "Conta de folha desconhecida",
+      "description": "Uma execução confirmada tem resíduos que nenhuma conta de declaração ou de passivo assume."
+    },
+    "payroll_missing_elections": {
+      "title": "Opções legais ausentes",
+      "description": "Funcionários não têm opções de declaração arquivadas."
+    },
+    "payroll_yearend_gaps": {
+      "title": "Lacuna de fim de ano",
+      "description": "Uma exigência de informe não foi atendida."
+    },
+    "project_negative_margin": {
+      "title": "Margem de projeto negativa",
+      "description": "Um projeto está operando com prejuízo."
+    },
+    "project_budget_overrun": {
+      "title": "Estouro de orçamento do projeto",
+      "description": "Custos mais compromissos ultrapassaram o orçamento aprovado."
+    },
+    "project_stale_unbilled": {
+      "title": "Trabalho antigo não faturado",
+      "description": "Trabalho faturável segue sem fatura após o corte."
+    },
+    "cash_low_balance": {
+      "title": "Saldo de caixa baixo",
+      "description": "O caixa em banco está abaixo do piso."
+    },
+    "cash_bill_crunch": {
+      "title": "Aperto de faturas",
+      "description": "Faturas vencendo logo superam o caixa disponível."
+    },
+    "cash_forecast_shortfall": {
+      "title": "Insuficiência de previsão",
+      "description": "A previsão de caixa cai abaixo de zero."
+    },
     "missing_approved_budget": {
       "title": "Nenhum orçamento aprovado",
       "description": "O monitoramento financeiro não pode comparar valores reais porque não há orçamento aprovado disponível."
@@ -64,6 +154,70 @@
     "gross_margin_decline": {
       "title": "Queda de margem bruta",
       "description": "A margem bruta caiu além do limite configurado em relação ao período anterior concluído."
+    },
+    "overdue_customer_balance": {
+      "title": "Cliente em atraso",
+      "description": "Um cliente carrega atrasos além do piso configurado e entra na lista prioritária de ligações."
+    },
+    "broken_payment_promise": {
+      "title": "Promessa de pagamento quebrada",
+      "description": "Uma fatura passou da data de pagamento esperada sem pagamento."
+    },
+    "credit_hold_candidate": {
+      "title": "Candidata a bloqueio de crédito",
+      "description": "Atrasos antigos justificam exigir antecipação em novos pedidos."
+    },
+    "duplicate_bills": {
+      "title": "Faturas duplicadas",
+      "description": "Duas faturas compartilham fornecedor, tipo e valor dentro da janela de duplicadas."
+    },
+    "bills_due_before_payrun": {
+      "title": "Faturas vencendo antes da folha",
+      "description": "Faturas em aberto vencem dentro do horizonte da folha."
+    },
+    "early_pay_discount_opportunity": {
+      "title": "Desconto por antecipação",
+      "description": "Faturas em aberto estão dentro de uma janela de desconto ativa."
+    },
+    "bills_missing_approval": {
+      "title": "Faturas sem aprovação",
+      "description": "Faturas ficam em rascunho ou aprovação pendente além da janela de estagnação."
+    },
+    "bank_line_match_candidate": {
+      "title": "Candidata a correspondência bancária",
+      "description": "Uma linha de extrato sem correspondência tem uma correspondência confiável de linha de lançamento."
+    },
+    "stale_reconciliation": {
+      "title": "Conciliação estagnada",
+      "description": "Uma sessão em andamento ficou intocada além da janela de estagnação."
+    },
+    "never_reconciled_account": {
+      "title": "Conta nunca conciliada",
+      "description": "Uma conta conciliável tem movimento, mas nunca teve uma sessão."
+    },
+    "control_account_type_mismatch": {
+      "title": "Divergência de conta de controle",
+      "description": "Uma conta carrega itens em aberto ou um nome que seu tipo contradiz."
+    },
+    "duplicate_party_identity": {
+      "title": "Contraparte duplicada",
+      "description": "Duas contrapartes compartilham nome normalizado ou identidade fiscal."
+    },
+    "item_missing_tax_code": {
+      "title": "Item sem código fiscal",
+      "description": "Um item ativo não tem código fiscal atribuído."
+    },
+    "project_missing_cost_budget": {
+      "title": "Projeto sem orçamento de custos",
+      "description": "Um projeto ativo não tem linhas de orçamento."
+    },
+    "budget_scenario_without_lines": {
+      "title": "Cenário orçamentário sem linhas",
+      "description": "Um cenário aprovado ou enviado não tem linhas."
+    },
+    "unmapped_payroll_component": {
+      "title": "Componente sem atribuição",
+      "description": "Um componente de remuneração não tem contas de lançamento nem responsável pelo recolhimento."
     }
   },
   "summary": {
@@ -131,7 +285,35 @@
     "document": "Documento contábil",
     "reconciliation": "Conciliação",
     "budget_variance": "Variação orçamentária",
-    "period_comparison": "Comparação de períodos"
+    "period_comparison": "Comparação de períodos",
+    "account_mismatch": "Detalhes de conta divergente",
+    "accounting_period": "Período contábil",
+    "broken_promise": "Promessa de pagamento quebrada",
+    "cash_balance": "Saldo de caixa",
+    "cash_crunch": "Aperto de caixa",
+    "cash_forecast": "Previsão de caixa",
+    "credit_hold_case": "Caso de bloqueio de crédito",
+    "discount_bill": "Fatura com desconto",
+    "duplicate_bill_pair": "Par de faturas duplicadas",
+    "duplicate_party": "Contraparte duplicada",
+    "employee": "Funcionário",
+    "empty_scenario": "Cenário orçamentário vazio",
+    "match_candidate": "Candidata à correspondência",
+    "overdue_invoice": "Fatura vencida",
+    "pay_run": "Folha de pagamento",
+    "payment_behaviour": "Comportamento de pagamento",
+    "payrun_bill": "Fatura no horizonte da folha",
+    "project_budget": "Orçamento do projeto",
+    "project_margin": "Margem do projeto",
+    "project_unbilled": "Trabalho de projeto não faturado",
+    "remittance_group": "Grupo de recolhimento",
+    "stalled_bill": "Fatura paralisada",
+    "tax_return": "Declaração fiscal",
+    "tax_return_form": "Formulário fiscal",
+    "unbudgeted_project": "Projeto sem orçamento",
+    "unmapped_component": "Componente sem atribuição",
+    "unreconciled_activity": "Atividade não conciliada",
+    "untaxed_item": "Item sem código fiscal"
   },
   "actions": {
     "settings": "Configurações do agente",

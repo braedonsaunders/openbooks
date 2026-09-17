@@ -33,7 +33,10 @@
     "tax": "Impostos",
     "gl": "Razão"
   },
-  "status": { "closed": "fechado", "open": "aberto" },
+  "status": {
+    "closed": "fechado",
+    "open": "aberto"
+  },
   "runStatus": {
     "not_started": "Não iniciado",
     "draft": "Rascunho",
@@ -67,8 +70,10 @@
     "approve": "Aprovar",
     "requestChanges": "Solicitar alterações",
     "addEvidence": "Adicionar evidência",
+    "resolveException": "Abrir a área de trabalho",
     "takeAction": "Tomar ação",
     "requestApproval": "Solicitar aprovação",
+    "attest": "Atestar e aprovar o fechamento",
     "reviewApprovals": "Revisar aprovações",
     "configureApprovalFlow": "Configurar fluxo de aprovação",
     "documentation": "Documentação",
@@ -76,10 +81,13 @@
     "publish": "Publicar pacote",
     "downloadBinder": "Baixar dossiê de auditoria imutável"
   },
-  "errors": { "actionFailed": "Não foi possível concluir a ação de fechamento" },
+  "errors": {
+    "actionFailed": "Não foi possível concluir a ação de fechamento"
+  },
   "messages": {
     "refresh": "Estado do fechamento atualizado",
     "request_approval": "Fechamento enviado para aprovação",
+    "attest": "Atestado do responsável registrado",
     "close": "Período bloqueado",
     "publish": "Pacote de fechamento publicado",
     "taskUpdated": "Tarefa atualizada",
@@ -127,6 +135,10 @@
       "title": "Restam atividades não lançadas",
       "message": "{count, plural, one {# transação em rascunho ou pendente permanece no período.} other {# transações em rascunho ou pendentes permanecem no período.}}"
     },
+    "posting-period-missing": {
+      "title": "Há transações que precisam de período contábil",
+      "message": "{count, plural, one {# transação não tem referência exata de período contábil. Atribua-a antes de fechar qualquer período.} other {# transações não têm referência exata de período contábil. Atribua-as antes de fechar qualquer período.}}"
+    },
     "bank-unreconciled": {
       "title": "Contas de caixa precisam de conciliação",
       "message": "{count, plural, one {# conta conciliável não está aprovada até o fim do período.} other {# contas conciliáveis não estão aprovadas até o fim do período.}}"
@@ -134,6 +146,10 @@
     "depreciation-unposted": {
       "title": "Depreciação permanece não lançada",
       "message": "{count, plural, one {# linha de depreciação agendada permanece não lançada.} other {# linhas de depreciação agendadas permanecem não lançadas.}}"
+    },
+    "recognition-unposted": {
+      "title": "Reconhecimento de receita permanece não lançado",
+      "message": "{count, plural, one {# linha de reconhecimento agendada permanece não lançada.} other {# linhas de reconhecimento agendadas permanecem não lançadas.}}"
     },
     "fx-missing": {
       "title": "Faltam taxas de câmbio",
@@ -143,9 +159,17 @@
       "title": "Saldos em moeda estrangeira não estão reavaliados",
       "message": "{count, plural, one {# saldo monetário em moeda estrangeira não foi reavaliado à taxa de fim de período.} other {# saldos monetários em moeda estrangeira não foram reavaliados à taxa de fim de período.}}"
     },
+    "fx-reversal-period-missing": {
+      "title": "Sem período seguinte para a reversão da reavaliação",
+      "message": "Os saldos em moeda estrangeira precisam de reavaliação, mas não existe período contábil posterior para receber a reversão obrigatória. Gere o próximo período fiscal e execute a reavaliação."
+    },
     "intercompany-residual": {
       "title": "Atividade intercompany não elimina",
       "message": "{count, plural, one {# conta de eliminação tem resíduo de grupo diferente de zero.} other {# contas de eliminação têm resíduo de grupo diferente de zero.}}"
+    },
+    "consolidated-rates-missing": {
+      "title": "Faltam taxas de câmbio consolidadas",
+      "message": "{count, plural, one {# conta de eliminação carrega atividade de entidade estrangeira sem taxa consolidada para o período. Derive as taxas consolidadas antes de eliminar.} other {# contas de eliminação carregam atividade de entidades estrangeiras sem taxa consolidada para o período. Derive as taxas consolidadas antes de eliminar.}}"
     },
     "material-variances": {
       "title": "Flutuações relevantes exigem explicação",
@@ -171,7 +195,11 @@
     "review": "Revisão",
     "publish": "Publicação"
   },
-  "gates": { "none": "Sem gate", "soft": "Gate flexível", "hard": "Gate rígido" },
+  "gates": {
+    "none": "Sem gate",
+    "soft": "Gate flexível",
+    "hard": "Gate rígido"
+  },
   "taskStatus": {
     "blocked": "Bloqueado",
     "ready": "Pronto",
@@ -193,6 +221,11 @@
     "blockedDescription": "{count, plural, one {# tarefa com gate rígido permanece} other {# tarefas com gate rígido permanecem}}.",
     "approvalTitle": "Aprovação independente e bloqueio",
     "approvalDescription": "O iniciador da execução não pode fornecer a aprovação final. Qualquer alteração no razão após a aprovação reabre a revisão.",
+    "ownerTitle": "Atestado do responsável e bloqueio",
+    "ownerDescription": "Para um fechamento conduzido pelo responsável, revise as demonstrações e registre por que o período está pronto. O atestado fica vinculado a este estado exato do razão.",
+    "attestationLabel": "Por que estes livros estão prontos para fechar?",
+    "attestationPlaceholder": "Exemplo: balancete de verificação, balanço patrimonial e demonstração de resultados revisados; atividade bancária conciliada e todas as transações conhecidas do período lançadas.",
+    "confirmLock": "Bloquear CR, CP, bancos, ativos, impostos e o razão geral deste período? Novos lançamentos serão rejeitados até que uma reabertura controlada seja aprovada.",
     "complete": "Período bloqueado por {name}"
   },
   "lockStates": {
@@ -203,9 +236,13 @@
   "publish": {
     "package": "Pacote de relatórios do fechamento",
     "description": "Revise as saídas configuradas, depois congele o dossiê de evidências e publique o pacote.",
+    "confirm": "Publicar e congelar este pacote de fechamento com seu dossiê de auditoria imutável?",
     "complete": "Pacote publicado por {name}",
     "lockFirst": "Aplique os bloqueios de período aprovados antes de publicar.",
-    "awaitingApproval": "Conclua a revisão e o fluxo de aprovação antes de publicar."
+    "awaitingApproval": "Conclua a revisão e o fluxo de aprovação antes de publicar.",
+    "noteLabel": "Nota de publicação",
+    "notePlaceholder": "Adicione uma nota sobre esta publicação…",
+    "noteRequired": "Republicar um pacote corrigido é uma reapresentação: descreva o que mudou."
   },
   "timeline": {
     "title": "Linha do tempo imutável do fechamento",
@@ -217,6 +254,7 @@
       "started": "Execução de fechamento iniciada",
       "data_changed": "Alteração no razão invalidou o trabalho anterior",
       "approval_requested": "Aprovação do fechamento solicitada",
+      "owner_attested": "O responsável atestou que os livros estão prontos",
       "approval_rejected": "Aprovação do fechamento rejeitada",
       "approved": "Fechamento recebeu aprovação final",
       "closed": "Bloqueios de período aplicados",
@@ -244,7 +282,9 @@
     "general-ledger": "Razão geral"
   },
   "defaultData": {
-    "calendar": { "name": "Calendário fiscal padrão" },
+    "calendar": {
+      "name": "Calendário fiscal padrão"
+    },
     "blueprint": {
       "name": "Fechamento padrão",
       "description": "Fechamento mensal, trimestral e anual nativo do razão"
@@ -261,6 +301,10 @@
       "controlledReopen": {
         "name": "Reabertura controlada",
         "description": "Reaberturas exigem um motivo, aprovação independente e um prazo de expiração."
+      },
+      "sourceReconciliationEvidence": {
+        "name": "Evidência de conciliação do sistema de origem",
+        "description": "O espelhamento pode aprovar contas bancárias até a data conciliada do sistema de origem. Desative para exigir extratos importados."
       }
     },
     "package": {
@@ -289,6 +333,10 @@
       "title": "Lançar depreciação de ativos imobilizados",
       "description": "Execute a depreciação agendada e resolva as exceções."
     },
+    "recognition-posted": {
+      "title": "Lançar reconhecimento de receita",
+      "description": "Execute o reconhecimento de receita agendado e resolva as exceções."
+    },
     "fx-ready": {
       "title": "Validar cobertura de câmbio",
       "description": "Toda moeda de transação deve ter uma taxa de fim de período utilizável."
@@ -313,6 +361,10 @@
       "title": "Aprovação do controller",
       "description": "Revise de forma independente a prontidão, exceções, evidências e saídas de relatórios."
     },
+    "financial-review": {
+      "title": "Revisar as demonstrações financeiras",
+      "description": "Revise o balancete de verificação, o balanço patrimonial e a demonstração de resultados antes de atestar: completude e saldos inesperados."
+    },
     "lock-subledgers": {
       "title": "Bloquear subrazões operacionais",
       "description": "Bloqueie CR, CP, bancos, ativos e impostos antes do razão."
@@ -329,6 +381,8 @@
   "setup": {
     "title": "Períodos e Fechamento",
     "description": "Projete calendários fiscais, gere períodos, gerencie bloqueios e reaberturas, versione blueprints de fechamento e configure controles, automação e pacotes de relatórios.",
+    "simpleMode": "O fechamento conduzido pelo responsável está ativo. Calendários, períodos, bloqueios, atestados e publicação imutável seguem disponíveis sem o custo de fluxos corporativos.",
+    "enableAdvanced": "Ver o fechamento avançado",
     "tabs": {
       "calendars": "Calendários",
       "periods": "Períodos",
@@ -374,7 +428,8 @@
       "title": "Políticas de fechamento",
       "description": "Configure controles de materialidade, bloqueio, revisão, segregação e exceção.",
       "formTitle": "Configuração de política",
-      "rulesHint": "Defina limites de materialidade personalizados e controle onde cada política se aplica — sem necessidade de desenvolvedor."
+      "rulesHint": "Defina limites de materialidade personalizados e controle onde cada política se aplica — sem necessidade de desenvolvedor.",
+      "materialityFormTitle": "Política de materialidade"
     },
     "automation": {
       "title": "Automação de fechamento",
@@ -386,7 +441,17 @@
       "description": "Defina as demonstrações, destinatários e configuração de entrega publicados com um fechamento.",
       "formTitle": "Pacote de relatórios",
       "reportCount": "{count, plural, one {# relatório} other {# relatórios}}",
-      "recipientsHint": "Um destinatário por linha."
+      "recipientsHint": "Um destinatário por linha.",
+      "addReport": "Adicionar relatório…",
+      "noReports": "Nenhum relatório anexado ainda.",
+      "sendNowTitle": "Enviar agora",
+      "sendNowHint": "Entregue imediatamente o pacote salvo para um período escolhido, sem esperar a publicação de um fechamento.",
+      "sendNow": "Enviar agora",
+      "sending": "Enviando…",
+      "sendQueued": "Entrega na fila — o pacote será enviado por e-mail aos destinatários.",
+      "sendPeriod": "Período",
+      "selectPeriod": "Selecione um período…",
+      "sendNoPeriods": "Gere períodos contábeis antes de enviar."
     },
     "actions": {
       "newCalendar": "Novo calendário",
@@ -409,7 +474,8 @@
       "reject": "Rejeitar",
       "cancel": "Cancelar",
       "manageBooks": "Gerenciar livros",
-      "managePeriod": "Gerenciar {period}"
+      "managePeriod": "Gerenciar {period}",
+      "addRow": "Adicionar"
     },
     "fields": {
       "name": "Nome",
@@ -515,7 +581,11 @@
       "review": "Revisão",
       "publish": "Publicação"
     },
-    "gates": { "none": "Sem gate", "soft": "Gate flexível", "hard": "Gate rígido" },
+    "gates": {
+      "none": "Sem gate",
+      "soft": "Gate flexível",
+      "hard": "Gate rígido"
+    },
     "completionModes": {
       "manual": "Manual",
       "computed": "Calculado pelo razão",
@@ -561,7 +631,12 @@
       "trial-balance": "Balancete de verificação",
       "general-ledger": "Razão geral"
     },
-    "table": { "period": "Período", "range": "Intervalo", "entries": "Lançamentos", "status": "Status" },
+    "table": {
+      "period": "Período",
+      "range": "Intervalo",
+      "entries": "Lançamentos",
+      "status": "Status"
+    },
     "empty": {
       "calendars": "Nenhum calendário fiscal corresponde a esta pesquisa.",
       "periods": "Nenhum período contábil corresponde a estes filtros.",
@@ -585,6 +660,150 @@
     "errors": {
       "actionFailed": "Não foi possível salvar a alteração de configuração",
       "invalidConfiguration": "A configuração deve ser válida e completa"
+    },
+    "policyRules": {
+      "materialityIntro": "Uma variação de conta entre períodos só é sinalizada para revisão quando excede AMBOS os limites.",
+      "amount": "Limite de valor",
+      "amountHint": "Variação absoluta na moeda base (ex.: 10.000).",
+      "percent": "Limite de percentual",
+      "percentHint": "Variação relativa ao período anterior.",
+      "approvalRequired": "Exigir aprovação independente para reabrir um período bloqueado",
+      "defaultHours": "Janela de reabertura padrão (horas)",
+      "maxHours": "Janela de reabertura máxima (horas)",
+      "prohibitSelfApproval": "Impedir a aprovação do próprio trabalho",
+      "advancedIntro": "Este tipo de política não tem configurações integradas. Adicione configurações personalizadas de chave/valor se o seu fluxo precisar.",
+      "noSettings": "Este tipo de política não precisa de configurações adicionais."
+    },
+    "conditions": {
+      "intro": "A regra só é executada quando todas as condições abaixo são atendidas. Deixe uma condição em branco para ignorá-la.",
+      "runStatus": "O status da execução é",
+      "workstream": "O fluxo de trabalho é",
+      "taskStatus": "O status da tarefa é",
+      "severity": "A severidade da exceção é",
+      "taskKey": "A chave da tarefa é uma de",
+      "taskKeyHint": "Chaves de tarefa estáveis separadas por vírgula.",
+      "minReadiness": "A pontuação de prontidão é de pelo menos",
+      "maxReadiness": "A pontuação de prontidão é de no máximo",
+      "withinDays": "Dias restantes até o fechamento-alvo: no máximo",
+      "readinessHint": "0–100.",
+      "any": "Qualquer"
+    },
+    "automationConfig": {
+      "notifyUsers": "Notificar estas pessoas",
+      "notifyRoles": "…e todos nestes papéis",
+      "notifyHint": "Se ninguém for selecionado, quem iniciou a execução é notificado.",
+      "title": "Título da notificação",
+      "titlePlaceholder": "Padrão: o nome da regra",
+      "body": "Mensagem",
+      "bodyPlaceholder": "Padrão: o período e o livro",
+      "owner": "Responsável atribuído (pessoa)",
+      "ownerRole": "…ou o primeiro disponível no papel",
+      "reviewer": "Revisor atribuído (pessoa)",
+      "reviewerRole": "…ou o primeiro disponível no papel",
+      "assignHint": "Automações de atribuição são executadas em eventos de tarefa.",
+      "taskKey": "Chave da tarefa",
+      "taskKeyPlaceholder": "minúsculo com hifens, ex.: late-accrual-review",
+      "taskTitle": "Título da tarefa",
+      "taskDescription": "Descrição da tarefa",
+      "gate": "Gate",
+      "evidenceRequired": "Exigir evidência antes da conclusão",
+      "report": "Relatório para instantâneo",
+      "label": "Rótulo da evidência",
+      "subjectKind": "Tipo de sujeito do flow",
+      "subjectId": "Executar o flow contra",
+      "buttonId": "Id do botão do flow",
+      "none": "Esta ação não precisa de configuração adicional.",
+      "allocHint": "Prévia de cada regra periódica selecionada para o período e o livro desta execução. Ao contabilizar, também registra os lançamentos calculados.",
+      "allocAllRules": "Todas as regras periódicas ativas",
+      "allocRuleIds": "Ids de regras",
+      "allocRuleIdsHint": "UUIDs de regras de rateio separados por vírgula. Usado somente quando “Todas as regras periódicas ativas” está desativado.",
+      "allocPost": "Contabilizar as execuções calculadas (senão, só prévia)",
+      "sectionConditions": "Quando (condições)",
+      "sectionConfig": "Então (configuração)"
+    },
+    "subjectRefs": {
+      "$run": "A execução de fechamento",
+      "$task": "A tarefa que o acionou"
+    },
+    "reportGroups": {
+      "built_in": "Relatórios padrão",
+      "custom": "Relatórios personalizados"
+    },
+    "reportsEmpty": "Nenhum relatório definido ainda.",
+    "delivery": {
+      "title": "Entrega",
+      "intro": "Como este pacote é montado e enviado quando um fechamento é publicado.",
+      "format": "Formato de arquivo",
+      "formats": {
+        "pdf": "PDF",
+        "xlsx": "Excel",
+        "both": "PDF + Excel"
+      },
+      "combine": "Combinar todos os relatórios em um só PDF",
+      "coverPage": "Incluir capa",
+      "cadence": "Quando entregar",
+      "cadences": {
+        "on_publish": "Quando o fechamento é publicado",
+        "manual": "Somente manualmente"
+      },
+      "advanced": "Configurações de entrega avançadas"
+    },
+    "kv": {
+      "key": "Configuração",
+      "value": "Valor",
+      "add": "Adicionar configuração",
+      "empty": "Sem configurações personalizadas."
+    },
+    "reportParams": {
+      "dateRange": "Intervalo de datas",
+      "closePeriod": "O período de fechamento",
+      "custom": "Intervalo personalizado",
+      "from": "De",
+      "to": "Até",
+      "breakout": "Detalhar por",
+      "breakouts": {
+        "none": "Sem detalhamento",
+        "department": "Departamento",
+        "location": "Local",
+        "class": "Classe",
+        "project": "Projeto",
+        "month": "Mês",
+        "quarter": "Trimestre"
+      },
+      "filters": "Filtros",
+      "department": "Departamento",
+      "location": "Local",
+      "class": "Classe",
+      "project": "Projeto",
+      "subsidiary": "Subsidiária",
+      "anyValue": "Qualquer",
+      "definedDate": "Intervalo de datas",
+      "definedBreakouts": "Detalhamentos",
+      "definedFilters": "Filtros",
+      "definedMeasures": "Medidas",
+      "noDefined": "Este relatório recebe intervalo de datas e filtros no momento da entrega."
     }
+  },
+  "postingPeriods": {
+    "title": "Atribuir períodos contábeis",
+    "description": "Documentos aprovados sem período contábil, derivados da data de vigência de cada documento. Revise a prévia e atribua.",
+    "backToClose": "Voltar ao fechamento do período",
+    "previewTitle": "{count, plural, one {# documento} other {# documentos}}",
+    "previewDescription": "Somente documentos atribuíveis são confirmados. Documentos bloqueados mantêm seu motivo e nunca são atribuídos à força.",
+    "loading": "Carregando prévia…",
+    "empty": "Nenhum documento aprovado sem período contábil.",
+    "document": "Documento",
+    "kind": "Tipo",
+    "effectiveDate": "Data de vigência",
+    "period": "Período",
+    "status": "Status",
+    "assignable": "Atribuível",
+    "assign": "{count, plural, one {Atribuir # período} other {Atribuir # períodos}}",
+    "blockedNote": "{count, plural, one {# documento está bloqueado e será ignorado.} other {# documentos estão bloqueados e serão ignorados.}}",
+    "refusedNote": "{count, plural, one {# documento foi recusado na confirmação.} other {# documentos foram recusados na confirmação.}}",
+    "previewFailed": "Não foi possível carregar a prévia.",
+    "commitFailed": "Não foi possível atribuir períodos contábeis.",
+    "committed": "{count, plural, one {# período contábil atribuído.} other {# períodos contábeis atribuídos.}}",
+    "needsBook": "Abra esta página a partir de uma execução de fechamento para escolher um livro e atribuir períodos contábeis."
   }
 }
