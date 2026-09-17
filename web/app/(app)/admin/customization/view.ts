@@ -140,6 +140,14 @@ export interface CustomizationData {
   perPage: number
   formDrawerOpen: boolean
   formDrawerRecordType: string
+  /**
+   * Remount key for the form drawer (F-t10-002): FormDesigner seeds its
+   * field state in mount-only useState, so edit-<id> and create-from-<src>
+   * sessions must mount distinct instances — otherwise a duplicate opened
+   * after editing the org-default form inherits isDefault=true and steals
+   * the default on save.
+   */
+  formDrawerKey: string
   formDrawerDef: Record<string, unknown> | null
   formDrawerHeaderDefs: Record<string, unknown>[] | null
   formDrawerLineDefs: Record<string, unknown>[] | null
@@ -406,6 +414,7 @@ export async function loadCustomization(
     perPage: params.perPage,
     formDrawerOpen: Boolean(formId && designerRecordType),
     formDrawerRecordType: designerRecordType ?? '',
+    formDrawerKey: formId === 'new' ? `new:${fromParam ?? ''}` : `edit:${formId ?? ''}`,
     formDrawerDef: (openForm as unknown as Record<string, unknown> | null) ?? null,
     formDrawerHeaderDefs: (designerHeaderDefs as unknown as Record<string, unknown>[] | null) ?? null,
     formDrawerLineDefs: (designerLineDefs as unknown as Record<string, unknown>[] | null) ?? null,
@@ -556,6 +565,7 @@ export function customizationSpec(data: CustomizationData): PageSpec {
         'form-drawer',
         {
           recordType: data.formDrawerRecordType,
+          drawerKey: data.formDrawerKey,
           def: data.formDrawerDef,
           headerDefs: data.formDrawerHeaderDefs,
           lineDefs: data.formDrawerLineDefs,
