@@ -51,6 +51,7 @@
     "additiveHint": "Choose a line to revise it, or create a new additive line.",
     "adjusts": "Adjusts {description}",
     "approve": "Approve",
+    "approvalBlockedHint": "Complete or void the open application first",
     "void": "Void",
     "voidConfirm": "Void change order {number}? Its audit history will be retained.",
     "add": "Add change order",
