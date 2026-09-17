@@ -615,7 +615,7 @@ export function PartyDrawer({
     if (!nameValid) {
       setNameError(true)
       setSaveState('error')
-      toast.error(t('drawer.nameRequired'))
+      toast.error(t('nameRequired'))
       return
     }
     const materialControlChange =
@@ -732,7 +732,7 @@ export function PartyDrawer({
     }
     switch (placement.key) {
       case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option></Select> : partyValue(kind === 'person' ? t('kindPerson') : t('kindCompany'))}</>
-      case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable ? <span className="text-red-500"> *</span> : null}</Label>{editable ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('drawer.nameRequired')}</p> : null}</> : partyValue(displayName)}</>
+      case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable ? <span className="text-red-500"> *</span> : null}</Label>{editable ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}</> : partyValue(displayName)}</>
       case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label>{editable ? <Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} /> : partyValue(shortCode, 'font-mono')}</>
       case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label>{editable ? <Input value={legalName} onChange={(event) => setLegalName(event.target.value)} /> : partyValue(legalName)}</>
       case 'email': return <><Label>{label(placement, tc('labels.email'))}</Label>{editable ? <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /> : partyValue(email)}</>
@@ -840,7 +840,7 @@ export function PartyDrawer({
           {mode !== 'edit' && (payload.customer || payload.vendor) ? (
             <>
               <Button asChild variant="outline">
-                <Link href={`/reports/statements/${payload.party.id}?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}>{t('drawer.viewStatement')}</Link>
+                <Link href={`/reports/statements/${payload.party.id}?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}>{t('viewStatement')}</Link>
               </Button>
               {canManage ? (
                 <SendButton
@@ -934,7 +934,7 @@ export function PartyDrawer({
                 placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')}
                 aria-invalid={nameError && !nameValid}
               />
-              {nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('drawer.nameRequired')}</p> : null}
+              {nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}
             </> : partyValue(displayName)}
           </div>
           <div className={field}>

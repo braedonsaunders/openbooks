@@ -39,7 +39,8 @@
       "compliance": "Conformité",
       "wages": "Taux de rémunération",
       "invoicing": "Facturation",
-      "pricing": "Tarification"
+      "pricing": "Tarification",
+      "payroll": "Paie"
     },
     "wages": {
       "title": "Taux de rémunération",

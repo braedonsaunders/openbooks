@@ -26,6 +26,9 @@
     "updateFailed": "Aktualisierung fehlgeschlagen",
     "nameRequired": "Benennen Sie den Geschäftspartner, um ihn zu speichern",
     "viewStatement": "Kontoauszug anzeigen",
+    "creditHold": "Kreditsperre",
+    "paymentHold": "Zahlungssperre",
+    "holdReason": "Grund der Sperre",
     "activated": "Geschäftspartner aktiviert",
     "deactivated": "Geschäftspartner deaktiviert",
     "tabs": {
@@ -39,7 +42,8 @@
       "compliance": "Compliance",
       "wages": "Lohnsätze",
       "invoicing": "Fakturierung",
-      "pricing": "Preise"
+      "pricing": "Preise",
+      "payroll": "Lohnabrechnung"
     },
     "wages": {
       "title": "Lohnsätze",
@@ -188,7 +192,10 @@
       "saved": "Compliance-Klasse gespeichert.",
       "saveFailed": "Speichern der Compliance-Klasse fehlgeschlagen.",
       "viewMatrix": "Compliance-Matrix öffnen"
-    }
+    },
+    "workerCompGroup": "BG-Gruppe",
+    "customForm": "Datensatzformular",
+    "manageForms": "Datensatzformular anpassen"
   },
   "rateBookAssignments": {
     "title": "Satzbuchzuordnungen",
