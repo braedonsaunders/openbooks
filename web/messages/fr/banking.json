@@ -600,6 +600,12 @@
       "lastSync": "Dernière synchronisation",
       "lastAttempt": "Dernière tentative",
       "never": "Jamais"
+    },
+    "client": {
+      "configure": {
+        "noEligibleAccounts": "Aucun compte bancaire rapprochable à connecter pour le moment. Marquez vos comptes bancaires et de carte comme rapprochables dans le Plan comptable, puis choisissez-en un ici.",
+        "noEligibleAccountsLink": "Ouvrir le Plan comptable"
+      }
     }
   },
   "pspSettlements": {

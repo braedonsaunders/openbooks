@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
@@ -601,6 +602,14 @@ function ConfigureConnection({
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
             </Select>
+            {accounts.length === 0 && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t("configure.noEligibleAccounts")}{" "}
+                <Link href="/accounts" className="text-teal-700 hover:underline dark:text-teal-300">
+                  {t("configure.noEligibleAccountsLink")}
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>

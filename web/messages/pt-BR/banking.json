@@ -603,6 +603,12 @@
       "lastSync": "Última sincronização",
       "lastAttempt": "Última tentativa",
       "never": "Nunca"
+    },
+    "client": {
+      "configure": {
+        "noEligibleAccounts": "Ainda não há contas bancárias conciliáveis para conectar. Marque suas contas bancárias e de cartão como conciliáveis no Plano de contas e escolha uma aqui.",
+        "noEligibleAccountsLink": "Abrir o Plano de contas"
+      }
     }
   },
   "pspSettlements": {

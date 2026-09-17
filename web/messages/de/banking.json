@@ -603,6 +603,12 @@
       "lastSync": "Letzte Synchronisierung",
       "lastAttempt": "Letzter Versuch",
       "never": "Nie"
+    },
+    "client": {
+      "configure": {
+        "noEligibleAccounts": "Noch keine abstimmbaren Bankkonten zum Verbinden. Markieren Sie Ihre Bank- und Kartenkonten im Kontenplan als abstimmbar und wählen Sie dann hier eines aus.",
+        "noEligibleAccountsLink": "Kontenplan öffnen"
+      }
     }
   },
   "pspSettlements": {

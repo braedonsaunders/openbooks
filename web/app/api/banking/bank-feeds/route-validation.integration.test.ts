@@ -105,6 +105,31 @@ test('bank-feed routes reject malformed ids as client errors', { skip: !enabled 
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
 
+// F-t11-005: the picker and the API must agree on what a feed can attach
+// to — a reconcilable BANK account. A reconcilable non-bank account (or an
+// inactive one) used to sail through POST and strand statements where no
+// banking surface can reconcile them.
+test('bank-feed POST refuses a reconcilable non-bank account', { skip: !enabled }, async () => {
+  const org = await fixture()
+  try {
+    await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+      where org_id=${org.orgId} and id=${org.accounts.clearing}`)
+    const refused = await post({ name: 'Clearing feed', provider: 'manual', accountId: org.accounts.clearing })
+    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
+    assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
+  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
+})
+
+test('bank-feed POST refuses an inactive reconcilable bank account', { skip: !enabled }, async () => {
+  const org = await fixture()
+  try {
+    await db.execute(sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`)
+    const refused = await post({ name: 'Dead feed', provider: 'manual', accountId: org.accounts.bank })
+    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
+    assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
+  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
+})
+
 test('bank-feed writes reject a syncCadence outside the stored check constraint', { skip: !enabled }, async () => {
   const org = await fixture()
   try {

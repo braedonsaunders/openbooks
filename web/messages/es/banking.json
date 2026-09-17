@@ -600,6 +600,12 @@
       "lastSync": "Última sincronización",
       "lastAttempt": "Último intento",
       "never": "Nunca"
+    },
+    "client": {
+      "configure": {
+        "noEligibleAccounts": "Aún no hay cuentas bancarias conciliables para conectar. Marque sus cuentas bancarias y de tarjeta como conciliables en el Plan de cuentas y luego elija una aquí.",
+        "noEligibleAccountsLink": "Abrir el Plan de cuentas"
+      }
     }
   },
   "pspSettlements": {

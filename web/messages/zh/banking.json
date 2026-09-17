@@ -603,6 +603,12 @@
       "lastSync": "上次同步",
       "lastAttempt": "上次尝试",
       "never": "从未"
+    },
+    "client": {
+      "configure": {
+        "noEligibleAccounts": "暂无可连接的可对账银行账户。请先在科目表中将银行和卡账户标记为可对账，然后在此选择。",
+        "noEligibleAccountsLink": "打开科目表"
+      }
     }
   },
   "pspSettlements": {
