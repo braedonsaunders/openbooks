@@ -8,7 +8,7 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–41: setup, banking, assistant, payroll, CRM, reports,
+Fleet-6 batches 9–44: setup, banking, assistant, payroll, CRM, reports,
 dashboard, documents, allocations, construction/AR, rates, assets,
 payroll, i18n, drawers/search/mobile, expenses, compliance, invites,
 agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
@@ -120,6 +120,17 @@ agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
   drawer catalog; mobile tabs prefer short AR/AP labels.
 - Stat tiles wrap instead of truncating; a retried flow parks the
   subject in pending_approval so the engine-enforced release can land.
+
+### Budgets, reports, drawers, and search (batches 42–44)
+
+- Draft budgets can be submitted, approved, and rejected with
+  revision-guarded provenance so Pending approval / Approved are reachable.
+- Report-schedule DELETE accepts a bodiless request; add-journal refusals
+  stay as a dialog alert; the related-party overlay receives Compliance
+  tab inputs.
+- Exact journal-entry numbers resolve outside list origin/link scope;
+  recurring cadence options translate in fr/es; setup wizard, go-live
+  guide, and api-keys copy backfill.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 
