@@ -223,6 +223,8 @@
       "pause": "Pause",
       "resume": "Resume",
       "cancelSub": "Cancel",
+      "cancelConfirmTitle": "Cancel subscription?",
+      "cancelConfirmBody": "Canceling ends recurring billing for this subscription. This cannot be undone.",
       "toasts": {
         "prorated": "Proration {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "Quantity updated (no proration due)",
