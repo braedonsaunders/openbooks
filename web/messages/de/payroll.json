@@ -7,5 +7,208 @@
       "qpipEmployerYtd": "Arbeitgeber-QPIP-Beiträge",
       "wcbAssessableYtd": "WCB-pflichtiges Entgelt"
     }
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# Lohn-Kontrollkonto ist} other {# Lohn-Kontrollkonten sind}} nicht eingerichtet:",
+    "openSettings": "Lohneinrichtung öffnen"
+  },
+  "columns": {
+    "employees": "Mitarbeiter",
+    "gross": "Brutto",
+    "net": "Netto",
+    "number": "Nummer",
+    "payDate": "Zahltag",
+    "period": "Periode",
+    "schedule": "Plan",
+    "status": "Status"
+  },
+  "description": "Lohnläufe, Mitarbeiter-Lohnprofile und gesetzliche Abzüge.",
+  "empty": {
+    "profiles": "Noch keine Mitarbeiter-Lohnprofile. Fügen Sie eines hinzu, um einen Mitarbeiter in Läufe einzubeziehen.",
+    "runs": "Noch keine Lohnläufe. Legen Sie einen aus einem Lohnplan an, um zu beginnen."
+  },
+  "home": {
+    "actions": {
+      "remittances": "Abführungen",
+      "resume": "Lauf fortsetzen",
+      "reviewPost": "Prüfen & verbuchen",
+      "startRun": "Abrechnung starten",
+      "viewRuns": "Lohnläufe",
+      "yearEnd": "Jahresabschluss"
+    },
+    "current": {
+      "noSchedules": "Keine aktiven Lohnpläne. Legen Sie einen Plan an, um mit der Abrechnung zu beginnen.",
+      "title": "Aktuelle Lohnperiode"
+    },
+    "directory": {
+      "employees": "Mitarbeiter",
+      "employeesHint": "aktive Lohnprofile",
+      "openingBalances": "Anfangssalden",
+      "parallelRun": "Parallellauf",
+      "retro": "Nachzahlung",
+      "runs": "Lohnläufe",
+      "runsHint": "in Arbeit · {total} insgesamt",
+      "setup": "Lohneinrichtung",
+      "setupHint": "Kontrollkonten fehlen",
+      "title": "Lohnabrechnung erkunden"
+    },
+    "exceptions": {
+      "allClear": "Alle Mitarbeiter sind abrechnungsbereit.",
+      "missingProfile": "{name} hat kein Lohnprofil",
+      "missingWage": "{name} hat keinen heute gültigen Lohnsatz",
+      "moreMissingProfiles": "{count, plural, one {# weiterer Mitarbeiter} other {# weitere Mitarbeiter}} ohne Lohnprofil",
+      "moreMissingWages": "{count, plural, one {# weiterer Mitarbeiter} other {# weitere Mitarbeiter}} ohne Lohnsatz",
+      "title": "Handlungsbedarf"
+    },
+    "frequency": {
+      "biweekly": "Zweiwöchentlich",
+      "monthly": "Monatlich",
+      "semi_monthly": "Halbmonatlich",
+      "weekly": "Wöchentlich"
+    },
+    "previous": {
+      "none": "Noch keine abgeschlossenen Lohnläufe.",
+      "title": "Vorherige Lohnperiode"
+    },
+    "tabs": {
+      "overview": "Lohnabrechnung",
+      "remittances": "Abführungen",
+      "runs": "Lohnläufe",
+      "separations": "Austritte",
+      "yearEnd": "Jahresabschluss"
+    },
+    "vitals": {
+      "employees": "Auf der Lohnliste",
+      "employeesSub": "aktive Lohnprofile",
+      "nextPayDate": "Nächster Zahltag",
+      "noSchedule": "kein aktiver Rhythmus",
+      "periodsOf": "{ran} von {total}",
+      "periodsRan": "Lohnperioden {year}",
+      "periodsRanSub": "in diesem Steuerjahr verbucht",
+      "ytdEmployerCost": "+{amount} Arbeitgeberkosten",
+      "ytdGross": "Brutto laufendes Jahr",
+      "ytdNet": "Netto laufendes Jahr",
+      "ytdNetSub": "aus verbuchten Läufen"
+    }
+  },
+  "list": {
+    "description": "Alle Lohnläufe. Nach Phase oder Plan suchen und filtern, dann einen Lauf zur Verarbeitung öffnen.",
+    "open": "Lauf öffnen",
+    "stageFilter": "Phase",
+    "title": "Lohnläufe"
+  },
+  "newRun": {
+    "create": "Neuer Lohnlauf",
+    "description": "Bestätigen Sie den Zeitraum dieses Laufs. Die nächste Periode des Plans ist vorausgefüllt; ändern Sie die Daten für einen außerplanmäßigen oder Nachhollauf.",
+    "employees": "Bezahlte Mitarbeiter",
+    "employeesHint": "Ein Schlusslauf zahlt jede angesammelte Bank aus und löst sie auf, daher läuft er nur für die hier genannten Mitarbeiter.",
+    "invalidWindow": "Das Periodenende muss auf oder nach dem Beginn liegen, und der Zahltag auf oder nach dem Periodenende.",
+    "noSchedules": "Keine aktiven Lohnpläne",
+    "noTerminated": "Kein Mitarbeiter dieses Plans hat ein Austrittsdatum hinterlegt. Erfassen Sie es zuerst beim Mitarbeiter — ohne das Datum lässt sich keine Schlussabrechnung berechnen.",
+    "notBegun": "Diese Periode beginnt am {date} und hat noch nicht begonnen. Wählen Sie eine laufende oder abgeschlossene Periode.",
+    "payDateHint": "Der Tag, an dem die Mitarbeiter bezahlt werden. Die gesetzlichen Sätze werden aus diesem Datum abgeleitet.",
+    "periodEnd": "Periodenende",
+    "periodStart": "Periodenbeginn",
+    "runType": "Laufart",
+    "runTypeHint": {
+      "bonus": "Außerplanmäßige Zahlung für Boni und Provisionen. Kein Gehalt, keine Zeiten, keine wiederkehrenden Abzüge; Bezüge werden nach der Bonusmethode besteuert.",
+      "regular": "Die normale Abrechnung des Plans: Gehalt, genehmigte Zeiten, wiederkehrende Bestandteile und Abzüge.",
+      "termination": "Schlussabrechnung für austretende Mitarbeiter. Enthält die Auszahlung des angesammelten Urlaubsguthabens."
+    },
+    "schedule": "Lohnplan"
+  },
+  "register": {
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Sonstige Abzüge",
+    "print": "Drucken",
+    "title": "Lohnregister",
+    "totals": "Summen ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
+  },
+  "remittances": {
+    "apLink": "Kreditorenrechnungen öffnen",
+    "apNote": "Abführungsrechnungen sind gewöhnliche Lieferantenrechnungen:",
+    "apply": "Anwenden",
+    "assignVendor": "Ordnen Sie auf den Bestandteilen einen Lieferanten zu",
+    "back": "Lohnabrechnung",
+    "billCreated": "Rechnungsentwurf {number} erstellt. Prüfen und buchen Sie ihn in den Kreditoren.",
+    "context": "Bruttolohnsumme {gross} · {employees, plural, one {# Mitarbeiter} other {# Mitarbeiter}} im Zeitraum",
+    "createAnother": "Weitere Rechnung erstellen",
+    "createBill": "Abführungsrechnung erstellen",
+    "description": "Aufgelaufene Einbehalte und Arbeitgeberbeiträge je Empfänger für einen Zeitraum. Das Erstellen einer Rechnung belastet die Verbindlichkeitskonten und übergibt die Zahlung an die Kreditoren.",
+    "dueOn": "Fällig am {dueDate} · {authority}",
+    "employer": "Arbeitgeber",
+    "empty": "Keine verbuchten Lohnläufe mit abführbaren Beträgen in diesem Zeitraum.",
+    "from": "Von",
+    "noAccount": "Kein Verbindlichkeitskonto",
+    "title": "Lohnabführungen",
+    "to": "Bis",
+    "total": "Abzuführende Summe",
+    "unassigned": "Kein Abführungslieferant zugeordnet",
+    "withheld": "Einbehalten"
+  },
+  "run": {
+    "approvalNotRequired": "Für Lohnläufe gilt keine Genehmigungsrichtlinie",
+    "approvalPending": "Genehmigung ausstehend ({count} offen) — Festschreibung und Buchung sind blockiert",
+    "approvalSubmitted": "Mit dem Nachweispaket zur Genehmigung gesendet",
+    "calculate": "Berechnen",
+    "calculateDone": "Lohnlauf berechnet.",
+    "commit": "Festschreiben",
+    "commitDone": "Lohnlauf festgeschrieben.",
+    "employerCost": "Arbeitgeberkosten",
+    "empty": "Keine Abrechnungen. Berechnen Sie den Lauf, um sie zu erzeugen.",
+    "lineKind": {
+      "deduction": "Abzug",
+      "earning": "Bezug",
+      "employer_contribution": "Arbeitgeber"
+    },
+    "post": "Buchen",
+    "postDone": "Lohnlauf gebucht.",
+    "printSet": "Drucksatz (nur Druckausgabe)",
+    "stub": {
+      "employee": "Mitarbeiter",
+      "lines": "Lohnzeilen",
+      "tax": "Steuer",
+      "trace": "{engine}-Nachvollzug"
+    },
+    "stubsPrintOnly": "{count} Mitarbeiter sind nur Druckausgabe und wurden nicht per E-Mail benachrichtigt",
+    "submitApproval": "Zur Genehmigung einreichen",
+    "title": "Lohnlauf"
+  },
+  "runType": {
+    "bonus": "Außerplanmäßiger Bonus",
+    "regular": "Regulär",
+    "termination": "Schlussabrechnung"
+  },
+  "status": {
+    "calculated": "Berechnet",
+    "committed": "Festgeschrieben",
+    "draft": "Entwurf",
+    "posted": "Verbucht",
+    "void": "Storniert"
+  },
+  "tabs": {
+    "employees": "Mitarbeiter ({count})",
+    "runs": "Lohnläufe"
+  },
+  "title": "Lohnabrechnung",
+  "wizard": {
+    "steps": {
+      "finish": "Buchen & abschließen",
+      "gl": "Hauptbuch-Vorschau & Festschreibung",
+      "period": "Umfang",
+      "readiness": "Prüfung",
+      "review": "Abrechnungen prüfen"
+    }
+  },
+  "yearEnd": {
+    "cadence": {
+      "annual": "Jahresmeldungen",
+      "annualHelp": "Einmal je Steuerjahr eingereicht (T4, W-2, RL-1). Die Steuerjahr-Auswahl oben bestimmt, welche Grundgesamtheit gezeigt wird.",
+      "quarterly": "Quartalsmeldungen",
+      "quarterlyHelp": "Einmal je Kalenderquartal eingereicht (Formular 941) — die Bevölkerungstabelle zeigt eine Zeile je Quartal innerhalb des gewählten Steuerjahrs."
+    },
+    "description": "Jede jährliche und vierteljährliche Meldung, die die installierten Lohnpakete vorsehen, erstellt aus verbuchten Abrechnungen — jede Position stimmt mit den Abrechnungsspuren überein.",
+    "noFilings": "Für diese Organisation sind keine Lohn-Jahresmeldungen vorgesehen.",
+    "title": "Jahresabschluss"
   }
 }

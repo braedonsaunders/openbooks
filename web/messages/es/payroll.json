@@ -7,5 +7,208 @@
       "qpipEmployerYtd": "Primas QPIP del empleador",
       "wcbAssessableYtd": "Ingresos evaluables WCB"
     }
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# cuenta de control de nómina está} other {# cuentas de control de nómina están}} sin configurar:",
+    "openSettings": "Abrir configuración de nómina"
+  },
+  "columns": {
+    "employees": "Empleados",
+    "gross": "Bruto",
+    "net": "Neto",
+    "number": "Número",
+    "payDate": "Fecha de pago",
+    "period": "Período",
+    "schedule": "Calendario",
+    "status": "Estado"
+  },
+  "description": "Ciclos de nómina, perfiles de nómina de empleados y retenciones obligatorias.",
+  "empty": {
+    "profiles": "Aún no hay perfiles de nómina de empleados. Añada uno para incluir a un empleado en los ciclos.",
+    "runs": "Aún no hay ciclos de nómina. Cree uno desde un calendario de nómina para empezar."
+  },
+  "home": {
+    "actions": {
+      "remittances": "Remesas",
+      "resume": "Reanudar el ciclo",
+      "reviewPost": "Revisar y contabilizar",
+      "startRun": "Ejecutar la nómina",
+      "viewRuns": "Nóminas",
+      "yearEnd": "Cierre anual"
+    },
+    "current": {
+      "noSchedules": "No hay calendarios de nómina activos. Cree un calendario para empezar a procesar la nómina.",
+      "title": "Período de nómina actual"
+    },
+    "directory": {
+      "employees": "Empleados",
+      "employeesHint": "perfiles de nómina activos",
+      "openingBalances": "Saldos iniciales",
+      "parallelRun": "Nómina paralela",
+      "retro": "Pago retroactivo",
+      "runs": "Nóminas",
+      "runsHint": "en curso · {total} en total",
+      "setup": "Configuración de nómina",
+      "setupHint": "faltan cuentas de control",
+      "title": "Explorar la nómina"
+    },
+    "exceptions": {
+      "allClear": "Todos los empleados están listos para la nómina.",
+      "missingProfile": "{name} no tiene perfil de nómina",
+      "missingWage": "{name} no tiene tarifa salarial vigente hoy",
+      "moreMissingProfiles": "{count, plural, one {# empleado más} other {# empleados más}} sin perfil de nómina",
+      "moreMissingWages": "{count, plural, one {# empleado más} other {# empleados más}} sin tarifa salarial",
+      "title": "Requiere atención"
+    },
+    "frequency": {
+      "biweekly": "Bisemanal",
+      "monthly": "Mensual",
+      "semi_monthly": "Quincenal",
+      "weekly": "Semanal"
+    },
+    "previous": {
+      "none": "Aún no hay ciclos de nómina terminados.",
+      "title": "Período de nómina anterior"
+    },
+    "tabs": {
+      "overview": "Nómina",
+      "remittances": "Remesas",
+      "runs": "Nóminas",
+      "separations": "Bajas",
+      "yearEnd": "Cierre anual"
+    },
+    "vitals": {
+      "employees": "En nómina",
+      "employeesSub": "perfiles de nómina activos",
+      "nextPayDate": "Próxima fecha de pago",
+      "noSchedule": "sin calendario activo",
+      "periodsOf": "{ran} de {total}",
+      "periodsRan": "Períodos de nómina {year}",
+      "periodsRanSub": "contabilizados este año fiscal",
+      "ytdEmployerCost": "+{amount} costo del empleador",
+      "ytdGross": "Bruto acumulado",
+      "ytdNet": "Neto acumulado",
+      "ytdNetSub": "de ciclos contabilizados"
+    }
+  },
+  "list": {
+    "description": "Todos los ciclos de nómina. Busque y filtre por etapa o calendario, luego abra un ciclo para procesarlo.",
+    "open": "Abrir ciclo",
+    "stageFilter": "Etapa",
+    "title": "Nóminas"
+  },
+  "newRun": {
+    "create": "Nuevo ciclo de nómina",
+    "description": "Confirme el período que cubre este ciclo. El siguiente período del calendario viene precargado; cambie las fechas para un ciclo fuera de ciclo o de recuperación.",
+    "employees": "Empleados pagados",
+    "employeesHint": "Un ciclo final paga y liquida cada banco acumulado, por lo que solo incluye a los empleados nombrados aquí.",
+    "invalidWindow": "El fin del período debe ser igual o posterior al inicio, y la fecha de pago igual o posterior al fin del período.",
+    "noSchedules": "Sin calendarios de nómina activos",
+    "noTerminated": "Ningún empleado de este calendario tiene fecha de baja registrada. Regístrela primero en el empleado — sin ella no se puede calcular un finiquito.",
+    "notBegun": "Este período comienza el {date} y aún no ha empezado. Elija un período en curso o terminado.",
+    "payDateHint": "La fecha en que se paga a los empleados. Las tasas obligatorias se determinan a partir de esta fecha.",
+    "periodEnd": "Fin del período",
+    "periodStart": "Inicio del período",
+    "runType": "Tipo de ciclo",
+    "runTypeHint": {
+      "bonus": "Pago fuera de ciclo para bonos y comisiones. Sin salario, tiempo ni deducciones recurrentes; las percepciones tributan por el método de bonos.",
+      "regular": "La nómina normal del calendario: salario, tiempo aprobado, conceptos y deducciones recurrentes.",
+      "termination": "Pago final para empleados que se van. Incluye el pago del saldo vacacional acumulado."
+    },
+    "schedule": "Calendario de nómina"
+  },
+  "register": {
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Otras deducciones",
+    "print": "Imprimir",
+    "title": "Registro de nómina",
+    "totals": "Totales ({count, plural, one {# empleado} other {# empleados}})"
+  },
+  "remittances": {
+    "apLink": "abrir facturas de proveedor",
+    "apNote": "Las facturas de remesa son facturas de proveedor ordinarias:",
+    "apply": "Aplicar",
+    "assignVendor": "Asigne un proveedor en los conceptos",
+    "back": "Nómina",
+    "billCreated": "Borrador de factura {number} creado. Revíselo y contabilícelo en cuentas por pagar.",
+    "context": "Nómina bruta {gross} · {employees, plural, one {# empleado} other {# empleados}} en el período",
+    "createAnother": "Crear otra factura",
+    "createBill": "Crear factura de remesa",
+    "description": "Retenciones acumuladas y aportaciones patronales por destino para un período. Crear una factura carga las cuentas de pasivo y entrega el pago a cuentas por pagar.",
+    "dueOn": "Vence el {dueDate} · {authority}",
+    "employer": "Empleador",
+    "empty": "No hay ciclos contabilizados con montos remitibles en este período.",
+    "from": "Desde",
+    "noAccount": "Sin cuenta de pasivo",
+    "title": "Remesas de nómina",
+    "to": "Hasta",
+    "total": "Total a remitir",
+    "unassigned": "Sin proveedor de remesa asignado",
+    "withheld": "Retenido"
+  },
+  "run": {
+    "approvalNotRequired": "Ninguna política de aprobación aplica a los ciclos de nómina",
+    "approvalPending": "En espera de aprobación ({count} pendientes) — la confirmación y contabilización están bloqueadas",
+    "approvalSubmitted": "Enviado a aprobación con el paquete de evidencia",
+    "calculate": "Calcular",
+    "calculateDone": "Nómina calculada.",
+    "commit": "Confirmar",
+    "commitDone": "Nómina confirmada.",
+    "employerCost": "Costo del empleador",
+    "empty": "Sin recibos. Calcule el ciclo para generarlos.",
+    "lineKind": {
+      "deduction": "Deducción",
+      "earning": "Percepción",
+      "employer_contribution": "Empleador"
+    },
+    "post": "Contabilizar",
+    "postDone": "Nómina contabilizada.",
+    "printSet": "Juego de impresión (solo impresión)",
+    "stub": {
+      "employee": "Empleado",
+      "lines": "Líneas de nómina",
+      "tax": "Impuesto",
+      "trace": "traza {engine}"
+    },
+    "stubsPrintOnly": "{count} empleados son solo impresión y no recibieron correo",
+    "submitApproval": "Enviar a aprobación",
+    "title": "Ciclo de nómina"
+  },
+  "runType": {
+    "bonus": "Bono fuera de ciclo",
+    "regular": "Ordinario",
+    "termination": "Finiquito"
+  },
+  "status": {
+    "calculated": "Calculado",
+    "committed": "Confirmado",
+    "draft": "Borrador",
+    "posted": "Contabilizado",
+    "void": "Anulado"
+  },
+  "tabs": {
+    "employees": "Empleados ({count})",
+    "runs": "Nóminas"
+  },
+  "title": "Nómina",
+  "wizard": {
+    "steps": {
+      "finish": "Contabilizar y terminar",
+      "gl": "Vista previa contable y confirmación",
+      "period": "Alcance",
+      "readiness": "Preparación",
+      "review": "Revisar recibos"
+    }
+  },
+  "yearEnd": {
+    "cadence": {
+      "annual": "Declaraciones anuales",
+      "annualHelp": "Se presentan una vez por año fiscal (T4, W-2, RL-1). El selector de año fiscal de arriba elige la población mostrada.",
+      "quarterly": "Declaraciones trimestrales",
+      "quarterlyHelp": "Se presentan una vez por trimestre calendario (formulario 941) — la tabla de población muestra una fila por trimestre dentro del año fiscal elegido."
+    },
+    "description": "Cada declaración anual y trimestral que prevén los paquetes de nómina instalados, construida desde recibos contabilizados — cada casilla concilia con las trazas de recibos.",
+    "noFilings": "No hay declaraciones de cierre de nómina previstas para esta organización.",
+    "title": "Cierre anual"
   }
 }

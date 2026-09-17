@@ -427,9 +427,6 @@
     },
     "stub": {
       "employee": "Employee",
-      "province": "Province",
-      "cpp": "CPP",
-      "ei": "EI",
       "tax": "Tax",
       "lines": "Pay lines",
       "trace": "{engine} trace"

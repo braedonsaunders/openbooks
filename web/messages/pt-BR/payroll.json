@@ -7,5 +7,208 @@
       "qpipEmployerYtd": "Contribuições QPIP do empregador",
       "wcbAssessableYtd": "Rendimentos avaliáveis WCB"
     }
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# conta de controle da folha está} other {# contas de controle da folha estão}} sem configurar:",
+    "openSettings": "Abrir configuração da folha"
+  },
+  "columns": {
+    "employees": "Funcionários",
+    "gross": "Bruto",
+    "net": "Líquido",
+    "number": "Número",
+    "payDate": "Data de pagamento",
+    "period": "Período",
+    "schedule": "Cronograma",
+    "status": "Status"
+  },
+  "description": "Folhas, perfis de funcionários e retenções obrigatórias.",
+  "empty": {
+    "profiles": "Nenhum perfil de folha ainda. Adicione um para incluir um funcionário nas folhas.",
+    "runs": "Nenhuma folha ainda. Crie uma a partir de um cronograma de folha para começar."
+  },
+  "home": {
+    "actions": {
+      "remittances": "Recolhimentos",
+      "resume": "Retomar folha",
+      "reviewPost": "Revisar e lançar",
+      "startRun": "Processar folha",
+      "viewRuns": "Folhas",
+      "yearEnd": "Fechamento anual"
+    },
+    "current": {
+      "noSchedules": "Sem cronogramas de folha ativos. Crie um cronograma para começar a processar a folha.",
+      "title": "Período de folha atual"
+    },
+    "directory": {
+      "employees": "Funcionários",
+      "employeesHint": "perfis de folha ativos",
+      "openingBalances": "Saldos iniciais",
+      "parallelRun": "Folha paralela",
+      "retro": "Pagamento retroativo",
+      "runs": "Folhas",
+      "runsHint": "em andamento · {total} no total",
+      "setup": "Configuração da folha",
+      "setupHint": "contas de controle ausentes",
+      "title": "Explorar a folha"
+    },
+    "exceptions": {
+      "allClear": "Todos os funcionários estão prontos para a folha.",
+      "missingProfile": "{name} não tem perfil de folha",
+      "missingWage": "{name} não tem salário vigente hoje",
+      "moreMissingProfiles": "{count, plural, one {# outro funcionário} other {# outros funcionários}} sem perfil de folha",
+      "moreMissingWages": "{count, plural, one {# outro funcionário} other {# outros funcionários}} sem salário",
+      "title": "Precisa de atenção"
+    },
+    "frequency": {
+      "biweekly": "Quinzenal",
+      "monthly": "Mensal",
+      "semi_monthly": "Duas vezes ao mês",
+      "weekly": "Semanal"
+    },
+    "previous": {
+      "none": "Nenhuma folha concluída ainda.",
+      "title": "Período de folha anterior"
+    },
+    "tabs": {
+      "overview": "Folha de pagamento",
+      "remittances": "Recolhimentos",
+      "runs": "Folhas",
+      "separations": "Desligamentos",
+      "yearEnd": "Fechamento anual"
+    },
+    "vitals": {
+      "employees": "Na folha",
+      "employeesSub": "perfis de folha ativos",
+      "nextPayDate": "Próxima data de pagamento",
+      "noSchedule": "sem cronograma ativo",
+      "periodsOf": "{ran} de {total}",
+      "periodsRan": "Períodos de folha {year}",
+      "periodsRanSub": "lançados neste ano fiscal",
+      "ytdEmployerCost": "+{amount} custo do empregador",
+      "ytdGross": "Bruto acumulado",
+      "ytdNet": "Líquido acumulado",
+      "ytdNetSub": "de folhas lançadas"
+    }
+  },
+  "list": {
+    "description": "Todas as folhas. Pesquise e filtre por etapa ou cronograma, depois abra uma folha para processá-la.",
+    "open": "Abrir folha",
+    "stageFilter": "Etapa",
+    "title": "Folhas"
+  },
+  "newRun": {
+    "create": "Nova folha",
+    "description": "Confirme o período desta folha. O próximo período do cronograma já vem preenchido; altere as datas para uma folha fora do ciclo ou retroativa.",
+    "employees": "Funcionários pagos",
+    "employeesHint": "Uma folha final paga e zera todos os bancos acumulados, por isso abrange apenas os funcionários indicados aqui.",
+    "invalidWindow": "O fim do período deve ser igual ou posterior ao início, e a data de pagamento igual ou posterior ao fim do período.",
+    "noSchedules": "Sem cronogramas de folha ativos",
+    "noTerminated": "Nenhum funcionário deste cronograma tem data de desligamento registrada. Registre-a primeiro no funcionário — sem ela não há como calcular um acerto final.",
+    "notBegun": "Este período começa em {date} e ainda não começou. Escolha um período em curso ou concluído.",
+    "payDateHint": "A data em que os funcionários são pagos. As alíquotas obrigatórias são apuradas a partir desta data.",
+    "periodEnd": "Fim do período",
+    "periodStart": "Início do período",
+    "runType": "Tipo de folha",
+    "runTypeHint": {
+      "bonus": "Pagamento fora do ciclo para bônus e comissões. Sem salário, horas ou descontos recorrentes; os proventos são tributados pelo método de bônus.",
+      "regular": "A folha normal do cronograma: salário, horas aprovadas, componentes e descontos recorrentes.",
+      "termination": "Pagamento final para funcionários desligados. Inclui o pagamento do saldo de férias acumulado."
+    },
+    "schedule": "Cronograma de folha"
+  },
+  "register": {
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Outros descontos",
+    "print": "Imprimir",
+    "title": "Livro de folha",
+    "totals": "Totais ({count, plural, one {# funcionário} other {# funcionários}})"
+  },
+  "remittances": {
+    "apLink": "abrir faturas de fornecedor",
+    "apNote": "Faturas de recolhimento são faturas comuns de fornecedor:",
+    "apply": "Aplicar",
+    "assignVendor": "Atribua um fornecedor nos componentes",
+    "back": "Folha de pagamento",
+    "billCreated": "Rascunho de fatura {number} criado. Revise e contabilize no contas a pagar.",
+    "context": "Folha bruta {gross} · {employees, plural, one {# funcionário} other {# funcionários}} no período",
+    "createAnother": "Criar outra fatura",
+    "createBill": "Criar fatura de recolhimento",
+    "description": "Retenções acumuladas e encargos patronais por destino em um período. Criar uma fatura debita as contas de passivo e entrega o pagamento ao contas a pagar.",
+    "dueOn": "Vence em {dueDate} · {authority}",
+    "employer": "Empregador",
+    "empty": "Sem folhas lançadas com valores recolhíveis neste período.",
+    "from": "De",
+    "noAccount": "Sem conta de passivo",
+    "title": "Recolhimentos da folha",
+    "to": "Até",
+    "total": "Total a recolher",
+    "unassigned": "Sem fornecedor de recolhimento atribuído",
+    "withheld": "Retido"
+  },
+  "run": {
+    "approvalNotRequired": "Nenhuma política de aprovação se aplica às folhas",
+    "approvalPending": "Aguardando aprovação ({count} pendentes) — lançamento e contabilização bloqueados",
+    "approvalSubmitted": "Enviada para aprovação com o dossiê de evidências",
+    "calculate": "Calcular",
+    "calculateDone": "Folha calculada.",
+    "commit": "Lançar",
+    "commitDone": "Folha lançada.",
+    "employerCost": "Custo do empregador",
+    "empty": "Sem holerites. Calcule a folha para gerá-los.",
+    "lineKind": {
+      "deduction": "Desconto",
+      "earning": "Provento",
+      "employer_contribution": "Empregador"
+    },
+    "post": "Contabilizar",
+    "postDone": "Folha contabilizada.",
+    "printSet": "Jogo de impressão (somente impressão)",
+    "stub": {
+      "employee": "Funcionário",
+      "lines": "Linhas da folha",
+      "tax": "Imposto",
+      "trace": "trilha {engine}"
+    },
+    "stubsPrintOnly": "{count} funcionários são somente impressão e não receberam e-mail",
+    "submitApproval": "Enviar para aprovação",
+    "title": "Folha"
+  },
+  "runType": {
+    "bonus": "Bônus fora do ciclo",
+    "regular": "Normal",
+    "termination": "Acerto final"
+  },
+  "status": {
+    "calculated": "Calculada",
+    "committed": "Lançada",
+    "draft": "Rascunho",
+    "posted": "Contabilizada",
+    "void": "Anulada"
+  },
+  "tabs": {
+    "employees": "Funcionários ({count})",
+    "runs": "Folhas"
+  },
+  "title": "Folha de pagamento",
+  "wizard": {
+    "steps": {
+      "finish": "Lançar e concluir",
+      "gl": "Prévia contábil e lançamento",
+      "period": "Escopo",
+      "readiness": "Preparo",
+      "review": "Revisar holerites"
+    }
+  },
+  "yearEnd": {
+    "cadence": {
+      "annual": "Declarações anuais",
+      "annualHelp": "Entregues uma vez por ano fiscal (T4, W-2, RL-1). O seletor de ano fiscal acima escolhe a população exibida.",
+      "quarterly": "Declarações trimestrais",
+      "quarterlyHelp": "Entregues uma vez por trimestre civil (formulário 941) — a tabela de população mostra uma linha por trimestre do ano fiscal selecionado."
+    },
+    "description": "Toda declaração anual e trimestral prevista pelos pacotes de folha instalados, apurada a partir de holerites lançados — cada campo confere com as trilhas dos holerites.",
+    "noFilings": "Nenhuma declaração de fechamento de folha prevista para esta organização.",
+    "title": "Fechamento anual"
   }
 }
