@@ -1418,6 +1418,15 @@ export async function payRunFunding(
     return { method, netPay: sum(mine.map((s) => s.netPay)), employees: mine.length };
   });
 
+  // Account balances read the LEDGER reader — posted + reversed lines in the
+  // primary posting book, exactly the banking roster's balance leg
+  // (web/lib/module-home/banking.ts) and the GL summary. Reading posted-only
+  // counted live reversal legs while ignoring the voided originals they
+  // negate, so a voided transfer haunted funding (F-t05-004: 1010 at -$5,000
+  // beside the roster's $0.00, 1000 $2,500 apart) with no journal entry to
+  // explain the gap — because the explaining entries were the reversed ones
+  // this query excluded. A secondary book's adjustments must not inflate
+  // funding either, like bank reconciliation itself.
   const accounts = (await db.execute<{ id: string; label: string; balance: string }>(sql`
     select a.id, coalesce(a.number || ' · ', '') || a.name as label,
            coalesce(bal.amount, 0)::text as balance
@@ -1425,7 +1434,11 @@ export async function payRunFunding(
       left join lateral (
         select sum(jl.amount) as amount
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+           and je.status in ('posted', 'reversed')
+           and je.book_id = (select b.id from accounting_books b
+                              where b.org_id = ${orgId} and b.is_primary
+                              order by b.created_at limit 1)
          where jl.org_id = a.org_id and jl.account_id = a.id) bal on true
      where a.org_id = ${orgId} and a.is_active and not a.is_summary and a.type = 'asset_bank'
        ${allowedSubsidiaryIds == null
