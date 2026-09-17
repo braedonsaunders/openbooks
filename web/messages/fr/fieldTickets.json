@@ -38,7 +38,12 @@
     "createFailed": "Impossible de créer le bon"
   },
   "editor": {
-    "tabs": { "time": "Temps", "items": "Articles", "tasks": "Tâches", "related": "Associés" },
+    "tabs": {
+      "time": "Temps",
+      "items": "Articles",
+      "tasks": "Tâches",
+      "related": "Associés"
+    },
     "periodLocked": "Supprimez les heures saisies avant de modifier la période.",
     "back": "Bons de régie",
     "submit": "Soumettre",
@@ -108,13 +113,24 @@
       "amount": "Montant",
       "equipment": "Unité d'équipement",
       "pooledItem": "Aucune unité précise",
-      "rateSource": { "rate_book": "Tarif issu de la grille", "item_default": "Tarif par défaut de l'article" },
+      "rateSource": {
+        "rate_book": "Tarif issu de la grille",
+        "item_default": "Tarif par défaut de l'article"
+      },
       "add": "Ajouter une ligne",
       "remove": "Retirer la ligne",
       "empty": "Aucune ligne pour l'instant.",
-      "itemRequired": "Choisissez un article"
+      "itemRequired": "Choisissez un article",
+      "operator": "Opérateur",
+      "noOperator": "Non renseigné"
     },
-    "tasks": { "title": "Tâches du projet", "hint": "Tâches WBS disponibles pour imputer les heures.", "code": "Code", "task": "Tâche", "estimatedHours": "Heures estimées" },
+    "tasks": {
+      "title": "Tâches du projet",
+      "hint": "Tâches WBS disponibles pour imputer les heures.",
+      "code": "Code",
+      "task": "Tâche",
+      "estimatedHours": "Heures estimées"
+    },
     "totals": {
       "title": "Totaux du bon",
       "labor": "Main-d'œuvre",
@@ -147,6 +163,10 @@
     "sendMessage": "Message (optionnel)",
     "send": "Envoyer",
     "signatureSent": "Lien de signature envoyé à {to}",
-    "pdf": "PDF"
+    "pdf": "PDF",
+    "discard": "Abandonner le brouillon",
+    "discardConfirm": "Abandonner ce brouillon vide ? Un brouillon qui contient déjà des heures, des lignes ou des signatures est conservé — seul un brouillon sans aucun contenu est supprimé.",
+    "discardFailed": "Impossible d'abandonner le brouillon.",
+    "discarded": "Brouillon abandonné."
   }
 }
