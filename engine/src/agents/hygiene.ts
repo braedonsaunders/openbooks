@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { addCalendarDays, businessToday } from "../business-date.ts";
 import { db } from "../db.ts";
 import type { ContinuousCloseDetectorPolicy } from "../continuous-close-config.ts";
 import type { AgentFinding } from "./types.ts";
@@ -75,9 +76,11 @@ export type ControlMismatchRow = {
   accountNumber: string | null;
   accountName: string;
   accountType: string;
-  reason: "open_item_misuse" | "name_type";
+  reason: "open_item_misuse" | "name_type" | "bank_credit_balance";
   detail: string;
   sampleDocId: string | null;
+  /** Lifetime debit-signed balance; set for balance-behavior reasons. */
+  balance: string | null;
 };
 
 export type DuplicatePartyRow = {
@@ -126,7 +129,12 @@ export type HygieneLoaders = {
 };
 
 async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[]> {
-  const [accounts, misuse] = await Promise.all([
+  // The trailing window that separates a persistent credit-normal bank
+  // balance (a miscategorised provision or an unmanaged overdraft) from a
+  // timing overdraft: negative now but positive before the window stays
+  // silent. Anchored on the org business day, never the database UTC date.
+  const cutoff = addCalendarDays(await businessToday(orgId), -90);
+  const [accounts, misuse, bankCredit] = await Promise.all([
     db.execute<{ account_id: string; number: string | null; name: string; type: string }>(sql`
       select id as account_id, number, name, type
         from accounts
@@ -142,10 +150,48 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
          and a.type not in ('asset_receivable', 'liability_payable')
        group by jl.account_id
     `),
+    // Bank-typed accounts behave as cash in every cash reader, so one that
+    // persistently carries a credit-normal balance corrupts cash everywhere
+    // (F-t08-003: a -CA$40,000 tax provision typed asset_bank). Reconcilable
+    // accounts are managed facilities the business tracks as banks and stay
+    // silent; genuine cash is debit-normal and never matches.
+    db.execute<{ account_id: string; number: string | null; name: string; type: string; balance: string }>(sql`
+      select a.id as account_id, a.number, a.name, a.type,
+             coalesce(sum(l.amount), 0) as balance
+        from accounts a
+        left join journal_lines l on l.account_id = a.id and l.org_id = a.org_id
+        left join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          and e.status in ('posted', 'reversed')
+       where a.org_id = ${orgId} and a.is_active and not a.is_summary
+         and a.type = 'asset_bank' and not a.reconcilable
+       group by a.id
+      having coalesce(sum(l.amount), 0) < -0.005
+         and coalesce(sum(l.amount) filter (where e.posting_date < ${cutoff}), 0) < 0.005
+       order by abs(sum(l.amount)) desc
+       limit 50
+    `),
   ]);
   const misuseByAccount = new Map(misuse.rows.map((row) => [row.account_id, row.sample_doc_id]));
+  const bankCreditByAccount = new Map(bankCredit.rows.map((row) => [row.account_id, row]));
   const out: ControlMismatchRow[] = [];
+  // One finding per account: the behavioral signal dominates the keyword
+  // signal, so a persistently credit-normal unreconciled bank reports its
+  // cash impact rather than its name.
   for (const account of accounts.rows) {
+    const credit = bankCreditByAccount.get(account.account_id);
+    if (credit) {
+      out.push({
+        accountId: account.account_id,
+        accountNumber: account.number,
+        accountName: account.name,
+        accountType: account.type,
+        reason: "bank_credit_balance",
+        detail: `typed asset_bank but carries a credit-normal balance of ${credit.balance} that predates the trailing 90 days, and it is not statement-reconcilable, so every cash reader counts it as cash`,
+        sampleDocId: null,
+        balance: credit.balance,
+      });
+      continue;
+    }
     const sampleDocId = misuseByAccount.get(account.account_id) ?? null;
     if (sampleDocId !== undefined && misuseByAccount.has(account.account_id)) {
       out.push({
@@ -156,6 +202,7 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
         reason: "open_item_misuse",
         detail: `open-item postings sit on a ${account.type} account; only asset_receivable / liability_payable controls may carry open items`,
         sampleDocId,
+        balance: null,
       });
       continue;
     }
@@ -169,6 +216,7 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
         reason: "name_type",
         detail: `named like ${label} but typed ${account.type}`,
         sampleDocId: null,
+        balance: null,
       });
     }
   }
@@ -328,7 +376,11 @@ export async function hygieneFindings(
           accountType: row.accountType,
           reason: row.reason,
           detail: row.detail,
-          review: "Rename the account or retype it in the chart of accounts, then re-run.",
+          balance: row.balance,
+          review:
+            row.reason === "bank_credit_balance"
+              ? "Confirm the account is really cash (reconcile it as a bank account) or correct its type in the chart of accounts, then re-run."
+              : "Rename the account or retype it in the chart of accounts, then re-run.",
           href: "/accounts",
         },
         evidence: [
@@ -342,6 +394,7 @@ export async function hygieneFindings(
               accountType: row.accountType,
               reason: row.reason,
               sampleDocumentId: row.sampleDocId,
+              balance: row.balance,
             },
           },
         ],
