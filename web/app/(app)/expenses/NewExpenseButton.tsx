@@ -16,16 +16,18 @@ export function NewExpenseButton() {
 
   async function create() {
     setBusy(true)
-    const res = await fetch('/api/expenses/draft', { method: 'POST' })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('toasts.draftFailed'))
+    try {
+      const res = await fetch('/api/expenses/draft', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? t('toasts.draftFailed'))
+      if (!data.id) throw new Error(t('toasts.draftFailed'))
+      router.push(`/expenses/reports?expense=${data.id}&mode=edit`)
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('toasts.draftFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    router.push(`/expenses/reports?expense=${data.id}&mode=edit`)
-    router.refresh()
-    setBusy(false)
   }
 
   return (
