@@ -87,6 +87,9 @@
     "copyPriorActuals": "Copy prior-year actuals",
     "applySource": "Apply",
     "delete": "Delete draft",
+    "submit": "Submit for approval",
+    "approve": "Approve",
+    "reject": "Reject",
     "openReport": "Budget vs Actual",
     "exportCsv": "Export CSV",
     "exportXlsx": "Export Excel"
@@ -97,7 +100,10 @@
     "clearPage": "Clear every value on the current account page?",
     "clearYear": "Clear this account for the full fiscal year?",
     "copyPriorActuals": "Replace this dimensional slice with prior-year posted actuals?",
-    "applySource": "Replace every line in this draft with the selected budget's values?"
+    "applySource": "Replace every line in this draft with the selected budget's values?",
+    "submit": "Submit this budget for approval? It will lock for editing until a decision is made.",
+    "approve": "Approve this budget?",
+    "reject": "Return this budget to draft?"
   },
   "feedback": {
     "archived": "Budget archived.",
@@ -105,6 +111,9 @@
     "actualsCopied": "Prior-year actuals copied into this slice.",
     "sourceApplied": "Starting-point values applied to this draft.",
     "deleted": "Budget draft deleted.",
+    "submitted": "Sent for approval.",
+    "approved": "Budget approved.",
+    "rejected": "Budget returned to draft.",
     "actionFailed": "The budget action failed.",
     "revisionConflict": "This budget changed elsewhere. Reload to continue."
   },

@@ -87,6 +87,9 @@
     "copyPriorActuals": "Copier les résultats réels antérieurs",
     "applySource": "Appliquer",
     "delete": "Supprimer le brouillon",
+    "submit": "Soumettre pour approbation",
+    "approve": "Approuver",
+    "reject": "Rejeter",
     "openReport": "Budget et réel",
     "exportCsv": "Exporter en CSV",
     "exportXlsx": "Exporter vers Excel"
@@ -97,7 +100,10 @@
     "clearPage": "Effacer toutes les valeurs de la page de comptes actuelle?",
     "clearYear": "Effacer ce compte pour tout l’exercice?",
     "copyPriorActuals": "Remplacer cette tranche par les résultats réels comptabilisés de l’exercice précédent?",
-    "applySource": "Remplacer toutes les lignes de ce brouillon par les valeurs du budget sélectionné?"
+    "applySource": "Remplacer toutes les lignes de ce brouillon par les valeurs du budget sélectionné?",
+    "submit": "Soumettre ce budget pour approbation ? Il sera verrouillé en modification jusqu’à la décision.",
+    "approve": "Approuver ce budget ?",
+    "reject": "Renvoyer ce budget en brouillon ?"
   },
   "feedback": {
     "archived": "Budget archivé.",
@@ -105,6 +111,9 @@
     "actualsCopied": "Résultats réels antérieurs copiés dans cette tranche.",
     "sourceApplied": "Les valeurs de départ ont été appliquées à ce brouillon.",
     "deleted": "Brouillon budgétaire supprimé.",
+    "submitted": "Envoyé pour approbation.",
+    "approved": "Budget approuvé.",
+    "rejected": "Budget renvoyé en brouillon.",
     "actionFailed": "L’action budgétaire a échoué.",
     "revisionConflict": "Ce budget a été modifié ailleurs. Rechargez la page pour continuer."
   },

@@ -287,6 +287,9 @@ export function BudgetDrawer({
     if (actionName === 'archive' && !window.confirm(t('confirm.archive'))) return
     if (actionName === 'copy_prior_actuals' && !window.confirm(t('confirm.copyPriorActuals'))) return
     if (actionName === 'apply_source' && !window.confirm(t('confirm.applySource'))) return
+    if (actionName === 'submit' && !window.confirm(t('confirm.submit'))) return
+    if (actionName === 'approve' && !window.confirm(t('confirm.approve'))) return
+    if (actionName === 'reject' && !window.confirm(t('confirm.reject'))) return
     setBusy(true)
     try {
       if (!(await flushCells()) || !(await saveMetadataNow())) return
@@ -308,6 +311,7 @@ export function BudgetDrawer({
       if (data.status) setScenario((current) => ({ ...current, status: data.status! }))
       const feedback: Record<string, string> = {
         archive: 'archived', copy_prior_actuals: 'actualsCopied', apply_source: 'sourceApplied',
+        submit: 'submitted', approve: 'approved', reject: 'rejected',
       }
       toast.success(t(`feedback.${feedback[actionName]}`))
       router.refresh()
@@ -344,6 +348,9 @@ export function BudgetDrawer({
     <Button variant="outline" size="sm" asChild><Link href={`/reports/budget?scenario=${scenario.id}`}>{t('actions.openReport')}</Link></Button>
     <FlowManualButtons subjectKind="budget_scenario" subjectId={scenario.id} />
     <ApprovalActions subjectKind="budget_scenario" subjectId={scenario.id} />
+    {canManage && scenario.status === 'draft' ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('submit')}>{t('actions.submit')}</Button> : null}
+    {canApprove && scenario.status === 'pending_approval' ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('approve')}>{t('actions.approve')}</Button> : null}
+    {canApprove && scenario.status === 'pending_approval' ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('reject')}>{t('actions.reject')}</Button> : null}
     <BudgetMoreActions scenario={scenario} canManage={canManage} canApprove={canApprove} canExport={canExport} busy={busy} onAction={action} onDelete={deleteDraft} />
   </>
 
