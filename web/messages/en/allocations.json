@@ -63,7 +63,7 @@
       "active": "Active",
       "searchPlaceholder": "Search rules…",
       "emptyDescription": "Create the first rule to start distributing costs.",
-      "blurb": "Versioned rules that fire at entry, at posting, or as a period sweep."
+      "blurb": "Versioned rules that fire at entry, at posting, or as a period sweep. New rule opens a guided setup."
     },
     "modes": {
       "entry": "At entry",
@@ -470,6 +470,122 @@
     "pendingApprovalNotice": "This run is waiting for approval and cannot be posted from here.",
     "viewApproval": "Open the approval",
     "emptyDescription": "Preview a rule to compute one."
+  },
+  "wizard": {
+    "untitled": "Untitled allocation",
+    "loadFailed": "Could not load departments and drivers for the setup guide.",
+    "createFailed": "Could not create the allocation rule.",
+    "publishFailed": "The rule was saved as a draft — publish it after you finish the definition.",
+    "created": "Allocation rule saved as a draft. Publish it from Versions when you are ready.",
+    "published": "Allocation rule is published and in force.",
+    "creating": "Creating…",
+    "finish": "Create rule",
+    "skipGuide": "Skip the guide — open a blank rule",
+    "publishNow": "Publish now so the rule can fire",
+    "publishNowHint": "A draft never matches a line or a period run. Leave this on unless you want to review the definition first.",
+    "advancedAfter": "After create, the rule drawer still has every advanced field — books, custom segments, offsets, and test.",
+    "when": {
+      "title": "When should this fire?",
+      "description": "Same rule model, three moments. Pick the one that matches when the split should happen.",
+      "advanced": "Advanced",
+      "entry": {
+        "title": "When a line is entered",
+        "description": "Saving a matching bill, expense, or journal line replaces it with the split children.",
+        "example": "A 1,000.00 overhead bill becomes four department lines at a 1 : 2 : 3 : 4 ratio."
+      },
+      "period": {
+        "title": "At month-end",
+        "description": "A period sweep reads a pool, apportions it, and posts its own allocation journal.",
+        "example": "Untagged IT spend is reclassed onto every department by headcount after the period closes."
+      },
+      "post": {
+        "title": "When the document posts",
+        "description": "Extra journal lines land on the same entry, stamped with this rule as the contributor.",
+        "example": "Use this when the source document should stay whole and the allocation is GL-only."
+      }
+    },
+    "source": {
+      "title": "Which lines should it catch?",
+      "description": "Name the rule, then filter by transaction type and department. Empty transaction types mean every kind.",
+      "kinds": "Transaction types",
+      "kindsHint": "These are document kinds. Leave them all off to match every type.",
+      "anyKind": "Nothing selected means every transaction type.",
+      "department": "Source department",
+      "departmentHint": "AND-ed with the transaction types. Period sweeps often collect the untagged pool.",
+      "deptAny": "Any department",
+      "deptAnyHint": "Match the line regardless of department.",
+      "deptUntagged": "Only untagged",
+      "deptUntaggedHint": "Match lines with no department — the classic pool to sweep at month-end.",
+      "deptSpecific": "These departments",
+      "deptSpecificHint": "Match only lines coded to the departments you pick.",
+      "noDepartments": "No departments yet. Create one under Setup before filtering on department."
+    },
+    "split": {
+      "title": "How should the amount split?",
+      "description": "A fixed ratio is a named split (1, 2, 3, 4). A driver is a reusable measure you attach here — drivers are not rules.",
+      "ratio": {
+        "title": "Fixed ratio",
+        "description": "Relative weights such as 1 : 2 : 3 : 4. Stored as percents that always sum to 100.",
+        "example": "1 + 2 + 3 + 4 = 10 parts, so the shares are 10%, 20%, 30%, and 40%."
+      },
+      "percent": {
+        "title": "Fixed percent",
+        "description": "Type the percents yourself. They must total 100."
+      },
+      "driver": {
+        "title": "Existing driver",
+        "description": "Headcount, hours, a manual table, or a saved report. Create the driver on the Drivers tab, then pick it here."
+      },
+      "driverEmpty": "No drivers yet. A fixed ratio does not need one. Create a driver only when the weights should change each period.",
+      "driverHint": "The driver measures one dimension. Dynamic targets follow that dimension at run time."
+    },
+    "targets": {
+      "title": "Where does the money go?",
+      "description": "Pick the destination dimension and give each value a share. Empty account keeps the source account.",
+      "dimension": "Split across",
+      "value": "Destination",
+      "weight": "Ratio",
+      "percent": "Percent",
+      "pickValue": "Choose a value…",
+      "add": "Add destination",
+      "noValues": "No active values for that dimension yet.",
+      "needOne": "Pick at least two destinations with a positive share.",
+      "example": "A 1,000.00 line would become {amounts}.",
+      "driverDynamic": "{driver} will split across every {dimension} that has weight.",
+      "driverDynamicHint": "No need to list destinations — the driver vector is the target set."
+    },
+    "policy": {
+      "title": "What should the books do?",
+      "description": "Whether the split is automatic, and whether cost moves or only dimensional attribution is added.",
+      "applyAutomatic": "Automatic",
+      "applyAutomaticHint": "Matching lines explode on save.",
+      "applySuggest": "Suggest",
+      "applySuggestHint": "The line grid offers a chip; the split applies on click.",
+      "applyManual": "Manual",
+      "applyManualHint": "The split only appears in the line's distribution picker.",
+      "impactReclass": "Move the cost",
+      "impactReclassHint": "Credit the source coordinate and debit each target. Trial balance total holds.",
+      "impactNetZero": "Attribute without moving P&L",
+      "impactNetZeroHint": "Net-zero pair: company profit does not change; dimensions do.",
+      "periodActivityHint": "Allocate this period's posted activity, excluding this rule's own lines.",
+      "periodBalanceHint": "Allocate the period-end balance of the source pool.",
+      "runManualHint": "You preview and post from the Runs tab.",
+      "runAutoPreviewHint": "After period end, compute a preview automatically. You still post it."
+    },
+    "review": {
+      "title": "Create this rule?",
+      "description": "This writes the same versioned rule the drawer edits. You can change anything after.",
+      "when": "Fires {mode}",
+      "sourceAnyKind": "Matches every transaction type",
+      "sourceKinds": "Matches {kinds}",
+      "sourceAnyDept": "Any source department",
+      "sourceUntagged": "Only untagged source departments",
+      "sourceDepts": "Source department: {departments}",
+      "splitRatio": "Split {weights} → {percents}",
+      "splitPercent": "Split {percents}",
+      "splitDriver": "Split by driver {driver}",
+      "targets": "Onto {dimension}: {names}"
+    }
   },
   "lineage": {
     "title": "Allocation lineage",

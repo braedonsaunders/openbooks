@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { X } from 'lucide-react'
 import {
@@ -37,6 +36,7 @@ import {
   type DefinitionForm,
   type GeneralForm,
 } from './rule-drawer-form'
+import { AllocationRuleWizard } from './AllocationRuleWizard'
 import { ComputationView, type Computation } from './runs-tab'
 
 type DrawerTab = 'general' | 'definition' | 'versions' | 'test'
@@ -220,14 +220,14 @@ function ErrorBox({ message, onRetry, retryLabel }: { message: string; onRetry?:
 }
 
 /**
- * Rule drawer host: `?rule=<id>` opens the editor, `?rule=new` opens create.
- * The slot mounts this only when the param is present; UrlDrawer owns the
- * close navigation back to the list (list state preserved via closeHref).
+ * Rule drawer host: `?rule=<id>` opens the editor, `?rule=new` opens the
+ * guided WizardShell. The slot mounts this only when the param is present;
+ * the editor UrlDrawer and the wizard both close back to the list.
  */
 const TABS: DrawerTab[] = ['general', 'definition', 'versions', 'test']
 
 export function RuleDrawerHost({ ruleParam, closeHref }: { ruleParam: string; closeHref: string }) {
-  if (ruleParam === 'new') return <RuleCreateDrawer closeHref={closeHref} />
+  if (ruleParam === 'new') return <AllocationRuleWizard closeHref={closeHref} />
   return <RuleEditDrawer key={ruleParam} ruleId={ruleParam} closeHref={closeHref} />
 }
 
@@ -260,80 +260,6 @@ function TabStrip({ tab, onTab }: { tab: DrawerTab; onTab: (tab: DrawerTab) => v
         </button>
       ))}
     </div>
-  )
-}
-
-/**
- * Create mode: head fields, then one POST builds head + initial draft. The
- * primary Create action lives in the drawer header — the SetupDrawer
- * composition, no inline Save/Cancel row under the fields.
- */
-function RuleCreateDrawer({ closeHref }: { closeHref: string }) {
-  const t = useTranslations('allocations')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const [key, setKey] = useState('')
-  const [name, setName] = useState('')
-  const [mode, setMode] = useState<'entry' | 'post' | 'period'>('entry')
-  const [description, setDescription] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const create = async () => {
-    setSaving(true)
-    setError(null)
-    const { status, body } = await fetchJson('/api/allocations/rules', {
-      method: 'POST',
-      body: JSON.stringify({ key, name, mode, description: description === '' ? null : description }),
-    })
-    setSaving(false)
-    if (status !== 201) {
-      setError(apiError(status, body, t('rules.errors.save')).message)
-      return
-    }
-    const id = (body as { rule?: { id?: string } })?.rule?.id
-    if (typeof id === 'string' && id !== '') {
-      const params = new URLSearchParams({ rule: id })
-      router.push(`/admin/setup/allocations?${params.toString()}` as never)
-    } else {
-      router.push(closeHref as never)
-    }
-  }
-
-  return (
-    <UrlDrawer
-      open
-      closeHref={closeHref}
-      title={t('rules.drawer.newTitle')}
-      size="lg"
-      headerActions={
-        <Button type="button" onClick={() => void create()} disabled={saving || key === '' || name === ''}>
-          {saving ? tc('actions.saving') : tc('actions.create')}
-        </Button>
-      }
-    >
-      <div className="space-y-4 p-1">
-        {error ? <ErrorBox message={error} /> : null}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('rules.general.key')} hint={t('rules.general.keyHint')}>
-            <Input value={key} onChange={(e) => setKey(e.target.value)} aria-label={t('rules.general.key')} />
-          </Field>
-          <Field label={t('rules.general.mode')} hint={t('rules.general.modeHint')}>
-            <Select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} aria-label={t('rules.general.mode')}>
-              <option value="entry">{t('rules.modes.entry')}</option>
-              <option value="post">{t('rules.modes.post')}</option>
-              <option value="period">{t('rules.modes.period')}</option>
-            </Select>
-          </Field>
-        </div>
-        <Field label={t('rules.general.name')}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t('rules.general.name')} />
-        </Field>
-        <Field label={t('rules.general.description')}>
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} aria-label={t('rules.general.description')} />
-        </Field>
-      </div>
-    </UrlDrawer>
   )
 }
 
