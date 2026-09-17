@@ -314,7 +314,7 @@ function shapeSummarizeResult(
         ? formatBreakoutValue(row[`d${i}`], b.bin)
         : formatCellValue(entity, b.column, row[`d${i}`], labels),
     ),
-    ...measures.map((_, i) => formatCustomValue(row[`m${i}`])),
+    ...measures.map((m, i) => formatMeasureValue(entity, m, row[`m${i}`])),
   ])
 
   // Exact per-row scope of each aggregate bucket: eq for plain breakouts,
@@ -747,6 +747,30 @@ function formatExactNumber(value: unknown): string | null {
     return `${whole}.${fraction.slice(0, 2).padEnd(2, '0')}`
   }
   return raw
+}
+
+/**
+ * Display value for a summarize-mode measure. Date-kind source columns
+ * (min/max/latest of a date) render as calendar dates — the kind-blind
+ * fallback printed Date objects as datetimes ("2026-06-30 04:00:00", a UTC
+ * rendering of a local-midnight date; F-t07-007). Every other measure keeps
+ * the exact shaping it has today.
+ */
+export function formatMeasureValue(
+  entity: ReportEntity,
+  measure: Pick<ReportMeasure, 'column' | 'fn' | 'label'>,
+  v: unknown,
+): string | number | null {
+  const kind = measure.column ? entityColumn(entity, measure.column)?.kind : undefined
+  if (kind !== 'date') return formatCustomValue(v)
+  if (v === null || typeof v === 'undefined') return null
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null
+    const mm = String(v.getMonth() + 1).padStart(2, '0')
+    const dd = String(v.getDate()).padStart(2, '0')
+    return `${v.getFullYear()}-${mm}-${dd}`
+  }
+  return String(v).slice(0, 10)
 }
 
 function formatCustomValue(v: unknown): string | number | null {
