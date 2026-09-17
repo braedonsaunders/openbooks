@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { approvalTabBody } from './approval-history'
 
 // F-t02-003: the receipt Approvals tab rendered a completely blank panel —
@@ -28,5 +31,31 @@ test('history wins over a concurrent pending gate', () => {
       approvalState: { pendingWith: [{ name: 'Controller', gateId: 'g1', since: '2026-09-01' }] },
     }),
     'history',
+  )
+})
+
+const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
+
+// F-t04-001 (vendor bank-account Approvals dialog) + F-t04-002 (expense
+// report Approvals tab): both bodies are <ApprovalHistory> without
+// showEmptyState, which returned null whenever the record had no flow
+// history — a completely blank dialog / tab. SIM tenants run no approval
+// flows, so both surfaces were blank there. Both opt into the
+// loading/pending/empty bodies; inline embeddings keep the compact default.
+test('bank-account dialog and expense approvals tab opt into empty bodies', () => {
+  const history = source('components/approval-history.tsx')
+  assert.match(history, /if \(!showEmptyState\) return null/)
+  const partyDrawer = source('app/(app)/parties/PartyDrawer.tsx')
+  assert.match(
+    partyDrawer,
+    /<ApprovalHistory\s+subjectKind="party_bank_account"\s+subjectId=\{String\(historyAccount\.id\)\}\s+showEmptyState\s*\/>/,
+    'vendor bank-account Approvals dialog must render loading/pending/empty, never a blank panel',
+  )
+  const expenseDrawer = source('app/(app)/expenses/ExpenseDrawer.tsx')
+  assert.match(
+    expenseDrawer,
+    /<ApprovalHistory subjectKind="expense_report" subjectId=\{String\(doc\.id\)\} showEmptyState \/>/,
+    'expense report Approvals tab must render loading/pending/empty, never a blank panel',
   )
 })
