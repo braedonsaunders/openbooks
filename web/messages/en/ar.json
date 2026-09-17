@@ -71,6 +71,7 @@
     "overdueCol": "Overdue",
     "openCol": "Open",
     "noReceivables": "No open receivables. Everything is collected.",
+    "noCustomerMatch": "No customers match the current filters.",
     "customerSearch": "Search customers…",
     "customerStatus": "Customer status",
     "customerOverdueOnly": "Has overdue balance",

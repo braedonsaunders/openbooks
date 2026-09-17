@@ -71,6 +71,7 @@
     "overdueCol": "En retard",
     "openCol": "Ouvert",
     "noReceivables": "Aucune créance ouverte. Tout est encaissé.",
+    "noCustomerMatch": "Aucun client ne correspond aux filtres actuels.",
     "customerSearch": "Rechercher des clients…",
     "customerStatus": "Statut du client",
     "customerOverdueOnly": "Avec un solde en retard",

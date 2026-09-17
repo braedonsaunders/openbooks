@@ -71,6 +71,7 @@
     "overdueCol": "Überfällig",
     "openCol": "Offen",
     "noReceivables": "Keine offenen Forderungen. Alles ist eingezogen.",
+    "noCustomerMatch": "Keine Kunden entsprechen den aktuellen Filtern.",
     "customerSearch": "Kunden suchen…",
     "customerStatus": "Kundenstatus",
     "customerOverdueOnly": "Mit überfälligem Saldo",
