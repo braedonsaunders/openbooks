@@ -564,7 +564,7 @@ export async function createDriverValue(
   input: DriverValueInput,
 ): Promise<DriverValueRow> {
   if (!isUuid(driverId)) fail("not_found", "driver not found");
-  if (!isUuid(input.dimensionValueId)) fail("validation", "dimensionValueId must be a uuid");
+  if (!isUuid(input.dimensionValueId)) fail("validation", "Choose a dimension value from the list.");
   const from = validateIsoDate(input.effectiveFrom, "effectiveFrom");
   const to = input.effectiveTo == null || input.effectiveTo === "" ? null : validateIsoDate(input.effectiveTo, "effectiveTo");
   if (to !== null && to < from) fail("validation", "effectiveTo must be on or after effectiveFrom");

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import {
   NATIVE_MEASURES,
+  createDriverValue,
   driverValueWindowsOverlap,
   parseAllocationDimension,
   validateDriverConfig,
@@ -144,4 +146,23 @@ test("effective windows overlap on shared days", () => {
     driverValueWindowsOverlap({ from: "2026-01-01", to: "2026-04-01" }, { from: "2026-04-01", to: null }),
     true,
   );
+});
+
+test("free-text dimension values fail in user language, never field-name jargon (F-t06-016)", async () => {
+  // The manual-values form fell back to a bare textbox when no dimension
+  // options existed, and free text died with "dimensionValueId must be a
+  // uuid". The rejection must name the action in user words. Rejects before
+  // any database access (the shape check precedes the transaction), so this
+  // runs without a database.
+  const error = await createDriverValue(randomUUID(), randomUUID(), randomUUID(), {
+    dimensionValueId: "Overhead",
+    effectiveFrom: "2026-08-01",
+    value: "3",
+  }).then(
+    () => null,
+    (e: unknown) => e,
+  );
+  assert.ok(error instanceof Error, "free text must be rejected");
+  assert.match(error.message, /Choose a dimension value from the list/);
+  assert.ok(!/dimensionValueId|uuid/i.test(error.message), "no internal field names leak");
 });
