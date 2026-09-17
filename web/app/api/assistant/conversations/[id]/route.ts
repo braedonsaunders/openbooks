@@ -8,6 +8,8 @@ import {
   recentMessages,
   renameConversation,
 } from "../../../../../lib/ai-conversations";
+import { abortActiveRun } from "../../../../../lib/assistant/owned-runs";
+import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
 import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
 
 export const runtime = "nodejs";
@@ -70,6 +72,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  // Stop its live run first so it cannot write past the cascade; other
+  // conversations' runs are untouched (different rows, different runs).
+  await abortActiveRun(createDbOwnedRunStore(gate), id);
   const deleted = await deleteConversation(gate, id, SCOPE);
   if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });

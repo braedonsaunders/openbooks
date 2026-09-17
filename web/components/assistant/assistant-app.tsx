@@ -4,7 +4,7 @@
 // composer. Streams via the UI-message protocol (readUIMessageStream) so the
 // SAME parts[] renderer serves live tokens and reloaded transcripts.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -43,11 +43,53 @@ import {
   MESSAGE_PAGE_SIZE,
   reconcileThreadAfterStop,
   TITLE_REFRESH_DELAY_MS,
-  withLastAssistantParts,
 } from './thread-state'
+import {
+  abortTurn,
+  attachLoop,
+  beginTurn,
+  completeTurn,
+  controllerFor,
+  detachLoop,
+  dropTurn,
+  failTurn,
+  hasLiveLoop,
+  readTurn,
+  rekeyTurn,
+  settleTurn,
+  subscribeTurns,
+  syncTurn,
+  turnRevision,
+  writeTurnParts,
+  type TurnEntry,
+} from './turn-store'
 
 type Role = 'user' | 'assistant' | 'system'
-type ChatMessage = { id: string; role: Role; parts: unknown[]; createdAt?: string }
+type ChatMessage = {
+  id: string
+  role: Role
+  parts: unknown[]
+  createdAt?: string
+  /** Present when the server row behind this message is a live run. */
+  run?: { runId: string }
+}
+/** Reattach poll cadence for runs this view did not start. */
+const RUN_FOLLOW_INTERVAL_MS = 1_500
+
+/**
+ * Compose the persisted base with the live tail of the viewed conversation.
+ * A live tail replaces its own running row (a reattached base still carries
+ * the server's last snapshot of the same turn) so the turn never renders
+ * twice.
+ */
+function composeVisible(base: ChatMessage[], live: TurnEntry | undefined): ChatMessage[] {
+  if (!live) return base
+  return [
+    ...base.filter((m) => !m.run),
+    { id: live.userId, role: 'user', parts: [{ type: 'text', text: live.userText }] },
+    { id: live.assistantId, role: 'assistant', parts: live.parts },
+  ]
+}
 
 export type StoredMessage = {
   id: string
@@ -65,6 +107,7 @@ const TITLE_MAX_CHARS = 120
 
 export function toChatMessage(message: StoredMessage): ChatMessage {
   const storedParts = message.data?.parts
+  const data = message.data as { kind?: unknown; status?: unknown } | null
   return {
     id: message.id,
     role: message.role,
@@ -73,6 +116,11 @@ export function toChatMessage(message: StoredMessage): ChatMessage {
         ? storedParts
         : [{ type: 'text', text: message.content }],
     ...(message.createdAt ? { createdAt: message.createdAt } : {}),
+    // A server-running run row flags itself so the view can follow it even
+    // when this client did not start the turn (reload, second tab).
+    ...(data?.kind === 'agent-turn' && data?.status === 'running'
+      ? { run: { runId: message.id } }
+      : {}),
   }
 }
 
@@ -101,20 +149,52 @@ export function AssistantApp({
   const admin = useTranslations('admin.ai')
   const common = useTranslations('common.actions')
   const router = useRouter()
+  // messages is the PERSISTED base (server transcript). The live tail of an
+  // in-flight turn composes on top at render from the conversation-keyed
+  // turn store — never from view-local state — so switching chats,
+  // remounting, or reloading re-adopts the same live progress.
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages.map(toChatMessage))
   const [convos, setConvos] = useState(conversations)
   const [currentId, setCurrentId] = useState<string | null>(activeId)
+  // Provisional view key for a new chat until the server answers with its id.
+  // (The begun store entry already renders the optimistic tail, so no
+  // separate pending-bubble state is needed.)
+  const [pendingKey, setPendingKey] = useState<string | null>(null)
+  // x-run-id per conversation, for the explicit Stop endpoint.
+  const runIdsRef = useRef(new Map<string, string>())
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+  const viewKey = currentId ?? pendingKey
+  // Mirrors for stable callbacks and async adopts. Written in effects (never
+  // during render) so the viewed key is always current when handlers fire.
+  const viewKeyRef = useRef<string | null>(null)
+  const messagesRef = useRef<ChatMessage[]>([])
+  useEffect(() => {
+    viewKeyRef.current = viewKey
+    messagesRef.current = messages
+  })
+  // Re-render whenever the viewed conversation's turn entry changes. The
+  // snapshot closes over this render's key (a primitive revision number, so
+  // no caching hazard); the subscription itself is stable.
+  useSyncExternalStore(subscribeTurns, () => turnRevision(viewKey))
+  const live = readTurn(viewKey)
+  const visibleMessages = composeVisible(messages, live)
+  const streaming = live?.streaming ?? false
+  const liveError = live && !live.streaming ? live.error : null
   // Workbench finding context: attached to turns until removed. A fresh chat
   // (Link to /assistant) remounts and reads the URL again, so no clearing
   // logic is needed here beyond the dismiss chip.
   const [findingId, setFindingId] = useState<string | null>(initialFindingId ?? null)
-  const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
-  const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const autoSentPrompt = useRef<string | null>(null)
   // Assistant turns this mounted panel has already shown. Raised on every
@@ -233,25 +313,118 @@ export function AssistantApp({
     prependAnchorRef.current = null
   }, [messages])
 
+  // Adopt the newly shown conversation: the persisted base resets to its
+  // transcript while in-flight turns keep streaming in the conversation-keyed
+  // store (a refresh then converges the tail). Guarded on the id so sidebar
+  // refreshes and re-renders never reset the base mid-turn.
+  const prevActiveIdRef = useRef(activeId)
+  useEffect(() => {
+    if (prevActiveIdRef.current === activeId) return
+    const droppedPending = pendingKey
+    prevActiveIdRef.current = activeId
+    setPendingKey(null)
+    if (droppedPending) dropTurn(droppedPending)
+    setCurrentId(activeId)
+    const base = initialMessages.map(toChatMessage)
+    setMessages(base)
+    completedTurnsRef.current = countAssistantTurns(base)
+    firstTurnRef.current = base.length === 0
+    if (!activeId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/assistant/conversations/${activeId}`)
+        if (!res.ok || cancelled || prevActiveIdRef.current !== activeId) return
+        const body = (await res.json()) as { messages: StoredMessage[] }
+        const server = body.messages.map(toChatMessage)
+        if (cancelled || prevActiveIdRef.current !== activeId) return
+        setMessages(server)
+        completedTurnsRef.current = countAssistantTurns(server)
+        firstTurnRef.current = server.length === 0
+        // The fresh transcript carries every settled turn: drop redundant
+        // tails, but never a turn that is still streaming.
+        const entry = readTurn(activeId)
+        if (entry && !entry.streaming) settleTurn(activeId)
+      } catch {
+        // keep the loader-provided base
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeId, initialMessages, pendingKey])
+
+  // Follow a server-running turn this view did not start (page reload, a turn
+  // started in another tab): poll its event log until terminal, then adopt
+  // the persisted transcript. Live loops feed the store directly instead.
+  useEffect(() => {
+    if (!currentId || hasLiveLoop(viewKey)) return
+    const running = messages.find((m) => m.run?.runId)
+    if (!running?.run) return
+    const runId = running.run.runId
+    const conversationId = currentId
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/assistant/runs/${runId}`)
+        if (!res.ok || cancelled) return
+        const body = (await res.json()) as {
+          run: { status: string; parts: unknown[]; revision: number } | null
+        }
+        if (!body.run || cancelled) return
+        const status = body.run.status
+        syncTurn({ conversationId, status: status as 'running', parts: body.run.parts, revision: body.run.revision })
+        if (status !== 'running' && !cancelled) {
+          try {
+            const t = await fetch(`/api/assistant/conversations/${conversationId}`)
+            if (t.ok && !cancelled) {
+              const adopted = ((await t.json()) as { messages: StoredMessage[] }).messages.map(toChatMessage)
+              setMessages(adopted)
+              completedTurnsRef.current = countAssistantTurns(adopted)
+            }
+          } catch {
+            // keep the synced tail; the next navigation converges
+          }
+          settleTurn(conversationId)
+        }
+      } catch {
+        // transient: the next tick retries
+      }
+    }
+    void poll()
+    const timer = window.setInterval(poll, RUN_FOLLOW_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [currentId, messages, viewKey])
+
   const send = useCallback(
     async (rawText: string) => {
       const text = rawText.trim()
-      if (!text || text.length > MAX_PROMPT_CHARS || abortRef.current || !aiEnabled) return
+      if (!text || text.length > MAX_PROMPT_CHARS || !aiEnabled) return
 
       const conversationId = currentId
-      let resolvedConversationId = conversationId
-      const ac = new AbortController()
-      abortRef.current = ac
+      const stamp = Date.now()
+      // One turn per conversation; the entry (and its parts) is keyed by the
+      // conversation — or a provisional key until a new chat answers.
+      const key = conversationId ?? `pending:${stamp}`
+      if (hasLiveLoop(key) || readTurn(key)?.streaming) return
+      if (!conversationId) setPendingKey(key)
+      // The read signal ends only this view's SSE consumption (unmount,
+      // stop): the server-owned run continues regardless.
+      const ac = controllerFor(key)
       setError(null)
       setSidebarOpen(false)
-      const stamp = Date.now()
-      setMessages((prev) => [
-        ...prev,
-        { id: `u-${stamp}`, role: 'user', parts: [{ type: 'text', text }] },
-        { id: `a-${stamp}`, role: 'assistant', parts: [] },
-      ])
+      beginTurn(key, conversationId, {
+        userId: `u-${stamp}`,
+        assistantId: `a-${stamp}`,
+        userText: text,
+      })
+      attachLoop(key)
       scrollToBottom()
-      setStreaming(true)
+      let turnKey = key
+      let resolvedConversationId = conversationId
       let lastParts: unknown[] = []
       let producedParts = false
       let completedNormally = false
@@ -263,10 +436,15 @@ export function AssistantApp({
           signal: ac.signal,
         })
         const responseConversationId = res.headers.get('x-conversation-id')
+        const responseRunId = res.headers.get('x-run-id')
         if (responseConversationId) {
           resolvedConversationId = responseConversationId
-          setCurrentId(responseConversationId)
+          if (responseRunId) runIdsRef.current.set(responseConversationId, responseRunId)
           if (!conversationId) {
+            rekeyTurn(key, responseConversationId)
+            turnKey = responseConversationId
+            setPendingKey(null)
+            setCurrentId(responseConversationId)
             // Reflect the new thread in the URL without unmounting the stream.
             window.history.replaceState(null, '', `/assistant/${responseConversationId}`)
             // Instant sidebar: pin the new thread at the top with the same
@@ -282,11 +460,13 @@ export function AssistantApp({
           }
         }
         if (!res.ok || !res.body) {
-          setError(res.status === 503 ? t('errors.notConfigured') : t('errors.failed'))
+          failTurn(turnKey, res.status === 503 ? t('errors.notConfigured') : t('errors.failed'))
           return
         }
         // The HTTP body is an SSE byte stream — parse it into UIMessageChunks
         // before handing it to readUIMessageStream (matches the SDK transport).
+        // Chunks land in the conversation-keyed store (the render composes
+        // them), never in view-local state, so the turn survives navigation.
         const chunkStream = parseJsonEventStream({
           stream: res.body,
           schema: uiMessageChunkSchema,
@@ -300,24 +480,28 @@ export function AssistantApp({
         for await (const message of readUIMessageStream({ stream: chunkStream })) {
           lastParts = message.parts as unknown[]
           if (lastParts.length > 0) producedParts = true
-          setMessages((prev) => withLastAssistantParts(prev, lastParts))
+          writeTurnParts(turnKey, lastParts)
           scrollToBottom()
         }
         completedNormally = true
-        if (producedParts && completedNormally && !ac.signal.aborted) {
-          completedTurnsRef.current += 1
-        }
         // A turn that ended without producing anything (e.g. the provider
         // rejected the request) would otherwise vanish silently.
-        if (lastParts.length === 0 && !ac.signal.aborted) setError(t('errors.failed'))
+        if (lastParts.length === 0 && !ac.signal.aborted) failTurn(turnKey, t('errors.failed'))
       } catch (e) {
-        if ((e as Error)?.name !== 'AbortError') setError(t('errors.failed'))
+        if ((e as Error)?.name !== 'AbortError') failTurn(turnKey, t('errors.failed'))
       } finally {
-        if (!resolvedConversationId) {
-          // The turn never started server-side — drop the optimistic bubbles.
-          setMessages((prev) =>
-            prev.filter((message) => message.id !== `u-${stamp}` && message.id !== `a-${stamp}`),
-          )
+        detachLoop(turnKey)
+        runIdsRef.current.delete(turnKey)
+        if (!mountedRef.current) {
+          // Unmounted as the loop ended: the server persisted the turn;
+          // keep its final parts so a return adopts instantly, and let the
+          // next transcript load converge and drop the tail.
+          completeTurn(turnKey, lastParts)
+        } else if (!resolvedConversationId) {
+          // The turn never started server-side — drop the optimistic tail
+          // and release the provisional key.
+          dropTurn(turnKey)
+          setPendingKey(null)
         } else if (ac.signal.aborted) {
           // Reconcile with what actually got persisted for the stopped turn —
           // unless persistence has not caught up yet, in which case the
@@ -325,12 +509,13 @@ export function AssistantApp({
           await new Promise((resolve) => window.setTimeout(resolve, 150))
           try {
             const res = await fetch(`/api/assistant/conversations/${resolvedConversationId}`)
-            if (res.ok) {
+            if (res.ok && viewKeyRef.current === resolvedConversationId) {
               const body = (await res.json()) as { messages: StoredMessage[] }
               const server = body.messages.map(toChatMessage)
-              setMessages((prev) =>
-                reconcileThreadAfterStop(prev, server, completedTurnsRef.current),
-              )
+              const base = messagesRef.current
+              const adopted = reconcileThreadAfterStop(base, server, completedTurnsRef.current)
+              setMessages(adopted)
+              if (adopted === server) settleTurn(resolvedConversationId)
               // An adopted server window may itself sit below older history.
               if (server.length >= MESSAGE_PAGE_SIZE) {
                 void probeHasOlder(
@@ -342,10 +527,25 @@ export function AssistantApp({
           } catch {
             // keep the streamed state
           }
+        } else if (viewKeyRef.current === resolvedConversationId) {
+          // Normal completion while viewing: fold the tail into the base.
+          const tail = readTurn(turnKey)
+          if (tail && producedParts) {
+            setMessages((prev) => [
+              ...prev,
+              { id: tail.userId, role: 'user', parts: [{ type: 'text', text: tail.userText }] },
+              { id: tail.assistantId, role: 'assistant', parts: tail.parts },
+            ])
+            completedTurnsRef.current += 1
+          }
+          settleTurn(turnKey)
+        } else {
+          // Completed while viewing another conversation: keep the final
+          // parts for instant adopt on return; the return's transcript load
+          // converges and drops the tail.
+          completeTurn(turnKey, lastParts)
         }
-        setStreaming(false)
-        if (abortRef.current === ac) abortRef.current = null
-        void refreshConversations()
+        if (mountedRef.current) void refreshConversations()
         // The server generates the thread title after the stream closes, so
         // the refresh above usually still shows the placeholder: one delayed
         // second pass picks the generated title up. Bounded to the thread's
@@ -356,7 +556,8 @@ export function AssistantApp({
           completedNormally &&
           !ac.signal.aborted &&
           firstTurnRef.current &&
-          titleRefreshTimerRef.current === null
+          titleRefreshTimerRef.current === null &&
+          viewKeyRef.current === resolvedConversationId
         ) {
           firstTurnRef.current = false
           titleRefreshTimerRef.current = window.setTimeout(() => {
@@ -373,7 +574,7 @@ export function AssistantApp({
   // query. Wait for any active turn to finish so navigation cannot drop it.
   useEffect(() => {
     const prompt = initialPrompt?.trim()
-    if (!prompt || !aiEnabled || streaming || abortRef.current || autoSentPrompt.current === prompt) {
+    if (!prompt || !aiEnabled || streaming || autoSentPrompt.current === prompt) {
       return
     }
     autoSentPrompt.current = prompt
@@ -381,9 +582,16 @@ export function AssistantApp({
   }, [aiEnabled, initialPrompt, send, streaming])
 
   // Stable identity so the memoed composer is not re-rendered by transcript
-  // updates such as streamed tokens.
+  // updates such as streamed tokens. Stop ends the SERVER run explicitly —
+  // closing the stream alone no longer stops it — then ends local reading.
   const stop = useCallback(() => {
-    abortRef.current?.abort()
+    const key = viewKeyRef.current
+    if (!key) return
+    const runId = runIdsRef.current.get(key)
+    if (runId) {
+      void fetch(`/api/assistant/runs/${runId}/abort`, { method: 'POST' }).catch(() => {})
+    }
+    abortTurn(key)
   }, [])
 
   // Stable identity so the memoed composer (and its textarea) is not
@@ -421,6 +629,10 @@ export function AssistantApp({
       // Drop the provisional pin too, so the end-of-turn reconcile cannot
       // resurrect a thread the user just deleted.
       provisionalIdsRef.current.delete(id)
+      // This conversation's turn state only: other in-flight turns are
+      // untouched (different keys, different server runs).
+      dropTurn(id)
+      runIdsRef.current.delete(id)
       setConvos((items) => removeConversationRow(items, id))
       if (id === currentId) {
         router.push('/assistant')
@@ -586,7 +798,7 @@ export function AssistantApp({
                 </button>
               </div>
             ) : null}
-            {messages.length === 0 ? (
+            {visibleMessages.length === 0 ? (
               <Welcome
                 suggestions={suggestions}
                 onPick={(s) => void send(s)}
@@ -596,25 +808,28 @@ export function AssistantApp({
               />
             ) : (
               <div className="space-y-6">
-                {messages.map((m, i) =>
+                {visibleMessages.map((m, i) =>
                   m.role === 'system' ? null : (
                     <MessageRow
                       key={m.id}
                       message={m}
-                      pending={streaming && m.role === 'assistant' && i === messages.length - 1}
+                      pending={streaming && m.role === 'assistant' && i === visibleMessages.length - 1}
                     />
                   ),
                 )}
               </div>
             )}
-            {error ? (
-              <div
-                role="alert"
-                className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
-              >
-                {error}
-              </div>
-            ) : null}
+            {(() => {
+              const alert = liveError ?? error
+              return alert ? (
+                <div
+                  role="alert"
+                  className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  {alert}
+                </div>
+              ) : null
+            })()}
             <div ref={bottomRef} />
           </div>
         </div>
