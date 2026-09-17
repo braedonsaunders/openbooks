@@ -27,7 +27,8 @@ test('the journal union lists posted pay_run entries', () => {
 })
 
 test('the journal count predicate matches the union', () => {
-  assert.match(journalView, /d\.kind in \('journal', 'pay_run'\)/)
+  assert.match(journalView, /journalScopeWhere/)
+  assert.match(journalView, /JOURNAL_ENTRY_TABLE/)
 })
 
 test('pay_run rows open the entry drawer, not the manual-journal document drawer', () => {

@@ -88,6 +88,7 @@ const DIRECT_JSON_READ_RE = /\b(?:req|request)\s*\.\s*json\s*\(/;
 // Deliberately NOT global: RegExp.prototype.test on a /g pattern carries
 // lastIndex across calls and silently skips matches on later routes.
 const SHARED_BOUNDARY_FACTORY_RE = /\b(?:makePATCH|makeConvertPOST)\s*\(/;
+const TYPED_BOUNDARY_FACTORY_RE = /\bmakeAssignWarehousePOST\s*\(/;
 const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z_$][\w$]*)/g;
 
 /**
@@ -146,6 +147,10 @@ function parsedSchemaArgs(source: string): string[] {
  * passing jsonObject themselves; "unparsed" means no shared boundary at all.
  */
 function classifyBoundary(route: MutationRoute): ClassifiedRoute {
+  // Assign-warehouse parses a typed uuid body in the shared factory, so the
+  // thin route files count as typed coverage rather than the object-only
+  // ratchet the PATCH/convert factories still sit on.
+  if (TYPED_BOUNDARY_FACTORY_RE.test(route.source)) return { ...route, kind: "typed" };
   if (SHARED_BOUNDARY_FACTORY_RE.test(route.source)) return { ...route, kind: "shared-factory" };
   const schemas = parsedSchemaArgs(route.source);
   if (schemas.length === 0) return { ...route, kind: "unparsed" };
@@ -179,8 +184,11 @@ test("every JSON mutation route parses its body through the shared zod boundary"
   if (DIRECT_JSON_READ_RE.test(orderFactorySource)) {
     failures.push("web/app/api/_order/handlers.ts: shared mutation factory reads req/request.json() directly");
   }
-  if ((orderFactorySource.match(/parseJsonBody\(/g) ?? []).length < 2) {
-    failures.push("web/app/api/_order/handlers.ts: PATCH and convert factories must both use parseJsonBody");
+  if ((orderFactorySource.match(/parseJsonBody\(/g) ?? []).length < 3) {
+    failures.push("web/app/api/_order/handlers.ts: PATCH, convert, and assign-warehouse factories must all use parseJsonBody");
+  }
+  if (!orderFactorySource.includes("parseJsonBody(req, assignWarehouseBody)")) {
+    failures.push("web/app/api/_order/handlers.ts: assign-warehouse must parse through assignWarehouseBody, not jsonObject");
   }
 
   for (const [file, reason] of Object.entries(EXEMPT_ROUTES)) {
@@ -191,7 +199,11 @@ test("every JSON mutation route parses its body through the shared zod boundary"
   for (const route of routes) {
     if (route.file in EXEMPT_ROUTES) continue;
     const violations: string[] = [];
-    if (!route.source.includes("parseJsonBody(") && !SHARED_BOUNDARY_FACTORY_RE.test(route.source)) {
+    if (
+      !route.source.includes("parseJsonBody(") &&
+      !SHARED_BOUNDARY_FACTORY_RE.test(route.source) &&
+      !TYPED_BOUNDARY_FACTORY_RE.test(route.source)
+    ) {
       violations.push("does not use parseJsonBody");
     }
     if (DIRECT_JSON_READ_RE.test(route.source)) violations.push("reads req/request.json() directly");

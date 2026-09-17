@@ -102,6 +102,13 @@ const UUID_MESSAGE = "must be a valid id";
 /** A tenant-entity uuid reference. */
 export const uuidId = z.string().refine(isUuid, UUID_MESSAGE);
 
+/** Assign a warehouse to one approved order line (F-coord-004). */
+export const assignWarehouseBody = z.object({
+  lineId: uuidId,
+  stockLocationId: uuidId,
+  expectedUpdatedAt: z.string().optional(),
+});
+
 /** Optional nullable uuid reference (null clears the reference). */
 export const nullableUuidId = z
   .union([z.string(), z.null()])

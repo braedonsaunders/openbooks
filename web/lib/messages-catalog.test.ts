@@ -3935,3 +3935,125 @@ test('I15 compliance and fieldTickets copy ships translated in de, ja, zh and pt
     assert.deepEqual(I15_armsDrift, [], `${I15_locale} compliance/fieldTickets translations drop ICU plural/select arms`)
   }
 })
+
+const I13_IDENTICAL_BY_FACT = new Set([
+  'fr:projects.schedule.view.gantt|Gantt',
+  'fr:projects.duplicates.code|Code',
+  'fr:projects.duplicates.action|Action',
+  'fr:projects.wipBilling.linesTable.source|Source',
+  'fr:projects.wipBilling.linesTable.date|Date',
+  'fr:projects.wipBilling.linesTable.description|Description',
+  'fr:allocations.drivers.fieldDescription|Description',
+  'fr:allocations.drivers.inactive|Inactive',
+  'fr:allocations.wizard.targets.weight|Ratio',
+  'es:projects.schedule.view.gantt|Gantt',
+  'es:projects.wipBilling.metrics.original|Original',
+  'es:projects.wipBilling.linesTable.original|Original',
+  'es:allocations.wizard.policy.applyManual|Manual',
+  'es:allocations.wizard.review.sourceValues|{dimension}: {values}',
+  'de:projects.schedule.view.gantt|Gantt',
+  'de:projects.schedule.view.board|Board',
+  'de:projects.duplicates.code|Code',
+  'de:projects.duplicates.name|Name',
+  'de:projects.duplicates.status|Status',
+  'de:projects.wipBilling.table.status|Status',
+  'de:projects.wipBilling.trail.system|System',
+  'de:allocations.wizard.review.sourceValues|{dimension}: {values}',
+  'pt-BR:projects.schedule.view.gantt|Gantt',
+  'pt-BR:projects.duplicates.status|Status',
+  'pt-BR:projects.wipBilling.table.status|Status',
+  'pt-BR:projects.wipBilling.metrics.original|Original',
+  'pt-BR:projects.wipBilling.linesTable.original|Original',
+  'pt-BR:allocations.wizard.policy.applyManual|Manual',
+  'pt-BR:allocations.wizard.review.sourceValues|{dimension}: {values}',
+])
+
+const I13_PROJECT_SINGLES = new Set([
+  'projects.billing.applicationsPermissionRequired',
+  'projects.charges.operator',
+  'projects.charges.selectOperator',
+  'projects.charges.operatorNeedsEquipment',
+])
+
+const I13_ALLOC_SCATTERED = new Set([
+  'allocations.rules.list.emptyTitle',
+  'allocations.rules.list.emptyDescription',
+  'allocations.rules.list.blurb',
+  'allocations.rules.definition.documentKindAdd',
+  'allocations.rules.definition.noOptions',
+  'allocations.rules.definition.approvalFlowNone',
+  'allocations.rules.test.book',
+  'allocations.drivers.fieldDescription',
+  'allocations.drivers.inactive',
+  'allocations.drivers.emptyTitle',
+  'allocations.drivers.noDimensionValues',
+  'allocations.drivers.manualCreateHint',
+  'allocations.drivers.valuesAfterSave',
+  'allocations.drivers.emptyDescription',
+  'allocations.runs.emptyTitle',
+  'allocations.runs.summary',
+  'allocations.runs.pendingApprovalNotice',
+  'allocations.runs.viewApproval',
+  'allocations.runs.emptyDescription',
+])
+
+test('I13 projects schedule/WIP/duplicates and allocations wizard copy ships translated in every locale', () => {
+  // F-i13-001: the schedule, prebill-worksheet (wipBilling) and operator
+  // sections of projects, the duplicates merge section (new in de/ja/zh/pt-BR;
+  // already translated in fr/es), and the allocations setup wizard plus its
+  // rules-list, drivers and runs strays existed only in en — those locales
+  // rendered English inside otherwise translated project/allocation screens.
+  // Every leaf must exist, keep its ICU placeholders and plural/select arms,
+  // and differ from English except for reviewed cognates and placeholder-only
+  // skeletons, pinned to the exact term above.
+  const I13_source = flattenCatalog('en')
+  const I13_allKeys = [...I13_source.keys()]
+  const I13_wip = I13_allKeys.filter((I13_key) => I13_key.startsWith('projects.wipBilling.'))
+  const I13_schedule = I13_allKeys.filter((I13_key) => I13_key.startsWith('projects.schedule.'))
+  const I13_dups = I13_allKeys.filter((I13_key) => I13_key.startsWith('projects.duplicates.'))
+  const I13_wizard = I13_allKeys.filter((I13_key) => I13_key.startsWith('allocations.wizard.'))
+  assert.equal(I13_wip.length, 90, 'wipBilling source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I13_schedule.length, 12, 'schedule source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I13_dups.length, 23, 'duplicates source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I13_wizard.length, 89, 'wizard source inventory changed; translate the new keys in every locale and re-pin')
+  const I13_wanted = I13_allKeys.filter(
+    (I13_key) =>
+      I13_key.startsWith('projects.wipBilling.') ||
+      I13_key.startsWith('projects.schedule.') ||
+      I13_key.startsWith('projects.duplicates.') ||
+      I13_key.startsWith('allocations.wizard.') ||
+      I13_PROJECT_SINGLES.has(I13_key) ||
+      I13_ALLOC_SCATTERED.has(I13_key),
+  )
+  assert.equal(I13_wanted.length, 90 + 12 + 23 + 4 + 89 + 19, 'i13 source inventory changed; re-pin')
+  const I13_tokens = (I13_value: string): Set<string> =>
+    new Set(I13_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I13_arms = (I13_value: string): string[] => I13_value.match(/, +(plural|select)/g) ?? []
+  for (const I13_locale of ['fr', 'es', 'de', 'ja', 'zh', 'pt-BR']) {
+    const I13_catalog = flattenCatalog(I13_locale)
+    for (const I13_key of I13_wanted) {
+      const I13_value = I13_catalog.get(I13_key)
+      assert.ok(I13_value && I13_value.trim(), `${I13_locale} is missing ${I13_key}`)
+      const I13_identical = [...I13_IDENTICAL_BY_FACT].find((I13_entry) =>
+        I13_entry.startsWith(`${I13_locale}:${I13_key}|`),
+      )
+      if (I13_identical) {
+        assert.equal(I13_value, I13_identical.split('|')[1], `${I13_locale}:${I13_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I13_value, I13_source.get(I13_key), `${I13_locale} must not copy English ${I13_key}`)
+      }
+    }
+    const I13_drift = I13_wanted.filter((I13_key) => {
+      const I13_expected = I13_tokens(I13_source.get(I13_key) ?? '')
+      const I13_actual = I13_tokens(I13_catalog.get(I13_key) ?? '')
+      return I13_expected.size !== I13_actual.size || [...I13_expected].some((I13_token) => !I13_actual.has(I13_token))
+    })
+    assert.deepEqual(I13_drift, [], `${I13_locale} projects/allocations translations drop or rename ICU placeholders`)
+    const I13_armsDrift = I13_wanted.filter((I13_key) => {
+      const I13_expected = I13_arms(I13_source.get(I13_key) ?? '').join(',')
+      const I13_actual = I13_arms(I13_catalog.get(I13_key) ?? '').join(',')
+      return I13_expected !== I13_actual
+    })
+    assert.deepEqual(I13_armsDrift, [], `${I13_locale} projects/allocations translations drop ICU plural/select arms`)
+  }
+})

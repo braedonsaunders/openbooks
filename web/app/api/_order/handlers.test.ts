@@ -495,6 +495,9 @@ const mockSources = new Map<string, string>([
       }
       return { kind: 'sales_order', id: '60000000-0000-4000-8000-000000000001', documentNumber: 'SO-CVT-1' }
     }
+    export async function assignOrderLineWarehouse() {
+      return { lineId: '70000000-0000-4000-8000-000000000001', lineNumber: 1, stockLocationId: '70000000-0000-4000-8000-000000000002' }
+    }
   `],
   ['mock:order-lib', `
     const state = ${stateExpression}
