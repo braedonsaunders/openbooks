@@ -17,7 +17,7 @@ registerHooks({ resolve(specifier, context, next) {
   // page's own modules so they cannot leak into the service-boundary cases
   // below, and the loader they were written for now lives in the sibling.
   if (context.parentURL?.endsWith('/page.tsx') || context.parentURL?.endsWith('/view.ts')) {
-    if (specifier.endsWith('/lib/consolidation')) return { shortCircuit: true, url: 'data:text/javascript,export async function reportSubsidiaryView(){return {subsidiary:{ids:globalThis.__cashScope.subIds},picker:[],options:[],consolidated:false}}' };
+    if (specifier.endsWith('/lib/consolidation')) return { shortCircuit: true, url: 'data:text/javascript,export class MissingRatesError extends Error {}\nexport async function reportSubsidiaryView(){return {subsidiary:{ids:globalThis.__cashScope.subIds},picker:[],options:[],consolidated:false}}' };
     if (specifier.endsWith('/lib/page-layout')) return { shortCircuit: true, url: 'data:text/javascript,export async function userPageLayout(){return null}' };
     if (specifier.endsWith('/module-home/group-tabs')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}' };
   }
