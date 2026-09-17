@@ -8,6 +8,7 @@ import { Loader2, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
+import { postAgentScan } from './run-agent-scan'
 
 /**
  * One pack's trailing actions for the Agents overview spec table — switch,
@@ -76,10 +77,18 @@ export function AgentsPackActions({
     if (pending || running) return
     setRunning(true)
     try {
-      const res = await fetch(`/api/admin/setup/agents/${agentKey}/run`, { method: 'POST' })
-      const payload = (await res.json().catch(() => ({}))) as { detected?: number }
-      if (!res.ok) throw new Error(t('setup.agents.overview.scanFailed'))
-      toast.success(t('setup.agents.overview.scanComplete', { count: payload.detected ?? 0 }))
+      const outcome = await postAgentScan(agentKey)
+      if (!outcome.ok) {
+        if (outcome.alreadyRunning) {
+          // Another run owns the scan: say so and converge the row onto
+          // its progress instead of reporting a generic failure.
+          toast.error(t('setup.agents.overview.scanAlreadyRunning'))
+          router.refresh()
+          return
+        }
+        throw new Error(t('setup.agents.overview.scanFailed'))
+      }
+      toast.success(t('setup.agents.overview.scanComplete', { count: outcome.detected }))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)

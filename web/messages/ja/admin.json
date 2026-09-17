@@ -2049,6 +2049,11 @@
       "copied": "コピー済み",
       "testConnection": "接続テスト",
       "testing": "テスト中…"
+    },
+    "agents": {
+      "overview": {
+        "scanAlreadyRunning": "スキャンは既に実行中です。"
+      }
     }
   },
   "flows": {

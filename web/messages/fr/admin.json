@@ -1464,6 +1464,7 @@
         "toggleFailed": "Impossible d'enregistrer le paramètre du pack.",
         "scanComplete": "{count, plural, one {# constat détecté} other {# constats détectés}}",
         "scanFailed": "Le lancement de l'analyse a échoué.",
+        "scanAlreadyRunning": "Une analyse est déjà en cours.",
         "guideLink": "Guide de configuration",
         "columns": {
           "pack": "Module",
