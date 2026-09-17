@@ -8,6 +8,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { Building2, CalendarDays, CircleDollarSign, FileText, Landmark, Plus, Search, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
 import {
   customFieldDefKey,
   defaultFormLayout,
@@ -428,15 +431,17 @@ export function PartyDrawer({
   )
   const [addressDraft, setAddressDraft] = useState<{ index: number | null; row: AddressRow } | null>(null)
   const [contactDraft, setContactDraft] = useState<{ index: number | null; row: ContactRow } | null>(null)
-  const [relatedBusy, setRelatedBusy] = useState(false)
+  // Address/contact rows save on their own lifecycle beside the main form —
+  // one pin per surface, so a refused row save pins in its own editor.
+  const relatedAction = useAppAction()
+  const relatedBusy = relatedAction.busy
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
   const [nameError, setNameError] = useState(false)
-  // A refused save pins its reason on the record until the next save attempt
-  // or cancel — a toast alone let F-t05-002 read as a successful save while
-  // the data was silently lost.
-  const [saveError, setSaveError] = useState<string | null>(null)
+  // A refused save or activate/deactivate pins its reason on the record until
+  // the next action or cancel — a toast alone let F-t05-002 read as a
+  // successful save while the data was silently lost.
+  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
 
   // Existing parties default to read-only; creation flows can explicitly
   // request edit mode. Permission checks remain authoritative.
@@ -593,34 +598,36 @@ export function PartyDrawer({
         isPrimary: index === (draft.index ?? nextRows.length - 1) ? 'true' : 'false',
       }))
     }
-    setRelatedBusy(true)
-    try {
-      const response = await fetch(`/api/parties/${p.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expectedUpdatedAt: p.updated_at,
-          [kind]: kind === 'addresses'
-            ? serializeAddresses(nextRows as AddressRow[])
-            : serializeContacts(nextRows as ContactRow[]),
+    const ok = await relatedAction.execute(
+      () =>
+        fetchAction(`/api/parties/${p.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedUpdatedAt: p.updated_at,
+            [kind]: kind === 'addresses'
+              ? serializeAddresses(nextRows as AddressRow[])
+              : serializeContacts(nextRows as ContactRow[]),
+          }),
         }),
-      })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error ?? t('autosaveFailed'))
-      skipDirty.current = true
-      if (kind === 'addresses') {
-        setAddresses((result.addresses ?? []).map(addressFromApi))
-        setAddressDraft(null)
-      } else {
-        setContacts((result.contacts ?? []).map(contactFromApi))
-        setContactDraft(null)
-      }
-      toast.success(tc('feedback.saved'))
+      {
+        fallbackMessage: t('autosaveFailed'),
+        successMessage: tc('feedback.saved'),
+        onOk: (result) => {
+          skipDirty.current = true
+          const rows = (result as { addresses?: unknown; contacts?: unknown } | null)
+          if (kind === 'addresses') {
+            setAddresses(((rows?.addresses ?? []) as AddressApiRecord[]).map(addressFromApi))
+            setAddressDraft(null)
+          } else {
+            setContacts(((rows?.contacts ?? []) as ContactApiRecord[]).map(contactFromApi))
+            setContactDraft(null)
+          }
+        },
+      },
+    )
+    if (ok) {
       router.refresh()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('autosaveFailed'))
-    } finally {
-      setRelatedBusy(false)
     }
   }
 
@@ -631,7 +638,7 @@ export function PartyDrawer({
     if (!nameValid) {
       setNameError(true)
       setSaveState('error')
-      toast.error(t('nameRequired'))
+      refuse(t('nameRequired'), t('autosaveFailed'))
       return
     }
     const materialControlChange =
@@ -650,37 +657,38 @@ export function PartyDrawer({
       if (!reason) return
       changeReason = reason
     }
-    setBusy(true)
     setSaveState('saving')
-    setSaveError(null)
-    const res = await fetch(`/api/parties/${p.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...savePayload, changeReason }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (res.ok) {
-      setIsActive(data.party?.is_active === true)
-      setSaveState('saved')
-      setDirty(false)
-      setMode('view')
-      router.refresh()
-    } else {
-      // Stay in edit mode with the typed values intact and the refusal
-      // pinned: the form is still dirty, nothing was persisted.
-      const detail = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('autosaveFailed')
-      setSaveState('error')
-      setSaveError(detail)
-      toast.error(detail)
-    }
-    setBusy(false)
+    const ok = await execute(
+      () =>
+        fetchAction(`/api/parties/${p.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...savePayload, changeReason }),
+        }),
+      {
+        fallbackMessage: t('autosaveFailed'),
+        onOk: (data) => {
+          const party = (data as { party?: { is_active?: unknown } } | null)?.party
+          setIsActive(party?.is_active === true)
+          setSaveState('saved')
+          setDirty(false)
+          setMode('view')
+        },
+        onRefused: () => {
+          // Stay in edit mode with the typed values intact: the form is
+          // still dirty, nothing was persisted, the pin carries the reason.
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
   }
 
   function cancel() {
     resetForm()
     setDirty(false)
     setSaveState('saved')
-    setSaveError(null)
+    clearRefusal()
     setMode('view')
   }
 
@@ -692,23 +700,25 @@ export function PartyDrawer({
       confirmLabel: next ? t('activate') : t('deactivate'),
     })
     if (!reason) return
-    setBusy(true)
-    const res = await fetch(`/api/parties/${p.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        isActive: next,
-        expectedUpdatedAt: p.updated_at,
-        changeReason: reason,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('updateFailed'))
-    else {
-      setIsActive(next)
-      toast.success(next ? t('activated') : t('deactivated'))
-    }
-    setBusy(false)
+    await execute(
+      () =>
+        fetchAction(`/api/parties/${p.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            isActive: next,
+            expectedUpdatedAt: p.updated_at,
+            changeReason: reason,
+          }),
+        }),
+      {
+        fallbackMessage: t('updateFailed'),
+        successMessage: next ? t('activated') : t('deactivated'),
+        onOk: () => {
+          setIsActive(next)
+        },
+      },
+    )
     router.refresh()
   }
 
@@ -901,11 +911,7 @@ export function PartyDrawer({
         </div>
       }
     >
-      {saveError ? (
-        <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-          {t('saveFailedRetry')}{saveError === t('saveFailedRetry') || saveError === t('autosaveFailed') ? null : `: ${saveError}`}
-        </p>
-      ) : null}
+      <ActionAlert error={refusal} fallbackMessage={t('autosaveFailed')} title={t('saveFailedRetry')} className="mb-4" />
       <nav className="-mt-2 mb-5 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabs.ariaLabel')}>
         {tabs.map((item) => (
           <button
@@ -1505,6 +1511,8 @@ export function PartyDrawer({
         ) : undefined}
       >
         {contactDraft ? (
+          <>
+          <ActionAlert error={relatedAction.refusal} fallbackMessage={t('autosaveFailed')} />
           <ContactForm
             row={contactDraft.row}
             onChange={(row) => setContactDraft({ ...contactDraft, row })}
@@ -1520,6 +1528,7 @@ export function PartyDrawer({
               active: tc('labels.active'),
             }}
           />
+          </>
         ) : null}
       </Drawer>
 
@@ -1550,6 +1559,8 @@ export function PartyDrawer({
         ) : undefined}
       >
         {addressDraft ? (
+          <>
+          <ActionAlert error={relatedAction.refusal} fallbackMessage={t('autosaveFailed')} />
           <AddressForm
             row={addressDraft.row}
             onChange={(row) => setAddressDraft({ ...addressDraft, row })}
@@ -1568,6 +1579,7 @@ export function PartyDrawer({
               defaultShipping: t('defaultShipping'),
             }}
           />
+          </>
         ) : null}
       </Drawer>
       </TabContent>
@@ -1823,7 +1835,10 @@ function BankAccountsPanel({
   const [historyAccount, setHistoryAccount] = useState<BankAccountClient | null>(null)
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  const [busy, setBusy] = useState(false)
+  // Bank saves and retires pin beside the panel until the next action AND
+  // toast; a 409 refreshes the list behind the still-open draft (the stale
+  // token is never adopted) so the next save cannot overwrite unseen work.
+  const { busy, refusal, execute, refuse } = useAppAction()
   const perPage = 10
   const countries = useMemo(() => countryOptions(locale), [locale])
   const currencies = useMemo(() => currencyOptions(locale), [locale])
@@ -1860,15 +1875,15 @@ function BankAccountsPanel({
   async function saveBankAccount() {
     if (!draft) return
     if (!draft.bankName.trim()) {
-      toast.error(t('bankAccountValidation.bankName'))
+      refuse(t('bankAccountValidation.bankName'), t('bankAccountSaveFailed'))
       return
     }
     if (!draft.id && draft.accountNumber.trim().length < 4) {
-      toast.error(t('bankAccountValidation.accountNumber'))
+      refuse(t('bankAccountValidation.accountNumber'), t('bankAccountSaveFailed'))
       return
     }
     if (draft.currency && !/^[A-Za-z]{3}$/.test(draft.currency)) {
-      toast.error(t('bankAccountValidation.currency'))
+      refuse(t('bankAccountValidation.currency'), t('bankAccountSaveFailed'))
       return
     }
     const routing = { ...draft.routingBase }
@@ -1895,34 +1910,36 @@ function BankAccountsPanel({
       ...(draft.accountNumber.trim() ? { accountNumber: draft.accountNumber.trim() } : {}),
       ...(draft.id ? { expectedUpdatedAt: draft.updatedAt, changeReason } : {}),
     }
-    setBusy(true)
-    try {
-      const url = draft.id
-        ? `/api/parties/${partyId}/bank-accounts?accountId=${encodeURIComponent(draft.id)}`
-        : `/api/parties/${partyId}/bank-accounts`
-      const response = await fetch(url, {
-        method: draft.id ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const result = await response.json().catch(() => ({}))
-      if (response.status === 409) {
-        // Stale-revision conflicts (F-t04-004 residual: every pre-fix save
-        // 409d because the payload published a truncated token) surface as a
-        // translated message with a recovery path, never a raw server string.
-        await refreshAccounts()
-        toast.error(t('bankAccountStaleRevision'))
-        return
-      }
-      if (!response.ok) throw new Error(result.error ?? t('bankAccountSaveFailed'))
-      setDraft(null)
-      await refreshAccounts()
-      toast.success(t(draft.id ? 'bankAccountUpdated' : 'bankAccountAdded'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('bankAccountSaveFailed'))
-    } finally {
-      setBusy(false)
-    }
+    const savedId = draft.id
+    const ok = await execute(
+      () =>
+        fetchAction(
+          savedId
+            ? `/api/parties/${partyId}/bank-accounts?accountId=${encodeURIComponent(savedId)}`
+            : `/api/parties/${partyId}/bank-accounts`,
+          {
+            method: savedId ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          },
+        ),
+      {
+        fallbackMessage: t('bankAccountSaveFailed'),
+        successMessage: t(savedId ? 'bankAccountUpdated' : 'bankAccountAdded'),
+        onOk: () => {
+          setDraft(null)
+        },
+        onRefused: (error) => {
+          // A 409 reloads the list behind the still-open draft — the server
+          // reason names the recovery, and the stale token is never adopted,
+          // so the next save still cannot overwrite unseen work. (F-t04-004:
+          // the pre-fix bug was truncated tokens 409ing every save; the
+          // route bodies are clean human sentences now, safe to surface.)
+          if (error.kind === 'conflict') void refreshAccounts()
+        },
+      },
+    )
+    if (ok) await refreshAccounts()
   }
 
   async function retire(account: Record<string, unknown>) {
@@ -1933,28 +1950,28 @@ function BankAccountsPanel({
       confirmLabel: tc('actions.retire'),
     })
     if (!reason) return
-    setBusy(true)
-    const response = await fetch(
-      `/api/parties/${partyId}/bank-accounts?accountId=${encodeURIComponent(String(account.id))}`,
+    const ok = await execute(
+      () =>
+        fetchAction(
+          `/api/parties/${partyId}/bank-accounts?accountId=${encodeURIComponent(String(account.id))}`,
+          {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              retirementReason: reason,
+              expectedUpdatedAt: account.updated_at,
+            }),
+          },
+        ),
       {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          retirementReason: reason,
-          expectedUpdatedAt: account.updated_at,
-        }),
+        fallbackMessage: t('bankAccountSaveFailed'),
+        successMessage: tc('actions.retire'),
+        onRefused: (error) => {
+          if (error.kind === 'conflict') void refreshAccounts()
+        },
       },
     )
-    const result = await response.json().catch(() => ({}))
-    if (response.status === 409) {
-      await refreshAccounts()
-      toast.error(t('bankAccountStaleRevision'))
-    } else if (!response.ok) toast.error(result.error ?? t('bankAccountSaveFailed'))
-    else {
-      await refreshAccounts()
-      toast.success(tc('actions.retire'))
-    }
-    setBusy(false)
+    if (ok) await refreshAccounts()
   }
 
   const statusLabel = (account: Record<string, unknown>) => {
@@ -1988,6 +2005,8 @@ function BankAccountsPanel({
         ) : undefined}
       >
         {draft ? (
+          <>
+          <ActionAlert error={refusal} fallbackMessage={t('bankAccountSaveFailed')} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}><Label>{t('bankName')}</Label><Input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></div>
             <div className={field}><Label>{t('country')}</Label><SearchSelect value={draft.country} onChange={(country) => setDraft({ ...draft, country })} options={countries} sheetTitle={t('country')} clearable ariaLabel={t('country')} /></div>
@@ -1999,6 +2018,7 @@ function BankAccountsPanel({
               <Input type="password" autoComplete="off" className="font-mono" value={draft.accountNumber} onChange={(event) => setDraft({ ...draft, accountNumber: event.target.value })} placeholder={draft.id ? t('accountNumberUnchanged', { lastFour: draft.lastFour }) : undefined} />
             </div>
           </div>
+          </>
         ) : null}
       </Drawer>
 
@@ -2018,6 +2038,8 @@ function BankAccountsPanel({
           />
         ) : null}
       </Drawer>
+
+      <ActionAlert error={refusal} fallbackMessage={t('bankAccountSaveFailed')} />
 
       {accounts.length === 0 ? (
         <SublistEmpty icon={<Landmark size={22} />} text={t('noBankAccounts')} />
