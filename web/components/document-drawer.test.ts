@@ -7,6 +7,7 @@ import {
   distributionFieldsOf,
   isPricedDrawerLine,
   lineAmountFromQtyPrice,
+  readDocumentActionResult,
 } from './document-drawer'
 
 const row = (accountId: string, amount: string) => ({
@@ -121,4 +122,36 @@ test('a hand-typed amount that diverges from qty x price is never overwritten', 
   // …and an unrelated edit leaves derived and manual rows alike untouched.
   const same = [qtyRow('3', '1000', '3000.0000'), qtyRow('1', '100', '90.0000')]
   assert.deepEqual(applyQtyPriceToRows(same, same.map((r) => ({ ...r }))), same)
+})
+
+// F-t04-006 follow-up: the drawer Post read res.json() unguarded — a
+// non-JSON error body threw out as an unhandled rejection (zero toast, and
+// the Post button wedged busy). The read must never throw; the caller falls
+// back to the localized message when no typed reason arrives.
+test('drawer action result read never throws on a non-JSON error body', async () => {
+  const html = new Response('<html>proxy error</html>', {
+    status: 422,
+    headers: { 'content-type': 'text/html' },
+  })
+  const result = await readDocumentActionResult(html)
+  assert.deepEqual(result, { ok: false, message: null, pendingApproval: false })
+})
+
+test('drawer action result read carries the typed 422 refusal', async () => {
+  const refused = new Response(
+    JSON.stringify({ error: 'AP is closed for this period and accounting book' }),
+    { status: 422, headers: { 'content-type': 'application/json' } },
+  )
+  const result = await readDocumentActionResult(refused)
+  assert.deepEqual(result, {
+    ok: false,
+    message: 'AP is closed for this period and accounting book',
+    pendingApproval: false,
+  })
+})
+
+test('drawer action result read passes approvals through', async () => {
+  const pending = new Response(JSON.stringify({ ok: true, pendingApproval: true }), { status: 202 })
+  const result = await readDocumentActionResult(pending)
+  assert.deepEqual(result, { ok: true, message: null, pendingApproval: true })
 })

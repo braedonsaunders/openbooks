@@ -360,6 +360,24 @@ export async function readDocumentSaveFailure(
   }
 }
 
+/**
+ * Read a submit/post action response without ever throwing. Error bodies
+ * may be proxy HTML pages rather than JSON — letting res.json() throw
+ * turns the failure silent (unhandled rejection, zero toast) and wedges
+ * the action button busy. A null message tells the caller to use the
+ * localized fallback.
+ */
+export async function readDocumentActionResult(
+  response: Pick<Response, 'ok' | 'json'>,
+): Promise<{ ok: boolean; message: string | null; pendingApproval: boolean }> {
+  const data = await response.json().catch(() => ({})) as { error?: unknown; pendingApproval?: unknown }
+  return {
+    ok: response.ok,
+    message: typeof data.error === 'string' && data.error ? data.error : null,
+    pendingApproval: data.pendingApproval === true,
+  }
+}
+
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
   open: 'default',
   paid: 'success',
@@ -1405,17 +1423,24 @@ export function DocumentDrawer({
 
   async function act(action: 'submit' | 'post') {
     setBusy(true)
-    const res = await fetch('/api/documents/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, documentId: doc.id }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
-    else if (data.pendingApproval) toast.success(t('toasts.submitted'))
-    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
-    setBusy(false)
-    router.refresh()
+    try {
+      const res = await fetch('/api/documents/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, documentId: doc.id }),
+      })
+      const result = await readDocumentActionResult(res)
+      if (!result.ok) toast.error(result.message ?? t('toasts.actionFailed'))
+      else if (result.pendingApproval) toast.success(t('toasts.submitted'))
+      else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+      router.refresh()
+    } catch {
+      toast.error(t('toasts.actionFailed'))
+    } finally {
+      // A rejected transport must not wedge the button on: without this,
+      // every later click silently dies on the stuck disabled button.
+      setBusy(false)
+    }
   }
 
   async function remove() {
