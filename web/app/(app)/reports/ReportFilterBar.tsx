@@ -5,8 +5,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronsDown, ChevronsUp, SlidersHorizontal } from 'lucide-react'
 import { Popover, Select, cn } from '@openbooks/ui'
-import { PERIOD_PRESETS, PERIOD_PRESET_GROUP_LABELS, type PeriodPresetGroup } from '@openbooks/reports'
+import { PERIOD_PRESETS, type PeriodPresetGroup } from '@openbooks/reports'
 import { SearchInput } from '../../../components/search-input'
+import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName, type BuiltinSegmentKey } from '../../../lib/segment-labels'
 import { setAllReportSections } from './report-section-events'
 
 type DimOption = { id: string; name: string }
@@ -146,6 +147,25 @@ export function ReportFilterBar({
   const breakoutOpts = controls.breakoutOptions ?? ['department', 'project', 'location', 'class', 'month', 'quarter']
   const builtinByKey = new Map((dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]))
 
+  // A renamed built-in is tenant data and renders verbatim; a default one
+  // resolves to the catalog translation so the toolbar reads naturally in
+  // every locale (F-t07-009).
+  const builtinBreakoutLabel = (key: string) => {
+    const seg = builtinByKey.get(key)
+    return seg && !isDefaultSegmentName(seg) ? seg.name : t(`breakoutOpts.${key}`)
+  }
+  const segText = (key: BuiltinSegmentKey, labelKey: string) => {
+    const seg = builtinByKey.get(key)
+    if (seg && !isDefaultSegmentName(seg)) {
+      return { label: seg.name, all: t('allSegment', { name: seg.pluralName }) }
+    }
+    return { label: t(labelKey), all: t(DEFAULT_SEGMENT_ALL_KEY[key]) }
+  }
+  const deptText = segText('department', 'department')
+  const projectText = segText('project', 'project')
+  const locationText = segText('location', 'location')
+  const classText = segText('class', 'class')
+
   // Dimension filters carry no inline label — the value ("All departments", a
   // department name, …) is self-describing, which keeps the toolbar on one row.
   const dimSelect = (key: string, label: string, options: DimOption[] | undefined, allLabel: string) =>
@@ -209,10 +229,10 @@ export function ReportFilterBar({
               const groupPresets = PERIOD_PRESETS.filter((p) => p.group === group
                 && (!periodPresets || periodPresets.includes(p.id)))
               return groupPresets.length ? (
-                <optgroup key={group} label={PERIOD_PRESET_GROUP_LABELS[group]}>
+                <optgroup key={group} label={t(`periodPresetGroups.${group}`)}>
                   {groupPresets.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.label}
+                      {t(`periodPresets.${p.id}`)}
                     </option>
                   ))}
                 </optgroup>
@@ -263,7 +283,7 @@ export function ReportFilterBar({
             <option value="none">{t('breakoutNone')}</option>
             {breakoutOpts.filter((b) => b === 'month' || b === 'quarter' || builtinByKey.get(b)?.showInReports !== false).map((b) => (
               <option key={b} value={b}>
-                {b === 'month' || b === 'quarter' ? t(`breakoutOpts.${b}`) : (builtinByKey.get(b)?.name ?? t(`breakoutOpts.${b}`))}
+                {b === 'month' || b === 'quarter' ? t(`breakoutOpts.${b}`) : builtinBreakoutLabel(b)}
               </option>
             ))}
             {(dimensions?.segments ?? []).filter((segment) => segment.showInReports).map((segment) => (
@@ -318,10 +338,10 @@ export function ReportFilterBar({
 
       {controls.dimensions && dimensions && (
         <>
-          {builtinByKey.get('department')?.showInReports !== false ? dimSelect('dept', builtinByKey.get('department')?.name ?? t('department'), dimensions.departments, builtinByKey.get('department') ? t('allSegment', { name: builtinByKey.get('department')!.pluralName }) : t('allDepartments')) : null}
-          {builtinByKey.get('project')?.showInReports !== false ? dimSelect('project', builtinByKey.get('project')?.name ?? t('project'), dimensions.projects, builtinByKey.get('project') ? t('allSegment', { name: builtinByKey.get('project')!.pluralName }) : t('allProjects')) : null}
-          {builtinByKey.get('location')?.showInReports !== false ? dimSelect('location', builtinByKey.get('location')?.name ?? t('location'), dimensions.locations, builtinByKey.get('location') ? t('allSegment', { name: builtinByKey.get('location')!.pluralName }) : t('allLocations')) : null}
-          {builtinByKey.get('class')?.showInReports !== false ? dimSelect('class', builtinByKey.get('class')?.name ?? t('class'), dimensions.classes, builtinByKey.get('class') ? t('allSegment', { name: builtinByKey.get('class')!.pluralName }) : t('allClasses')) : null}
+          {builtinByKey.get('department')?.showInReports !== false ? dimSelect('dept', deptText.label, dimensions.departments, deptText.all) : null}
+          {builtinByKey.get('project')?.showInReports !== false ? dimSelect('project', projectText.label, dimensions.projects, projectText.all) : null}
+          {builtinByKey.get('location')?.showInReports !== false ? dimSelect('location', locationText.label, dimensions.locations, locationText.all) : null}
+          {builtinByKey.get('class')?.showInReports !== false ? dimSelect('class', classText.label, dimensions.classes, classText.all) : null}
           {(dimensions.segments ?? []).filter((segment) => segment.showInReports).map((segment) =>
             dimSelect(`seg_${segment.key}`, segment.name, segment.values, t('allSegment', { name: segment.pluralName })),
           )}
