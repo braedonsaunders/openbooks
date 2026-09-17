@@ -108,6 +108,8 @@ export interface TicketPayload {
   entries: EntryRow[]
   lines: LineRow[]
   laborTotal: string
+  /** Crew hours with no bill rate (unpriced at $0): shown, never silent. */
+  unpricedLaborHours?: string
   linesTotal: string
   grandTotal: string
   links: {
@@ -910,7 +912,13 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
           </span>
           <span className="flex-1" />
           <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
-            {t('editor.totals.labor')} {money(ticket.laborTotal)} · {t('editor.totals.items')} {money(ticket.linesTotal)} ·{' '}
+            {t('editor.totals.labor')} {money(ticket.laborTotal)}
+            {Number(ticket.unpricedLaborHours ?? 0) > 0 ? (
+              <span className="ml-1 font-medium text-amber-700 dark:text-amber-300" title={t('editor.totals.unpricedHours', { hours: ticket.unpricedLaborHours ?? 0 })}>
+                ({t('editor.totals.unpricedHours', { hours: ticket.unpricedLaborHours ?? 0 })})
+              </span>
+            ) : null}
+            {' '}· {t('editor.totals.items')} {money(ticket.linesTotal)} ·{' '}
             <strong className="text-slate-900 dark:text-slate-100">{money(ticket.grandTotal)}</strong>
           </span>
         </div>

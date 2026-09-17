@@ -123,6 +123,7 @@
       "items": "Equipment & materials",
       "grand": "Grand total",
       "previewNote": "Labor uses live preview rates until approval snapshots them for good.",
+      "unpricedHours": "{hours} h have no bill rate and price at $0 — pick a labor item or configure the rate book.",
       "snappedNote": "Rates are snapshotted — this ticket's history never restates."
     },
     "signatures": {
