@@ -345,3 +345,80 @@ test("a foreign-organization line department is refused with a domain error and 
     await dropScratchOrg(orgB.orgId);
   }
 });
+
+test("every UUID segment accepts the full a-f hex range", () => {
+  // Turning a class dash into a literal drops b-e from that segment's
+  // alphabet. The all-numeric fixtures never notice; a hex letter in each
+  // segment does.
+  const variants = [
+    "abcdefab-1111-4111-8111-111111111111",
+    "11111111-cdef-4111-8111-111111111111",
+    "11111111-1111-cdef-8111-111111111111",
+    "11111111-1111-4111-cdef-111111111111",
+    "11111111-1111-4111-8111-abcdefabcdef",
+  ];
+  for (const accountId of variants) {
+    const v = validateJournalInput({
+      documentDate: "2026-07-16",
+      lines: [
+        { accountId, amount: 5 },
+        { accountId: B, amount: -5 },
+      ],
+    });
+    assert.equal(v.lines[0]!.accountId, accountId, accountId);
+  }
+});
+
+test("exactly 200 lines validate; 201 do not", () => {
+  const lines = Array.from({ length: 100 }, (_, i) => [
+    { accountId: A, amount: "1.00" },
+    { accountId: B, amount: "-1.00" },
+  ]).flat();
+  const v = validateJournalInput({ documentDate: "2026-07-16", lines });
+  assert.equal(v.totalDebits, "100.0000");
+  assert.throws(
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [...lines, { accountId: A, amount: "1.00" }, { accountId: B, amount: "-1.00" }],
+      }),
+    /too many lines/,
+  );
+});
+
+test("the per-line amount ceiling is exact at ten trillion", () => {
+  const at = validateJournalInput({
+    documentDate: "2026-07-16",
+    lines: [
+      { accountId: A, amount: "10000000000000.0000" },
+      { accountId: B, amount: "-10000000000000.0000" },
+    ],
+  });
+  assert.equal(at.totalDebits, "10000000000000.0000");
+  assert.throws(
+    () =>
+      validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: "10000000000000.0001" },
+          { accountId: B, amount: "-10000000000000.0001" },
+        ],
+      }),
+    /out of range/,
+  );
+});
+
+test("memo, reference, and description caps truncate at their documented widths", () => {
+  const v = validateJournalInput({
+    documentDate: "2026-07-16",
+    memo: `m${"e".repeat(2000)}`,
+    referenceNumber: `r${"e".repeat(100)}`,
+    lines: [
+      { accountId: A, amount: 5, description: `d${"e".repeat(500)}` },
+      { accountId: B, amount: -5 },
+    ],
+  });
+  assert.equal(v.memo, `m${"e".repeat(1999)}`);
+  assert.equal(v.referenceNumber, `r${"e".repeat(99)}`);
+  assert.equal(v.lines[0]!.description, `d${"e".repeat(499)}`);
+});
