@@ -12,6 +12,7 @@ import {
   DOC_KINDS,
   accountOptions,
   bankAccountOptions,
+  cardLiabilityAccountOptions,
   cardOptions,
   dimensionOptions,
   loadDocument,
@@ -71,6 +72,7 @@ export interface BankingTransactionsDrawer {
   builtinSegments: DocumentDrawerProps['builtinSegments']
   items: Record<string, unknown>[]
   cards: DocumentDrawerProps['cards']
+  cardAccounts: DocumentDrawerProps['cardAccounts']
   bankAccounts: DocumentDrawerProps['bankAccounts']
   parties: DocumentDrawerProps['parties']
   subsidiaries: DocumentDrawerProps['subsidiaries']
@@ -158,6 +160,10 @@ export async function loadBankingTransactions(
         // Payee options for the optional check payee (checks only — appended
         // last so the indices above never shift).
         openKind === 'check' ? partyOptions('vendor') : Promise.resolve([]),
+        // Card-liability fallback for the card-charge picker when no card
+        // instruments exist (F-t05-020) — appended after the payee slot so
+        // no index above shifts.
+        openKind === 'card_charge' || openKind === 'card_refund' ? cardLiabilityAccountOptions() : Promise.resolve([]),
       ])
     : null
   const resolvedForm = drawerOpen && pickers
@@ -199,6 +205,7 @@ export async function loadBankingTransactions(
           builtinSegments: pickers[3].builtinSegments,
           items: pickers[4],
           cards: pickers[5],
+          cardAccounts: pickers[11] as DocumentDrawerProps['cardAccounts'],
           bankAccounts: pickers[6],
           parties: pickers[10] as DocumentDrawerProps['parties'],
           subsidiaries: pickers[9] ?? undefined,

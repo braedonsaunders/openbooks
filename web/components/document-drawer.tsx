@@ -645,6 +645,10 @@ export interface DocumentDrawerProps {
   taxCodes?: Opt[]
   taxGroups?: Opt[]
   cards?: Opt[]
+  /** Reconcilable card-liability accounts: the card picker fallback when no
+   * card instruments exist (F-t05-020). Only passed by loaders for
+   * fundingSource='card' kinds. */
+  cardAccounts?: Opt[]
   bankAccounts?: Opt[]
   departments: Opt[]
   projects: Opt[]
@@ -695,6 +699,7 @@ export function DocumentDrawer({
   taxCodes,
   taxGroups,
   cards,
+  cardAccounts,
   bankAccounts,
   departments,
   projects,
@@ -1636,8 +1641,36 @@ export function DocumentDrawer({
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
     if (!id) return '—'
-    const a = (bankAccounts ?? accounts).find((x) => x.id === id) ?? accounts.find((x) => x.id === id)
+    const a = [...(cardAccounts ?? []), ...(bankAccounts ?? accounts)].find((x) => x.id === id) ?? accounts.find((x) => x.id === id)
     return a ? `${a.number ?? ''} ${a.name ?? ''}`.trim() : String(id)
+  }
+  // Card-instrument fallback (F-t05-020): no UI creates payment_cards rows,
+  // so with zero instruments the instrument picker is unfillable. Offer the
+  // reconcilable card-liability accounts as the controlAccountId override
+  // the engine cardRule reads first; name what qualifies when those are
+  // absent too. Unused while instruments exist.
+  const cardAccountFallback = (editable: boolean) => {
+    if (editable) {
+      return (cardAccounts ?? []).length > 0 ? (
+        <>
+          <SearchSelect
+            options={(cardAccounts ?? []).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
+            value={(customValues.controlAccountId as string) ?? ''}
+            onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))}
+            placeholder={t('drawer.accountPlaceholder')}
+          />
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.cardAccountHelp')}</p>
+        </>
+      ) : (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('drawer.noCardAccounts')}{' '}
+          <Link href="/accounts" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {t('drawer.noCardAccountsCta')}
+          </Link>
+        </p>
+      )
+    }
+    return <p className="text-sm">{accountName(customValues.controlAccountId)}</p>
   }
   // Header party picker role: a mandatory partyRole, else an opt-in payee
   // (optionalPartyRole) that never blocks save/submit/post or the server edit
@@ -1806,24 +1839,32 @@ export function DocumentDrawer({
             ) : (<p className="text-sm">{doc.party_name}</p>)}
           </>
         )
-      case 'payment_card_id':
+      case 'payment_card_id': {
+        const savedCardName = (cards ?? []).find((c) => c.id === doc.payment_card_id)?.display_name ?? doc.payment_card_id
         return (
           <>
             <FieldLabel fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
             {isEditable ? (
-              <SearchSelect
-                options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
-                value={paymentCardId}
-                onChange={(v) => setPaymentCardId(v ?? '')}
-                placeholder={t('drawer.selectCardPlaceholder')}
-              />
+              (cards ?? []).length > 0 ? (
+                <SearchSelect
+                  options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
+                  value={paymentCardId}
+                  onChange={(v) => setPaymentCardId(v ?? '')}
+                  placeholder={t('drawer.selectCardPlaceholder')}
+                />
+              ) : (
+                cardAccountFallback(true)
+              )
             ) : (
-              <p className="text-sm">
-                {(cards ?? []).find((c) => c.id === doc.payment_card_id)?.display_name ?? doc.payment_card_id ?? '—'}
-              </p>
+              savedCardName ? (
+                <p className="text-sm">{savedCardName}</p>
+              ) : (
+                cardAccountFallback(false)
+              )
             )}
           </>
         )
+      }
       case 'document_date':
         return (
           <>
@@ -2266,18 +2307,26 @@ export function DocumentDrawer({
               {config.fundingSource === 'card' ? (
                 <div className={`${field} lg:col-span-2`}>
                   <FieldLabel fieldName={t('drawer.card')}>{t('drawer.card')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
-                  {editable ? (
-                    <SearchSelect
-                      options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
-                      value={paymentCardId}
-                      onChange={(v) => setPaymentCardId(v ?? '')}
-                      placeholder={t('drawer.selectCardPlaceholder')}
-                    />
-                  ) : (
-                    <p className="text-sm">
-                      {(cards ?? []).find((c) => c.id === doc.payment_card_id)?.display_name ?? doc.payment_card_id ?? '—'}
-                    </p>
-                  )}
+                  {(() => {
+                    const savedCardName = (cards ?? []).find((c) => c.id === doc.payment_card_id)?.display_name ?? doc.payment_card_id
+                    if (editable) {
+                      return (cards ?? []).length > 0 ? (
+                        <SearchSelect
+                          options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
+                          value={paymentCardId}
+                          onChange={(v) => setPaymentCardId(v ?? '')}
+                          placeholder={t('drawer.selectCardPlaceholder')}
+                        />
+                      ) : (
+                        cardAccountFallback(true)
+                      )
+                    }
+                    return savedCardName ? (
+                      <p className="text-sm">{savedCardName}</p>
+                    ) : (
+                      cardAccountFallback(false)
+                    )
+                  })()}
                 </div>
               ) : null}
 

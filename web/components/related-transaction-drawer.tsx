@@ -25,6 +25,7 @@ import {
   DOC_KINDS,
   accountOptions,
   bankAccountOptions,
+  cardLiabilityAccountOptions,
   cardOptions,
   createPermission,
   dimensionOptions,
@@ -327,7 +328,7 @@ export async function loadRelatedTransactionDrawerData({
     loadFieldDefs('documents', kind),
     loadFieldDefs('document_lines', kind),
   ])
-  const [parties, accounts, taxCodes, dimensions, items, cards, banks, subsidiaries, resolvedForm] = await Promise.all([
+  const [parties, accounts, taxCodes, dimensions, items, cards, cardAccounts, banks, subsidiaries, resolvedForm] = await Promise.all([
     config.partyRole ? partyOptions(config.partyRole) : Promise.resolve(undefined),
     accountOptions(config),
     config.hasTax ? taxCodeOptions() : Promise.resolve(undefined),
@@ -345,6 +346,7 @@ export async function loadRelatedTransactionDrawerData({
          )
        order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
     config.fundingSource === 'card' ? cardOptions() : Promise.resolve(undefined),
+    config.fundingSource === 'card' ? cardLiabilityAccountOptions() : Promise.resolve(undefined),
     config.fundingSource === 'bank' || kind === 'transfer' ? bankAccountOptions() : Promise.resolve(undefined),
     visibleSubsidiaries(authz),
     resolveFormLayout({
@@ -368,6 +370,7 @@ export async function loadRelatedTransactionDrawerData({
       accounts: (accounts),
       taxCodes: (taxCodes),
       cards: (cards),
+      cardAccounts: (cardAccounts),
       bankAccounts: (banks),
       departments: (dimensions.departments),
       projects: (dimensions.projects),

@@ -1088,15 +1088,24 @@ export async function applyDocumentEdit(
       }
     }
   }
-  // Structural funding-bank override (the drawer's fundingSource='bank'
-  // picker: deposit destination, check source). It is not a registered
+  // Structural funding override (the drawer's fundingSource picker: deposit
+  // destination, check source, card liability). It is not a registered
   // custom field, so validateCustomValues cannot see it — without an
   // explicit carry the picker silently stops persisting (the save succeeds
   // and the reopen shows '—'). Fence it like a reference: uuid-shaped and
-  // owned by this org's reconcilable bank accounts, the exact set the
-  // picker lists. An absent key leaves the stored bag untouched; an
-  // explicit null/'' clears back to the org default bank.
-  if (body.custom !== undefined && cfg?.fundingSource === 'bank') {
+  // owned by this org's reconcilable funding accounts of the kind's type,
+  // the exact set the picker lists. An absent key leaves the stored bag
+  // untouched; an explicit null/'' clears back to the org default.
+  // F-t05-020 extends the F-t04-013 bank carry to fundingSource='card':
+  // with no card instruments on file the drawer offers reconcilable
+  // card-liability accounts, saved as the controlAccountId override the
+  // engine cardRule already reads first.
+  const fundingAccountType =
+    cfg?.fundingSource === 'bank' ? 'asset_bank'
+    : cfg?.fundingSource === 'card' ? 'liability_card'
+    : null
+  const fundingNoun = cfg?.fundingSource === 'card' ? 'card liability account' : 'bank account'
+  if (body.custom !== undefined && fundingAccountType) {
     const override = (body.custom as Record<string, unknown>).controlAccountId
     if (override !== undefined) {
       if (override === null || override === '') {
@@ -1106,14 +1115,14 @@ export async function applyDocumentEdit(
           typeof override !== 'string' ||
           !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(override)
         ) {
-          throw new DocumentEditError(422, 'funding bank must be a valid record reference')
+          throw new DocumentEditError(422, `${cfg?.fundingSource === 'card' ? 'card account' : 'funding bank'} must be a valid record reference`)
         }
         const owned = (await db.execute<{ id: string }>(sql`
           select id from accounts
            where org_id = ${orgId} and is_active and not is_summary
-             and reconcilable and type = 'asset_bank' and id = ${override}::uuid
+             and reconcilable and type = ${fundingAccountType} and id = ${override}::uuid
         `))
-        if (!owned.rows[0]) throw new DocumentEditError(404, 'bank account not found in this organization')
+        if (!owned.rows[0]) throw new DocumentEditError(404, `${fundingNoun} not found in this organization`)
         headerCustom = { ...(headerCustom ?? current.custom ?? {}), controlAccountId: override }
       }
     }
@@ -1695,6 +1704,22 @@ export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
   const r = (await db.execute<Opt>(sql`
     select id, number, name from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'asset_bank'
+     order by number nulls last
+  `))
+  return r.rows
+}
+
+/**
+ * Reconcilable card-liability accounts (the card-charge fallback when no
+ * card instruments exist — F-t05-020). Offered as the controlAccountId
+ * override the engine cardRule reads first; fenced to this exact set by
+ * the funding-override guard in applyDocumentEdit.
+ */
+export async function cardLiabilityAccountOptions(orgId?: string): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
+  const r = (await db.execute<Opt>(sql`
+    select id, number, name from accounts
+     where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'liability_card'
      order by number nulls last
   `))
   return r.rows

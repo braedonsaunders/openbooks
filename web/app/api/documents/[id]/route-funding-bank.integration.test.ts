@@ -118,6 +118,81 @@ test('the funding-bank override round-trips through save and read-back', { skip:
   }
 })
 
+async function cardFixture(): Promise<{ orgId: string; chargeId: string; cardId: string; bankId: string; cleanup: () => Promise<void> }> {
+  const org = await createScratchOrg()
+  state.orgId = org.orgId
+  state.actorId = randomUUID()
+  const cardId = randomUUID()
+  await db.execute(sql`
+    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+    values (${cardId}, ${org.orgId}, '2050', 'Corporate Credit Card', 'liability_card', false, true, false, true, 'CAD', '[]'::jsonb, '{}'::jsonb, true)`)
+  const bankId = randomUUID()
+  await db.execute(sql`
+    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+    values (${bankId}, ${org.orgId}, '1010', 'QA t04 Operating', 'asset_bank', false, true, false, true, 'CAD', '[]'::jsonb, '{}'::jsonb, true)`)
+  const chargeId = randomUUID()
+  await db.execute(sql`
+    insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+    values (${chargeId}, ${org.orgId}, 'card_charge', 'draft', 'CC-00001', ${org.date}, ${org.subsidiaryId}, 'CAD', '0', '0', '0', '{}'::jsonb)`)
+  return { orgId: org.orgId, chargeId, cardId, bankId, cleanup: () => dropScratchOrg(org.orgId) }
+}
+
+// F-t05-020: with no card instruments on file the drawer offers the
+// reconcilable card-liability account, saved as the controlAccountId
+// override the engine cardRule already reads first. The guard must carry
+// it exactly like the funding-bank override — and refuse the wrong
+// population in both directions.
+test('the card-liability override round-trips for card charges', { skip: !DB }, async () => {
+  const { orgId, chargeId, cardId, cleanup } = await cardFixture()
+  try {
+    const saved = await patchDoc(orgId, chargeId, {
+      expectedUpdatedAt: await revision(orgId, chargeId),
+      custom: { controlAccountId: cardId },
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.json))
+    assert.equal((await storedCustom(orgId, chargeId)).controlAccountId, cardId)
+    const kept = await patchDoc(orgId, chargeId, {
+      expectedUpdatedAt: await revision(orgId, chargeId),
+      memo: 'still the same card',
+    })
+    assert.equal(kept.status, 200, JSON.stringify(kept.json))
+    assert.equal((await storedCustom(orgId, chargeId)).controlAccountId, cardId)
+    const cleared = await patchDoc(orgId, chargeId, {
+      expectedUpdatedAt: await revision(orgId, chargeId),
+      custom: { controlAccountId: '' },
+    })
+    assert.equal(cleared.status, 200, JSON.stringify(cleared.json))
+    assert.ok(!('controlAccountId' in (await storedCustom(orgId, chargeId))), 'clearing the picker must remove the override')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('the card-liability override fails closed on the wrong population', { skip: !DB }, async () => {
+  const { orgId, chargeId, cardId, bankId, cleanup } = await cardFixture()
+  try {
+    // A bank account is not a card liability, even when reconcilable.
+    const bankOnCard = await patchDoc(orgId, chargeId, {
+      expectedUpdatedAt: await revision(orgId, chargeId),
+      custom: { controlAccountId: bankId },
+    })
+    assert.equal(bankOnCard.status, 404, JSON.stringify(bankOnCard.json))
+    assert.ok(!('controlAccountId' in (await storedCustom(orgId, chargeId))), 'a refused override writes nothing')
+    // A card liability is not a funding bank (same org, check draft).
+    const checkId = randomUUID()
+    await db.execute(sql`
+      insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+      values (${checkId}, ${orgId}, 'check', 'draft', 'CHK-00002', '2026-07-15', (select subsidiary_id from documents where id = ${chargeId}), 'CAD', '0', '0', '0', '{}'::jsonb)`)
+    const cardOnCheck = await patchDoc(orgId, checkId, {
+      expectedUpdatedAt: await revision(orgId, checkId),
+      custom: { controlAccountId: cardId },
+    })
+    assert.equal(cardOnCheck.status, 404, JSON.stringify(cardOnCheck.json))
+  } finally {
+    await cleanup()
+  }
+})
+
 test('the funding-bank override fails closed on foreign and malformed banks', { skip: !DB }, async () => {
   const { orgId, checkId, bankId, cleanup } = await fixture()
   try {
