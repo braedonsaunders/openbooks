@@ -89,7 +89,7 @@ test('every default built-in segment maps to a fully-translated All-X key', () =
       const catalog = JSON.parse(
         readFileSync(new URL(`../messages/${locale}/reports.json`, import.meta.url), 'utf8'),
       ) as FilterBarCatalog
-      const value = (catalog.filterBar as Record<string, unknown> | undefined)?.[allKey]
+      const value: unknown = (catalog.filterBar as Record<string, unknown> | undefined)?.[allKey]
       assert.ok(
         typeof value === 'string' && value.trim(),
         `${locale} is missing filterBar.${allKey}`,
