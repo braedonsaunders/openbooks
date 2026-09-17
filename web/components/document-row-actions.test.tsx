@@ -64,6 +64,7 @@ const { DOC_KINDS } = await import("../lib/document-kinds");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const config = DOC_KINDS["vendor_bill"]!;
+const transferConfig = DOC_KINDS["transfer"]!;
 
 async function mountApprovedRow() {
   globalThis.__docRowRouter = {
@@ -97,6 +98,51 @@ async function clickPost(host: HTMLElement) {
   await tick();
   await tick();
 }
+
+async function mountDraftTransferRow() {
+  globalThis.__docRowRouter = {
+    push() {},
+    refresh() {},
+  };
+  globalThis.__docRowToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <DocumentRowActions id={randomUUID()} status="draft" config={transferConfig} openHref="/banking/transactions/1" />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  return { host, root };
+}
+
+/** F-t05-013: row Post on an incomplete transfer draft 422s with a typed
+ * engine reason — the same row-action path as F-t04-006 must toast it and
+ * persist it row-inline instead of failing silently. */
+test("a 422 post refusal on a draft transfer names the missing legs", async (t) => {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    Response.json({ error: "transfer lines must name both the destination and the source account" }, { status: 422 })) as typeof fetch;
+  const { host, root } = await mountDraftTransferRow();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await clickPost(host);
+  await tick();
+  const errors = (globalThis.__docRowToasts ?? []).filter((toast) => toast.kind === "error");
+  assert.equal(errors.length, 1, "the refused transfer post must surface exactly one error toast");
+  assert.match(errors[0]!.message, /destination and the source account/);
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused transfer post must persist a row-inline alert");
+  assert.match(alert.textContent ?? "", /destination and the source account/);
+});
 
 /** F-t04-006: a refused Post must name the reason instead of failing silently. */
 test("a 422 post refusal surfaces the typed server reason", async (t) => {
