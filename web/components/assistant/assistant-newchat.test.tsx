@@ -29,9 +29,11 @@ registerHooks({
       };
     }
     if (specifier === "next/link") {
+      // Render a real anchor (href/target/rel preserved) so link-behavior
+      // tests can pin same-tab navigation; children-only mocks hide it.
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children}",
+        url: "data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',{href:p.href,target:p.target,rel:p.rel},p.children)}",
       };
     }
     if (specifier === "@/lib/confirm" || specifier.endsWith("/lib/confirm")) {
@@ -68,7 +70,7 @@ function newChatButton(host: HTMLElement): HTMLButtonElement {
   return found as HTMLButtonElement;
 }
 
-async function mount(aiEnabled: boolean) {
+async function mount(aiEnabled: boolean, canConfigureAi = false) {
   globalThis.__newChatPushes = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -87,6 +89,7 @@ async function mount(aiEnabled: boolean) {
           initialMessages: [],
           canWrite: true,
           aiEnabled,
+          canConfigureAi,
         }),
       }),
     );
@@ -120,6 +123,26 @@ test("F-t12-011: New chat explains setup instead of dead-clicking", async () => 
     assert.ok(
       alert?.textContent?.includes("isn't configured yet"),
       "must surface the not-configured guidance inline",
+    );
+  } finally {
+    await unmount();
+  }
+});
+
+// F-t13-004: the empty-state "AI providers" entry must take the admin to
+// /admin/ai in the SAME tab. As target="_blank" the URL never changed and the
+// link read as dead (new-tab opens are also popup-blocker bait in lockdown
+// browsers). The New-chat half of that finding already holds — the F-t12-011
+// test above pins the inline guidance, and the t13 screenshot shows it live.
+test("F-t13-004: AI providers link navigates to setup in the same tab", async () => {
+  const { host, unmount } = await mount(false, true);
+  try {
+    const link = host.querySelector('a[href="/admin/ai"]');
+    assert.ok(link, "AI providers setup link must render for admins");
+    assert.equal(
+      link.getAttribute("target"),
+      null,
+      "setup link must not open a new tab",
     );
   } finally {
     await unmount();

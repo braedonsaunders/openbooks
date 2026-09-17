@@ -966,9 +966,7 @@ export function AssistantApp({
                 <div className="flex justify-center gap-2">
                   {canConfigureAi ? (
                     <Button asChild variant="outline">
-                      <Link href="/admin/ai" target="_blank" rel="noopener noreferrer">
-                        {admin('title')}
-                      </Link>
+                      <Link href="/admin/ai">{admin('title')}</Link>
                     </Button>
                   ) : null}
                   <Button variant="outline" onClick={() => router.refresh()}>
