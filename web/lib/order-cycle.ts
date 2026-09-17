@@ -71,11 +71,19 @@ export async function createOrderDraft(orgId: string, userId: string, kind: Orde
 }
 
 export class ConversionError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
     super(message)
     this.name = 'ConversionError'
   }
 }
+
+/** Machine-readable code for a goods receipt refused over a missing RNB account. */
+export const ITEM_MISSING_RNB_ACCOUNT = 'ITEM_MISSING_RNB_ACCOUNT'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
@@ -506,6 +514,7 @@ interface PurchaseReceiptSourceLineRow extends Record<string, unknown> {
   quantity_fulfilled: string
   custom: Record<string, unknown> | null
   item_kind: string | null
+  item_name: string | null
   has_inventory_profile: boolean
   received_not_billed_account_id: string | null
 }
@@ -571,7 +580,7 @@ export async function receivePurchaseOrder(
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
              dl.quantity, dl.unit, dl.unit_price, dl.department_id, dl.project_id, dl.location_id,
              dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
-             dl.custom, i.kind as item_kind,
+             dl.custom, i.kind as item_kind, i.name as item_name,
              profile.item_id is not null as has_inventory_profile,
              profile.received_not_billed_account_id
         from document_lines dl
@@ -595,8 +604,12 @@ export async function receivePurchaseOrder(
         throw new ConversionError(`Purchase-order line ${line.line_number} is an inventory item without a costing profile`)
       }
       if (!line.received_not_billed_account_id) {
+        const itemLabel = line.item_name ? ` (${line.item_name})` : ''
         throw new ConversionError(
-          `Purchase-order line ${line.line_number} cannot be received before its bill: the item has no received-not-billed account`,
+          `Purchase-order line ${line.line_number}${itemLabel} cannot be received: the item has no received-not-billed account — set it on the item's costing profile before receiving`,
+          422,
+          ITEM_MISSING_RNB_ACCOUNT,
+          { lineNumber: line.line_number, itemId: line.item_id, itemName: line.item_name },
         )
       }
       const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
