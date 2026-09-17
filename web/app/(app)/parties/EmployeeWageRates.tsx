@@ -37,6 +37,10 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [data, setData] = useState<RatesResponse | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
+  // A refused save/end/delete stays visible on the record until the next
+  // mutation attempt — a 4-second toast alone let F-t05-001 read as a
+  // silent no-op. The detail is the server's refusal text when present.
+  const [actionError, setActionError] = useState<string | null>(null)
   const [rate, setRate] = useState('')
   const [currency, setCurrency] = useState('')
   const [basis, setBasis] = useState<'hour' | 'year'>('hour')
@@ -67,17 +71,31 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
 
   async function mutate(payload: Record<string, unknown>, successMessage: string) {
     setBusy(true)
+    setActionError(null)
     try {
       const response = await fetch('/api/admin/setup/labor-costing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!response.ok) throw new Error('mutation failed')
+      if (!response.ok) {
+        let detail: string | null = null
+        try {
+          const body = (await response.json()) as { error?: unknown }
+          if (typeof body.error === 'string' && body.error.trim()) detail = body.error.trim()
+        } catch {
+          detail = null
+        }
+        setActionError(detail ?? t('saveFailed'))
+        throw new Error('mutation failed')
+      }
       await load()
       toast.success(successMessage)
       return true
     } catch {
+      // A transport failure reaches here with no server detail pinned yet —
+      // still leave the generic refusal on the record, not only the toast.
+      setActionError((current) => current ?? t('saveFailed'))
       toast.error(t('saveFailed'))
       return false
     } finally {
@@ -140,6 +158,12 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
           <BookOpen size={13} aria-hidden /> {t('documentation')}
         </Link>
       </div>
+
+      {actionError ? (
+        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {t('saveFailed')}{actionError === t('saveFailed') ? null : `: ${actionError}`}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60">
         <div>

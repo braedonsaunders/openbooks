@@ -34,6 +34,9 @@ export const dynamic = 'force-dynamic'
  *  POST { action:'save-rate' }  upsert an effective-dated wage. Starting a new
  *                               rate auto-closes the previous open row in the
  *                               same scope the day before — no overlaps, ever.
+ *                               A start before an existing start (a backdate)
+ *                               is capped the day before its successor instead,
+ *                               so history stays gapless and ordered.
  *                               Close + upsert + audit commit in ONE tenant
  *                               transaction under a same-scope advisory lock,
  *                               so a failure mid-save rolls back the close and
@@ -184,6 +187,31 @@ function scopeLock(orgId: string, scope: WageScope): SQL {
  * row always carries attributable evidence. */
 function bodyReason(raw: unknown, fallback: string): string {
   return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 500) : fallback
+}
+
+/** The storage-enforced single-window conflict, anywhere in a cause chain
+ * (same walk as the FX single-running-provider guard). */
+function isWageOverlapConflict(error: unknown): boolean {
+  let current: unknown = error
+  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown }
+    if (candidate.code === '23P01' && candidate.constraint === 'labor_cost_rates_no_active_overlap') {
+      return true
+    }
+    current = candidate.cause
+  }
+  return false
+}
+
+/** Storage refusals past validation must never leak driver text — the raw
+ * failure embeds the full statement with bound org/actor ids (F-t05-001's
+ * 422 did exactly that). Overlap refusals carry a stable code the UI pins
+ * to its own catalog copy; anything else is a generic safe refusal. */
+function rateStorageRefusal(error: unknown): { error: string; errorCode: string } {
+  if (isWageOverlapConflict(error)) {
+    return { error: 'wage rate overlaps an existing rate in this scope', errorCode: 'overlap' }
+  }
+  return { error: 'could not save the wage rate', errorCode: 'save' }
 }
 
 /** GET ?employee=<partyId> → that employee's wage-rate history (confidential;
@@ -472,12 +500,29 @@ export async function POST(req: Request) {
              and subsidiary_id is not distinct from ${subsidiaryId}
              and effective_from < ${effectiveFrom}::date
              and (effective_to is null or effective_to >= ${effectiveFrom}::date)`)
+        // A mid-timeline start (a backdate) must end the day before its
+        // successor: without the cap the new row overlaps the next start and
+        // the overlap exclusion refuses the save. Forward starts have no
+        // successor, so the cap stays open — exactly the old behavior.
+        const successor = await db.execute<{ start: string }>(sql`
+          select min(effective_from)::text as start
+            from labor_cost_rates
+           where org_id = ${orgId}
+             and employee_party_id is not distinct from ${employeePartyId}
+             and lower(job_title) is not distinct from lower(${jobTitle})
+             and trade_id is not distinct from ${tradeId}
+             and department_id is not distinct from ${departmentId}
+             and subsidiary_id is not distinct from ${subsidiaryId}
+             and is_active
+             and effective_from > ${effectiveFrom}::date`)
+        const successorFrom = successor.rows[0]?.start ?? null
         const upserted = await db.execute<RateRow>(sql`
           insert into labor_cost_rates
             (org_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id, currency,
-             rate, basis, annual_hours, effective_from, notes, created_by, updated_by)
+             rate, basis, annual_hours, effective_from, effective_to, notes, created_by, updated_by)
           values (${orgId}, ${employeePartyId}, ${jobTitle}, ${tradeId}, ${departmentId}, ${subsidiaryId}, ${currency},
                   ${rate}, ${basis}, ${annualHours}, ${effectiveFrom},
+                  (case when ${successorFrom}::date is null then null else (${successorFrom}::date - 1) end),
                   ${body.notes ? String(body.notes).slice(0, 500) : null}, ${userId}, ${userId})
           on conflict (org_id,
                        coalesce(employee_party_id, '00000000-0000-0000-0000-000000000000'::uuid),
@@ -486,8 +531,12 @@ export async function POST(req: Request) {
                        coalesce(department_id, '00000000-0000-0000-0000-000000000000'::uuid),
                        coalesce(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid),
                        effective_from)
+          -- A same-start correction replaces terms in place and keeps the
+          -- row's window: resetting effective_to here would reopen the row
+          -- past its successor and trip the overlap exclusion. Window edits
+          -- go through end-rate.
           do update set rate = excluded.rate, currency = excluded.currency, basis = excluded.basis, annual_hours = excluded.annual_hours,
-                        notes = excluded.notes, effective_to = null, is_active = true,
+                        notes = excluded.notes, is_active = true,
                         updated_at = now(), updated_by = ${userId}
                     where labor_cost_rates.org_id = ${orgId}
           returning ${RATE_ROW_COLUMNS}`)
@@ -509,7 +558,8 @@ export async function POST(req: Request) {
     } catch (e) {
       // A storage refusal past validation (exclusion constraint, injected
       // error) rolls back close + upsert + audit together: no committed gap.
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      // The refusal is mapped, never the driver text (see rateStorageRefusal).
+      return NextResponse.json(rateStorageRefusal(e), { status: 422 })
     }
     return NextResponse.json({ ok: true })
   }
@@ -567,8 +617,9 @@ export async function POST(req: Request) {
       if (!outcome.ok) return outcome.response
     } catch (e) {
       // Overlap/valid-range refusals from storage roll data and audit back
-      // together — the update never survives without its evidence.
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      // together — the update never survives without its evidence. Mapped,
+      // never the driver text (see rateStorageRefusal).
+      return NextResponse.json(rateStorageRefusal(e), { status: 422 })
     }
     return NextResponse.json({ ok: true })
   }
@@ -616,7 +667,7 @@ export async function POST(req: Request) {
       })
       if (!outcome.ok) return outcome.response
     } catch (e) {
-      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      return NextResponse.json(rateStorageRefusal(e), { status: 422 })
     }
     return NextResponse.json({ ok: true })
   }

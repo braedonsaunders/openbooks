@@ -945,3 +945,113 @@ test("reconcile rejects an impossible calendar date with a 422, never a 500", { 
     await dropScratchOrgReporting(f.orgId);
   }
 });
+
+test("a backdated save-rate persists mid-timeline, capped the day before its successor (F-t05-001)", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // F-t05-001: adding a rate effective BEFORE the current start (2026-09-05
+  // against a 2026-09-17 start) 422'd on the overlap exclusion and the UI
+  // toasted a generic failure — a silent no-op. Backdating is legitimate by
+  // design (the retro finder names backdated wages over paid periods as a
+  // trigger), so the save must land: the new row covers its start until the
+  // day before the next start, and later rows are untouched.
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    const current = await POST(postRequest(saveRateBody({ rate: 32.5, effectiveFrom: "2026-09-17" })));
+    assert.equal(current.status, 200);
+    const future = await POST(postRequest(saveRateBody({ rate: 34, effectiveFrom: "2026-09-19" })));
+    assert.equal(future.status, 200);
+
+    const backdated = await POST(postRequest(saveRateBody({ rate: 35, effectiveFrom: "2026-09-05" })));
+    assert.equal(backdated.status, 200);
+
+    const rates = await storedRates(f.orgId);
+    assert.equal(rates.length, 3);
+    // Backdated row slots into history, capped before the Sep-17 start.
+    assert.equal(rates[0]!.rate, "35.0000");
+    assert.equal(rates[0]!.effectiveFrom, "2026-09-05");
+    assert.equal(rates[0]!.effectiveTo, "2026-09-16");
+    // Later rows keep their exact windows.
+    assert.equal(rates[1]!.rate, "32.5000");
+    assert.equal(rates[1]!.effectiveTo, "2026-09-18");
+    assert.equal(rates[2]!.rate, "34.0000");
+    assert.equal(rates[2]!.effectiveTo, null);
+
+    const audits = await rateAudits(f.orgId);
+    assert.equal(audits.length, 3);
+    assert.equal(audits[2]!.action, "insert");
+    assert.equal((audits[2]!.changes.after as StoredRate).effectiveTo, "2026-09-16");
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("a same-start correction keeps the row's window instead of reopening past its successor", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The same-start upsert used to reset effective_to to null, which overlaps
+  // the successor and trips the overlap exclusion on any mid-timeline row.
+  // A correction changes terms, never the window — window edits go through
+  // end-rate.
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    assert.equal((await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })))).status, 200);
+    assert.equal((await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })))).status, 200);
+    const backdated = await POST(postRequest(saveRateBody({ rate: 110, effectiveFrom: "2026-02-01" })));
+    assert.equal(backdated.status, 200);
+
+    let rates = await storedRates(f.orgId);
+    assert.equal(rates.length, 3);
+    assert.equal(rates[1]!.effectiveTo, "2026-02-28");
+
+    const correction = await POST(postRequest(saveRateBody({ rate: 115, effectiveFrom: "2026-02-01" })));
+    assert.equal(correction.status, 200);
+    rates = await storedRates(f.orgId);
+    assert.equal(rates.length, 3);
+    assert.equal(rates[1]!.rate, "115.0000");
+    assert.equal(rates[1]!.effectiveTo, "2026-02-28");
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("a storage refusal past validation never leaks driver text to the client", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // F-t05-001's 422 carried the full INSERT statement with bound org/actor
+  // ids. Refusals map to a stable code + safe message instead.
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    assert.equal((await POST(postRequest(saveRateBody({ rate: 100, effectiveFrom: "2026-01-01" })))).status, 200);
+
+    routeState.fault = (text) => text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
+    const failed = await POST(postRequest(saveRateBody({ rate: 120, effectiveFrom: "2026-03-01" })));
+    routeState.fault = null;
+    assert.equal(failed.status, 422);
+    const body = await failed.json() as { error: string; errorCode: string };
+    assert.ok(body.errorCode === "overlap" || body.errorCode === "save", `unexpected code ${body.errorCode}`);
+    assert.doesNotMatch(body.error, /insert into|params:|org_id/i);
+    assert.doesNotMatch(JSON.stringify(body), new RegExp(f.orgId));
+  } finally {
+    routeState.fault = null;
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
