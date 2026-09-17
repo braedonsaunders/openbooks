@@ -67,22 +67,38 @@ export interface ResolvedSubsidiaryView {
   options: SubsidiaryOption[];
 }
 
-export async function resolveSubsidiaryView(
+/**
+ * Scope resolution that never refuses on underived consolidated rates
+ * (F-t06-001): operational cockpits (banking overview) translate at dated
+ * spot rates, not period consolidated rates, so they must keep reading
+ * their scope — and keep offering the subsidiary picker as an escape to a
+ * single-entity view — while a formal statement would refuse. The would-be
+ * refusal rides along as `ratesError` (null when rates cover the view) so
+ * the caller can still pin the derive-rates banner beside live figures.
+ */
+export interface ResolvedSubsidiaryScope extends ResolvedSubsidiaryView {
+  /** The refusal `resolveSubsidiaryView` would throw; null when covered. */
+  ratesError: MissingRatesError | null;
+}
+
+export async function resolveSubsidiaryScope(
   subsidiaryId: string | undefined,
   periodTo: string,
   allowed: Set<string> | null = null,
-): Promise<ResolvedSubsidiaryView> {
+): Promise<ResolvedSubsidiaryScope> {
   const all = await subsidiaryOptions(false, true);
   const visible = allowed ? all.filter((s) => allowed.has(s.id)) : all;
   const pickerOptions = visible.filter((s) => !s.isElimination);
-  if (allowed === null && all.filter((s) => !s.isElimination).length <= 1) return { consolidated: false, options: [] };
+  if (allowed === null && all.filter((s) => !s.isElimination).length <= 1)
+    return { consolidated: false, options: [], ratesError: null };
 
   const root = all.find((s) => s.parentId === null);
   const node =
     (subsidiaryId && pickerOptions.find((s) => s.id === subsidiaryId)) ||
     (allowed ? pickerOptions[0] : root && pickerOptions.find((s) => s.id === root.id)) ||
     pickerOptions[0];
-  if (!node) return { consolidated: false, options: pickerOptions, subsidiary: { ids: [], includeNullSubsidiary: false } };
+  if (!node)
+    return { consolidated: false, options: pickerOptions, subsidiary: { ids: [], includeNullSubsidiary: false }, ratesError: null };
 
   const subtree = subtreeIds(all, node.id);
   const members = all.filter(
@@ -128,6 +144,7 @@ export async function resolveSubsidiaryView(
 
   const foreign = [...new Set(inView.filter((s) => s.baseCurrency !== node.baseCurrency).map((s) => s.baseCurrency))];
   let rates: StatementSubsidiaryContext["rates"];
+  let ratesError: MissingRatesError | null = null;
   if (consolidated && foreign.length > 0) {
     // Rate sets load for EVERY accounting period ending on or before the
     // report date (scoped to the node's org), so comparative columns and
@@ -163,24 +180,28 @@ export async function resolveSubsidiaryView(
     const missing = foreign.filter(
       (c) => !(byCcy.get(c) ?? []).some((x) => x.pFrom <= periodTo && periodTo <= x.pTo),
     );
+    // Never throw here: the refusal rides along for the caller to convert
+    // into a banner (F-t06-001) or throw (formal statements).
     if (missing.length > 0) {
-      throw new MissingRatesError(
+      ratesError = new MissingRatesError(
         `No consolidated exchange rates for ${missing.join(", ")} → ${node.baseCurrency} in the period ending ${periodTo}. Derive rates from period close first.`,
       );
     }
-    rates = inView
-      .filter((s) => s.baseCurrency !== node.baseCurrency)
-      .flatMap((s) =>
-        byCcy.get(s.baseCurrency)!.map((row) => ({
-          subsidiaryId: s.id,
-          currency: s.baseCurrency,
-          periodFrom: row.pFrom,
-          periodTo: row.pTo,
-          averageRate: row.avg,
-          currentRate: row.cur,
-          historicalRate: row.hist,
-        })),
-      );
+    if (!ratesError) {
+      rates = inView
+        .filter((s) => s.baseCurrency !== node.baseCurrency)
+        .flatMap((s) =>
+          byCcy.get(s.baseCurrency)!.map((row) => ({
+            subsidiaryId: s.id,
+            currency: s.baseCurrency,
+            periodFrom: row.pFrom,
+            periodTo: row.pTo,
+            averageRate: row.avg,
+            currentRate: row.cur,
+            historicalRate: row.hist,
+          })),
+        );
+    }
   }
 
   const includeNullSubsidiary = resolveNullSubsidiaryInclusion(
@@ -194,6 +215,23 @@ export async function resolveSubsidiaryView(
     label: consolidated ? `${node.name} (consolidated)` : node.name,
     consolidated,
     options: pickerOptions,
+    ratesError,
+  };
+}
+
+export async function resolveSubsidiaryView(
+  subsidiaryId: string | undefined,
+  periodTo: string,
+  allowed: Set<string> | null = null,
+): Promise<ResolvedSubsidiaryView> {
+  const scoped = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed);
+  if (scoped.ratesError) throw scoped.ratesError;
+  return {
+    subsidiary: scoped.subsidiary,
+    currency: scoped.currency,
+    label: scoped.label,
+    consolidated: scoped.consolidated,
+    options: scoped.options,
   };
 }
 
@@ -206,13 +244,37 @@ export async function reportSubsidiaryView(
   subsidiaryId: string | undefined,
   periodTo: string,
 ): Promise<ResolvedSubsidiaryView & { picker: { id: string; label: string }[] }> {
+  const scoped = await reportSubsidiaryScope(subsidiaryId, periodTo);
+  if (scoped.ratesError) throw scoped.ratesError;
+  return {
+    subsidiary: scoped.subsidiary,
+    currency: scoped.currency,
+    label: scoped.label,
+    consolidated: scoped.consolidated,
+    options: scoped.options,
+    picker: scoped.picker,
+  };
+}
+
+/**
+ * Scope bundle that never refuses on underived consolidated rates
+ * (F-t06-001): same visibility, context, and picker rows as
+ * `reportSubsidiaryView`, with the would-be refusal as `ratesError`.
+ * Operational cockpits read their scope and figures through this and pin
+ * the banner beside live numbers; formal statements keep throwing via
+ * `reportSubsidiaryView`.
+ */
+export async function reportSubsidiaryScope(
+  subsidiaryId: string | undefined,
+  periodTo: string,
+): Promise<ResolvedSubsidiaryScope & { picker: { id: string; label: string }[] }> {
   const user = await currentUser();
   const subsidiaryUiEnabled = Boolean(user && await subsidiaryFeatureEnabled(user.orgId));
   const allowed = user ? (user.isSuperAdmin ? null : await allowedSubsidiaryIds(user.id, user.orgId)) : new Set<string>();
   if (!subsidiaryUiEnabled && allowed === null) {
-    return { consolidated: false, options: [], picker: [] };
+    return { consolidated: false, options: [], picker: [], ratesError: null };
   }
-  const view = await resolveSubsidiaryView(subsidiaryId, periodTo, allowed);
+  const view = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed);
   if (!subsidiaryUiEnabled) return { ...view, picker: [] };
   const hasChildren = new Set(view.options.map((s) => s.parentId).filter(Boolean));
   const picker = view.options.map((s) => ({
