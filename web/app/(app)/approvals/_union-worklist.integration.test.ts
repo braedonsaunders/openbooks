@@ -113,6 +113,70 @@ async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{
   return { docId: doc, number };
 }
 
+/** A budget submitted through the direct maker/checker path (no flow run). */
+async function postedPendingBudget(org: ScratchOrg, submittedBy: string): Promise<{ budgetId: string; name: string }> {
+  const budget = randomUUID();
+  const name = `UNION-BUDGET-${budget.slice(0, 8)}`;
+  await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
+    values(${budget},${org.orgId},${org.bookId},2026,${name},'budget','draft',${submittedBy},${submittedBy})`);
+  await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
+    values(${org.orgId},${budget},${org.accounts.revenue},${org.periodId},'-50000.0000',${submittedBy},${submittedBy})`);
+  await db.execute(sql`update budget_scenarios set status='pending_approval',revision=revision+1,
+    submitted_at=now(),submitted_by=${submittedBy},updated_at=now(),updated_by=${submittedBy}
+    where id=${budget} and org_id=${org.orgId}`);
+  return { budgetId: budget, name };
+}
+
+function budgetAuthzFor(orgId: string, userId: string, name: string): Authz {
+  return {
+    user: {
+      id: userId, email: `${userId}@test`, name, orgId,
+      roles: [{ key: "approver", name: "approver" }],
+      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
+      homeUserId: userId, homeOrgId: orgId,
+    },
+    permissions: new Set(["budgets.approve", "budgets.read", "budgets.manage"]),
+    allowedSubsidiaryIds: null,
+  };
+}
+
+for (const tab of ["mine", "all", "submitted"] as const) {
+  test(`approvals ${tab} tab lists a directly submitted pending budget`, { skip: !DB }, async () => {
+    // F-t13-005: the direct submit creates no flow run, so the inbox tabs
+    // showed nothing while the budget waited for a checker.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const submitter = await withBypass(() => createScratchUser(org.orgId, "Union Budget Submitter", "accountant"));
+      const approver = await withBypass(() => createScratchUser(org.orgId, "Union Budget Approver", "approver"));
+      await withBypass(async () => {
+        await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`);
+        await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+      });
+      const pending = await withBypass(() => postedPendingBudget(org, submitter as unknown as string));
+      if (tab === "submitted") {
+        state.authz = budgetAuthzFor(org.orgId, submitter as unknown as string, "Union Budget Submitter");
+        const data = await withOrgContext(org.orgId, () => loadApprovals({ tab: "submitted" }));
+        assert.ok(data, "loader returns data");
+        const row = data!.submittedRows.find((r) => r.documentNumber === pending.name);
+        assert.ok(row, "submitter sees their pending budget under Submitted");
+        assert.equal(row!.href, `/budgets?budget=${pending.budgetId}`);
+        assert.match(row!.pendingWith ?? "", /Union Budget Approver/);
+      } else {
+        state.authz = budgetAuthzFor(org.orgId, approver as unknown as string, "Union Budget Approver");
+        const data = await withOrgContext(org.orgId, () =>
+          loadApprovals(tab === "all" ? { tab: "all" } : {}),
+        );
+        assert.ok(data, "loader returns data");
+        const row = data!.approvalRows.find((r) => r.documentNumber === pending.name);
+        assert.ok(row, `${tab} tab lists the pending budget`);
+        assert.equal(row!.href, `/budgets?budget=${pending.budgetId}`);
+      }
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  });
+}
+
 for (const tab of ["mine", "all"] as const) {
   test(`approvals ${tab} tab lists gateless pending documents like the tile`, { skip: !DB }, async () => {
     const org = await withBypass(() => createScratchOrg());

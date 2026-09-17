@@ -10,11 +10,13 @@ import {
 /**
  * The unified approvals worklist. Flows gates are only one approval
  * mechanism: documents sitting in `pending_approval` with no pending gate
- * (migrated rows, abandoned runs, legacy direct writes) and status-based
- * payment runs are invisible to worklistGates, so an approver would see an
- * empty worklist while work waits. This reader returns every thing awaiting
- * the caller — pending gates AND gateless document approvals AND pending pay
- * runs — with one row per actionable item:
+ * (migrated rows, abandoned runs, legacy direct writes), status-based
+ * payment runs, and budget scenarios in `pending_approval` submitted through
+ * the direct maker/checker path are invisible to worklistGates, so an
+ * approver would see an empty worklist while work waits. This reader returns
+ * every thing awaiting the caller — pending gates AND gateless document
+ * approvals AND pending budgets AND pending pay runs — with one row per
+ * actionable item:
  *
  * - a document WITH a pending gate appears only through its gate (never as
  *   a document row), so the assigned approver cannot be bypassed;
@@ -62,9 +64,24 @@ export interface WorklistPayRun {
   createdAt: string;
 }
 
+export interface WorklistBudget {
+  kind: "budget";
+  /** Scenario id — the inbox links to the budget drawer, where the module
+   * surface (not the inbox) records the checker decision. */
+  id: string;
+  name: string;
+  status: string;
+  total: string;
+  fiscalYear: number;
+  submittedBy: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+}
+
 export type UnifiedApproval =
   | { kind: "flow_gate"; id: string; gate: WorklistGate }
   | { kind: "document"; id: string; document: WorklistDocument }
+  | { kind: "budget"; id: string; budget: WorklistBudget }
   | { kind: "pay_run"; id: string; payRun: WorklistPayRun };
 
 export interface WorklistScope {
@@ -75,6 +92,11 @@ export interface WorklistScope {
    * run's direction). Pay runs stay out of the worklist without it.
    */
   includePayRuns?: boolean;
+  /**
+   * The caller holds the budgets.approve grant. Pending budget scenarios
+   * stay out of the worklist without it.
+   */
+  includeBudgets?: boolean;
 }
 
 function scopeAllows(allowed: GateSubsidiaryScope, subsidiaryId: string | null): boolean {
@@ -136,6 +158,38 @@ async function worklistPayRuns(
     .map((row) => ({ kind: "pay_run" as const, ...row }));
 }
 
+/**
+ * Gateless budget approvals: scenarios in pending_approval with no pending
+ * flow gate. Deliberately unfiltered by subsidiary — the budgets module
+ * itself scopes by grant, not by line subsidiary, so the inbox mirrors the
+ * drawer the row links to. The submitter never sees their own submission
+ * here, mirroring the document leg.
+ */
+async function worklistBudgets(
+  orgId: string,
+  userId: string,
+): Promise<WorklistBudget[]> {
+  const rows = (await db.execute<{
+    id: string; name: string; status: string; total: string; fiscalYear: number;
+    submittedBy: string | null; submittedAt: string | null; createdAt: string;
+  }>(sql`
+    select bs.id, bs.name, bs.status::text as status,
+           coalesce(sum(bl.amount), 0)::text as total, bs.fiscal_year as "fiscalYear",
+           bs.submitted_by as "submittedBy", bs.submitted_at::text as "submittedAt",
+           bs.created_at::text as "createdAt"
+      from budget_scenarios bs
+      left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
+     where bs.org_id = ${orgId} and bs.status = 'pending_approval'
+       and (bs.submitted_by is null or bs.submitted_by <> ${userId})
+       and not exists (
+         select 1 from flow_gates g
+          where g.org_id = bs.org_id and g.subject_id = bs.id and g.status = 'pending'
+       )
+     group by bs.id
+     order by bs.created_at`)).rows;
+  return rows.map((row) => ({ kind: "budget" as const, ...row }));
+}
+
 export async function worklistApprovals(
   orgId: string,
   userId: string,
@@ -145,6 +199,11 @@ export async function worklistApprovals(
   const out: UnifiedApproval[] = gates.map((gate) => ({ kind: "flow_gate" as const, id: gate.id, gate }));
   for (const document of await worklistDocuments(orgId, userId, scope.allowedSubsidiaryIds)) {
     out.push({ kind: "document", id: document.id, document });
+  }
+  if (scope.includeBudgets) {
+    for (const budget of await worklistBudgets(orgId, userId)) {
+      out.push({ kind: "budget", id: budget.id, budget });
+    }
   }
   if (scope.includePayRuns) {
     for (const payRun of await worklistPayRuns(orgId, userId, scope.allowedSubsidiaryIds)) {

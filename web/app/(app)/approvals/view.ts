@@ -66,6 +66,7 @@ const KIND_KEYS = [
   'sales_order',
   'quote',
   'close_run',
+  'budget_scenario',
 ]
 
 export interface SubmittedListRow {
@@ -149,7 +150,7 @@ export async function loadApprovals(
   // as the tile and get_vitals: a caller who cannot approve anything sees
   // no rows rather than a forbidden error.
   const mayApprove =
-    can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve')
+    can(authz, 'flows.approve') || can(authz, 'ap.approve') || can(authz, 'ar.approve') || can(authz, 'budgets.approve')
   const unified: ApprovalWorklistItem[] = mayApprove ? await approvalWorklistForAuthz(authz) : []
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
@@ -223,6 +224,26 @@ export async function loadApprovals(
     signatureRequired: false,
   })
 
+  // Budget rows link to the budget drawer, where the checker decision is
+  // recorded; like documents they carry no gate actions (F-t13-005).
+  const budgetToRow = (b: Extract<ApprovalWorklistItem, { kind: 'budget' }>): ApprovalRow => ({
+    key: `budget:${b.id}`,
+    gateId: null,
+    documentNumber: b.name,
+    kind: 'budget_scenario',
+    kindLabel: kindLabel('budget_scenario'),
+    href: approvalRecordHref('budget_scenario', b.id),
+    party: null,
+    amount: formatMoney(b.total),
+    approvalTitle: null,
+    engineName: '',
+    requestedAt: iso(b.submittedAt ?? b.createdAt),
+    assignee: null,
+    canDelegate: false,
+    quorumAll: false,
+    signatureRequired: false,
+  })
+
   const payToRow = (p: Extract<ApprovalWorklistItem, { kind: 'pay_run' }>): ApprovalRow => ({
     key: `payrun:${p.id}`,
     gateId: null,
@@ -243,6 +264,7 @@ export async function loadApprovals(
 
   const unionToRow = (item: ApprovalWorklistItem, assignee: string | null): ApprovalRow => {
     if (item.kind === 'document') return docToRow(item)
+    if (item.kind === 'budget') return budgetToRow(item)
     if (item.kind === 'pay_run') return payToRow(item)
     return gateToRow(item, assignee)
   }
@@ -314,7 +336,46 @@ export async function loadApprovals(
           statusLabel: String(r.docStatus).replace(/_/g, ' '),
         }
       })
-      .sort((a, b) => a.waitingSince.localeCompare(b.waitingSince))
+
+    // Budgets submitted through the direct maker/checker path create no flow
+    // run, so the query above never sees them. List the caller's own pending
+    // scenarios with the approvers who can decide them (F-t13-005).
+    if (can(authz, 'budgets.read')) {
+      const budgetRes = await db.execute<Record<string, unknown>>(sql`
+        select bs.id as "budgetId", bs.name as "documentNumber",
+               coalesce(sum(bl.amount), 0)::text as total,
+               bs.status::text as "docStatus", bs.submitted_at as "waitingSince",
+               (select string_agg(distinct u.name, ', ')
+                  from users u
+                  join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
+                  join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
+                 where u.org_id = ${orgId} and u.is_active and u.id <> ${user.id}
+                   and ar.permissions::jsonb ? 'budgets.approve') as "pendingWith"
+          from budget_scenarios bs
+          left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
+         where bs.org_id = ${orgId} and bs.status = 'pending_approval' and bs.submitted_by = ${user.id}
+         group by bs.id
+         order by bs.submitted_at
+      `)
+      for (const r of budgetRes.rows) {
+        const waitingSince = iso(r.waitingSince)
+        submittedRows.push({
+          key: `budget:${r.budgetId}`,
+          documentNumber: String(r.documentNumber),
+          kind: 'budget_scenario',
+          kindLabel: kindLabel('budget_scenario'),
+          href: approvalRecordHref('budget_scenario', String(r.budgetId)),
+          party: null,
+          amount: r.total != null ? formatMoney(r.total as string) : null,
+          engineName: '',
+          pendingWith: (r.pendingWith as string | null) ?? null,
+          waitingSince,
+          waitingSinceDate: waitingSince.slice(0, 10),
+          statusLabel: String(r.docStatus).replace(/_/g, ' '),
+        })
+      }
+    }
+    submittedRows.sort((a, b) => a.waitingSince.localeCompare(b.waitingSince))
   }
 
   // Delegate targets (row delegation + out-of-office picker).

@@ -38,7 +38,8 @@
     "sales_order": "受注",
     "quote": "見積",
     "field_ticket": "作業票",
-    "close_run": "期間決算"
+    "close_run": "期間決算",
+    "budget_scenario": "予算"
   },
   "decide": {
     "rejectionReason": "却下理由:",

@@ -10,6 +10,8 @@ const ORDER_HREF: Record<string, (id: string) => string> = {
   sales_order: (id) => `/sales-orders?order=${id}`,
   purchase_order: (id) => `/purchase-orders?order=${id}`,
   close_run: (id) => `/close?run=${id}&stage=lock`,
+  // Budgets open their module drawer, where the checker decision is recorded.
+  budget_scenario: (id) => `/budgets?budget=${id}`,
   // Allocation runs have no record drawer: approvers land on the Runs tab,
   // which shows the pending run with its computation and lineage.
   allocation_run: () => `/admin/setup/allocations?tab=runs`,

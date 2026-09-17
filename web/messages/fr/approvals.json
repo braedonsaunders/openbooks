@@ -38,7 +38,8 @@
     "sales_order": "commande client",
     "quote": "soumission",
     "field_ticket": "fiche de travail",
-    "close_run": "clôture de période"
+    "close_run": "clôture de période",
+    "budget_scenario": "budget"
   },
   "decide": {
     "rejectionReason": "Motif du rejet :",

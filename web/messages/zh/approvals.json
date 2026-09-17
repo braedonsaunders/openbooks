@@ -38,7 +38,8 @@
     "sales_order": "销售订单",
     "quote": "报价单",
     "field_ticket": "现场工单",
-    "close_run": "期间结账"
+    "close_run": "期间结账",
+    "budget_scenario": "预算"
   },
   "decide": {
     "rejectionReason": "驳回原因：",

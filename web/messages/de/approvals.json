@@ -38,7 +38,8 @@
     "sales_order": "Kundenauftrag",
     "quote": "Angebot",
     "field_ticket": "Leistungsnachweis",
-    "close_run": "Periodenabschluss"
+    "close_run": "Periodenabschluss",
+    "budget_scenario": "Budget"
   },
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",

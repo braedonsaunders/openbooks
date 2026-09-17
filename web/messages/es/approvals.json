@@ -38,7 +38,8 @@
     "sales_order": "orden de venta",
     "quote": "cotización",
     "field_ticket": "parte de trabajo",
-    "close_run": "cierre de período"
+    "close_run": "cierre de período",
+    "budget_scenario": "presupuesto"
   },
   "decide": {
     "rejectionReason": "Motivo del rechazo:",

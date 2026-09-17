@@ -38,7 +38,8 @@
     "sales_order": "sales order",
     "quote": "quote",
     "field_ticket": "field ticket",
-    "close_run": "period close"
+    "close_run": "period close",
+    "budget_scenario": "budget"
   },
   "decide": {
     "rejectionReason": "Rejection reason:",
