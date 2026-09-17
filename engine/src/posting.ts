@@ -452,7 +452,7 @@ export function projectChargeKernelLines(
   return out;
 }
 
-async function validateRequiredDimensions(
+export async function validateRequiredDimensions(
   runner: Pick<typeof db, "execute">,
   orgId: string,
   lines: KernelLine[],
@@ -527,7 +527,7 @@ function componentSettlementTotal(components: TaxPostingComponent[]): string {
   return add(standard, neg(withholding));
 }
 
-function componentsForLine(
+export function componentsForLine(
   line: DocLine,
   deps: PostingDeps,
 ): TaxPostingComponent[] {
@@ -594,7 +594,7 @@ function assertTaxControlAccount(
 }
 
 /** Validate every tax control leg before scripts, flows, or ledger writes. */
-function validateTaxControlAccounts(
+export function validateTaxControlAccounts(
   doc: Doc,
   lines: DocLine[],
   deps: PostingDeps,
@@ -643,7 +643,7 @@ type ProviderTaxPlan = {
   components: TaxPostingComponent[];
 };
 
-function providerTaxDocumentKind(kind: string): boolean {
+export function providerTaxDocumentKind(kind: string): boolean {
   return kind === "customer_invoice" || kind === "customer_credit" ||
     kind === "vendor_bill" || kind === "vendor_credit";
 }
@@ -658,7 +658,7 @@ function addressFromRow(row: Record<string, unknown> | undefined): Address {
   };
 }
 
-async function defaultPartyAddress(
+export async function defaultPartyAddress(
   orgId: string,
   partyId: string | null,
   shipping: boolean,
@@ -700,7 +700,7 @@ function providerRequestForLine(
   };
 }
 
-function taxConfigsFromEvidence(
+export function taxConfigsFromEvidence(
   components: TaxPostingComponent[],
 ): TaxComponentConfig[] {
   return components.map((component) => ({
@@ -1356,7 +1356,7 @@ export class PostingError extends Error {}
  * regeneration, and secondary-book sets all pass through it, with no
  * migration exemption (the trigger enforces currency on replay too).
  */
-async function assertAccountCurrencyRestrictions(
+export async function assertAccountCurrencyRestrictions(
   runner: Pick<typeof db, "execute">,
   orgId: string,
   lines: readonly { accountId: string; currency: string }[],
@@ -1635,6 +1635,32 @@ async function resolvePostingPeriod(
   return period;
 }
 
+/**
+ * Credit memos are stated in their own direction — positive lines, positive
+ * total — with the kernel flipping the sign at posting. A negative-total
+ * credit would post backwards: a customer credit becomes a shadow invoice
+ * (debit AR, credit income) outside every invoice-gated control, from
+ * dunning to capacity, and a vendor credit becomes a shadow bill (debit
+ * expense, credit AP). A balance owed by the customer is an invoice; a
+ * balance owed to a vendor is a bill. Migrations replaying source-system
+ * history pass migration=true and are unaffected.
+ */
+export function assertCreditMemoDirection(
+  doc: Pick<Doc, "kind" | "total">,
+  migration?: boolean,
+): void {
+  if (doc.kind === "customer_credit" && !migration && toUnits(doc.total) < 0n) {
+    throw new PostingError(
+      `a credit memo must carry a positive total; a negative balance owed by the customer is an invoice`,
+    );
+  }
+  if (doc.kind === "vendor_credit" && !migration && toUnits(doc.total) < 0n) {
+    throw new PostingError(
+      `a credit memo must carry a positive total; a negative balance owed to the vendor is a bill`,
+    );
+  }
+}
+
 export async function postDocument(
   documentId: string,
   deps: PostingDeps,
@@ -1660,24 +1686,7 @@ export async function postDocument(
       `document ${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
     );
   }
-  // Credit memos are stated in their own direction — positive lines, positive
-  // total — with the kernel flipping the sign at posting. A negative-total
-  // credit would post backwards: a customer credit becomes a shadow invoice
-  // (debit AR, credit income) outside every invoice-gated control, from
-  // dunning to capacity, and a vendor credit becomes a shadow bill (debit
-  // expense, credit AP). A balance owed by the customer is an invoice; a
-  // balance owed to a vendor is a bill. Migrations replaying source-system
-  // history pass deps.migration and are unaffected.
-  if (doc.kind === "customer_credit" && !deps.migration && toUnits(doc.total) < 0n) {
-    throw new PostingError(
-      `a credit memo must carry a positive total; a negative balance owed by the customer is an invoice`,
-    );
-  }
-  if (doc.kind === "vendor_credit" && !deps.migration && toUnits(doc.total) < 0n) {
-    throw new PostingError(
-      `a credit memo must carry a positive total; a negative balance owed to the vendor is a bill`,
-    );
-  }
+  assertCreditMemoDirection(doc, deps.migration);
   if (
     (doc.kind === "journal" ||
       doc.kind === "deposit" ||

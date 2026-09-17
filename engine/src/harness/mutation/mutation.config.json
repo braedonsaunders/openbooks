@@ -15,6 +15,7 @@
         "engine/src/dunning.test.ts",
         "engine/src/direct-debit.test.ts",
         "engine/src/posting.test.ts",
+        "engine/src/posting-tax-guards.test.ts",
         "engine/src/posting-period.integration.test.ts"
       ]
     },
