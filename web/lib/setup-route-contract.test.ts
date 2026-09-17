@@ -93,6 +93,9 @@ interface Fixture {
   /** non-summary posting accounts usable as ownership-account targets */
   investmentAccountId: string;
   equityIncomeAccountId: string;
+  /** asset accounts for the full-consolidation goodwill/fair-value legs */
+  goodwillAccountId: string;
+  fairValueAdjustmentAccountId: string;
 }
 
 async function seed(): Promise<Fixture> {
@@ -107,6 +110,14 @@ async function seed(): Promise<Fixture> {
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${childSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Child Co', 'CAD', 'CA')`);
+  const goodwillAccountId = randomUUID();
+  const fairValueAdjustmentAccountId = randomUUID();
+  await db.execute(sql`
+    insert into accounts
+      (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+    values
+      (${goodwillAccountId}, ${org.orgId}, '1800', 'Goodwill', 'asset_noncurrent_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true),
+      (${fairValueAdjustmentAccountId}, ${org.orgId}, '1810', 'Fair Value Adjustment', 'asset_noncurrent_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
   return {
     orgId: org.orgId,
     actorId,
@@ -116,6 +127,8 @@ async function seed(): Promise<Fixture> {
     // a fully-owned interest's investment and equity-income legs.
     investmentAccountId: org.accounts.invAsset,
     equityIncomeAccountId: org.accounts.revenue,
+    goodwillAccountId,
+    fairValueAdjustmentAccountId,
   };
 }
 
@@ -239,6 +252,107 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
     const afterAccounts = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from accounts where org_id = ${f.orgId}`);
     assert.equal(afterAccounts.rows[0]!.n, beforeAccounts.rows[0]!.n);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+/** F-t06-022 (t12 follow-up): the tester's exact shape — 100% Full with no
+ * goodwill/fair-value legs — must be refused with a typed user-language
+ * message naming the missing accounts, never the raw SQL INSERT the
+ * ownership_interest_guard raise used to echo through describeDbError. */
+function fullOwnershipBody(f: Fixture): Record<string, unknown> {
+  return {
+    ...validOwnershipBody(f),
+    effectiveFrom: "2026-10-01",
+    method: "full",
+    acquisitionDate: "2026-10-01",
+    acquisitionCost: "100000",
+    fairValueNetAssets: "100000",
+    acquisitionRate: "1.37",
+  };
+}
+
+test("a full-method ownership without goodwill legs is a typed refusal without SQL", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    const res = await POST(postRequest("subsidiary-ownership-interests", fullOwnershipBody(f)), {
+      params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
+    });
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { error?: unknown; code?: unknown };
+    assert.equal(body.code, "invalid");
+    assert.match(String(body.error), /goodwill/i);
+    assert.doesNotMatch(JSON.stringify(body), /insert into|failed query|subsidiary_ownership_interests \(/i);
+    assert.equal(await persistedInterestCount(f.orgId), 0, "refused create writes nothing");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("a full-method ownership with goodwill legs persists", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    const res = await POST(postRequest("subsidiary-ownership-interests", {
+      ...fullOwnershipBody(f),
+      goodwillAccountId: f.goodwillAccountId,
+      fairValueAdjustmentAccountId: f.fairValueAdjustmentAccountId,
+    }), {
+      params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
+    });
+    const created = (await res.json()) as { id?: unknown };
+    assert.equal(res.status, 200, `full-payload create failed: ${JSON.stringify(created)}`);
+    assert.ok(created.id);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("blank keepDefault ownership fields fall through to database defaults", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // F-t06-022: the drawer sends explicit empty strings for untouched
+  // keepDefault inputs. The registry documents those columns as NOT NULL
+  // WITH a database default, so blanks are legal input — never a missing
+  // requirement leaking a camelCase key.
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+
+    const res = await POST(postRequest("subsidiary-ownership-interests", {
+      ...validOwnershipBody(f),
+      acquisitionRate: "",
+      nciMeasurement: "",
+    }), {
+      params: Promise.resolve({ entity: "subsidiary-ownership-interests" }),
+    });
+    const created = (await res.json()) as { id?: unknown };
+    assert.equal(res.status, 200, `blank-keepDefault create failed: ${JSON.stringify(created)}`);
+    const id = String(created.id);
+    assert.ok(created.id);
+    const row = ((await db.execute(sql`
+      select acquisition_rate as "acquisitionRate", nci_measurement as "nciMeasurement"
+        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`))).rows[0];
+    assert.ok(row);
+    assert.equal(Number(row.acquisitionRate), 1);
+    assert.equal(row.nciMeasurement, "proportionate");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);

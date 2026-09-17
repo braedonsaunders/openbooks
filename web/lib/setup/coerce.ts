@@ -77,7 +77,12 @@ export function multirefField(entity: SetupEntity): SetupField | undefined {
  */
 export function coerceField(field: SetupField, raw: unknown): Coerced | { error: string } {
   const present = raw !== undefined && raw !== null && raw !== ''
-  if (field.required && !present && field.kind !== 'boolean') {
+  // keepDefault columns are NOT NULL WITH a database default (F-t06-022): a
+  // blank is legal input that falls through to the default (each kind's
+  // absent branch below resolves to null/undefined, which buildRow omits),
+  // never a missing requirement. Without this the server refused the exact
+  // blanks the drawer deliberately sends for untouched keepDefault inputs.
+  if (field.required && !present && field.kind !== 'boolean' && !field.keepDefault) {
     return { error: `${field.key} is required` }
   }
   const column = toSnake(field.key)
@@ -242,5 +247,14 @@ export function describeDbError(e: unknown): string {
   if (code === '23505') return 'duplicate' // unique_violation
   if (code === '23503') return 'in-use' // foreign_key_violation
   if (code === '23502') return 'missing-required' // not_null_violation
-  return (e as { message?: string })?.message ?? 'save failed'
+  // Drizzle wraps driver failures in DrizzleQueryError whose own message
+  // embeds the FULL SQL text plus bound params (F-t06-022 leaked a raw
+  // INSERT to the dialog this way) — never echo the wrapper. The driver's
+  // message (cause) is plain Postgres text, e.g. a trigger's user-language
+  // refusal; anything else degrades to a generic failure, never SQL.
+  const driverMessage = (e as { cause?: { message?: unknown } })?.cause?.message
+  if (typeof driverMessage === 'string' && driverMessage.length > 0) return driverMessage
+  const message = (e as { message?: unknown; query?: unknown })?.message
+  if (typeof message === 'string' && message.length > 0 && (e as { query?: unknown })?.query === undefined) return message
+  return 'save failed'
 }

@@ -603,6 +603,13 @@ async function validateEntityIntegrity(
     if (method === 'full' && !fullyOwned && (!value('nciEquityAccountId', 'nci_equity_account_id') || !value('nciIncomeAccountId', 'nci_income_account_id'))) {
       return 'Full consolidation below 100% requires both NCI equity and NCI profit-allocation accounts'
     }
+    // The ownership_interest_guard trigger refuses full-method rows without
+    // these legs (F-t06-022): preflight it here so the refusal is a typed
+    // user-language 400 naming the missing accounts, never the trigger's
+    // raw SQL INSERT echoing through describeDbError.
+    if (method === 'full' && (!value('goodwillAccountId', 'goodwill_account_id') || !value('fairValueAdjustmentAccountId', 'fair_value_adjustment_account_id'))) {
+      return 'Full consolidation requires goodwill and fair-value adjustment accounts'
+    }
   }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     const from = String(body.fromCurrency ?? '')
@@ -740,7 +747,7 @@ export async function createSetupRecord(
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
   const built = buildRow(createEntity, body, { forCreate: true })
-  if ('error' in built) return { status: 400, body: { error: built.error } }
+  if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) {
     if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
@@ -954,7 +961,7 @@ export async function updateSetupRecord(
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
   const built = buildRow(patchEntity, body, { forCreate: false })
-  if ('error' in built) return { status: 400, body: { error: built.error } }
+  if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) {
     if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
