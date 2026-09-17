@@ -137,12 +137,12 @@ export function StatementMatrixTable({
     })
 
   return (
-    <div className="overflow-x-auto">
+    <div className="min-w-0 max-w-full overflow-x-auto">
       <table className="w-full text-sm tabular-nums">
         <thead>
           {hasGroups && (
             <tr>
-              <th className="min-w-[16rem]" />
+              <th className="min-w-[10rem] sm:min-w-[16rem]" />
               {spans.map((s, i) => (
                 <th
                   key={i}
@@ -155,7 +155,7 @@ export function StatementMatrixTable({
             </tr>
           )}
           <tr className="border-b border-slate-300 dark:border-slate-600">
-            <th className="min-w-[16rem] py-2 pr-4 text-left font-semibold text-slate-500 dark:text-slate-400" />
+            <th className="min-w-[10rem] py-2 pr-4 text-left font-semibold text-slate-500 dark:text-slate-400 sm:min-w-[16rem]" />
             {cols.map((c, ci) => (
               <th
                 key={c.key}
