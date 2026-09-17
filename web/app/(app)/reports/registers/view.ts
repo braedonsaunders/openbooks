@@ -30,7 +30,7 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { dimensionOptions, partyRegister, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -107,6 +107,11 @@ export interface RegistersData {
   columnDebits: string
   columnCredits: string
   columnBalance: string
+  /** Set when underived consolidated rates block the report (F-t06-027):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
   parties: RegisterParty[]
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
@@ -128,13 +133,32 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [reg, opts, org] = await Promise.all([
-    partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims }),
-    dimensionOptions(),
-    orgInfo(),
-  ])
+  // Underived consolidated rates must not throw out of SSR (F-t06-027):
+  // the page renders a typed banner with a derive link instead of any
+  // numbers. Anything else is a real defect and still throws. The register
+  // runs only with a resolved subsidiary scope — never scope-less.
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: t('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: t('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const [reg, opts, org] = subView
+    ? await Promise.all([
+        partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims }),
+        dimensionOptions(),
+        orgInfo(),
+      ])
+    : [null, await dimensionOptions(), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const keepParams = toSearchParams(q)
   keepParams.set('book', selectedBook.id)
@@ -152,7 +176,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     backLabel: t('hub.title'),
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
-    truncated: reg.truncated,
+    truncated: reg?.truncated ?? false,
     truncatedLabel: t('registers.truncated'),
     emptyLabel: t('registers.empty'),
     openingLabel,
@@ -169,7 +193,9 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     columnDebits: t('trialBalance.columns.debits'),
     columnCredits: t('trialBalance.columns.credits'),
     columnBalance: tc('labels.balance'),
-    parties: reg.parties.map((pt) => {
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
+    parties: (reg?.parties ?? []).map((pt) => {
       const name = pt.partyName ?? noParty
       const partyIds = pt.partyId ? [pt.partyId] : undefined
       return {
@@ -214,7 +240,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
       }
     }),
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
@@ -279,11 +305,24 @@ export function registersSpec(data: RegistersData): PageSpec {
       textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         wide: true,
+        when: f('ratesReady'),
         blocks: [
           repeat({
             items: f('parties'),
