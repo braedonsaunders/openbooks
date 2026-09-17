@@ -47,7 +47,12 @@ test('lead/prospect owner empty option resolves through the real message loader'
 test('lead/prospect first save carries the party revision token', () => {
   assert.match(
     source,
-    /fetch\(`\/api\/parties\/\$\{party\.id\}`[\s\S]*?expectedUpdatedAt:\s*party\.updated_at/,
-    'the identity PATCH must echo the loaded updated_at revision: /api/parties/[id] answers 409 without it, so a token-less first save can never succeed',
+    /buildAccountIdentityPatch\(party,\s*form\)/,
+    'the identity PATCH must go through the create-safe builder: /api/parties/[id] answers 409 without the loaded updated_at revision, and 422 when a draft save carries a status change',
+  )
+  assert.doesNotMatch(
+    source,
+    /isActive:\s*true,\s*expectedUpdatedAt/,
+    'the create path must not send a status change alongside the revision: isActive:true against an is_active=false draft trips the status-change guard and blocks creation',
   )
 })
