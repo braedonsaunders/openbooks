@@ -58,7 +58,8 @@
     "reasonLabel": "Motivo del rechazo (se aplica a cada elemento seleccionado)",
     "approvedCount": "{count} aprobada(s)",
     "rejectedCount": "{count} rechazada(s)",
-    "failedCount": "{count} con error ({error})"
+    "failedCount": "{count} con error ({error})",
+    "signatureBlocked": "Algunas aprobaciones seleccionadas requieren firma; apruébelas una por una."
   },
   "ooo": {
     "button": "Fuera de la oficina",
@@ -84,7 +85,10 @@
     "badges": {
       "quorumAll": "Todos los aprobadores",
       "reminder": "Recordatorio {date}",
-      "escalates": "Escala {date}"
-    }
+      "escalates": "Escala {date}",
+      "signature": "Firma requerida"
+    },
+    "signTitle": "Firmar para aprobar",
+    "signLabel": "Escriba su nombre completo para firmar esta aprobación"
   }
 }

@@ -64,7 +64,24 @@
     "importAnother": "Importar otro archivo",
     "postMode": "Cómo importar",
     "postDraft": "Crear borradores (revisar y contabilizar después)",
-    "postPost": "Crear y contabilizar en el libro mayor"
+    "postPost": "Crear y contabilizar en el libro mayor",
+    "resourcePlaceholder": "Elija un destino de importación…",
+    "truncatedWarning": "Solo se leyeron las primeras {n} filas; el resto del archivo se omitió. Divida el archivo e importe el resto por separado.",
+    "warnings": "Advertencias",
+    "sample": {
+      "title": "Explore una empresa de ejemplo completa",
+      "description": "Abra una empresa realista de su sector con clientes, proveedores, transacciones, informes, proyectos y períodos cerrados ya listos.",
+      "industry": "Empresa de ejemplo",
+      "create": "Crear empresa de ejemplo",
+      "open": "Abrir empresa de ejemplo",
+      "preparing": "Preparando empresa…",
+      "created": "La empresa de ejemplo está lista",
+      "ready": "Abriendo su empresa de ejemplo",
+      "error": "No se pudo preparar la empresa de ejemplo",
+      "firstGeneration": "La primera copia puede tardar unos minutos mientras se genera su plantilla verificada",
+      "safety": "Los datos de ejemplo se copian en un espacio de trabajo separado y claramente marcado. Nunca entran en sus libros reales, y los efectos de correo, pago, API e integración quedan desactivados.",
+      "orFile": "o importe su propio archivo"
+    }
   },
   "history": {
     "title": "Historial de importaciones",

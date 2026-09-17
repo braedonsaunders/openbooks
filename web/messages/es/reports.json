@@ -31,7 +31,8 @@
       "ordersTitle": "Flujo de pedidos",
       "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión",
       "cashFlowIndirectTitle": "Flujo de caja (indirecto)",
-      "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo"
+      "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo",
+      "payrollDescription": "Informe de nómina integrado sobre recibos: los datos salariales requieren el permiso de nómina."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -40,7 +41,8 @@
       "budgeting": "Presupuestos",
       "custom": "Personalizados y guardados",
       "projects": "Proyectos",
-      "orders": "Ventas y pedidos"
+      "orders": "Ventas y pedidos",
+      "payroll": "Nómina"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -514,7 +516,9 @@
         "fri": "viernes",
         "sat": "sábado"
       }
-    }
+    },
+    "drawerDescription": "Envía este informe por correo según un calendario. Las programaciones usan los filtros guardados al crearlas.",
+    "loading": "Cargando programaciones…"
   },
   "catalog": {
     "entities": {
@@ -1113,7 +1117,22 @@
       "purchases": "Compras",
       "both": "Ambos",
       "true": "Sí",
-      "false": "No"
+      "false": "No",
+      "earning": "Percepción",
+      "deduction": "Deducción",
+      "employer_contribution": "Aportación patronal",
+      "match": "Conciliación exacta",
+      "within_tolerance": "Dentro de la tolerancia",
+      "difference": "Diferencia",
+      "prior_only": "Solo en el sistema anterior",
+      "our_only": "Solo aquí",
+      "employee_prior_only": "Empleado ausente de nuestra nómina",
+      "employee_our_only": "Empleado ausente del registro",
+      "unattributed": "Sin explicación en ningún componente",
+      "clean": "Conciliado exacto",
+      "clean_within_tolerance": "Conciliado dentro de la tolerancia",
+      "differences": "Diferencias por resolver",
+      "no_comparable_data": "No se comparó nada"
     }
   },
   "operators": {
@@ -1172,7 +1191,9 @@
       "fiscal_year": "ejercicio fiscal"
     },
     "csvSection": "Sección",
-    "exportTruncated": "Mostrando las primeras {shown} de {total} filas — reduzca el período o agregue filtros para ver todo."
+    "exportTruncated": "Mostrando las primeras {shown} de {total} filas — reduzca el período o agregue filtros para ver todo.",
+    "subtotal": "{level} — total",
+    "grandTotals": "Totales generales"
   },
   "builtIns": {
     "ap-aging-by-vendor": {
@@ -1194,6 +1215,30 @@
     "lot-recall": {
       "name": "Retirada de lote",
       "description": "Cada movimiento de inventario vinculado a un lote, con artículo, vencimiento, cantidad, ubicación, documento de origen y tercero para retiradas y trazabilidad."
+    },
+    "payroll-journal": {
+      "name": "Diario de nómina",
+      "description": "El registro de auditoría completo del período de nómina, una sección por empleado: cada percepción, deducción y aportación patronal con horas, tarifa, monto del período y acumulado anual. Elija un solo período de nómina en el menú de períodos para igualar un ciclo. Requiere el permiso de nómina."
+    },
+    "payroll-deductions-register": {
+      "name": "Registro de deducciones y aportaciones",
+      "description": "Cada retención y aportación patronal, por componente: quién pagó qué en el período y en el acumulado anual. El detalle de respaldo para remesas y aseguradoras. Requiere el permiso de nómina."
+    },
+    "payroll-cost-by-department": {
+      "name": "Costo de nómina por departamento",
+      "description": "Distribución laboral: montos de nómina por departamento y tipo de componente (percepciones, deducciones retenidas, carga patronal). Requiere el permiso de nómina."
+    },
+    "payroll-employee-totals": {
+      "name": "Totales por empleado (acumulado anual)",
+      "description": "Una línea por empleado: bruto, impuesto retenido, neto y totales de costo patronal con conteo de recibos del período. Requiere el permiso de nómina."
+    },
+    "payroll-parallel-run": {
+      "name": "Conciliación del ciclo paralelo",
+      "description": "El control de adopción: para un período de nómina, cada empleado y cada componente comparados con el proveedor de nómina anterior, por resultado para leer primero las diferencias materiales y los empleados unilaterales y al final las conciliaciones exactas. La tolerancia, si está configurada, aparece en su propia columna."
+    },
+    "payroll-parallel-run-totals": {
+      "name": "Totales del ciclo paralelo por componente",
+      "description": "La misma conciliación acumulada: por componente, lo que pagó en total el proveedor anterior, lo que calcula esta nómina y la diferencia, para atribuir una diferencia del período a los componentes que la produjeron."
     }
   },
   "generalLedger": {

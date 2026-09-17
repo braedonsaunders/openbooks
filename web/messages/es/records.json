@@ -157,7 +157,10 @@
         "max": "Máximo",
         "concat": "Unir texto"
       }
-    }
+    },
+    "publishNeedsField": "Añada al menos un campo antes de publicar.",
+    "publishNeedsSave": "Espere a que se guarden los cambios y publique.",
+    "publishResolveIssues": "Resuelva los problemas anteriores antes de publicar."
   },
   "module": {
     "defaultDescription": "{pluralName} gestionados como tipo de registro personalizado.",

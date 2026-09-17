@@ -58,6 +58,10 @@
     },
     "linksTitle": "Origen / Convertido en",
     "linkCreatedFrom": "Creado a partir de",
-    "linkConvertedInto": "Convertido en"
+    "linkConvertedInto": "Convertido en",
+    "deleteConfirmTitle": "¿Eliminar esta orden?",
+    "deleteConfirmMessage": "Esto elimina definitivamente la orden y sus líneas. No se puede deshacer.",
+    "toastDeleted": "Orden eliminada",
+    "issueHint": "Añada un cliente o un proveedor y al menos una línea para emitir esta orden."
   }
 }

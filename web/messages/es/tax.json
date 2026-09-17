@@ -26,7 +26,12 @@
     "label": "Exportación de trabajo",
     "pdf": "PDF de trabajo",
     "csv": "CSV de trabajo",
-    "xlsx": "Excel de trabajo"
+    "xlsx": "Excel de trabajo",
+    "menu": "Exportar",
+    "groupForm": "Formulario de declaración",
+    "groupData": "Datos de trabajo",
+    "facsimile": "PDF del formulario",
+    "json": "JSON estructurado"
   },
   "official": {
     "download": "Formulario oficial rellenado"
@@ -175,5 +180,9 @@
       "auto": "auto",
       "manual": "manual"
     }
+  },
+  "tabs": {
+    "prepare": "Preparar una declaración",
+    "history": "Declaraciones anteriores"
   }
 }

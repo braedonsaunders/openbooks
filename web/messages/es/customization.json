@@ -40,7 +40,8 @@
     "project_charge": "Cargo de proyecto",
     "field_ticket": "Parte de obra",
     "fixed_asset": "Activo fijo",
-    "property": "Propiedad"
+    "property": "Propiedad",
+    "pay_run": "Ciclo de nómina"
   },
   "property": {
     "tabs": {
@@ -166,7 +167,12 @@
         "text": "Texto"
       },
       "customFields": "Campos personalizados",
-      "noCustomFields": "Aún no hay campos personalizados para este tipo."
+      "noCustomFields": "Aún no hay campos personalizados para este tipo.",
+      "tabsSection": "Pestañas",
+      "tabsHelp": "Las pestañas que muestra el panel de este registro. Oculte las que no use, reordénelas según su trabajo, renómbrelas con su vocabulario o añada una pestaña propia para sus campos personalizados.",
+      "addTab": "Añadir pestaña",
+      "customTab": "Personalizada",
+      "tabLocked": "Esta pestaña muestra los campos propios del registro y no se puede ocultar."
     },
     "list": {
       "new": "Nueva vista",
