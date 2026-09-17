@@ -171,6 +171,7 @@
     "bankAccountAdded": "银行账户已添加，待审批",
     "bankAccountUpdated": "银行账户已更新并重新提交审批",
     "bankAccountSaveFailed": "无法保存银行账户",
+    "bankAccountStaleRevision": "您打开后这些银行信息已更改。列表已刷新 — 请重新打开记录并重试。",
     "bankAccountValidation": {
       "bankName": "请输入银行名称",
       "accountNumber": "请输入至少四位字符的账号",

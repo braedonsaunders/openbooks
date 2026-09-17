@@ -65,9 +65,16 @@ export function useRecordApprovalState(
 export function ApprovalActions({
   subjectKind,
   subjectId,
+  submitApprovalHref,
 }: {
   subjectKind: string
   subjectId: string
+  /**
+   * POST endpoint that submits a never-submitted record into its current
+   * flow (F-t04-004 residual: pre-flow bank details). Passed only by
+   * surfaces that own such a path — the row stays quiet without it.
+   */
+  submitApprovalHref?: string
 }) {
   const t = useTranslations('common')
   const router = useRouter()
@@ -144,10 +151,47 @@ export function ApprovalActions({
     router.refresh()
   }, [state, router, t])
 
+  const submitForApproval = useCallback(async () => {
+    if (!submitApprovalHref) return
+    setBusy(true)
+    try {
+      const res = await fetch(submitApprovalHref, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(
+          typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.submitFailed'),
+        )
+      } else {
+        toast.success(t('approvalFlow.submitted'))
+      }
+    } catch {
+      toast.error(t('approvalFlow.submitFailed'))
+    } finally {
+      setBusy(false)
+    }
+    refreshApprovalState()
+    router.refresh()
+  }, [submitApprovalHref, router, t])
+
   const showRetry = !!state?.failedRun && !!state?.canRetry
+  // A record the engine never saw (no run, hence no live gate and no failed
+  // run) with a status still claiming it awaits approval: offer the surface's
+  // submit path. neverSubmitted already implies the gate/run absences; the
+  // status check keeps the button off records that are not awaiting anything.
+  const showSubmit =
+    !!submitApprovalHref &&
+    !!state?.neverSubmitted &&
+    state.approvalState.status === 'pending' &&
+    !state.approvalState.myActions &&
+    state.approvalState.pendingWith.length === 0 &&
+    !state.failedRun
   if (
     !state ||
-    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry)
+    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry && !showSubmit)
   ) return null
 
   // A failed run strands the record with no live gate (F-t04-004): offer a
@@ -198,5 +242,16 @@ export function ApprovalActions({
     )
   }
 
-  return <>{retryButton}</>
+  // No live gate and no failed run here (see showSubmit above): the only
+  // remaining button is the never-submitted submit, if this surface owns one.
+  return (
+    <>
+      {retryButton}
+      {showSubmit ? (
+        <Button variant="outline" disabled={busy} onClick={submitForApproval}>
+          {t('approvalFlow.submitRun')}
+        </Button>
+      ) : null}
+    </>
+  )
 }

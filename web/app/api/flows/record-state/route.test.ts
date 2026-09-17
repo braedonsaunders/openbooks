@@ -182,3 +182,39 @@ test("a failed latest run surfaces as failedRun with the retry capability", asyn
   });
   assert.equal(body.canRetry, true);
 });
+
+/** F-t04-004 residual: a record the engine never saw (no run, no live gate)
+ * must say so, so the drawer can offer to submit it into the current flow
+ * instead of claiming no approvals are required. */
+test("a pending record with no run at all surfaces as neverSubmitted", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.status = "pending";
+  routeState.runRows = [];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { neverSubmitted: boolean };
+  assert.equal(body.neverSubmitted, true);
+});
+
+test("a record with any run history is not neverSubmitted", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.status = "pending";
+  routeState.runRows = [
+    {
+      id: "run-1",
+      status: "waiting",
+      error: null,
+      finishedAt: null,
+      startedAt: new Date("2026-09-10T12:00:00.000Z"),
+      submitterName: null,
+    },
+  ];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { neverSubmitted: boolean };
+  assert.equal(body.neverSubmitted, false);
+});

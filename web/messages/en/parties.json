@@ -171,6 +171,7 @@
     "bankAccountAdded": "Bank account added for approval",
     "bankAccountUpdated": "Bank account updated and resubmitted for approval",
     "bankAccountSaveFailed": "Could not save the bank account",
+    "bankAccountStaleRevision": "These bank details changed after you opened them. The list was refreshed — reopen the record and try again.",
     "bankAccountValidation": {
       "bankName": "Enter a bank name",
       "accountNumber": "Enter an account number with at least four characters",

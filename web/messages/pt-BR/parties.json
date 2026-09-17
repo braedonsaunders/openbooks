@@ -171,6 +171,7 @@
     "bankAccountAdded": "Conta bancária adicionada para aprovação",
     "bankAccountUpdated": "Conta bancária atualizada e reenviada para aprovação",
     "bankAccountSaveFailed": "Não foi possível salvar a conta bancária",
+    "bankAccountStaleRevision": "Estes dados bancários mudaram depois que você os abriu. A lista foi atualizada — reabra o registro e tente novamente.",
     "bankAccountValidation": {
       "bankName": "Informe o nome do banco",
       "accountNumber": "Informe um número de conta com pelo menos quatro caracteres",

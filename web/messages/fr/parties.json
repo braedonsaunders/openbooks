@@ -171,6 +171,7 @@
     "bankAccountAdded": "Compte bancaire ajouté pour approbation",
     "bankAccountUpdated": "Compte bancaire modifié et soumis de nouveau pour approbation",
     "bankAccountSaveFailed": "Impossible d’enregistrer le compte bancaire",
+    "bankAccountStaleRevision": "Ces coordonnées bancaires ont été modifiées après leur ouverture. La liste a été actualisée — rouvrez la fiche et réessayez.",
     "bankAccountValidation": {
       "bankName": "Saisissez le nom de la banque",
       "accountNumber": "Saisissez un numéro de compte d’au moins quatre caractères",

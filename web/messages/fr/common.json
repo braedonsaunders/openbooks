@@ -269,8 +269,12 @@
     "waitingOthers": "Enregistré — en attente des autres approbateurs",
     "alreadyDecided": "Cette approbation a déjà été traitée — actualisation",
     "decisionFailed": "Échec de la décision",
+    "submitRun": "Soumettre pour approbation",
+    "submitted": "Envoyé dans le circuit d’approbation — la nouvelle approbation figure sur la liste de travail",
+    "submitFailed": "Échec de la soumission",
     "historyTitle": "Approbations",
     "historyEmpty": "Aucune approbation requise pour cet enregistrement.",
+    "historyNeverSubmitted": "En attente d’approbation — cet enregistrement n’a jamais été envoyé dans le circuit d’approbation.",
     "events": {
       "submitted": "Soumis pour approbation",
       "requested": "Approbation demandée",

@@ -274,8 +274,12 @@
     "retryRun": "Retry approval",
     "retried": "Approval re-driven — the new gate is on the worklist",
     "retryFailed": "Retry failed",
+    "submitRun": "Submit for approval",
+    "submitted": "Sent to the approval flow — the new gate is on the worklist",
+    "submitFailed": "Submit failed",
     "historyTitle": "Approvals",
     "historyEmpty": "No approvals required for this record.",
+    "historyNeverSubmitted": "Waiting for approval — this record was never sent to the approval flow.",
     "events": {
       "submitted": "Submitted for approval",
       "requested": "Approval requested",

@@ -141,7 +141,7 @@ export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds:
       select id, bank_name, country, currency, routing, account_last_four,
              approval_status, approved_at, approved_by, submitted_by,
              submitted_at, retired_at, retired_by, retirement_reason,
-             is_active, updated_at
+             is_active, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from party_bank_accounts where party_id = ${id} and org_id = ${orgId} order by created_at
     `),
     db.execute<Record<string, unknown>>(sql`

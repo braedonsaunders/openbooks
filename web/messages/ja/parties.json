@@ -171,6 +171,7 @@
     "bankAccountAdded": "銀行口座を承認用に追加しました",
     "bankAccountUpdated": "銀行口座を更新し、承認用に再提出しました",
     "bankAccountSaveFailed": "銀行口座を保存できませんでした",
+    "bankAccountStaleRevision": "開いた後に銀行情報が変更されました。一覧を更新しました — レコードを開き直して再試行してください。",
     "bankAccountValidation": {
       "bankName": "銀行名を入力してください",
       "accountNumber": "4文字以上の口座番号を入力してください",

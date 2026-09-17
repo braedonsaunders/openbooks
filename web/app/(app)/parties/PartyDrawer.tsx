@@ -1876,6 +1876,14 @@ function BankAccountsPanel({
         body: JSON.stringify(body),
       })
       const result = await response.json().catch(() => ({}))
+      if (response.status === 409) {
+        // Stale-revision conflicts (F-t04-004 residual: every pre-fix save
+        // 409d because the payload published a truncated token) surface as a
+        // translated message with a recovery path, never a raw server string.
+        await refreshAccounts()
+        toast.error(t('bankAccountStaleRevision'))
+        return
+      }
       if (!response.ok) throw new Error(result.error ?? t('bankAccountSaveFailed'))
       setDraft(null)
       await refreshAccounts()
@@ -1908,7 +1916,10 @@ function BankAccountsPanel({
       },
     )
     const result = await response.json().catch(() => ({}))
-    if (!response.ok) toast.error(result.error ?? t('bankAccountSaveFailed'))
+    if (response.status === 409) {
+      await refreshAccounts()
+      toast.error(t('bankAccountStaleRevision'))
+    } else if (!response.ok) toast.error(result.error ?? t('bankAccountSaveFailed'))
     else {
       await refreshAccounts()
       toast.success(tc('actions.retire'))
@@ -2003,7 +2014,15 @@ function BankAccountsPanel({
                   <TableCell>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <FlowManualButtons subjectKind="party_bank_account" subjectId={String(account.id)} />
-                      <ApprovalActions subjectKind="party_bank_account" subjectId={String(account.id)} />
+                      <ApprovalActions
+                        subjectKind="party_bank_account"
+                        subjectId={String(account.id)}
+                        submitApprovalHref={
+                          canManage
+                            ? `/api/parties/${partyId}/bank-accounts/submit?accountId=${encodeURIComponent(String(account.id))}`
+                            : undefined
+                        }
+                      />
                       <Button variant="ghost" size="sm" onClick={() => setHistoryAccount(account)}>
                         {tc('approvalFlow.historyTitle')}
                       </Button>
