@@ -8,8 +8,10 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–22: setup, banking, assistant, payroll, CRM, reports,
-dashboard, documents, and allocations UX on top of alpha.11.
+Fleet-6 batches 9–29: setup, banking, assistant, payroll, CRM, reports,
+dashboard, documents, allocations, construction/AR, rates, assets,
+payroll, i18n, drawers/search/mobile, expenses, and compliance UX on
+top of alpha.11.
 
 ### Setup and shell
 
@@ -53,6 +55,34 @@ dashboard, documents, and allocations UX on top of alpha.11.
   last_sign_in sort; agent finding hrefs resolve through the nav
   registry; period lists show locked modules and book; journal Origin=All
   includes migration entries; document drawer post fails closed.
+
+### Construction, AR, rates, and consolidation (batches 23–29)
+
+- Rates-blocked banner on aging, registers, GL, journal, and workspaces;
+  aging export uses the same as-of rule as the screen; consolidation
+  refusals carry typed reason codes.
+- AR never renders a sync source handle as the document number; CRM
+  lead/prospect first save completes the draft; owner picker resolves
+  the nested unassigned label.
+- Allocations uncovered kinds answer empty instead of 404; new-rule
+  setup is a guided wizard.
+
+### Assets, payroll, i18n, drawers, search, expenses
+
+- Depreciation extends a stale schedule before posting and surfaces run
+  problems instead of failing silent; payroll posts one labeled burden
+  debit per employer component and lists org-wide vendors.
+- Inventory locations, BOM tabs, run funding, and the property workspace
+  translate in every locale.
+- Document title row wraps so the status pill never clips; AR-pulse
+  hero amounts wrap on narrow screens; mobile search sits in the topbar;
+  exact numbers bypass the search candidate cap and journal entries are
+  indexed.
+- Expense reports are editable via recall and correct; the vendor
+  drawer Compliance tab assigns the class; funding-bank override
+  persists on save.
+- Approvals center binds assignee ids as a PostgreSQL array literal so a
+  single user-assigned gate no longer 500s the page.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 

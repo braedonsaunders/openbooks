@@ -26,7 +26,7 @@ test("statement exports resolve every journal-backed detail report to one accoun
   assert.ok(threaded.length >= 10, `expected every detail export to thread the resolved book, found ${threaded.length}`);
   // Aging reads documents.open_balance, and documents carry no book column —
   // the canonical balance is book-independent by design, so it stays unscoped.
-  assert.match(runSource, /agingByParty\(side, asOf, dims, orgId\)/);
+  assert.match(runSource, /agingByParty\(side, agingAsOf, dims, orgId\)/);
   for (const file of ["./reports/ledger-reports.ts", "./reports/registers.ts"]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     assert.match(source, /bookId\?: string \| null/);

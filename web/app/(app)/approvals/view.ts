@@ -30,6 +30,7 @@ import {
 import { getAuthz, can } from '../../../lib/authz'
 import { mergeHref, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
+import { pgTextArrayLiteral } from '../../../lib/pg-array'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import type { ApprovalRow } from './ApprovalsTable'
 import type { DelegateOption } from './GateActions'
@@ -175,7 +176,7 @@ export async function loadApprovals(
   const assigneeNames = new Map<string, string>()
   if (assigneeIds.length > 0) {
     const rows = await db.execute<Record<string, unknown>>(sql`
-      select id, name from users where org_id = ${orgId} and id = any(${assigneeIds}::uuid[])
+      select id, name from users where org_id = ${orgId} and id = any(${pgTextArrayLiteral(assigneeIds)}::uuid[])
     `)
     for (const r of rows.rows) assigneeNames.set(String(r.id), String(r.name))
   }

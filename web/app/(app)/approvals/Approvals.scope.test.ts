@@ -24,4 +24,9 @@ test('approval worklists enforce subsidiary visibility in every consumer', () =>
   // The dashboard lists read the unified worklist, which scopes every kind
   // (Flows gates, document approvals, pay runs) by the caller's authz.
   assert.match(application, /export async function approvalWorklistForAuthz\(authz: Authz\)/)
+  // A JS array bound into `any($n::uuid[])` is a scalar for one id (22P02)
+  // and a record for several — both 500 the center. Same helper as the
+  // other list pages.
+  assert.match(page, /pgTextArrayLiteral\(assigneeIds\)/)
+  assert.doesNotMatch(page, /any\(\$\{assigneeIds\}::uuid\[\]\)/)
 })
