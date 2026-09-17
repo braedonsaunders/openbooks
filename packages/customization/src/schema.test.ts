@@ -374,3 +374,22 @@ test('between list filters require both bounds', () => {
   view.filters[0]!.value = '2026-01-01'
   assert.deepEqual(lintListView(view), [])
 })
+
+test('the default check form carries an optional vendor payee', () => {
+  // F-t05-008: the standalone check form had no payee field although the
+  // record model (doc.party_id) and the posting rule both support one. The
+  // payee stays optional — anonymous expense checks remain valid.
+  const check = getRecordType('check')
+  assert.ok(check)
+  const party = check.headerFields.find((field) => field.key === 'party_id')
+  assert.deepEqual(party, {
+    key: 'party_id',
+    labelKey: 'common.labels.vendor',
+    level: 'header',
+    kind: 'entity_ref',
+  })
+  const layout = defaultFormLayout('check')
+  const keys = layout.header.groups.flatMap((group) => group.fields.map((field) => field.key))
+  assert.ok(keys.includes('party_id'))
+  assert.deepEqual(lintFormLayout(layout), [])
+})

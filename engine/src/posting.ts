@@ -502,8 +502,8 @@ async function validateRequiredDimensions(
 const lineTotal = (l: DocLine) => add(l.amount, l.taxAmount ?? "0");
 
 /**
- * The payable/receivable/card-liability control account a document should post
- * to. source platform lets a transaction choose its own AP/AR/financing account on the
+ * The payable/receivable/card-liability/bank control account a document should post
+ * to. source platform lets a transaction choose its own AP/AR/financing/funding account on the
  * header (usually the org default, but sometimes a financing sub-account like
  * "Ford Credit" or a per-card employee liability). We surface that choice as
  * `doc.custom.controlAccountId`; when present it wins over the org default.
@@ -1184,7 +1184,10 @@ export const RULES: Record<string, RuleFn> = {
       ...expense,
       ...tax,
       {
-        accountId: deps.control.bank,
+        // The funding bank is the doc's control-account override, else the
+        // org default bank — the same contract as `deposit`: a check drawn on
+        // a non-default account must credit that account, not the default.
+        accountId: controlOverride(doc) ?? deps.control.bank,
         amount: neg(total), // credit bank
         ...dims(doc),
       },

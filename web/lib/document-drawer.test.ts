@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { DOC_KINDS } from './document-kinds.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -516,4 +517,22 @@ test('every interactive editor wires the shared fence through its real Save path
     /result\.status === 'conflict'[\s\S]{0,120}reloadTicketAfterConflict/,
     '409 triggers the reload flow',
   )
+})
+
+test('the check form exposes an optional payee and the funding bank without mandating a party', () => {
+  // F-t05-008: the standalone check form had no payee and no bank-account
+  // field although the record model has both. The payee must stay optional
+  // (partyRole null: the submit gate and the server edit guard key off it),
+  // so anonymous expense checks keep saving and posting.
+  assert.equal(DOC_KINDS.check!.partyRole, null)
+  assert.equal(DOC_KINDS.check!.optionalPartyRole, 'vendor')
+  assert.equal(DOC_KINDS.check!.fundingSource, 'bank')
+  // The fallback party picker renders from the optional-aware role, while
+  // the submit requirement stays on the mandatory role alone.
+  assert.match(DRAWER_SOURCE, /\{pickerPartyRole \? \(/)
+  assert.match(DRAWER_SOURCE, /disabled=\{busy \|\| \(config\.partyRole \? !partyId : false\)/)
+  // The funding-bank block covers every bank-funded kind (check + deposit),
+  // labelled per kind from existing catalog copy.
+  assert.match(DRAWER_SOURCE, /\{config\.fundingSource === 'bank' \? \(/)
+  assert.ok(!DRAWER_SOURCE.includes("{config.kind === 'deposit' ? ("))
 })

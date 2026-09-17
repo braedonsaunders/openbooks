@@ -141,6 +141,48 @@ test("ordinary expense checks stay direct bank disbursements", () => {
   );
 });
 
+test("checks credit the chosen funding bank instead of the org default", () => {
+  // The check form's funding-bank picker stores the account on
+  // doc.custom.controlAccountId (the same bag contract deposits use). The
+  // credit leg must follow it; without an override the org default bank
+  // still wins.
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "office-supplies",
+    amount: "100.0000",
+    taxAmount: "0",
+  } as unknown as PostingDocumentLine;
+  const deps = {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    openItemAccountIds: new Set(["ar", "ap"]),
+  };
+  const base = {
+    id: "check",
+    kind: "check",
+    partyId: "vendor",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+  } as unknown as PostingDocument;
+  const overridden = RULES.check!(
+    { ...base, custom: { controlAccountId: "payroll-account" } },
+    [line],
+    deps,
+  );
+  assert.deepEqual(overridden.map((row) => [row.accountId, row.amount]), [
+    ["office-supplies", "100.0000"],
+    ["payroll-account", "-100.0000"],
+  ]);
+  assert.doesNotThrow(() =>
+    assertFinalKernelBalance(
+      overridden.map((row) => ({ ...row, subsidiaryId: "sub" })),
+    ),
+  );
+  const fallback = RULES.check!({ ...base, custom: {} }, [line], deps);
+  assert.equal(fallback.at(-1)!.accountId, "bank");
+});
+
 test("final posting proof rejects whole-entry and per-subsidiary imbalance", () => {
   assert.doesNotThrow(() =>
     assertFinalKernelBalance([

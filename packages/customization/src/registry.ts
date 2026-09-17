@@ -307,6 +307,11 @@ const CHECK: RecordTypeMeta = {
   labelKey: "customization.recordTypes.check",
   category: "transaction",
   headerFields: [
+    // Optional payee: a check can settle a vendor's AP open items (the engine
+    // reads doc.partyId) or disburse anonymously, so — unlike a bill — the
+    // party is neither required nor locked. JOURNAL sets the optional-party
+    // precedent.
+    { key: "party_id", labelKey: "common.labels.vendor", level: "header", kind: "entity_ref" },
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
     { key: "reference_number", labelKey: "common.labels.reference", level: "header", kind: "text" },
     { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
