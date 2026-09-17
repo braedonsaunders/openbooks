@@ -574,9 +574,12 @@ export async function payRunReadiness(
      order by (l.subsidiary_id is not null) desc
      limit 1
   `));
-  if (!lock.rows[0]) flag("blocker", "period.missing", [], { detail: run.pay_date });
+  // Both period blockers resolve on the periods setup screen (generate the
+  // missing period, or reopen the closed one) — the readiness panel promises
+  // every item links to where it is fixed (F-t08-005).
+  if (!lock.rows[0]) flag("blocker", "period.missing", [], { detail: run.pay_date, href: "/admin/setup/period-close" });
   else if (lock.rows[0].state !== "open") {
-    flag("blocker", "period.closed", [], { detail: lock.rows[0].name, href: "/admin/close" });
+    flag("blocker", "period.closed", [], { detail: lock.rows[0].name, href: "/admin/setup/period-close" });
   }
 
   // --- Population ---------------------------------------------------------
