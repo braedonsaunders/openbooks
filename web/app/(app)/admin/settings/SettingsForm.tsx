@@ -114,6 +114,11 @@ export function SettingsForm({
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(initial)
+  // Save-attempt marker: the required error shows once a save is attempted
+  // with a blank name and clears as soon as typing resumes (F-t01-010 — a
+  // toast alone leaves the field looking saved-but-blank until reload).
+  const [showNameError, setShowNameError] = useState(false)
+  const nameInvalid = showNameError && !form.name.trim()
 
   const monthLabel = (m: number) => t(`months.${MONTH_KEYS[(m - 1 + 12) % 12]}`)
   /** "January → December" label for a fiscal year starting in `startMonth`. */
@@ -133,9 +138,11 @@ export function SettingsForm({
 
   async function save() {
     if (!form.name.trim()) {
+      setShowNameError(true)
       toast.error(t('validation.nameRequired'))
       return
     }
+    setShowNameError(false)
     if (!form.country.trim()) {
       toast.error(t('validation.countryRequired'))
       return
@@ -190,7 +197,15 @@ export function SettingsForm({
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder={t('organization.displayNamePlaceholder')}
+              required
+              aria-invalid={nameInvalid || undefined}
+              aria-describedby={nameInvalid ? 'name-error' : undefined}
             />
+            {nameInvalid ? (
+              <p id="name-error" role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {t('validation.nameRequired')}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <FieldLabel htmlFor="legalName" help={t('organization.legalNameHint')}>{t('organization.legalName')}</FieldLabel>
