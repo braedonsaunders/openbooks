@@ -26,7 +26,12 @@
     "label": "作業コピーのエクスポート",
     "pdf": "作業コピー PDF",
     "csv": "作業コピー CSV",
-    "xlsx": "作業コピー Excel"
+    "xlsx": "作業コピー Excel",
+    "menu": "エクスポート",
+    "groupForm": "申告書式",
+    "groupData": "作業コピーデータ",
+    "facsimile": "書式PDF",
+    "json": "構造化JSON"
   },
   "official": {
     "download": "記入済みの正式フォーム"
@@ -175,5 +180,9 @@
       "auto": "自動",
       "manual": "手動"
     }
+  },
+  "tabs": {
+    "prepare": "申告書を作成する",
+    "history": "過去の申告"
   }
 }

@@ -51,7 +51,8 @@
     "submitForApproval": "承認申請",
     "glImpact": "GLへの影響",
     "done": "完了",
-    "sending": "送信中…"
+    "sending": "送信中…",
+    "retire": "廃止する"
   },
   "transactionTypes": {
     "vendorBill": "仕入請求書", "bill": "仕入請求書",
@@ -156,7 +157,10 @@
     "active": "有効",
     "inactive": "無効",
     "error": "エラー",
-    "ok": "OK"
+    "ok": "OK",
+    "pending_approval": "提出済み",
+    "calculated": "計算済み",
+    "committed": "確定済み"
   },
   "filters": {
     "showInactive": "無効も表示"
@@ -217,14 +221,18 @@
     "loadFailedTitle": "監査証跡を表示できません",
     "loadFailedDescription": "監査証跡を読み込めませんでした。しばらくしてから再試行してください。",
     "retry": "再試行",
-    "actions": { "insert": "作成", "update": "更新", "delete": "削除", "post": "記帳", "void": "無効化", "approve": "承認", "reject": "却下" }
+    "actions": { "insert": "作成", "update": "更新", "delete": "削除", "post": "記帳", "void": "無効化", "approve": "承認", "reject": "却下",
+      "retired": "廃止済み" }
   },
   "amendment": {
     "title": "転記済み伝票の変更理由",
     "deleteTitle": "転記済み伝票を削除する理由",
     "reason": "変更理由",
     "placeholder": "変更内容と理由を記載してください",
-    "deletePlaceholder": "転記済み取引を削除する必要がある理由を記載してください"
+    "deletePlaceholder": "転記済み取引を削除する必要がある理由を記載してください",
+    "voidTitle": "この取引を無効化しますか？",
+    "correctionCreated": "修正下書きを作成しました",
+    "voidPlaceholder": "取引を振り戻す理由を記入してください"
   },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",
@@ -250,6 +258,11 @@
     "badges": {
       "delegated": "委任",
       "escalated": "エスカレーション"
-    }
+    },
+    "signTitle": "この承認に署名する",
+    "signLabel": "承認の証として氏名を入力してください",
+    "retryRun": "承認を再実行する",
+    "retried": "承認を再実行しました — 新しいステップは作業リストにあります",
+    "retryFailed": "再実行に失敗しました"
   }
 }

@@ -36,7 +36,12 @@
     "bank_rule": "銀行ルール",
     "project_charge": "プロジェクトチャージ",
     "fixed_asset": "固定資産",
-    "property": "物件"
+    "property": "物件",
+    "customer": "得意先",
+    "vendor": "仕入先",
+    "employee": "従業員",
+    "pay_run": "給与計算",
+    "field_ticket": "作業日報"
   },
   "property": {
     "tabs": {
@@ -161,7 +166,12 @@
         "text": "テキスト"
       },
       "customFields": "カスタムフィールド",
-      "noCustomFields": "このレコードタイプにはまだカスタムフィールドが定義されていません。"
+      "noCustomFields": "このレコードタイプにはまだカスタムフィールドが定義されていません。",
+      "tabsSection": "タブ",
+      "tabsHelp": "このレコードのフライアウトに表示するタブです。使わないタブを非表示にし、作業に合わせて並べ替え、呼び名に変更し、カスタムフィールド用の独自タブも追加できます。",
+      "addTab": "タブを追加する",
+      "customTab": "カスタム",
+      "tabLocked": "このタブはレコード固有のフィールドを表示し、非表示にはできません。"
     },
     "list": {
       "new": "新規ビュー",
@@ -195,7 +205,9 @@
       "sortDir": "方向",
       "asc": "昇順",
       "desc": "降順",
-      "perPage": "1ページあたりの行数"
-    }
+      "perPage": "1ページあたりの行数",
+      "deleteConfirm": "このビューを削除しますか？使用中のリストは既定のビューに戻ります。元に戻せません。"
+    },
+    "documentation": "ドキュメント"
   }
 }

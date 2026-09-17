@@ -7,7 +7,10 @@
     "emptyTitle": "品目はまだありません",
     "emptyDescription": "最初のサービス、労務、または料金を追加してカタログを開始します。",
     "newButton": "新規品目",
-    "createDraftFailed": "下書き品目を作成できませんでした"
+    "createDraftFailed": "下書き品目を作成できませんでした",
+    "view": "表示",
+    "viewCatalog": "カタログ",
+    "viewRateBooks": "料金表"
   },
   "labels": {
     "code": "コード",
@@ -102,7 +105,9 @@
     "saveFailed": "レートを保存できませんでした",
     "saved": "レート版を保存しました",
     "empty": "レート版はまだありません。",
-    "rates": "レート"
+    "rates": "レート",
+    "tierOverrides": "時間種別レート：",
+    "tierAuto": "自動"
   },
   "revrec": {
     "title": "収益認識",
@@ -125,5 +130,56 @@
       "exclude": "除外",
       "software": "ソフトウェア(残余法)"
     }
+  },
+  "costing": {
+    "title": "在庫評価",
+    "description": "この品目の在庫の評価・管理方法 — 評価方法、勘定科目、発注点を指定します。",
+    "configure": "評価を設定する",
+    "empty": "原価プロファイルがまだありません — 在庫を受け入れる前に設定してください。",
+    "method": "評価方法",
+    "methods": {
+      "fifo": "先入先出法",
+      "moving_average": "移動平均法",
+      "standard": "標準原価"
+    },
+    "tracking": "追跡",
+    "trackingOptions": {
+      "none": "なし",
+      "lot": "ロット",
+      "serial": "シリアル番号"
+    },
+    "baseUnit": "基本単位",
+    "assetAccount": "在庫資産勘定",
+    "cogsAccount": "売上原価勘定",
+    "adjustmentAccount": "調整勘定",
+    "varianceAccount": "差異勘定",
+    "receivedNotBilledAccount": "未請求受入勘定",
+    "standardCost": "標準原価",
+    "reorderPoint": "発注点",
+    "preferredStockLevel": "適正在庫水準",
+    "selectAccount": "勘定科目を選択してください",
+    "separationConflict": "在庫資産勘定とは異なる勘定にしてください",
+    "separationBlocked": "保存前に強調表示の勘定を修正してください — 相殺勘定は在庫資産勘定と異なる必要があります。",
+    "allowNegativeInventory": "マイナス在庫を許可する",
+    "negativeCostBasis": "暫定原価基準",
+    "provisionalUnitCost": "設定済み暫定単価",
+    "negativeCostBasisOptions": {
+      "last_receipt": "最終受入原価",
+      "standard": "標準原価",
+      "configured": "設定原価"
+    }
+  },
+  "fairValue": {
+    "title": "公正価値単価",
+    "description": "通貨別の日付付き独立販売価格（SSP）。バンドル収益を履行義務に配分するために使用します。",
+    "new": "新規単価",
+    "currency": "通貨",
+    "unitPrice": "単価",
+    "lowValue": "下限値",
+    "highValue": "上限値",
+    "effectiveFrom": "適用開始日",
+    "effectiveTo": "適用終了日",
+    "empty": "公正価値単価はまだありません — 上の単一SSPを使用します。",
+    "confirmDelete": "この公正価値単価を削除しますか？"
   }
 }

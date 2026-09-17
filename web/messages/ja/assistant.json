@@ -66,5 +66,14 @@
     "placeholder": "帳簿について何でも質問…",
     "submit": "質問",
     "hint": "Enter で質問 · Esc で閉じる · アシスタントを開きます"
-  }
+  },
+  "context": {
+    "attached": "指摘コンテキストを添付しました",
+    "remove": "指摘コンテキストを外す"
+  },
+  "responding": "アシスタントが応答しています",
+  "jumpToLatest": "最新へ移動",
+  "loadEarlier": "以前のメッセージを読み込む",
+  "loadingEarlier": "以前のメッセージを読み込んでいます…",
+  "loadEarlierFailed": "以前のメッセージを読み込めませんでした。"
 }

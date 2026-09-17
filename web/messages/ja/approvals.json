@@ -58,7 +58,8 @@
     "reasonLabel": "却下理由(選択したすべての項目に適用されます)",
     "approvedCount": "{count} 件承認しました",
     "rejectedCount": "{count} 件却下しました",
-    "failedCount": "{count} 件失敗しました({error})"
+    "failedCount": "{count} 件失敗しました({error})",
+    "signatureBlocked": "選択した承認の一部に署名が必要です — 1件ずつ承認してください。"
   },
   "ooo": {
     "button": "不在",
@@ -84,7 +85,10 @@
     "badges": {
       "quorumAll": "すべての承認者",
       "reminder": "リマインダー {date}",
-      "escalates": "エスカレーション {date}"
-    }
+      "escalates": "エスカレーション {date}",
+      "signature": "署名必須"
+    },
+    "signTitle": "署名して承認する",
+    "signLabel": "この承認に署名するため氏名を入力してください"
   }
 }

@@ -20,7 +20,9 @@
     "organizationWorkspace": "組織ワークスペース",
     "organizationWorkspaceDescription": "現在の組織のモジュール",
     "platformDescription": "導入全体の運用ツール",
-    "security": "サインインのセキュリティ"
+    "security": "サインインのセキュリティ",
+    "sandbox": "sandbox",
+    "sampleCompany": "サンプル企業"
   },
   "language": {
     "label": "言語",
@@ -141,6 +143,13 @@
     "askAdministrator": "この変更ができない場合は、管理者に依頼してください。",
     "deniedTitle": "アクセス権がありません",
     "deniedDescription": "このエリアには{permission}権限が必要です。",
-    "operatorDescription": "プラットフォームコンソールはプラットフォーム運営者専用です。組織の設定は管理メニューにあります。"
+    "operatorDescription": "プラットフォームコンソールはプラットフォーム運営者専用です。組織の設定は管理メニューにあります。",
+    "errorTitle": "問題が発生しました",
+    "errorDescription": "このページを読み込めませんでした。再試行するか、問題が続く場合はダッシュボードに戻ってください。",
+    "errorReference": "参照 {id}",
+    "notFoundTitle": "ページが見つかりません",
+    "notFoundDescription": "お探しのページは存在しないか、アクセス権がありません。",
+    "backToDashboard": "ダッシュボードへ移動",
+    "backToSignIn": "サインインへ移動"
   }
 }

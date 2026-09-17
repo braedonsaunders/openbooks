@@ -61,7 +61,18 @@
     "crm-forecasts": "予測とノルマ",
     "revenue": "収益認識",
     "inventory": "在庫",
-    "docs": "ドキュメント"
+    "docs": "ドキュメント",
+    "payroll": "給与計算",
+    "wip-billing": "仕掛品と前請求",
+    "property-management": "不動産管理",
+    "subcontracts": "下請契約",
+    "admin-page-layouts": "ページレイアウト",
+    "admin-extensions": "アプリ",
+    "field-tickets": "作業日報",
+    "compliance": "コンプライアンス",
+    "compliance-vendors": "下請業者",
+    "lien-waivers": "留置権放棄証書",
+    "information-returns": "支払調書"
   },
   "groups": {
     "my-work": "マイワーク",
@@ -93,6 +104,11 @@
     "customize": "カスタマイズ",
     "automate": "自動化",
     "extend": "拡張",
-    "records": "レコード"
+    "records": "レコード",
+    "compliance": "コンプライアンス"
+  },
+  "modulesShort": {
+    "ap": "買掛金",
+    "ar": "売掛金"
   }
 }

@@ -89,7 +89,12 @@
       "autosaveFailed": "自動保存に失敗しました",
       "postFailed": "記帳に失敗しました",
       "posted": "{side, select, ap {支払を記帳して適用しました} other {入金を記帳して適用しました}}"
-    }
+    },
+    "deleteConfirmTitle": "この支払を削除しますか？",
+    "deleteConfirmBody": "下書きの支払を完全に削除します。元に戻せません。",
+    "deleteConfirmAction": "削除する",
+    "deleted": "支払を削除しました",
+    "deleteFailed": "削除に失敗しました"
   },
   "eft": {
     "notConfiguredTitle": "EFT 送金元が構成されていません",

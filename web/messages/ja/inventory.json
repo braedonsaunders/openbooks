@@ -76,5 +76,65 @@
       "value": "金額按分",
       "quantity": "数量按分"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "失敗"
+    },
+    "toasts": {
+      "saved": "保存しました"
+    },
+    "transfers": {
+      "newOrder": "新規振替オーダー",
+      "from": "出庫元",
+      "to": "入庫先",
+      "item": "品目",
+      "qty": "数量",
+      "inTransitAccount": "輸送中勘定（上書きは任意）",
+      "useControlAccount": "統制勘定を使用する",
+      "createDraft": "下書きを作成する",
+      "help": "出庫は借方輸送中／貸方在庫で記帳します。入庫で入庫先の輸送中を消し込みます。上書きしない場合は controlAccounts.inventoryInTransit を設定してください。",
+      "table": {
+        "number": "番号",
+        "fromTo": "出庫元 → 入庫先",
+        "status": "ステータス",
+        "ordered": "発注済み"
+      },
+      "ship": "出庫する",
+      "receive": "入庫する",
+      "noneYet": "振替オーダーはまだありません。"
+    },
+    "landed": {
+      "newVoucher": "複数受入の仕入諸掛証憑",
+      "amount": "金額",
+      "basis": "基準",
+      "basisValue": "金額基準",
+      "basisQuantity": "数量基準",
+      "basisWeight": "重量基準",
+      "freightAccount": "運賃勘定",
+      "targetItem": "対象品目",
+      "location": "倉庫",
+      "addTarget": "対象を追加する",
+      "remove": "削除する",
+      "postVoucher": "証憑を記帳する",
+      "table": {
+        "number": "番号",
+        "date": "日付",
+        "basis": "基準",
+        "amount": "金額",
+        "status": "ステータス"
+      },
+      "noneYet": "仕入諸掛証憑はまだありません。"
+    },
+    "lots": {
+      "lotNumber": "ロット番号",
+      "openRecallReport": "リコールレポートを開く",
+      "table": {
+        "lot": "ロット",
+        "item": "品目",
+        "expiry": "有効期限"
+      },
+      "noneYet": "ロットはまだありません — ロット番号付きで在庫を受け入れてください。"
+    }
   }
 }

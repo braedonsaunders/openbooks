@@ -18,7 +18,7 @@
     "recentEntries": "最近の仕訳",
     "recentEntryStatusPosted": "転記済み",
     "recentEntryStatusReversed": "取消済み",
-    "recentEntryLines": "{count} 行",
+    "recentEntryLines": "{count, plural, one {# 行} other {# 行}}",
     "pendingApprovalsList": "承認待ち",
     "myApprovals": "自分の承認",
     "inProgress": "進行中",
@@ -26,7 +26,8 @@
     "openReceivables": "未回収の売掛金",
     "overdueReceivables": "延滞している売掛金",
     "openPayables": "未払の買掛金",
-    "overduePayables": "延滞している買掛金"
+    "overduePayables": "延滞している買掛金",
+    "agentFindings": "エージェントの指摘"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -34,7 +35,10 @@
     "baseCurrency": "基準通貨 · {currency}",
     "outstanding": "未決済",
     "pastDue": "期日超過",
-    "asOf": "{date} 時点"
+    "asOf": "{date} 時点",
+    "agentProposals": "提案あり {count} 件",
+    "agentLastRun": "前回実行 {date}",
+    "agentClear": "問題なし"
   },
   "categories": {
     "kpi": "ヘッドライン",
@@ -59,7 +63,8 @@
     "openReceivables": "基準通貨での未払の得意先請求書です。",
     "overdueReceivables": "基準通貨での支払期日を過ぎた得意先請求書です。",
     "openPayables": "基準通貨での未払の仕入請求書です。",
-    "overduePayables": "基準通貨での支払期日を過ぎた仕入請求書です。"
+    "overduePayables": "基準通貨での支払期日を過ぎた仕入請求書です。",
+    "agentFindings": "バックグラウンドエージェントの指摘を開く — ワークベンチへ移動します。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",

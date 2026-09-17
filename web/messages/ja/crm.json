@@ -46,7 +46,8 @@
     "number": "番号",
     "projectedAmount": "予測金額",
     "periodStart": "期間開始",
-    "periodEnd": "期間終了"
+    "periodEnd": "期間終了",
+    "weightedAmount": "加重金額"
   },
   "accounts": {
     "newFallback": "新規アカウント",
@@ -68,6 +69,17 @@
       "new": "新規見込み客",
       "emptyTitle": "見込み客がありません",
       "emptyDescription": "評価済みのリードや商談アカウントがここに表示されます。"
+    },
+    "statuses": {
+      "new": "新規",
+      "working": "対応中",
+      "qualified": "適格",
+      "disqualified": "失格",
+      "open": "オープン",
+      "nurturing": "育成中",
+      "closedLost": "失注",
+      "active": "アクティブ",
+      "inactive": "非アクティブ"
     }
   },
   "activities": {
@@ -113,7 +125,15 @@
     "createEstimate": "見積を作成",
     "estimateCreated": "見積を作成しました",
     "estimateFailed": "見積を作成できませんでした。",
-    "estimateNeedsAccount": "見積を作成する前に取引先を設定してください"
+    "estimateNeedsAccount": "見積を作成する前に取引先を設定してください",
+    "statuses": {
+      "qualification": "適格化",
+      "discovery": "ヒアリング",
+      "proposal": "提案",
+      "negotiation": "交渉",
+      "closedWon": "受注",
+      "closedLost": "失注"
+    }
   },
   "forecastCategories": {
     "omitted": "除外",
