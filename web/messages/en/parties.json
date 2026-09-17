@@ -24,6 +24,7 @@
     "unsavedChanges": "Unsaved changes…",
     "autosaveFailed": "Autosave failed",
     "updateFailed": "Update failed",
+    "nameRequired": "Enter a name to save this party",
     "viewStatement": "View statement",
     "activated": "Party activated",
     "deactivated": "Party deactivated",
