@@ -232,6 +232,52 @@
         "cheque": "支票 ({count, plural, one {#名员工} other {#名员工}})"
       }
     },
+    "bankFile": {
+      "title": "直接存款",
+      "hint": "该文件指示银行向每位EFT员工付款。生成后即冻结、哈希并编号；每次下载都会记录。",
+      "profile": "发起银行档案",
+      "notConfigured": "未配置",
+      "generate": "生成文件",
+      "regenerate": "生成替换文件",
+      "generated": "已生成直接存款文件",
+      "regenerateTitle": "替换现有的直接存款文件？",
+      "regenerateLabel": "为什么需要替换？现有文件保留在案并标记为已取代。如果已发送银行，请勿同时发送两份。",
+      "regeneratePlaceholder": "例如：银行拒绝了首次传输",
+      "regenerateConfirm": "生成替换文件",
+      "multipleLive": "本次发薪有多份未取代文件。请只向银行发送一份——同时发布两份会导致每位员工收到双倍工资。",
+      "noProfile": "工资尚未设置发起银行档案。请在设置 → 付款与银行业务中添加：发起人ID、路由和公司标识由银行分配，绝不使用默认值。",
+      "onFile": "文件中（EFT）",
+      "onPaper": "改用支票支付",
+      "controlTotal": "控制总额",
+      "employees": "{n}名员工",
+      "credits": "{n}笔入账",
+      "excludedTitle": "不在文件中——请与发薪日核对",
+      "file": "文件",
+      "amount": "控制总额",
+      "status": "状态",
+      "released": "已发送",
+      "download": "下载",
+      "neverReleased": "从未下载",
+      "copyHash": "复制sha256",
+      "hashCopied": "已复制sha256",
+      "auditTitle": "动态——生成与下载记录",
+      "state": {
+        "generated": "已生成",
+        "released": "已发送银行",
+        "superseded": "已被取代"
+      },
+      "event": {
+        "generate": "已生成",
+        "release": "已下载",
+        "supersede": "已被取代"
+      },
+      "exclusion": {
+        "profile": "支票支付（工资覆盖）",
+        "party": "支票支付（员工偏好）",
+        "default": "无银行账户记录——支票支付",
+        "eftFallback": "已设为EFT但无已审核银行账户——支票支付"
+      }
+    },
     "steps": {
       "finish": "过账并完成",
       "gl": "总账预览与确认",

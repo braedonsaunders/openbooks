@@ -232,6 +232,52 @@
         "cheque": "Cheques ({count, plural, one {# funcionário} other {# funcionários}})"
       }
     },
+    "bankFile": {
+      "title": "Depósito direto",
+      "hint": "O arquivo instrui o banco a creditar cada funcionário com EFT. Depois de gerado, fica congelado, com hash e numerado; cada download é registrado.",
+      "profile": "Perfil bancário de origem",
+      "notConfigured": "não configurado",
+      "generate": "Gerar arquivo",
+      "regenerate": "Gerar substituição",
+      "generated": "Arquivo de depósito direto gerado",
+      "regenerateTitle": "Substituir o arquivo de depósito direto existente?",
+      "regenerateLabel": "Por que a substituição é necessária? O arquivo existente permanece registrado e marcado como substituído. Se já foi enviado ao banco, não envie os dois.",
+      "regeneratePlaceholder": "ex.: o banco rejeitou a primeira transmissão",
+      "regenerateConfirm": "Gerar substituição",
+      "multipleLive": "Este ciclo de pagamento tem mais de um arquivo não substituído. Envie exatamente UM arquivo ao banco — liberar os dois paga cada funcionário duas vezes.",
+      "noProfile": "Nenhum perfil bancário de origem está configurado para a folha. Adicione um em Setup → Payment operations: o id. do originador, o roteamento e a identificação da empresa são atribuídos pelo seu banco e nunca presumidos.",
+      "onFile": "Incluído no arquivo (EFT)",
+      "onPaper": "Pago com cheque",
+      "controlTotal": "Soma de verificação",
+      "employees": "{n} funcionários",
+      "credits": "{n} créditos",
+      "excludedTitle": "Fora do arquivo — concilie com a data de pagamento",
+      "file": "Arquivo",
+      "amount": "Soma de verificação",
+      "status": "Situação",
+      "released": "Liberado",
+      "download": "Baixar",
+      "neverReleased": "Nunca baixado",
+      "copyHash": "Copiar hash",
+      "hashCopied": "Hash copiado",
+      "auditTitle": "Atividade — quem gerou e quem baixou",
+      "state": {
+        "generated": "Gerado",
+        "released": "Enviado ao banco",
+        "superseded": "Substituído"
+      },
+      "event": {
+        "generate": "Gerado",
+        "release": "Baixado",
+        "supersede": "Substituído"
+      },
+      "exclusion": {
+        "profile": "Pago com cheque (exceção da folha)",
+        "party": "Pago com cheque (preferência do funcionário)",
+        "default": "Sem dados bancários registrados — pago com cheque",
+        "eftFallback": "Configurado como EFT, mas sem dados bancários aprovados — pago com cheque"
+      }
+    },
     "steps": {
       "finish": "Lançar e concluir",
       "gl": "Prévia contábil e lançamento",
