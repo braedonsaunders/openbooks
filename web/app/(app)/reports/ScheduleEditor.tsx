@@ -76,7 +76,7 @@ export function ScheduleEditor({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !s.active }),
     })
-    if (!res.ok) toast.error((await res.json()).error ?? t('updateFailed'))
+    if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? t('updateFailed'))
     else toast.success(s.active ? t('paused') : t('resumed'))
     onChanged?.()
     router.refresh()
@@ -86,7 +86,9 @@ export function ScheduleEditor({
     const ok = await confirmDialog({ message: t('deleteConfirm'), tone: 'danger' })
     if (!ok) return
     const res = await fetch(`/api/reports/schedules/${s.id}`, { method: 'DELETE' })
-    if (!res.ok) toast.error((await res.json()).error ?? tc('feedback.deleteFailed'))
+    // The error body may not be JSON (proxy 5xx pages): never let the read
+    // itself throw, or the failure goes silent with an unhandled rejection.
+    if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? tc('feedback.deleteFailed'))
     else toast.success(t('deleted'))
     onChanged?.()
     router.refresh()
@@ -202,7 +204,7 @@ function ScheduleForm({
       }),
     })
     if (!res.ok) {
-      toast.error((await res.json()).error ?? t('saveFailed'))
+      toast.error((await res.json().catch(() => ({}))).error ?? t('saveFailed'))
       setBusy(false)
       return
     }
