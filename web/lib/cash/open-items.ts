@@ -7,6 +7,7 @@ import { mulDecimal } from '@openbooks/engine/src/money.ts'
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '../../../engine/src/open-item-kinds.ts'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
+import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
 
 function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
@@ -26,7 +27,6 @@ export async function openItems(
   asOf: string,
   subIds?: string[],
 ): Promise<OpenItem[]> {
-  const acctType = side === 'ar' ? 'asset_receivable' : 'liability_payable'
   const creditKind = side === 'ap' ? 'vendor_credit' : 'customer_credit'
   // Bills/invoices carry the side's normal sign; credit memos carry the
   // opposite sign on the same control account. Both are open items: an
@@ -63,7 +63,8 @@ export async function openItems(
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
          and je.posting_date <= ${asOf}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
-        join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
+        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
+         and ${side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`)}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
          ${subScope(sql`jl.subsidiary_id`, subIds)}
