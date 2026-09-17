@@ -10,7 +10,14 @@ import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./
 import { englishHealthStrings, type HealthStrings } from "./health-strings";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
+import { OPERATING_EXPENSE_TYPES, operatingExpenseRatio } from "./operating-expenses";
 import { getMoneyFormatter } from '../money-server'
+
+/** The canonical operating-expense type list as a SQL `IN` fragment (F-t09-001: one definition). */
+const OPEX_TYPES_SQL = sql.join(
+  OPERATING_EXPENSE_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+);
 
 /**
  * Full data payload for the Financial Health dashboard — everything the 10
@@ -251,7 +258,7 @@ async function monthlySeries(
       -sum(case when a.type in ('income','income_other') then m.amt else 0 end) as revenue,
       -sum(case when a.type = 'income' then m.amt else 0 end) as operating_revenue,
       sum(case when a.type = 'cogs' then m.amt else 0 end) as cogs,
-      sum(case when a.type in ('expense','expense_deferred') then m.amt else 0 end) as opex,
+      sum(case when a.type in (${OPEX_TYPES_SQL}) then m.amt else 0 end) as opex,
       sum(case when a.type = 'expense_other' then m.amt else 0 end) as other_exp
     from movement m
     join accounts a on a.id = m.account_id and a.org_id = ${orgId}
@@ -343,7 +350,7 @@ async function segmentsBy(
       -sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as revenue,
       -sum(case when a.type = 'income' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as operating_revenue,
       sum(case when a.type = 'cogs' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cogs,
-      sum(case when a.type in ('expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as opex,
+      sum(case when a.type in (${OPEX_TYPES_SQL}) and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as opex,
       -sum(case when a.type in ('income','income_other') and l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_revenue
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -651,7 +658,7 @@ function buildInsights(
     else if (safety < 0.1) out.push(strings.thinMargin((safety * 100).toFixed(0)));
   }
   if (f.revenue > 0 && f.opex / f.revenue > 0.4)
-    out.push(strings.heavyOverhead(((f.opex / f.revenue) * 100).toFixed(0)));
+    out.push(strings.heavyOverhead(String(operatingExpenseRatio(f.opex, f.revenue))));
 
   if (gm >= GM_TARGET) out.push(strings.healthyGM);
   if (opm < OP_TARGET && gm >= GM_TARGET * 0.75) out.push(strings.trimOpex);

@@ -7,6 +7,7 @@ import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
 import { englishSpendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { getMoneyFormatter } from '../money-server'
 
@@ -260,7 +261,6 @@ interface PriorYearRow extends Record<string, unknown> {
 interface CommitmentRow extends Record<string, unknown> {
   kind: string; month: string; amount: SqlNumber; func: string | null; late: string | null;
 }
-interface RevenueRow extends Record<string, unknown> { revenue: SqlNumber; func: string | null; late: string | null }
 interface SpenderRow extends Record<string, unknown> {
   employee_id: string; employee_name: string; current_spend: SqlNumber; prior_spend: SqlNumber;
   report_count: SqlNumber; current_ids: string[] | null; prior_ids: string[] | null; func: string | null;
@@ -314,7 +314,7 @@ export async function spendVelocityData(
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
       and l.posting_date >= ${f} and l.posting_date <= ${t}`;
 
-  const [acctRows, vendRows, pyRows, poSoRows, revRows, spenderRows, catRows, cmpRows] = await Promise.all([
+  const [acctRows, vendRows, pyRows, poSoRows, plOpex, spenderRows, catRows, cmpRows] = await Promise.all([
     // 1. Monthly account spend split by transaction kind (PRIMARY). Legs are
     // stamped in their line entity's functional: aggregate per (account,
     // month, functional) and translate below. Document counts ride
@@ -378,20 +378,12 @@ export async function spendVelocityData(
         and document_date >= ${from} and document_date <= ${to}
       group by 1, 2, 4
     `),
-    // 5. Revenue (income lines) for OpEx normalisation.
-    db.execute<RevenueRow>(sql`
-      select coalesce(-sum(l.amount), 0) as revenue, sub.base_currency as func,
-        max(e.posting_date)::text as late
-      from journal_lines l
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-      where l.org_id = ${orgId} and a.type in ('income', 'income_other')
-        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-        and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
-        and e.posting_date >= ${from} and e.posting_date <= ${to}
-      group by sub.base_currency
-    `),
+    // 5. P&L operating expenses + revenue for the OpEx ratio — the shared
+    // operating-expenses reader, so this page reports the same "Operating
+    // expenses … of revenue" figure as Financial Health (F-t09-001). The
+    // spend-document universe above (COGS included, non-spend journals
+    // missed) is not operating expenses and must not feed this ratio.
+    periodOperatingExpenses(orgId, from, to, allowed),
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
     // 7. Top spenders use the same primary-book base-currency actuals as
     // the expense summary; draft headers and transaction totals are not GL spend.
@@ -833,14 +825,15 @@ export async function spendVelocityData(
   const commitmentCliff: SpendVelocityData["commitmentCliff"] = { summary: { poVelocity, soVelocity, velocityGap, ratio, status, monthsToCliff, totalPO: Math.round(totalPO), totalSO: Math.round(totalSO) }, months: cliffSeries };
 
   // ---- revenue normalisation ---------------------------------------------------------------------
-  const revCtx = await flowRates(orgId, revRows.rows.map((r) => ({
-    func: r.func ?? null, date: asDate(r.late, to),
-  })));
-  let totalRevenue = 0;
-  for (const r of revRows.rows) {
-    totalRevenue += Number(mulDecimal(String(r.revenue ?? 0), revCtx.rateAt(r.func ?? null, asDate(r.late, to))));
-  }
-  const revenue = { hasData: totalRevenue > 0, totalRevenue, opexRatio: totalRevenue > 0 ? Math.round((totalSpend / totalRevenue) * 100) : 0 };
+  // The OpEx ratio reads the shared P&L operating-expenses reader (true OpEx
+  // over true revenue), never the spend-document total above: that universe
+  // mixes a COGS account in and drops genuine expense (F-t09-001).
+  const totalRevenue = plOpex.revenue;
+  const revenue = {
+    hasData: totalRevenue > 0,
+    totalRevenue,
+    opexRatio: operatingExpenseRatio(plOpex.opex, totalRevenue),
+  };
 
   // ---- period comparison ------------------------------------------------------------------------------
   // Comparison legs translate per (account, functional) at each window's

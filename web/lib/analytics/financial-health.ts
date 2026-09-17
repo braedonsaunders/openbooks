@@ -11,6 +11,7 @@ import { resolveOrgId } from "../org-scope";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
 import { englishFinancialHealthNotes, type FinancialHealthNotes } from "./health-strings";
+import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalSum, type ExactDecimal } from '../statement-format'
 
 /**
@@ -364,14 +365,14 @@ export async function financialHealth(
   const revenue = Number(pl.revenue); // = operatingRevenue + otherIncome (ties to P&L report)
   const cogs = Number(pl.cogs);
   const grossProfit = Number(pl.grossProfit);
-  const opex = Number(totalOf(pl.items, ["expense", "expense_deferred"]));
+  const opex = Number(totalOf(pl.items, [...OPERATING_EXPENSE_TYPES]));
   const otherExpense = Number(totalOf(pl.items, ["expense_other"]));
   const operatingIncome = operatingRevenue - cogs - opex;
   const netIncome = Number(pl.netIncome); // = revenue - cogs - opex - otherExpense
 
   const priorRevenue = Number(priorPl.revenue);
   const priorOperatingRevenue = Number(totalOf(priorPl.items, ["income"]));
-  const priorOpInc = priorOperatingRevenue - Number(priorPl.cogs) - Number(totalOf(priorPl.items, ["expense", "expense_deferred"]));
+  const priorOpInc = priorOperatingRevenue - Number(priorPl.cogs) - Number(totalOf(priorPl.items, [...OPERATING_EXPENSE_TYPES]));
   const revenueGrowth = priorRevenue > 0 ? (revenue - priorRevenue) / priorRevenue : 0;
   const opIncGrowth = priorOpInc !== 0 ? (operatingIncome - priorOpInc) / Math.abs(priorOpInc) : 0;
   const operatingLeverage = revenueGrowth !== 0 ? opIncGrowth / revenueGrowth : 1;
