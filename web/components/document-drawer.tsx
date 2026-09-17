@@ -30,6 +30,7 @@ import { HeaderFields } from './transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from './doc-type-badge'
 import { JournalEntryLink } from './journal-entry-link'
 import { PdfButton } from './pdf-button'
+import { SendButton } from './send-button'
 import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
 import { ApprovalHistory } from './approval-history'
@@ -2110,6 +2111,9 @@ export function DocumentDrawer({
             {actionLayout.filter((action) => action.visible && action.key !== 'edit').map((action) => (
               <Fragment key={action.key}>{renderFormAction(action.key)}</Fragment>
             ))}
+            {(doc.kind === 'customer_invoice' || doc.kind === 'customer_credit') && canCreate ? (
+              <SendButton recordType={String(doc.kind)} recordId={String(doc.id)} />
+            ) : null}
           </>
         )
       }
