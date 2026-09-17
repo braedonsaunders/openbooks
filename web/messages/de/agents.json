@@ -1,0 +1,123 @@
+{
+  "metaTitle": "Agenten",
+  "title": "Agenten",
+  "description": "Alle Befunde der Hintergrund-Agenten in einem priorisierten Posteingang — prüfen, Vorschläge übernehmen und informiert in den Tag starten.",
+  "configure": "Agenten konfigurieren",
+  "search": "Befunde suchen…",
+  "facets": {
+    "pack": "Pack",
+    "severity": "Schweregrad",
+    "status": "Status",
+    "subsidiary": "Tochtergesellschaft",
+    "proposal": "Vorschlag",
+    "all": "Alle",
+    "withProposal": "Mit Vorschlag",
+    "unresolved": "Ohne zugeordnete Gesellschaft",
+    "assignment": "Zuweisung",
+    "assignedToMe": "Mir zugewiesen",
+    "unassigned": "Nicht zugewiesen",
+    "overdue": "Überfällig",
+    "since": "Seit"
+  },
+  "subsidiaryHelp": "Die Tochtergesellschaft ergibt sich aus Befunden mit Kontobezug; alle übrigen Befunde gelten als nicht zugeordnet.",
+  "lastVisit": "Neu seit {date}",
+  "markSeen": "Als gesehen markieren",
+  "triage": {
+    "hint": "j/k bewegen · Enter öffnet · x wählt aus · a übernimmt (Seitenbereich) · d verwirft (Seitenbereich) · s parkt zur Prüfung",
+    "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
+    "review": "Prüfung starten",
+    "resolve": "Lösen",
+    "clear": "Leeren"
+  },
+  "empty": {
+    "title": "Leerer Posteingang",
+    "description": "Keine Befunde für diese Filter.",
+    "action": "Filter zurücksetzen"
+  },
+  "proposal": {
+    "badge": "Vorschlag"
+  },
+  "tabs": {
+    "ariaLabel": "Arbeitsbereiche der Agenten",
+    "inbox": "Posteingang",
+    "proposals": "Vorschläge",
+    "briefing": "Briefing",
+    "activity": "Aktivität"
+  },
+  "briefing": {
+    "title": "Morgenbriefing",
+    "generate": "Briefing erstellen",
+    "generating": "Wird erstellt…",
+    "send": "Als E-Mail senden",
+    "sent": "Briefing gesendet.",
+    "sendFailed": "Die E-Mail konnte nicht in die Warteschlange gestellt werden.",
+    "empty": "Heute noch kein Briefing.",
+    "noAi": "Für das Briefing ist ein konfiguriertes KI-Modell erforderlich.",
+    "generatedAt": "Erstellt {date}",
+    "errors": {
+      "failed": "Diese Aktion konnte nicht abgeschlossen werden.",
+      "ai_not_configured": "Für diese Organisation ist keine KI konfiguriert.",
+      "briefing_empty": "Das Modell hat ein leeres Briefing zurückgegeben.",
+      "briefing_failed": "Die Briefing-Erstellung ist fehlgeschlagen.",
+      "no_briefing": "Es gibt noch kein Briefing zum Senden.",
+      "invalid_action": "Unbekannte Aktion."
+    }
+  },
+  "lane": {
+    "emptyTitle": "Keine Vorschläge",
+    "emptyDescription": "Kein Befund enthält derzeit einen Vorschlag."
+  },
+  "drawer": {
+    "askAboutThis": "Dazu fragen",
+    "askAboutThisHint": "Chat mit den Nachweisen dieses Befunds öffnen",
+    "assignment": {
+      "title": "Zuweisung",
+      "unassigned": "Nicht zugewiesen — unten Verantwortlichen oder Team wählen.",
+      "owner": "Verantwortlicher",
+      "team": "Team",
+      "nobody": "Niemand",
+      "noTeam": "Kein Team",
+      "roles": {
+        "accountant": "Buchhalter",
+        "administrator": "Administrator",
+        "approver": "Genehmiger",
+        "controller": "Controller",
+        "salesManager": "Vertriebsleiter",
+        "salesRepresentative": "Vertriebsmitarbeiter",
+        "viewer": "Betrachter"
+      },
+      "due": "Fällig",
+      "overdue": "Überfällig",
+      "save": "Speichern",
+      "clear": "Entfernen",
+      "saved": "Zuweisung aktualisiert.",
+      "saveFailed": "Die Zuweisung konnte nicht aktualisiert werden."
+    },
+    "notes": {
+      "title": "Notizen",
+      "empty": "Noch keine Notizen.",
+      "placeholder": "Notiz hinzufügen…",
+      "add": "Notiz hinzufügen",
+      "added": "Notiz hinzugefügt.",
+      "addFailed": "Die Notiz konnte nicht hinzugefügt werden."
+    }
+  },
+  "assignment": {
+    "unassigned": "Nicht zugewiesen"
+  },
+  "since": {
+    "day": "Letzte 24 Stunden",
+    "week": "Letzte 7 Tage"
+  },
+  "columns": {
+    "age": "Alter",
+    "due": "Fällig"
+  },
+  "kpis": {
+    "open": "Offene Befunde",
+    "proposals": "Offene Vorschläge",
+    "overdue": "Überfällige Zuweisungen",
+    "lastRun": "Letzter Lauf",
+    "never": "Nie"
+  }
+}

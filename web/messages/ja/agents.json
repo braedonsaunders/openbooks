@@ -1,0 +1,123 @@
+{
+  "metaTitle": "エージェント",
+  "title": "エージェント",
+  "description": "バックグラウンドエージェントの検出をすべて優先度付きの受信トレイに集約 — 対処、提案の適用、最新情報の確認をここで行います。",
+  "configure": "エージェントを設定",
+  "search": "検出を検索…",
+  "facets": {
+    "pack": "パック",
+    "severity": "重大度",
+    "status": "ステータス",
+    "subsidiary": "子会社",
+    "proposal": "提案",
+    "all": "すべて",
+    "withProposal": "提案あり",
+    "unresolved": "子会社との紐付けなし",
+    "assignment": "割り当て",
+    "assignedToMe": "自分に割り当て",
+    "unassigned": "未割り当て",
+    "overdue": "延滞",
+    "since": "期間"
+  },
+  "subsidiaryHelp": "子会社は勘定に紐付く検出から特定されます。それ以外の検出は未解決として扱われます。",
+  "lastVisit": "{date} 以降の新着",
+  "markSeen": "既読にする",
+  "triage": {
+    "hint": "j/k 移動 · Enter 開く · x 選択 · a 適用（ドロワー） · d 却下（ドロワー） · s レビューに保留",
+    "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
+    "review": "レビューを開始",
+    "resolve": "解決",
+    "clear": "クリア"
+  },
+  "empty": {
+    "title": "空の受信トレイ",
+    "description": "この条件に一致する検出はありません。",
+    "action": "フィルターをクリア"
+  },
+  "proposal": {
+    "badge": "提案"
+  },
+  "tabs": {
+    "ariaLabel": "エージェント作業セクション",
+    "inbox": "受信トレイ",
+    "proposals": "提案",
+    "briefing": "ブリーフィング",
+    "activity": "アクティビティ"
+  },
+  "briefing": {
+    "title": "朝のブリーフィング",
+    "generate": "ブリーフィングを生成",
+    "generating": "生成中…",
+    "send": "メールで送信",
+    "sent": "ブリーフィングを送信しました。",
+    "sendFailed": "メールをキューに入れられませんでした。",
+    "empty": "今日のブリーフィングはまだありません。",
+    "noAi": "ブリーフィングには設定済みのAIモデルが必要です。",
+    "generatedAt": "{date} 生成",
+    "errors": {
+      "failed": "このアクションを完了できませんでした。",
+      "ai_not_configured": "この組織ではAIが設定されていません。",
+      "briefing_empty": "モデルが空のブリーフィングを返しました。",
+      "briefing_failed": "ブリーフィングの生成に失敗しました。",
+      "no_briefing": "送信できるブリーフィングはまだありません。",
+      "invalid_action": "不明なアクションです。"
+    }
+  },
+  "lane": {
+    "emptyTitle": "提案はありません",
+    "emptyDescription": "提案を持つ検出は現在ありません。"
+  },
+  "drawer": {
+    "askAboutThis": "これについて質問する",
+    "askAboutThisHint": "この検出の証拠を添付してチャットを開く",
+    "assignment": {
+      "title": "割り当て",
+      "unassigned": "未割り当て — 下で担当者またはチームを選択してください。",
+      "owner": "担当者",
+      "team": "チーム",
+      "nobody": "なし",
+      "noTeam": "チームなし",
+      "roles": {
+        "accountant": "会計担当者",
+        "administrator": "管理者",
+        "approver": "承認者",
+        "controller": "経理責任者",
+        "salesManager": "営業マネージャー",
+        "salesRepresentative": "営業担当者",
+        "viewer": "閲覧者"
+      },
+      "due": "期限",
+      "overdue": "延滞",
+      "save": "保存",
+      "clear": "クリア",
+      "saved": "割り当てを更新しました。",
+      "saveFailed": "割り当てを更新できませんでした。"
+    },
+    "notes": {
+      "title": "備考",
+      "empty": "備考はまだありません。",
+      "placeholder": "備考を追加…",
+      "add": "備考を追加",
+      "added": "備考を追加しました。",
+      "addFailed": "備考を追加できませんでした。"
+    }
+  },
+  "assignment": {
+    "unassigned": "未割り当て"
+  },
+  "since": {
+    "day": "過去24時間",
+    "week": "過去7日間"
+  },
+  "columns": {
+    "age": "経過日数",
+    "due": "期限"
+  },
+  "kpis": {
+    "open": "未対応の検出",
+    "proposals": "対応待ちの提案",
+    "overdue": "延滞中の割り当て",
+    "lastRun": "最終実行",
+    "never": "未実行"
+  }
+}

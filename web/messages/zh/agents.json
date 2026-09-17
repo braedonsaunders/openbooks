@@ -1,0 +1,123 @@
+{
+  "metaTitle": "代理",
+  "title": "代理",
+  "description": "将所有后台代理的发现汇集到一个排序收件箱中——分类、应用提议，开启知情的一天。",
+  "configure": "配置代理",
+  "search": "搜索发现……",
+  "facets": {
+    "pack": "包",
+    "severity": "严重程度",
+    "status": "状态",
+    "subsidiary": "子公司",
+    "proposal": "提议",
+    "all": "全部",
+    "withProposal": "有提议",
+    "unresolved": "无子公司关联",
+    "assignment": "分配",
+    "assignedToMe": "分配给我",
+    "unassigned": "未分配",
+    "overdue": "逾期",
+    "since": "时间范围"
+  },
+  "subsidiaryHelp": "子公司根据关联科目的发现确定；其余发现归入未解决。",
+  "lastVisit": "{date} 之后的新动态",
+  "markSeen": "标记为已读",
+  "triage": {
+    "hint": "j/k 移动 · 回车打开 · x 选择 · a 应用（抽屉） · d 驳回（抽屉） · s 暂存待复核",
+    "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
+    "review": "开始复核",
+    "resolve": "解决",
+    "clear": "清除"
+  },
+  "empty": {
+    "title": "空收件箱",
+    "description": "没有符合这些筛选条件的发现。",
+    "action": "清除筛选"
+  },
+  "proposal": {
+    "badge": "提议"
+  },
+  "tabs": {
+    "ariaLabel": "代理工作区",
+    "inbox": "收件箱",
+    "proposals": "提议",
+    "briefing": "简报",
+    "activity": "活动"
+  },
+  "briefing": {
+    "title": "晨间简报",
+    "generate": "生成简报",
+    "generating": "生成中……",
+    "send": "通过邮件发送",
+    "sent": "简报已发送。",
+    "sendFailed": "邮件无法进入队列。",
+    "empty": "今日暂无简报。",
+    "noAi": "简报需要配置 AI 模型。",
+    "generatedAt": "生成于 {date}",
+    "errors": {
+      "failed": "无法完成该操作。",
+      "ai_not_configured": "本组织尚未配置 AI。",
+      "briefing_empty": "模型返回了空简报。",
+      "briefing_failed": "简报生成失败。",
+      "no_briefing": "暂无可发送的简报。",
+      "invalid_action": "未知操作。"
+    }
+  },
+  "lane": {
+    "emptyTitle": "暂无提议",
+    "emptyDescription": "目前没有附带提议的发现。"
+  },
+  "drawer": {
+    "askAboutThis": "咨询此事",
+    "askAboutThisHint": "附上该发现的证据发起聊天",
+    "assignment": {
+      "title": "分配",
+      "unassigned": "未分配——在下方选择负责人或团队。",
+      "owner": "负责人",
+      "team": "团队",
+      "nobody": "无",
+      "noTeam": "无团队",
+      "roles": {
+        "accountant": "会计",
+        "administrator": "管理员",
+        "approver": "审批人",
+        "controller": "财务总监",
+        "salesManager": "销售经理",
+        "salesRepresentative": "销售代表",
+        "viewer": "查看者"
+      },
+      "due": "到期",
+      "overdue": "逾期",
+      "save": "保存",
+      "clear": "清除",
+      "saved": "分配已更新。",
+      "saveFailed": "无法更新分配。"
+    },
+    "notes": {
+      "title": "备注",
+      "empty": "暂无备注。",
+      "placeholder": "添加备注……",
+      "add": "添加备注",
+      "added": "已添加备注。",
+      "addFailed": "无法添加备注。"
+    }
+  },
+  "assignment": {
+    "unassigned": "未分配"
+  },
+  "since": {
+    "day": "过去 24 小时",
+    "week": "过去 7 天"
+  },
+  "columns": {
+    "age": "等待时长",
+    "due": "到期"
+  },
+  "kpis": {
+    "open": "未解决的发现",
+    "proposals": "待处理的提议",
+    "overdue": "逾期的分配",
+    "lastRun": "上次运行",
+    "never": "从未"
+  }
+}
