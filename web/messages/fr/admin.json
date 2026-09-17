@@ -1266,6 +1266,11 @@
       "loading": "Chargement…",
       "loaded": "{count, plural, one {# modèle disponible} other {# modèles disponibles}}",
       "loadError": "Impossible de charger les modèles.",
+      "result": {
+        "empty": "Le fournisseur n'a renvoyé aucun modèle — saisissez l'identifiant manuellement.",
+        "missingKey": "Saisissez une clé API pour ce fournisseur afin de charger ses modèles.",
+        "unauthorized": "La clé API a été rejetée ({status}). Vérifiez la clé et réessayez."
+      },
       "none": "Aucun modèle",
       "pick": "Choisir un modèle…",
       "loadFirst": "Chargez d'abord les modèles, ou saisissez l'identifiant manuellement",

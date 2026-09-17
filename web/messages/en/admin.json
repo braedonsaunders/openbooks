@@ -1317,6 +1317,11 @@
       "loading": "Loading…",
       "loaded": "{count, plural, one {# model available} other {# models available}}",
       "loadError": "Could not load models.",
+      "result": {
+        "empty": "The provider returned no models — enter the id manually.",
+        "missingKey": "Enter an API key for this provider to load its models.",
+        "unauthorized": "The API key was rejected ({status}). Check the key and try again."
+      },
       "none": "No models",
       "pick": "Pick a model…",
       "loadFirst": "Load models first, or type the id manually",

@@ -1222,6 +1222,11 @@
       "loading": "Cargando…",
       "loaded": "{count, plural, one {# modelo disponible} other {# modelos disponibles}}",
       "loadError": "No se pudieron cargar los modelos.",
+      "result": {
+        "empty": "El proveedor no devolvió modelos — ingrese el identificador manualmente.",
+        "missingKey": "Ingrese una clave API de este proveedor para cargar sus modelos.",
+        "unauthorized": "La clave API fue rechazada ({status}). Revise la clave e inténtelo de nuevo."
+      },
       "none": "Sin modelos",
       "pick": "Elija un modelo…",
       "loadFirst": "Cargue primero los modelos, o escriba el id manualmente",
