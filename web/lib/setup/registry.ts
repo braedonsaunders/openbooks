@@ -2242,6 +2242,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       {
         key: 'defaultLienWaiverType',
         kind: 'select',
+        // Conditionally required: the waiver_type_required CHECK refuses
+        // enforcement without one (F-t03-007). Visible — and required —
+        // only while enforcement is Warn/Block; with enforcement None the
+        // drawer clears it, exactly as the CHECK expects.
+        required: true,
+        showWhen: { field: 'lienWaiverEnforcement', in: ['warn', 'block'] },
         options: LIEN_WAIVER_TYPES,
         helpTextKey: 'fieldHelp.defaultLienWaiverType',
       },
