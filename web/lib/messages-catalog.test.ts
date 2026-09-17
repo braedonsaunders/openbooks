@@ -10,6 +10,7 @@ import {
   generateFallbackManifest,
   readFallbackManifest,
 } from './i18n-catalog-completeness.ts'
+import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 
 /**
  * Structural guards on the translation catalogs.
@@ -461,4 +462,25 @@ test('Portuguese fixed-asset tax pool uses the reviewed regime label', () => {
   const catalog = flattenCatalog('pt-BR')
 
   assert.equal(catalog.get('assets.taxPools.regime'), 'Regime fiscal')
+})
+
+test('every installable payroll pack slot has a statutory account label', () => {
+  // The payroll setup wizard labels each statutory slot's account picker
+  // with `packAccounts.<country>.slots.<key>` and falls back to the raw
+  // slot key when the message is missing — the US pack shipped its
+  // state/local income tax slots with no labels, so the wizard showed
+  // `state_income_tax` / `local_income_tax` in every locale. Non-English
+  // locales deep-merge over English at request time (web/i18n/request.ts),
+  // so English coverage IS every-locale coverage for these labels.
+  const source = flattenCatalog('en')
+  const missing: string[] = []
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    if (!pack.installable) continue
+    for (const slot of pack.statutorySlots) {
+      const key = `payroll.settingsPage.packAccounts.${pack.country}.slots.${slot.key}`
+      const value = source.get(key)
+      if (!value || !value.trim() || value === slot.key) missing.push(key)
+    }
+  }
+  assert.deepEqual(missing, [], `these statutory slots render as raw keys:\n${missing.join('\n')}`)
 })
