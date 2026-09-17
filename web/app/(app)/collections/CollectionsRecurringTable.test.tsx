@@ -44,14 +44,15 @@ const { CollectionsClient } = await import('./CollectionsClient')
 // of jamming.
 function panelHtml() {
   return renderToString(
-    React.createElement(MoneyProvider, {
-      currency: 'CAD',
-      children: React.createElement(NextIntlClientProvider, {
-        locale: 'en',
-        messages: {},
-        children: React.createElement(CollectionsClient, {}),
-      }),
-    }),
+    React.createElement(
+      MoneyProvider,
+      { currency: 'CAD' },
+      React.createElement(
+        NextIntlClientProvider,
+        { locale: 'en', messages: {} },
+        React.createElement(CollectionsClient, {}),
+      ),
+    ),
   )
 }
 
