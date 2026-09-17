@@ -3198,3 +3198,102 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
     assert.deepEqual(I7_armsDrift, [], `${locale} payroll translations drop ICU plural/select arms`)
   }
 })
+
+const I6_PAYROLL_IDENTICAL_BY_FACT = new Set([
+  'fr:payroll.columns.net|Net',
+  'fr:payroll.entitlements.hoursSuffix|h',
+  'fr:payroll.entitlements.movementDate|Date',
+  'fr:payroll.entitlements.movementKind|Type',
+  'fr:payroll.entitlements.source|Source',
+  'fr:payroll.filings.lifecycle.correction|Correction',
+  'fr:payroll.filings.run.title|{label}',
+  'fr:payroll.filings.slip.description|{label} · {year}',
+  'fr:payroll.parallelRun.exact|exact',
+  'fr:payroll.parallelRun.tiles.net|Net',
+  'fr:payroll.profiles.columns.province|Province',
+  'fr:payroll.profiles.country.CA|Canada',
+  'fr:payroll.settingsPage.derivedPreview.total|Total',
+  'fr:payroll.settingsPage.holidayCalendar.citation|Source',
+  'fr:payroll.settingsPage.holidayCalendar.source|Source',
+  'fr:payroll.settingsPage.packs.canada.title|Canada',
+  'fr:payroll.wizard.gl.description|Description',
+  'fr:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
+  'fr:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
+  'fr:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
+  'fr:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+  'fr:payroll.wizard.review.varianceColumn|Δ net',
+  'es:payroll.entitlements.hoursSuffix|h',
+  'es:payroll.entitlements.plan|Plan',
+  'es:payroll.filings.run.title|{label}',
+  'es:payroll.filings.slip.description|{label} · {year}',
+  'es:payroll.paymentMethod.cheque|Cheque',
+  'es:payroll.profiles.fields.sin|SIN / SSN',
+  'es:payroll.profiles.paymentMethod.cheque|Cheque',
+  'es:payroll.register.cppFica|CPP / FICA',
+  'es:payroll.settingsPage.derivedPreview.total|Total',
+  'es:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
+  'es:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
+  'es:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
+  'es:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+  'de:payroll.columns.status|Status',
+  'de:payroll.entitlements.hoursSuffix|h',
+  'de:payroll.entitlements.plan|Plan',
+  'de:payroll.filings.run.title|{label}',
+  'de:payroll.filings.slip.description|{label} · {year}',
+  'de:payroll.profiles.columns.status|Status',
+  'de:payroll.profiles.fields.sin|SIN / SSN',
+  'de:payroll.register.cppFica|CPP / FICA',
+  'de:payroll.settingsPage.rates.columns.region|Region',
+  'de:payroll.settingsPage.workSchedules.columns.status|Status',
+  'de:payroll.settingsPage.workSchedules.fields.name|Name',
+  'de:payroll.setupWizard.schedule.name|Name',
+  'de:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
+  'de:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
+  'de:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
+  'de:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+  'de:payroll.workSchedules.columns.status|Status',
+  'de:payroll.workSchedules.fields.name|Name',
+])
+
+test('I6 payroll copy ships translated in fr, es and de', () => {
+  // F-i6-001: 848 payroll leaves per locale (settingsPage, wizard, profiles,
+  // parallelRun, filings, setupWizard, workSchedules, openingBalances,
+  // entitlements, separations, paymentMethod, links, readiness, retro)
+  // existed only in en — fr/es/de rendered English inside otherwise
+  // translated payroll screens. Every leaf must exist, keep its ICU
+  // placeholders and plural/select arms, and differ from English except
+  // for reviewed cognates, pinned to the exact term.
+  const I6_source = flattenCatalog('en')
+  const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
+  assert.equal(I6_wanted.length, 1074, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  const I6_tokens = (I6_value: string): Set<string> =>
+    new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []
+  for (const I6_locale of ['fr', 'es', 'de']) {
+    const I6_catalog = flattenCatalog(I6_locale)
+    for (const I6_key of I6_wanted) {
+      const I6_value = I6_catalog.get(I6_key)
+      assert.ok(I6_value && I6_value.trim(), `${I6_locale} is missing ${I6_key}`)
+      const I6_identical = [...I6_PAYROLL_IDENTICAL_BY_FACT].find((I6_entry) =>
+        I6_entry.startsWith(`${I6_locale}:${I6_key}|`),
+      )
+      if (I6_identical) {
+        assert.equal(I6_value, I6_identical.split('|')[1], `${I6_locale}:${I6_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I6_value, I6_source.get(I6_key), `${I6_locale} must not copy English ${I6_key}`)
+      }
+    }
+    const I6_drift = I6_wanted.filter((I6_key) => {
+      const I6_expected = I6_tokens(I6_source.get(I6_key) ?? '')
+      const I6_actual = I6_tokens(I6_catalog.get(I6_key) ?? '')
+      return I6_expected.size !== I6_actual.size || [...I6_expected].some((I6_token) => !I6_actual.has(I6_token))
+    })
+    assert.deepEqual(I6_drift, [], `${I6_locale} payroll translations drop or rename ICU placeholders`)
+    const I6_armsDrift = I6_wanted.filter((I6_key) => {
+      const I6_expected = I6_arms(I6_source.get(I6_key) ?? '').join(',')
+      const I6_actual = I6_arms(I6_catalog.get(I6_key) ?? '').join(',')
+      return I6_expected !== I6_actual
+    })
+    assert.deepEqual(I6_armsDrift, [], `${I6_locale} payroll translations drop ICU plural/select arms`)
+  }
+})
