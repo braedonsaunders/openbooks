@@ -237,9 +237,14 @@
       "run_created": "Remessa de pagamento criada", "run_submitted": "Remessa de pagamento enviada", "run_approved": "Remessa de pagamento aprovada", "run_rejected": "Remessa de pagamento rejeitada",
       "file_generated": "Arquivo de pagamento gerado", "file_reprocessed": "Arquivo de pagamento reprocessado", "file_approved": "Arquivo de pagamento aprovado", "file_rejected": "Arquivo de pagamento rejeitado",
       "file_downloaded": "Arquivo de pagamento baixado", "file_delivered_sftp": "Arquivo de pagamento entregue por SFTP", "run_rolled_back": "Remessa de pagamento revertida",
+      "run_posting_started": "Contabilização da remessa de pagamento iniciada", "run_posting_completed": "Remessa de pagamento contabilizada",
+      "run_posting_failed": "Falha na contabilização da remessa de pagamento", "run_posting_recovered": "Contabilização da remessa de pagamento recuperada",
       "run_cancelled": "Remessa de pagamento cancelada",
       "file_delivery_failed": "Falha na entrega do arquivo de pagamento",
-      "instruction_settled": "Pagamento liquidado", "instruction_returned": "Pagamento devolvido", "instruction_rejected": "Pagamento rejeitado"
+      "instruction_sent": "Pagamento enviado", "instruction_settled": "Pagamento liquidado", "instruction_returned": "Pagamento devolvido", "instruction_rejected": "Pagamento rejeitado"
+    },
+    "eventsDetail": {
+      "postingOutcome": "{posted} enviados · {failed} com falha · {pending} ainda pendentes"
     },
     "confirmPost": "{count, plural, one {Lançar # pagamento} other {Lançar # pagamentos}} totalizando {total} no razão e aplicá-los às contas a pagar selecionadas?",
     "toasts": {

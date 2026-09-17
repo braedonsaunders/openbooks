@@ -71,7 +71,29 @@ export interface PaymentFileClient {
   id: string; status: string; filename: string; content_hash: string; sequence_number: number;
   payment_count: number; total_amount: string | number; currency: string
 }
-export interface PaymentEventClient { id: string; event_type: string; actor_name: string | null; created_at: string }
+export interface PaymentEventClient { id: string; event_type: string; actor_name: string | null; created_at: string; details: Record<string, unknown> | null }
+
+/** Failure evidence stored on a posting event: the engine records the crash
+ *  reason ({ error }) or the per-run tally ({ posted, failureCount,
+ *  incompleteInstructions }). Rendered under the activity label so a failed
+ *  posting names its reason instead of sitting as a bare key. */
+function postingEventReason(
+  event: PaymentEventClient,
+  t: (
+    key: 'runDrawer.eventsDetail.postingOutcome',
+    values: { posted: number; failed: number; pending: number },
+  ) => string,
+): string | null {
+  const details = event.details ?? {}
+  const reason = details.error
+  if (typeof reason === 'string' && reason.trim()) return reason
+  if (event.event_type !== 'run_posting_failed' && event.event_type !== 'run_posting_completed') return null
+  const failed = typeof details.failureCount === 'number' ? details.failureCount : 0
+  const pending = typeof details.incompleteInstructions === 'number' ? details.incompleteInstructions : 0
+  if (failed === 0 && pending === 0) return null
+  const posted = typeof details.posted === 'number' ? details.posted : 0
+  return t('runDrawer.eventsDetail.postingOutcome', { posted, failed, pending })
+}
 export interface PaymentRunItemClient {
   id: string; document_number: string; party_name: string; payment_amount: string | number;
   discount_amount: string | number; credit_amount: string | number; currency: string
@@ -390,7 +412,7 @@ export function RunDrawer({
         </div>
         {instructionPages > 1 ? <div className="flex items-center justify-end gap-2"><Button size="sm" variant="outline" disabled={instructionPage <= 1} onClick={() => setInstructionPage((p) => p - 1)}>{tCommon('actions.previous')}</Button><span className="text-xs text-slate-500">{instructionPage} / {instructionPages}</span><Button size="sm" variant="outline" disabled={instructionPage >= instructionPages} onClick={() => setInstructionPage((p) => p + 1)}>{tCommon('actions.next')}</Button></div> : null}
 
-        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t((`runDrawer.events.${event.event_type}`))}</p><p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</time></div>)}</div></section> : null}
+        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t((`runDrawer.events.${event.event_type}`))}</p>{(() => { const reason = postingEventReason(event, t); return reason ? <p className="text-xs text-red-600 dark:text-red-400">{reason}</p> : null })()}<p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</time></div>)}</div></section> : null}
       </div>
 
       <Drawer
