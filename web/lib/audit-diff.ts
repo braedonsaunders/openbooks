@@ -59,6 +59,19 @@ function collectDiffs(before: unknown, after: unknown, path = ''): AuditDiffRow[
   return [{ path, before, after }]
 }
 
+/**
+ * Whether an audit event has anything worth opening: field diffs, or
+ * before/after snapshots (viewable in their own tabs even when equal).
+ * Synthesized creation events ({source, event} metadata only — see
+ * /api/audit/record) carry no field data, so the trail must not promise a
+ * detail view for them (F-t06-009).
+ */
+export function hasInspectableChanges(changesValue: unknown): boolean {
+  const changes = isObject(changesValue) ? changesValue : {}
+  if (Object.hasOwn(changes, 'before') || Object.hasOwn(changes, 'after')) return true
+  return auditEventDiffs(changes).length > 0
+}
+
 export function auditEventDiffs(changesValue: unknown): AuditDiffRow[] {
   const changes = isObject(changesValue) ? changesValue : {}
   const hasBefore = Object.hasOwn(changes, 'before')

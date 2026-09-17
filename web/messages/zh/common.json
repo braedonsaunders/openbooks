@@ -204,6 +204,7 @@
     "systemActor": "系统",
     "metadata": "记录元数据",
     "viewChanges": "查看更改",
+    "noChanges": "未记录任何更改",
     "changeCount": "{count, plural, one {# 项更改} other {# 项更改}}",
     "pageStatus": "第 {page} 页，共 {pages} 页 · {total} 个事件",
     "previous": "上一页",

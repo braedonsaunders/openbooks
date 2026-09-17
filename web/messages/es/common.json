@@ -228,6 +228,7 @@
     "systemActor": "Sistema",
     "metadata": "Metadatos del registro",
     "viewChanges": "Ver cambios",
+    "noChanges": "Sin cambios registrados",
     "changeCount": "{count, plural, one {# cambio} other {# cambios}}",
     "pageStatus": "Página {page} de {pages} · {total} eventos",
     "previous": "Anterior",

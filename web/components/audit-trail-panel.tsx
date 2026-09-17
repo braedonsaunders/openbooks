@@ -10,6 +10,7 @@ import {
   auditEventDiffs,
   type AuditEvent,
 } from '../app/(app)/admin/audit/AuditEventDrawer'
+import { hasInspectableChanges } from '../lib/audit-diff'
 
 type AuditRow = {
   id: string
@@ -127,6 +128,10 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
             <TableBody>
               {data.rows.map((row) => {
                 const count = changeCount(row.changes)
+                // Events with no field data (e.g. the API-synthesized Created
+                // row) must not promise a detail view — the drawer still opens
+                // with who/when/context, but the cell says so honestly.
+                const inspectable = hasInspectableChanges(row.changes)
                 return (
                   <TableRow
                     key={row.id}
@@ -150,7 +155,7 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
                     <TableCell><Badge variant={ACTION_VARIANT[row.action] ?? 'secondary'}>{actionLabel(row.action)}</Badge></TableCell>
                     <TableCell className="max-w-sm">
                       <span className="flex items-center justify-between gap-2 text-sm font-medium text-teal-700 dark:text-teal-300">
-                        <span>{count > 0 ? t('changeCount', { count }) : t('viewChanges')}</span>
+                        <span>{count > 0 ? t('changeCount', { count }) : inspectable ? t('viewChanges') : t('noChanges')}</span>
                         <ChevronRight size={15} aria-hidden />
                       </span>
                     </TableCell>

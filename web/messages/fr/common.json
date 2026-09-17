@@ -228,6 +228,7 @@
     "systemActor": "Système",
     "metadata": "Métadonnées de l’enregistrement",
     "viewChanges": "Voir les modifications",
+    "noChanges": "Aucune modification enregistrée",
     "changeCount": "{count, plural, one {# modification} other {# modifications}}",
     "pageStatus": "Page {page} sur {pages} · {total} événements",
     "previous": "Précédente",
