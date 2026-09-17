@@ -9,7 +9,7 @@ registerHooks({ resolve(specifier, context, next) {
 }});
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const {
   createScratchOrg,
   createScratchUser,
@@ -59,24 +59,35 @@ async function seedOrder(
   return id;
 }
 
+// Seeding helpers run under withBypassContext at their call sites: importing
+// ./order-cycle.ts pulls in the web request-org resolver, which denies every
+// unscoped query under pooled RLS (bare setup dies with 42501). convertOrder
+// and requestDocumentVoid scope their own transactions internally and run
+// bare; the remaining engine calls (post, delete, materialize) rely on ambient
+// scope like the sibling order-convert-income suite, so they run under bypass.
+// Reads run in the scratch org's scope.
 async function billedOf(orgId: string, documentId: string): Promise<string> {
-  const r = (await db.execute<{ quantity_billed: string }>(sql`
-    select quantity_billed::text from document_lines
-     where org_id = ${orgId} and document_id = ${documentId}
-     order by line_number limit 1`));
-  return r.rows[0]!.quantity_billed;
+  return withOrgContext(orgId, async () => {
+    const r = (await db.execute<{ quantity_billed: string }>(sql`
+      select quantity_billed::text from document_lines
+       where org_id = ${orgId} and document_id = ${documentId}
+       order by line_number limit 1`));
+    return r.rows[0]!.quantity_billed;
+  });
 }
 
 async function approveAndPostInvoice(org: ScratchOrg, actorId: string, invoiceId: string): Promise<void> {
-  await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
-  await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await withBypassContext(async () => {
+    await db.execute(sql`update documents set status = 'approved' where id = ${invoiceId} and org_id = ${org.orgId}`);
+    await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  });
 }
 
 test("voiding a converted invoice restores the sales order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Billed Unwind", "admin");
-    const soId = await seedOrder(org, actorId, "sales_order", "SO-BILLED-VOID-1");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
+    const soId = await withBypassContext(() => seedOrder(org, actorId, "sales_order", "SO-BILLED-VOID-1"));
     const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     assert.equal(await billedOf(org.orgId, soId), "10.00000000");
     await approveAndPostInvoice(org, actorId, converted.id);
@@ -88,21 +99,21 @@ test("voiding a converted invoice restores the sales order billed quantity", { s
     assert.equal(await billedOf(org.orgId, soId), "0.00000000");
     const again = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     assert.ok(again.id);
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
 test("deleting a draft converted invoice restores the sales order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Billed Unwind", "admin");
-    const soId = await seedOrder(org, actorId, "sales_order", "SO-BILLED-DELETE-1");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
+    const soId = await withBypassContext(() => seedOrder(org, actorId, "sales_order", "SO-BILLED-DELETE-1"));
     const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     assert.equal(await billedOf(org.orgId, soId), "10.00000000");
-    await deleteDocument(converted.id, actorId, org.orgId, { reason: "Discard a mistakenly converted draft" });
+    await withBypassContext(() => deleteDocument(converted.id, actorId, org.orgId, { reason: "Discard a mistakenly converted draft" }));
     assert.equal(await billedOf(org.orgId, soId), "0.00000000");
     const again = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
     assert.ok(again.id);
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
 async function seedServicePO(
@@ -207,15 +218,17 @@ async function seedCaptureItem(
 }
 
 async function approveAndPostBill(org: ScratchOrg, billId: string): Promise<void> {
-  await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
-  await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await withBypassContext(async () => {
+    await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
+    await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  });
 }
 
 test("voiding a converted sales order restores the quote billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Billed Unwind", "admin");
-    const quoteId = await seedOrder(org, actorId, "quote", "QUOTE-BILLED-VOID-1", "5");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
+    const quoteId = await withBypassContext(() => seedOrder(org, actorId, "quote", "QUOTE-BILLED-VOID-1", "5"));
     const converted = await convertOrder(org.orgId, actorId, quoteId, "sales_order");
     assert.equal(await billedOf(org.orgId, quoteId), "5.00000000");
     const voided = await requestDocumentVoid({
@@ -224,39 +237,39 @@ test("voiding a converted sales order restores the quote billed quantity", { ski
     });
     assert.equal(voided.status, "voided");
     assert.equal(await billedOf(org.orgId, quoteId), "0.00000000");
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
 test("deleting a draft captured bill restores the purchase order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Billed Unwind", "admin");
-    const { poId, lineId } = await seedServicePO(org, actorId, "PO-BILLED-DELETE-1");
-    const itemId = await seedCaptureItem(org, actorId, {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
+    const { poId, lineId } = await withBypassContext(() => seedServicePO(org, actorId, "PO-BILLED-DELETE-1"));
+    const itemId = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_bill", poId, poLineId: lineId, quantity: "10", invoiceNumber: "AP-DELETE-1",
-    });
-    const materialized = await materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId });
+    }));
+    const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId }));
     assert.equal(await billedOf(org.orgId, poId), "10.00000000");
-    await deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft" });
+    await withBypassContext(() => deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft" }));
     assert.equal(await billedOf(org.orgId, poId), "0.00000000");
-    const released = (await db.execute<{ status: string; document_id: string | null }>(sql`
-      select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`)).rows[0]!;
+    const released = await withOrgContext(org.orgId, async () => (await db.execute<{ status: string; document_id: string | null }>(sql`
+      select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`)).rows[0]!);
     assert.equal(released.status, "needs_review");
     assert.equal(released.document_id, null);
     const again = await convertOrder(org.orgId, actorId, poId, "vendor_bill");
     assert.ok(again.id, "the received remainder is billable again");
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
 test("voiding a captured bill restores the purchase order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Billed Unwind", "admin");
-    const { poId, lineId } = await seedServicePO(org, actorId, "PO-BILLED-VOID-1");
-    const itemId = await seedCaptureItem(org, actorId, {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
+    const { poId, lineId } = await withBypassContext(() => seedServicePO(org, actorId, "PO-BILLED-VOID-1"));
+    const itemId = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_bill", poId, poLineId: lineId, quantity: "10", invoiceNumber: "AP-VOID-1",
-    });
-    const materialized = await materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId });
+    }));
+    const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId }));
     await approveAndPostBill(org, materialized.documentId);
     const voided = await requestDocumentVoid({
       documentId: materialized.documentId, orgId: org.orgId, actorId,
@@ -264,24 +277,24 @@ test("voiding a captured bill restores the purchase order billed quantity", { sk
     });
     assert.equal(voided.status, "voided");
     assert.equal(await billedOf(org.orgId, poId), "0.00000000");
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
 test("voiding a captured vendor credit re-consumes the purchase order billed quantity", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Billed Unwind", "admin");
-    const { poId, lineId: poLineId } = await seedServicePO(org, actorId, "PO-BILLED-CREDIT-1");
-    const billItem = await seedCaptureItem(org, actorId, {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Billed Unwind", "admin"));
+    const { poId, lineId: poLineId } = await withBypassContext(() => seedServicePO(org, actorId, "PO-BILLED-CREDIT-1"));
+    const billItem = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_bill", poId, poLineId, quantity: "10", invoiceNumber: "AP-CREDIT-BILL-1",
-    });
-    const bill = await materializeCapture({ orgId: org.orgId, captureItemId: billItem, actorId });
+    }));
+    const bill = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: billItem, actorId }));
     await approveAndPostBill(org, bill.documentId);
     assert.equal(await billedOf(org.orgId, poId), "10.00000000");
-    const creditItem = await seedCaptureItem(org, actorId, {
+    const creditItem = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_credit", poId, poLineId, quantity: "4", invoiceNumber: "AP-CREDIT-1",
-    });
-    const credit = await materializeCapture({ orgId: org.orgId, captureItemId: creditItem, actorId });
+    }));
+    const credit = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: creditItem, actorId }));
     assert.equal(await billedOf(org.orgId, poId), "6.00000000");
     await approveAndPostBill(org, credit.documentId);
     const voided = await requestDocumentVoid({
@@ -295,6 +308,6 @@ test("voiding a captured vendor credit re-consumes the purchase order billed qua
       convertOrder(org.orgId, actorId, poId, "vendor_bill"),
       /fully converted|do not cover|already/,
     );
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
 
