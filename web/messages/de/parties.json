@@ -36,6 +36,7 @@
       "contacts": "Kontakte",
       "addresses": "Adressen",
       "accounting": "Buchhaltung",
+      "compliance": "Compliance",
       "wages": "Lohnsätze",
       "invoicing": "Fakturierung",
       "pricing": "Preise"
@@ -177,6 +178,16 @@
       "customer": "Kundendetails",
       "vendor": "Lieferantendetails",
       "employee": "Mitarbeiterdetails"
+    },
+    "compliance": {
+      "heading": "Subunternehmer-Compliance",
+      "description": "Die Compliance-Klasse entscheidet, ob die Zahlungen an diesen Lieferanten freigegeben werden können, und nimmt den Lieferanten in die Compliance-Matrix auf.",
+      "classLabel": "Compliance-Klasse",
+      "noClass": "Keine Klasse — nicht erfasst",
+      "untrackedHint": "Weisen Sie eine Klasse zu, um diesen Lieferanten in die Compliance-Matrix aufzunehmen.",
+      "saved": "Compliance-Klasse gespeichert.",
+      "saveFailed": "Speichern der Compliance-Klasse fehlgeschlagen.",
+      "viewMatrix": "Compliance-Matrix öffnen"
     }
   },
   "rateBookAssignments": {

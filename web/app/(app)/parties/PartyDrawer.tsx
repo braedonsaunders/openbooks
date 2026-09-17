@@ -45,6 +45,7 @@ import { EmployeeWageRates } from './EmployeeWageRates'
 import { EmployeeEntitlementBalances } from './EmployeeEntitlementBalances'
 import { PayrollProfileTab } from '../payroll/_ui/PayrollProfileTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
+import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
@@ -211,7 +212,7 @@ const serializeContacts = (rows: ContactRow[]) => rows.map(({ id: _id, ...contac
 }))
 
 // Payroll profile editing lives here, on the native employee entity.
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages' | 'payroll'
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'compliance' | 'wages' | 'payroll'
 
 /**
  * Records a visited drawer tab for keep-alive panels (F-t08-003): the
@@ -256,6 +257,9 @@ export function PartyDrawer({
   canManagePayroll = false,
   payrollEnabled = false,
   multiCurrency = false,
+  complianceEnabled = false,
+  canManageCompliance = false,
+  compliance = null,
   role,
   initialTab = 'overview',
   initialMode = 'view',
@@ -288,6 +292,14 @@ export function PartyDrawer({
   /** Company Settings → Features. Customer/vendor currency is
    *  Multi-currency configuration; hide and omit it when that switch is off. */
   multiCurrency?: boolean
+  /** Company Settings → Features. The Subcontractor-compliance switch gates
+   *  the vendor Compliance tab (F-t04-003). */
+  complianceEnabled?: boolean
+  /** compliance.manage — assigning the class releases vendor money, so the
+   *  tab is read-only without it (the PATCH route re-checks). */
+  canManageCompliance?: boolean
+  /** The vendor's assigned class + the active classes, for the Compliance tab. */
+  compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -309,10 +321,15 @@ export function PartyDrawer({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  // The Compliance tab needs a vendor in a compliance-enabled org — the same
+  // predicate gates the tab button and the deep-link, so a stale
+  // ?partyTab=compliance can never strand the drawer on a missing panel.
+  const showComplianceTab = complianceEnabled && (role === 'vendor' || (!role && payload.vendor != null))
   const allowedInitialTab =
     (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
     (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll)) ||
-    (initialTab === 'activities' && !canReadActivities)
+    (initialTab === 'activities' && !canReadActivities) ||
+    (initialTab === 'compliance' && !showComplianceTab)
       ? 'overview'
       : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
@@ -775,6 +792,7 @@ export function PartyDrawer({
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
+    ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
     ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
     ...(role === 'employee' && canManagePayroll ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
   ]
@@ -1428,6 +1446,15 @@ export function PartyDrawer({
 
         {tab === 'accounting' && (!role || role === 'vendor') ? (
           <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
+        ) : null}
+
+        {tab === 'compliance' && showComplianceTab && compliance ? (
+          <VendorCompliancePanel
+            partyId={String(p.id)}
+            initialClassId={compliance.classId}
+            classes={compliance.classes}
+            canManage={canManageCompliance}
+          />
         ) : null}
 
       </div>

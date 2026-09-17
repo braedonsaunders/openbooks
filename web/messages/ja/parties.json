@@ -36,6 +36,7 @@
       "contacts": "連絡先",
       "addresses": "住所",
       "accounting": "会計",
+      "compliance": "コンプライアンス",
       "wages": "賃金レート",
       "invoicing": "請求",
       "pricing": "価格"
@@ -177,6 +178,16 @@
       "customer": "得意先の詳細",
       "vendor": "仕入先の詳細",
       "employee": "従業員の詳細"
+    },
+    "compliance": {
+      "heading": "下請業者コンプライアンス",
+      "description": "コンプライアンスクラスにより、このベンダーへの支払いが解放可能かどうかが決まり、ベンダーはコンプライアンスマトリクスに取り込まれます。",
+      "classLabel": "コンプライアンスクラス",
+      "noClass": "クラスなし — 未追跡",
+      "untrackedHint": "クラスを割り当てて、このベンダーをコンプライアンスマトリクスに取り込みます。",
+      "saved": "コンプライアンスクラスを保存しました。",
+      "saveFailed": "コンプライアンスクラスの保存に失敗しました。",
+      "viewMatrix": "コンプライアンスマトリクスを開く"
     }
   },
   "rateBookAssignments": {

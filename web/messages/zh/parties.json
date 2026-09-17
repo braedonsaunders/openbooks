@@ -36,6 +36,7 @@
       "contacts": "联系人",
       "addresses": "地址",
       "accounting": "会计",
+      "compliance": "合规",
       "wages": "工资费率",
       "invoicing": "开票",
       "pricing": "定价"
@@ -177,6 +178,16 @@
       "customer": "客户详情",
       "vendor": "供应商详情",
       "employee": "员工详情"
+    },
+    "compliance": {
+      "heading": "分包商合规",
+      "description": "合规类别决定是否可以释放该供应商的款项，并将供应商纳入合规矩阵。",
+      "classLabel": "合规类别",
+      "noClass": "无类别 — 未跟踪",
+      "untrackedHint": "分配类别以将该供应商纳入合规矩阵。",
+      "saved": "合规类别已保存。",
+      "saveFailed": "合规类别保存失败。",
+      "viewMatrix": "打开合规矩阵"
     }
   },
   "rateBookAssignments": {

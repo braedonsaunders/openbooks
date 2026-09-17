@@ -126,6 +126,19 @@ export interface ComplianceMatrix {
   rows: MatrixRow[]
 }
 
+/**
+ * One vendor's assigned compliance class for the party drawer's Compliance
+ * tab (F-t04-003). Null covers both "no vendor_roles row" and "row without
+ * a class" — either way the vendor is outside the matrix until a class is
+ * assigned through PATCH /api/compliance/vendors/[partyId].
+ */
+export async function loadVendorComplianceClass(orgId: string, partyId: string): Promise<string | null> {
+  const result = await db.execute<{ classId: string | null }>(sql`
+    select compliance_class_id as "classId" from vendor_roles
+     where org_id = ${orgId} and party_id = ${partyId} and is_active`)
+  return result.rows[0]?.classId ?? null
+}
+
 export async function loadComplianceClasses(orgId: string): Promise<ComplianceClassRow[]> {
   const r = await db.execute<ComplianceClassRow>(sql`
     select id, code, name,

@@ -36,6 +36,7 @@
       "contacts": "Contacts",
       "addresses": "Adresses",
       "accounting": "Comptabilité",
+      "compliance": "Conformité",
       "wages": "Taux de rémunération",
       "invoicing": "Facturation",
       "pricing": "Tarification"
@@ -183,7 +184,17 @@
     },
     "workerCompGroup": "Groupe d'indemnisation",
     "customForm": "Formulaire du dossier",
-    "manageForms": "Personnaliser le formulaire"
+    "manageForms": "Personnaliser le formulaire",
+    "compliance": {
+      "heading": "Conformité des sous-traitants",
+      "description": "La classe de conformité détermine si les fonds de ce fournisseur peuvent être débloqués et intègre le fournisseur dans la matrice de conformité.",
+      "classLabel": "Classe de conformité",
+      "noClass": "Aucune classe — non suivi",
+      "untrackedHint": "Attribuez une classe pour intégrer ce fournisseur dans la matrice de conformité.",
+      "saved": "Classe de conformité enregistrée.",
+      "saveFailed": "Échec de l’enregistrement de la classe de conformité.",
+      "viewMatrix": "Ouvrir la matrice de conformité"
+    }
   },
   "rateBookAssignments": {
     "title": "Tarification de la main-d’œuvre",

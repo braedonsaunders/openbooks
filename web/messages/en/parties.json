@@ -38,6 +38,7 @@
       "contacts": "Contacts",
       "addresses": "Addresses",
       "accounting": "Accounting",
+      "compliance": "Compliance",
       "wages": "Wage rates",
       "payroll": "Payroll"
     },
@@ -184,7 +185,17 @@
     },
     "workerCompGroup": "Worker-comp group",
     "customForm": "Record form",
-    "manageForms": "Customize record form"
+    "manageForms": "Customize record form",
+    "compliance": {
+      "heading": "Subcontractor compliance",
+      "description": "The compliance class decides whether this vendor’s money can be released, and brings the vendor into the compliance matrix.",
+      "classLabel": "Compliance class",
+      "noClass": "No class — untracked",
+      "untrackedHint": "Assign a class to bring this vendor into the compliance matrix.",
+      "saved": "Compliance class saved.",
+      "saveFailed": "Saving the compliance class failed.",
+      "viewMatrix": "Open the compliance matrix"
+    }
   },
   "rateBookAssignments": {
     "title": "Labor Pricing",
