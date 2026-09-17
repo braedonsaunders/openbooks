@@ -533,7 +533,7 @@ test("two concurrent Setup creates cannot duplicate an authoritative code", { sk
     const statuses = [first.status, second.status].sort();
     assert.deepEqual(statuses, [200, 409], "exactly one create wins with a deterministic conflict");
     const conflict = first.status === 409 ? first : second;
-    assert.deepEqual(await conflict.json(), { error: "duplicate", code: "duplicate" });
+    assert.deepEqual(await conflict.json(), { error: "This record already exists.", code: "duplicate" });
 
     const rows = await db.execute<{ id: string; n: number }>(sql`
       select id, count(*) over ()::int as n from tax_codes
@@ -566,7 +566,7 @@ test("two concurrent Setup creates cannot duplicate an authoritative code", { sk
       call("classes", {}),
     );
     assert.equal(takeover.status, 409);
-    assert.deepEqual(await takeover.json(), { error: "duplicate", code: "duplicate" });
+    assert.deepEqual(await takeover.json(), { error: "This record already exists.", code: "duplicate" });
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);
@@ -632,6 +632,37 @@ test("storage decides two-session create/create races for every authoritative se
       }
     }
   } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("duplicate FX rates answer a typed conflict with a human message, not a bare code (F-t06-019)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "FX Setup Admin", "admin");
+  try {
+    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) ||
+      '{"features":{"multiCurrency":true}}'::jsonb where id = ${org.orgId}`);
+    authenticate({ orgId: org.orgId, actorId });
+    const rate = {
+      asOf: "2026-08-16",
+      fromCurrency: "USD",
+      toCurrency: "CAD",
+      rateType: "spot",
+      rate: "1.3604000000",
+    };
+    const first = await POST(postRequest("fx-rates", rate), call("fx-rates", {}));
+    assert.equal(first.status, 200);
+    const second = await POST(postRequest("fx-rates", rate), call("fx-rates", {}));
+    assert.equal(second.status, 409);
+    const body = (await second.json()) as { error?: unknown; code?: unknown };
+    assert.equal(body.code, "duplicate");
+    const message = String(body.error ?? "");
+    assert.ok(
+      message.length > "duplicate".length && !/duplicate/i.test(message),
+      `the message must read as user language, got: ${JSON.stringify(body.error)}`,
+    );
+  } finally {
+    routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);
   }
 });

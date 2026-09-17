@@ -700,6 +700,19 @@ export async function preflightSetupWrite(
   return null
 }
 
+/**
+ * Duplicate conflicts stay typed (F-t06-019): `code` drives the drawer's
+ * localized copy while `error` reads as user language for every other
+ * surface of this shared layer (assistant/MCP tools, API consumers) — never
+ * a bare code string.
+ */
+function duplicateConflict(entityKey: string): { status: 409; body: { error: string; code: 'duplicate' } } {
+  const error = entityKey === 'fx-rates' || entityKey === 'consolidated-fx-rates'
+    ? 'An exchange rate for this date, currency pair and type already exists.'
+    : 'This record already exists.'
+  return { status: 409, body: { error, code: 'duplicate' } }
+}
+
 /** Create one setup record (the POST semantics of /api/admin/setup/[entity]). */
 export async function createSetupRecord(
   actor: SetupActor,
@@ -773,7 +786,7 @@ export async function createSetupRecord(
     const dup = ((await db.execute(sql`
       select 1 from ${sql.raw(entity.table)}
        where ${sql.raw(col)} = ${val}${orgFilter}${effectiveFilter} limit 1`)))
-    if (dup.rows.length > 0) return { status: 409, body: { error: 'duplicate', code: 'duplicate' } }
+    if (dup.rows.length > 0) return duplicateConflict(entity.key)
   }
 
   let cols = entity.key === 'fx-rates'
@@ -851,7 +864,7 @@ export async function createSetupRecord(
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
       if (pgErrorCode(e) === '23505' || pgErrorCode(e) === '23P01') {
-        return { status: 409, body: { error: 'duplicate', code: 'duplicate' } }
+        return duplicateConflict(entity.key)
       }
       return { status: 400, body: { error: describeDbError(e) } }
     }
@@ -889,7 +902,7 @@ export async function createSetupRecord(
     // and surfaces here as a deterministic 409, with no partial row or audit
     // (the insert and its audit share one transaction).
     if (pgErrorCode(e) === '23505') {
-      return { status: 409, body: { error: 'duplicate', code: 'duplicate' } }
+      return duplicateConflict(entity.key)
     }
     return { status: 400, body: { error: describeDbError(e) } }
   }
@@ -1090,7 +1103,7 @@ export async function updateSetupRecord(
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
       const code = pgErrorCode(e)
       if (code === '23505' || code === '23P01') {
-        return { status: 409, body: { error: 'duplicate', code: 'duplicate' } }
+        return duplicateConflict(entity.key)
       }
       const message = (e as Error).message
       if (message === 'not found') return { status: 404, body: { error: message } }
@@ -1167,7 +1180,7 @@ export async function updateSetupRecord(
     // occupied natural key (codes are editable on several entities) is a
     // duplicate conflict, not a generic save failure.
     if (pgErrorCode(e) === '23505') {
-      return { status: 409, body: { error: 'duplicate', code: 'duplicate' } }
+      return duplicateConflict(entity.key)
     }
     return { status: 400, body: { error: describeDbError(e) } }
   }
