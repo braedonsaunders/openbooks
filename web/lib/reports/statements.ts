@@ -7,6 +7,7 @@ import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
+import { PNL_TYPES } from "../account-types";
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -23,7 +24,6 @@ export interface StatementRow {
   isSummary: boolean;
 }
 
-export const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"];
 export const CREDIT_NORMAL = new Set([
   "income", "income_other",
   "liability_payable", "liability_card", "liability_current_other", "liability_long_term",
