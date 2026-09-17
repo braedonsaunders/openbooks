@@ -1,0 +1,182 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const { JSDOM } = await import("jsdom");
+const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
+  url: "http://localhost:4800/admin/pdf-templates",
+});
+const globals = globalThis as Record<string, unknown>;
+const domWindow = dom.window as unknown as Record<string, unknown>;
+for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+  if (globals[key] === undefined) globals[key] = domWindow[key];
+}
+if (!window.HTMLElement.prototype.scrollIntoView) {
+  window.HTMLElement.prototype.scrollIntoView = function () {};
+}
+if (typeof dom.window.requestAnimationFrame !== "function") {
+  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
+  dom.window.cancelAnimationFrame = ((id: number) =>
+    clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame;
+}
+if (globals.requestAnimationFrame === undefined) {
+  globals.requestAnimationFrame = dom.window.requestAnimationFrame;
+  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame;
+}
+if (typeof window.matchMedia !== "function") {
+  window.matchMedia = (() => ({
+    matches: false,
+    media: "",
+    addEventListener() {},
+    removeEventListener() {},
+  })) as typeof window.matchMedia;
+}
+
+const { registerHooks } = await import("node:module");
+const { pathToFileURL } = await import("node:url");
+// @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
+// worktree copy so the test runs the code under test.
+const worktreeUi = pathToFileURL(
+  (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
+).href;
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "@openbooks/ui") {
+      return { shortCircuit: true, url: worktreeUi };
+    }
+    if (specifier === "next/navigation") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/admin/pdf-templates'}export function useSearchParams(){return new URLSearchParams()}",
+      };
+    }
+    if (specifier === "next/link") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
+    }
+    return next(specifier, context);
+  },
+});
+
+(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { PromptRoot } = await import("../../../../lib/prompt");
+const { NewTemplateButton } = await import("./TemplateActions");
+const { TemplatesList } = await import("./TemplatesList");
+
+// F-x6-003: the starter row-level Duplicate button is a dead click — no
+// dialog opens, so no request can ever fire. The button must open the name
+// prompt (the request fires only after confirm).
+test("F-x6-003: starter Duplicate opens the name prompt", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    // The provider's overloads only accept children inside the props object.
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages,
+        timeZone: "UTC",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(PromptRoot, {}),
+          React.createElement(NewTemplateButton, {
+            recordType: "customer_invoice",
+            asDuplicateOfStarter: true,
+            defaultName: "Customer invoice starter",
+          }),
+        ),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    const button = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Duplicate"),
+    );
+    assert.ok(button, "row Duplicate button must render");
+    await act(async () => {
+      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.ok(
+      document.body.querySelector('[role="dialog"]'),
+      "name prompt dialog must open on click",
+    );
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
+// Same contract through the real list row (PagedTable cell): the starter
+// row's Duplicate must reach the same prompt.
+test("F-x6-003: starter row Duplicate opens the name prompt in the list", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    // The provider's overloads only accept children inside the props object.
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages,
+        timeZone: "UTC",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(PromptRoot, {}),
+          React.createElement(TemplatesList, {
+            templates: [],
+            starters: [
+              {
+                recordType: "customer_invoice",
+                label: "Customer invoice",
+                sourceHtml: "<p>hi</p>",
+                headerHtml: "",
+                footerHtml: "",
+                isEffectiveDefault: true,
+              },
+            ],
+            recordTypes: [{ key: "customer_invoice", label: "Customer invoice" }],
+          }),
+        ),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    const buttons = [...host.querySelectorAll("button")].filter((b) =>
+      b.textContent?.trim().startsWith("Duplicate"),
+    );
+    assert.ok(buttons.length > 0, "row Duplicate button must render");
+    await act(async () => {
+      buttons[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.ok(
+      document.body.querySelector('[role="dialog"]'),
+      "name prompt dialog must open from the list row",
+    );
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
