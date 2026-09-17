@@ -13,8 +13,8 @@ const { trialBalance } = await import('./reports/statements.ts')
 
 /**
  * F-t08-002: the trial balance is headed "accounts with activity" but dropped
- * zero-balance accounts with real postings (Rassaun 1055 Investments: 5 FY
- * lines incl. a CA$905k credit leg, closed at CA$0.00), understating gross
+ * zero-balance accounts with real postings (an investment account with
+ * several fiscal-year legs that closed at zero), understating gross
  * debit/credit flows. Every account with postings must appear with its
  * debit/credit legs on both TB paths (summary-backed and line-backed).
  */

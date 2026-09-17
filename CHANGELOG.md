@@ -49,6 +49,32 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
 - CAM finalize refusals pin on the pool card instead of vanishing with
   a toast.
 
+### Inventory chain, billing provenance, and hygiene
+
+- Order and invoice drawers have line-level warehouse pickers with
+  save APIs, so stock relief can follow the line that will post COGS.
+- Draft line replacement keeps billed-time/cost provenance, so a
+  billing-request invoice can be saved.
+- Project merge previews key by group and direction; refusals pin on
+  the duplicates screen.
+- Hygiene flags persistently credit-normal unreconciled bank accounts.
+- Asset-category setup labels the default depreciation formula in
+  every locale.
+
+### Reports, analytics, purchasing, and tax
+
+- Vendor drills and compliance open-payables read the shared open-items
+  reader, never reversed entries. Purchasing recovers through the
+  lenient scope and groups the hero off that same set.
+- Registers keep capped-out parties with exact closings. The trial
+  balance keeps zero-balance accounts that had activity. Statements
+  print gross account balances so lines foot to section totals.
+- The OpEx-to-revenue ratio shares one P&L operating-expense reader.
+- Waiver forms are required while enforcement applies. Positive NOL
+  and provision inputs measure as DTA, never DTL.
+- PSP settlement drafts are postable, with typed import refusals.
+- Dashboard money and AR tiles label the as-of cut-off.
+
 ## [0.1.0-alpha.14] - 2026-09-17
 
 Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.

@@ -67,7 +67,7 @@ export async function GET(req: Request) {
     // Open items with days-overdue — off the shared cash-engine reader, not
     // a bespoke aggregate (F-t03-010). The old query joined reversed entries
     // without the document's current posting projection, so an append-only
-    // correction (reversed original + re-post: Rassaun bill 76913) listed the
+    // correction (reversed original + re-post of the same bill) listed the
     // same bill twice under two dates and inflated the dialog total past the
     // dashboard. Filtering the house item set to the party keeps the dialog
     // tied to /ap by construction.

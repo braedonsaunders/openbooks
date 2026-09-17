@@ -80,9 +80,8 @@ test("truncated ledger and party registers retain complete closing balances", { 
 /**
  * The line cap is presentation-only: parties whose detail lines are capped
  * out must still get their section with the exact closing (F-t08-005 —
- * Rassaun's AP register showed 182 of 225 vendors and its closings summed
- * CA$293,617.43 short of the control because capped-out vendors lost their
- * sections entirely).
+ * an AP register dropped capped-out vendors entirely, so closings summed
+ * short of the control).
  */
 test("capped-out register parties keep their sections and exact closings", { skip: !env.OPENBOOKS_DB_URL }, () => {
   const source = `

@@ -16,8 +16,9 @@ const { decimalAdd } = await import('./statement-format.ts')
 /**
  * F-t08-001: fixed-asset cost lines printed NET of their contra while the
  * contra printed again beside them — depreciation subtracted twice from
- * every visual sum (Rassaun 1520 read CA$1,071,884.33 against a CA$3,475,885.89
- * trial balance; asset lines summed CA$1.57M against CA$6.04M total assets).
+ * every visual sum (a cost account printed net of its contra while the
+ * contra printed again, so displayed assets no longer footed to Total
+ * Assets).
  * Gross presentation: each line shows its OWN balance, contras are sibling
  * lines, and the displayed asset lines foot exactly to Total Assets.
  */

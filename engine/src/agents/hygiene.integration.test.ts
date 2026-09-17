@@ -137,11 +137,11 @@ test(
 
 /**
  * A bank-typed account carrying a persistent credit-normal balance that
- * nobody reconciles is either miscategorised (Rassaun 5910 'Provision for
- * Future Income Tax' sat at -CA$40,000 inside asset_bank, so dashboard cash
- * and both cash-flow statements counted a tax provision as cash) or an
- * unmanaged overdraft. Either way the product should say so: the finding is
- * a warning with a review path, never a retype.
+ * nobody reconciles is either miscategorised (a tax-provision liability
+ * sitting inside asset_bank, so dashboard cash and both cash-flow
+ * statements counted a provision as cash) or an unmanaged overdraft.
+ * Either way the product should say so: the finding is a warning with a
+ * review path, never a retype.
  */
 test(
   "bank-typed credit balances flag only when unmanaged and persistent",

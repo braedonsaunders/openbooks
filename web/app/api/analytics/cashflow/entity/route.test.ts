@@ -188,8 +188,8 @@ test("entity drills scope every transaction leg and preserve exact money", async
 });
 
 // F-t03-010: the drill's own live aggregate joined reversed entries without
-// the current posting projection, so an append-only correction (Rassaun bill
-// 76913: reversed original + re-post) listed the same bill twice and inflated
+// the current posting projection, so an append-only correction (reversed
+// original + re-post of the same bill) listed the same bill twice and inflated
 // the dialog total past the dashboard. The drill must read the shared reader
 // and never the reversed-including aggregate.
 test("vendor drills read open items off the shared reader, never reversed entries", async () => {
