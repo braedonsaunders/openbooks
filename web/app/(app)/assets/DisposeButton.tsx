@@ -53,7 +53,7 @@ export function DisposeButton({ assetId, accountOptions }: { assetId: string; ac
       open={open}
       onOpenChange={setOpen}
       trigger={
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => setOpen((v) => !v)}>
           <PackageX size={15} className="mr-1.5" />
           {t('dispose.label')}
         </Button>

@@ -59,7 +59,7 @@ export function RunDepreciationButton({
   return <Popover
     open={open}
     onOpenChange={setOpen}
-    trigger={<Button variant={assetId ? 'outline' : 'default'} disabled={busy}><Play size={15} /> {t('list.runDepreciation')}</Button>}
+    trigger={<Button variant={assetId ? 'outline' : 'default'} disabled={busy} onClick={() => setOpen((v) => !v)}><Play size={15} /> {t('list.runDepreciation')}</Button>}
   >
     <div className="w-72 space-y-3 p-3">
       <div className="space-y-1.5"><Label htmlFor="depreciation-book">{t('run.book')}</Label><Select id="depreciation-book" value={bookId} onChange={(event) => setBookId(event.target.value)}>{books.map((book) => <option key={book.id} value={book.id}>{book.name}</option>)}</Select></div>

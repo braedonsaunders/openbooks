@@ -80,7 +80,7 @@ export function DepreciationInputButton({
       open={open}
       onOpenChange={(next) => void changeOpen(next)}
       trigger={
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => changeOpen(!open)}>
           {production ? <Gauge size={15} className="mr-1.5" /> : <ListPlus size={15} className="mr-1.5" />}
           {production ? t('recordUsage') : t('recordManual')}
         </Button>
