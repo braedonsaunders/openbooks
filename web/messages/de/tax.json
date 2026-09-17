@@ -83,6 +83,11 @@
     "markFiled": "Als eingereicht markieren",
     "markingFiled": "Wird als eingereicht markiert…",
     "filedSuccess": "Einreichung als eingereicht markiert",
+    "errors": {
+      "periodNotClosed": "Die Periode muss geschlossen sein, bevor diese Einreichung als eingereicht markiert werden kann. Schließen Sie die Periode und versuchen Sie es erneut.",
+      "alreadyFiled": "Diese Einreichung ist bereits als eingereicht markiert.",
+      "stale": "Diese Einreichung hat sich seit der Vorbereitung geändert. Aktualisieren Sie sie und bereiten Sie sie erneut vor, bevor Sie sie als eingereicht markieren."
+    },
     "line": "Zeile",
     "lineDescription": "Beschreibung",
     "amount": "Betrag",

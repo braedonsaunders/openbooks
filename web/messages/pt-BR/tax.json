@@ -83,6 +83,11 @@
     "markFiled": "Marcar como enviada",
     "markingFiled": "Marcando como enviada…",
     "filedSuccess": "Declaração marcada como enviada",
+    "errors": {
+      "periodNotClosed": "O período precisa estar fechado antes que esta declaração possa ser marcada como enviada. Feche o período e tente novamente.",
+      "alreadyFiled": "Esta declaração já está marcada como enviada.",
+      "stale": "Esta declaração mudou desde a preparação. Atualize e prepare-a novamente antes de marcá-la como enviada."
+    },
     "line": "Linha",
     "lineDescription": "Descrição",
     "amount": "Valor",

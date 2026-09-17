@@ -83,6 +83,11 @@
     "markFiled": "Marcar como presentada",
     "markingFiled": "Marcando…",
     "filedSuccess": "Presentación marcada como presentada",
+    "errors": {
+      "periodNotClosed": "El período debe estar cerrado antes de poder marcar esta presentación como presentada. Cierre el período e inténtelo de nuevo.",
+      "alreadyFiled": "Esta presentación ya está marcada como presentada.",
+      "stale": "Esta presentación cambió desde su preparación. Actualícela y prepárela de nuevo antes de marcarla como presentada."
+    },
     "line": "Casilla",
     "lineDescription": "Descripción",
     "amount": "Importe",

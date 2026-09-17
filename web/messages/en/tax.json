@@ -92,6 +92,11 @@
     "markFiled": "Mark as filed",
     "markingFiled": "Marking filed…",
     "filedSuccess": "Filing marked as filed",
+    "errors": {
+      "periodNotClosed": "The period must be closed before this filing can be marked filed. Close the period, then try again.",
+      "alreadyFiled": "This filing is already marked filed.",
+      "stale": "This filing changed since it was prepared. Refresh and prepare it again before marking filed."
+    },
     "line": "Line",
     "lineDescription": "Description",
     "amount": "Amount",

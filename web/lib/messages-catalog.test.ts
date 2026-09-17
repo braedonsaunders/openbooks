@@ -512,6 +512,26 @@ test('the filed agreement key is pinned in every locale', () => {
   }
 })
 
+test('mark-filed refusal copy ships localized in every locale', () => {
+  // F-x5-001: the period-not-closed remedy renders from these keys — absent
+  // outside en it falls back to English inside otherwise translated drawers.
+  // Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const keys = ['tax.history.errors.periodNotClosed', 'tax.history.errors.alreadyFiled', 'tax.history.errors.stale']
+  for (const key of keys) {
+    assert.ok(source.get(key), `en is missing ${key}`)
+  }
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
 test('the generated fallback manifest exactly identifies untranslated property-management copy', () => {
   const source = flattenCatalog('en')
   const manifest = readFallbackManifest()
