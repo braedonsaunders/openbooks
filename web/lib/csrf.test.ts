@@ -125,6 +125,44 @@ test("forged origins are rejected, including scheme, port, and suffix spoofs", a
   assert.equal(attacker("::::"), false);
 });
 
+test("loopback literals share one trusted origin", async () => {
+  // Same fleet reality as the route gate: localhost vs 127.0.0.1 on one
+  // machine and port is the same origin. Scheme, port, and real hosts stay
+  // exact.
+  const { hasTrustedOrigin } = await import("./csrf.ts");
+  const environment = { OPENBOOKS_APP_URL: "http://localhost:4780" };
+  assert.equal(
+    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
+      origin: "http://127.0.0.1:4780",
+    }), environment),
+    true,
+  );
+  assert.equal(
+    hasTrustedOrigin(post("http://127.0.0.1:4780/api/password-reset", {
+      origin: "http://localhost:4780",
+    }), { OPENBOOKS_APP_URL: "http://127.0.0.1:4780" }),
+    true,
+  );
+  assert.equal(
+    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
+      origin: "http://127.0.0.1:9999",
+    }), environment),
+    false,
+  );
+  assert.equal(
+    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
+      origin: "https://127.0.0.1:4780",
+    }), environment),
+    false,
+  );
+  assert.equal(
+    hasTrustedOrigin(post("http://localhost:4780/api/password-reset", {
+      origin: "http://attacker.test",
+    }), environment),
+    false,
+  );
+});
+
 test("referer anchors the decision when Origin is absent", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   assert.equal(
