@@ -746,12 +746,27 @@ export function AssistantApp({
   const sidebar = (
     <div className="flex h-full flex-col">
       <div className="p-3">
-        <Link href="/assistant" className="block">
-          <Button variant="outline" className="w-full justify-start gap-2">
+        {aiEnabled ? (
+          <Link href="/assistant" className="block">
+            <Button variant="outline" className="w-full justify-start gap-2">
+              <Plus className="h-4 w-4" />
+              {t('newChat')}
+            </Button>
+          </Link>
+        ) : (
+          // No provider: navigating to the page already showing is a dead
+          // click, so say so inline through the panel's own alert region
+          // (title carries the hint for hover). Zero new strings.
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2"
+            onClick={() => setError(t('errors.notConfigured'))}
+            title={t('errors.notConfigured')}
+          >
             <Plus className="h-4 w-4" />
             {t('newChat')}
           </Button>
-        </Link>
+        )}
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         <div className="px-2 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
