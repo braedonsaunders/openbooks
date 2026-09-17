@@ -11,5 +11,8 @@
   "verify": "Bestätigen",
   "or": "oder",
   "sso": "Einmalanmeldung",
-  "ssoFailed": "Die Einmalanmeldung konnte nicht abgeschlossen werden"
+  "ssoFailed": "Die Einmalanmeldung konnte nicht abgeschlossen werden",
+  "reset": {
+    "requestFailed": "Der Link zum Zurücksetzen konnte nicht angefordert werden — prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+  }
 }

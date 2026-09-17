@@ -11,5 +11,8 @@
   "verify": "验证",
   "or": "或",
   "sso": "单点登录",
-  "ssoFailed": "无法完成单点登录"
+  "ssoFailed": "无法完成单点登录",
+  "reset": {
+    "requestFailed": "无法请求密码重置链接 — 请检查网络连接后重试。"
+  }
 }

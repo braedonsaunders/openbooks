@@ -11,5 +11,8 @@
   "verify": "Verificar",
   "or": "ou",
   "sso": "Login único",
-  "ssoFailed": "Não foi possível concluir o login único"
+  "ssoFailed": "Não foi possível concluir o login único",
+  "reset": {
+    "requestFailed": "Não foi possível solicitar o link de redefinição — verifique sua conexão e tente novamente."
+  }
 }
