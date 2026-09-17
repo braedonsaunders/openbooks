@@ -34,6 +34,7 @@ export {
 export {
   PROJECT_BASE_JOINS,
   PROJECT_BUILT_IN_EXPR,
+  PROJECT_COUNT_JOINS,
   PROJECT_SORTS,
   projectWhere,
 } from "./entity-list-query/projects"

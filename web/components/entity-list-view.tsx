@@ -26,7 +26,7 @@ import {
   customerSorts,
   customerStatusExpr,
 } from '../lib/customization/entity-list-query'
-import { entityListSource, entityOrderClause } from '../lib/list/entity-sources'
+import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/list/entity-sources'
 
 /**
  * The universal ENTITY list — the non-`documents` twin of RecordListView. Renders
@@ -183,13 +183,22 @@ export async function EntityListView({
     ? customerBaseJoins(crmOn)
     : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
 
+  // Planned page ids for sorts SQL cannot serve without a per-row scan (see
+  // `orderedPageIds`): the page reads by id membership ordered by array
+  // position, so no query on this path touches journal lines per row.
+  const plannedIds = source.orderedPageIds
+    ? await source.orderedPageIds({ orgId, sort: params.sort, dir: params.dir, tableSql, baseJoins, where })
+    : null
+  const planned = plannedIds ? plannedPageClauses(plannedIds, idExpr) : null
+  const pageWhere = planned ? planned.where : where
+  const pageOrder = planned ? planned.order : entityOrderClause(source, orderExpr, params.dir)
   const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
     (db.execute(sql`
       select ${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from ${tableSql}
         ${baseJoins}
-       where ${where}
-       order by ${entityOrderClause(source, orderExpr, params.dir)}
+       where ${pageWhere}
+       order by ${pageOrder}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `)),
     source.statusCounts === false
@@ -215,7 +224,8 @@ export async function EntityListView({
   const rows = rowsRes.rows as any[]
   // Server-computed display values (project actual cost reads the same
   // profile-driven reader as the cockpit). Runs after the page fetch so it
-  // touches only displayed rows; SQL keeps serving counts and sort order.
+  // touches only displayed rows; SQL serves counts, and sort-by-actual pages
+  // arrive pre-ordered from `orderedPageIds` (same reader, so order ties).
   if (source.enrichRows) await source.enrichRows(orgId, rows)
   const filteredTotal = Number(totalRow.rows[0].n)
   const total = filteredTotal

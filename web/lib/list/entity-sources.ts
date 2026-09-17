@@ -2,6 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/project-financials.ts'
+import { cmp } from '@openbooks/engine/src/money.ts'
 import type { ListViewConfig } from '@openbooks/customization'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
@@ -14,6 +15,7 @@ import {
   PARTY_SORTS,
   PROJECT_BASE_JOINS,
   PROJECT_BUILT_IN_EXPR,
+  PROJECT_COUNT_JOINS,
   PROJECT_SORTS,
   OPPORTUNITY_BASE_JOINS,
   OPPORTUNITY_BUILT_IN_EXPR,
@@ -158,12 +160,28 @@ export interface EntityListSource {
   rowHref?: (row: Record<string, unknown>) => string
   /**
    * Post-fetch row enrichment, keyed by displayed rows. The project source
-   * uses it to overwrite the SQL `actual` lateral with the profile-driven
+   * uses it to overwrite the SQL `actual` placeholder with the profile-driven
    * actual-cost reader the cockpit Financials tab reads, so the two "Actual
-   * cost" figures tie; SQL keeps serving the sort grain. Sources without
-   * server-computed display values omit it.
+   * cost" figures tie. Sources without server-computed display values omit it.
    */
   enrichRows?: (orgId: string, rows: Record<string, unknown>[]) => Promise<void>
+  /**
+   * Planned page ids for sorts SQL cannot serve without a per-row scan over
+   * a huge table (project Actual cost is profile-driven and FX-translated).
+   * The list fetches the filtered id set through the source's own joins and
+   * WHERE, resolves the sort values in ONE batched reader over that set,
+   * and reads the page by id membership ordered by array position — never a
+   * correlated per-row sum (F-t03-013). Return null to fall back to SQL
+   * ordering. Only consulted when defined.
+   */
+  orderedPageIds?: (ctx: {
+    orgId: string
+    sort: string
+    dir: "asc" | "desc"
+    tableSql: SQL
+    baseJoins: SQL
+    where: SQL
+  }) => Promise<string[] | null>
 }
 
 /**
@@ -286,10 +304,27 @@ const SOURCES: Record<string, EntityListSource> = {
     alias: 'p',
     customFieldTable: 'projects',
     baseJoins: PROJECT_BASE_JOINS,
+    countJoins: PROJECT_COUNT_JOINS,
     builtInExpr: PROJECT_BUILT_IN_EXPR,
     sorts: PROJECT_SORTS,
     defaultSort: sql`p.name`,
     where: projectWhere,
+    orderedPageIds: async ({ orgId, sort, dir, tableSql, baseJoins, where }) => {
+      if (sort !== 'actual') return null
+      // The filtered id set through the list's own joins/WHERE (projects
+      // only — no journal lines), then ONE batched profile-driven cost read
+      // over that set. Sorting by the same reader the rows display keeps the
+      // order tied to the cockpit by construction.
+      const found = await db.execute<{ id: string }>(sql`
+        select p.id from ${tableSql} ${baseJoins} where ${where}`)
+      const ids = [...new Set(found.rows.map((r) => String(r.id ?? '')).filter((id) => id.length > 0))]
+      if (ids.length === 0) return []
+      const costs = await resolveProjectActualCosts(orgId, ids)
+      const rank = (id: string) => costs.get(id) ?? '0'
+      const sign = dir === 'asc' ? 1 : -1
+      ids.sort((a, b) => sign * cmp(rank(a), rank(b)) || sign * (a < b ? -1 : a > b ? 1 : 0))
+      return ids
+    },
     quickFilters: [
       { paramKey: 'status', filterKey: 'status' },
       { paramKey: 'billing', filterKey: 'project_type' },
@@ -795,6 +830,20 @@ export function entityListSource(recordType: string): EntityListSource | undefin
  * id expression falls back to `<alias>.id` for sources whose selected row id
  * is the table primary key.
  */
+/**
+ * Page scoping for a planned id list (see `orderedPageIds`): id membership
+ * plus array-position ordering, so the page reads exactly the planned rows
+ * in planned order. Shared by the list view and its tests — keep the shape
+ * in one place.
+ */
+export function plannedPageClauses(ids: string[], idExpr: SQL): { where: SQL; order: SQL } {
+  const array = `{${ids.join(',')}}`;
+  return {
+    where: sql`${idExpr} = any(${array}::uuid[])`,
+    order: sql`array_position(${array}::uuid[], ${idExpr})`,
+  };
+}
+
 export function entityOrderClause(
   source: Pick<EntityListSource, 'alias' | 'idExpr'>,
   orderExpr: SQL,
