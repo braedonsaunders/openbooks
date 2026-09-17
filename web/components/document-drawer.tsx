@@ -1423,6 +1423,9 @@ export function DocumentDrawer({
     }
     setBusy(true)
     setSaveState('saving')
+    // A fresh attempt clears the previous refusal: the alert pins until the
+    // next action, not past a successful save (F-t03-002).
+    setActionError(null)
     // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
     // explicit { abort } blocks; { warnings } toast and proceed; fail-open.
     const gate = await runClientScripts(config.kind, payload_)
@@ -1483,6 +1486,9 @@ export function DocumentDrawer({
       router.refresh()
     } else {
       const failure = await readDocumentSaveFailure(res, t('toasts.actionFailed'))
+      // A save refusal stays on the record, not only in a toast (F-t03-002):
+      // the typed reason pins as an alert until the next action or edit.
+      setActionError(failure.message)
       setSaveState('error')
       toast.error(failure.message)
     }
@@ -2057,8 +2063,10 @@ export function DocumentDrawer({
         // HARD RULE: no subsidiary UI in single-subsidiary orgs, even if a
         // form layout carries the field. Locked (read-only) once posted — the
         // subsidiary shapes the GL and intercompany balancing.
+        // An unset subsidiary reads as unset (F-t03-003): the empty option
+        // must never borrow the root name, or the picker lists "Main Co"
+        // twice and the pre-selected entry saves as null.
         if (!multiSub) return null
-        const rootName = subsidiaries?.[0]?.name ?? '—'
         return (
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
@@ -2068,10 +2076,9 @@ export function DocumentDrawer({
                 value={subsidiaryId}
                 onChange={(v) => setSubsidiaryId(v ?? '')}
                 clearable
-                emptyLabel={rootName}
-                placeholder={rootName}
+                placeholder="—"
               />
-            ) : (<p className="text-sm">{subsidiaryId ? subsidiaryName(subsidiaryId) : rootName}</p>)}
+            ) : (<p className="text-sm">{subsidiaryId ? subsidiaryName(subsidiaryId) : '—'}</p>)}
           </>
         )
       }
