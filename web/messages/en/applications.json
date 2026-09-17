@@ -34,6 +34,7 @@
     "empty": "No schedule-of-values lines yet.",
     "defaultIncomeAccount": "Default income account",
     "addLine": "Add line", "editLine": "Edit line", "lockedValuesHint": "Value fields are controlled once billing begins — only the income account can change here.",
+    "lockedHint": "Billing has begun — contract value now changes through an approved change order.",
     "workspaceHint": "The contract schedule that controls cumulative billing for this project.",
     "formHint": "Add one contract line without leaving the project billing workspace.",
     "cancel": "Cancel"

@@ -224,6 +224,7 @@ export function ApplicationsBillingWorkspace({
               onChange={post}
               canCreate={canCreate}
               busy={busy}
+              billingBegan={data.payApplications.length > 0}
             />
           ) : null}
           {tab === "changes" ? (
@@ -291,6 +292,7 @@ function ScheduleSection({
   onChange,
   canCreate,
   busy,
+  billingBegan,
 }: {
   projectId: string;
   lines: SovLine[];
@@ -356,8 +358,13 @@ function ScheduleSection({
       <SectionHeader
         title={t("title")}
         description={t("workspaceHint")}
-        action={canCreate ? <Button size="sm" onClick={() => setFormOpen(true)}>{t("addLine")}</Button> : undefined}
+        action={canCreate ? <Button size="sm" onClick={() => setFormOpen(true)} disabled={billingBegan} title={billingBegan ? t("lockedHint") : undefined}>{t("addLine")}</Button> : undefined}
       />
+      {canCreate && billingBegan ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          {t("lockedHint")}
+        </p>
+      ) : null}
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
         <Table>
           <TableHeader>
