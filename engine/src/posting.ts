@@ -2118,6 +2118,13 @@ export async function postDocument(
       throw new PostingError("posting requires exactly one active primary posting book");
     const book = books[0]!;
     const period = await resolvePostingPeriod(tx, effectiveDoc, postingDate);
+    // Hold the shared period fence BEFORE the authoritative module check and
+    // keep it through commit: a module-only close takes the exclusive side,
+    // so it either waits for this posting or this check re-reads its commit.
+    // Without this, a close could land between the check below and the
+    // journal insert while the storage guard rechecked GL only (0168
+    // rechecks the source module in storage as the second half of this fix).
+    await tx.execute(sql`select period_posting_fence(${doc.orgId}, ${period.id}, ${book.id})`);
     try {
       await assertPeriodModulesOpen(tx, {
         orgId: doc.orgId,

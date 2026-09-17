@@ -351,6 +351,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0165_jl_guard_original_parent_immutability.sql",
     "0166_journal_reversal_evidence_guard.sql",
     "0167_document_revision_counter.sql",
+    "0168_close_posting_module_recheck.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
