@@ -84,6 +84,31 @@ test('no readiness message names a country-specific payroll program', () => {
   )
 })
 
+/**
+ * The readiness panel promises every item links to where it is fixed
+ * (F-t08-005: the period blocker stranded the user with plain text), so the
+ * period blockers must carry the periods setup href — and it must be the
+ * live screen, not the dead /admin/close route period.closed once used.
+ */
+test('period blockers resolve to the periods setup screen that can fix them', () => {
+  const source = readFileSync(READINESS, 'utf8')
+  for (const code of ['period.missing', 'period.closed']) {
+    const at = source.indexOf(`"${code}"`)
+    assert.ok(at >= 0, `the engine no longer emits ${code} — update this test`)
+    const call = source.slice(at, at + 400)
+    assert.match(
+      call,
+      /href: ['"]\/admin\/setup\/period-close['"]/,
+      `${code} must link to the periods setup screen`,
+    )
+    assert.ok(!call.includes('/admin/close'), `${code} must not link to the dead /admin/close route`)
+  }
+  assert.ok(
+    !/href: ['"]\/admin\/close['"]/.test(source),
+    'no readiness flag may link to the dead /admin/close route',
+  )
+})
+
 test('every readiness code the engine emits has a message', () => {
   const codes = emittedCodes(readFileSync(READINESS, 'utf8'))
   // A scan that silently matched nothing would pass this file vacuously.
