@@ -42,7 +42,9 @@ registerHooks({
   },
 });
 
-const { db, withOrgTransaction } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import(
+  "@openbooks/engine/src/db.ts"
+);
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { withReportAuthz } = await import("./report-execution-context");
@@ -68,32 +70,37 @@ const plan = (groupBy: string | null = null, lotFilter: string | null = null) =>
 });
 
 async function fixture(rows: number) {
-  const org = await createScratchOrg();
+  // Fixture seeding runs under bypass (exactly what the pooled fixture path
+  // does): the shared cluster enforces RLS and CI's superuser role hides it.
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const uid = await createScratchUser(org.orgId, "Recall exporter", "recall_exporter");
-    await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='recall_exporter'`);
+    const uid = await withBypassContext(async () => {
+      const id = await createScratchUser(org.orgId, "Recall exporter", "recall_exporter");
+      await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='recall_exporter'`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+      await db.execute(sql`
+        update item_inventory_profiles set tracking = 'lot', updated_at = now()
+         where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
+      await db.execute(sql`
+        insert into lots (org_id, item_id, lot_number, expires_on)
+        select ${org.orgId}, ${org.items.fifo}, 'LOT-' || lpad(g::text, 4, '0'), date '2027-01-01' + (g % 365)
+        from generate_series(1, 40) g`);
+      await db.execute(sql`
+        insert into inventory_movements (org_id, item_id, kind, moved_at, stock_location_id, lot_id, quantity, unit_cost, total_value, status, memo)
+        select ${org.orgId}::uuid, ${org.items.fifo}::uuid,
+          case when g % 2 = 0 then 'receipt' else 'issue' end,
+          timestamptz '2026-01-01' + (g || ' seconds')::interval,
+          ${org.stockLocationId}::uuid, lot.id,
+          case when g % 2 = 0 then 5 else -2 end,
+          '10.5000', '52.5000', 'posted',
+          case when g = 777 then '=cmd|evil' end
+        from generate_series(1, ${rows}) g
+        join (select id, row_number() over (order by lot_number) as rn from lots where org_id = ${org.orgId}::uuid) lot
+          on lot.rn = (g % 40) + 1`);
+      return id;
+    });
     state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: "Recall exporter", email: "recall@example.test",
       roles: [], envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid };
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
-    await db.execute(sql`
-      update item_inventory_profiles set tracking = 'lot', updated_at = now()
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
-    await db.execute(sql`
-      insert into lots (org_id, item_id, lot_number, expires_on)
-      select ${org.orgId}, ${org.items.fifo}, 'LOT-' || lpad(g::text, 4, '0'), date '2027-01-01' + (g % 365)
-      from generate_series(1, 40) g`);
-    await db.execute(sql`
-      insert into inventory_movements (org_id, item_id, kind, moved_at, stock_location_id, lot_id, quantity, unit_cost, total_value, status, memo)
-      select ${org.orgId}::uuid, ${org.items.fifo}::uuid,
-        case when g % 2 = 0 then 'receipt' else 'issue' end,
-        timestamptz '2026-01-01' + (g || ' seconds')::interval,
-        ${org.stockLocationId}::uuid, lot.id,
-        case when g % 2 = 0 then 5 else -2 end,
-        '10.5000', '52.5000', 'posted',
-        case when g = 777 then '=cmd|evil' end
-      from generate_series(1, ${rows}) g
-      join (select id, row_number() over (order by lot_number) as rn from lots where org_id = ${org.orgId}::uuid) lot
-        on lot.rn = (g % 40) + 1`);
     const authz = { user: state.user, permissions: new Set(["reports.read"]), allowedSubsidiaryIds: null } as import("./authz").Authz;
     return { org, authz };
   } catch (err) {
@@ -243,10 +250,10 @@ test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered
   const fx = await fixture(1200);
   try {
     const { GET } = await import("../app/api/reports/definitions/[id]/export/route");
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await withOrgContext(fx.org.orgId, () => db.execute<{ id: string }>(sql`
       insert into report_definitions (org_id, slug, name, query)
       values (${fx.org.orgId}, 'recall-stream', 'Recall', ${JSON.stringify(plan())}::jsonb)
-      returning id`);
+      returning id`));
     const defId = inserted.rows[0]!.id;
     const params = { params: Promise.resolve({ id: defId }) };
     const run = <T>(action: () => Promise<T>): Promise<T> =>
