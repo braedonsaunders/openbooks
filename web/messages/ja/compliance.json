@@ -1,0 +1,362 @@
+{
+  "title": "下請業者コンプライアンス",
+  "description": "支払先の方々に求める保険証券、留置権放棄書、および年末の情報申告書を管理します。",
+  "tabs": {
+    "overview": "概要",
+    "vendors": "下請業者",
+    "lienWaivers": "留置権放棄書",
+    "informationReturns": "情報申告書"
+  },
+  "setup": {
+    "prompt": "まだ何も適用されていません。取引先区分と、各区分に必要な証明書を定義してください。",
+    "action": "コンプライアンスを設定"
+  },
+  "stats": {
+    "tracked": "管理中の下請業者",
+    "trackedHint": "有効な保険証券 {count} 件",
+    "compliant": "適合",
+    "compliantHint": "まもなく期限切れ {expiring} 件",
+    "blocked": "停止中",
+    "blockedHint": "影響を受ける請求書 {bills} 件",
+    "exposure": "停止中の支払額",
+    "exposureHint": "解除できない買掛金"
+  },
+  "panels": {
+    "blocked": "管理により保留中の支払",
+    "blockedHint": "本日時点の証憑に基づきリアルタイムで再評価しています",
+    "blockedEmpty": "保留中の支払はありません。未払いの下請仕入請求書はすべて支払可能です。",
+    "expiring": "今月期限切れの証明書",
+    "expiringHint": "失効する前にご対応ください",
+    "expiringEmpty": "警告期間内の証明書はありません。",
+    "waivers": "未完了の留置権放棄書",
+    "waiversHint": "要求済みまたは受領済みで未署名のものです",
+    "waiversEmpty": "署名待ちの放棄書はありません。",
+    "waiversAction": "すべての放棄書",
+    "readiness": "1099 対応状況 — {year}",
+    "readinessHint": "1月までに是正してください",
+    "readinessEmpty": "申告対象の仕入先は申告に必要な情報をすべて備えています。",
+    "readinessAction": "申告書"
+  },
+  "empty": {
+    "title": "管理中の下請業者はまだありません",
+    "description": "仕入先にコンプライアンス区分を割り当てると、証明書の要求を開始できます。"
+  },
+  "states": {
+    "compliant": "適合",
+    "expiring": "期限切れ間近",
+    "waived": "例外適用中",
+    "missing": "未提出",
+    "expired": "期限切れ",
+    "insufficient": "不足",
+    "awaiting_verification": "未検証",
+    "rejected": "却下済み"
+  },
+  "reasons": {
+    "no_evidence": "ファイルなし",
+    "rejected": "却下済み",
+    "awaiting_verification": "検証待ち",
+    "not_yet_effective": "未発効",
+    "expired": "期限切れ",
+    "coverage_below_minimum": "1事故あたりの限度額が最低額を下回っています",
+    "aggregate_below_minimum": "通算限度額が最低額を下回っています",
+    "coverage_currency_mismatch": "限度額が他通貨建てです",
+    "coverage_amount_missing": "証明書に限度額の記載がありません",
+    "missing_additional_insured": "追加被保険者の指定がありません",
+    "missing_waiver_of_subrogation": "代位求償権放棄の記載がありません",
+    "missing_primary_noncontributory": "プライマリーかつノンコントリビューアリーの記載がありません"
+  },
+  "decision": {
+    "cleared": "問題なし",
+    "warned": "警告",
+    "blocked": "停止中",
+    "overridden": "例外承認済み"
+  },
+  "certificateStatus": {
+    "pending_review": "検証待ち",
+    "active": "検証済み",
+    "rejected": "却下済み",
+    "superseded": "更新済み"
+  },
+  "waiverStatus": {
+    "draft": "下書き",
+    "requested": "要求済み",
+    "received": "受領済み",
+    "signed": "署名済み",
+    "rejected": "却下済み",
+    "void": "無効"
+  },
+  "filingStatus": {
+    "draft": "下書き",
+    "computed": "計算済み",
+    "finalized": "確定済み",
+    "filed": "提出済み",
+    "void": "無効"
+  },
+  "recipientStatus": {
+    "included": "申告対象",
+    "excluded": "対象外",
+    "corrected": "訂正済み",
+    "void": "無効"
+  },
+  "filingChannel": {
+    "iris": "IRS IRIS",
+    "fire": "IRS FIRE",
+    "provider": "申告代行業者",
+    "paper": "書面",
+    "other": "その他"
+  },
+  "direction": {
+    "received": "下請業者から受領",
+    "issued": "当社が発行"
+  },
+  "waiverType": {
+    "conditional_progress": "条件付き — 中間",
+    "unconditional_progress": "無条件 — 中間",
+    "conditional_final": "条件付き — 最終",
+    "unconditional_final": "無条件 — 最終"
+  },
+  "waiverTypeHint": {
+    "conditional_progress": "支払が銀行で決済された後に限り、その日までの作業を解除します。",
+    "unconditional_progress": "支払が実際に履行されなくても、その日までの作業を直ちに解除します。",
+    "conditional_final": "最終支払の決済後に、保留金を含む契約全体を解除します。",
+    "unconditional_final": "保留金を含む契約全体を、直ちに無条件で解除します。"
+  },
+  "taxClassification": {
+    "individual": "個人",
+    "sole_proprietor": "個人事業主",
+    "partnership": "パートナーシップ",
+    "c_corp": "C法人",
+    "s_corp": "S法人",
+    "llc": "LLC",
+    "trust_estate": "信託または財団",
+    "government": "政府機関",
+    "nonprofit": "非営利団体",
+    "other": "その他"
+  },
+  "tinType": {
+    "ein": "EIN",
+    "ssn": "SSN",
+    "itin": "ITIN",
+    "atin": "ATIN",
+    "sin": "SIN（カナダ）",
+    "bn": "事業番号（カナダ）",
+    "unknown": "不明"
+  },
+  "readiness": {
+    "unflagged": "支払額が基準額を超えていますが申告対象としてフラグされていません",
+    "missingTin": "TINが登録されていません",
+    "noForm": "情報申告書が割り当てられていません"
+  },
+  "vendors": {
+    "title": "下請業者コンプライアンス一覧",
+    "description": "管理中の下請業者ごとに1行、要件ごとに1列で表示します。支払バッチと同じ評価です。",
+    "columns": {
+      "vendor": "下請業者",
+      "class": "区分",
+      "status": "ステータス",
+      "exposure": "未払残高"
+    },
+    "filters": {
+      "class": "区分",
+      "allClasses": "すべての区分",
+      "state": "ステータス",
+      "allStates": "すべてのステータス",
+      "attention": "要対応",
+      "expiring": "まもなく期限切れ"
+    },
+    "empty": {
+      "title": "一致する管理中の下請業者はありません",
+      "description": "仕入先のコンプライアンスタブでコンプライアンス区分を割り当てると、この一覧に追加されます。"
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "certificates": "証明書",
+      "identification": "税務情報",
+      "exceptions": "例外",
+      "aria": "コンプライアンスのセクション"
+    }
+  },
+  "certificates": {
+    "empty": "この下請業者の証明書はまだ登録されていません。",
+    "recordTitle": "証明書を記録",
+    "record": "証明書を記録",
+    "recordHint": "検証待ちとして記録されます。有効になるには、他の担当者による検証が必要です。",
+    "noPolicies": "この下請業者の区分に適用される要件はまだありません。",
+    "noExpiry": "期限なし",
+    "limits": "1事故あたり {occurrence} ・ 通算 {aggregate}",
+    "additionalInsured": "追加被保険者",
+    "waiverOfSubrogation": "代位求償権の放棄",
+    "primaryNoncontributory": "プライマリーかつノンコントリビューアリー",
+    "verify": "検証する",
+    "reject": "却下する",
+    "rejectTitle": "この証明書を却下",
+    "rejectReason": "却下する理由を入力してください",
+    "verifiedBy": "{who} が {when} に検証済み",
+    "selfVerifyBlocked": "証明書は、記録した本人以外の担当者が検証する必要があります。"
+  },
+  "exceptions": {
+    "intro": "例外は、支払停止となる要件を通過する唯一の手段です。必ず有効期限が設定され、記録に残ります。",
+    "empty": "有効な例外はありません。",
+    "grantTitle": "例外を付与",
+    "grant": "例外を付与",
+    "grantHint": "最長120日です。それ以上の停止は例外ではなく要件の変更として扱います。",
+    "revoke": "取り消す",
+    "revokeTitle": "この例外を取り消す",
+    "revokeReason": "取り消す理由を入力してください",
+    "window": "{from} → {to}"
+  },
+  "lienWaivers": {
+    "title": "留置権放棄書",
+    "description": "建設工事の支払いと引き換えに交換される法定の解除証書です — 下請業者から受領し、発注者に発行します。",
+    "new": "新規放棄書",
+    "create": "放棄書を作成",
+    "columns": {
+      "number": "放棄書",
+      "direction": "方向",
+      "party": "取引先",
+      "project": "プロジェクト",
+      "type": "形式",
+      "through": "対象期日",
+      "amount": "金額",
+      "status": "ステータス",
+      "jurisdiction": "準拠法",
+      "bill": "対象請求書",
+      "requested": "要求日"
+    },
+    "filters": {
+      "direction": "方向",
+      "allDirections": "すべての方向",
+      "status": "ステータス",
+      "allStatuses": "すべてのステータス"
+    },
+    "empty": {
+      "title": "留置権放棄書はまだありません",
+      "description": "下請業者に解除証書を要求する場合、または支払申請とともに発行する場合に作成してください。"
+    },
+    "jurisdictionHint": "様式が準拠する法域（例：US-CA、CA-ON）です。文書に印刷されます。",
+    "editTitle": "解除条件",
+    "notesHint": "放棄書に印刷される除外事項と係争中の請求です。",
+    "copyFromBill": "請求書から金額をコピー…",
+    "request": "要求済みにする",
+    "receive": "受領済みにする",
+    "reject": "却下する",
+    "rejectTitle": "この放棄書を却下",
+    "rejectReason": "却下する理由を入力してください",
+    "void": "無効化する",
+    "voidTitle": "この放棄書を無効化",
+    "voidReason": "無効化する理由を入力してください",
+    "recordSignature": "締結済みの放棄書を記録",
+    "recordSignatureHint": "署名済みとしてマークすると、停止中の支払が解除されます。締結済みの文書を入手してから行ってください。",
+    "signedByName": "署名者",
+    "signedByTitle": "役職",
+    "signedAt": "署名日",
+    "notarized": "公証済み",
+    "markSigned": "署名済みにする",
+    "signedBy": "{who} {title} が {when} に署名済み",
+    "printForm": "様式を印刷",
+    "executedCopy": "締結済みの写し",
+    "executedCopyHint": "署名済みの放棄書のスキャンをここに添付してください。ファイルキャビネットに保管され、この記録にリンクされます。",
+    "errors": {
+      "partyAndProject": "取引先とプロジェクトの両方を選択してください — 留置権は特定のプロジェクトに対する請求権です。"
+    }
+  },
+  "informationReturns": {
+    "title": "情報申告書",
+    "description": "暦年に実際に支払った現金から計算される1099-NEC、1099-MISCおよびT4Aです。",
+    "new": "申告を開始",
+    "create": "申告を開始",
+    "orgRoot": "組織全体",
+    "columns": {
+      "year": "年",
+      "form": "様式",
+      "entity": "申告事業体",
+      "recipients": "受領者",
+      "total": "申告額",
+      "status": "ステータス",
+      "attention": "要対応",
+      "vendor": "仕入先",
+      "issue": "課題",
+      "classification": "区分",
+      "paid": "支払額",
+      "recipient": "受領者",
+      "tin": "TIN"
+    },
+    "empty": {
+      "title": "申告書はまだありません",
+      "description": "完了した暦年の申告を開始し、元帳から計算してください。"
+    },
+    "excluded": "+{count} 件が対象外",
+    "missingTin": "TINなし {count} 件",
+    "readinessTitle": "対応状況 — {year}",
+    "readinessDescription": "対応しなければ申告を誤らせる仕入先です。",
+    "readinessClear": "申告対象の仕入先はすべてTINと様式が割り当てられています。",
+    "detailDescription": "{entity} ・ 申告基準額 {threshold}",
+    "compute": "元帳から計算",
+    "recompute": "再計算",
+    "computed": "{count} 件の受領者を計算し、確認が必要な例外が {exceptions} 件あります。",
+    "finalize": "確定",
+    "markFiled": "提出済みとして記録",
+    "printCopies": "受領者用の写し",
+    "exportTransmittal": "送付ファイル",
+    "void": "申告を無効化",
+    "voidTitle": "この申告を無効化",
+    "voidReason": "無効化する理由を入力してください",
+    "frozenNotice": "この申告は凍結されています。金額と除外は送信内容を反映しています。訂正は新しい申告で行ってください。",
+    "noRecipients": "まだ計算されていません。申告を計算して年間の支払を集計してください。",
+    "computedNoRecipients": "計算済み — 申告基準額に達した受領者はいませんでした。",
+    "adjust": "調整",
+    "adjustDescription": "調整は元帳金額に対する符号付きの差分として記録されるため、追跡可能性が損なわれることはありません。",
+    "adjustReason": "調整の理由",
+    "delta": "差分",
+    "ledgerFigure": "元帳：{value}",
+    "exclude": "この受領者を申告から除外",
+    "exclusionReason": "除外の理由",
+    "channel": "申告チャネル",
+    "reference": "確認参照番号",
+    "referenceHint": "チャネルが返した受領証または送信IDです。",
+    "filedVia": "{channel} で申告 ・ {reference}",
+    "footnote": "金額は暦年に支払った現金であり、各請求書の費用勘定への申請を通じて追跡されています。アスタリスクは担当者が調整した金額を示します。"
+  },
+  "fields": {
+    "requirement": "要件",
+    "select": "選択…",
+    "none": "なし",
+    "issuer": "保険会社または発行機関",
+    "policyNumber": "証券番号または証明書番号",
+    "effectiveFrom": "発効日",
+    "expiresOn": "有効期限",
+    "expiryRequired": "この要件には有効期限が必要です。",
+    "coverageAmount": "1事故あたりの限度額",
+    "aggregateAmount": "通算限度額",
+    "coverageCurrency": "限度額の通貨",
+    "coverageCurrencyHint": "{currency} である必要があります — 限度額の比較で換算されることはありません。",
+    "project": "プロジェクト",
+    "allProjects": "すべてのプロジェクト",
+    "supersedes": "更新対象",
+    "notes": "備考",
+    "reason": "理由",
+    "save": "保存",
+    "complianceClass": "コンプライアンス区分",
+    "complianceClassHint": "区分なしの場合、この仕入先は管理対象外となり、支払が停止されることはありません。",
+    "notTracked": "管理対象外",
+    "taxClassification": "税務上の区分",
+    "unknown": "不明",
+    "reportable": "情報申告書の申告対象",
+    "informationReturnForm": "様式",
+    "inheritClass": "区分から継承",
+    "notReportable": "申告対象外",
+    "informationReturnBox": "既定の欄",
+    "defaultBox": "様式の既定値",
+    "tinType": "TINの種類",
+    "tin": "納税者番号",
+    "tinPlaceholder": "9桁の数字",
+    "tinHint": "保存時は暗号化されます。以降は下4桁のみ表示されます。",
+    "backupWithholding": "バックアップ源泉徴収の対象"
+  },
+  "errors": {
+    "saveFailed": "保存できませんでした。",
+    "pickRequirement": "この証明書が満たす要件を選択してください。",
+    "exceptionIncomplete": "例外には要件と終了日が必要です。"
+  }
+}

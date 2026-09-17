@@ -54,9 +54,11 @@ import reports from './reports.json'
 import salesOrders from './salesOrders.json'
 import sync from './sync.json'
 import tax from './tax.json'
+import fieldTickets from './fieldTickets.json'
 import timesheets from './timesheets.json'
 import laborPricing from './labor-pricing.json'
 import applications from './applications.json'
+import compliance from './compliance.json'
 
 export default {
   common,
@@ -113,6 +115,8 @@ export default {
   salesOrders,
   sync,
   tax,
+  fieldTickets,
   timesheets,
   applications,
+  compliance,
 } as const
