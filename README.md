@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.10` image digest in
+2. resolves and records the official `0.1.0-alpha.11` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -735,17 +735,12 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.10` is the current community preview. It keeps the allocations
-release from `v0.1.0-alpha.8`/`v0.1.0-alpha.9` and adds a version-tag
-release path: the tagged commit's attested image is published, then the
-swarm pin is swapped only after migrations from that exact digest succeed
-and the health endpoint reports the tag. It also ships integrity fixes for
-period-run posting after a rule is retired, report-backed allocation
-drivers, payment bank-return evidence, sync identity writes, and a few
-adjacent platform edges, plus two additive migrations: original-parent
-immutability on posted journal lines (0165) and a strictly increasing
-`revision_seq` counter for optimistic concurrency (0167). See the changelog
-for the areas touched and the operator notes.
+`v0.1.0-alpha.11` is the current community preview. It keeps the
+version-tag release path from `v0.1.0-alpha.10` and adds the fleet-6 UI
+and session-gate fixes (AR as-of book, approvals empty states, form
+designer PATCH/remount/delete/visibility, banking root error boundary,
+document line amounts, project activation) plus a configurable
+per-process database pool. See the changelog for the areas touched.
 
 Good uses today:
 
