@@ -8,7 +8,7 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–35: setup, banking, assistant, payroll, CRM, reports,
+Fleet-6 batches 9–39: setup, banking, assistant, payroll, CRM, reports,
 dashboard, documents, allocations, construction/AR, rates, assets,
 payroll, i18n, drawers/search/mobile, expenses, compliance, invites,
 agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
@@ -98,6 +98,18 @@ agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
   tables stay readable on a phone; cash cockpit, bank feeds, project
   billing, setup sidebar, and report filter presets translate.
 - Drawer banners wrap at 390px instead of squeezing.
+
+### Invites, remittance, banking, and tax (batches 36–39)
+
+- Pending invites expose a one-time set-password link and resend;
+  reset-request failures no longer claim the link is on its way; a blank
+  company display name pins an inline required error.
+- Remittance vendor listbox reads parties+vendor_roles; card-liability
+  is offered when no card instruments exist; reconcile never swallows
+  an unreadable error; KPI titles wrap and trend ticks stay thin.
+- Failed flow runs can be retried; mark-as-filed refusals are typed in
+  the filing drawer; delete-payment confirm resolves through the drawer
+  scope.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 
