@@ -532,6 +532,23 @@ test('tax recoverable-percent refusal copy ships localized in every locale', () 
   }
 })
 
+test('project rate-card lapse label ships localized in every locale', () => {
+  // F-t11-002: the project-type Invoicing tab read projectTypes.rateCardLapse
+  // while the sentence lives at projects.invoicing.rateCardLapse. The editor
+  // reuses that key, so it must stay present and localized.
+  const source = flattenCatalog('en')
+  const keys = ['projects.invoicing.rateCardLapse']
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
 test('the seeded default-form label is translated in every locale', () => {
   const source = flattenCatalog('en')
   assert.equal(source.get('common.labels.defaultForm'), DEFAULT_FORM_NAME_EXPECTATIONS.en)

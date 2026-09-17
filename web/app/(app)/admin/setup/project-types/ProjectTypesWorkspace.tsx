@@ -158,6 +158,7 @@ export function ProjectTypesWorkspace({
   const t = useTranslations('projectTypes')
   const tCommon = useTranslations('common')
   const tMeasures = useTranslations('projects.measures')
+  const tProjectInvoicing = useTranslations('projects.invoicing')
   const router = useRouter()
   const today = useBusinessToday()
   const [list, setList] = useState(types)
@@ -471,7 +472,10 @@ export function ProjectTypesWorkspace({
                 onChange={(v) => setIp({ markupPresentation: v as unknown as "embedded" | "lump_sum" | undefined })} />
               <EnumField label={t('notToExceed')} value={ip.notToExceed ? 'yes' : 'no'} options={['no', 'yes']}
                 onChange={(v) => setIp({ notToExceed: v === 'yes' })} />
-              <EnumField label={t('rateCardLapse')} value={ip.rateCardLapse ?? 'block'}
+              {/* The label lives with the invoicing-preference it names
+                  (projects.invoicing.rateCardLapse, all locales) — the same
+                  setting the project/customer overrides edit (F-t11-002). */}
+              <EnumField label={tProjectInvoicing('rateCardLapse')} value={ip.rateCardLapse ?? 'block'}
                 options={['block', 'carry_forward']}
                 onChange={(v) => setIp({ rateCardLapse: v as 'block' | 'carry_forward' })} />
 
