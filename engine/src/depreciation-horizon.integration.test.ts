@@ -128,6 +128,34 @@ for(const missing of ['line','period'] as const) {
   });
 }
 
+test('run extends schedules past periods created after the build',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+  // F-t09-005 engine: the builder only projects months whose accounting
+  // periods exist, and nothing else rebuilds the schedule — so a run after
+  // month-end rollover found no September-style line and reported "nothing
+  // due" with a 200 while an open period accrued. The run must extend stale
+  // formula schedules to cover existing periods before collecting candidates.
+  const org=await createScratchOrg();
+  try {
+    const actorId=(await seedFlowActors(org.orgId)).adminId;
+    const categoryId=randomUUID(),assetId=randomUUID();
+    await db.execute(sql`insert into asset_categories
+      (id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,default_convention)
+      values (${categoryId},${org.orgId},'Extension equipment',${org.accounts.invAsset},${org.accounts.clearing},${org.accounts.adjustment},${org.accounts.adjustment},'straight_line',10,'full_month')`);
+    await db.execute(sql`insert into fixed_assets
+      (id,org_id,subsidiary_id,category_id,asset_number,name,status,acquired_on,in_service_on,acquisition_cost,salvage_value,depreciation_method,useful_life_months,depreciation_convention)
+      values (${assetId},${org.orgId},${org.subsidiaryId},${categoryId},'EXTEND','Extension asset','in_service',${org.date},${org.date},1000,0,'straight_line',10,'full_month')`);
+    // The scratch org ships a single open period (2026-07): the build covers July only.
+    await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+    assert.equal((await rows(org,assetId)).length,1);
+    // August arrives later via month-end rollover; nothing rebuilds the schedule.
+    await calendar(org,1,2);
+    const result=await runDepreciation(org.orgId,'2026-08-31',actorId,assetId);
+    assert.deepEqual(result.problems,[]);
+    assert.equal(result.posted,2);
+    assert.equal(result.totalAmount,'200.0000');
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
 test('retained unposted depreciation and salvage are reserved separately from posted carrying value',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
   const org=await createScratchOrg();
   try {

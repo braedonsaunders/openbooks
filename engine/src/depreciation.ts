@@ -1077,6 +1077,55 @@ export async function runDepreciation(
   allowedSubsidiaryIds?: string[],
   bookId?: string,
 ): Promise<RunDepreciationResult> {
+  const result: RunDepreciationResult = {
+    posted: 0,
+    skipped: 0,
+    totalAmount: "0",
+    entries: [],
+    problems: [],
+  };
+
+  // Schedules project only months whose accounting periods exist; later
+  // months are future gaps the builder leaves to be "mapped when their
+  // periods are created" — but no other path rebuilds them, so a run after
+  // month-end rollover would find no line and report "nothing due" while an
+  // open period accrues. Extend each stale in-scope formula schedule first.
+  // Extension is best-effort: a schedule that cannot extend keeps its lines
+  // and the reason lands in problems, never a fatal error.
+  const stale = (await db.execute<{
+    asset_id: string;
+    book_id: string;
+    asset_number: string;
+  }>(sql`
+    select distinct s.asset_id, s.book_id, a.asset_number
+      from depreciation_schedules s
+      join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
+      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+     where s.org_id = ${orgId}
+       and a.status not in ('disposed', 'written_off')
+       and (s.method not in ('manual', 'units_of_production') or s.depreciation_method_id is not null)
+       ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
+       ${assetId ? sql`and a.id = ${assetId}` : sql``}
+       ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
+       and exists (
+         select 1 from accounting_periods p
+          where p.org_id = s.org_id and not p.is_adjustment
+            and p.ends_on > coalesce((
+              select max(pp.ends_on)
+                from depreciation_schedule_lines l
+                join accounting_periods pp on pp.id = l.period_id and pp.org_id = l.org_id
+               where l.org_id = s.org_id and l.schedule_id = s.id
+            ), date '0001-01-01')
+       )`));
+  for (const s of stale.rows) {
+    try {
+      await buildSchedule(s.asset_id, orgId, actorId, s.book_id);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.problems.push(`${s.asset_number}: schedule extension skipped (${msg.slice(0, 120)})`);
+    }
+  }
+
   // Due, unposted lines are only a candidate list. Account, dimension, and
   // other posting fields are reloaded under locks inside each line transaction.
   const due = (await db.execute<{
@@ -1102,14 +1151,6 @@ export async function runDepreciation(
        ${assetId ? sql`and a.id = ${assetId}` : sql``}
        ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
      order by a.asset_number, l.sequence`));
-
-  const result: RunDepreciationResult = {
-    posted: 0,
-    skipped: 0,
-    totalAmount: "0",
-    entries: [],
-    problems: [],
-  };
 
   for (const row of due.rows) {
     try {
