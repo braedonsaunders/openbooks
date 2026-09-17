@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { generalLedger, journalReport } = await import('./reports/ledger-reports')
 const { accountRegister, partyRegister, partnerStatement } = await import('./reports/registers')
@@ -53,20 +53,27 @@ test('raw report readers refuse mixed functional currencies and preserve native 
       indirect: (subsidiaryIds) => cashFlowIndirect(day, day, { subsidiaryIds }, org, book),
       projects: (subsidiaryIds) => projectProfitability(day, day, { orgId: org, bookId: book, dims: { subsidiaryIds } }),
     }
-    for (const [name, read] of Object.entries(readers)) {
-      await assert.rejects(() => read([scratch.subsidiaryId, child]), { name: 'ReportCurrencyBasisError' }, name)
-      await read([scratch.subsidiaryId])
-      await read([child])
-      await read([])
-    }
-    const cad = await generalLedger(day, day, { orgId: org, dims: { subsidiaryIds: [scratch.subsidiaryId] } })
-    assert.equal(cad.accounts.find((account) => account.id === scratch.accounts.revenue)?.closing, '-200.0000')
-    const usd = await trialBalance(day, { subsidiaryIds: [child] }, org)
-    assert.equal(usd.find((account) => account.id === scratch.accounts.ar)?.balance, '100.0000')
-    // An unused second currency cannot block an earlier empty report.
-    await generalLedger('2000-01-01', '2000-01-02', { orgId: org })
-    // The raw-line (non-summary) branch observes the same dimension scope.
-    await profitAndLoss(day, day, { subsidiaryIds: [scratch.subsidiaryId, child], departmentId: randomUUID() }, org)
-    await trialBalance(day, { subsidiaryIds: [scratch.subsidiaryId, child], departmentId: randomUUID() }, org)
+    // Reads run in the scratch org's scope: the report readers issue bare
+    // queries with explicit org predicates, which pooled RLS denies outside an
+    // explicit scope. Unscoped, every reader sees zero rows — so the
+    // mixed-currency rejection below goes missing (deny-all hides the rows
+    // that should trigger it) and the closing/balance asserts read undefined.
+    await withOrgContext(scratch.orgId, async () => {
+      for (const [name, read] of Object.entries(readers)) {
+        await assert.rejects(() => read([scratch.subsidiaryId, child]), { name: 'ReportCurrencyBasisError' }, name)
+        await read([scratch.subsidiaryId])
+        await read([child])
+        await read([])
+      }
+      const cad = await generalLedger(day, day, { orgId: org, dims: { subsidiaryIds: [scratch.subsidiaryId] } })
+      assert.equal(cad.accounts.find((account) => account.id === scratch.accounts.revenue)?.closing, '-200.0000')
+      const usd = await trialBalance(day, { subsidiaryIds: [child] }, org)
+      assert.equal(usd.find((account) => account.id === scratch.accounts.ar)?.balance, '100.0000')
+      // An unused second currency cannot block an earlier empty report.
+      await generalLedger('2000-01-01', '2000-01-02', { orgId: org })
+      // The raw-line (non-summary) branch observes the same dimension scope.
+      await profitAndLoss(day, day, { subsidiaryIds: [scratch.subsidiaryId, child], departmentId: randomUUID() }, org)
+      await trialBalance(day, { subsidiaryIds: [scratch.subsidiaryId, child], departmentId: randomUUID() }, org)
+    })
   } finally { await withBypass(() => dropScratchOrg(scratch.orgId)) }
 })
