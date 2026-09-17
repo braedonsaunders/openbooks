@@ -1,197 +1,271 @@
 {
-  "openingBalances": {
-    "fields": {
-      "cpp2BonusYtd": "CPP2-Beiträge auf Boni",
-      "qcCsbYtd": "Zusätzliche QPP-Beiträge auf Boni",
-      "ficaWithheldYtd": "Einbehaltene FICA-Steuer",
-      "qpipEmployerYtd": "Arbeitgeber-QPIP-Beiträge",
-      "wcbAssessableYtd": "WCB-pflichtiges Entgelt"
-    }
-  },
-  "checklist": {
-    "incomplete": "{count, plural, one {# Lohn-Kontrollkonto ist} other {# Lohn-Kontrollkonten sind}} nicht eingerichtet:",
-    "openSettings": "Lohneinrichtung öffnen"
-  },
-  "columns": {
-    "employees": "Mitarbeiter",
-    "gross": "Brutto",
-    "net": "Netto",
-    "number": "Nummer",
-    "payDate": "Zahltag",
-    "period": "Periode",
-    "schedule": "Plan",
-    "status": "Status"
-  },
+  "title": "Lohnabrechnung",
   "description": "Lohnläufe, Mitarbeiter-Lohnprofile und gesetzliche Abzüge.",
-  "empty": {
-    "profiles": "Noch keine Mitarbeiter-Lohnprofile. Fügen Sie eines hinzu, um einen Mitarbeiter in Läufe einzubeziehen.",
-    "runs": "Noch keine Lohnläufe. Legen Sie einen aus einem Lohnplan an, um zu beginnen."
+  "tabs": {
+    "runs": "Lohnläufe",
+    "employees": "Mitarbeiter ({count})"
   },
   "home": {
-    "actions": {
-      "remittances": "Abführungen",
-      "resume": "Lauf fortsetzen",
-      "reviewPost": "Prüfen & verbuchen",
-      "startRun": "Abrechnung starten",
-      "viewRuns": "Lohnläufe",
-      "yearEnd": "Jahresabschluss"
-    },
-    "current": {
-      "noSchedules": "Keine aktiven Lohnpläne. Legen Sie einen Plan an, um mit der Abrechnung zu beginnen.",
-      "title": "Aktuelle Lohnperiode"
-    },
-    "directory": {
-      "employees": "Mitarbeiter",
-      "employeesHint": "aktive Lohnprofile",
-      "openingBalances": "Anfangssalden",
-      "parallelRun": "Parallellauf",
-      "retro": "Nachzahlung",
-      "runs": "Lohnläufe",
-      "runsHint": "in Arbeit · {total} insgesamt",
-      "setup": "Lohneinrichtung",
-      "setupHint": "Kontrollkonten fehlen",
-      "title": "Lohnabrechnung erkunden"
-    },
-    "exceptions": {
-      "allClear": "Alle Mitarbeiter sind abrechnungsbereit.",
-      "missingProfile": "{name} hat kein Lohnprofil",
-      "missingWage": "{name} hat keinen heute gültigen Lohnsatz",
-      "moreMissingProfiles": "{count, plural, one {# weiterer Mitarbeiter} other {# weitere Mitarbeiter}} ohne Lohnprofil",
-      "moreMissingWages": "{count, plural, one {# weiterer Mitarbeiter} other {# weitere Mitarbeiter}} ohne Lohnsatz",
-      "title": "Handlungsbedarf"
-    },
-    "frequency": {
-      "biweekly": "Zweiwöchentlich",
-      "monthly": "Monatlich",
-      "semi_monthly": "Halbmonatlich",
-      "weekly": "Wöchentlich"
-    },
-    "previous": {
-      "none": "Noch keine abgeschlossenen Lohnläufe.",
-      "title": "Vorherige Lohnperiode"
-    },
     "tabs": {
       "overview": "Lohnabrechnung",
-      "remittances": "Abführungen",
       "runs": "Lohnläufe",
+      "remittances": "Abführungen",
       "separations": "Austritte",
+      "yearEnd": "Jahresabschluss"
+    },
+    "actions": {
+      "viewRuns": "Lohnläufe",
+      "startRun": "Abrechnung starten",
+      "resume": "Lauf fortsetzen",
+      "reviewPost": "Prüfen & verbuchen",
+      "remittances": "Abführungen",
       "yearEnd": "Jahresabschluss"
     },
     "vitals": {
       "employees": "Auf der Lohnliste",
       "employeesSub": "aktive Lohnprofile",
-      "nextPayDate": "Nächster Zahltag",
-      "noSchedule": "kein aktiver Rhythmus",
-      "periodsOf": "{ran} von {total}",
       "periodsRan": "Lohnperioden {year}",
+      "periodsOf": "{ran} von {total}",
       "periodsRanSub": "in diesem Steuerjahr verbucht",
-      "ytdEmployerCost": "+{amount} Arbeitgeberkosten",
       "ytdGross": "Brutto laufendes Jahr",
+      "ytdEmployerCost": "+{amount} Arbeitgeberkosten",
       "ytdNet": "Netto laufendes Jahr",
-      "ytdNetSub": "aus verbuchten Läufen"
+      "ytdNetSub": "aus verbuchten Läufen",
+      "nextPayDate": "Nächster Zahltag",
+      "noSchedule": "kein aktiver Rhythmus"
+    },
+    "current": {
+      "title": "Aktuelle Lohnperiode",
+      "noSchedules": "Keine aktiven Lohnpläne. Legen Sie einen Plan an, um mit der Abrechnung zu beginnen."
+    },
+    "frequency": {
+      "weekly": "Wöchentlich",
+      "biweekly": "Zweiwöchentlich",
+      "semi_monthly": "Halbmonatlich",
+      "monthly": "Monatlich"
+    },
+    "previous": {
+      "title": "Vorherige Lohnperiode",
+      "none": "Noch keine abgeschlossenen Lohnläufe."
+    },
+    "exceptions": {
+      "title": "Handlungsbedarf",
+      "allClear": "Alle Mitarbeiter sind abrechnungsbereit.",
+      "missingProfile": "{name} hat kein Lohnprofil",
+      "moreMissingProfiles": "{count, plural, one {# weiterer Mitarbeiter} other {# weitere Mitarbeiter}} ohne Lohnprofil",
+      "missingWage": "{name} hat keinen heute gültigen Lohnsatz",
+      "moreMissingWages": "{count, plural, one {# weiterer Mitarbeiter} other {# weitere Mitarbeiter}} ohne Lohnsatz"
+    },
+    "directory": {
+      "title": "Lohnabrechnung erkunden",
+      "runs": "Lohnläufe",
+      "runsHint": "in Arbeit · {total} insgesamt",
+      "employees": "Mitarbeiter",
+      "employeesHint": "aktive Lohnprofile",
+      "setup": "Lohneinrichtung",
+      "setupHint": "Kontrollkonten fehlen",
+      "openingBalances": "Anfangssalden",
+      "parallelRun": "Parallellauf",
+      "retro": "Nachzahlung"
     }
   },
   "list": {
+    "title": "Lohnläufe",
     "description": "Alle Lohnläufe. Nach Phase oder Plan suchen und filtern, dann einen Lauf zur Verarbeitung öffnen.",
     "open": "Lauf öffnen",
-    "stageFilter": "Phase",
-    "title": "Lohnläufe"
+    "stageFilter": "Phase"
   },
-  "newRun": {
-    "create": "Neuer Lohnlauf",
-    "description": "Bestätigen Sie den Zeitraum dieses Laufs. Die nächste Periode des Plans ist vorausgefüllt; ändern Sie die Daten für einen außerplanmäßigen oder Nachhollauf.",
-    "employees": "Bezahlte Mitarbeiter",
-    "employeesHint": "Ein Schlusslauf zahlt jede angesammelte Bank aus und löst sie auf, daher läuft er nur für die hier genannten Mitarbeiter.",
-    "invalidWindow": "Das Periodenende muss auf oder nach dem Beginn liegen, und der Zahltag auf oder nach dem Periodenende.",
-    "noSchedules": "Keine aktiven Lohnpläne",
-    "noTerminated": "Kein Mitarbeiter dieses Plans hat ein Austrittsdatum hinterlegt. Erfassen Sie es zuerst beim Mitarbeiter — ohne das Datum lässt sich keine Schlussabrechnung berechnen.",
-    "notBegun": "Diese Periode beginnt am {date} und hat noch nicht begonnen. Wählen Sie eine laufende oder abgeschlossene Periode.",
-    "payDateHint": "Der Tag, an dem die Mitarbeiter bezahlt werden. Die gesetzlichen Sätze werden aus diesem Datum abgeleitet.",
-    "periodEnd": "Periodenende",
-    "periodStart": "Periodenbeginn",
-    "runType": "Laufart",
-    "runTypeHint": {
-      "bonus": "Außerplanmäßige Zahlung für Boni und Provisionen. Kein Gehalt, keine Zeiten, keine wiederkehrenden Abzüge; Bezüge werden nach der Bonusmethode besteuert.",
-      "regular": "Die normale Abrechnung des Plans: Gehalt, genehmigte Zeiten, wiederkehrende Bestandteile und Abzüge.",
-      "termination": "Schlussabrechnung für austretende Mitarbeiter. Enthält die Auszahlung des angesammelten Urlaubsguthabens."
-    },
-    "schedule": "Lohnplan"
-  },
-  "register": {
-    "cppFica": "CPP / FICA",
-    "otherDeductions": "Sonstige Abzüge",
-    "print": "Drucken",
-    "title": "Lohnregister",
-    "totals": "Summen ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
-  },
-  "remittances": {
-    "apLink": "Kreditorenrechnungen öffnen",
-    "apNote": "Abführungsrechnungen sind gewöhnliche Lieferantenrechnungen:",
-    "apply": "Anwenden",
-    "assignVendor": "Ordnen Sie auf den Bestandteilen einen Lieferanten zu",
-    "back": "Lohnabrechnung",
-    "billCreated": "Rechnungsentwurf {number} erstellt. Prüfen und buchen Sie ihn in den Kreditoren.",
-    "context": "Bruttolohnsumme {gross} · {employees, plural, one {# Mitarbeiter} other {# Mitarbeiter}} im Zeitraum",
-    "createAnother": "Weitere Rechnung erstellen",
-    "createBill": "Abführungsrechnung erstellen",
-    "description": "Aufgelaufene Einbehalte und Arbeitgeberbeiträge je Empfänger für einen Zeitraum. Das Erstellen einer Rechnung belastet die Verbindlichkeitskonten und übergibt die Zahlung an die Kreditoren.",
-    "dueOn": "Fällig am {dueDate} · {authority}",
-    "employer": "Arbeitgeber",
-    "empty": "Keine verbuchten Lohnläufe mit abführbaren Beträgen in diesem Zeitraum.",
-    "from": "Von",
-    "noAccount": "Kein Verbindlichkeitskonto",
-    "title": "Lohnabführungen",
-    "to": "Bis",
-    "total": "Abzuführende Summe",
-    "unassigned": "Kein Abführungslieferant zugeordnet",
-    "withheld": "Einbehalten"
-  },
-  "run": {
-    "approvalNotRequired": "Für Lohnläufe gilt keine Genehmigungsrichtlinie",
-    "approvalPending": "Genehmigung ausstehend ({count} offen) — Festschreibung und Buchung sind blockiert",
-    "approvalSubmitted": "Mit dem Nachweispaket zur Genehmigung gesendet",
-    "calculate": "Berechnen",
-    "calculateDone": "Lohnlauf berechnet.",
-    "commit": "Festschreiben",
-    "commitDone": "Lohnlauf festgeschrieben.",
-    "employerCost": "Arbeitgeberkosten",
-    "empty": "Keine Abrechnungen. Berechnen Sie den Lauf, um sie zu erzeugen.",
-    "lineKind": {
-      "deduction": "Abzug",
-      "earning": "Bezug",
-      "employer_contribution": "Arbeitgeber"
-    },
-    "post": "Buchen",
-    "postDone": "Lohnlauf gebucht.",
-    "printSet": "Drucksatz (nur Druckausgabe)",
-    "stub": {
-      "employee": "Mitarbeiter",
-      "lines": "Lohnzeilen",
-      "tax": "Steuer",
-      "trace": "{engine}-Nachvollzug"
-    },
-    "stubsPrintOnly": "{count} Mitarbeiter sind nur Druckausgabe und wurden nicht per E-Mail benachrichtigt",
-    "submitApproval": "Zur Genehmigung einreichen",
-    "title": "Lohnlauf"
-  },
-  "runType": {
-    "bonus": "Außerplanmäßiger Bonus",
-    "regular": "Regulär",
-    "termination": "Schlussabrechnung"
-  },
-  "status": {
-    "calculated": "Berechnet",
-    "committed": "Festgeschrieben",
-    "draft": "Entwurf",
-    "posted": "Verbucht",
-    "void": "Storniert"
-  },
-  "tabs": {
-    "employees": "Mitarbeiter ({count})",
-    "runs": "Lohnläufe"
-  },
-  "title": "Lohnabrechnung",
   "wizard": {
+    "stepsAria": "Lohnlaufschritte",
+    "steps": {
+      "period": "Umfang",
+      "readiness": "Prüfung",
+      "review": "Abrechnungen prüfen",
+      "gl": "Hauptbuch-Vorschau & Festschreibung",
+      "finish": "Buchen & abschließen"
+    },
+    "voided": "Dieser Lohnlauf ist storniert und schreibgeschützt.",
+    "stale": {
+      "title": "Eingaben änderten sich seit Berechnung dieses Laufs ({reasons}). Berechnen Sie vor dem Festschreiben neu.",
+      "reason": {
+        "adjustments": "Anpassungen",
+        "time": "genehmigte Zeit",
+        "wages": "Lohnsätze",
+        "roster": "Mitarbeiterprofile",
+        "missing": "der Lauf selbst",
+        "components": "Mitarbeiter-Lohnbestandteile",
+        "componentDefinitions": "Lohnbestandteil-Einrichtung",
+        "derivedRules": "abgeleitete Bezugsregeln",
+        "entitlements": "Lohnkonten",
+        "workerComp": "Unfallversicherungs-Beitragssätze",
+        "timeTypes": "Zeitarten-Einrichtung",
+        "settings": "Lohneinstellungen",
+        "ytd": "Jahresstände eines anderen Laufs",
+        "openingBalances": "Anfangssalden (Vorträge)"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# Punkt blockiert diesen Lauf} other {# Punkte blockieren diesen Lauf}}",
+      "blockedHint": "Klären Sie jeden Punkt vor der Berechnung. Jeder verlinkt dorthin, wo er behoben wird.",
+      "readyTitle": "Bereit zur Berechnung · {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}",
+      "readyHint": "Einrichtung, Periodensteuerung und Mitarbeiterdatensätze sind vollständig.",
+      "warningsHint": "{count, plural, one {# Punkt braucht} other {# Punkte brauchen}} Prüfung. Bestätigen Sie, um fortzufahren.",
+      "blockersTitle": "Blockaden",
+      "warningsTitle": "Vor dem Fortfahren prüfen",
+      "acknowledge": "Ich habe diese Punkte geprüft und möchte fortfahren",
+      "allClear": "Keine Blockaden oder Warnungen. Dieser Lauf ist bereit zur Berechnung.",
+      "fix": "Klären",
+      "andMore": "+{count} weitere",
+      "dryRun": "Probelauf",
+      "dryRunTitle": "Probelaufergebnisse",
+      "dryRunHint": "Nichts wurde gespeichert. Führen Sie Berechnen aus, um die Abrechnungen echt zu erstellen.",
+      "codes": {
+        "retro": {
+          "sourceVoided": "Eine Quellperiode, die dieser Lauf abrechnet, wurde storniert ({detail}).",
+          "crossTaxYear": "Eine Quellperiode fällt außerhalb des gesetzlichen Jahres {detail} — reichen Sie stattdessen eine geänderte Meldung ein.",
+          "stale": "Die Eingaben einer Quellperiode änderten sich nach der Quantifizierung dieses Laufs. Legen Sie den Nachzahlungslauf neu an.",
+          "doubleSettled": "Ein anderer offener Nachzahlungslauf rechnet dieselbe Periode für diesen Mitarbeiter bereits ab.",
+          "componentRetired": "Ein Lohnbestandteil, den dieser Lauf zahlt, wurde zurückgezogen.",
+          "zeroDelta": "Dieser Lauf zahlt dem Mitarbeiter nichts; die Periodendifferenz ist null."
+        },
+        "setup": {
+          "pack": "Kein Länder-Lohnpaket installiert.",
+          "wageExpense": "Kein Lohnaufwandskonto eingerichtet.",
+          "netPay": "Kein Nettolohn-Verbindlichkeitskonto eingerichtet.",
+          "laborClearing": "Löhne buchen auf das Lohnverrechnungskonto, aber kein Verrechnungskonto ist eingerichtet.",
+          "slot": "Gesetzliches Konto nicht zugeordnet: {detail}",
+          "schedule": "Es existiert kein aktiver Lohnplan.",
+          "remittanceVendor": "Gesetzlicher Abführungsempfänger nicht gesetzt: {detail}",
+          "paymentRail": "Kein eingerichtetes EFT-Originatorprofil, und die Scheck-Alternative ist aus — es gibt keine Möglichkeit, jemanden zu bezahlen.",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
+        },
+        "period": {
+          "missing": "Keine Buchungsperiode deckt das Zahldatum {detail} ab.",
+          "closed": "Die Buchungsperiode {detail} ist für Hauptbuchbuchungen geschlossen."
+        },
+        "scope": {
+          "empty": "Keine Mitarbeiter sind in diesem Lauf eingeschlossen."
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keinen für diese Periode gültigen Lohnsatz.",
+          "zeroHours": "{count, plural, one {# Stundenmitarbeiter hat} other {# Stundenmitarbeiter haben}} keine genehmigten Stunden in dieser Periode.",
+          "paidInPeriod": "{count, plural, one {# Mitarbeiter wurde} other {# Mitarbeiter wurden}} für eine überlappende Periode bereits bezahlt.",
+          "terminated": "{count, plural, one {# Mitarbeiter ist} other {# Mitarbeiter sind}} zum Periodenende ausgeschieden.",
+          "noBankDetails": "{count, plural, one {# Mitarbeiter soll} other {# Mitarbeiter sollen}} per Direktüberweisung bezahlt werden, hat aber keine geprüften Bankdaten und wird in diesem Lauf daher per Scheck bezahlt.",
+          "noSin": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keine SIN/SSN für die Jahresmeldung hinterlegt.",
+          "eftNoBankDetails": "{count, plural, one {# Mitarbeiter soll} other {# Mitarbeiter sollen}} per Direktüberweisung bezahlt werden, hat aber keine geprüften Bankdaten, und die Scheck-Alternative ist ausgeschaltet, sodass es keine Möglichkeit gibt, sie zu bezahlen.",
+          "noOpeningBalance": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keinen {detail}-Anfangssaldo aus Ihrem früheren Lohnsystem, daher starten ihre gesetzlichen Jahresgrenzen in diesem Lauf bei null.",
+          "noOpeningComponentYtd": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keinen Eröffnungsjahresstand für {detail} mit Jahresobergrenze — die Grenze startet in diesem Lauf bei null, sodass sie eine zweite volle Jahresgrenze einzahlen können.",
+          "noOpeningEntitlement": "{count, plural, one {# Mitarbeiter bringt} other {# Mitarbeiter bringen}} einen Saldo aus Ihrem früheren Lohnsystem mit, aber keinen Anfangssaldo für {detail}. Dies ist der erste Lohnlauf, der ihn bewegt, daher startet ihr Konto bei null."
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "Feiertagsvergütung kann nicht berechnet werden: {detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} eine Arbeitsrechtsordnung, die diese Lohnabrechnung nicht bedienen kann: {detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
+        }
+      }
+    },
+    "funding": {
+      "title": "Finanzierung",
+      "netPay": "Erforderliche Liquidität",
+      "liabilities": "Erfasste Verbindlichkeiten",
+      "totalCost": "Gesamtkosten für den Arbeitgeber",
+      "accounts": "Bankkonten",
+      "leadTime": "{days, plural, =0 {Zahltag ist heute} one {# Werktag bis zum Zahltag} other {# Werktage bis zum Zahltag}} · {date}",
+      "payDatePast": "Zahltag {date} ist verstrichen",
+      "short": "Kein Bankkonto deckt die erforderlichen {amount}.",
+      "rail": {
+        "eft": "Direktüberweisung ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})",
+        "cheque": "Schecks ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
+      }
+    },
+    "period": {
+      "taxYear": "Steuerjahr",
+      "employeesTitle": "Eingeschlossene Mitarbeiter ({count})",
+      "hint": "Alle mit aktivem Lohnprofil auf diesem Plan.",
+      "calculatedNote": "Stunden und Brutto stammen aus den berechneten Abrechnungen.",
+      "approvedHours": "Genehmigte Stunden",
+      "recalculate": "Neu berechnen",
+      "empty": "Noch kein Mitarbeiter hat auf diesem Plan ein aktives Lohnprofil.",
+      "wageMissing": "Kein Lohnsatz",
+      "zeroHours": "Keine Stunden",
+      "ready": "Bereit",
+      "scopeSaved": "Laufumfang gespeichert: {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}.",
+      "allBases": "Alle Vergütungsbasen",
+      "onlyWithHours": "Nur mit Stunden",
+      "hideIneligible": "Nicht berechtigte ausblenden",
+      "department": "Abteilung",
+      "selectAll": "Alle gezeigten Mitarbeiter wählen",
+      "selectEmployee": "{name} wählen",
+      "selectedCount": "{selected} von {total} Mitarbeitern gewählt",
+      "selectedHours": "{hours} Stunden",
+      "selectedBlocked": "{count, plural, one {# gewählter Mitarbeiter hat keinen Lohnsatz} other {# gewählte Mitarbeiter haben keinen Lohnsatz}}",
+      "applyScope": "Auswahl anwenden",
+      "noneMatch": "Keine Mitarbeiter entsprechen diesen Filtern.",
+      "noWage": "Kein Lohnsatz",
+      "paidInPeriod": "Bereits bezahlt",
+      "terminated": "Ausgeschieden",
+      "excluded": "Ausgeschlossen",
+      "included": "Eingeschlossen",
+      "runType": "Laufart",
+      "continue": "Weiter zur Bereitschaft",
+      "dimension": {
+        "all": "Alle",
+        "department": "Abteilung",
+        "trade": "Beruf",
+        "job_title": "Stellenbezeichnung",
+        "subsidiary": "Einheit",
+        "payment_method": "Zahlung per"
+      }
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# Berechnungsausnahme} other {# Berechnungsausnahmen}}",
+      "varianceFlag": "{count, plural, one {# Abrechnung änderte} other {# Abrechnungen änderten}} sich mehr als ±{percent} % im Nettolohn gegenüber der vorherigen Abrechnung. Prüfen Sie vor dem Festschreiben.",
+      "varianceColumn": "Δ netto",
+      "newEmployee": "erste Abrechnung",
+      "needsCalculation": "Berechnen Sie den Lauf, um Abrechnungen zu erzeugen. Beträge bleiben bis zum Festschreiben des Laufs bearbeitbar.",
+      "drawerDescription": "Lohnzeilen und die gesetzliche Berechnungsspur für diese Abrechnung.",
+      "drawerVariance": "Der Nettolohn bewegte sich {percent} % gegenüber der vorherigen Abrechnung dieses Mitarbeiters.",
+      "downloadPdf": "PDF herunterladen",
+      "close": "Schließen",
+      "registerTitle": "Registervorschau",
+      "selectAll": "Alle Abrechnungen wählen",
+      "selectedCount": "{count, plural, one {# gewählt} other {# gewählt}}",
+      "bulkEdit": "Auswahl bearbeiten",
+      "bulkDescription": "Einen Bestandsbetrag auf {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} in diesem Lauf anwenden.",
+      "bulkApply": "Auf {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} anwenden",
+      "changedColumn": "Geändert",
+      "noChange": "keine Änderung",
+      "changedTitle": "Änderungen seit {date}",
+      "noChangeDetail": "Nichts änderte sich gegenüber der vorherigen Abrechnung.",
+      "changedTotals": "Netto {net} · Stunden {hours} gegenüber der vorherigen Abrechnung.",
+      "changeKind": {
+        "added": "Neu",
+        "removed": "Entfernt",
+        "changed": "Geändert"
+      },
+      "protectionShortfallTitle": "{count, plural, one {# Abrechnung konnte einen geschützten Abzug nicht voll nehmen} other {# Abrechnungen konnten einen geschützten Abzug nicht voll nehmen}}",
+      "protectionShortfallHint": "Geschützter Verdienst deckelte diese Abzüge. Der unbeglichene Rest bleibt geschuldet — informieren Sie den Gläubiger oder tragen Sie ihn in den nächsten Lauf vor."
+    },
+    "gl": {
+      "needsCalculation": "Berechnen Sie den Lauf, um seine Kontenwirkung vorzuschauen.",
+      "setupIncomplete": "Lohneinrichtung ist unvollständig",
+      "openSetup": "Konten & Buchung öffnen",
+      "retry": "Erneut versuchen",
+      "loading": "Kontenvorschau wird aufgebaut…",
+      "hint": "Die Buchung, die das Festschreiben schreibt. Soll zuerst, dann Haben. In dieser Phase wird nichts gebucht.",
+      "account": "Konto",
+      "description": "Beschreibung",
+      "debits": "Soll",
+      "credits": "Haben",
+      "balanced": "Ausgeglichen",
+      "staleBlocked": "Berechnen Sie den Lauf vor dem Festschreiben neu.",
+      "commitHint": "Festschreiben friert die Abrechnungen ein und schreibt diese Zeilen in das Lohnlaufdokument. Der Lauf bleibt bis zur Buchung prüfbar."
+    },
     "finish": {
       "notCommitted": "Erfassen Sie den Lauf im Hauptbuch-Schritt vor dem Buchen.",
       "postTitle": "Bereit zum Buchen",
@@ -218,19 +292,22 @@
       "stubsEmailedPartial": "{sent} versendet; übersprungen (keine E-Mail oder fehlgeschlagen): {skipped}",
       "printCheques": "{count, plural, one {# Scheck} other {# Schecks}} drucken"
     },
-    "funding": {
-      "title": "Finanzierung",
-      "netPay": "Erforderliche Liquidität",
-      "liabilities": "Erfasste Verbindlichkeiten",
-      "totalCost": "Gesamtkosten für den Arbeitgeber",
-      "accounts": "Bankkonten",
-      "leadTime": "{days, plural, =0 {Zahltag ist heute} one {# Werktag bis zum Zahltag} other {# Werktage bis zum Zahltag}} · {date}",
-      "payDatePast": "Zahltag {date} ist verstrichen",
-      "short": "Kein Bankkonto deckt die erforderlichen {amount}.",
-      "rail": {
-        "eft": "Direktüberweisung ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})",
-        "cheque": "Schecks ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
-      }
+    "adjust": {
+      "title": "Anpassungen",
+      "applied": "Anpassung angewendet. Abrechnungen neu berechnet.",
+      "excludedLabel": "Aus diesem Lauf ausgeschlossen:",
+      "include": "Einschließen",
+      "exclude": "Aus diesem Lauf ausschließen",
+      "component": "Bestandteil",
+      "amount": "Betrag",
+      "note": "Grund / Notiz (optional)",
+      "replace": "Berechnete Zeilen ersetzen",
+      "replaceHelp": "Die berechneten Zeilen dieses Bestandteils ersetzen, statt sie zu ergänzen",
+      "add": "Anpassung hinzufügen",
+      "remove": "Entfernen",
+      "replaces": "ersetzt Berechnetes",
+      "earnings": "Bezüge",
+      "deductions": "Abzüge"
     },
     "bankFile": {
       "title": "Direktüberweisung",
@@ -277,24 +354,1001 @@
         "default": "Keine Bankverbindung hinterlegt — per Scheck bezahlt",
         "eftFallback": "EFT eingestellt, aber keine bestätigte Bankverbindung — per Scheck bezahlt"
       }
-    },
-    "steps": {
-      "finish": "Buchen & abschließen",
-      "gl": "Hauptbuch-Vorschau & Festschreibung",
-      "period": "Umfang",
-      "readiness": "Prüfung",
-      "review": "Abrechnungen prüfen"
     }
   },
+  "links": {
+    "paySchedules": "Lohnpläne",
+    "payComponents": "Lohnbestandteile"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# Lohn-Kontrollkonto ist} other {# Lohn-Kontrollkonten sind}} nicht eingerichtet:",
+    "openSettings": "Lohneinrichtung öffnen"
+  },
+  "runType": {
+    "regular": "Regulär",
+    "bonus": "Außerplanmäßiger Bonus",
+    "termination": "Schlussabrechnung"
+  },
+  "newRun": {
+    "runType": "Laufart",
+    "runTypeHint": {
+      "regular": "Die normale Abrechnung des Plans: Gehalt, genehmigte Zeiten, wiederkehrende Bestandteile und Abzüge.",
+      "bonus": "Außerplanmäßige Zahlung für Boni und Provisionen. Kein Gehalt, keine Zeiten, keine wiederkehrenden Abzüge; Bezüge werden nach der Bonusmethode besteuert.",
+      "termination": "Schlussabrechnung für austretende Mitarbeiter. Enthält die Auszahlung des angesammelten Urlaubsguthabens."
+    },
+    "employees": "Bezahlte Mitarbeiter",
+    "employeesHint": "Ein Schlusslauf zahlt jede angesammelte Bank aus und löst sie auf, daher läuft er nur für die hier genannten Mitarbeiter.",
+    "noTerminated": "Kein Mitarbeiter dieses Plans hat ein Austrittsdatum hinterlegt. Erfassen Sie es zuerst beim Mitarbeiter — ohne das Datum lässt sich keine Schlussabrechnung berechnen.",
+    "schedule": "Lohnplan",
+    "noSchedules": "Keine aktiven Lohnpläne",
+    "create": "Neuer Lohnlauf",
+    "description": "Bestätigen Sie den Zeitraum dieses Laufs. Die nächste Periode des Plans ist vorausgefüllt; ändern Sie die Daten für einen außerplanmäßigen oder Nachhollauf.",
+    "periodStart": "Periodenbeginn",
+    "periodEnd": "Periodenende",
+    "payDateHint": "Der Tag, an dem die Mitarbeiter bezahlt werden. Die gesetzlichen Sätze werden aus diesem Datum abgeleitet.",
+    "invalidWindow": "Das Periodenende muss auf oder nach dem Beginn liegen, und der Zahltag auf oder nach dem Periodenende.",
+    "notBegun": "Diese Periode beginnt am {date} und hat noch nicht begonnen. Wählen Sie eine laufende oder abgeschlossene Periode."
+  },
+  "columns": {
+    "number": "Nummer",
+    "schedule": "Plan",
+    "period": "Periode",
+    "payDate": "Zahltag",
+    "status": "Status",
+    "gross": "Brutto",
+    "net": "Netto",
+    "employees": "Mitarbeiter"
+  },
+  "status": {
+    "draft": "Entwurf",
+    "calculated": "Berechnet",
+    "committed": "Festgeschrieben",
+    "posted": "Verbucht",
+    "void": "Storniert"
+  },
+  "empty": {
+    "runs": "Noch keine Lohnläufe. Legen Sie einen aus einem Lohnplan an, um zu beginnen.",
+    "profiles": "Noch keine Mitarbeiter-Lohnprofile. Fügen Sie eines hinzu, um einen Mitarbeiter in Läufe einzubeziehen."
+  },
+  "run": {
+    "title": "Lohnlauf",
+    "employerCost": "Arbeitgeberkosten",
+    "calculate": "Berechnen",
+    "commit": "Festschreiben",
+    "post": "Buchen",
+    "calculateDone": "Lohnlauf berechnet.",
+    "commitDone": "Lohnlauf festgeschrieben.",
+    "postDone": "Lohnlauf gebucht.",
+    "empty": "Keine Abrechnungen. Berechnen Sie den Lauf, um sie zu erzeugen.",
+    "lineKind": {
+      "earning": "Bezug",
+      "deduction": "Abzug",
+      "employer_contribution": "Arbeitgeber"
+    },
+    "stub": {
+      "employee": "Mitarbeiter",
+      "tax": "Steuer",
+      "lines": "Lohnzeilen",
+      "trace": "{engine}-Nachvollzug"
+    },
+    "submitApproval": "Zur Genehmigung einreichen",
+    "approvalSubmitted": "Mit dem Nachweispaket zur Genehmigung gesendet",
+    "approvalNotRequired": "Für Lohnläufe gilt keine Genehmigungsrichtlinie",
+    "approvalPending": "Genehmigung ausstehend ({count} offen) — Festschreibung und Buchung sind blockiert",
+    "printSet": "Drucksatz (nur Druckausgabe)",
+    "stubsPrintOnly": "{count} Mitarbeiter sind nur Druckausgabe und wurden nicht per E-Mail benachrichtigt"
+  },
+  "profiles": {
+    "addEmployee": "Mitarbeiter ohne Profil",
+    "new": "Profil hinzufügen",
+    "saved": "Profil gespeichert.",
+    "editorDescription": "TD1-Fakten, Plan, Befreiungen und Urlaubsregelung für diesen Mitarbeiter.",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "columns": {
+      "employee": "Mitarbeiter",
+      "schedule": "Plan",
+      "province": "Provinz",
+      "basis": "Vergütungsbasis",
+      "claims": "Anträge (Bund / Prov)",
+      "vacation": "Urlaub",
+      "status": "Status"
+    },
+    "basis": {
+      "hourly": "Stündlich",
+      "salary": "Gehalt"
+    },
+    "vacation": {
+      "accrue": "Ansparen",
+      "pay_each_period": "Jede Periode zahlen"
+    },
+    "fields": {
+      "schedule": "Lohnplan",
+      "province": "Beschäftigungsprovinz",
+      "labourJurisdiction": "Arbeitsrechtsordnung",
+      "payBasis": "Vergütungsbasis",
+      "additionalTax": "Zusatzsteuer je Periode",
+      "federalClaimCode": "Bundes-Antragscode",
+      "federalClaimAmount": "Bundes-Antragsbetrag",
+      "provincialClaimCode": "Provinz-Antragscode",
+      "provincialClaimAmount": "Provinz-Antragsbetrag",
+      "claimAmountHint": "Überschreibt den Antragscode",
+      "vacationPercent": "Urlaubsprozentsatz",
+      "vacationMethod": "Urlaubsmethode",
+      "cppExempt": "CPP-befreit",
+      "eiExempt": "EI-befreit",
+      "taxExempt": "Einkommensteuerbefreit",
+      "isActive": "Aktiv",
+      "country": "Land",
+      "state": "Beschäftigungsstaat",
+      "filingStatus": "Steuerstatus (W-4 Schritt 1c)",
+      "dependentCredits": "Angehörige & sonstige Guthaben, jährlich (W-4 Schritt 3)",
+      "otherIncomeAnnual": "Sonstige Einkünfte, jährlich (W-4 Schritt 4a)",
+      "deductionsAnnual": "Abzüge, jährlich (W-4 Schritt 4b)",
+      "multipleJobs": "Mehrere Jobs / Ehepartner arbeitet (W-4 Schritt 2, Kontrollkästchen)",
+      "w4Pre2020": "Hinterlegtes W-4 stammt aus 2019 oder früher",
+      "w4Allowances": "Einbehaltsfreibeträge (W-4 vor 2020)",
+      "ficaExempt": "FICA-befreit",
+      "futaExempt": "FUTA/SUI-befreit",
+      "fitExempt": "Bundeseinkommensteuerbefreit (W-4 „Exempt“)",
+      "sin": "SIN / SSN",
+      "sinPlaceholder": "9 Ziffern. Versiegelt gespeichert und nie wieder angezeigt.",
+      "filingAccount": "Meldungskonto",
+      "stubDelivery": "Abrechnungszustellung",
+      "paymentMethod": "Zahlung per"
+    },
+    "country": {
+      "CA": "Kanada",
+      "US": "Vereinigte Staaten"
+    },
+    "filingStatus": {
+      "single": "Ledig oder verheiratet mit getrennter Veranlagung",
+      "married_joint": "Verheiratet, gemeinsame Veranlagung",
+      "head_household": "Haushaltsvorstand"
+    },
+    "loading": "Lohnprofil wird geladen…",
+    "loadFailed": "Das Lohnprofil konnte nicht geladen werden.",
+    "noSchedules": "Legen Sie einen Lohnplan an, bevor Sie Lohnprofile einrichten.",
+    "openSchedules": "Lohnpläne öffnen",
+    "filingAccountDefault": "Standardkonto",
+    "stubDelivery": {
+      "email": "E-Mail",
+      "print": "Druck",
+      "both": "E-Mail und Druck"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "Aus der Beschäftigungsprovinz",
+      "help": "Die Arbeitsrechtsordnung, deren Arbeitsnormen dieses Beschäftigungsverhältnis regieren — ihr Feiertagskalender und ihre Feiertagsvergütungsformel. Belassen Sie es bei „aus der Beschäftigungsprovinz“, was für fast jedes Beschäftigungsverhältnis richtig ist; setzen Sie es nur, wenn eine andere Arbeitsrechtsordnung den eingetragenen Arbeitgeber reguliert, etwa einen bundesrechtlich regulierten Arbeitgeber. Es ändert nicht den Einbehalt, der stets der Beschäftigungsprovinz folgt."
+    },
+    "paymentMethod": {
+      "eft": "Direktüberweisung",
+      "cheque": "Scheck",
+      "help": "Wie dieser Mitarbeiter bezahlt wird. Belassen Sie es beim Partnerstandard, es sei denn, diese Person wird anders bezahlt als die übrigen — etwa ein Scheck für jemanden ohne hinterlegte Bankdaten. Der Lohnlauf teilt den Zahltag auf beide Wege auf und finanziert jeden separat.",
+      "inherit": "Partnerstandard verwenden"
+    }
+  },
+  "setupWizard": {
+    "cta": {
+      "title": "Lohnabrechnung einrichten",
+      "description": "Ein geführter Erstdurchlauf: Länderpakete, Kontrollkonten, ein Lohnplan, Abführungsempfänger und Zahlungswege — dieselben Prüfungen, die ein Lohnlauf vor der Berechnung verifiziert.",
+      "start": "Lohnabrechnung einrichten",
+      "relaunch": "Einrichtungsassistent",
+      "missing": "{count, plural, one {# Pflichtpunkt} other {# Pflichtpunkte}} noch einzurichten."
+    },
+    "back": "Zurück",
+    "next": "Weiter",
+    "close": "Schließen",
+    "finish": "Einrichtung abschließen",
+    "packs": {
+      "title": "Installieren Sie Ihre Länderpakete",
+      "description": "Ein Paket ist die gesetzliche Engine einer Jurisdiktion: ihre Einbehaltsmathematik, Lohnbestandteile, Feiertage und Meldungen.",
+      "note": "Das Installieren eines Pakets legt dessen gesetzliche Lohnbestandteile an und schaltet die Einbehalts-Engine dieser Jurisdiktion ein. Bestehende Bestandteile werden niemals überschrieben, und ein Paket kann später durch erneutes Ausführen dieses Assistenten hinzugefügt werden."
+    },
+    "accounts": {
+      "title": "Kontrollkonten",
+      "description": "Wohin Löhne und Nettolohn gebucht werden, und das Verbindlichkeitskonto hinter jedem gesetzlichen Einbehalt, den die installierten Pakete vorsehen.",
+      "wageExpenseHelp": "Das Aufwandskonto, auf das Bruttolöhne beim Festschreiben eines Lohnlaufs belastet werden.",
+      "netPayHelp": "Das Verbindlichkeitskonto, auf dem der Nettolohn gutgeschrieben wird, bis die Zahltagsmittel die Bank verlassen.",
+      "slotHelp": "Das Verbindlichkeitskonto, in dem dieser gesetzliche Einbehalt bis zur Abführung aufläuft."
+    },
+    "schedule": {
+      "title": "Lohnplan",
+      "description": "Der Lohnkalender: Wie oft gezahlt wird und welche Periodenenden den Zyklus verankern.",
+      "addAnother": "Weiteren Plan erstellen",
+      "created": "Lohnplan „{name}“ erstellt.",
+      "name": "Name",
+      "nameHelp": "Wie dieser Kalender auf Läufen und Mitarbeiterprofilen erscheint — z. B. „Zweiwöchentlich — alle Mitarbeiter“.",
+      "namePlaceholder": "Zweiwöchentlich — alle Mitarbeiter",
+      "frequency": "Rhythmus",
+      "frequencyHelp": "Wie oft dieser Kalender zahlt. Perioden je Jahr folgen der gesetzlichen Tabelle des Rhythmus.",
+      "periods": "Perioden je Jahr",
+      "periodsHelp": "Die gesetzliche Periodenzahl, mit der die Einbehalts-Engine annualisiert — 52 wöchentlich, 26 zweiwöchentlich, 24 halbmonatlich, 12 monatlich.",
+      "anchor": "Anker-Periodenende",
+      "anchorHelp": "Ein beliebiges echtes Periodenende in diesem Kalender; jede andere Periode wird von ihm aus vorwärts und rückwärts fortgeschrieben.",
+      "noPermission": "Das Erstellen von Lohnplänen braucht die Einrichtungsberechtigung. Bitten Sie einen Administrator, einen auf der Registerkarte Lohnpläne hinzuzufügen, und fahren Sie dann fort."
+    },
+    "vendors": {
+      "title": "Abführungsempfänger",
+      "description": "Der Empfänger, an den jede gesetzliche Behörde abgeführt wird, wie von den installierten Paketen vorgesehen.",
+      "help": "Einbehaltene Beträge laufen gegen diesen Empfänger auf, sodass eine Abführung eine normale Verbindlichkeit gegenüber der Behörde erzeugt.",
+      "note": "Empfänger sind gewöhnliche Lieferantendatensätze — legen Sie die Behörde zuerst unter Einheiten → Lieferanten an, falls sie noch nicht existiert, und wählen Sie sie dann hier."
+    },
+    "rails": {
+      "title": "Zahlungswege",
+      "description": "Wie der Nettolohn am Zahltag die Bank verlässt: Direktüberweisungsdateien, und was geschieht, wenn ein für EFT vorgesehener Mitarbeiter keine Bankdaten hat.",
+      "eftTitle": "EFT-Originatorprofile",
+      "eftNone": "Es existiert noch kein lohnfähiges Originatorprofil. Direktüberweisungsdateien brauchen eines; bis dahin werden Mitarbeiter per Scheck bezahlt.",
+      "needsConfig": "fehlende Originatordaten",
+      "manageProfiles": "Originatorprofile in Zahlungsoperationen verwalten"
+    },
+    "review": {
+      "title": "Prüfen & abschließen",
+      "description": "Wie die Lohnabrechnung dieser Organisation nun aussieht, und woran ein Lohnlauf noch stoppen würde.",
+      "packsLabel": "Länderpakete",
+      "scheduleLabel": "Lohnpläne",
+      "remainingTitle": "Noch zu klären",
+      "allClear": "Alle erforderlichen Einstellungen sind vorhanden. Ein Lohnlauf kann berechnen.",
+      "seedNote": "Das Abschließen lässt die Anlage gesetzlicher Bestandteile für jedes installierte Paket erneut laufen — idempotent, und bestehende Bestandteile werden niemals überschrieben."
+    },
+    "applying": {
+      "title": "Lohneinrichtung wird abgeschlossen…",
+      "description": "Gesetzliche Bestandteile werden angelegt."
+    },
+    "done": {
+      "title": "Die Lohnabrechnung ist bereit",
+      "description": "Fügen Sie Mitarbeiter und ihre Lohnprofile hinzu und starten Sie dann den ersten Lauf."
+    }
+  },
+  "settingsPage": {
+    "title": "Lohnabrechnung",
+    "description": "Länder-Lohnpakete installieren, Buchungskonten verdrahten und Lohnpläne, Bestandteile sowie Tarifverträge verwalten.",
+    "saved": "Gespeichert.",
+    "save": "Speichern",
+    "accounts": {
+      "title": "Kontrollkonten",
+      "description": "Wohin Löhne, Arbeitgeberlast und Nettolohn gebucht werden. Gesetzliche Einbehaltskonten werden je installiertem Länderpaket unten eingerichtet."
+    },
+    "posting": {
+      "title": "Buchung",
+      "description": "Wie stundengetriebene Löhne ins Buch gelangen und an wen gesetzliche Einbehalte abgeführt werden."
+    },
+    "wagesTo": {
+      "expense": "Lohnaufwand (mit Projektaufteilungen)",
+      "laborClearing": "Lohnverrechnung (wäscht Standardkosten)",
+      "help": "Das Lohnverrechnungskonto wäscht die bei Zeitgenehmigung gebuchten Standardkosten; es braucht das Lohnverrechnungs-Kontrollkonto aus den Lohnkosten."
+    },
+    "fields": {
+      "wageExpenseAccountId": "Lohnaufwand",
+      "burdenExpenseAccountId": "Arbeitgeberlast-Aufwand",
+      "netPayAccountId": "Nettolohn verbindlich",
+      "cppPayableAccountId": "CPP verbindlich",
+      "eiPayableAccountId": "EI verbindlich",
+      "taxPayableAccountId": "Einkommensteuer verbindlich",
+      "vacationPayableAccountId": "Urlaub verbindlich",
+      "wagesTo": "Löhne buchen auf",
+      "craRemittancePartyId": "CRA-Abführungsempfänger",
+      "rqRemittancePartyId": "Revenu-Québec-Abführungsempfänger",
+      "rqRemittancePartyIdHelp": "Empfänger, dem Québec-Quellenabzüge auf Formular TPZ-1015.R abgerechnet werden — QPP, QPP2 und QPIP eines QC-Mitarbeiters laufen hierher, niemals zum CRA-Empfänger."
+    },
+    "tabsAria": "Lohneinrichtungsbereiche",
+    "groups": {
+      "foundations": "Grundlagen",
+      "earnings": "Lohn & Bezüge",
+      "entitlements": "Konten & Ansprüche",
+      "payday": "Zahltag"
+    },
+    "payday": {
+      "eftTitle": "EFT- & Bankdateien",
+      "eftDescription": "Direktüberweisungsdateien stammen aus einem lohnfähigen Originatorprofil. Profile werden in Zahlungsoperationen verwaltet; dieses Panel meldet ihren Stand.",
+      "eftNone": "Es existiert noch kein lohnfähiges Originatorprofil. Bis eines eingerichtet ist, verlassen sich Direktüberweisungsmitarbeiter auf die Scheck-Alternative.",
+      "eftManage": "Originatorprofile in Zahlungsoperationen verwalten",
+      "eftNeedsConfig": "fehlende Originatordaten"
+    },
+    "tabs": {
+      "packs": "Länderpakete",
+      "accounts": "Konten & Buchung",
+      "schedules": "Lohnpläne",
+      "components": "Bestandteile",
+      "union": "Gewerkschaft",
+      "filing": "Meldungskonten",
+      "entitlements": "Anspruchspläne",
+      "limits": "Kontengrenzen",
+      "service": "Dienstaltersstufen",
+      "derived": "Abgeleitete Bezüge",
+      "derivedPreview": "Regelvorschau",
+      "holidays": "Feiertage",
+      "holidayCalendar": "Feiertagskalender",
+      "payday": "Zahltag",
+      "rates": "Gesetzliche Sätze",
+      "workSchedules": "Arbeitszeitpläne"
+    },
+    "packs": {
+      "installed": "Installiert",
+      "install": "Paket installieren",
+      "reinstall": "Bestandteilsanlage erneut laufen lassen",
+      "installSuccess": "Länderpaket installiert.",
+      "componentCount": "{count, plural, one {# gesetzlicher Bestandteil installiert} other {# gesetzliche Bestandteile installiert}}",
+      "hint": "Das Installieren eines Pakets legt die gesetzlichen Lohnbestandteile an und schaltet die Einbehalts-Engine dieser Jurisdiktion ein. Bestehende Bestandteile werden niemals überschrieben.",
+      "canada": {
+        "title": "Kanada",
+        "description": "Gesetzlicher Einbehalt für kanadische Lohnläufe, Abführungen und Jahresende.",
+        "edition": "{edition, selectordinal, one {#.} two {#.} few {#.} other {#.}} Ausgabe (gültig {effective})",
+        "engine": "Gesetzliche CRA-T4127-Engine —",
+        "coverage": "Alle Provinzen & Territorien. Quebec: QPP, QPIP sowie Bundes- und Provinzeinkommensteuereinbehalt enthalten; die Provinzeinkommensteuer verwaltet Revenu Québec.",
+        "components": "Gesetzliche Lohnbestandteile: Grundlohn, Überstunden, Bonus, Urlaub, Einkommensteuer, CPP, EI, QPIP.",
+        "verified": "Centgenau gegen CRA PDOC verifiziert."
+      },
+      "us": {
+        "title": "Vereinigte Staaten",
+        "description": "Gesetzlicher Bundeseinbehalt für US-Lohnläufe: Einkommensteuer, Social Security, Medicare und Arbeitslosigkeit.",
+        "engine": "IRS-Pub-15-T-Prozentmethode-Engine (2026) mit W-4-Schritten 2–4 und Freibeträgen vor 2020.",
+        "coverage": "49 unterstützte Staaten: 40 Steuer-Engines plus die neun steuerfreien Staaten (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC und NM werden bis zu offiziellen Referenzdateien abgewiesen.",
+        "components": "Gesetzliche Lohnbestandteile: Bundeseinkommensteuer, Social Security, Medicare (inkl. Zusatz-Medicare), FUTA und SUI.",
+        "config": "SUI-Sätze und Bemessungsgrenzen sind je Arbeitgeber erfahrungsbewertet. Tragen Sie Ihre unter Konten & Buchung ein."
+      },
+      "uninstall": "Deinstallieren",
+      "uninstallTitle": "Länderpaket deinstallieren",
+      "uninstallConfirm": "Die gesetzlichen Bestandteile dieses Pakets entfernen und seine Einbehalts-Engine ausschalten? Deinstallieren ist blockiert, solange Mitarbeiter oder Lohndatensätze noch vom Paket abhängen.",
+      "uninstallSuccess": "Länderpaket deinstalliert.",
+      "taxYears": "Gesetzliche Tabellen geladen für",
+      "taxYearDraft": "{year} · gerüstet, nicht übertragen",
+      "taxYearNone": "keine gesetzlichen Tabellen geladen"
+    },
+    "packAccounts": {
+      "none": "Noch kein Länder-Lohnpaket installiert, daher gibt es keine gesetzlichen Einbehaltskonten einzurichten.",
+      "installLink": "Länderpaket installieren",
+      "CA": {
+        "title": "Kanada — gesetzliche CRA-Konten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das CRA-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "income_tax": "Einkommensteuer verbindlich",
+          "qc_income_tax": "Québec-Einkommensteuer verbindlich (Revenu Québec)",
+          "cpp": "CPP verbindlich (inkl. CPP2)",
+          "ei": "EI verbindlich",
+          "qpip": "QPIP verbindlich (Quebec)",
+          "vacation": "Urlaub verbindlich",
+          "wcb": "Unfallversicherung verbindlich (WCB/WSIB)",
+          "eht": "Arbeitgeber-Gesundheitssteuer verbindlich"
+        }
+      },
+      "US": {
+        "title": "Vereinigte Staaten — gesetzliche Bundeskonten",
+        "description": "Verbindlichkeitskonten für die Beträge, die das US-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
+        "slots": {
+          "fit": "Bundeseinkommensteuer verbindlich",
+          "fica": "FICA verbindlich (Social Security + Medicare)",
+          "futa": "FUTA verbindlich",
+          "suta": "Staatliche Arbeitslosenversicherung verbindlich",
+          "state_income_tax": "Staatliche Einkommensteuer verbindlich",
+          "local_income_tax": "Kommunale Einkommensteuer verbindlich"
+        }
+      },
+      "ratesLink": "Sätze, die Sie liefern — Arbeitslosigkeit, Gesundheitsabgaben — stehen auf der Registerkarte Gesetzliche Sätze."
+    },
+    "usConfig": {
+      "title": "Arbeitslosensätze",
+      "description": "FUTA und staatliche Arbeitslosigkeit zahlt der Arbeitgeber. SUI-Sätze sind je Arbeitgeber erfahrungsbewertet, daher werden sie hier eingetragen, niemals angenommen.",
+      "futaRate": "Wirksamer FUTA-Satz",
+      "futaRateHelp": "Als Dezimalzahl: 0,006 ist der Standard von 0,6 % nach voller Staatsgutschrift. Erhöhen Sie ihn für Staaten mit Gutschriftskürzung.",
+      "suiTitle": "Staatliche Arbeitslosenversicherung (SUI)",
+      "suiHelp": "Eine Zeile je Staat, in dem Sie beschäftigen: Ihr festgesetzter Satz als Dezimalzahl (0,027 = 2,7 %) und die steuerpflichtige Lohnbasis des Staates.",
+      "suiState": "Staat",
+      "suiRate": "Satz",
+      "suiWageBase": "Lohnbasis",
+      "addState": "Staat hinzufügen",
+      "removeState": "Entfernen"
+    },
+    "caConfig": {
+      "title": "Arbeitgeber-Lohnsteuern",
+      "description": "Arbeitgebersteuern auf den Lohn, die das CA-Paket jeden Lauf auflaufen lässt: Unfallversicherungsbeiträge und die Arbeitgeber-Gesundheitssteuer Ontarios.",
+      "ehtEnabled": "Arbeitgeber-Gesundheitssteuer Ontarios (EHT) auflaufen lassen",
+      "ehtRate": "EHT-Satz (%)",
+      "ehtRateHelp": "Als Prozent: 1,95 ist der ontarische Höchstsatz. Ihr Satz hängt von der gesamten Ontario-Lohnsumme ab.",
+      "ehtExemption": "Jahresfreibetrag",
+      "ehtExemptionHelp": "Jährlich befreite Ontario-Vergütung (1 000 000 $ für die meisten berechtigten privaten Arbeitgeber; verbundene Arbeitgeber teilen sich einen Freibetrag).",
+      "wcbNote": "Unfallversicherungs-Sätze (WCB/WSIB) und die jährliche Höchstbemessung werden je Satzklasse auf Unfallversicherungsgruppen gesetzt, unter Personaleinrichtung."
+    },
+    "stubPassword": {
+      "title": "Passwort für E-Mail-Abrechnungen",
+      "description": "Verschlüsseln Sie per E-Mail versandte Abrechnungen und leiten Sie das Passwort jedes Mitarbeiters aus einer Regel ab, die Sie Ihrer Belegschaft bekannt geben.",
+      "enabled": "Per E-Mail versandte Abrechnungen verschlüsseln",
+      "unavailable": "PDF-Verschlüsselung ist auf diesem Server nicht verfügbar — das Werkzeug qpdf ist nicht installiert.",
+      "expression": "Passwortregel",
+      "expressionHelp": "Token: {surname}, {givenName}, {employeeNumber} (:3 für die ersten drei Zeichen anhängen) und {dob} mit einem Format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). |upper oder |lower anhängen, um die Großschreibung zu ändern. Beispiel: {surname:3|upper}{dob:MMDDYYYY}."
+    },
+    "derivedPreview": {
+      "title": "Abgeleitete Bezugsregel vorschauen",
+      "description": "Sehen Sie, welche Mitarbeiter und Tage eine Regel träfe und was sie zahlte, bevor Sie sie aktivieren.",
+      "rule": "Regel",
+      "selectRule": "Regel wählen…",
+      "from": "Periodenbeginn",
+      "to": "Periodenende",
+      "noRules": "Noch keine abgeleiteten Bezugsregeln eingerichtet.",
+      "pickRule": "Wählen Sie eine Regel, um die Periode vorzuschauen.",
+      "enabled": "Aktiviert",
+      "disabled": "Noch nicht aktiviert",
+      "employeesPaid": "Bezahlte Mitarbeiter",
+      "employee": "Mitarbeiter",
+      "jobTitle": "Stellenbezeichnung",
+      "day": "Tag",
+      "project": "Auftrag",
+      "quantity": "Einheiten",
+      "amount": "Betrag",
+      "total": "Summe",
+      "empty": "Diese Regel zahlt über die gewählte Periode nichts.",
+      "grossEstimated": "Diese Regel zahlt einen Brutto-Prozentsatz. Die Vorschau schätzt das Brutto aus genehmigter Zeit und dem gültigen Lohn; die eigene Berechnung des Lohnlaufs ist maßgeblich.",
+      "excludedTitle": "Nach Stellenbezeichnung ausgeschlossen",
+      "excludedDescription": "Diese Mitarbeiter hält die Ausschlussliste der Regel heraus — die Streichung, die sich niemand mehr merken muss.",
+      "coverageTitle": "Diese Regel kann den Monat noch nicht abrechnen",
+      "coverageBody": "Manche Gerätekosten des abgerechneten Monats verzeichnen nicht, welcher Bediener die Einheit fuhr, daher kann die Prämie nicht sagen, wem sie zusteht. Sie verweigert, statt auf zufällig zugeordnete Kosten zu zahlen, was unterbezahlen würde. Erfassen Sie den Bediener auf diesen Kosten, oder engen Sie diese Regel ein, sodass sie herausfallen.",
+      "coverageUnattributed": "Kosten ohne Bediener"
+    },
+    "paymentMethods": {
+      "title": "Wie Löhne gezahlt werden",
+      "description": "Ein Mitarbeiter ohne geprüfte Bankdaten wird per Scheck bezahlt. Dies entscheidet, was geschieht, wenn jemand mit Direktüberweisung keine hat.",
+      "fallback": "Per Scheck zahlen, wenn Direktüberweisungsdaten fehlen",
+      "fallbackOn": "Der Lauf geht weiter und der Mitarbeiter wird in die Scheckcharge aufgenommen, mit einer Warnung im Bereitschaftsschritt.",
+      "fallbackOff": "Der Lauf ist blockiert, bis der Mitarbeiter geprüfte Bankdaten hat oder auf Scheck umgestellt wird."
+    },
+    "holidayCalendar": {
+      "title": "Gesetzlicher Feiertagskalender",
+      "description": "Die Tage, die diese Jurisdiktion begeht, mit Ihren eigenen Wahlen angewandt. Gesetzliche Tage stammen aus dem Länderpaket und können nicht abgeschaltet werden; optionale und Firmentage werden auf der Registerkarte Feiertage eingerichtet.",
+      "jurisdiction": "Jurisdiktion",
+      "year": "Jahr",
+      "citation": "Quelle",
+      "date": "Begangen",
+      "holiday": "Feiertag",
+      "statutoryDate": "Fällt auf",
+      "source": "Quelle",
+      "paid": "Bezahlt",
+      "statutory": "Gesetzlich",
+      "elected": "Optional — gewählt",
+      "company": "Firma",
+      "yes": "Ja",
+      "unpaid": "Unbezahlte Schließung",
+      "empty": "In diesem Jahr werden keine Feiertage begangen.",
+      "noMandate": "Diese Jurisdiktion schreibt keine Feiertagsvergütung vor, daher steuert der Kalender nur Schließungen und Arbeitstagearithmetik. Freie Tage können nach Ihrer eigenen Regelung weiterhin bezahlt sein.",
+      "payRule": "Wie die Feiertagsvergütung eines Tages berechnet wird",
+      "regularWages": "regulärer Lohn",
+      "overtime": "Überstunden",
+      "vacationPay": "Urlaubsgeld",
+      "priorHolidayPay": "frühere Feiertagsvergütung",
+      "workSchedules": "Arbeitszeitpläne",
+      "normalDay": "der Lohn eines normalen Arbeitstages, aus dem erfassten Arbeitszeitplan des Mitarbeiters",
+      "normalDayStandardHours": "für Mitarbeiter mit mindestens den Standardstunden der Jurisdiktion, ",
+      "normalDayOtherwise": "Andernfalls",
+      "beforeTheDay": "vor dem Feiertag",
+      "beforeTheWeek": "vor der Woche des Feiertags",
+      "daysWorked": "darin gearbeitete Tage",
+      "daysWorkedOrEarned": "gearbeitete Tage oder Tage, an denen Lohn verdient wurde",
+      "daysEntitledToPay": "Tage, für die der Mitarbeiter bezahlt wurde oder zu bezahlen war, für"
+    },
+    "statHolidayPay": {
+      "title": "Feiertagsvergütung",
+      "description": "Berechnen Sie Feiertagsvergütung und Feiertagsarbeitszuschläge auf jedem Lohnlauf, mit der Formel, die die Jurisdiktion des Mitarbeiters vorsieht. Mitarbeiter in einer Jurisdiktion ohne vorgesehene Formel werden namentlich abgewiesen, wenn ein Feiertag in die Periode fällt.",
+      "enabled": "Feiertagsvergütung berechnen"
+    },
+    "rates": {
+      "title": "Gesetzliche Sätze",
+      "description": "Sätze, die keine Veröffentlichung liefern kann oder die Behörden je Region oder registriertem Konto veröffentlichen. Alles andere — Steuerstufen, Beitragshöchstwerte, Guthabenbeträge — stammt aus dem Länderpaket und kann hier nicht bearbeitet werden.",
+      "noPacks": "Kein installiertes Länderpaket sieht einen arbeitgeberseitig eingetragenen gesetzlichen Satz vor. Installieren Sie ein Paket auf der Registerkarte Länderpakete.",
+      "tablesLoaded": "Gesetzliche Tabellen geladen für",
+      "draftEdition": "gerüstet, nicht übertragen",
+      "notLoaded": "nicht geladen",
+      "year": "Steuerjahr",
+      "yearHelp": "Gesetzliche Sätze werden für ein Steuerjahr vergeben — ein Staatssatzbescheid, eine Gutschriftskürzungsfeststellung, eine Provinzbefreiung. Für ein Jahr eingetragene Sätze deuten die Lohnabrechnung eines anderen Jahres niemals um.",
+      "add": "Satz hinzufügen",
+      "remove": "Entfernen",
+      "empty": "Für dieses Jahr sind keine gesetzlichen Sätze eingetragen.",
+      "gapsTitle": "Für dieses Jahr nicht eingerichtet",
+      "allAccounts": "Alle Konten",
+      "regionHelp": "Die Region, in der der Satz gilt. Ein für eine Region eingetragener Satz wird niemals auf eine andere angewandt.",
+      "accountHelp": "Dieser Satz ist einem registrierten Konto zugeordnet, daher hat ein Arbeitgeber mit zwei Konten in einer Region zwei Sätze. Belassen Sie Alle Konten, um einen Wert für jedes Konto in der Region zu verwenden.",
+      "scope": {
+        "org": "Arbeitgeberweit",
+        "region": "Je Region",
+        "subRegion": "Je Steuerjurisdiktion",
+        "account": "Je Meldungskonto"
+      },
+      "columns": {
+        "levy": "Satz",
+        "scope": "Umfang",
+        "region": "Region",
+        "subRegion": "Steuerjurisdiktion",
+        "account": "Meldungskonto",
+        "values": "Werte",
+        "country": "Länderpaket"
+      },
+      "subRegionHelp": "Die Steuerjurisdiktion innerhalb der Region — ein Pennsylvania-PSD-Code, eine Ohio-Gemeinde, eine Michigan-Stadt. Jede setzt ihren eigenen Satz, daher wird jede separat eingetragen; eine Jurisdiktion ohne hinterlegten Satz weist den Lohnlauf namentlich ab, statt nichts einzubehalten."
+    },
+    "workSchedules": {
+      "title": "Arbeitszeitpläne",
+      "description": "Die Stunden und Tage, die jeder Mitarbeiter normalerweise arbeitet. Mehrere Jurisdiktionen berechnen die Feiertagsvergütung daraus — dem Lohn eines normalen Arbeitstages — und verweigern lieber die Berechnung, als für jemanden ohne erfassten Plan einen Achtstundentag anzunehmen.",
+      "add": "Neuer Plan",
+      "editTitle": "Arbeitszeitplan",
+      "drawerDescription": "Gilt ab dem Anfangsdatum, bis er abgelöst oder beendet wird. Die Feiertagsvergütung einer vergangenen Periode richtet sich stets nach dem damals gültigen Muster, niemals nach dem heutigen.",
+      "empty": "Noch keine Arbeitszeitpläne.",
+      "columns": {
+        "appliesTo": "Gilt für",
+        "pattern": "Plan",
+        "effectiveFrom": "Gültig",
+        "status": "Status"
+      },
+      "scope": {
+        "organization": "Alle",
+        "employee": "Ein Mitarbeiter",
+        "jobTitle": "Stellenbezeichnung",
+        "trade": "Beruf",
+        "department": "Abteilung",
+        "subsidiary": "Tochtergesellschaft"
+      },
+      "pattern": {
+        "cycle": "Ein sich wiederholendes Muster",
+        "cycleHint": "Ein Tageszyklus, der sich wiederholt — sieben Tage für eine gewöhnliche Woche, vierzehn für eine komprimierte Vierzehntagewoche, acht für eine Vier-um-vier-Rotation.",
+        "varies": "Stunden variieren",
+        "variesHint": "Kein regelmäßiger Plan; die Stunden werden Periode für Periode festgelegt. Dies ist eine echte Antwort, keine leere — mehrere Jurisdiktionen zahlen einem Mitarbeiter mit variierenden Stunden nach einer anderen Formel, und erst die Erfassung lässt sie berechnen."
+      },
+      "summary": {
+        "cycle": "{hours} Stunden über {days} Tage je {cycle}",
+        "week": "Woche",
+        "cycleDays": "{count}-Tage-Zyklus",
+        "total": "{hours} Stunden über {days} Arbeitstage je Zyklus."
+      },
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "Vollzeit, Montag bis Freitag",
+        "appliesTo": "Gilt für",
+        "selectEmployee": "Mitarbeiter wählen",
+        "selectScope": "Eines wählen",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "pattern": "Plan",
+        "cycleDays": "Zykluslänge (Tage)",
+        "cycleAnchor": "Erster Tag des Zyklus",
+        "hours": "Stunden pro Tag"
+      },
+      "help": {
+        "scope": "Der genauste Plan gewinnt: Ein Mitarbeiter schlägt eine Stellenbezeichnung, diese einen Beruf, dann eine Abteilung, dann eine Tochtergesellschaft, dann alle. Dieselbe Reihenfolge, in der sich Löhne und Anspruchsgrenzen auflösen.",
+        "effectiveFrom": "Wird mit dem ARBEITSDATUM verglichen, niemals mit heute. Wer im März von Vollzeit auf Teilzeit wechselt, dessen Januar-Feiertagsvergütung wird weiterhin nach dem Vollzeitmuster berechnet.",
+        "pattern": "Ob der Mitarbeiter einem sich wiederholenden Muster folgt oder gar keinen regelmäßigen Plan hat. Der Unterschied entscheidet, welche Formel mehrere Jurisdiktionen verwenden.",
+        "cycleDays": "Wie viele Tage es dauert, bis sich das Muster wiederholt. Sieben ist die gewöhnliche Woche. Vierzehn drückt eine komprimierte Vierzehntagewoche mit neun Arbeitstagen aus; acht drückt eine Vier-um-vier-Rotation aus, die bewusst nie mit der Woche zusammenfällt.",
+        "cycleAnchor": "Der Tag, ab dem der Zyklus zu zählen beginnt. Für ein Wochenmuster ist dies ein Sonntag, daher sind die Felder unten von Sonntag bis Samstag beschriftet.",
+        "hours": "Die Stunden, die an jeder Position des Zyklus normalerweise gearbeitet werden. Lassen Sie einen Tag für einen freien Tag leer. Aus diesen Stunden wird die Feiertagsvergütung eines normalen Arbeitstages berechnet: Eine Viertagewoche zu zehn Stunden ist daher zehn Stunden je Feiertag wert, nicht acht."
+      },
+      "grid": {
+        "sunday": "Sonntag",
+        "monday": "Montag",
+        "tuesday": "Dienstag",
+        "wednesday": "Mittwoch",
+        "thursday": "Donnerstag",
+        "friday": "Freitag",
+        "saturday": "Samstag",
+        "day": "Tag {n}",
+        "weekDay": "Woche {week} · {day}"
+      }
+    }
+  },
+  "remittances": {
+    "title": "Lohnabführungen",
+    "description": "Aufgelaufene Einbehalte und Arbeitgeberbeiträge je Empfänger für einen Zeitraum. Das Erstellen einer Rechnung belastet die Verbindlichkeitskonten und übergibt die Zahlung an die Kreditoren.",
+    "back": "Lohnabrechnung",
+    "from": "Von",
+    "to": "Bis",
+    "apply": "Anwenden",
+    "empty": "Keine verbuchten Lohnläufe mit abführbaren Beträgen in diesem Zeitraum.",
+    "unassigned": "Kein Abführungslieferant zugeordnet",
+    "assignVendor": "Ordnen Sie auf den Bestandteilen einen Lieferanten zu",
+    "context": "Bruttolohnsumme {gross} · {employees, plural, one {# Mitarbeiter} other {# Mitarbeiter}} im Zeitraum",
+    "withheld": "Einbehalten",
+    "employer": "Arbeitgeber",
+    "noAccount": "Kein Verbindlichkeitskonto",
+    "total": "Abzuführende Summe",
+    "createBill": "Abführungsrechnung erstellen",
+    "createAnother": "Weitere Rechnung erstellen",
+    "billCreated": "Rechnungsentwurf {number} erstellt. Prüfen und buchen Sie ihn in den Kreditoren.",
+    "dueOn": "Fällig am {dueDate} · {authority}",
+    "apNote": "Abführungsrechnungen sind gewöhnliche Lieferantenrechnungen:",
+    "apLink": "Kreditorenrechnungen öffnen"
+  },
   "yearEnd": {
+    "title": "Jahresabschluss",
+    "description": "Jede jährliche und vierteljährliche Meldung, die die installierten Lohnpakete vorsehen, erstellt aus verbuchten Abrechnungen — jede Position stimmt mit den Abrechnungsspuren überein.",
+    "noFilings": "Für diese Organisation sind keine Lohn-Jahresmeldungen vorgesehen.",
     "cadence": {
       "annual": "Jahresmeldungen",
       "annualHelp": "Einmal je Steuerjahr eingereicht (T4, W-2, RL-1). Die Steuerjahr-Auswahl oben bestimmt, welche Grundgesamtheit gezeigt wird.",
       "quarterly": "Quartalsmeldungen",
       "quarterlyHelp": "Einmal je Kalenderquartal eingereicht (Formular 941) — die Bevölkerungstabelle zeigt eine Zeile je Quartal innerhalb des gewählten Steuerjahrs."
+    }
+  },
+  "filings": {
+    "yearLabel": "Steuerjahr",
+    "rowCount": "{count, plural, =0 {Keine Zeilen} one {# Zeile} other {# Zeilen}}",
+    "notInstalled": "Lohnpaket nicht installiert",
+    "emptyDefault": "Keine Zeilen für dieses Jahr.",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "PDF herunterladen"
     },
-    "description": "Jede jährliche und vierteljährliche Meldung, die die installierten Lohnpakete vorsehen, erstellt aus verbuchten Abrechnungen — jede Position stimmt mit den Abrechnungsspuren überein.",
-    "noFilings": "Für diese Organisation sind keine Lohn-Jahresmeldungen vorgesehen.",
-    "title": "Jahresabschluss"
+    "issue": {
+      "reason": "Ausstellungsgrund",
+      "reasonHelp": "Block 16 ist die Erklärung des Arbeitgebers, warum der Verdienst endete. Die Wahl eines Grundes nimmt diesen Mitarbeiter in die ROE-Web-Datei auf; ohne Grund bleibt er draußen.",
+      "comment": "Kommentar",
+      "notIncluded": "Nicht in der Datei enthalten",
+      "included": "In der Datei enthalten — Grund {code}",
+      "commentRequired": "Für diesen Grundcode ist ein Kommentar erforderlich."
+    },
+    "lifecycle": {
+      "title": "Meldungsstatus",
+      "statusColumn": "Meldungsstatus",
+      "help": "Eine ausgestellte Meldung belegt, was der Behörde gemeldet wurde, daher wird sie niemals überschrieben: Eine Korrektur ist ein neues Artefakt, das sie ablöst, und die Originaldatei bleibt herunterladbar. Beträge werden stets aus festgeschriebenen Abrechnungen neu berechnet — berichtigen Sie die Lohndaten, dann ändern.",
+      "history": "Meldungsverlauf",
+      "recordOriginal": "Als gemeldet erfassen",
+      "note": "Meldungsnotiz",
+      "notePlaceholder": "Wie sie gemeldet wurde (optional)",
+      "notIssued": "Noch nicht als gemeldet erfasst.",
+      "issuedCount": "Ausgestellte Artefakte",
+      "latest": "Neueste",
+      "changedCount": "Seit Meldung geändert",
+      "absentCount": "Nicht mehr im Bestand",
+      "resurrectedCount": "Storniert, aber noch im Bestand",
+      "slipsCovered": "Abgedeckte Abrechnungen",
+      "supersedes": "löst ab",
+      "noArtifact": "Keine elektronische Datei — der Abrechnungsausschnitt unten ist der Nachweis.",
+      "correction": "Korrektur",
+      "correctionForm": "Korrekturformular",
+      "correctionHelp": "Berichtigen stellt eine Abrechnung richtig, die existieren sollte; Stornieren erklärt, dass die Abrechnung nie hätte existieren dürfen. Die Zahlen werden aus festgeschriebenen Abrechnungen neu berechnet — niemals darübergetippt — daher berichtigen Sie zuerst die Lohndaten, und die Änderung folgt.",
+      "unfiledHelp": "Diese Abrechnung wurde nicht als gemeldet erfasst, daher gibt es nichts zu berichtigen.",
+      "addedHelp": "Diese Abrechnung erschien erst nach Abgabe der Meldung. Eine später entdeckte Abrechnung wird als zusätzliches Original gemeldet, nicht als Korrektur, und das geschieht nicht hier — melden Sie sie über den eigenen Dienst der Behörde.",
+      "absentHelp": "Das Lohnbuch erzeugt diese Abrechnung nicht mehr, daher gibt es nichts richtigzustellen. Stornieren Sie sie, damit die Behörde sie nicht weiter führt.",
+      "resurrectedHelp": "Diese Abrechnung wurde storniert, aber das Lohnbuch erzeugt sie weiterhin. Stornieren oder passen Sie den zugrunde liegenden Lauf an, sonst meldet die nächste Erklärung sie erneut.",
+      "box": "Zeile",
+      "field": "Feld",
+      "asFiled": "Wie gemeldet",
+      "now": "Jetzt",
+      "redacted": "Geändert — Wert nicht angezeigt",
+      "previewAmended": "Korrekturvorschau",
+      "issueAmended": "Änderung ausstellen",
+      "previewCancelled": "Stornovorschau",
+      "issueCancelled": "Diese Abrechnung stornieren",
+      "status": {
+        "unfiled": "Nicht gemeldet",
+        "unchanged": "Gemeldet",
+        "changed": "Seit Meldung geändert",
+        "absent": "Nicht mehr im Bestand",
+        "withdrawn": "Storniert",
+        "resurrected": "Storniert, aber noch im Bestand"
+      }
+    },
+    "run": {
+      "title": "{label}",
+      "help": "Alle, die diese Meldung abdeckt, mit den Zahlen, die sie tragen wird. Erzeugen Sie die Datei erst, wenn die Zeilen stimmen — eine ausgestellte Meldung ist ein Beleg, und sie zu berichtigen bedeutet eine Änderung statt einer Bearbeitung.",
+      "issue": "Als gemeldet erfassen",
+      "viewAll": "Alle ansehen"
+    }
+  },
+  "separations": {
+    "title": "Austritte",
+    "description": "Die Austrittsmeldungen, die die installierten Lohnpakete vorsehen — fällig innerhalb von Tagen nach einer Unterbrechung des Verdienstes, je Mitarbeiterereignis, nicht zum Jahresende.",
+    "noFilings": "Für diese Organisation sind keine Austrittsmeldungen der Lohnabrechnung vorgesehen.",
+    "run": {
+      "title": "{label} ausstellen",
+      "help": "Eine Austrittsmeldung ist innerhalb von Tagen nach der Verdienstunterbrechung fällig — stellen Sie sie aus diesem Lauf aus, je Mitarbeiter, statt auf das Jahresende zu warten.",
+      "issue": "Prüfen & ausstellen",
+      "viewAll": "Alle Austritte"
+    }
+  },
+  "register": {
+    "title": "Lohnregister",
+    "print": "Drucken",
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Sonstige Abzüge",
+    "totals": "Summen ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
+  },
+  "entitlements": {
+    "title": "Lohnkonten",
+    "hint": "Angesparte Zeit, Urlaub und jeder Saldo, den dieser Mitarbeiter zurückschuldet. Salden sind das Anspruchskonto — sie bewegen sich über die Lohnabrechnung, niemals durch Editieren einer Zahl.",
+    "managePlans": "Pläne verwalten",
+    "noPlans": "Für diese Organisation sind noch keine Anspruchspläne eingerichtet.",
+    "noMovements": "Noch keine Bewegungen.",
+    "overLimit": "Über der Grenze",
+    "nearLimit": "Nahe der Grenze",
+    "hoursSuffix": "h",
+    "hoursAtWage": "{hours} Stunden zum aktuellen Lohn von {wage}/h",
+    "worthToday": "Heute {amount} wert",
+    "owedBack": "Dem Arbeitgeber geschuldet — wird aus künftigem Lohn einbehalten.",
+    "limitLine": "Obergrenze {limit} (gesetzt von {scope})",
+    "plan": "Plan",
+    "amount": "Betrag",
+    "source": "Quelle",
+    "movementDate": "Datum",
+    "movementKind": "Art",
+    "scope": {
+      "employee": "diesem Mitarbeiter",
+      "job_title": "der Stellenbezeichnung",
+      "trade": "dem Beruf",
+      "department": "der Abteilung",
+      "subsidiary": "der juristischen Person",
+      "plan": "dem Planstandard"
+    },
+    "kind": {
+      "opening": "Anfangsstand",
+      "accrual": "Zuwachs",
+      "bank_in": "Angespart",
+      "payout": "Auszahlung",
+      "repayment": "Rückzahlung",
+      "adjustment": "Anpassung"
+    }
+  },
+  "paymentMethod": {
+    "eft": "Direktüberweisung",
+    "cheque": "Scheck",
+    "inherit": "Mitarbeiterstandard verwenden",
+    "help": "Belassen Sie die Voreinstellung, um dem Mitarbeiterdatensatz zu folgen: Direktüberweisung, wenn geprüfte Bankdaten vorliegen, sonst ein gedruckter Scheck."
+  },
+  "openingBalances": {
+    "title": "Anfangssalden",
+    "description": "Alles, was jeder Mitarbeiter aus Ihrem früheren Lohnsystem mitbringt: gesetzliche Jahresstände, die teils verbrauchten Jahresobergrenzen sowie Urlaubs- und Zeitguthaben. Nichts sonst liefert diese Werte, daher starten ohne sie jede Grenze und jedes Konto bei null.",
+    "hint": "Kopieren Sie diese aus der Jahresmeldung des abgebenden Anbieters zum Tag vor Ihrer ersten Lohnperiode hier. Lassen Sie einen Mitarbeiter leer, wenn er von Ihnen dieses Jahr noch keinen Lohn erhalten hat.",
+    "yearLabel": "Steuerjahr",
+    "employee": "Mitarbeiter",
+    "onlyMissing": "Nur Mitarbeiter ohne Vortrag",
+    "bulkImport": "Sammelweises Laden aus einer Datei",
+    "export": "Exportieren",
+    "entered": "Vorgetragen",
+    "locked": "Gesperrt",
+    "lockedShort": "gesperrt",
+    "lockedBy": "Festgeschriebener Lohnlauf",
+    "none": "keine",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Anfangssalden gespeichert.",
+    "saveFailed": "Nichts wurde gespeichert.",
+    "rejected": "Nichts wurde gespeichert — beheben Sie zuerst diese Fehler.",
+    "empty": "Noch kein Mitarbeiter hat ein aktives Lohnprofil.",
+    "fields": {
+      "pensionableYtd": "Rentenpflichtiges / FICA-Entgelt",
+      "insurableYtd": "Versicherungspflichtiges / Arbeitslosen-Entgelt",
+      "cppYtd": "CPP-Beiträge",
+      "cpp2Ytd": "CPP2-Beiträge",
+      "eiYtd": "EI-Beiträge",
+      "qpipYtd": "QPIP-Beiträge",
+      "taxableYtd": "Steuerpflichtige Bezüge",
+      "taxYtd": "Einbehaltene Lohnsteuer",
+      "nonPeriodicYtd": "Bonus- / Sonderbezüge",
+      "cpp2BonusYtd": "CPP2-Beiträge auf Boni",
+      "qcCsbYtd": "Zusätzliche QPP-Beiträge auf Boni",
+      "ficaWithheldYtd": "Einbehaltene FICA-Steuer",
+      "qpipEmployerYtd": "Arbeitgeber-QPIP-Beiträge",
+      "wcbAssessableYtd": "WCB-pflichtiges Entgelt"
+    },
+    "componentHelp": "Wie viel von der Jahresobergrenze dieses Bestandteils der Mitarbeiter dieses Jahr bereits verbraucht hat, im früheren Lohnsystem. Ohne das startet die Grenze bei null und der Mitarbeiter kann eine zweite volle Jahresgrenze einzahlen.",
+    "componentCap": "Jahresobergrenze",
+    "componentInertHelp": "Dieser Bestandteil hat keine Jahresobergrenze mehr, daher ändert der Betrag unten nichts und kann nicht bearbeitet werden. Er bleibt erhalten, weil ihn jemand eingetragen hat und eine Grenze erneut gesetzt werden könnte.",
+    "entitlements": {
+      "title": "Kontenvorträge (Urlaub, angesparte Zeit)",
+      "employee": "Mitarbeiter",
+      "asOf": "Vorgetragen zum",
+      "asOfHelp": "Das Übernahmedatum, auf das der Vortrag datiert ist. Ein Lohnlauf zählt nur Bewegungen, die spätestens auf sein Zahldatum datiert sind, daher muss dies vor Ihrem ersten Lohnlauf hier liegen. Es ist kein Steuerjahr: Ein Konto hat einen lebenslangen Saldo.",
+      "entered": "Vorgetragen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Kontenvorträge gespeichert.",
+      "saveFailed": "Nichts wurde gespeichert.",
+      "rejected": "Nichts wurde gespeichert — beheben Sie zuerst diese Fehler.",
+      "bulkImport": "Sammelweises Laden aus einer Datei",
+      "export": "Exportieren",
+      "empty": "Noch kein Mitarbeiter hat ein aktives Lohnprofil.",
+      "noPlans": "Es sind keine Anspruchspläne eingerichtet, daher kann kein Konto einen vorgetragenen Saldo aufnehmen.",
+      "configurePlans": "Anspruchspläne einrichten",
+      "lockedBy": "Festgeschriebener Lohnlauf",
+      "blocked": "Ausgezahlt am",
+      "blockedHint": "den Vortrag danach datieren",
+      "legacyShort": "Altbestand",
+      "legacyTitle": "Nicht übernommene Urlaubssalden gefunden",
+      "legacyBody": "Diese Mitarbeiter führen einen Urlaubssaldo in der ausgedienten Anfangsspalte, den kein Konto zeigt. Es ist eine Verbindlichkeit, die niemand verfolgt. Laden Sie ihn hier, oder führen Sie scripts/migrate-vacation-to-entitlements.ts aus, um die gesamte Historie nachzuspielen.",
+      "legacyPrefill": "In die Urlaubsspalte kopieren",
+      "moneyHelp": "Der vorgetragene Saldo, in Dollar. Konten werden als das Geld gespeichert, als das es verdient wurde, und in Stunden zum aktuellen Lohn des Mitarbeiters angezeigt.",
+      "hoursHelp": "Der vorgetragene Saldo, in Stunden.",
+      "oweHelp": "Ein Saldo, den DER MITARBEITER dem Arbeitgeber schuldet, daher negativ — geben Sie −1200 für einen offenen Betrag von 1 200 ein. Er wird aus künftigem Lohn einbehalten, bis er genau null erreicht."
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "Die juristische Person kann keine Lohnabrechnung durchführen",
+    "jurisdictionEmployee": "Die Jurisdiktion des Mitarbeiters widerspricht der zahlenden Einheit"
+  },
+  "parallelRun": {
+    "title": "Parallellauf",
+    "description": "Prüfen Sie eine Lohnperiode gegen das Lohnsystem, das Sie verlassen, Cent für Cent. Importieren Sie das Register des alten Anbieters, wählen Sie den Lauf, der dieselbe Periode abdeckt, und vergleichen Sie.",
+    "compare": "Vergleichen",
+    "comparing": "Wird verglichen…",
+    "compareFailed": "Der Vergleich konnte nicht ausgeführt werden.",
+    "cleanToast": "Jeder Betrag exakt abgestimmt.",
+    "toleranceToast": "Abgestimmt, mit angewandter Toleranz.",
+    "differencesToast": "Differenzen gefunden — öffnen Sie den Vergleich.",
+    "importRegister": "Register importieren",
+    "export": "Exportieren",
+    "tolerances": "Toleranzen",
+    "tolerancesDescription": "Jeder Bestandteil vergleicht standardmäßig exakt. Fügen Sie nur dort einen Spielraum hinzu, wo das Altsystem wirklich anders rundet — er wird auf jedem Vergleich gezeigt, der ihn verwendet.",
+    "addTolerance": "Toleranz hinzufügen",
+    "toleranceSaved": "Toleranz gespeichert.",
+    "noTolerances": "Keine Toleranz eingerichtet — jeder Bestandteil vergleicht exakt.",
+    "comparisonsTitle": "Vergleiche",
+    "noComparisons": "Noch kein Vergleich ausgeführt.",
+    "registersTitle": "Importierte Register",
+    "noRegisters": "Noch kein früheres Register importiert. Beginnen Sie mit Register importieren.",
+    "noRegistersRow": "Noch nichts importiert.",
+    "registerDiscarded": "Das importierte Register wurde verworfen.",
+    "discard": "Verwerfen",
+    "openReport": "Abstimmungsbericht öffnen",
+    "periodMismatch": "Diese beiden Seiten decken unterschiedliche Zahltage ab. Sie zu vergleichen meldet Differenzen, die in Wahrheit eine Periodenverschiebung sind.",
+    "emptyRegister": "Dieses Register enthält keine Mitarbeiter. Ein Vergleich dagegen meldet „Nichts wurde verglichen“, kein sauberes Ergebnis.",
+    "unmappedWarning": "Spalten in diesem Register wurden nie zugeordnet:",
+    "unmappedTitle": "Quellspalten, die niemand zugeordnet hat",
+    "nothingCompared": "Nichts wurde verglichen",
+    "toleranceTitle": "Geltende Toleranzen",
+    "showMatches": "Exakte Treffer zeigen",
+    "clearEmployee": "Alle Mitarbeiter",
+    "cleanNote": "Jeder verglichene Betrag stimmte auf den Cent, ohne Toleranz und ohne nicht zugeordnete Spalte.",
+    "noFindings": "Dieser Vergleich hat überhaupt keine Befunde.",
+    "noExceptions": "Keine Ausnahmen — jede Zelle stimmte exakt überein.",
+    "loading": "Wird geladen…",
+    "saving": "Wird gespeichert…",
+    "exact": "exakt",
+    "notPresent": "nicht vorhanden",
+    "allMapped": "Alle zugeordnet",
+    "matched": "stimmen überein",
+    "differ": "weichen ab",
+    "oneSidedShort": "einseitig",
+    "toleratedShort": "toleriert",
+    "employeesShort": "Mitarbeiter",
+    "amountsShort": "Beträge",
+    "rowsShort": "Zeile(n)",
+    "valuedRows": "einen Wert führte in",
+    "comparedOf": "verglichen von",
+    "onRegister": "im Register",
+    "inRun": "im Lauf",
+    "fromColumn": "aus",
+    "paid": "gezahlt",
+    "vsOurs": "unsere",
+    "columns": {
+      "outcome": "Ergebnis",
+      "register": "Altregister",
+      "payRun": "Lohnlauf",
+      "compared": "Verglichen",
+      "differences": "Differenzen",
+      "netDifference": "Nettodifferenz",
+      "comparedAt": "Verglichen",
+      "loaded": "Geladen",
+      "stated": "Angegebenes Brutto / Netto",
+      "unmapped": "Nicht zugeordnete Spalten",
+      "employee": "Mitarbeiter",
+      "component": "Bestandteil",
+      "priorSystem": "Altsystem",
+      "thisSystem": "Dieses System",
+      "difference": "Differenz",
+      "tolerance": "Toleranz",
+      "result": "Ergebnis"
+    },
+    "fields": {
+      "register": "Altregister",
+      "registerPlaceholder": "Register wählen…",
+      "payRun": "Unser Lohnlauf",
+      "payRunPlaceholder": "Lohnlauf wählen…",
+      "component": "Bestandteil",
+      "componentPlaceholder": "Wählen…",
+      "tolerance": "Spielraum",
+      "reason": "Grund"
+    },
+    "kinds": {
+      "earning": "Bezug",
+      "deduction": "Abzug",
+      "employer_contribution": "Arbeitgeberbeitrag",
+      "total": "Angegebene Summe"
+    },
+    "statuses": {
+      "clean": "Exakt abgestimmt",
+      "clean_within_tolerance": "Innerhalb der Toleranz abgestimmt",
+      "differences": "Differenzen zu klären",
+      "no_comparable_data": "Nichts wurde verglichen"
+    },
+    "classes": {
+      "match": "Exakte Übereinstimmung",
+      "within_tolerance": "Innerhalb der Toleranz",
+      "difference": "Differenz",
+      "prior_only": "Nur im Altsystem",
+      "our_only": "Nur hier",
+      "employee_prior_only": "Mitarbeiter fehlt in unserem Lauf",
+      "employee_our_only": "Mitarbeiter fehlt im Register",
+      "unattributed": "Durch keinen Bestandteil erklärt"
+    },
+    "tiles": {
+      "gross": "Brutto",
+      "net": "Netto",
+      "unattributed": "Unerklärtes Netto",
+      "cells": "Zellen"
+    },
+    "help": {
+      "register": "Ein aus dem Lohnsystem, das Sie verlassen, importiertes Register — eine Lohnperiode, eine Zeile je Mitarbeiter. Laden Sie es über Import & Export, Ressource „Früheres Lohnregister“, wo Sie die Spaltennamen des Altsystems auf die Bestandteile dieses Lohns abbilden.",
+      "payRun": "Der zu prüfende Lauf. Berechnete Läufe zählen: Der Sinn eines Parallellaufs ist, die Zahlen zu beweisen, bevor das Geld abgeht. Ein Entwurfslauf hat keine Abrechnungen und kann nicht verglichen werden.",
+      "compared": "Mitarbeiter auf BEIDEN Seiten, jeweils an der eigenen Zählung der Seite. Ein Vergleich, der niemanden verglich, wird als „Nichts wurde verglichen“ gemeldet, niemals als Übereinstimmung.",
+      "unmapped": "Spalten Ihrer Datei, die kein Bestandteil beanspruchte. Nichts darin wird verglichen, daher könnte dort ein Betrag unverrechnet liegen. Importieren Sie erneut mit zugeordneten Spalten, oder bestätigen Sie, dass sie kein Geld tragen.",
+      "tolerance": "Jeder Bestandteil vergleicht exakt, sofern nicht jemand einen Spielraum dafür eingerichtet hat. Jeder geltende Spielraum wird hier und auf dem Vergleich gezeigt, denn eine Toleranz, die niemand sehen kann, würde die ganze Übung zunichtemachen.",
+      "unattributed": "Der Teil der Nettodifferenz, den die verglichenen Bestandteile nicht erklären. Alles außer null bedeutet, dass ein Betrag eine Summe bewegte, ohne vergleichbaren Bestandteil dahinter — meist eine Quellspalte, die niemand zugeordnet hat.",
+      "toleranceSlot": "Der Bestandteil oder eine der angegebenen Summen des Registers. Eine Toleranz gilt je Mitarbeiter, je Periode.",
+      "toleranceAmount": "Ein absoluter Betrag, niemals ein Prozentsatz: Ein Prozentsatz einer beweglichen Basis ist, wie eine Toleranz leise wächst. Null entfernt den Spielraum.",
+      "toleranceReason": "Erforderlich. Der Einwilligung, eine Differenz nicht weiter zu verfolgen, ist eine Entscheidung, die jemandem und einem Grund zurechenbar sein muss."
+    }
+  },
+  "workSchedules": {
+    "title": "Arbeitszeitpläne",
+    "description": "Die Stunden und Tage, die jeder Mitarbeiter normalerweise arbeitet. Mehrere Jurisdiktionen berechnen die Feiertagsvergütung daraus — dem Lohn eines normalen Arbeitstages — und verweigern lieber die Berechnung, als für jemanden ohne erfassten Plan einen Achtstundentag anzunehmen.",
+    "add": "Neuer Plan",
+    "editTitle": "Arbeitszeitplan",
+    "drawerDescription": "Gilt ab dem Anfangsdatum, bis er abgelöst oder beendet wird. Die Feiertagsvergütung einer vergangenen Periode richtet sich stets nach dem damals gültigen Muster, niemals nach dem heutigen.",
+    "empty": "Noch keine Arbeitszeitpläne.",
+    "columns": {
+      "appliesTo": "Gilt für",
+      "pattern": "Plan",
+      "effectiveFrom": "Gültig",
+      "status": "Status"
+    },
+    "scope": {
+      "organization": "Alle",
+      "employee": "Ein Mitarbeiter",
+      "jobTitle": "Stellenbezeichnung",
+      "trade": "Beruf",
+      "department": "Abteilung",
+      "subsidiary": "Tochtergesellschaft"
+    },
+    "pattern": {
+      "cycle": "Ein sich wiederholendes Muster",
+      "cycleHint": "Ein Tageszyklus, der sich wiederholt — sieben Tage für eine gewöhnliche Woche, vierzehn für eine komprimierte Vierzehntagewoche, acht für eine Vier-um-vier-Rotation.",
+      "varies": "Stunden variieren",
+      "variesHint": "Kein regelmäßiger Plan; die Stunden werden Periode für Periode festgelegt. Dies ist eine echte Antwort, keine leere — mehrere Jurisdiktionen zahlen einem Mitarbeiter mit variierenden Stunden nach einer anderen Formel, und erst die Erfassung lässt sie berechnen."
+    },
+    "summary": {
+      "cycle": "{hours} Stunden über {days} Tage je {cycle}",
+      "week": "Woche",
+      "cycleDays": "{count}-Tage-Zyklus",
+      "total": "{hours} Stunden über {days} Arbeitstage je Zyklus."
+    },
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "Vollzeit, Montag bis Freitag",
+      "appliesTo": "Gilt für",
+      "selectEmployee": "Mitarbeiter wählen",
+      "selectScope": "Eines wählen",
+      "effectiveFrom": "Gültig ab",
+      "effectiveTo": "Gültig bis",
+      "pattern": "Plan",
+      "cycleDays": "Zykluslänge (Tage)",
+      "cycleAnchor": "Erster Tag des Zyklus",
+      "hours": "Stunden pro Tag"
+    },
+    "help": {
+      "scope": "Der genauste Plan gewinnt: Ein Mitarbeiter schlägt eine Stellenbezeichnung, diese einen Beruf, dann eine Abteilung, dann eine Tochtergesellschaft, dann alle. Dieselbe Reihenfolge, in der sich Löhne und Anspruchsgrenzen auflösen.",
+      "effectiveFrom": "Wird mit dem ARBEITSDATUM verglichen, niemals mit heute. Wer im März von Vollzeit auf Teilzeit wechselt, dessen Januar-Feiertagsvergütung wird weiterhin nach dem Vollzeitmuster berechnet.",
+      "pattern": "Ob der Mitarbeiter einem sich wiederholenden Muster folgt oder gar keinen regelmäßigen Plan hat. Der Unterschied entscheidet, welche Formel mehrere Jurisdiktionen verwenden.",
+      "cycleDays": "Wie viele Tage es dauert, bis sich das Muster wiederholt. Sieben ist die gewöhnliche Woche. Vierzehn drückt eine komprimierte Vierzehntagewoche mit neun Arbeitstagen aus; acht drückt eine Vier-um-vier-Rotation aus, die bewusst nie mit der Woche zusammenfällt.",
+      "cycleAnchor": "Der Tag, ab dem der Zyklus zu zählen beginnt. Für ein Wochenmuster ist dies ein Sonntag, daher sind die Felder unten von Sonntag bis Samstag beschriftet.",
+      "hours": "Die Stunden, die an jeder Position des Zyklus normalerweise gearbeitet werden. Lassen Sie einen Tag für einen freien Tag leer. Aus diesen Stunden wird die Feiertagsvergütung eines normalen Arbeitstages berechnet: Eine Viertagewoche zu zehn Stunden ist daher zehn Stunden je Feiertag wert, nicht acht."
+    },
+    "grid": {
+      "sunday": "Sonntag",
+      "monday": "Montag",
+      "tuesday": "Dienstag",
+      "wednesday": "Mittwoch",
+      "thursday": "Donnerstag",
+      "friday": "Freitag",
+      "saturday": "Samstag",
+      "day": "Tag {n}",
+      "weekDay": "Woche {week} · {day}"
+    }
+  },
+  "retro": {
+    "title": "Nachzahlung"
   }
 }
