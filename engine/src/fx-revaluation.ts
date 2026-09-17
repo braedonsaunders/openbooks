@@ -6,6 +6,7 @@ import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { loadControlAccounts } from "./control-accounts.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+import { assertPeriodModulesOpen, CloseError } from "./close.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.
@@ -535,14 +536,38 @@ async function postRevaluationEntry(
     // the flip with a raw driver error instead. Both legs are guarded — the
     // adjustment and its mandatory next-period reversal commit atomically.
     // A no-op rerun already returned null above and never reaches this check.
-    const locks = (await tx.execute<{ adjustment_closed: boolean; reversal_closed: boolean }>(sql`
-      select period_module_is_closed(${orgId}, ${periodId}, ${bookId}, ${subsidiaryId}, 'gl') as adjustment_closed,
-             period_module_is_closed(${orgId}, ${nextPeriodId}, ${bookId}, ${subsidiaryId}, 'gl') as reversal_closed`)).rows[0]!;
-    if (locks.adjustment_closed) {
-      throw new RevaluationError(`FX revaluation cannot post into the closed GL period ${periodName}`);
+    // One period gate: the shared GL check replaces the raw
+    // period_module_is_closed query, for both the adjustment leg and its
+    // mandatory next-period reversal. Revaluation is new local activity,
+    // not historical replay, so source-owned imported locks refuse exactly
+    // like user locks.
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId,
+        periodId,
+        bookId,
+        subsidiaryIds: [subsidiaryId],
+        modules: ["gl"],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) {
+        throw new RevaluationError(`FX revaluation cannot post into the closed GL period ${periodName}`);
+      }
+      throw error;
     }
-    if (locks.reversal_closed) {
-      throw new RevaluationError(`FX revaluation cannot post its reversal into the closed GL period ${nextPeriodName ?? nextStartsOn}`);
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId,
+        periodId: nextPeriodId,
+        bookId,
+        subsidiaryIds: [subsidiaryId],
+        modules: ["gl"],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) {
+        throw new RevaluationError(`FX revaluation cannot post its reversal into the closed GL period ${nextPeriodName ?? nextStartsOn}`);
+      }
+      throw error;
     }
     const netDelta = sum(monetaryLines.map((line) => line.amount));
     const lines = isZero(netDelta) ? monetaryLines
