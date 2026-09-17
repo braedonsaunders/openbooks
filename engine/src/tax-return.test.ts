@@ -196,3 +196,53 @@ test("a GL-mapped box with no ledger activity is zero, not missing", () => {
   assert.equal(boxes.find((b) => b.lineCode === "101")!.value, "0.0000");
   assert.equal(boxes.find((b) => b.lineCode === "109")!.value, "5000.0000");
 });
+
+test("max returns the left operand on ties, even when spellings differ", () => {
+  const values = new Map([["A", "1.0"], ["B", "1.00"]]);
+  assert.equal(evalFormula("max(A, B)", values, codes("A", "B")), "1.0");
+});
+
+test("fractional numeric literals evaluate, not just integers", () => {
+  assert.equal(evalFormula("1.5 + 2.25", new Map(), new Set()), "3.7500");
+});
+
+test("assembleReturn evaluates boxes in sequence order regardless of declaration order", () => {
+  const boxes: TaxReturnBoxDef[] = [
+    { lineCode: "C", label: "Total", sign: 1, sequence: 3, formula: "A + B", editable: false, pdfField: null },
+    { lineCode: "B", label: "Second", sign: 1, sequence: 2, formula: null, editable: false, pdfField: null },
+    { lineCode: "A", label: "First", sign: 1, sequence: 1, formula: null, editable: false, pdfField: null },
+  ];
+  const gl = new Map([["A", "10.0000"], ["B", "20.0000"]]);
+  const out = assembleReturn(boxes, gl);
+  assert.equal(out.find((b) => b.lineCode === "C")!.value, "30.0000");
+});
+
+test("a zero-sign box prints its value unflipped", () => {
+  const boxes: TaxReturnBoxDef[] = [
+    { lineCode: "Z", label: "Memo", sign: 0, sequence: 1, formula: null, editable: false, pdfField: null },
+  ];
+  const out = assembleReturn(boxes, new Map([["Z", "5.0000"]]));
+  assert.equal(out[0]!.value, "5.0000");
+});
+
+test("planReturn keeps the first formula and pdf field for a repeated line code", () => {
+  const row = (over: Partial<TaxReportLineRow>): TaxReportLineRow => ({
+    lineCode: "101",
+    label: "Sales",
+    sign: 1,
+    sequence: 2,
+    taxCodeId: null,
+    basis: null,
+    formula: null,
+    pdfField: null,
+    ...over,
+  });
+  const { boxes } = planReturn([
+    row({ formula: "A + B", pdfField: "f1", sequence: 1 }),
+    row({ formula: "C", pdfField: "f2", sequence: 2 }),
+  ]);
+  assert.equal(boxes.length, 1);
+  assert.equal(boxes[0]!.formula, "A + B");
+  assert.equal(boxes[0]!.pdfField, "f1");
+  assert.equal(boxes[0]!.sequence, 1);
+});
