@@ -520,11 +520,12 @@
       "sftp-schedules": "Import schedules"
     },
     "operational": {
-      "title": "Bank feed connections",
-      "manage": "Manage feeds",
-      "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
-      "lastSync": "Last sync",
-      "never": "Never"
+      "title": "Connexions de flux bancaires",
+      "manage": "Gérer les flux",
+      "none": "Aucune connexion de flux bancaire active. Configurez-en une dans Company Settings → Bank Feeds.",
+      "lastSync": "Dernière synchronisation",
+      "lastAttempt": "Dernière tentative",
+      "never": "Jamais"
     }
   },
   "pspSettlements": {
