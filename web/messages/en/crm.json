@@ -114,7 +114,15 @@
     "createEstimate": "Create estimate",
     "estimateCreated": "Estimate created",
     "estimateFailed": "The estimate could not be created.",
-    "estimateNeedsAccount": "Set an account before creating an estimate"
+    "estimateNeedsAccount": "Set an account before creating an estimate",
+    "statuses": {
+      "qualification": "Qualification",
+      "discovery": "Discovery",
+      "proposal": "Proposal",
+      "negotiation": "Negotiation",
+      "closedWon": "Closed won",
+      "closedLost": "Closed lost"
+    }
   },
   "forecastCategories": {
     "omitted": "Omitted",
