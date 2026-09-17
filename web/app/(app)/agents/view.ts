@@ -25,7 +25,7 @@ import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { dateTime } from '../../../lib/format'
 import { parseAgentFindingsParams } from '../../../lib/list/agent-findings'
 import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
-import { loadAgentInbox } from '../../../lib/agents/inbox'
+import { INBOX_STATUSES, loadAgentInbox } from '../../../lib/agents/inbox'
 import { loadBriefing } from '../../../lib/agents/briefing'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import { listWorkItemNotes, loadWorkItemAssignment } from '../../../lib/agents/assignments'
@@ -242,9 +242,9 @@ export async function loadAgents(
   const ageFormat = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
   const countFormat = new Intl.NumberFormat(locale)
   const canWrite = can(authz, 'assistant.write')
-  const activeCount = inbox.facets.statuses
-    .filter((row) => row.key === 'open' || row.key === 'in_review')
-    .reduce((sum, row) => sum + row.count, 0)
+  // Query-independent by construction (the read model counts it without the
+  // free-text clause): the tile keeps global scope under ?q= (F-t11-005).
+  const activeCount = inbox.facets.openActive
   const overdueCount = inbox.facets.overdue
   const lastRun = runs[0] ?? null
 
@@ -315,10 +315,13 @@ export async function loadAgents(
       label: tc(`agents.${row.key}`),
       count: row.count,
     })),
-    statusOptions: inbox.facets.statuses.map((row) => ({
-      value: row.key,
-      label: tc(`status.${row.key}`),
-      count: row.count,
+    // Every lifecycle state is always offered (counts from the unfiltered-by-
+    // status facet): triaged work stays discoverable while the default inbox
+    // remains actionable (F-t11-006).
+    statusOptions: INBOX_STATUSES.map((key) => ({
+      value: key,
+      label: tc(`status.${key}`),
+      count: inbox.facets.statuses.find((row) => row.key === key)?.count ?? 0,
     })),
     severityOptions: inbox.facets.severities.map((row) => ({
       value: row.key,
