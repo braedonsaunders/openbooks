@@ -1815,6 +1815,26 @@ async function createPaymentRunWithinTransaction(
   const found = new Set(bills.rows.map((b) => b.document_id));
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
+    // Name the bills held by another live run (bill + holding run number)
+    // instead of failing the whole selection behind the generic guard
+    // (F-t04-005): the operator can see exactly which selection to drop.
+    const reserved = (await db.execute<{ billId: string; billNumber: string; runNumber: string }>(sql`
+      select distinct i.source_document_id as "billId", d.document_number as "billNumber", r.run_number as "runNumber"
+        from payment_run_items i
+        join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
+        join documents d on d.id = i.source_document_id and d.org_id = i.org_id
+       where i.org_id = ${opts.orgId}
+         and i.source_document_id = any(${`{${missing.join(',')}}`}::uuid[])
+         and i.status = 'selected'
+    `)).rows;
+    if (reserved.length > 0) {
+      const pairs = reserved.map((row) => `${row.billNumber} (${row.runNumber})`);
+      const rest = missing.length - new Set(reserved.map((row) => row.billId)).size;
+      throw new PaymentError(
+        `${pairs.join(", ")} ${pairs.length === 1 ? "is" : "are"} already selected in another live payment run` +
+        (rest > 0 ? "; other selected bills are held, closed, or do not match the profile currency and subsidiary" : ""),
+      );
+    }
     throw new PaymentError(
       "some selected bills are held, closed, already selected in another live payment run, or do not match the profile currency and subsidiary",
     );
