@@ -237,9 +237,14 @@
       "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
       "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
       "file_downloaded": "Payment file downloaded", "file_delivered_sftp": "Payment file delivered by SFTP", "run_rolled_back": "Payment run rolled back",
+      "run_posting_started": "Payment run posting started", "run_posting_completed": "Payment run posted",
+      "run_posting_failed": "Payment run posting failed", "run_posting_recovered": "Payment run posting recovered",
       "run_cancelled": "Payment run cancelled",
       "file_delivery_failed": "Payment file delivery failed",
-      "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
+      "instruction_sent": "Payment sent", "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
+    },
+    "eventsDetail": {
+      "postingOutcome": "{posted} sent · {failed} failed · {pending} still pending"
     },
     "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",
     "toasts": {

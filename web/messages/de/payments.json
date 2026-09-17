@@ -237,9 +237,14 @@
       "run_created": "Zahlungslauf erstellt", "run_submitted": "Zahlungslauf eingereicht", "run_approved": "Zahlungslauf genehmigt", "run_rejected": "Zahlungslauf abgelehnt",
       "file_generated": "Zahlungsdatei erzeugt", "file_reprocessed": "Zahlungsdatei erneut verarbeitet", "file_approved": "Zahlungsdatei genehmigt", "file_rejected": "Zahlungsdatei abgelehnt",
       "file_downloaded": "Zahlungsdatei heruntergeladen", "file_delivered_sftp": "Zahlungsdatei per SFTP übermittelt", "run_rolled_back": "Zahlungslauf zurückgerollt",
+      "run_posting_started": "Buchung des Zahlungslaufs gestartet", "run_posting_completed": "Zahlungslauf gebucht",
+      "run_posting_failed": "Buchung des Zahlungslaufs fehlgeschlagen", "run_posting_recovered": "Buchung des Zahlungslaufs wiederhergestellt",
       "run_cancelled": "Zahlungslauf abgebrochen",
       "file_delivery_failed": "Übermittlung der Zahlungsdatei fehlgeschlagen",
-      "instruction_settled": "Zahlung abgewickelt", "instruction_returned": "Zahlung zurückgegeben", "instruction_rejected": "Zahlung abgelehnt"
+      "instruction_sent": "Zahlung gesendet", "instruction_settled": "Zahlung abgewickelt", "instruction_returned": "Zahlung zurückgegeben", "instruction_rejected": "Zahlung abgelehnt"
+    },
+    "eventsDetail": {
+      "postingOutcome": "{posted} gesendet · {failed} fehlgeschlagen · {pending} noch ausstehend"
     },
     "confirmPost": "{count, plural, one {# Zahlung} other {# Zahlungen}} über insgesamt {total} in das Hauptbuch buchen und den ausgewählten Eingangsrechnungen zuordnen?",
     "toasts": {
