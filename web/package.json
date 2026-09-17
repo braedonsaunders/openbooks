@@ -15,6 +15,7 @@
     "@ai-sdk/openai": "3.0.85",
     "@ai-sdk/openai-compatible": "2.0.60",
     "@aws-sdk/client-s3": "^3.1087.0",
+    "@braedonsaunders/appkit-errors": "0.2.0",
     "@braedonsaunders/appkit-mcp": "0.1.0",
     "@braedonsaunders/appkit-scheduling": "1.0.0",
     "@braedonsaunders/appkit-superadmin": "2.1.0",
