@@ -112,7 +112,8 @@
     "selectItem": "Selecione um item",
     "createEstimate": "Criar orçamento",
     "estimateCreated": "Orçamento criado",
-    "estimateFailed": "Não foi possível criar o orçamento."
+    "estimateFailed": "Não foi possível criar o orçamento.",
+    "estimateNeedsAccount": "Defina uma conta antes de criar uma estimativa"
   },
   "forecastCategories": {
     "omitted": "Omitido",
@@ -267,7 +268,8 @@
   "validation": {
     "nameRequired": "Informe um nome de conta.",
     "subjectRequired": "Informe um assunto de atividade.",
-    "titleRequired": "Informe um título de oportunidade."
+    "titleRequired": "Informe um título de oportunidade.",
+    "lossReasonRequired": "Um motivo de perda é obrigatório para fechar como perdida"
   },
   "feedback": { "createFailed": "Não foi possível criar o rascunho." }
 }

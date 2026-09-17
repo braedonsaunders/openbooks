@@ -112,7 +112,8 @@
     "selectItem": "Sélectionner un article",
     "createEstimate": "Créer un devis",
     "estimateCreated": "Devis créé",
-    "estimateFailed": "Le devis n’a pas pu être créé."
+    "estimateFailed": "Le devis n’a pas pu être créé.",
+    "estimateNeedsAccount": "Sélectionnez un compte avant de créer un devis"
   },
   "forecastCategories": {
     "omitted": "Exclue",
@@ -271,7 +272,8 @@
   "validation": {
     "nameRequired": "Saisissez un nom de compte.",
     "subjectRequired": "Saisissez un objet d’activité.",
-    "titleRequired": "Saisissez un titre d’occasion."
+    "titleRequired": "Saisissez un titre d’occasion.",
+    "lossReasonRequired": "Un motif de clôture est requis pour les opportunités perdues"
   },
   "feedback": { "createFailed": "Le brouillon n’a pas pu être créé." }
 }

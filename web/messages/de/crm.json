@@ -112,7 +112,8 @@
     "selectItem": "Artikel auswählen",
     "createEstimate": "Angebot erstellen",
     "estimateCreated": "Angebot erstellt",
-    "estimateFailed": "Das Angebot konnte nicht erstellt werden."
+    "estimateFailed": "Das Angebot konnte nicht erstellt werden.",
+    "estimateNeedsAccount": "Legen Sie vor der Angebotserstellung einen Kunden fest"
   },
   "forecastCategories": {
     "omitted": "Ausgelassen",
@@ -267,7 +268,8 @@
   "validation": {
     "nameRequired": "Geben Sie einen Kontonamen ein.",
     "subjectRequired": "Geben Sie einen Aktivitätsbetreff ein.",
-    "titleRequired": "Geben Sie einen Titel für die Verkaufschance ein."
+    "titleRequired": "Geben Sie einen Titel für die Verkaufschance ein.",
+    "lossReasonRequired": "Für verlorene Verkaufschancen ist ein Verlustgrund erforderlich"
   },
   "feedback": { "createFailed": "Der Entwurf konnte nicht erstellt werden." }
 }
