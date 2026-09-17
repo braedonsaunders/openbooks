@@ -1084,7 +1084,8 @@
     "sum": "Summe",
     "avg": "Durchschnitt",
     "min": "Min",
-    "max": "Max"
+    "max": "Max",
+    "latest": "Letzter"
   },
   "run": {
     "results": "Ergebnisse",

@@ -1084,7 +1084,8 @@
     "sum": "Soma",
     "avg": "Média",
     "min": "Mín.",
-    "max": "Máx."
+    "max": "Máx.",
+    "latest": "Mais recente"
   },
   "run": {
     "results": "Resultados",
