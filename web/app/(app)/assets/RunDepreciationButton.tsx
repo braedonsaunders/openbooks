@@ -28,24 +28,35 @@ export function RunDepreciationButton({
 
   async function run() {
     setBusy(true)
-    const res = await fetch('/api/assets/run-depreciation', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...(assetId ? { assetId } : {}), bookId }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('drawer.runFailed'))
+    // A transport or parse failure must toast like any other failure — an
+    // uncaught rejection leaves the button spinning with zero feedback.
+    let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string }
+    try {
+      const res = await fetch('/api/assets/run-depreciation', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...(assetId ? { assetId } : {}), bookId }),
+      })
+      data = await res.json()
+      if (!res.ok) {
+        toast.error(typeof data.error === 'string' && data.error ? data.error : t('drawer.runFailed'))
+        setBusy(false)
+        return
+      }
+    } catch {
+      toast.error(t('drawer.runFailed'))
       setBusy(false)
       return
     }
-    if (data.posted > 0) {
+    const posted = data.posted ?? 0
+    const skipped = data.skipped ?? 0
+    if (posted > 0) {
       toast.success(
-        t('run.posted', { count: data.posted, amount: money(data.totalAmount) }) +
-          (data.skipped > 0 ? ` · ${t('run.someSkipped', { count: data.skipped })}` : ''),
+        t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') }) +
+          (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''),
       )
     } else {
-      toast.message(t('run.nothingDue') + (data.skipped > 0 ? ` · ${t('run.someSkipped', { count: data.skipped })}` : ''))
+      toast.message(t('run.nothingDue') + (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''))
     }
     if (Array.isArray(data.problems) && data.problems.length) {
       for (const p of data.problems.slice(0, 3)) toast.warning(String(p))

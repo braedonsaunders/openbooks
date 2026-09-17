@@ -287,13 +287,33 @@ export function AssetDrawer({
   async function runForAsset(bookId: string) {
     setBusy(true)
     try {
-      const res = await fetch('/api/assets/run-depreciation', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId: a.id, bookId }),
-      })
-      const data = await res.json()
-      if (!res.ok) toast.error(data.error ?? t('drawer.runFailed'))
-      else if (data.posted > 0) toast.success(t('run.posted', { count: data.posted, amount: money(data.totalAmount) }))
-      else toast.message(t('run.nothingDue'))
+      // A closed-period skip posts 0 with the reason in `problems` — surface
+      // it like the page-level button does. A transport or parse failure must
+      // also toast: try/finally alone closes the menu with zero feedback.
+      let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string }
+      try {
+        const res = await fetch('/api/assets/run-depreciation', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId: a.id, bookId }),
+        })
+        data = await res.json()
+        if (!res.ok) {
+          toast.error(typeof data.error === 'string' && data.error ? data.error : t('drawer.runFailed'))
+          return
+        }
+      } catch {
+        toast.error(t('drawer.runFailed'))
+        return
+      }
+      const posted = data.posted ?? 0
+      const skipped = data.skipped ?? 0
+      if (posted > 0) {
+        toast.success(t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') }))
+      } else {
+        toast.message(t('run.nothingDue') + (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''))
+      }
+      if (Array.isArray(data.problems) && data.problems.length) {
+        for (const p of data.problems.slice(0, 3)) toast.warning(String(p))
+      }
       router.refresh()
     } finally { setBusy(false); setActionsOpen(false) }
   }
