@@ -36,12 +36,16 @@ export function AccountDrawer({ data, statuses, owners, territories, sources, ba
     if (!form.displayName.trim()) return toast.error(t('validation.nameRequired'))
     setBusy(true)
     try {
-      const identity = await fetch(`/api/parties/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName: form.displayName, email: form.email, phone: form.phone, website: form.website, isActive: true }) })
+      // The parties PATCH is revision-guarded: echo the loaded updated_at or
+      // the first save of a fresh draft 409s as "changed after you opened".
+      const identity = await fetch(`/api/parties/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName: form.displayName, email: form.email, phone: form.phone, website: form.website, isActive: true, expectedUpdatedAt: party.updated_at }) })
+      const identityBody = await identity.json().catch(() => null) as { error?: string } | null
       const crm = await fetch(`/api/crm/accounts/${party.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...form, statusId: form.statusId || null, ownerUserId: form.ownerUserId || null, territoryId: form.territoryId || null, leadSourceId: form.leadSourceId || null, nextActionAt: form.nextActionAt || null, isActive: true }) })
-      if (!identity.ok || !crm.ok) throw new Error()
+      const crmBody = await crm.json().catch(() => null) as { error?: string } | null
+      if (!identity.ok || !crm.ok) throw new Error(identityBody?.error ?? crmBody?.error ?? undefined)
       toast.success(tc('feedback.saved'))
       router.refresh()
-    } catch { toast.error(tc('feedback.saveFailed')) } finally { setBusy(false) }
+    } catch (error) { toast.error(error instanceof Error && error.message ? error.message : tc('feedback.saveFailed')) } finally { setBusy(false) }
   }
   const filteredStatuses = statuses.filter((status) => status.lifecycle_stage === form.lifecycleStage)
   return <UrlDrawer open closeHref={basePath} size="xl" title={<span className="flex items-center gap-2">{form.displayName || t('accounts.newFallback')}<Badge>{t(`stages.${form.lifecycleStage}`)}</Badge></span>} headerActions={canManage ? <Button onClick={save} disabled={busy}>{busy ? tc('actions.saving') : tc('actions.save')}</Button> : undefined}>
