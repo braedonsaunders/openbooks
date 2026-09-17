@@ -74,6 +74,20 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
   and provision inputs measure as DTA, never DTL.
 - PSP settlement drafts are postable, with typed import refusals.
 - Dashboard money and AR tiles label the as-of cut-off.
+- Empty field-ticket drafts can be discarded instead of orphaned.
+
+### Aging, budgets, and bank setup
+
+- Aging derives opens from stored base amounts and folds documentless
+  control balances into a per-party residual, so the subledger ties to
+  its control account.
+- Budget variance is direction-aware: a revenue shortfall reads Under.
+  Self-approval is refused with a typed reason.
+- Bank-feed targets use the unified reconcilable-bank reader. Setup
+  drawer edits write the keys the controls read, so a bank profile can
+  be deactivated.
+- True-cost explains an empty Assign picker when no burden categories
+  exist.
 
 ## [0.1.0-alpha.14] - 2026-09-17
 

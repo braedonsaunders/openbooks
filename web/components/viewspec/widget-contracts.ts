@@ -315,7 +315,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'provision-recon-section': { props: ['amountLabel', 'enactedRateText', 'percentLabel', 'pretaxAmount', 'pretaxLabel', 'steps', 'summaries', 'title'] },
   'provision-runs-table': { props: ['columns', 'emptyText', 'rows'] },
   'provision-status-badge': { props: ['label', 'variant'] },
-  'psp-settlements': { props: ['initialRows', 'strings'] },
+  'psp-settlements': { props: ['initialRows', 'initialSubsidiaries', 'strings'] },
   'query-console': { props: [] },
   'quota-empty-action': { props: ['href', 'label', 'size'] },
   'readiness-panel': { props: ['actionHref', 'actionLabel', 'empty', 'hint', 'rows', 'title'] },

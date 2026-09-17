@@ -18,11 +18,16 @@ test('cash open items use only the document current posted projection', () => {
 })
 
 test('customer and purchasing home metrics reject superseded projections', () => {
-  for (const moduleSource of [customerHome, purchasingHome]) {
-    assert.match(moduleSource, /je\.org_id = \$\{orgId\} and je\.status = 'posted'/)
-    assert.match(moduleSource, /d\.org_id = \$\{orgId\}/)
-    assert.match(moduleSource, /d\.posted_entry_id = je\.id/)
-    assert.match(moduleSource, /d\.status = 'posted'/)
-    assert.doesNotMatch(moduleSource, /je\.status in \('posted', 'reversed'\)/)
-  }
+  assert.match(customerHome, /je\.org_id = \$\{orgId\} and je\.status = 'posted'/)
+  assert.match(customerHome, /d\.org_id = \$\{orgId\}/)
+  assert.match(customerHome, /d\.posted_entry_id = je\.id/)
+  assert.match(customerHome, /d\.status = 'posted'/)
+  assert.doesNotMatch(customerHome, /je\.status in \('posted', 'reversed'\)/)
+
+  // F-t03-009: purchasing groups the hero off the shared openItems reader
+  // instead of a second journal aggregate that drifted from /ap.
+  assert.match(purchasingHome, /openItems\(/)
+  assert.match(purchasingHome, /from ['"].*cash\/core['"]/)
+  assert.doesNotMatch(purchasingHome, /je\.status in \('posted', 'reversed'\)/)
+  assert.doesNotMatch(purchasingHome, /from journal_lines jl/)
 })
