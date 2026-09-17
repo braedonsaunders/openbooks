@@ -18,8 +18,8 @@ export type AgingSide = "ar" | "ap";
  * explicit period preset resolves to its own end date; a bare call with
  * neither defaults to today — the screen's default — never to the fiscal
  * year end. The export once fell through to the fiscal year end, so every
- * balance landed in 90+ (Rassaun) or the totals disagreed with the screen
- * by the postings between the two dates (Summit Ridge).
+ * balance landed in 90+ or the totals disagreed with the screen by the
+ * postings between the two dates.
  */
 export function resolveAgingAsOf(args: {
   asOf: string | null;
