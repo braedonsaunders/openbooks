@@ -16,6 +16,9 @@ const STATUS_STYLE: Record<BudgetRow['status'], string> = {
   'on-track': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   watch: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
   over: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
+  // F-t09-004: a missed revenue line is unfavorable, so it shares the
+  // over-spend hue family but keeps its own "Under" label and filter.
+  under: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300',
   'no-budget': 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
 }
 
@@ -30,7 +33,7 @@ export function BudgetTab({ data }: { data: HealthData }) {
 }
 
 /* ------------------------------------------------------------ real budgets */
-type Filter = 'all' | 'over' | 'watch' | 'on-track' | 'no-budget'
+type Filter = 'all' | BudgetRow['status']
 const PAGE = 30
 
 function RealBudget({ data }: { data: HealthData }) {
@@ -53,12 +56,14 @@ function RealBudget({ data }: { data: HealthData }) {
   const pageRows = filtered.slice((pageNo - 1) * PAGE, pageNo * PAGE)
 
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: b.rows.length, over: 0, watch: 0, 'on-track': 0, 'no-budget': 0 }
+    const c: Record<Filter, number> = { all: b.rows.length, over: 0, watch: 0, under: 0, 'on-track': 0, 'no-budget': 0 }
     for (const r of b.rows) c[r.status]++
     return c
   }, [b.rows])
 
   const budgeted = b.rows.filter((r) => r.status !== 'no-budget')
+  // F-t09-004: the header counts genuine cost overruns only — revenue
+  // shortfalls carry the "under" status and never inflate this figure.
   const overCount = counts.over
   const coverage = b.rows.length ? budgeted.length / b.rows.length : 0
   const statusLabel = (status: BudgetRow['status']) => t(`status.${status}`)
@@ -84,6 +89,7 @@ function RealBudget({ data }: { data: HealthData }) {
         <KpiCard icon={ClipboardList} accent={overCount > 0 ? 'red' : 'emerald'} label={t('overBudget')} value={String(overCount)} sub={t('onWatch', { count: counts.watch })} tone={overCount > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={ClipboardList} accent="violet" label={t('coverage')} value={fmtPct(coverage)} sub={t('coverageSub')} />
       </div>
+      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('toleranceNote')}</p>
 
       <Panel
         title={t('tableTitle', { count: filtered.length })}
@@ -146,7 +152,7 @@ function RealBudget({ data }: { data: HealthData }) {
                       ) : (
                         <span className="flex items-center gap-2">
                           <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                            <span className={cn('block h-full rounded-full', r.status === 'over' ? 'bg-red-500' : r.status === 'watch' ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+                            <span className={cn('block h-full rounded-full', r.status === 'over' || r.status === 'under' ? 'bg-red-500' : r.status === 'watch' ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(100, ratio * 100)}%` }} />
                           </span>
                           <span className="text-[11px] tabular-nums text-slate-400">{Math.round(ratio * 100)}%</span>
                         </span>
