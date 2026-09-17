@@ -32,16 +32,25 @@ export function DocumentRowActions({
 
   async function act(action: 'submit' | 'post') {
     setBusy(true)
-    const res = await fetch('/api/documents/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, documentId: id }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
-    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
-    setBusy(false)
-    router.refresh()
+    try {
+      const res = await fetch('/api/documents/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, documentId: id }),
+      })
+      // The error body may not be JSON (proxy 5xx pages): never let the read
+      // itself throw, or the failure goes silent with an unhandled rejection.
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+      else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+      router.refresh()
+    } catch {
+      toast.error(t('toasts.actionFailed'))
+    } finally {
+      // A rejected transport must not wedge the button on: without this,
+      // every later click silently dies on the stuck disabled button.
+      setBusy(false)
+    }
   }
 
   if (status === 'draft') {
