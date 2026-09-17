@@ -83,6 +83,11 @@
     "markFiled": "标记为已申报",
     "markingFiled": "标记为已申报中…",
     "filedSuccess": "申报已标记为已申报",
+    "errors": {
+      "periodNotClosed": "必须先关闭该期间，才能将此申报标记为已申报。请关闭期间后再试。",
+      "alreadyFiled": "此申报已标记为已申报。",
+      "stale": "此申报自准备以来已发生变化。请刷新并重新准备后再标记为已申报。"
+    },
     "line": "行",
     "lineDescription": "说明",
     "amount": "金额",

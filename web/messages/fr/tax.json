@@ -83,6 +83,11 @@
     "markFiled": "Marquer comme déposée",
     "markingFiled": "Marquage…",
     "filedSuccess": "Déclaration marquée comme déposée",
+    "errors": {
+      "periodNotClosed": "La période doit être clôturée avant de pouvoir marquer cette déclaration comme déposée. Clôturez la période, puis réessayez.",
+      "alreadyFiled": "Cette déclaration est déjà marquée comme déposée.",
+      "stale": "Cette déclaration a changé depuis sa préparation. Actualisez-la et préparez-la de nouveau avant de la marquer comme déposée."
+    },
     "line": "Ligne",
     "lineDescription": "Description",
     "amount": "Montant",

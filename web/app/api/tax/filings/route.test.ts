@@ -22,6 +22,7 @@ interface RouteState {
   permissions: Set<string>
   permissionChecks: string[]
   engineCalls: EngineCall[]
+  markFiledError: unknown
 }
 
 const stateKey = Symbol.for('openbooks.tax-filing-route-test')
@@ -29,6 +30,7 @@ const routeState: RouteState = {
   permissions: new Set(),
   permissionChecks: [],
   engineCalls: [],
+  markFiledError: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxFilingNextResponse =
@@ -106,10 +108,12 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
       export class TaxFilingError extends Error {
-        constructor(code) { super(code); this.code = code }
+        constructor(code, message) { super(message ?? code); this.code = code }
       }
+      globalThis.openbooksTaxFilingError = (code, message) => new TaxFilingError(code, message)
       export async function markTaxFilingFiled(orgId, id, userId) {
         state.engineCalls.push({ op: 'markFiled', orgId, userId })
+        if (state.markFiledError) throw state.markFiledError
         return { id, filedAt: '2026-08-24T00:00:00.000Z' }
       }
       export function buildTaxFilingSnapshot() {
@@ -171,10 +175,16 @@ const patchRouteUrl = './[id]/route.ts?tax-filing-permission-test'
 const { PATCH } = (await import(patchRouteUrl)) as typeof import('./[id]/route.ts')
 hooks.deregister()
 
+function taxFilingError(code: string, message: string): unknown {
+  const factory = (globalThis as { openbooksTaxFilingError?: (code: string, message: string) => unknown }).openbooksTaxFilingError
+  return factory ? factory(code, message) : Object.assign(new Error(message), { code })
+}
+
 function reset(permissions: string[]): void {
   routeState.permissions = new Set(permissions)
   routeState.permissionChecks.length = 0
   routeState.engineCalls.length = 0
+  routeState.markFiledError = null
 }
 
 function post(): Promise<Response> {
@@ -219,6 +229,30 @@ test('PATCH mark-filed demands compliance.file, not the report authority', async
   assert.deepEqual(await response.json(), { id: filingId, filed_at: '2026-08-24T00:00:00.000Z' })
   assert.deepEqual(routeState.permissionChecks, ['compliance.file'])
   assert.deepEqual(routeState.engineCalls, [{ op: 'markFiled', orgId: 'org-1', userId: 'user-1' }])
+})
+
+// F-x5-001 residual: a 409 whose reason stays server-side is UI-silent — the
+// drawer can only toast a generic save failure. Every mark-filed 409 must
+// carry its machine-readable code so the drawer localizes the remedy.
+test('PATCH mark-filed 409s carry the typed refusal code', async () => {
+  reset(['compliance.file'])
+  const filingId = randomUUID()
+
+  routeState.markFiledError = taxFilingError(
+    'period-not-closed',
+    'period 2026-08 must be closed for gl across every covered subsidiary before the filing can be marked filed',
+  )
+  const closed = await patch(filingId)
+  assert.equal(closed.status, 409)
+  assert.deepEqual(await closed.json(), {
+    code: 'period-not-closed',
+    error: 'period 2026-08 must be closed for gl across every covered subsidiary before the filing can be marked filed',
+  })
+
+  routeState.markFiledError = taxFilingError('already-filed', 'filing is already filed')
+  const duplicate = await patch(filingId)
+  assert.equal(duplicate.status, 409)
+  assert.deepEqual(await duplicate.json(), { code: 'already-filed', error: 'filing is already filed' })
 })
 
 test('a reports.create holder cannot certify a statutory filing', async () => {

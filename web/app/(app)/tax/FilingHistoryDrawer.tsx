@@ -31,19 +31,38 @@ export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: Fi
   const [reference, setReference] = useState(filing.filing_reference ?? '')
   const [busy, setBusy] = useState(false)
 
+  const [markError, setMarkError] = useState<string | null>(null)
+
+  /** Map a typed mark-filed refusal to localized copy (F-x5-001). */
+  function markFiledMessage(data: { code?: unknown; error?: unknown }): string {
+    const code = typeof data.code === 'string' ? data.code : null
+    if (code === 'period-not-closed') return t('errors.periodNotClosed')
+    if (code === 'already-filed') return t('errors.alreadyFiled')
+    if (code === 'stale') return t('errors.stale')
+    return typeof data.error === 'string' && data.error ? data.error : tCommon('feedback.saveFailed')
+  }
+
   async function markFiled() {
     setBusy(true)
+    setMarkError(null)
     try {
       const response = await fetch(`/api/tax/filings/${filing.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filingReference: reference }),
       })
-      if (!response.ok) throw new Error()
+      // A 409 names its remedy (close the period, refresh the snapshot):
+      // surface it inline and in the toast, never as a generic save failure.
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(markFiledMessage(data))
+      }
       toast.success(t('filedSuccess'))
       router.refresh()
-    } catch {
-      toast.error(tCommon('feedback.saveFailed'))
+    } catch (e) {
+      const message = e instanceof Error ? e.message : tCommon('feedback.saveFailed')
+      setMarkError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -78,6 +97,9 @@ export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: Fi
             <Input id="filing-reference" value={reference} onChange={(event) => setReference(event.target.value)} placeholder={t('referencePlaceholder')} maxLength={200} />
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('markFiledHint')}</p>
             <Button onClick={markFiled} disabled={busy}>{busy ? t('markingFiled') : t('markFiled')}</Button>
+            {markError ? (
+              <p role="alert" className="text-xs font-medium text-red-700 dark:text-red-300">{markError}</p>
+            ) : null}
           </div>
         ) : null}
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">

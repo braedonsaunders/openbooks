@@ -33,10 +33,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (error) {
     if (error instanceof TaxFilingError) {
       if (error.code === 'not-found') return NextResponse.json({ error: 'not found' }, { status: 404 })
-      if (error.code === 'already-filed') return NextResponse.json({ error: 'filing is already filed' }, { status: 409 })
+      // Every 409 carries its machine-readable code: the drawer localizes
+      // the refusal (period-not-closed names the close-the-period remedy)
+      // instead of swallowing it into a generic save failure (F-x5-001).
+      if (error.code === 'already-filed') {
+        return NextResponse.json({ code: error.code, error: 'filing is already filed' }, { status: 409 })
+      }
       // Stale or ungoverned: the state conflicts with what would be certified.
       if (error.code === 'stale' || error.code === 'period-not-closed') {
-        return NextResponse.json({ error: error.message }, { status: 409 })
+        return NextResponse.json({ code: error.code, error: error.message }, { status: 409 })
       }
     }
     return NextResponse.json({ error: 'could not update filing' }, { status: 422 })
