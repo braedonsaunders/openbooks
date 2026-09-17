@@ -1,0 +1,86 @@
+{
+  "orgId": "da472d3a-98e5-4fa5-a6ee-2451e6d6970a",
+  "orgName": "SIM · Summit Ridge Construction",
+  "at": "2026-09-09T02:02:36.209Z",
+  "gitSha": "e3aa3fa93",
+  "cutoff": "2025-12-31 00:00:00-05",
+  "cutoffSource": "prior-month-end (no closed GL period)",
+  "counts": {
+    "documents": 234,
+    "postedDocuments": 61,
+    "postedEntries": 62,
+    "postedLines": 296
+  },
+  "trialBalance": {
+    "debits": "0",
+    "credits": "0",
+    "accounts": 0
+  },
+  "controlTieOut": [],
+  "inventoryTieOut": [],
+  "checks": [
+    {
+      "name": "global-balance",
+      "ok": true,
+      "detail": "sum(all posted lines) = 0.0000 (want 0)"
+    },
+    {
+      "name": "per-entry-balance",
+      "ok": true,
+      "detail": "0 posted entries do not balance (want 0)"
+    },
+    {
+      "name": "open-balance-fresh",
+      "ok": true,
+      "detail": "0 closed-period documents have stale open_balance (want 0)"
+    },
+    {
+      "name": "overhead-pair-zero",
+      "ok": true,
+      "detail": "0 accounts moved by overhead_applied entries (want 0 — pairs must net to zero)"
+    },
+    {
+      "name": "overhead-burdens-jobs",
+      "ok": true,
+      "detail": "project-tagged overhead totals 0.00 (want >= 0 — burden must DEBIT jobs, not credit them)"
+    },
+    {
+      "name": "labor-clearing",
+      "ok": true,
+      "detail": "clearing balance = 0.0000 (standards − payroll − variance; informational)"
+    },
+    {
+      "name": "subledger-gl-tieout",
+      "ok": true,
+      "detail": "0 control accounts; worst |GL − subledger − directJE| = 0.0000"
+    },
+    {
+      "name": "inventory-subledger-gl-tieout",
+      "ok": true,
+      "detail": "0 control-account/entity ties across 0 method sets; worst |GL − Σ open layers| = 0.0000"
+    }
+  ],
+  "timings": [
+    {
+      "report": "trial_balance",
+      "ms": 0,
+      "rows": 0
+    },
+    {
+      "report": "balance_sheet",
+      "ms": 0,
+      "rows": 0
+    },
+    {
+      "report": "profit_and_loss",
+      "ms": 0,
+      "rows": 0
+    },
+    {
+      "report": "ar_aging",
+      "ms": 0,
+      "rows": 0
+    }
+  ],
+  "pass": true
+}

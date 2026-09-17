@@ -2592,3 +2592,155 @@ test('analytics copy ships translated in fr, es and de', () => {
     assert.deepEqual(armsDrift, [], `${locale} analytics translations drop ICU plural/select arms`)
   }
 })
+
+test('admin namespace ships translated in zh and pt-BR', () => {
+  // i3: the admin namespace (3354 keys) was missing 1380 keys each in zh
+  // and pt-BR — setup, ai agents, features, backups, page layouts and
+  // extensions rendered English inside otherwise translated screens.
+  // Every leaf must exist, keep its ICU placeholders, and differ from
+  // English except for reviewed cognates, pinned to the exact term.
+  const identicalByFact = new Set([
+    'zh:admin.ai.agents.units.percent|%',
+    'zh:admin.backupsManager.table.sha256|SHA-256',
+    'zh:admin.buildHub.groups.api|API',
+    'zh:admin.customFields.drawer.keyPlaceholder|po_number',
+    'zh:admin.features.apiAccess.title|REST API',
+    'zh:admin.features.crm.title|CRM',
+    'zh:admin.flows.targets.emailPlaceholder|ops@example.com, cfo@example.com',
+    'zh:admin.hub.cards.ai.title|AI',
+    'zh:admin.roles.drawer.keyPlaceholder|ap_clerk',
+    'zh:admin.settings.fiscal.range|{start} → {end}',
+    'zh:admin.settings.organization.displayNamePlaceholder|Acme Manufacturing',
+    'zh:admin.settings.organization.legalNamePlaceholder|Acme Manufacturing Inc.',
+    'zh:admin.setup.entities.sftp.title|SFTP',
+    'zh:admin.setup.fieldHelp.expiryWarningDaysHint|30',
+    'zh:admin.setup.fieldHelp.graceDaysHint|0',
+    'zh:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+    'zh:admin.setup.laborCosting.wizard.ratePlaceholder|0.00',
+    'zh:admin.setup.options.informationReturnForm.misc|1099-MISC',
+    'zh:admin.setup.options.informationReturnForm.nec|1099-NEC',
+    'zh:admin.setup.options.informationReturnForm.t4a|T4A',
+    'zh:admin.setup.options.macrsSystem.ads|ADS',
+    'zh:admin.setup.options.macrsSystem.gds|GDS',
+    'zh:admin.setup.options.taxType.gst|GST',
+    'zh:admin.setup.options.taxType.hst|HST',
+    'zh:admin.setup.options.taxType.pst|PST',
+    'zh:admin.setup.options.taxType.qst|QST',
+    'zh:admin.setup.paymentOperations.rails.positive_pay|Positive Pay',
+    'zh:admin.setup.paymentOperations.schemes.nacha|NACHA',
+    'zh:admin.setup.paymentOperations.schemes.sepa_b2b|SEPA B2B',
+    'zh:admin.setup.paymentOperations.schemes.sepa_core|SEPA Core',
+    'pt-BR:admin.ai.agents.parameterLabel|{label} ({unit})',
+    'pt-BR:admin.ai.agents.units.percent|%',
+    'pt-BR:admin.apiKeys.table.status|Status',
+    'pt-BR:admin.audit.drawer.item|Item',
+    'pt-BR:admin.backupsManager.table.sha256|SHA-256',
+    'pt-BR:admin.backupsManager.table.status|Status',
+    'pt-BR:admin.buildHub.groups.api|API',
+    'pt-BR:admin.customFields.drawer.keyPlaceholder|po_number',
+    'pt-BR:admin.customFields.drawer.placeholder|Placeholder',
+    'pt-BR:admin.customFields.drawer.roleController|Controller',
+    'pt-BR:admin.customFields.table.status|Status',
+    'pt-BR:admin.extensions.columns.status|Status',
+    'pt-BR:admin.extensions.status|Status',
+    'pt-BR:admin.extensions.title|Apps',
+    'pt-BR:admin.features.apps.title|Apps',
+    'pt-BR:admin.features.bankFeeds.title|Bank Feeds',
+    'pt-BR:admin.features.crm.title|CRM',
+    'pt-BR:admin.features.scripts.title|Scripts',
+    'pt-BR:admin.flows.runs.table.status|Status',
+    'pt-BR:admin.flows.table.status|Status',
+    'pt-BR:admin.hub.cards.backup.title|Backups',
+    'pt-BR:admin.hub.cards.scripts.title|Scripts',
+    'pt-BR:admin.pageLayouts.columns.status|Status',
+    'pt-BR:admin.pageLayouts.status.filter|Status',
+    'pt-BR:admin.permissions.groups.insights|Insights',
+    'pt-BR:admin.roles.drawer.keyPlaceholder|ap_clerk',
+    'pt-BR:admin.scripts.drawer.runStatus.ok|ok',
+    'pt-BR:admin.scripts.table.script|Script',
+    'pt-BR:admin.scripts.table.status|Status',
+    'pt-BR:admin.scripts.title|Scripts',
+    'pt-BR:admin.scripts.triggers.endpoint|endpoint',
+    'pt-BR:admin.settings.fiscal.frameworkAsc740|ASC 740 (US GAAP)',
+    'pt-BR:admin.settings.fiscal.frameworkIas12|IAS 12 (IFRS)',
+    'pt-BR:admin.settings.fiscal.range|{start} → {end}',
+    'pt-BR:admin.settings.fiscal.reportingFrameworkIfrs|IFRS',
+    'pt-BR:admin.settings.fiscal.reportingFrameworkUsGaap|US GAAP',
+    'pt-BR:admin.settings.organization.displayNamePlaceholder|Acme Manufacturing',
+    'pt-BR:admin.settings.organization.legalNamePlaceholder|Acme Manufacturing Inc.',
+    'pt-BR:admin.settings.organization.reportPdfStyleFormal|Formal (GAAP)',
+    'pt-BR:admin.setup.agents.activity.statusColumn|Status',
+    'pt-BR:admin.setup.agents.activity.triggers.manual|Manual',
+    'pt-BR:admin.setup.agents.overview.columns.status|Status',
+    'pt-BR:admin.setup.entities.classes.title|Classes',
+    'pt-BR:admin.setup.entities.overhead-model.application.status|Status',
+    'pt-BR:admin.setup.entities.overhead-model.lifecycle.modes.manual|Manual',
+    'pt-BR:admin.setup.entities.sftp.title|SFTP',
+    'pt-BR:admin.setup.fieldHelp.expiryWarningDaysHint|30',
+    'pt-BR:admin.setup.fieldHelp.graceDaysHint|0',
+    'pt-BR:admin.setup.fields.extensionKey|App',
+    'pt-BR:admin.setup.fields.itemId|Item',
+    'pt-BR:admin.setup.fields.regime|Regime',
+    'pt-BR:admin.setup.fxProvider.providers.bank_of_canada|Bank of Canada',
+    'pt-BR:admin.setup.fxProvider.providers.open_exchange_rates|Open Exchange Rates',
+    'pt-BR:admin.setup.laborCosting.billing.item|Item',
+    'pt-BR:admin.setup.laborCosting.billing.status|Status',
+    'pt-BR:admin.setup.laborCosting.rates.status|Status',
+    'pt-BR:admin.setup.laborCosting.wizard.ratePlaceholder|0.00',
+    'pt-BR:admin.setup.options.costingMethod.fifo|FIFO',
+    'pt-BR:admin.setup.options.holidayJurisdiction.caAb|Alberta',
+    'pt-BR:admin.setup.options.holidayJurisdiction.caQc|Quebec',
+    'pt-BR:admin.setup.options.holidayJurisdiction.caSk|Saskatchewan',
+    'pt-BR:admin.setup.options.informationReturnBox.misc2|MISC 2 — Royalties',
+    'pt-BR:admin.setup.options.informationReturnForm.misc|1099-MISC',
+    'pt-BR:admin.setup.options.informationReturnForm.nec|1099-NEC',
+    'pt-BR:admin.setup.options.informationReturnForm.t4a|T4A',
+    'pt-BR:admin.setup.options.jurisdictionLevel.federal|Federal',
+    'pt-BR:admin.setup.options.macrsSystem.ads|ADS',
+    'pt-BR:admin.setup.options.macrsSystem.gds|GDS',
+    'pt-BR:admin.setup.options.method.manual|Manual',
+    'pt-BR:admin.setup.options.rateSource.manual|Manual',
+    'pt-BR:admin.setup.options.taxType.gst|GST',
+    'pt-BR:admin.setup.options.taxType.hst|HST',
+    'pt-BR:admin.setup.options.taxType.pst|PST',
+    'pt-BR:admin.setup.options.taxType.qst|QST',
+    'pt-BR:admin.setup.paymentOperations.columns.status|Status',
+    'pt-BR:admin.setup.paymentOperations.fields.status|Status',
+    'pt-BR:admin.setup.paymentOperations.rails.cheque|Cheque',
+    'pt-BR:admin.setup.paymentOperations.rails.positive_pay|Positive Pay',
+    'pt-BR:admin.setup.paymentOperations.schemes.nacha|NACHA',
+    'pt-BR:admin.setup.paymentOperations.schemes.sepa_b2b|SEPA B2B',
+    'pt-BR:admin.setup.paymentOperations.schemes.sepa_core|SEPA Core',
+    'pt-BR:admin.setup.taxBoxes.manual|Manual',
+    'pt-BR:admin.setup.taxLibrary.status|Status',
+    'pt-BR:admin.users.statusFilter|Status',
+  ])
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
+  assert.equal(wanted.length, 3354, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  for (const key of wanted) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  for (const locale of ['pt-BR', 'zh']) {
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...identicalByFact].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const drift = wanted.filter((key) => {
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} admin translations drop or rename ICU placeholders`)
+  }
+})
