@@ -182,7 +182,8 @@
     "deleteTitle": "Excluir este registro?",
     "deleteBody": "Isso não pode ser desfeito.",
     "confirm": "Confirmar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "discardChanges": "Descartar alterações"
   },
   "billingMethods": {
     "timeAndMaterials": "Tempo e materiais",

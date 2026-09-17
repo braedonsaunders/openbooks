@@ -204,7 +204,8 @@
     "deleteTitle": "Delete this record?",
     "deleteBody": "This cannot be undone.",
     "confirm": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "discardChanges": "Discard changes"
   },
   "billingMethods": {
     "timeAndMaterials": "Time & materials",

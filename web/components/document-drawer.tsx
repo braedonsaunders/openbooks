@@ -1450,6 +1450,22 @@ export function DocumentDrawer({
     setBusy(false)
   }
 
+  // A dirty editor never closes silently: the X button (via beforeClose) and
+  // Cancel both ask first, so typed work survives a stray click (F-t02-003).
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
   function cancel() {
     const incoming = {
       documentId: String(doc.id),
@@ -2126,6 +2142,7 @@ export function DocumentDrawer({
   return (
     <TransactionDrawer
       closeHref={basePath}
+      beforeClose={confirmDiscard}
       recordId={String(doc.id)}
       canEditAttachments={canCreate}
       panelClassName={docTypeMeta(config.kind).surfaceCls}
@@ -2142,9 +2159,20 @@ export function DocumentDrawer({
       description={mode === 'edit' ? t('drawer.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
         canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
-            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
-          </Button>
+          mode === 'edit' ? (
+            <>
+              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={save}>
+                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={cancelWithConfirm}>
+                {tCommon('actions.cancel')}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setMode('edit')}>
+              {tCommon('actions.edit')}
+            </Button>
+          )
         ) : null
       }
       actionsMenuHeader={showFormPicker ? (
@@ -2177,9 +2205,6 @@ export function DocumentDrawer({
         mode === 'edit' ? (
           <>
             {actionLayout.find((action) => action.key === 'customize')?.visible ? renderFormAction('customize') : null}
-            <Button disabled={busy} onClick={save}>
-              {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-            </Button>
           </>
         ) : (
           <>

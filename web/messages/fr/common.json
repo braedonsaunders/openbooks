@@ -202,7 +202,8 @@
     "deleteTitle": "Supprimer cet enregistrement?",
     "deleteBody": "Cette action est irréversible.",
     "confirm": "Confirmer",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "discardChanges": "Abandonner les modifications"
   },
   "billingMethods": {
     "timeAndMaterials": "Temps et matériaux",
