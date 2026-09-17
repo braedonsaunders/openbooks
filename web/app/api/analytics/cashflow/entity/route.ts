@@ -4,6 +4,8 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { toISO } from "../../../../../lib/cash/core";
+import { openItems } from "../../../../../lib/cash/open-items";
 import { isUuid } from "../../../../../lib/list-params";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
@@ -43,7 +45,7 @@ export async function GET(req: Request) {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const today = await businessToday(user.orgId);
 
-  const [pay, open, recent] = await Promise.all([
+  const [pay, partyOpen, recent] = await Promise.all([
     // Avg days-to-pay + total paid over the trailing 12 months.
     (db.execute(sql`
       select avg(pe.posting_date - be.posting_date) as avg_days,
@@ -62,35 +64,19 @@ export async function GET(req: Request) {
         ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
         ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
     `)),
-    // Open items with days-overdue. Applications drain from EITHER side of the
-    // link (credits/payments can sit on to_ or from_), and fully-applied lines
-    // with a stale is_open_item flag are filtered out — "open" means money is
-    // actually outstanding.
-    (db.execute(sql`
-      with oi as (
-        select jl.id, je.id as entry_id, je.source_document_id as doc_id,
-          d.kind as doc_kind, d.document_number,
-          je.posting_date::text as tran_date, jl.due_date::text as due_date,
-          abs(jl.amount) - coalesce((
-            select sum(x.amount) from applications x
-             where x.org_id = jl.org_id
-               and (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
-          ), 0) as remaining
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-          and je.status in ('posted', 'reversed')
-        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-        left join documents d on d.id = je.source_document_id and d.org_id = jl.org_id
-        where jl.org_id = ${user.orgId} and jl.is_open_item and a.type = ${acctType}
-          and jl.party_id = ${party}
-          and ${side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`}
-          ${subsidiaryVisibleFilter(sql`jl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
-      )
-      select * from oi where remaining > 0
-      order by due_date nulls last
-    `)),
+    // Open items with days-overdue — off the shared cash-engine reader, not
+    // a bespoke aggregate (F-t03-010). The old query joined reversed entries
+    // without the document's current posting projection, so an append-only
+    // correction (reversed original + re-post: Rassaun bill 76913) listed the
+    // same bill twice under two dates and inflated the dialog total past the
+    // dashboard. Filtering the house item set to the party keeps the dialog
+    // tied to /ap by construction.
+    openItems(
+      user.orgId,
+      side,
+      today,
+      gate.allowedSubsidiaryIds === null ? undefined : [...gate.allowedSubsidiaryIds],
+    ).then((items) => items.filter((item) => item.partyId === party)),
     // Recent payments (drawer paginates client-side).
     (db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
@@ -109,17 +95,17 @@ export async function GET(req: Request) {
   const avgDays = pay.rows[0]?.avg_days === null || pay.rows[0]?.avg_days === undefined ? null : Math.round(Number(pay.rows[0].avg_days));
   const totalPaid = normalizeMoney(String(pay.rows[0]?.total_paid ?? "0"));
   const paymentCount = Number(pay.rows[0]?.payment_count ?? 0);
-  const openItems = ((open.rows)).map((r) => {
-    const due = r.due_date as string | null;
-    const overdue = due && due < today;
+  const rows = partyOpen.map((item) => {
+    const due = item.dueDate ? toISO(item.dueDate) : null;
+    const overdue = due !== null && due < today;
     return {
-      docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "",
-      tranDate: r.tran_date, dueDate: due, remaining: normalizeMoney(String(r.remaining ?? "0")), overdue: Boolean(overdue),
+      docId: item.docId, docKind: item.docKind, entryId: item.entryId, docNumber: item.docNumber ?? "",
+      tranDate: toISO(item.tranDate), dueDate: due, remaining: item.remaining, overdue,
     };
   });
-  const openBalance = sum(openItems.map((item) => item.remaining));
-  const overdueCount = openItems.filter((i) => i.overdue).length;
-  const overdueRatio = openItems.length ? overdueCount / openItems.length : 0;
+  const openBalance = sum(rows.map((item) => item.remaining));
+  const overdueCount = rows.filter((i) => i.overdue).length;
+  const overdueRatio = rows.length ? overdueCount / rows.length : 0;
 
   // Reliability score.
   let reliability = 70;
@@ -139,7 +125,7 @@ export async function GET(req: Request) {
     openBalance,
     overdueCount,
     reliability,
-    openItems,
+    openItems: rows,
     recentPayments: ((recent.rows)).map((r) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: normalizeMoney(String(r.amount ?? "0")) })),
   });
 }
