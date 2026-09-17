@@ -63,10 +63,12 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
       setError(t("saveEditsFirst"));
       return;
     }
+    // Discarding deletes the pending draft itself, so it always confirms —
+    // the dirty gate only protected unsaved drawer edits, letting a fresh
+    // draft vanish with one click (F-t10-007).
     if (
-      dirty &&
       action === "discard" &&
-      !(await confirmDialog(t("discardEdits")))
+      !(await confirmDialog({ message: t("discardConfirm"), tone: "danger" }))
     )
       return;
     setBusy(true);

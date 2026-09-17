@@ -4401,6 +4401,7 @@
       "editPackage": "Edit package",
       "backToReview": "Back to review",
       "discardEdits": "Discard unsaved package changes?",
+      "discardConfirm": "Discard this draft? The pending package is deleted. Nothing active changes.",
       "saveEditsFirst": "Save your package changes as a new draft before activating.",
       "grants": "Grants for this version: {permissions}"
     },
