@@ -985,6 +985,24 @@
       }
     }
   },
+  "charts": {
+    "history": "履歴",
+    "forecast": "予測",
+    "bridge": {
+      "start": "開始",
+      "inflows": "入金",
+      "outflows": "出金",
+      "projectedEnd": "予測期末残高"
+    },
+    "weekly": {
+      "endingCash": "期末残高",
+      "lowest": "最低",
+      "in": "入",
+      "out": "出",
+      "net": "純額",
+      "ending": "期末"
+    }
+  },
   "common": {
     "monthsShort": {
       "jan": "1月",

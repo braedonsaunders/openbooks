@@ -512,6 +512,79 @@
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
     "authorizedKeysHint": "Uma chave pública OpenSSH por linha. Clientes com uma chave privada correspondente podem fazer login sem senha."
   },
+  "cash": {
+    "title": "Caixa",
+    "description": "Sua central de controle de liquidez — caixa disponível, autonomia e próximas semanas.",
+    "weeks": "{n} sem.",
+    "status": {
+      "healthy": "Saudável",
+      "caution": "Atenção",
+      "critical": "Crítico"
+    },
+    "stats": {
+      "currentCash": "Caixa disponível",
+      "projectedEnd": "Saldo final projetado",
+      "netSub": "{amount} líquido",
+      "runway": "Autonomia de caixa",
+      "lowest": "Ponto mais baixo",
+      "lowestSub": "semana de {date}",
+      "netFlow": "Fluxo líquido do período",
+      "inflows": "Entradas",
+      "outflows": "Saídas"
+    },
+    "panels": {
+      "timeline": "Previsão de posição de caixa",
+      "timelineHint": "Clique em uma semana para ver entradas e saídas · {weeks} semanas",
+      "accounts": "Contas bancárias",
+      "timelineHintScheduled": "Clique em uma semana para suas transações · Fornecedores programados do mais antigo ao mais recente dentro da capacidade",
+      "bridge": "Ponte de fluxo de caixa",
+      "forecast": "Previsão de posição de caixa",
+      "forecastHint": "Caixa final por semana · ponto mais baixo sinalizado"
+    },
+    "cols": {
+      "week": "Semana",
+      "in": "Entradas",
+      "out": "Saídas",
+      "net": "Líquido",
+      "ending": "Caixa final"
+    },
+    "totalCash": "Caixa total",
+    "noAccounts": "Nenhuma conta bancária encontrada.",
+    "negativeAlert": "Projeção de saldo negativo — mínima de {amount} na semana de {date}. <ap>Atrase pagamentos a fornecedores</ap> ou <ar>acelere recebimentos</ar>.",
+    "deferralNote": "{amount} em contas a pagar não podem ser pagos dentro do horizonte com a configuração atual de capacidade de CP — o atraso se estende além da última semana.",
+    "configure": "Configurar previsão",
+    "configTitle": "Configuração da previsão de caixa",
+    "configDescription": "O modelo por trás da linha do tempo de liquidez — fluxos recorrentes (folha, aluguel, empréstimos) e como as datas de recebimento e pagamento são previstas. A regra de pagamento de CP é configurada no cockpit de CP.",
+    "vitals": {
+      "burnRate": "Taxa de queima de caixa",
+      "burnRateHint": "Saídas semanais médias",
+      "weekly": "Semanal",
+      "arCoverage": "Cobertura de CR",
+      "arCoverageHint": "(Caixa + CR) / CP",
+      "cashCycle": "Ciclo de caixa",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Fluxo líquido do período",
+      "netFlowHint": "Entradas − Saídas",
+      "runway": "Autonomia de caixa"
+    },
+    "layout": {
+      "customize": "Layout",
+      "title": "Personalizar layout",
+      "reset": "Redefinir",
+      "stats": "Faixa de indicadores",
+      "health": "Indicadores de saúde",
+      "empty": "Todos os painéis estão ocultos — use Layout para trazê-los de volta.",
+      "timeline": "Linha do tempo semanal",
+      "forecast": "Gráfico de previsão"
+    },
+    "timeline": {
+      "otherIn": "Outras entradas",
+      "otherOut": "Outras saídas",
+      "deferred": "Diferidos",
+      "txns": "{count} transações",
+      "spillBanner": "<strong>{amount} em contas a pagar não podem ser pagos dentro do horizonte</strong> com a configuração atual de capacidade de CP — o atraso se estende além da última semana."
+    }
+  },
   "bankFeeds": {
     "title": "Bank Feeds",
     "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",

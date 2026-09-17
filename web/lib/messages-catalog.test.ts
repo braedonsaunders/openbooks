@@ -675,6 +675,48 @@ test('banking feed operational panel copy is present in every locale and transla
   }
 })
 
+test('cash cockpit and chart copy are present in every locale and translated', () => {
+  // The cash cockpit (F-t05-016) reads banking.cash.* with English fallback
+  // and labels its charts from analytics.charts.* — both subtrees were
+  // absent outside en, so the whole page rendered English.
+  const identicalByFact = new Set([
+    'de:banking.cash.layout.customize|Layout',
+    'pt-BR:banking.cash.layout.customize|Layout',
+    'de:analytics.charts.bridge.start|Start',
+    'fr:banking.cash.cols.net|Net',
+    'fr:analytics.charts.weekly.net|Net',
+    'fr:banking.cash.stats.netSub|{amount} net',
+    'fr:banking.cash.vitals.cashCycleHint|DSO / DPO',
+    'es:banking.cash.vitals.cashCycleHint|DSO / DPO',
+    'de:banking.cash.vitals.cashCycleHint|DSO / DPO',
+    'ja:banking.cash.vitals.cashCycleHint|DSO / DPO',
+    'zh:banking.cash.vitals.cashCycleHint|DSO / DPO',
+    'pt-BR:banking.cash.vitals.cashCycleHint|DSO / DPO',
+  ])
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()].filter(
+    (key) => key.startsWith('banking.cash.') || key.startsWith('analytics.charts.'),
+  )
+  assert.ok(wanted.length >= 69, `English cash/chart source shrank unexpectedly: ${wanted.length}`)
+  for (const key of wanted) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...identicalByFact].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+  }
+})
+
 test('Portuguese fixed-asset tax pool uses the reviewed regime label', () => {
   const catalog = flattenCatalog('pt-BR')
 

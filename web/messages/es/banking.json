@@ -509,6 +509,79 @@
       "schedules": "Programas de importación"
     }
   },
+  "cash": {
+    "title": "Efectivo",
+    "description": "Su centro de control de liquidez — efectivo disponible, autonomía y próximas semanas.",
+    "weeks": "{n} sem.",
+    "status": {
+      "healthy": "Saludable",
+      "caution": "Precaución",
+      "critical": "Crítico"
+    },
+    "stats": {
+      "currentCash": "Efectivo disponible",
+      "projectedEnd": "Saldo final proyectado",
+      "netSub": "{amount} neto",
+      "runway": "Autonomía de caja",
+      "lowest": "Punto más bajo",
+      "lowestSub": "semana del {date}",
+      "netFlow": "Flujo neto del período",
+      "inflows": "Entradas",
+      "outflows": "Salidas"
+    },
+    "panels": {
+      "timeline": "Pronóstico de posición de efectivo",
+      "timelineHint": "Haga clic en una semana para ver entradas y salidas · {weeks} semanas",
+      "accounts": "Cuentas bancarias",
+      "timelineHintScheduled": "Haga clic en una semana para sus transacciones · Proveedores programados de más antiguos a más recientes según capacidad",
+      "bridge": "Puente de flujo de efectivo",
+      "forecast": "Pronóstico de posición de efectivo",
+      "forecastHint": "Efectivo final por semana · punto más bajo señalado"
+    },
+    "cols": {
+      "week": "Semana",
+      "in": "Entradas",
+      "out": "Salidas",
+      "net": "Neto",
+      "ending": "Efectivo final"
+    },
+    "totalCash": "Efectivo total",
+    "noAccounts": "No se encontraron cuentas bancarias.",
+    "negativeAlert": "Proyección de saldo negativo — mínimo de {amount} la semana del {date}. <ap>Ralentice pagos a proveedores</ap> o <ar>acelere cobros</ar>.",
+    "deferralNote": "{amount} en cuentas por pagar no pueden pagarse dentro del horizonte con la configuración actual de capacidad de CP — los atrasos se extienden más allá de la última semana.",
+    "configure": "Configurar pronóstico",
+    "configTitle": "Configuración del pronóstico de efectivo",
+    "configDescription": "El modelo detrás de la línea de tiempo de liquidez — flujos recurrentes (nómina, alquiler, préstamos) y cómo se predicen las fechas de cobro y pago. La regla de pago de CP se configura en el cockpit de CP.",
+    "vitals": {
+      "burnRate": "Tasa de consumo de efectivo",
+      "burnRateHint": "Salidas semanales promedio",
+      "weekly": "Semanal",
+      "arCoverage": "Cobertura de CxC",
+      "arCoverageHint": "(Efectivo + CxC) / CxP",
+      "cashCycle": "Ciclo de efectivo",
+      "cashCycleHint": "DSO / DPO",
+      "netFlow": "Flujo neto del período",
+      "netFlowHint": "Entradas − Salidas",
+      "runway": "Autonomía de caja"
+    },
+    "layout": {
+      "customize": "Diseño",
+      "title": "Personalizar diseño",
+      "reset": "Restablecer",
+      "stats": "Tira de indicadores",
+      "health": "Indicadores de salud",
+      "empty": "Todos los paneles están ocultos — use Diseño para recuperarlos.",
+      "timeline": "Cronología semanal",
+      "forecast": "Gráfico de pronóstico"
+    },
+    "timeline": {
+      "otherIn": "Otras entradas",
+      "otherOut": "Otras salidas",
+      "deferred": "Diferidos",
+      "txns": "{count} transacciones",
+      "spillBanner": "<strong>{amount} en cuentas por pagar no pueden pagarse dentro del horizonte</strong> con la configuración actual de capacidad de CP — los atrasos se extienden más allá de la última semana."
+    }
+  },
   "bankFeeds": {
     "title": "Bank Feeds",
     "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
