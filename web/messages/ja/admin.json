@@ -2513,6 +2513,7 @@
       "categoryId": "資産カテゴリ",
       "convention": "計上規約",
       "lifeMonths": "耐用期間（月数）",
+      "depreciationMethodId": "カスタム計算式",
       "departmentId": "部門",
       "defaultMethod": "既定の方法",
       "defaultDepreciationMethodId": "既定の計算式",

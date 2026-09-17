@@ -2513,6 +2513,7 @@
       "categoryId": "Anlagekategorie",
       "convention": "Konvention",
       "lifeMonths": "Nutzungsdauer (Monate)",
+      "depreciationMethodId": "Benutzerdefinierte Formel",
       "departmentId": "Abteilung",
       "defaultMethod": "Standardmethode",
       "defaultDepreciationMethodId": "Standardformel",

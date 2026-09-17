@@ -2467,6 +2467,7 @@
       "categoryId": "资产类别",
       "convention": "惯例",
       "lifeMonths": "使用寿命（月）",
+      "depreciationMethodId": "自定义公式",
       "departmentId": "部门",
       "defaultMethod": "默认方法",
       "defaultDepreciationMethodId": "默认公式",
