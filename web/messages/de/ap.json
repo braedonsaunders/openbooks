@@ -68,8 +68,14 @@
     "configure": "Konfigurieren Sie sie unter Admin-Center → KI.",
     "search": "Dateien, Lieferanten, Rechnungsnummern suchen…",
     "status": {
-      "queued": "In Warteschlange", "extracting": "Wird extrahiert", "needs_review": "Prüfung erforderlich", "ready": "Bereit",
-      "duplicate": "Mögliches Duplikat", "failed": "Fehlgeschlagen", "materialized": "Entwurf erstellt", "rejected": "Abgelehnt"
+      "queued": "In Warteschlange",
+      "extracting": "Wird extrahiert",
+      "needs_review": "Prüfung erforderlich",
+      "ready": "Bereit",
+      "duplicate": "Mögliches Duplikat",
+      "failed": "Fehlgeschlagen",
+      "materialized": "Entwurf erstellt",
+      "rejected": "Abgelehnt"
     },
     "emptyTitle": "Keine erfassten Dokumente",
     "emptyDescription": "Laden Sie Lieferantendokumente als PDF, JPEG, PNG oder TIFF hoch, um zu beginnen.",
@@ -88,7 +94,15 @@
     "openDraft": "Kreditoren-Entwurf öffnen",
     "bill": "Eingangsrechnung",
     "credit": "Lieferantengutschrift",
-    "columns": { "document": "Dokument", "vendor": "Lieferant", "invoice": "Rechnungs-Nr.", "date": "Rechnungsdatum", "total": "Gesamt", "status": "Status", "received": "Erhalten" },
+    "columns": {
+      "document": "Dokument",
+      "vendor": "Lieferant",
+      "invoice": "Rechnungs-Nr.",
+      "date": "Rechnungsdatum",
+      "total": "Gesamt",
+      "status": "Status",
+      "received": "Erhalten"
+    },
     "saving": "Korrekturen werden gespeichert…",
     "unsaved": "Nicht gespeicherte Korrekturen",
     "saved": "Alle Korrekturen gespeichert",
@@ -100,14 +114,30 @@
     "confidencePercent": "{percent} %",
     "highlightEvidence": "Diesen Beleg im Quelldokument hervorheben",
     "fields": {
-      "kind": "Dokumenttyp", "vendor": "Lieferant", "vendorPlaceholder": "Lieferant auswählen…",
-      "invoiceNumber": "Rechnungsnummer", "invoiceDate": "Rechnungsdatum", "dueDate": "Fälligkeitsdatum", "currency": "Währung",
-      "purchaseOrder": "Bestellung", "purchaseOrderPlaceholder": "Bestellung auswählen…", "memo": "Notiz",
-      "subtotal": "Zwischensumme", "taxTotal": "Steuer", "total": "Gesamt"
+      "kind": "Dokumenttyp",
+      "vendor": "Lieferant",
+      "vendorPlaceholder": "Lieferant auswählen…",
+      "invoiceNumber": "Rechnungsnummer",
+      "invoiceDate": "Rechnungsdatum",
+      "dueDate": "Fälligkeitsdatum",
+      "currency": "Währung",
+      "purchaseOrder": "Bestellung",
+      "purchaseOrderPlaceholder": "Bestellung auswählen…",
+      "memo": "Notiz",
+      "subtotal": "Zwischensumme",
+      "taxTotal": "Steuer",
+      "total": "Gesamt"
     },
     "lines": {
-      "title": "Extrahierte Zeilen", "add": "Zeile hinzufügen", "description": "Beschreibung", "account": "Konto",
-      "accountPlaceholder": "Konto auswählen…", "quantity": "Menge", "unitPrice": "Einzelpreis", "amount": "Betrag", "tax": "Steuer",
+      "title": "Extrahierte Zeilen",
+      "add": "Zeile hinzufügen",
+      "description": "Beschreibung",
+      "account": "Konto",
+      "accountPlaceholder": "Konto auswählen…",
+      "quantity": "Menge",
+      "unitPrice": "Einzelpreis",
+      "amount": "Betrag",
+      "tax": "Steuer",
       "remove": "Zeile {line} entfernen"
     },
     "issues": {
@@ -139,5 +169,56 @@
     "createDraftFailed": "Entwurf konnte nicht erstellt werden",
     "deleted": "Dokument gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen"
+  },
+  "cockpit": {
+    "title": "Kreditoren",
+    "description": "Ihre Kreditoren-Steuerung — was Sie schulden, was überfällig ist und was diese Woche zu zahlen ist.",
+    "tabs": {
+      "overview": "Übersicht",
+      "bills": "Eingangsrechnungen"
+    },
+    "current": "aktuell",
+    "vendor": "Lieferant",
+    "overdueCol": "Überfällig",
+    "openCol": "Offen",
+    "noPayables": "Keine offenen Verbindlichkeiten. Sie sind auf dem neuesten Stand.",
+    "stats": {
+      "openPayables": "Offene Verbindlichkeiten",
+      "overdue": "Überfällig",
+      "overdueSub": "{count} Eingangsrechnungen · {pct} der offenen",
+      "dueThisWeek": "Diese Woche fällig",
+      "next30": "Nächste 30 Tage",
+      "dpo": "Kreditorenlaufzeit (DPO)",
+      "dpoSub": "Ø Tage bis zur Zahlung",
+      "days": "{n} T"
+    },
+    "panels": {
+      "payRun": "Zahlungslauf-Planer",
+      "payRunHint": "Diese Woche fällige Eingangsrechnungen — auswählen und Zahlungslauf erstellen",
+      "payRunHintScheduled": "Empfohlen im Rahmen Ihrer wöchentlichen Kapazität — älteste Fälligkeiten zuerst",
+      "aging": "Altersstruktur der Verbindlichkeiten",
+      "schedule": "Auszahlungsplan",
+      "scheduleHint": "Prognostizierte Zahlungen über {weeks} Wochen",
+      "byVendor": "Verbindlichkeiten nach Lieferant"
+    },
+    "payRun": {
+      "noCap": "Diese Woche fällig",
+      "weeklyCap": "Wöchentliches Limit",
+      "safeCapacity": "Sicherheitspuffer",
+      "startingCash": "Verfügbare Mittel {amount}",
+      "overCap": "Limit überschritten",
+      "deferred": "{amount} verschiebt sich auf spätere Wochen",
+      "selected": "{count} ausgewählt",
+      "build": "Zahlungslauf erstellen",
+      "empty": "Diese Woche werden keine fälligen Rechnungen erwartet."
+    },
+    "deferralNote": "{amount} der Verbindlichkeiten können im Horizont mit den aktuellen Kreditoren-Kapazitätseinstellungen nicht gezahlt werden — der Rückstand reicht über die letzte Woche hinaus. Passen Sie das Limit in der Konfiguration der Cashflow-Prognose an.",
+    "forecastLink": {
+      "pre": "Möchten Sie die kommenden Wochen modellieren?",
+      "link": "Cashflow-Prognose öffnen"
+    },
+    "configure": "Konfigurieren",
+    "configTitle": "Regel zur Kreditoren-Zahlungsauswahl",
+    "configDescription": "Wie der Zahlungslauf dieser Woche gewählt wird — das wöchentliche Limit, der Sicherheitspuffer und das Planungsmodell hinter der Empfehlung."
   }
 }
