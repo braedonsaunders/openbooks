@@ -678,9 +678,15 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
     prior: priorNet,
     ours: ourNet,
     difference: difference(priorNet, ourNet),
+    // Net is downstream of the STATED gross, not of the itemized earnings:
+    // net == gross − deductions. Attributing net against earnings lets a
+    // one-sided earning (a register that states gross without itemizing it)
+    // smear the whole gross into "unexplained net" even when every deduction
+    // matches and the stated nets agree to the penny (F-t05-003) — the same
+    // smearing the component tests refuse for matched cells.
     unattributed: difference(
       difference(priorNet, ourNet),
-      difference(earningDifference, deductionDifference),
+      difference(difference(priorGross, ourGross), deductionDifference),
     ),
   };
   const employerCostReconciliation: ParallelTotalsReconciliation = {

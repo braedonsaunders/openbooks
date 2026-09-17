@@ -503,6 +503,56 @@ test("a stated total the components cannot explain is reported even with every c
   assertSelfConsistent(comparison);
 });
 
+test("net attributes against the stated gross, so one-sided earnings do not smear into unexplained net (F-t05-003)", () => {
+  // A prior register that states its totals and itemizes only its deductions
+  // — no earning or employer-contribution detail — against our fully itemized
+  // run. Every deduction matches and the stated nets agree to a penny, so the
+  // net is explained: the aggregate must equal the one-cent stated difference
+  // instead of dragging the whole one-sided gross into "unexplained net".
+  const prior = asPriorRegister({
+    employeePartyId: DEREK,
+    employeeName: "Derek Cole",
+    gross: "2600.00",
+    netPay: "2168.71",
+    employerCost: "284.70",
+    amounts: [
+      { kind: "deduction", slot: "fit", amount: "232.38" },
+      { kind: "deduction", slot: "ss", amount: "161.20" },
+      { kind: "deduction", slot: "medicare", amount: "37.70" },
+    ],
+  });
+  const ours: ParallelEmployeeSide = {
+    employeePartyId: DEREK,
+    employeeName: "Derek Cole",
+    gross: "2600.00",
+    netPay: "2168.72",
+    employerCost: "284.70",
+    amounts: [
+      { kind: "earning", slot: "base_pay", amount: "2600.00" },
+      { kind: "deduction", slot: "fit", amount: "232.38" },
+      { kind: "deduction", slot: "ss", amount: "161.20" },
+      { kind: "deduction", slot: "medicare", amount: "37.70" },
+      { kind: "employer_contribution", slot: "futa", amount: "15.60" },
+      { kind: "employer_contribution", slot: "medicare", amount: "37.70" },
+      { kind: "employer_contribution", slot: "ss", amount: "161.20" },
+      { kind: "employer_contribution", slot: "suta", amount: "70.20" },
+    ],
+  };
+  const comparison = comparePriorPayrollPeriod(baseInput([prior], [ours]));
+
+  assert.equal(comparison.status, "differences");
+  assert.equal(comparison.totals.netPay.difference, "-0.0100");
+  assert.equal(comparison.totals.netPay.unattributed, "-0.0100");
+  assert.equal(
+    findingFor(comparison, null, "total", "unattributed:net_pay").difference,
+    "-0.0100",
+  );
+  // The one-sided detail stays visible as its own findings — explained there,
+  // not laundered away.
+  assert.equal(findingFor(comparison, DEREK, "earning", "base_pay").classification, "our_only");
+  assertSelfConsistent(comparison);
+});
+
 /* ------------------------------------------------------------------ */
 /* Aggregation and input hygiene                                       */
 /* ------------------------------------------------------------------ */
