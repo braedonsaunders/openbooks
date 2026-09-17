@@ -148,6 +148,13 @@
       "documentation": "Read the accounts-receivable guide"
     }
   },
+  "appliedPayments": {
+    "title": "Payments applied",
+    "document": "Document",
+    "date": "Date",
+    "amount": "Amount",
+    "appliedOn": "Applied on"
+  },
   "paymentLinks": {
     "title": "Online payment links",
     "create": "Create link",

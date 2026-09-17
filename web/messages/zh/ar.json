@@ -148,6 +148,13 @@
       "documentation": "阅读应收账款指南"
     }
   },
+  "appliedPayments": {
+    "title": "已应用的收款",
+    "document": "单据",
+    "date": "日期",
+    "amount": "金额",
+    "appliedOn": "应用日期"
+  },
   "paymentLinks": {
     "title": "在线支付链接",
     "create": "创建链接",

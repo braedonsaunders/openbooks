@@ -350,6 +350,7 @@ import { DocumentRowActions } from '../document-row-actions'
 import { NewDocumentButton } from '../new-document-button'
 import { ScanLine } from 'lucide-react'
 import { PaymentLinksPanel } from '../payment-links-panel'
+import { AppliedPaymentsPanel, type AppliedPayment } from '../applied-payments-panel'
 import { DOC_KINDS } from '../../lib/document-kinds'
 import { SearchSelectFilter } from '../filter-bar'
 import { FormDesigner, NewFormButton } from '../../app/(app)/admin/customization/FormDesigner'
@@ -3224,17 +3225,25 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       | (ComponentProps<typeof DocumentDrawer> & {
           remountKey: string
           paymentLinks?: { documentId: string; canManage: boolean } | null
+          appliedPayments?: { payments: AppliedPayment[]; currency: string } | null
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}
         {...rest}
         afterContent={
-          paymentLinks ? (
-            <PaymentLinksPanel documentId={paymentLinks.documentId} canManage={paymentLinks.canManage} />
+          paymentLinks || appliedPayments ? (
+            <>
+              {appliedPayments ? (
+                <AppliedPaymentsPanel payments={appliedPayments.payments} currency={appliedPayments.currency} />
+              ) : null}
+              {paymentLinks ? (
+                <PaymentLinksPanel documentId={paymentLinks.documentId} canManage={paymentLinks.canManage} />
+              ) : null}
+            </>
           ) : null
         }
       />

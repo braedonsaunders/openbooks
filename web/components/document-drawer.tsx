@@ -648,6 +648,11 @@ export interface DocumentDrawerProps {
   /** Optional kind-specific section rendered read-only at the bottom of the
    *  drawer body (e.g. online payment links on customer invoices). */
   afterContent?: React.ReactNode
+  /** Server-known entry-mode allocation gate. When explicitly false the
+   *  drawer skips the entry-candidates presence checks entirely instead of
+   *  firing requests the server must refuse (console 404s in orgs without
+   *  the feature). Undefined preserves the probe-and-hide behavior. */
+  allocationsEntryEnabled?: boolean
 }
 
 export function DocumentDrawer({
@@ -680,6 +685,7 @@ export function DocumentDrawer({
   recordType,
   canCustomize,
   afterContent,
+  allocationsEntryEnabled,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
@@ -827,6 +833,16 @@ export function DocumentDrawer({
     const run = async (): Promise<void> => {
       // The whole block runs async so the gate-off reset below never sets
       // state synchronously in the effect body (cascading renders).
+      // A server-known off gate skips the probe entirely: the server must
+      // refuse entry-candidates when the feature is off, and firing that
+      // refusal litters the console on every drawer open.
+      if (allocationsEntryEnabled === false) {
+        if (!cancelled) {
+          setDistOn(false)
+          setDistAuto([])
+        }
+        return
+      }
       if (!distEditable) {
         if (!cancelled) {
           setDistOn(false)
@@ -862,7 +878,7 @@ export function DocumentDrawer({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distEditable, config.kind, documentDate, subsidiaryId])
+  }, [distEditable, config.kind, documentDate, subsidiaryId, allocationsEntryEnabled])
 
   // Per-line candidates for priced ungrouped rows, fetched lazily and
   // cached by coordinate so typing in one row never storms the route.

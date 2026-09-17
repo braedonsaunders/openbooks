@@ -148,6 +148,13 @@
       "documentation": "Lire le guide des comptes clients"
     }
   },
+  "appliedPayments": {
+    "title": "Paiements appliqués",
+    "document": "Document",
+    "date": "Date",
+    "amount": "Montant",
+    "appliedOn": "Appliqué le"
+  },
   "paymentLinks": {
     "title": "Liens de paiement en ligne",
     "create": "Créer un lien",
