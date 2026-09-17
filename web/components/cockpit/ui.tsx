@@ -50,13 +50,13 @@ export function StatTile({
   tone?: keyof typeof SUB_TONE
 }) {
   return (
-    <div className="flex items-center gap-3.5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex min-w-0 items-center gap-3.5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <span className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl ring-1', CHIP[accent])}>
         <Icon size={20} strokeWidth={2} />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500 leading-tight">{label}</p>
-        <p className={cn('truncate text-2xl font-bold tabular-nums', tone === 'negative' ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{value}</p>
+        <p className={cn('break-words text-2xl font-bold tabular-nums', tone === 'negative' ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{value}</p>
         {sub ? <p className={cn('text-xs font-medium leading-snug', SUB_TONE[tone])}>{sub}</p> : null}
       </div>
     </div>
