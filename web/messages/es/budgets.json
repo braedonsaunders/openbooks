@@ -87,6 +87,9 @@
     "copyPriorActuals": "Copiar datos reales del año anterior",
     "applySource": "Aplicar",
     "delete": "Eliminar borrador",
+    "submit": "Enviar para aprobación",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
     "openReport": "Presupuesto vs. real",
     "exportCsv": "Exportar CSV",
     "exportXlsx": "Exportar Excel"
@@ -97,7 +100,10 @@
     "clearPage": "¿Borrar todos los valores de la página de cuentas actual?",
     "clearYear": "¿Borrar esta cuenta para todo el ejercicio fiscal?",
     "copyPriorActuals": "¿Reemplazar esta sección con los datos reales contabilizados del año anterior?",
-    "applySource": "¿Reemplazar todas las líneas de este borrador con los valores del presupuesto seleccionado?"
+    "applySource": "¿Reemplazar todas las líneas de este borrador con los valores del presupuesto seleccionado?",
+    "submit": "¿Enviar este presupuesto para su aprobación? Se bloqueará la edición hasta que se decida.",
+    "approve": "¿Aprobar este presupuesto?",
+    "reject": "¿Devolver este presupuesto a borrador?"
   },
   "feedback": {
     "archived": "Presupuesto archivado.",
@@ -105,6 +111,9 @@
     "actualsCopied": "Los datos reales anteriores se copiaron en esta sección.",
     "sourceApplied": "Los valores iniciales se aplicaron a este borrador.",
     "deleted": "Borrador de presupuesto eliminado.",
+    "submitted": "Enviado para aprobación.",
+    "approved": "Presupuesto aprobado.",
+    "rejected": "Presupuesto devuelto a borrador.",
     "actionFailed": "La acción del presupuesto falló.",
     "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar."
   },

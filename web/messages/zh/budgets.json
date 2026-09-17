@@ -87,6 +87,9 @@
     "copyPriorActuals": "复制上年实际数",
     "applySource": "应用",
     "delete": "删除草稿",
+    "submit": "提交审批",
+    "approve": "批准",
+    "reject": "退回",
     "openReport": "预算与实际对比",
     "exportCsv": "导出 CSV",
     "exportXlsx": "导出 Excel"
@@ -97,7 +100,10 @@
     "clearPage": "清除当前科目页面上的每个值？",
     "clearYear": "清除本科目整个会计年度的数据？",
     "copyPriorActuals": "用上年已过账实际数替换此维度切片？",
-    "applySource": "用所选预算的值替换此草稿中的每一行？"
+    "applySource": "用所选预算的值替换此草稿中的每一行？",
+    "submit": "要提交此预算进行审批吗？在做出决定之前，它将被锁定，无法编辑。",
+    "approve": "批准此预算？",
+    "reject": "将此预算退回草稿？"
   },
   "feedback": {
     "archived": "预算已归档。",
@@ -105,6 +111,9 @@
     "actualsCopied": "上年实际数已复制到此切片。",
     "sourceApplied": "起点值已应用到此草稿。",
     "deleted": "预算草稿已删除。",
+    "submitted": "已提交审批。",
+    "approved": "预算已批准。",
+    "rejected": "预算已退回草稿。",
     "actionFailed": "预算操作失败。",
     "revisionConflict": "此预算已在别处更改。请重新加载以继续。"
   },

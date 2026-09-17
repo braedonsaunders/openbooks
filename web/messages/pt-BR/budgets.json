@@ -87,6 +87,9 @@
     "copyPriorActuals": "Copiar valores realizados do ano anterior",
     "applySource": "Aplicar",
     "delete": "Excluir rascunho",
+    "submit": "Enviar para aprovação",
+    "approve": "Aprovar",
+    "reject": "Rejeitar",
     "openReport": "Orçado x Realizado",
     "exportCsv": "Exportar CSV",
     "exportXlsx": "Exportar Excel"
@@ -97,7 +100,10 @@
     "clearPage": "Limpar todos os valores da página de contas atual?",
     "clearYear": "Limpar esta conta no ano fiscal inteiro?",
     "copyPriorActuals": "Substituir este segmento dimensional pelos valores realizados lançados do ano anterior?",
-    "applySource": "Substituir todas as linhas deste rascunho pelos valores do orçamento selecionado?"
+    "applySource": "Substituir todas as linhas deste rascunho pelos valores do orçamento selecionado?",
+    "submit": "Enviar este orçamento para aprovação? Ele ficará bloqueado para edição até a decisão.",
+    "approve": "Aprovar este orçamento?",
+    "reject": "Devolver este orçamento para rascunho?"
   },
   "feedback": {
     "archived": "Orçamento arquivado.",
@@ -105,6 +111,9 @@
     "actualsCopied": "Valores realizados do ano anterior copiados para este segmento.",
     "sourceApplied": "Valores do ponto de partida aplicados a este rascunho.",
     "deleted": "Rascunho de orçamento excluído.",
+    "submitted": "Enviado para aprovação.",
+    "approved": "Orçamento aprovado.",
+    "rejected": "Orçamento devolvido para rascunho.",
     "actionFailed": "A ação do orçamento falhou.",
     "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar."
   },

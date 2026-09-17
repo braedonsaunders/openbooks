@@ -10,7 +10,10 @@ import { BudgetMutationError } from '../../../../../lib/budget-mutations'
 
 export const runtime = 'nodejs'
 
-type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source'
+type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source' | 'submit' | 'approve' | 'reject'
+
+/** Approve/reject are checker decisions: the approve grant, not the manage grant. */
+const DECISION_ACTIONS: Action[] = ['approve', 'reject']
 
 function dims(body: Record<string, unknown>) {
   const value = (key: string) => typeof body[key] === 'string' && isUuid(body[key] as string) ? body[key] as string : null
@@ -33,10 +36,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
   const action = body.action as Action
-  if (!['archive', 'copy', 'copy_prior_actuals', 'apply_source'].includes(action)) {
+  if (!['archive', 'copy', 'copy_prior_actuals', 'apply_source', 'submit', 'approve', 'reject'].includes(action)) {
     return NextResponse.json({ error: 'invalid_action' }, { status: 422 })
   }
-  if (!can(gate, 'budgets.manage')) {
+  if (DECISION_ACTIONS.includes(action)) {
+    if (!can(gate, 'budgets.approve')) {
+      return NextResponse.json({ error: 'missing permission: budgets.approve' }, { status: 403 })
+    }
+  } else if (!can(gate, 'budgets.manage')) {
     return NextResponse.json({ error: 'missing permission: budgets.manage' }, { status: 403 })
   }
   const expectedRevision = Number(body.expectedRevision)
@@ -51,6 +58,51 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const scenario = locked.rows[0]
       if (!scenario) throw new BudgetMutationError('not_found', 404)
       if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+
+      // F-t07-003: the maker's submit and the checker's decision. Direct
+      // status transitions (no tenant-authored flow graph required) so the
+      // Pending approval / Approved states the list already offers are
+      // reachable out of the box. approved_by/submitted_by provenance mirrors
+      // the flows adapter's change_status semantics.
+      if (action === 'submit') {
+        if (scenario.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_submitted', 409)
+        const nextRevision = expectedRevision + 1
+        await tx.execute(sql`
+          update budget_scenarios set
+            status = 'pending_approval', revision = ${nextRevision},
+            submitted_at = now(), submitted_by = ${user.id},
+            updated_at = now(), updated_by = ${user.id}
+          where id = ${id} and org_id = ${user.orgId}
+        `)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+            ${JSON.stringify({ action: 'submit', from: 'draft', to: 'pending_approval' })}::jsonb, ${user.id})
+        `)
+        return { revision: nextRevision, status: 'pending_approval' }
+      }
+
+      if (action === 'approve' || action === 'reject') {
+        if (scenario.status !== 'pending_approval') throw new BudgetMutationError('only_pending_budgets_can_be_decided', 409)
+        const to = action === 'approve' ? 'approved' : 'draft'
+        const nextRevision = expectedRevision + 1
+        await tx.execute(sql`
+          update budget_scenarios set
+            status = ${to}, revision = ${nextRevision},
+            submitted_at = case when ${to} = 'draft' then null else submitted_at end,
+            submitted_by = case when ${to} = 'draft' then null else submitted_by end,
+            approved_at = case when ${to} = 'approved' then now() else approved_at end,
+            approved_by = case when ${to} = 'approved' then ${user.id} else approved_by end,
+            updated_at = now(), updated_by = ${user.id}
+          where id = ${id} and org_id = ${user.orgId}
+        `)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+            ${JSON.stringify({ action, from: 'pending_approval', to })}::jsonb, ${user.id})
+        `)
+        return { revision: nextRevision, status: to }
+      }
 
       if (action === 'copy') {
         const targetYearRaw = Number(body.fiscalYear)

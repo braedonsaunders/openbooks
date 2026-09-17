@@ -87,6 +87,9 @@
     "copyPriorActuals": "Ist-Werte des Vorjahres kopieren",
     "applySource": "Anwenden",
     "delete": "Entwurf löschen",
+    "submit": "Zur Genehmigung einreichen",
+    "approve": "Genehmigen",
+    "reject": "Ablehnen",
     "openReport": "Budget vs. Ist",
     "exportCsv": "CSV exportieren",
     "exportXlsx": "Excel exportieren"
@@ -97,7 +100,10 @@
     "clearPage": "Jeden Wert auf der aktuellen Kontenseite leeren?",
     "clearYear": "Dieses Konto für das gesamte Geschäftsjahr leeren?",
     "copyPriorActuals": "Diesen Dimensionsausschnitt durch die gebuchten Ist-Werte des Vorjahres ersetzen?",
-    "applySource": "Jede Zeile in diesem Entwurf durch die Werte des ausgewählten Budgets ersetzen?"
+    "applySource": "Jede Zeile in diesem Entwurf durch die Werte des ausgewählten Budgets ersetzen?",
+    "submit": "Dieses Budget zur Genehmigung einreichen? Es ist bis zur Entscheidung für die Bearbeitung gesperrt.",
+    "approve": "Dieses Budget genehmigen?",
+    "reject": "Dieses Budget in den Entwurf zurückgeben?"
   },
   "feedback": {
     "archived": "Budget archiviert.",
@@ -105,6 +111,9 @@
     "actualsCopied": "Ist-Werte des Vorjahres in diesen Ausschnitt kopiert.",
     "sourceApplied": "Ausgangswerte auf diesen Entwurf angewendet.",
     "deleted": "Budgetentwurf gelöscht.",
+    "submitted": "Zur Genehmigung eingereicht.",
+    "approved": "Budget genehmigt.",
+    "rejected": "Budget in den Entwurf zurückgegeben.",
     "actionFailed": "Die Budgetaktion ist fehlgeschlagen.",
     "revisionConflict": "Dieses Budget wurde anderweitig geändert. Laden Sie neu, um fortzufahren."
   },
