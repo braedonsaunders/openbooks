@@ -33,7 +33,8 @@
     "awaitingDecision": "判断待ち",
     "baseCurrency": "基準通貨 · {currency}",
     "outstanding": "未決済",
-    "pastDue": "期日超過"
+    "pastDue": "期日超過",
+    "asOf": "{date} 時点"
   },
   "categories": {
     "kpi": "ヘッドライン",

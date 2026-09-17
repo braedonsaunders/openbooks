@@ -33,7 +33,8 @@
     "awaitingDecision": "等待处理",
     "baseCurrency": "本位币 · {currency}",
     "outstanding": "未结",
-    "pastDue": "逾期"
+    "pastDue": "逾期",
+    "asOf": "截至 {date}"
   },
   "categories": {
     "kpi": "要点",

@@ -87,7 +87,8 @@
       "next30": "Nächste 30 Tage",
       "dso": "Forderungslaufzeit (DSO)",
       "dsoSub": "Ø Tage bis Zahlung",
-      "days": "{n} T."
+      "days": "{n} T.",
+      "asOf": "Stand {date}"
     },
     "panels": {
       "worklist": "Inkasso-Arbeitsliste",

@@ -37,7 +37,8 @@
     "pastDue": "Past due",
     "agentProposals": "{count} with proposals",
     "agentLastRun": "last run {date}",
-    "agentClear": "All clear"
+    "agentClear": "All clear",
+    "asOf": "As of {date}"
   },
   "categories": {
     "kpi": "Headlines",

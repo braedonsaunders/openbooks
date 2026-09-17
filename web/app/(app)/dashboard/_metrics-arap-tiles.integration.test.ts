@@ -41,6 +41,7 @@ const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/d
 const { toUnits } = await import("@openbooks/engine/src/money.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
+const { businessToday } = await import("@openbooks/engine/src/business-date.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type ScratchOrg = import("@openbooks/engine/src/test-fixtures.ts").ScratchOrg;
 
@@ -130,6 +131,13 @@ test("dashboard AR/AP tiles read the shared open-item reader, not the cached bal
     assert.equal(toUnits(metrics.overdueReceivables), toUnits("300"), "only the past-due invoice counts as overdue");
     assert.equal(toUnits(metrics.openPayables), toUnits("500"), "AP tile nets the partial payment instead of the stale cache");
     assert.equal(toUnits(metrics.overduePayables), toUnits("0"), "nothing is past due");
+    // The tiles label the cut-off their as-of readers used, so a figure
+    // that excludes future-dated documents says which day it is cut at.
+    assert.equal(
+      metrics.asOfDate,
+      await withOrgContext(org.orgId, () => businessToday(org.orgId)),
+      "the metrics carry the business day the as-of readers were cut",
+    );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

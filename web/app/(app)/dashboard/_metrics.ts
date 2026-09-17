@@ -37,6 +37,9 @@ export type DashboardMetrics = {
   overdueReceivables: string
   openPayables: string
   overduePayables: string
+  /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
+   * label it so a figure that excludes future-dated documents says so. */
+  asOfDate: string
   recentEntries: Array<{
     id: string
     entryNumber: string | null
@@ -232,6 +235,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     overdueReceivables: arTile.overdue,
     openPayables: apTile.open,
     overduePayables: apTile.overdue,
+    asOfDate: today,
     recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
       entryNumber: r.entry_number,
@@ -264,11 +268,11 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-pending-approvals': ['pendingApprovals'],
   'kpi-agent-findings': ['agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun'],
   'kpi-ledger-balance': ['ledgerSum'],
-  'kpi-cash-balance': ['baseCurrency', 'cashBalance'],
-  'kpi-open-receivables': ['baseCurrency', 'openReceivables'],
-  'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables'],
-  'kpi-open-payables': ['baseCurrency', 'openPayables'],
-  'kpi-overdue-payables': ['baseCurrency', 'overduePayables'],
+  'kpi-cash-balance': ['baseCurrency', 'cashBalance', 'asOfDate'],
+  'kpi-open-receivables': ['baseCurrency', 'openReceivables', 'asOfDate'],
+  'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables', 'asOfDate'],
+  'kpi-open-payables': ['baseCurrency', 'openPayables', 'asOfDate'],
+  'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'asOfDate'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -291,6 +295,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   overdueReceivables: '0',
   openPayables: '0',
   overduePayables: '0',
+  asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],
   myApprovalList: [],

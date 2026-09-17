@@ -3,7 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
 import { overdueOpenPct } from './overdue-pct'
 import {
@@ -60,6 +60,15 @@ export function ArCockpit({
 }) {
   const { money, moneyCompact } = useMoney()
   const t = useTranslations("ar.cockpit");
+  const locale = useLocale();
+  // The position is cut as of this business day: future-dated documents are
+  // excluded, and the headline tile says so (F-t02-007). Noon-anchored so a
+  // bare YYYY-MM-DD never renders a day early west of Greenwich.
+  const asOf = t("stats.asOf", {
+    date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
+      new Date(`${data.asOf}T12:00:00Z`),
+    ),
+  });
   const search = useSearchParams();
   const currentParams = Object.fromEntries(search.entries());
   const [showInfo, setShowInfo] = useState(false);
@@ -114,6 +123,7 @@ export function ArCockpit({
           accent="sky"
           label={t("stats.openReceivables")}
           value={moneyCompact(data.outstanding)}
+          sub={asOf}
         />
         <StatTile
           icon={TriangleAlert}

@@ -87,7 +87,8 @@
       "next30": "Next 30 days",
       "dso": "Days sales outstanding (DSO)",
       "dsoSub": "Avg days to collect",
-      "days": "{n}d"
+      "days": "{n}d",
+      "asOf": "As of {date}"
     },
     "panels": {
       "worklist": "Collections worklist",

@@ -1116,6 +1116,31 @@ test('retainage receivable control-account copy is present in every locale and t
   }
 })
 
+test('as-of labels ship translated in every locale and keep the date placeholder', () => {
+  // Dashboard money tiles and the AR open-receivables tile exclude
+  // future-dated documents; the cut-off caption must exist everywhere and
+  // keep its {date} placeholder (F-t02-007).
+  const keys = [
+    'dashboard.metricContext.asOf',
+    'ar.cockpit.stats.asOf',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+    assert.ok(english.includes('{date}'), `English source must carry {date} in ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      assert.ok(value.includes('{date}'), `${locale} must keep the {date} placeholder in ${key}`)
+    }
+  }
+})
+
 test('banking feed operational panel copy is present in every locale and translated', () => {
   // The /banking/imports live-feeds panel (F-t05-015) renders these keys;
   // present-but-English values read as hardcoded copy on screen.
