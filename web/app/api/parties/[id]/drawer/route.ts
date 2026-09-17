@@ -8,6 +8,7 @@ import { resolveFormLayout } from '../../../../../lib/customization/resolve'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { loadParty } from '../../_lib'
+import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../../lib/compliance'
 
 export const runtime = 'nodejs'
 
@@ -25,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
-  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency] = await Promise.all([
+  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency, complianceEnabled] = await Promise.all([
     loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds),
     (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
@@ -42,12 +43,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     (db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`)),
     isFeatureEnabled(gate.user.orgId, 'payroll'),
     isFeatureEnabled(gate.user.orgId, 'multiCurrency'),
+    isFeatureEnabled(gate.user.orgId, 'subcontractorCompliance'),
   ])
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const requestedRole = new URL(request.url).searchParams.get('role')
   const role = requestedRole === 'customer' || requestedRole === 'vendor' || requestedRole === 'employee'
     ? requestedRole
     : payload.customer ? 'customer' : payload.vendor ? 'vendor' : 'employee'
+  // F-t04-003: the shell overlay vendor drawer needs the same Compliance tab
+  // inputs the /parties and /entities loaders supply — drawer-open vendors
+  // only, so the class list never loads for customers, employees, or a
+  // feature-off org.
+  const compliance = complianceEnabled && role === 'vendor'
+    ? {
+        classId: await loadVendorComplianceClass(gate.user.orgId, id),
+        classes: await loadComplianceClasses(gate.user.orgId),
+      }
+    : null
   const formId = new URL(request.url).searchParams.get('form')
   const resolvedForm = await resolveFormLayout({
     orgId: gate.user.orgId,
@@ -67,6 +79,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     workerCompGroups: workerCompGroups.rows,
     payrollEnabled,
     multiCurrency,
+    complianceEnabled,
+    canManageCompliance: can(gate, 'compliance.manage'),
+    compliance,
     fieldDefs,
     subsidiaries,
     accounts: accounts.rows,
