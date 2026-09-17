@@ -7,6 +7,7 @@ import { flowTranslation, translateFlowAmount } from './fx-translation.ts'
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from './money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
 import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
+import { loadProjectType } from './project-type.ts'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -730,4 +731,106 @@ export async function resolveProjectFinancials(
   } finally {
     client.release()
   }
+}
+
+/**
+ * Batched actual-cost reader for project lists — the same reader the cockpit
+ * Financials tab uses, over a page of projects at once.
+ *
+ * The project list used to run its own hardcoded lateral (posted-only,
+ * standard cost types, every book, no adjustments, raw sums), so its
+ * "Actual cost" disagreed with the cockpit's profile-driven actual_cost
+ * (posted+reversed primary-book legs through the type's cost source —
+ * account types or an account group — translated per functional, plus manual
+ * actual_cost adjustments). The list now displays this reader's values while
+ * the lateral stays as the SQL sort grain.
+ *
+ * Grain parity notes (each mirrors the single-project resolver above):
+ * - cost membership reuses the same rule the SQL predicate encodes
+ *   (`none` never matches, groups match resolved member ids, type lists
+ *   match account types — empties match nothing);
+ * - legs aggregate per functional with the max posting date and translate
+ *   through the same `flowTranslation`/`translateFlowAmount` pair, fetched
+ *   once for every leg on the page;
+ * - profiles load through the same `loadProjectType` the cockpit passes in,
+ *   so tenant cost-source customizations apply identically.
+ */
+export async function resolveProjectActualCosts(
+  orgId: string,
+  projectIds: string[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(projectIds.filter((id) => typeof id === 'string' && id.length > 0))]
+  const out = new Map<string, string>(ids.map((id) => [id, normalizeMoney('0')]))
+  if (ids.length === 0) return out
+  const profiles = new Map<string, FinancialProfile>()
+  await Promise.all(ids.map(async (id) => {
+    try {
+      profiles.set(id, (await loadProjectType(orgId, id)).financialProfile)
+    } catch {
+      // A project whose type cannot load keeps the zero above rather than
+      // failing the whole list page.
+    }
+  }))
+  const groupCache = new Map<string, Set<string>>()
+  const groupIdsFor = async (src: CostSource): Promise<Set<string>> => {
+    if (src.source !== 'account_group') return new Set()
+    const key = `${src.dimension ?? ''}::${[...(src.groupKeys ?? [])].sort().join(',')}`
+    const hit = groupCache.get(key)
+    if (hit) return hit
+    const ids = new Set(await groupAccountIds(orgId, src))
+    groupCache.set(key, ids)
+    return ids
+  }
+  const [legs, adjustments] = await Promise.all([
+    db.execute<{ project_id: string; account_id: string; type: string; func: string | null; late: string | null; amount: string }>(sql`
+      select l.project_id, l.account_id, a.type, sub.base_currency as func,
+             max(e.posting_date)::text as late, coalesce(sum(l.amount), 0) as amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+       where l.org_id = ${orgId} and l.project_id = any(${`{${ids.join(',')}}`}::uuid[])
+         and e.status in ('posted', 'reversed')
+         and ${primaryBookSql(orgId)}
+       group by 1, 2, 3, 4`),
+    db.execute<{ project_id: string; amount: string }>(sql`
+      select project_id, coalesce(sum(amount), 0) as amount
+        from project_financial_adjustments
+       where org_id = ${orgId} and project_id = any(${`{${ids.join(',')}}`}::uuid[]) and measure = 'actual_cost'
+       group by 1`),
+  ])
+  const adjustmentByProject = new Map(adjustments.rows.map((r) => [r.project_id, amount(r.amount)]))
+  const ctx = await flowTranslation(
+    orgId,
+    legs.rows.map((r) => ({ func: r.func ?? null, date: String(r.late).slice(0, 10) })),
+  )
+  await Promise.all(ids.map(async (id) => {
+    const profile = profiles.get(id)
+    if (!profile) return
+    const src = profile.actualCost
+    const memberIds = await groupIdsFor(src)
+    const inSource = (accountId: string, type: string): boolean =>
+      src.source === 'none'
+        ? false
+        : src.source === 'account_group'
+          ? memberIds.has(accountId)
+          : (src.accountTypes ?? []).includes(type)
+    const byFunc = new Map<string, { func: string | null; late: string; cost: string }>()
+    for (const leg of legs.rows) {
+      if (leg.project_id !== id || !inSource(leg.account_id, leg.type)) continue
+      const late = String(leg.late).slice(0, 10)
+      const slot = byFunc.get(`${leg.func ?? ''}`)
+      if (!slot) byFunc.set(`${leg.func ?? ''}`, { func: leg.func, late, cost: String(leg.amount ?? 0) })
+      else {
+        slot.cost = add(slot.cost, String(leg.amount ?? 0))
+        if (late > slot.late) slot.late = late
+      }
+    }
+    let total = '0'
+    for (const leg of byFunc.values()) {
+      total = add(total, translateFlowAmount(leg.cost, leg.func, leg.late, ctx.rateAt))
+    }
+    out.set(id, add(amount(total), adjustmentByProject.get(id) ?? '0.0000'))
+  }))
+  return out
 }

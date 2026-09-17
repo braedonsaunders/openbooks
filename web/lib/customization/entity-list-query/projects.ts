@@ -8,15 +8,27 @@ import { uuidOrFalse } from "../list-query";
 /* Projects                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Posted actual cost per project (expense/cogs journal lines), lateral-joined. */
+/**
+ * Displayed actual cost is overwritten post-fetch by the profile-driven
+ * actual-cost reader (`resolveProjectActualCosts`, the same reader the
+ * cockpit Financials tab uses). This lateral stays as the SQL sort grain:
+ * posted+reversed primary-book legs plus manual actual_cost adjustments, so
+ * ordering matches the displayed values whenever the type uses the standard
+ * cost source (a customized account-group source can still order slightly
+ * differently than it displays — display always ties).
+ */
 export const PROJECT_BASE_JOINS = sql`
   left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
   left join lateral (
-    select coalesce(sum(l.amount), 0) as cost
+    select coalesce(sum(l.amount), 0)
+         + coalesce((select sum(adj.amount) from project_financial_adjustments adj
+                      where adj.org_id = p.org_id and adj.project_id = p.id and adj.measure = 'actual_cost'), 0) as cost
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = p.org_id and l.project_id = p.id and e.status = 'posted'
+     where l.org_id = p.org_id and l.project_id = p.id and e.status in ('posted', 'reversed')
+       and e.book_id = (select b.id from accounting_books b
+                         where b.org_id = p.org_id and b.is_primary and b.is_active and b.posts_gl)
        and a.type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
   ) actual on true`
 

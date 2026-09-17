@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { resolveProjectActualCosts } from '@openbooks/engine/src/project-financials.ts'
 import type { ListViewConfig } from '@openbooks/customization'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
@@ -155,6 +156,14 @@ export interface EntityListSource {
   drawerTarget?: (row: Record<string, unknown>) => { param: string; id: string }
   /** Full row href for read-only aggregate rows that do not own a drawer. */
   rowHref?: (row: Record<string, unknown>) => string
+  /**
+   * Post-fetch row enrichment, keyed by displayed rows. The project source
+   * uses it to overwrite the SQL `actual` lateral with the profile-driven
+   * actual-cost reader the cockpit Financials tab reads, so the two "Actual
+   * cost" figures tie; SQL keeps serving the sort grain. Sources without
+   * server-computed display values omit it.
+   */
+  enrichRows?: (orgId: string, rows: Record<string, unknown>[]) => Promise<void>
 }
 
 /**
@@ -289,6 +298,15 @@ const SOURCES: Record<string, EntityListSource> = {
     basePath: '/projects',
     hasInactive: true,
     extraSelect: sql`p.is_active`,
+    enrichRows: async (orgId, rows) => {
+      const ids = rows.map((row) => String(row.id ?? '')).filter((id) => id.length > 0)
+      if (ids.length === 0) return
+      const costs = await resolveProjectActualCosts(orgId, ids)
+      for (const row of rows) {
+        const cost = costs.get(String(row.id ?? ''))
+        if (cost !== undefined) row.actual = cost
+      }
+    },
   },
   opportunity: {
     recordType: 'opportunity',

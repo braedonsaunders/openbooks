@@ -213,6 +213,10 @@ export async function EntityListView({
     })),
   ])
   const rows = rowsRes.rows as any[]
+  // Server-computed display values (project actual cost reads the same
+  // profile-driven reader as the cockpit). Runs after the page fetch so it
+  // touches only displayed rows; SQL keeps serving counts and sort order.
+  if (source.enrichRows) await source.enrichRows(orgId, rows)
   const filteredTotal = Number(totalRow.rows[0].n)
   const total = filteredTotal
 
