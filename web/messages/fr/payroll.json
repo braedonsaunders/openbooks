@@ -7,5 +7,208 @@
       "qpipEmployerYtd": "Cotisations QPIP de l'employeur",
       "wcbAssessableYtd": "Gains assurables WCB"
     }
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# compte de contrôle de paie est} other {# comptes de contrôle de paie sont}} non configurés :",
+    "openSettings": "Ouvrir le paramétrage de la paie"
+  },
+  "columns": {
+    "employees": "Employés",
+    "gross": "Brut",
+    "net": "Net",
+    "number": "Numéro",
+    "payDate": "Date de paie",
+    "period": "Période",
+    "schedule": "Calendrier",
+    "status": "Statut"
+  },
+  "description": "Cycles de paie, dossiers de paie des employés et retenues obligatoires.",
+  "empty": {
+    "profiles": "Aucun dossier de paie d'employé pour l'instant. Ajoutez-en un pour inclure un employé dans les paies.",
+    "runs": "Aucune paie pour l'instant. Créez-en une à partir d'un calendrier de paie pour commencer."
+  },
+  "home": {
+    "actions": {
+      "remittances": "Versements",
+      "resume": "Reprendre la paie",
+      "reviewPost": "Vérifier et reporter",
+      "startRun": "Lancer la paie",
+      "viewRuns": "Paies",
+      "yearEnd": "Fin d'année"
+    },
+    "current": {
+      "noSchedules": "Aucun calendrier de paie actif. Créez un calendrier pour commencer à traiter la paie.",
+      "title": "Période de paie en cours"
+    },
+    "directory": {
+      "employees": "Employés",
+      "employeesHint": "dossiers de paie actifs",
+      "openingBalances": "Soldes d'ouverture",
+      "parallelRun": "Paie parallèle",
+      "retro": "Rappel de paie",
+      "runs": "Paies",
+      "runsHint": "en cours · {total} au total",
+      "setup": "Paramétrage de la paie",
+      "setupHint": "comptes de contrôle manquants",
+      "title": "Explorer la paie"
+    },
+    "exceptions": {
+      "allClear": "Tous les employés sont prêts pour la paie.",
+      "missingProfile": "{name} n'a pas de dossier de paie",
+      "missingWage": "{name} n'a pas de taux de salaire en vigueur aujourd'hui",
+      "moreMissingProfiles": "{count, plural, one {# autre employé} other {# autres employés}} sans dossier de paie",
+      "moreMissingWages": "{count, plural, one {# autre employé} other {# autres employés}} sans taux de salaire",
+      "title": "À surveiller"
+    },
+    "frequency": {
+      "biweekly": "Aux deux semaines",
+      "monthly": "Mensuelle",
+      "semi_monthly": "Bimensuelle",
+      "weekly": "Hebdomadaire"
+    },
+    "previous": {
+      "none": "Aucune paie terminée pour l'instant.",
+      "title": "Période de paie précédente"
+    },
+    "tabs": {
+      "overview": "Paie",
+      "remittances": "Versements",
+      "runs": "Paies",
+      "separations": "Départs",
+      "yearEnd": "Fin d'année"
+    },
+    "vitals": {
+      "employees": "À la paie",
+      "employeesSub": "dossiers de paie actifs",
+      "nextPayDate": "Prochaine date de paie",
+      "noSchedule": "aucun calendrier actif",
+      "periodsOf": "{ran} sur {total}",
+      "periodsRan": "Périodes de paie {year}",
+      "periodsRanSub": "comptabilisées cette année d'imposition",
+      "ytdEmployerCost": "+{amount} à la charge de l'employeur",
+      "ytdGross": "Brut cumulé",
+      "ytdNet": "Net cumulé",
+      "ytdNetSub": "des paies comptabilisées"
+    }
+  },
+  "list": {
+    "description": "Toutes les paies. Recherchez et filtrez par étape ou calendrier, puis ouvrez une paie pour la traiter.",
+    "open": "Ouvrir la paie",
+    "stageFilter": "Étape",
+    "title": "Paies"
+  },
+  "newRun": {
+    "create": "Nouvelle paie",
+    "description": "Confirmez la période couverte par cette paie. La prochaine période du calendrier est présélectionnée; modifiez les dates pour une paie hors cycle ou de rattrapage.",
+    "employees": "Employés payés",
+    "employeesHint": "Une paie de fin d'emploi paie et solde chaque banque accumulée; elle ne concerne donc que les employés nommés ici.",
+    "invalidWindow": "La fin de période doit être égale ou postérieure au début, et la date de paie égale ou postérieure à la fin de période.",
+    "noSchedules": "Aucun calendrier de paie actif",
+    "noTerminated": "Aucun employé de ce calendrier n'a de date de fin d'emploi au dossier. Saisissez-la d'abord sur l'employé — un chèque final ne peut être calculé sans elle.",
+    "notBegun": "Cette période commence le {date} et n'a pas commencé. Choisissez une période en cours ou terminée.",
+    "payDateHint": "La date à laquelle les employés sont payés. Les taux obligatoires sont déterminés à partir de cette date.",
+    "periodEnd": "Fin de période",
+    "periodStart": "Début de période",
+    "runType": "Type de paie",
+    "runTypeHint": {
+      "bonus": "Paie hors cycle pour primes et commissions. Ni salaire, ni temps, ni retenues récurrentes; les gains sont imposés selon la méthode des primes.",
+      "regular": "La paie ordinaire du calendrier : salaires, temps approuvé, éléments et retenues récurrents.",
+      "termination": "Solde de tout compte des employés partants. Comprend le paiement du solde de vacances accumulé."
+    },
+    "schedule": "Calendrier de paie"
+  },
+  "register": {
+    "cppFica": "RPC / FICA",
+    "otherDeductions": "Autres retenues",
+    "print": "Imprimer",
+    "title": "Registre de paie",
+    "totals": "Totaux ({count, plural, one {# employé} other {# employés}})"
+  },
+  "remittances": {
+    "apLink": "ouvrir les factures fournisseurs",
+    "apNote": "Les factures de versement sont des factures fournisseurs ordinaires :",
+    "apply": "Appliquer",
+    "assignVendor": "Attribuez un fournisseur sur les composantes",
+    "back": "Paie",
+    "billCreated": "Brouillon de facture {number} créé. Vérifiez-le et affichez-le dans les comptes fournisseurs.",
+    "context": "Masse salariale brute {gross} · {employees, plural, one {# employé} other {# employés}} sur la période",
+    "createAnother": "Créer une autre facture",
+    "createBill": "Créer la facture de versement",
+    "description": "Retenues accumulées et cotisations patronales par destinataire pour une période. Créer une facture débite les comptes de passif et confie le paiement aux comptes fournisseurs.",
+    "dueOn": "Échéance le {dueDate} · {authority}",
+    "employer": "Employeur",
+    "empty": "Aucune paie comptabilisée avec des montants à verser sur cette période.",
+    "from": "Du",
+    "noAccount": "Aucun compte de passif",
+    "title": "Versements de paie",
+    "to": "Au",
+    "total": "Total à verser",
+    "unassigned": "Aucun fournisseur de versement attribué",
+    "withheld": "Retenues"
+  },
+  "run": {
+    "approvalNotRequired": "Aucune politique d'approbation ne s'applique aux paies",
+    "approvalPending": "En attente d'approbation ({count} en suspens) — la comptabilisation et l'affichage sont bloqués",
+    "approvalSubmitted": "Envoyée à l'approbation avec le dossier de preuves",
+    "calculate": "Calculer",
+    "calculateDone": "Paie calculée.",
+    "commit": "Comptabiliser",
+    "commitDone": "Paie comptabilisée.",
+    "employerCost": "Coût employeur",
+    "empty": "Aucun bulletin. Calculez la paie pour les générer.",
+    "lineKind": {
+      "deduction": "Retenue",
+      "earning": "Gain",
+      "employer_contribution": "Employeur"
+    },
+    "post": "Reporter",
+    "postDone": "Paie reportée.",
+    "printSet": "Jeu d'impression (impression seulement)",
+    "stub": {
+      "employee": "Employé",
+      "lines": "Lignes de paie",
+      "tax": "Impôt",
+      "trace": "trace {engine}"
+    },
+    "stubsPrintOnly": "{count} employés sont en impression seulement et n'ont pas été avisés par courriel",
+    "submitApproval": "Soumettre à l'approbation",
+    "title": "Paie"
+  },
+  "runType": {
+    "bonus": "Prime hors cycle",
+    "regular": "Ordinaire",
+    "termination": "Solde de tout compte"
+  },
+  "status": {
+    "calculated": "Calculée",
+    "committed": "Comptabilisée",
+    "draft": "Brouillon",
+    "posted": "Reportée",
+    "void": "Annulée"
+  },
+  "tabs": {
+    "employees": "Employés ({count})",
+    "runs": "Paies"
+  },
+  "title": "Paie",
+  "wizard": {
+    "steps": {
+      "finish": "Reporter et terminer",
+      "gl": "Aperçu GL et comptabilisation",
+      "period": "Portée",
+      "readiness": "Préparation",
+      "review": "Vérifier les bulletins"
+    }
+  },
+  "yearEnd": {
+    "cadence": {
+      "annual": "Déclarations annuelles",
+      "annualHelp": "Produites une fois par année d'imposition (T4, W-2, RL-1). Le sélecteur d'année d'imposition ci-dessus choisit la population affichée.",
+      "quarterly": "Déclarations trimestrielles",
+      "quarterlyHelp": "Produites une fois par trimestre civil (formulaire 941) — le tableau de population affiche une ligne par trimestre de l'année d'imposition retenue."
+    },
+    "description": "Chaque déclaration annuelle et trimestrielle prévue par les modules de paie installés, établie à partir des bulletins comptabilisés — chaque case est rapprochée des traces de bulletins.",
+    "noFilings": "Aucune déclaration de fin d'année de paie n'est prévue pour cette organisation.",
+    "title": "Fin d'année"
   }
 }

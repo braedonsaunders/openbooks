@@ -7,5 +7,208 @@
       "qpipEmployerYtd": "雇用主QPIP保険料",
       "wcbAssessableYtd": "WCB算定対象賃金"
     }
+  },
+  "checklist": {
+    "incomplete": "未設定の給与管理勘定が {count} 件あります:",
+    "openSettings": "給与設定を開く"
+  },
+  "columns": {
+    "employees": "従業員",
+    "gross": "総支給額",
+    "net": "手取額",
+    "number": "番号",
+    "payDate": "支給日",
+    "period": "期間",
+    "schedule": "スケジュール",
+    "status": "ステータス"
+  },
+  "description": "給与計算、従業員の給与プロファイル、および法定控除。",
+  "empty": {
+    "profiles": "従業員の給与プロファイルはまだありません。追加すると従業員が計算対象になります。",
+    "runs": "給与計算はまだありません。給与スケジュールから作成して開始してください。"
+  },
+  "home": {
+    "actions": {
+      "remittances": "納付",
+      "resume": "計算を再開",
+      "reviewPost": "確認して転記",
+      "startRun": "給与計算を実行",
+      "viewRuns": "給与計算",
+      "yearEnd": "年末調整"
+    },
+    "current": {
+      "noSchedules": "有効な給与スケジュールがありません。給与処理を開始するにはスケジュールを作成してください。",
+      "title": "今期の給与期間"
+    },
+    "directory": {
+      "employees": "従業員",
+      "employeesHint": "有効な給与プロファイル",
+      "openingBalances": "期首残高",
+      "parallelRun": "並行計算",
+      "retro": "遡及支給",
+      "runs": "給与計算",
+      "runsHint": "処理中 · 合計 {total}",
+      "setup": "給与設定",
+      "setupHint": "管理勘定が未設定",
+      "title": "給与を探索"
+    },
+    "exceptions": {
+      "allClear": "全従業員の給与準備ができています。",
+      "missingProfile": "{name} に給与プロファイルがありません",
+      "missingWage": "{name} に本日有効な賃金レートがありません",
+      "moreMissingProfiles": "給与プロファイルのない従業員が他に {count} 名",
+      "moreMissingWages": "賃金レートのない従業員が他に {count} 名",
+      "title": "要確認"
+    },
+    "frequency": {
+      "biweekly": "隔週",
+      "monthly": "毎月",
+      "semi_monthly": "半月ごと",
+      "weekly": "毎週"
+    },
+    "previous": {
+      "none": "完了した給与計算はまだありません。",
+      "title": "前期の給与期間"
+    },
+    "tabs": {
+      "overview": "給与",
+      "remittances": "納付",
+      "runs": "給与計算",
+      "separations": "退職",
+      "yearEnd": "年末調整"
+    },
+    "vitals": {
+      "employees": "給与対象者",
+      "employeesSub": "有効な給与プロファイル",
+      "nextPayDate": "次回支給日",
+      "noSchedule": "有効なスケジュールなし",
+      "periodsOf": "{ran} / {total}",
+      "periodsRan": "給与期間 {year}",
+      "periodsRanSub": "当年に確定した税年度",
+      "ytdEmployerCost": "+{amount} 事業主負担",
+      "ytdGross": "年累計総支給額",
+      "ytdNet": "年累計手取額",
+      "ytdNetSub": "確定済み計算から"
+    }
+  },
+  "list": {
+    "description": "すべての給与計算。ステージまたはスケジュールで検索・絞り込み、計算を開いて処理します。",
+    "open": "計算を開く",
+    "stageFilter": "ステージ",
+    "title": "給与計算"
+  },
+  "newRun": {
+    "create": "新規給与計算",
+    "description": "この計算の対象期間を確認してください。スケジュールの次期が初期表示されます。臨時・遡及の計算では日付を変更してください。",
+    "employees": "支給対象者",
+    "employeesHint": "最終精算では蓄積されたバンクをすべて払い出して清算するため、ここで指定した従業員のみが対象です。",
+    "invalidWindow": "期間終了は開始日以降、支給日は期間終了日以降である必要があります。",
+    "noSchedules": "有効な給与スケジュールがありません",
+    "noTerminated": "このスケジュールには退職日の登録がある従業員がいません。先に従業員に退職日を登録してください。退職日がないと最終精算は計算できません。",
+    "notBegun": "この期間は {date} 開始で、まだ始まっていません。進行中または完了した期間を選んでください。",
+    "payDateHint": "従業員への支給日。法定料率はこの日から決まります。",
+    "periodEnd": "期間終了",
+    "periodStart": "期間開始",
+    "runType": "計算種別",
+    "runTypeHint": {
+      "bonus": "賞与・歩合の臨時支給。給与・時間・定期控除なし。賞与課税方式で課税されます。",
+      "regular": "通常の定期給与:給与、承認済み時間、定期的な支給・控除項目。",
+      "termination": "退職者の最終精算。蓄積された休暇残高の払い出しを含みます。"
+    },
+    "schedule": "給与スケジュール"
+  },
+  "register": {
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "その他の控除",
+    "print": "印刷",
+    "title": "給与台帳",
+    "totals": "合計 (従業員 {count} 名)"
+  },
+  "remittances": {
+    "apLink": "買掛請求書を開く",
+    "apNote": "納付請求書は通常の仕入請求書です:",
+    "apply": "適用",
+    "assignVendor": "コンポーネント上でベンダーを割り当ててください",
+    "back": "給与",
+    "billCreated": "請求書ドラフト {number} を作成しました。買掛金で確認・転記してください。",
+    "context": "給与総額 {gross} · 期間中の従業員 {employees} 名",
+    "createAnother": "別の請求書を作成",
+    "createBill": "納付請求書を作成",
+    "description": "期間ごとの納付先別の源泉徴収額と事業主負担額。請求書の作成で負債勘定に借方記入し、支払を買掛金に引き渡します。",
+    "dueOn": "納期限 {dueDate} · {authority}",
+    "employer": "事業主",
+    "empty": "この期間に納付対象額のある確定済み計算はありません。",
+    "from": "開始",
+    "noAccount": "負債勘定なし",
+    "title": "給与納付",
+    "to": "終了",
+    "total": "納付合計",
+    "unassigned": "納付先ベンダーが未割当",
+    "withheld": "源泉徴収額"
+  },
+  "run": {
+    "approvalNotRequired": "給与計算に適用される承認ポリシーはありません",
+    "approvalPending": "承認待ち ({count} 件) — 確定と転記はブロックされています",
+    "approvalSubmitted": "証跡パッケージとともに承認に送付しました",
+    "calculate": "計算",
+    "calculateDone": "給与計算が完了しました。",
+    "commit": "確定",
+    "commitDone": "給与計算を確定しました。",
+    "employerCost": "事業主負担",
+    "empty": "明細がありません。計算を実行して生成してください。",
+    "lineKind": {
+      "deduction": "控除",
+      "earning": "支給",
+      "employer_contribution": "事業主"
+    },
+    "post": "転記",
+    "postDone": "給与計算を転記しました。",
+    "printSet": "印刷セット (印刷配布のみ)",
+    "stub": {
+      "employee": "従業員",
+      "lines": "給与明細行",
+      "tax": "税",
+      "trace": "{engine} トレース"
+    },
+    "stubsPrintOnly": "{count} 名は印刷のみでメール送信されていません",
+    "submitApproval": "承認に提出",
+    "title": "給与計算"
+  },
+  "runType": {
+    "bonus": "臨時賞与",
+    "regular": "通常",
+    "termination": "退職精算"
+  },
+  "status": {
+    "calculated": "計算済み",
+    "committed": "確定済み",
+    "draft": "下書き",
+    "posted": "転記済み",
+    "void": "無効"
+  },
+  "tabs": {
+    "employees": "従業員 ({count})",
+    "runs": "給与計算"
+  },
+  "title": "給与",
+  "wizard": {
+    "steps": {
+      "finish": "転記して完了",
+      "gl": "総勘定プレビューと確定",
+      "period": "対象範囲",
+      "readiness": "事前確認",
+      "review": "明細を確認"
+    }
+  },
+  "yearEnd": {
+    "cadence": {
+      "annual": "年次申告",
+      "annualHelp": "税年度ごとに1回提出 (T4、W-2、RL-1)。上の税年度選択で表示対象が決まります。",
+      "quarterly": "四半期申告",
+      "quarterlyHelp": "暦四半期ごとに1回提出 (Form 941) — 選択年内の四半期ごとに行が表示されます。"
+    },
+    "description": "導入済み給与パックが定める年次・四半期申告を、確定済み明細から作成 — すべての欄が明細トレースと一致します。",
+    "noFilings": "この組織に該当する給与年末申告はありません。",
+    "title": "年末調整"
   }
 }

@@ -7,5 +7,208 @@
       "qpipEmployerYtd": "雇主 QPIP 缴款",
       "wcbAssessableYtd": "WCB 应评税工资"
     }
+  },
+  "checklist": {
+    "incomplete": "有 {count} 个工资统驭科目尚未配置:",
+    "openSettings": "打开工资设置"
+  },
+  "columns": {
+    "employees": "员工",
+    "gross": "应发",
+    "net": "实发",
+    "number": "编号",
+    "payDate": "发薪日期",
+    "period": "期间",
+    "schedule": "计划",
+    "status": "状态"
+  },
+  "description": "工资核算、员工工资档案和法定代扣。",
+  "empty": {
+    "profiles": "尚无员工工资档案。请添加档案以将员工纳入核算。",
+    "runs": "尚无工资核算。请从发薪计划创建一条以开始。"
+  },
+  "home": {
+    "actions": {
+      "remittances": "代缴",
+      "resume": "继续核算",
+      "reviewPost": "复核并过账",
+      "startRun": "运行工资核算",
+      "viewRuns": "工资核算",
+      "yearEnd": "年终"
+    },
+    "current": {
+      "noSchedules": "没有有效的发薪计划。请创建计划以开始处理工资。",
+      "title": "当前工资周期"
+    },
+    "directory": {
+      "employees": "员工",
+      "employeesHint": "有效的工资档案",
+      "openingBalances": "期初余额",
+      "parallelRun": "并行核算",
+      "retro": "补发工资",
+      "runs": "工资核算",
+      "runsHint": "进行中 · 共 {total}",
+      "setup": "工资设置",
+      "setupHint": "缺少统驭科目",
+      "title": "浏览工资"
+    },
+    "exceptions": {
+      "allClear": "所有员工均已就绪，可以核算工资。",
+      "missingProfile": "{name} 没有工资档案",
+      "missingWage": "{name} 没有当日有效的工资标准",
+      "moreMissingProfiles": "还有 {count} 名员工没有工资档案",
+      "moreMissingWages": "还有 {count} 名员工没有工资标准",
+      "title": "需要注意"
+    },
+    "frequency": {
+      "biweekly": "每两周",
+      "monthly": "每月",
+      "semi_monthly": "半月",
+      "weekly": "每周"
+    },
+    "previous": {
+      "none": "尚无已完成的工资核算。",
+      "title": "上一工资周期"
+    },
+    "tabs": {
+      "overview": "工资",
+      "remittances": "代缴",
+      "runs": "工资核算",
+      "separations": "离职",
+      "yearEnd": "年终"
+    },
+    "vitals": {
+      "employees": "在册发薪",
+      "employeesSub": "有效的工资档案",
+      "nextPayDate": "下次发薪日期",
+      "noSchedule": "无有效计划",
+      "periodsOf": "{ran} / {total}",
+      "periodsRan": "{year} 工资周期",
+      "periodsRanSub": "本纳税年度已确认",
+      "ytdEmployerCost": "+{amount} 雇主成本",
+      "ytdGross": "累计应发",
+      "ytdNet": "累计实发",
+      "ytdNetSub": "来自已确认的核算"
+    }
+  },
+  "list": {
+    "description": "全部工资核算。按阶段或计划搜索筛选，然后打开一条核算进行处理。",
+    "open": "打开核算",
+    "stageFilter": "阶段",
+    "title": "工资核算"
+  },
+  "newRun": {
+    "create": "新建工资核算",
+    "description": "确认本次核算覆盖的期间。已预填计划的下一期间;周期外或补核算请更改日期。",
+    "employees": "发薪员工",
+    "employeesHint": "最终结算会兑现并清零所有累计银行,因此仅包括此处点名的员工。",
+    "invalidWindow": "期间结束不得早于开始,发薪日期不得早于期间结束。",
+    "noSchedules": "无有效的发薪计划",
+    "noTerminated": "该计划中没有已登记离职日期的员工。请先在员工档案中登记——没有离职日期无法计算最终结算。",
+    "notBegun": "该期间自 {date} 开始,尚未开始。请选择进行中或已完成的期间。",
+    "payDateHint": "向员工发薪的日期。法定税率依此日期确定。",
+    "periodEnd": "期间结束",
+    "periodStart": "期间开始",
+    "runType": "核算类型",
+    "runTypeHint": {
+      "bonus": "奖金和佣金的周期外发放。无薪资、工时或经常性扣款;所得按奖金计税方法计税。",
+      "regular": "计划内的常规工资:薪资、已审批工时、经常性项目和扣款。",
+      "termination": "离职员工的最终结算。包括累计假期余额的兑现。"
+    },
+    "schedule": "发薪计划"
+  },
+  "register": {
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "其他扣款",
+    "print": "打印",
+    "title": "工资登记簿",
+    "totals": "合计(员工 {count} 名)"
+  },
+  "remittances": {
+    "apLink": "打开应付账单",
+    "apNote": "代缴账单是普通的供应商账单:",
+    "apply": "应用",
+    "assignVendor": "请在项目上指定供应商",
+    "back": "工资",
+    "billCreated": "账单草稿 {number} 已创建。请在应付账款中复核并过账。",
+    "context": "工资总额 {gross} · 本期间 {employees} 名员工",
+    "createAnother": "再创建一张账单",
+    "createBill": "创建代缴账单",
+    "description": "一段期间内按缴纳对象归集的累计代扣和雇主缴款。创建账单会借记负债科目,并将付款移交应付账款。",
+    "dueOn": "{dueDate} 到期 · {authority}",
+    "employer": "雇主",
+    "empty": "本期间没有含可代缴金额的已确认核算。",
+    "from": "自",
+    "noAccount": "无负债科目",
+    "title": "工资代缴",
+    "to": "至",
+    "total": "应代缴合计",
+    "unassigned": "未指定代缴供应商",
+    "withheld": "已代扣"
+  },
+  "run": {
+    "approvalNotRequired": "没有适用于工资核算的审批政策",
+    "approvalPending": "等待审批(还有 {count} 项)——确认和过账已被阻止",
+    "approvalSubmitted": "已连同证据包送审",
+    "calculate": "计算",
+    "calculateDone": "工资核算已计算。",
+    "commit": "确认",
+    "commitDone": "工资核算已确认。",
+    "employerCost": "雇主成本",
+    "empty": "没有工资条。请计算本次核算以生成。",
+    "lineKind": {
+      "deduction": "扣款项",
+      "earning": "应发项",
+      "employer_contribution": "雇主"
+    },
+    "post": "过账",
+    "postDone": "工资核算已过账。",
+    "printSet": "打印套件(仅用于打印分发)",
+    "stub": {
+      "employee": "员工",
+      "lines": "工资行",
+      "tax": "税款",
+      "trace": "{engine} 跟踪"
+    },
+    "stubsPrintOnly": "{count} 名员工仅打印,未发送邮件",
+    "submitApproval": "提交审批",
+    "title": "工资核算"
+  },
+  "runType": {
+    "bonus": "周期外奖金",
+    "regular": "常规",
+    "termination": "离职结算"
+  },
+  "status": {
+    "calculated": "已计算",
+    "committed": "已确认",
+    "draft": "草稿",
+    "posted": "已过账",
+    "void": "已作废"
+  },
+  "tabs": {
+    "employees": "员工 ({count})",
+    "runs": "工资核算"
+  },
+  "title": "工资",
+  "wizard": {
+    "steps": {
+      "finish": "过账并完成",
+      "gl": "总账预览与确认",
+      "period": "范围",
+      "readiness": "就绪检查",
+      "review": "复核工资条"
+    }
+  },
+  "yearEnd": {
+    "cadence": {
+      "annual": "年度申报",
+      "annualHelp": "每个纳税年度申报一次(T4、W-2、RL-1)。上方税年度选择器决定显示哪一年的人员。",
+      "quarterly": "季度申报",
+      "quarterlyHelp": "每个日历季度申报一次(941 表)——人员表在所选税年度内按季度分行显示。"
+    },
+    "description": "已安装工资包规定的所有年度和季度申报,依据已确认工资条生成——每个申报栏都与工资条跟踪核对一致。",
+    "noFilings": "本组织没有规定的工资年终申报。",
+    "title": "年终"
   }
 }

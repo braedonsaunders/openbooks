@@ -484,3 +484,254 @@ test('every installable payroll pack slot has a statutory account label', () => 
   }
   assert.deepEqual(missing, [], `these statutory slots render as raw keys:\n${missing.join('\n')}`)
 })
+
+// 149 keys
+const PAYROLL_CHROME_PREFIXES = [
+  'payroll.title',
+  'payroll.description',
+  'payroll.empty.',
+  'payroll.tabs.',
+  'payroll.home.',
+  'payroll.list.',
+  'payroll.columns.',
+  'payroll.status.',
+  'payroll.checklist.',
+  'payroll.run.',
+  'payroll.remittances.',
+  'payroll.yearEnd.',
+  'payroll.register.',
+  'payroll.newRun.',
+  'payroll.runType.',
+  'payroll.wizard.steps.',
+]
+const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
+  'payroll.checklist.incomplete': 'a26f9a130a9d9f7445eaeb613c98b8ff6bfcc0777aa2e4cf5375ae5b4e3befe8',
+  'payroll.checklist.openSettings': '82d325df366b1ac086c7f8625c21b1e38186104cec430afca2dfc47ef6d2de91',
+  'payroll.columns.employees': 'c98270317b51cbb34dd7db32e32d98e25c243111762b17902aa37b7ecea659fe',
+  'payroll.columns.gross': '0589b626717ccca8914a41a144ce292bf279c52ac7135af131cece4e747e89aa',
+  'payroll.columns.net': '660fb2c41d028988b2093656a80d3ae99bc67cd0d5acca5c6063793819b15881',
+  'payroll.columns.number': 'bd82cf16699be29ec05cbb763199c12f0dced428dde8381dbdd31c1d5dd0e8d4',
+  'payroll.columns.payDate': 'bd06c4ebc2eab6557364ebf541e0418d8a2630153db8a01e96dbe681ec7a9355',
+  'payroll.columns.period': '6e795d4d3cc21c5ca8349ab5e917482197aa612d1a218f9e9411467db73242bb',
+  'payroll.columns.schedule': 'f4830a1dae2980447c716bd4b5779b7013575ef09f70ef4731457218792487b3',
+  'payroll.columns.status': '920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355',
+  'payroll.description': 'e2701573f05d37c1008ca59e4557c2baaf000ff0d67bbc02622ab4db22269e9e',
+  'payroll.empty.profiles': '25c11d1a1d1907e64938f76bb2a951d1504f51976eeeaf739059e8fa7c243239',
+  'payroll.empty.runs': '963392599651b0b972efbefaedf0c1eb60858b49ef94a7e14d9693030d6647a2',
+  'payroll.home.actions.remittances': '8fc2a9656b5308428b116ac457b66a34793219d201920a0a14179c07dc4877fc',
+  'payroll.home.actions.resume': '020d618666ac1606183e3f70991a75f7ee85a53be238fd58532f076a5fdfb4ee',
+  'payroll.home.actions.reviewPost': 'cef1b025f6c1d0a70ac38840a6c299ef035f7b7cccbab3155c9777cec46aeff7',
+  'payroll.home.actions.startRun': '4a1d2b0bf63f0601999e11727cf9bc04745e0867cd9492883030cb2557888aec',
+  'payroll.home.actions.viewRuns': '5892ac63aab0c1d77c2110f4a1dfee29589c407a6b6dfed4b95025bbc050b8e7',
+  'payroll.home.actions.yearEnd': '9a63187ca66879c3edcaff1fd1159b7cde9fd6b66cd53ca0fbb3e7392ec8dd1f',
+  'payroll.home.current.noSchedules': 'd999afc22bef7e2038322362fba343287e278bc1851ecb162151b6c5fb0780b4',
+  'payroll.home.current.title': 'b0bdea00c98eaa4a75c9600936f7ec5f9d43e16eeb1617930fb042ac3088deaa',
+  'payroll.home.directory.employees': 'c98270317b51cbb34dd7db32e32d98e25c243111762b17902aa37b7ecea659fe',
+  'payroll.home.directory.employeesHint': '0e2c3fb537248bdf9059979d0fa143ab4ce650bbe24c62d42df7ee2c747b4f3d',
+  'payroll.home.directory.openingBalances': '28761a2a0372e004d4fdf2e968b19c70caca5871ae7829490483530646e64867',
+  'payroll.home.directory.parallelRun': '7b3ce4aa41193f215dbf9c7b3f8254ec9f3876828ec62807e970c0e2805f635e',
+  'payroll.home.directory.retro': '8ded50224886e49edb45d9ddebb82b2944183b522dc9405cebc94b805dac7154',
+  'payroll.home.directory.runs': '5892ac63aab0c1d77c2110f4a1dfee29589c407a6b6dfed4b95025bbc050b8e7',
+  'payroll.home.directory.runsHint': '6a7f5a5210347fb72fe6326417836338b0b280a089dbb79cad8cb3a015881efc',
+  'payroll.home.directory.setup': '15d68318003ecef218a282bd6f854dcaa5f3b0552e1b54987d764fe2c409924a',
+  'payroll.home.directory.setupHint': '55d9c974bbd96d56069d6e581fd00e94a101025d2a54e31f34d012fa54e7dd7b',
+  'payroll.home.directory.title': '15ed6d30cf4842a34e45eb18d9e93988cecbcc18262b7ed8dcf96e95de1cfc7a',
+  'payroll.home.exceptions.allClear': '605004d7175dda3d635450873436da51ecb5553a224b05e45e7ed452bbad0746',
+  'payroll.home.exceptions.missingProfile': '644f0043302e75935f19d32716b01b7a243ae2cf6ea26250d8a363c899a72e9a',
+  'payroll.home.exceptions.missingWage': '9a8639687905376b314778ae41babb6fab1d33bc47026db2193c9a157271ff48',
+  'payroll.home.exceptions.moreMissingProfiles': 'c71f43d7723f6281337939c5382639055e88654a9acf9db15ca4bf71562d13b4',
+  'payroll.home.exceptions.moreMissingWages': 'caa71439cc9b76ed7750149f3ed3b3c206022d936c5b7ba8dcabd40daa514860',
+  'payroll.home.exceptions.title': 'c1ebc7817870e5be78fceae559ba5fcac2b68d5c5498d8080298004f3f79d62d',
+  'payroll.home.frequency.biweekly': 'c95729ce66367d05386d90719dbd471cc4150df948d4fb1cd556f7985655da29',
+  'payroll.home.frequency.monthly': '9b11f6b707d2a03e0265465f32520bc1bc213de121de958539662d0ec1453fcb',
+  'payroll.home.frequency.semi_monthly': 'ceaa97df8beb1af938051d6df7a039cd81666ac92bccba577ea04f374ef5553c',
+  'payroll.home.frequency.weekly': '2975132481a7a6957cfa95055d04e706f21f1a613f448d0a17463f2eacca4636',
+  'payroll.home.previous.none': '1560d733989509e5139a31612a797c7ce9e21eb10fb40fad9e3569920faccc54',
+  'payroll.home.previous.title': '956853b817e5fab32938cabb1dfdc574b811cfaaa32e1723d5e35aa7e978d9e4',
+  'payroll.home.tabs.overview': '53fe8dfb6d9e1b03219adddcc3ffb741557dd579dc653d026097c463def4a8fe',
+  'payroll.home.tabs.remittances': '8fc2a9656b5308428b116ac457b66a34793219d201920a0a14179c07dc4877fc',
+  'payroll.home.tabs.runs': '5892ac63aab0c1d77c2110f4a1dfee29589c407a6b6dfed4b95025bbc050b8e7',
+  'payroll.home.tabs.separations': 'd80cf8b228846a2906d0ba7b447e13ea28b7ecb8893dd8c0ee39390700097a4d',
+  'payroll.home.tabs.yearEnd': '9a63187ca66879c3edcaff1fd1159b7cde9fd6b66cd53ca0fbb3e7392ec8dd1f',
+  'payroll.home.vitals.employees': '22974def8fac27a522ec79dd2977020e6bc38b754f992415d67cfc873a7d1a92',
+  'payroll.home.vitals.employeesSub': '0e2c3fb537248bdf9059979d0fa143ab4ce650bbe24c62d42df7ee2c747b4f3d',
+  'payroll.home.vitals.nextPayDate': 'e80efe0c31b06f425fd6a9d1edb5e7fad4e30397e7d786f8078a1c3f5ab42f42',
+  'payroll.home.vitals.noSchedule': '90a245e783edfb30669a50ad537085514cc92e681d32eea0a6c6ff305c7b2c2c',
+  'payroll.home.vitals.periodsOf': '6b0d9cd3d552732332cb1d9e25aaaa31e1e2cfbd87af618bb8a287c8badf4cb5',
+  'payroll.home.vitals.periodsRan': 'cfb980e45387229fcd7ceadae33ac7e309c3b94a96d2036b35e81fae97f9ecc7',
+  'payroll.home.vitals.periodsRanSub': '6f73e5441ca8e2b61fac5fbe38221ca918d2b4ab7e28b3f0b98b9b1f0e5fcc50',
+  'payroll.home.vitals.ytdEmployerCost': 'd5300731fb4034101bdcc9c4ec5f1633316e06d84f7d2eaf19ad82a74282f09c',
+  'payroll.home.vitals.ytdGross': '0dae0182fadb48e12a2b024eb1afa09456f0847798d241378b41d21ed9f1bf19',
+  'payroll.home.vitals.ytdNet': '79a260534ad6993aa9a5b14e07e6437b02ced7c2f2aa0d7c0e02742789a3de68',
+  'payroll.home.vitals.ytdNetSub': '145472234104cf4548d73688d931d826b082d46134de90a8d1ac092b0ebadceb',
+  'payroll.list.description': '89945291cbc257cfc325c622d6d422c6aa7979cdd0e769465cb400e64d563c81',
+  'payroll.list.open': '95fe7393c85ec788369d165a30dce046b1a8463ec83924e1a0af0f0fde8c1329',
+  'payroll.list.stageFilter': 'de838855e4a6e04ea2f284b246a07a1126e7fcd151be9449e112006ad7db5c50',
+  'payroll.list.title': '5892ac63aab0c1d77c2110f4a1dfee29589c407a6b6dfed4b95025bbc050b8e7',
+  'payroll.newRun.create': 'b6207e8df96a1465ddf6b22060a1160bba3510c6a6a27e0dd78e2f64be910000',
+  'payroll.newRun.description': '27b8e56762842029a51dea3bf9959adcdb1b076d47fc891a511b369a99ee787b',
+  'payroll.newRun.employees': 'ea72d7040845c167f23ebe0a4831483a7480a8953399d59ed303b69962c7cf48',
+  'payroll.newRun.employeesHint': '6d92d0cab408789334ef0719afb0b4791f0b197addd4e6254b445de533e5bdf2',
+  'payroll.newRun.invalidWindow': '0f808b5e1c28c2fc82764debc55a28e13df66f0250b78f3a3235c81a4ff6850f',
+  'payroll.newRun.noSchedules': '55c4c40c8c6c194516c1df77706f108e08704539654b8ad45ddfcc12c0f132ff',
+  'payroll.newRun.noTerminated': '22779dfc298e35045cb282e3c6dd1092836ddb532bf7851a032fc01ba306e146',
+  'payroll.newRun.notBegun': '136cba81b60a5e15f9b7000830a1f50dd100fc016c3754a9b61090b615e1eb58',
+  'payroll.newRun.payDateHint': '2eaa706e1da4a91e8cacbb90f35efa2263f37f15dd6112885591be656068dbc8',
+  'payroll.newRun.periodEnd': 'eeae9fdd63e0d5124bbce9ad39d4ce87e7576590cc79101610aa0e7a76e9be4e',
+  'payroll.newRun.periodStart': '32d302d524826d2b53741ee5386f5d52af7d664105953d2150c870c4927f5bad',
+  'payroll.newRun.runType': 'fb5d9febad2048ddadbeeb27731d5ef438d688ab4a1aa85fec227a15be7ed287',
+  'payroll.newRun.runTypeHint.bonus': 'fa5a9837f86704f553afdf82fc86ee40f9df071968512ac8dbbc6cbdd2d8fd8d',
+  'payroll.newRun.runTypeHint.regular': '25a2c4bfa7932d25dcdbade46fcbf3a2c1b1cf30cdea0c2fd16f55c78b3b77d6',
+  'payroll.newRun.runTypeHint.termination': 'f7ade71f4bc71107209baf4ec91c8e4ef9619462456db434c8e40a0482a2b85e',
+  'payroll.newRun.schedule': '56dfc97137f34180cb3651449135e39dc59ded527932ef55050a9609166751e7',
+  'payroll.register.cppFica': '73d16a069a8b67ecbf1b3ff53bdfc2b59388b6d13237b592331a7206af2e214c',
+  'payroll.register.otherDeductions': 'd5a0c1a14ee04bfd85d19edf78aa69dd8311a765133e5607302119b5668861b6',
+  'payroll.register.print': 'df0fe79898ef413ea686b3c25368cff678815b14862c796aa366ca40bdb547c7',
+  'payroll.register.title': '956ba70ca6be0bb877fc91c4645dd134c7160a580ceba4cdcc97c78eebda8f20',
+  'payroll.register.totals': 'f3ef725dc1a41439b9f10a3cfdfa0f480290d7f03aa812aa8b8cee57b7a42008',
+  'payroll.remittances.apLink': '5319b16e429ce3ca4645678640677581596f1def13ac0f4ed1e85a23a78cd00f',
+  'payroll.remittances.apNote': '7ce8092119c69f85dd15cd27187459b83d574b6adbe6c396e8f540470cc19dbe',
+  'payroll.remittances.apply': '31e392d1c0378beca611de66c0f4c71cba29159905cc54242d9bddee5b23d851',
+  'payroll.remittances.assignVendor': '91a3c9e42074aa1c0cd479c8c4a838c8c42cbae2f9998fa6ef73c1877ba1733a',
+  'payroll.remittances.back': '53fe8dfb6d9e1b03219adddcc3ffb741557dd579dc653d026097c463def4a8fe',
+  'payroll.remittances.billCreated': 'a24f44ba16e4dad72ce8de5896b08b3081ebf4944e9e35624a94625ec025b308',
+  'payroll.remittances.context': '53d078a30ff0f9dc84813cb8b71f4ff5e946db2202e33da13acfd84cd6b9e624',
+  'payroll.remittances.createAnother': '66b14727e315e6dcaecf788be813ac5fb360dfc023020db450a0c38502b37b47',
+  'payroll.remittances.createBill': 'd05c700fd23b3a41fe089bbff08b55db8f1b0eb8002f2742b6b4b174eb92b582',
+  'payroll.remittances.description': '73573f2c47fdc4bf6908e01acd69f21d99022887011f178b37085214ed857765',
+  'payroll.remittances.dueOn': 'b607af8330b6721ee5e9106b16ec8511efc982b3f393c4a2fabd33239a2d1073',
+  'payroll.remittances.employer': '54a3b64c67ddb4343c34c4449d625f60823bf937be3b5823f3b11d9c9c0a20bd',
+  'payroll.remittances.empty': '8e0cf1cd87263e110ae307de3237788ab34186d6b17ef1a26e5da27c77b086e8',
+  'payroll.remittances.from': '218197693424e0154cefc0af31aed96c084b987e08136e91d5528ddbb5461e24',
+  'payroll.remittances.noAccount': '125122de33c22326c4f3029adc0027e4c5c61281342734327e66eeb9933a7d0c',
+  'payroll.remittances.title': '6e1e7136fa5ecd4a7efb546fd666072aedf1492176f70abfa26f40dac6a4e696',
+  'payroll.remittances.to': 'f4b06ef6d3c81436f60a318c81c42f8f7e2d774d45a22f3b9b5f3b6980d28146',
+  'payroll.remittances.total': '362263a1b1ef93ae2cdecb333037e374cb4a49e077081f555a28af2dc76a1b63',
+  'payroll.remittances.unassigned': '76d349b2a55266a51b7234236fb74db846e734121b6726058da7fc39a0581b1a',
+  'payroll.remittances.withheld': '7f5ad98195ddf9d5da5f3bc2a67f39ed865f94200ecae8c874fac12159ca84d5',
+  'payroll.run.approvalNotRequired': '915b6ed78c68b893990815aab4cf5034015617e286e5da2dc018a6f2f9fc8f5e',
+  'payroll.run.approvalPending': '209a22c19e77ab07406c80dab264f42ada4775cc507171cc8bb3e0d783a6a83c',
+  'payroll.run.approvalSubmitted': 'a0e42da94f35822594798d592ff9c2340469227370f9d8ec1b9af7f1a76e6f6f',
+  'payroll.run.calculate': '2121cc15afb6ba5350deb90e1a292faa7d932537a19ddddadff4aeb796a8d595',
+  'payroll.run.calculateDone': 'ab4d17df1be5e14501d827733d62e0c092b6122f48f95892cb125628339db90c',
+  'payroll.run.commit': '82a9c46ffa4789945d9f2359d75891558ef6faa8dee09e4b25e4e0597704f5bd',
+  'payroll.run.commitDone': 'c658f4ed443d30ae20af749910d66fa1791cab0edd50e4eabd63e71667a2cc31',
+  'payroll.run.employerCost': 'a9a907e63324e4e63486704af9ec6da5620d92ab53bd1200749d40c329558b9e',
+  'payroll.run.empty': 'c8eb26bf0e9fd229af9c93f881f1a5cf1e769399b34133b12141dd997d1151ba',
+  'payroll.run.lineKind.deduction': '269c3f89d7f948718293656d2f2040409319ff11e650c98c87edcb25f28997c7',
+  'payroll.run.lineKind.earning': 'db16b9c47de42f782af890bacab6725fafac4edb8fcad3d860a3cab2cd0bb60c',
+  'payroll.run.lineKind.employer_contribution': '54a3b64c67ddb4343c34c4449d625f60823bf937be3b5823f3b11d9c9c0a20bd',
+  'payroll.run.post': 'a5554622c655c7a7e470c115f374d92595fa3b1f431dc6ee3d1edfbc103846ed',
+  'payroll.run.postDone': 'ee33e307f5d5b859b18522bbd1f0024169bf1ebdc3f183a5b0cacdc1ce552765',
+  'payroll.run.printSet': '0b2a3e3bff491302b24b5eb0cf53fd1dde266f58c25190865de0a0f16b36c36c',
+  'payroll.run.stub.employee': '14014e6a570327892015d91391f0756bc8c84d3594c867af4cefb5a7e9fb4eac',
+  'payroll.run.stub.lines': '8f7dbf2cd074d911eb32a65d2cc68181d39d7b05955d384391d3aa7762f233c6',
+  'payroll.run.stub.tax': '47e2886ee5d3fcab799efae44644488b428a7cb7d3bf24752b46e93d5c3eb6b8',
+  'payroll.run.stub.trace': '8fadfcad7d265020ebc78ffd42d1a6bb7335507b8e08b055bd18bf5c4209f3cb',
+  'payroll.run.stubsPrintOnly': '0af9a759f2bc196a106f2bd7359605856f9ed92506f28e2e82becd62cf1ea052',
+  'payroll.run.submitApproval': 'beec6c108c0009ae6939ce599427435c276e48423ed24289a3548de56c875397',
+  'payroll.run.title': '2f419d72b16c47c35f01fc7d9d33ac338fc25469eee3374946cb135c125ab8b5',
+  'payroll.runType.bonus': '7c546f729ddc50709bea66cca61ec89944fcc46f257a2c07f07c3bf3d5efb7b9',
+  'payroll.runType.regular': 'b455784ab53072773e72df494aa4b12ac467976447e250c694c11b6f1268e235',
+  'payroll.runType.termination': '585819a32a8f71c29e79827a89eef3aaf6fc70b7b832b5e61a1fd3f0e3680d72',
+  'payroll.status.calculated': 'c8b3c4b0e288f4d853337be83585bda9c7fb35b983120f59f6c5fe6833f9cac8',
+  'payroll.status.committed': 'dd9061853d8b1498557341a82186e1d9087de502101d830b5d1bc2d560399eb0',
+  'payroll.status.draft': 'ebf12ef47cf575b3ba9a3cc019c5310146fdac88f6d1be6618d6e91158c2f174',
+  'payroll.status.posted': 'afd80c5a1b84c378544290379f7195d17d994e3a6e30675372c6dc58446e0614',
+  'payroll.status.void': '4e7ba40328eee49c03ebf12bed83a10f42022b10601b9963ee299e50cbde0026',
+  'payroll.tabs.employees': 'cb380f519abdd1fe18d31c4e75497c251d8ef92f889b766dd3623d3b30c853e7',
+  'payroll.tabs.runs': '5892ac63aab0c1d77c2110f4a1dfee29589c407a6b6dfed4b95025bbc050b8e7',
+  'payroll.title': '53fe8dfb6d9e1b03219adddcc3ffb741557dd579dc653d026097c463def4a8fe',
+  'payroll.wizard.steps.finish': '98452ce4ea5d1d3a1e0a8106c62814e8c7aa0e357e3f4d76cc24a7048d8b6811',
+  'payroll.wizard.steps.gl': '3a57c2d7783758c2061576c47b4b83ec7c63c73448c1ae777859065615e3c1e0',
+  'payroll.wizard.steps.period': 'b073f6c68ef8721107fd9815b19b2c35ec111d526b75c2123d1111ba64424000',
+  'payroll.wizard.steps.readiness': 'd53d98c1774966ba468529b735a17d59131becf86e929e1f143bc7f057a73a03',
+  'payroll.wizard.steps.review': '7f2085b8c3a9e4613108d42b68b14bc09917aac01829a6f3c96f6707c5586cc9',
+  'payroll.yearEnd.cadence.annual': 'c0780ee74289557c17edf45f61c5ea8e6aafc5dc16b8e3e6741ed2a0ebc50ba7',
+  'payroll.yearEnd.cadence.annualHelp': '2d626ad8c7b9d6c7f331f70c4f53f264baeff5b243be928168ec61f2693e11e9',
+  'payroll.yearEnd.cadence.quarterly': 'c093a9a1b7baac3c0c20b5c58b112b627baff87bba6f8041d3d31c6fa259460e',
+  'payroll.yearEnd.cadence.quarterlyHelp': '0459f5bc12f90790c77728f538c41792b56c210959179307a178330b03b1e8aa',
+  'payroll.yearEnd.description': '60f1b1bf1f3cc0f6f929d33036cea564c31342265f1ebdd9cb4fde29b3d8ffdb',
+  'payroll.yearEnd.noFilings': '8b73cb6cd478b4ee9c958e53037f6a37cf8382749edee75a7ffd16d3ac0d6f16',
+  'payroll.yearEnd.title': '9a63187ca66879c3edcaff1fd1159b7cde9fd6b66cd53ca0fbb3e7392ec8dd1f',
+}
+
+
+/**
+ * True cognates and program codes that legitimately render identically to
+ * English: the CPP/FICA register label names statutory programs, and
+ * Net/Status are the ordinary French/German/Portuguese words.
+ */
+const PAYROLL_CHROME_COGNATES = new Set([
+  'de:payroll.columns.status',
+  'de:payroll.register.cppFica',
+  'es:payroll.register.cppFica',
+  'fr:payroll.columns.net',
+  'fr:payroll.register.cppFica',
+  'ja:payroll.register.cppFica',
+  'pt-BR:payroll.columns.status',
+  'pt-BR:payroll.register.cppFica',
+  'zh:payroll.register.cppFica',
+])
+
+test('payroll navigation chrome is translated in every locale', () => {
+  // F-t08-018: the payroll module rendered fully English under fr while the
+  // shell translated — the namespace had 5 keys per locale against 1077 in
+  // English. These navigation-chrome namespaces (H1s, steps, table headers,
+  // banners, buttons) now ship in every locale; deeper copy stays on the
+  // tracked English fallback until a native review pass covers it.
+  const source = flattenCatalog('en')
+  const sourceKeys = [...source.keys()]
+    .filter((key) => PAYROLL_CHROME_PREFIXES.some((prefix) => key === prefix || key.startsWith(prefix)))
+    .sort()
+  assert.deepEqual(
+    sourceKeys,
+    Object.keys(PAYROLL_CHROME_SOURCE_HASHES).sort(),
+    'payroll chrome source inventory changed; translate the new keys everywhere and re-pin',
+  )
+  const changedSource = sourceKeys.filter(
+    (key) => sha256(source.get(key) ?? '') !== PAYROLL_CHROME_SOURCE_HASHES[key],
+  )
+  assert.deepEqual(
+    changedSource,
+    [],
+    'payroll chrome English copy changed; review every locale before updating the pinned hashes',
+  )
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    const missing = sourceKeys.filter((key) => !catalog.has(key))
+    const copiedEnglish = sourceKeys.filter(
+      (key) => catalog.get(key) === source.get(key) && !PAYROLL_CHROME_COGNATES.has(`${locale}:${key}`),
+    )
+    // ICU placeholders are not prose: strip them before the stale check so
+    // short labels like "{ran} von {total}" are judged on their words alone
+    // (exact untranslated copies are already rejected by copiedEnglish).
+    const prose = (value: string): string => value.replace(/\{[^}]*\}/g, ' ')
+    const staleEnglish = sourceKeys.filter((key) => {
+      const sourceValue = source.get(key)
+      const localizedValue = catalog.get(key)
+      return sourceValue !== undefined && localizedValue !== undefined && isAsciiEnglishCopy(prose(sourceValue), prose(localizedValue))
+    })
+    const placeholderDrift = sourceKeys.filter((key) => {
+      const expected = new Set((source.get(key) ?? '').match(/\{[a-zA-Z_][a-zA-Z0-9_]*/g) ?? [])
+      const actual = new Set((catalog.get(key) ?? '').match(/\{[a-zA-Z_][a-zA-Z0-9_]*/g) ?? [])
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(missing, [], `${locale} is missing payroll chrome translations`)
+    assert.deepEqual(
+      copiedEnglish,
+      [],
+      `${locale} contains source-English payroll chrome copy that would be counted as translated`,
+    )
+    assert.deepEqual(
+      staleEnglish,
+      [],
+      `${locale} contains stale ASCII-only English payroll chrome prose`,
+    )
+    assert.deepEqual(
+      placeholderDrift,
+      [],
+      `${locale} payroll chrome translations drop or rename ICU placeholders`,
+    )
+  }
+})
