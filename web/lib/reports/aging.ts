@@ -11,6 +11,7 @@ import { presentationCurrency, presentationRates } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
+import { apOpenAccountScope, arOpenAccountScope, arResidualAccountScope } from "../ledger-scope";
 
 // ---------------------------------------------------------------------------
 // AR / AP Aging
@@ -128,6 +129,13 @@ export class AgingRatesUnavailableError extends Error {
  * functional open AND the signed transaction-currency open, side by side.
  * Both readers (summary, detail) share this one rebuild — the basis toggle
  * only chooses which leg converts to the reporting currency.
+ *
+ * The rebuild admits only counterparty-side control lines (0171, F-p3-001):
+ * personal expense lines post open employee-receivable debits that still
+ * carry the expense_report kind, and the legs below enter through abs() — so
+ * without the account gate a personal balance would age on the AP side as
+ * money owed TO the employee. Company-paid card legs stay out one layer
+ * down, through the posting invariant (never stamped is_open_item).
  */
 interface OpenDocument {
   docId: string;
@@ -153,6 +161,14 @@ async function openDocuments(
   kinds: readonly string[],
   creditKind: string,
 ): Promise<OpenDocument[]> {
+  // Account gate: the AP side admits liability_payable lines plus the
+  // designated employee-payable control (preset-typed liability_current_other,
+  // where OOP reports actually post); the AR side admits asset_receivable.
+  // Same scope object the dashboard tile reads — one shared answer to which
+  // open items are payables, not a second list.
+  const accountScope = side === "ap"
+    ? apOpenAccountScope(sql`a`, orgId)
+    : arOpenAccountScope(sql`a`);
   const r = (await db.execute<{
     doc_id: string; kind: string; party_id: string | null; party_name: string | null;
     reference: string | null; due: string | null; age_days: number;
@@ -182,9 +198,11 @@ async function openDocuments(
              coalesce(sub.base_currency, ${orgBase}) as func_ccy
         from documents d
         join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId}
          and d.status = 'posted' and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+         and ${accountScope}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     ),
@@ -367,7 +385,13 @@ export async function agingByParty(
  * partition differently and control-minus-docs is not attributable per
  * party, so the residual stays out and the aging reads documents only, as
  * before. Subsidiary stamps ride on documents and lines together, so
- * subsidiary-scoped reads keep the residual.
+ * subsidiary-scoped reads keep the residual. Third, the control side uses the
+ * same account scope as the document side (0171): the AP control counts
+ * liability_payable accounts plus the designated employee-payable control, so
+ * newly aged OOP reports cancel out of the residual instead of being netted
+ * back off it; the AR control excludes the designated employee-receivable
+ * account, whose personal balances age nowhere by design (see
+ * arResidualAccountScope) rather than landing as document-less AR rows.
  */
 interface ControlResidual {
   partyId: string | null;
@@ -388,14 +412,22 @@ async function controlResiduals(
   ) {
     return [];
   }
-  const type = side === "ap" ? "liability_payable" : "asset_receivable";
+  // The control side reads the SAME account scope as the document side above:
+  // the AP control counts liability_payable plus the designated
+  // employee-payable control, so newly aged OOP reports cancel out of the
+  // residual instead of being netted back off it; the AR control excludes
+  // the designated employee-receivable account, whose personal balances age
+  // nowhere by design and must not land as document-less AR rows.
+  const controlScope = side === "ap"
+    ? apOpenAccountScope(sql`a`, orgId)
+    : arResidualAccountScope(sql`a`, orgId);
   const control = await db.execute<{ party_id: string | null; func_ccy: string; bal: string }>(sql`
     select l.party_id, coalesce(sub.base_currency, ${orgBase}) as func_ccy, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-     where l.org_id = ${orgId} and a.type = ${type} and e.posting_date <= ${asOf}
+     where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
        and ${dimWhere(dims)}
      -- Ordinal, not a repeated expression: the SELECT's coalesce carries a
      -- different bind parameter per occurrence, which GROUP BY will not match.
@@ -523,6 +555,8 @@ export async function agingDetail(
 ): Promise<AgingDetailResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
   // Same shared population as the summary above — detail and summary always tie.
+  // The account gate rides inside the shared rebuild, so detail rows inherit
+  // it: personal lines never surface here either.
   const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
