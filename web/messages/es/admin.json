@@ -55,7 +55,8 @@
       "people": "Personas y acceso",
       "workspace": "Espacio de trabajo",
       "activity": "Actividad y datos",
-      "data": "Integraciones y datos"
+      "data": "Integraciones y datos",
+      "platform": "Plataforma y desarrollo"
     },
     "cards": {
       "apiKeys": {
@@ -133,6 +134,18 @@
       "agentsSetup": {
         "title": "Agentes",
         "description": "Paquetes de agentes en segundo plano: instale, configure horarios y controles, revise ejecuciones"
+      },
+      "flows": {
+        "description": "Cree automatizaciones gobernadas, puertas de aprobación, condiciones y acciones",
+        "title": "Flujos"
+      },
+      "queryConsole": {
+        "description": "Ejecute consultas controladas por permisos para análisis e integración",
+        "title": "Consola de consultas"
+      },
+      "sandboxes": {
+        "description": "Cree, actualice y promueva copias sandbox aisladas de producción",
+        "title": "Entornos"
       }
     }
   },
@@ -287,13 +300,23 @@
         "vendorPayment": "Pagos a proveedores",
         "customerPayment": "Pagos de clientes",
         "expenseReport": "Informes de gastos",
-        "journal": "Asientos contables"
+        "journal": "Asientos contables",
+        "cardCharge": "Cargos de tarjeta",
+        "cardRefund": "Reembolsos de tarjeta",
+        "check": "Cheques",
+        "customerCredit": "Créditos de cliente",
+        "vendorCredit": "Créditos de proveedor"
       },
       "lines": {
         "vendorBill": "Líneas de factura de proveedor",
         "customerInvoice": "Líneas de factura de cliente",
         "expenseReport": "Líneas de informe de gastos",
-        "journal": "Líneas de asiento contable"
+        "journal": "Líneas de asiento contable",
+        "cardCharge": "Líneas de cargo de tarjeta",
+        "cardRefund": "Líneas de reembolso de tarjeta",
+        "check": "Líneas de cheque",
+        "customerCredit": "Líneas de crédito de cliente",
+        "vendorCredit": "Líneas de crédito de proveedor"
       }
     },
     "types": {
@@ -459,7 +482,9 @@
       "subsidiaryPlaceholder": "Elija una subsidiaria…",
       "subsidiarySearchPlaceholder": "Buscar subsidiarias…",
       "subsidiaryRequired": "Elija una subsidiaria",
-      "subsidiaryListRequired": "Seleccione al menos una subsidiaria"
+      "subsidiaryListRequired": "Seleccione al menos una subsidiaria",
+      "inactivePermissions": "Permisos de aplicación inactivos",
+      "permissionsLoadFailed": "No se pudieron cargar los permisos de la aplicación"
     }
   },
   "scripts": {
@@ -487,7 +512,8 @@
       "scheduled": "programado",
       "endpoint": "punto de acceso",
       "bulk": "masivo",
-      "client": "cliente"
+      "client": "cliente",
+      "customGlLines": "líneas personalizadas del libro mayor"
     },
     "kinds": {
       "vendorBill": "factura de proveedor",
@@ -545,7 +571,11 @@
       "builtInGroup": "Transacciones",
       "noRuns": "Aún no hay ejecuciones: este script nunca se ha ejecutado.",
       "selectRun": "Seleccione una ejecución en la pestaña Ejecuciones recientes para inspeccionar su registro.",
-      "logEmpty": "Esta ejecución no produjo salida en el registro."
+      "logEmpty": "Esta ejecución no produjo salida en el registro.",
+      "copyUrl": "Copiar",
+      "endpointUrl": "URL invocable",
+      "endpointUrlHint": "Envíe solicitudes a esta URL para ejecutar el script.",
+      "urlCopied": "URL del endpoint copiada"
     },
     "tabs": {
       "general": "General",
@@ -577,7 +607,9 @@
       "reportPdfStyle": "Estilo de PDF de informes financieros",
       "reportPdfStyleModern": "Moderno (con marca)",
       "reportPdfStyleFormal": "Formal (PCGA)",
-      "reportPdfStyleHint": "Cómo se ven los estados financieros exportados: Moderno usa el color de su marca y una tipografía sans-serif; Formal es un estado clásico en serif, escala de grises, listo para auditoría."
+      "reportPdfStyleHint": "Cómo se ven los estados financieros exportados: Moderno usa el color de su marca y una tipografía sans-serif; Formal es un estado clásico en serif, escala de grises, listo para auditoría.",
+      "perEntityNote": "Esta sociedad es su entidad principal: su razón social, país y moneda viven aquí. Añada filiales debajo, cada una con los suyos.",
+      "subsidiariesLink": "Abrir filiales"
     },
     "fiscal": {
       "title": "Ejercicio fiscal",
@@ -682,8 +714,13 @@
         "valuationAllowance": {
           "label": "Provisión de valoración",
           "hint": "Contra activo por impuesto diferido"
+        },
+        "retainagePayable": {
+          "hint": "Retención en garantía de la facturación de avance de proveedores, conservada hasta una liberación aprobada",
+          "label": "Retención en garantía por pagar"
         }
-      }
+      },
+      "defaultsNote": "Estos son los valores predeterminados de toda la empresa. Cada filial puede reemplazarlos en su propia ficha; los reemplazos vacíos vuelven a estos."
     },
     "revenue": {
       "title": "Reconocimiento de ingresos",
@@ -768,7 +805,8 @@
     "inviteCopyLink": "Copiar enlace",
     "inviteCopied": "Enlace copiado",
     "inviteCopyFailed": "No se pudo copiar el enlace: selecciónelo manualmente",
-    "inviteTooManyAttempts": "Demasiadas invitaciones: inténtelo más tarde"
+    "inviteTooManyAttempts": "Demasiadas invitaciones: inténtelo más tarde",
+    "unassignedRole": "sin rol asignado"
   },
   "permissions": {
     "groups": {
@@ -794,7 +832,9 @@
       "assets": "Activos fijos y depreciación",
       "data": "Importar y exportar",
       "crm": "Gestión de relaciones con clientes",
-      "compliance": "Cumplimiento"
+      "compliance": "Cumplimiento",
+      "allocations": "Distribuciones",
+      "payroll": "Nómina"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -885,7 +925,15 @@
     "compliance_manage": "Registrar certificados, renuncias y declaraciones",
     "compliance_verify": "Verificar certificados",
     "compliance_waive": "Conceder excepciones de cumplimiento",
-    "compliance_file": "Finalizar y presentar declaraciones informativas"
+    "compliance_file": "Finalizar y presentar declaraciones informativas",
+    "admin_sandboxes_manage": "Crear y administrar entornos sandbox",
+    "allocations_approve": "Aprobar las distribuciones pendientes de aprobación",
+    "allocations_manage": "Crear y editar reglas y claves de distribución",
+    "allocations_read": "Ver reglas, ejecuciones y trazabilidad de distribuciones",
+    "allocations_run": "Obtener vista previa, contabilizar, revertir y repetir distribuciones",
+    "payroll_manage": "Configurar la nómina y los perfiles de empleados",
+    "payroll_read": "Ver ciclos de nómina y recibos de pago",
+    "payroll_run": "Crear, calcular y confirmar ciclos de nómina"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -1824,7 +1872,8 @@
         "status": "Estado",
         "signedOn": "Firmado el",
         "validFrom": "Válido desde",
-        "expiresOn": "Vence el"
+        "expiresOn": "Vence el",
+        "cronHint": "Elija un ajuste preestablecido o indique una programación personalizada (sintaxis cron) para un control total."
       },
       "secretFields": {
         "originatorId": "ID del originador",
@@ -1905,7 +1954,13 @@
       "saving": "Guardando…",
       "saved": "Guardado",
       "cancel": "Cancelar",
-      "saveFailed": "No se pudo guardar la configuración."
+      "saveFailed": "No se pudo guardar la configuración.",
+      "schedulePresets": {
+        "daily": "Diaria",
+        "monthly": "Mensual (día 1)",
+        "weekdays": "Días laborables",
+        "weekly": "Semanal (lun.)"
+      }
     },
     "entities": {
       "company": {
@@ -2122,7 +2177,10 @@
           "backfill": "Aplicar a horas pasadas",
           "backfilled": "Aplicados ${total} de gastos generales en {entries} registros pasados",
           "systemRule": {
-            "title": "Regla de distribución del núcleo"
+            "title": "Regla de distribución del núcleo",
+            "body": "Cada contabilización anterior la construye la regla de distribución propia del motor {key} (versión {version}, vigente el {date}, definición {hash}). Refleja esta política y la tarjeta de tasas publicada, por lo que no puede editarse ni eliminarse aquí: cambie la política o publique nuevas tasas.",
+            "noVersion": "Ninguna versión de regla está vigente: la política no es un par activo de suma cero o la tarjeta de tasas por hora está vacía. Las contabilizaciones se reanudan por el núcleo cuando ambas condiciones se cumplan.",
+            "viewRule": "Ver en Distribuciones"
           }
         },
         "lifecycle": {
@@ -2178,61 +2236,91 @@
         "description": "Tasas promulgadas por jurisdicción, con vigencia — alimentan la provisión ASC 740."
       },
       "tax-jurisdictions": {
-        "title": "Jurisdicciones de impuesto"
+        "title": "Jurisdicciones de impuesto",
+        "description": "Los países, estados y localidades que recaudan impuestos indirectos: la columna vertebral de su nexo.",
+        "singularTitle": "Jurisdicción fiscal"
       },
       "tax-registrations": {
-        "title": "Nexo de impuesto"
+        "title": "Nexo de impuesto",
+        "description": "Dónde la empresa está registrada para recaudar y remitir, su frecuencia de declaración y la declaración que presenta.",
+        "singularTitle": "Registro fiscal"
       },
       "tax-regimes": {
-        "title": "Regímenes de depreciación fiscal"
+        "title": "Regímenes de depreciación fiscal",
+        "description": "Regímenes configurables de depreciación fiscal agrupada. Integrados para Canadá (CCA), el Reino Unido, Australia y Nueva Zelanda; añada los suyos o reemplace uno integrado.",
+        "singularTitle": "Régimen de depreciación fiscal"
       },
       "tax-pool-classes": {
-        "title": "Clases de depreciación fiscal"
+        "title": "Clases de depreciación fiscal",
+        "description": "Clases de grupos por régimen: tasa, método, fracción de primer año y comportamiento de recuperación. Reemplaza la tabla de clases integrada.",
+        "singularTitle": "Clase de depreciación fiscal"
       },
       "tax-first-year-rules": {
-        "title": "Reglas del primer año"
+        "title": "Reglas del primer año",
+        "description": "Reglas datadas de primer año por régimen y clase (regla del medio año, incentivo a la inversión acelerada, gasto inmediato).",
+        "singularTitle": "Regla de primer año"
       },
       "pay-schedules": {
-        "title": "Calendarios de nómina"
+        "title": "Calendarios de nómina",
+        "description": "Calendarios de frecuencia de pago: períodos por año, fin de período de anclaje y desfase de la fecha de pago."
       },
       "pay-components": {
-        "title": "Componentes de nómina"
+        "title": "Componentes de nómina",
+        "description": "Percepciones, deducciones y aportaciones patronales con su tratamiento fiscal, sus cuentas contables y sus proveedores de remesa."
       },
       "union-agreements": {
-        "title": "Convenios colectivos"
+        "title": "Convenios colectivos",
+        "description": "Convenios colectivos: el sindicato, la sección local y el proveedor sindical al que se pagan las remesas sindicales."
       },
       "account-groups": {
-        "title": "Grupos de cuentas"
+        "title": "Grupos de cuentas",
+        "description": "Clasificaciones de informes de su plan contable (p. ej., grupos de costos). Los grupos clasifican las cuentas automáticamente por regla, con reemplazos por cuenta."
       },
       "subsidiary-ownership-interests": {
-        "title": "Participación en subsidiarias"
+        "title": "Participación en subsidiarias",
+        "description": "Participación con fecha de vigencia, adquisición, participación no controladora (NCI) y política del método de participación para la consolidación.",
+        "singularTitle": "Participación"
       },
       "allocations": {
-        "title": "Asignaciones"
+        "title": "Asignaciones",
+        "description": "Distribuya costos comunes a destinos mediante un inductor: divisiones al registrar, aportes al contabilizar y barridos del período.",
+        "singular": "regla de distribución"
       },
       "payroll-filing-accounts": {
-        "title": "Cuentas de declaración"
+        "title": "Cuentas de declaración",
+        "description": "Programa de nómina, EIN y cuentas estatales de desempleo bajo las cuales el empleador remite y declara. Cada empleado tiene una asignada en su perfil de nómina."
       },
       "entitlement-plans": {
-        "title": "Planes de derechos"
+        "title": "Planes de derechos",
+        "description": "Bancos de nómina: horas extra, vacaciones y bancos de enfermedad acumulados, y recuperación de beneficios durante licencias. Los saldos se guardan en dinero y se muestran en horas al salario vigente.",
+        "singular": "Plan de derechos"
       },
       "entitlement-plan-limits": {
-        "title": "Límites de los bancos"
+        "title": "Límites de los bancos",
+        "description": "Cuánto puede acumular en el banco cada rol. Los límites se resuelven al más específico: empleado, luego puesto de trabajo, oficio, departamento, entidad jurídica y después el valor predeterminado del plan.",
+        "singular": "Límite de banco"
       },
       "entitlement-service-tiers": {
-        "title": "Escalas de antigüedad"
+        "title": "Escalas de antigüedad",
+        "description": "Lo que la antigüedad otorga: beneficios a los tres meses, RRSP al año, un porcentaje de vacaciones mayor a los cinco, diez y quince años.",
+        "singular": "Escala de antigüedad"
       },
       "pay-derived-rules": {
-        "title": "Percepciones calculadas"
+        "title": "Percepciones calculadas",
+        "description": "Reglas que convierten hechos operativos en nómina: dietas por noches fuera, días de guardia, desplazamiento al primer trabajo del día, incentivos de obra y de equipo. Obtenga una vista previa de una regla antes de activarla."
       },
       "trades": {
-        "title": "Oficios"
+        "title": "Oficios",
+        "description": "Electricista, mecánico, soldador: el oficio que ejerce un empleado, usado por el alcance salarial, las cargas y las reglas de percepciones derivadas."
       },
       "payroll-holidays": {
-        "title": "Días festivos"
+        "title": "Días festivos",
+        "description": "Qué días festivos opcionales observa y los cierres de empresa que añade. Los días festivos obligatorios vienen del paquete reglamentario del país y no pueden quitarse aquí.",
+        "singularTitle": "Día festivo"
       },
       "extension-settings": {
-        "title": "Configuración de aplicaciones"
+        "title": "Configuración de aplicaciones",
+        "description": "Configure los ajustes declarados por las aplicaciones instaladas. Los cambios conservan los valores anteriores y sus fechas de vigencia."
       }
     },
     "fields": {
@@ -2395,7 +2483,103 @@
       "requiresPrimaryNoncontributory": "Exige primaria y no contributiva",
       "requiresVerification": "Exige verificación por una segunda persona",
       "formType": "Formulario",
-      "box": "Casilla"
+      "box": "Casilla",
+      "accountNumber": "Número de cuenta",
+      "accrualComponentId": "Componente de devengo",
+      "accrualMethod": "Método de devengo",
+      "accrualValue": "Valor de devengo",
+      "acquisitionCost": "Costo de adquisición",
+      "acquisitionDate": "Fecha de adquisición",
+      "acquisitionRate": "Tipo de cambio de adquisición",
+      "afterMonths": "Después (meses de servicio)",
+      "anchorPeriodEnd": "Fin de período de anclaje",
+      "basisCapAmountPerPeriod": "Tope de base — importe por período",
+      "basisCapAmountPerYear": "Tope de base — importe por año",
+      "basisCapHoursPerPeriod": "Tope de base — horas por período",
+      "billableOnly": "Solo tiempo facturable",
+      "capBehavior": "Cuando se alcanza el límite",
+      "color": "Color",
+      "componentId": "Componente de nómina",
+      "costingMode": "Costeo de obra",
+      "dimension": "Dimensión",
+      "direction": "Sentido",
+      "distributionAccountId": "Cuenta de distribución",
+      "distributionIncomeAccountId": "Cuenta de ingresos de distribución",
+      "eligible": "Elegible",
+      "employeePartyId": "Empleado",
+      "equipmentUnitId": "Unidad de equipo",
+      "equityIncomeAccountId": "Cuenta de ingresos por participación",
+      "excludeFromWages": "Solo evento (tiempo no trabajado)",
+      "excludedJobTitles": "Puestos de trabajo excluidos",
+      "expenseAccountId": "Cuenta de gastos",
+      "extensionKey": "Aplicación",
+      "fairValueAdjustmentAccountId": "Cuenta de ajuste a valor razonable",
+      "fairValueNetAssets": "Valor razonable del activo neto",
+      "filingFrequency": "Frecuencia de declaración",
+      "frequency": "Frecuencia",
+      "goodwillAccountId": "Cuenta de plusvalía",
+      "includeInDisposableEarnings": "Cuenta para la base protegida",
+      "includedJobTitles": "Solo estos puestos de trabajo",
+      "insurable": "Asegurable",
+      "investmentAccountId": "Cuenta de inversión",
+      "isObserved": "Observado",
+      "isPaid": "Pagado",
+      "jobTitle": "Puesto de trabajo",
+      "jurisdiction": "Jurisdicción",
+      "jurisdictionId": "Jurisdicción",
+      "key": "Clave",
+      "level": "Nivel",
+      "liabilityAccountId": "Cuenta de pasivo",
+      "localNumber": "Número de sección local",
+      "maxAssessable": "Máximo asegurable anual",
+      "maxBalance": "Límite",
+      "nciEquityAccountId": "Cuenta de patrimonio NCI",
+      "nciFairValue": "Valor razonable NCI",
+      "nciIncomeAccountId": "Cuenta de ingresos NCI",
+      "nciMeasurement": "Medición NCI",
+      "nonPeriodic": "No periódico (método de primas)",
+      "notifyBalance": "Avisar en",
+      "observance": "Si cae en fin de semana",
+      "observedOn": "Fecha",
+      "ownershipPercent": "Participación %",
+      "packKey": "Festivo legal",
+      "parentSubsidiaryId": "Filial matriz",
+      "payDateOffsetDays": "Desfase de fecha de pago (días)",
+      "payoutComponentId": "Componente de pago",
+      "pensionable": "Pensionable",
+      "periodsPerYear": "Períodos por año",
+      "planId": "Plan",
+      "programType": "Tipo de cuenta",
+      "protectionBase": "Base de ingresos protegidos",
+      "protectionMaxPercent": "Porción máxima de la base",
+      "protectionPriority": "Prioridad de protección",
+      "quantityMode": "Cantidad",
+      "rateMode": "Tasa",
+      "rateValue": "Valor de la tasa",
+      "reason": "Motivo del cambio",
+      "registrationNumber": "Número de registro",
+      "remittancePartyId": "Proveedor de remesa",
+      "remitterType": "Tipo de remitente",
+      "returnFormCode": "Formulario de declaración",
+      "ruleDay": "Día del mes",
+      "ruleKind": "Recurrencia",
+      "ruleMonth": "Mes",
+      "ruleNth": "Cuál",
+      "ruleOffset": "Días desde el Domingo de Pascua",
+      "ruleWeekday": "Día de semana",
+      "settingKey": "Ajuste",
+      "sortOrder": "Orden",
+      "stateCode": "Estado o provincia",
+      "taxTreatment": "Tratamiento fiscal",
+      "taxType": "Tipo de impuesto",
+      "taxable": "Gravable",
+      "timeTypeId": "Tipo de tiempo",
+      "tradeId": "Oficio",
+      "trigger": "Activado por",
+      "unionName": "Sindicato",
+      "unit": "Unidad",
+      "vacationable": "Cuenta para pago de vacaciones",
+      "value": "Valor"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2410,7 +2594,44 @@
       "minCoverageAmount": "Los certificados por debajo de este límite se rechazan. Los límites nunca se convierten entre monedas.",
       "coverageCurrency": "Obligatoria en cuanto se fija un límite mínimo: un límite es un importe y debe ser comparable.",
       "requiresVerification": "Quien registra un certificado nunca puede ser quien lo verifica.",
-      "informationReturnBox": "Las casillas son legales. Lo que usted configura es qué cuenta suya alimenta qué casilla."
+      "informationReturnBox": "Las casillas son legales. Lo que usted configura es qué cuenta suya alimenta qué casilla.",
+      "basisCapAmountPerPeriod": "Detenga este componente cuando haya retenido esta cantidad en un período de pago.",
+      "basisCapAmountPerYear": "Detenga este componente cuando haya retenido esta cantidad en el año fiscal: el límite de planes de aportación definida de la CRA o el límite estadounidense 402(g) de aportaciones electivas. Las cantidades ya comprometidas este año, incluidos los saldos de apertura, cuentan para el límite.",
+      "basisCapHoursPerPeriod": "Calcule este componente sobre como máximo estas horas por período; por ejemplo, RRSP sobre 40 horas semanales. Las horas extra y dobles cargadas a una obra están exentas y nunca tienen tope.",
+      "entitlementAccrualValue": "Un porcentaje para planes de porcentaje de ingresos (4 = 4 %); en otro caso, un importe por hora o por período de pago.",
+      "entitlementAfterMonths": "Meses de servicio continuo desde la fecha de contratación. 36 = tres años.",
+      "entitlementCapBehavior": "Advertir registra el devengo y lo señala. Bloquear detiene el ciclo de nómina de ese empleado. Pago automático topa el banco y paga el excedente.",
+      "entitlementDirection": "Devengar: el empleador debe al empleado. Deber: el empleado debe al empleador: el saldo se vuelve negativo y se recupera de pagos futuros hasta llegar exactamente a cero.",
+      "entitlementLiabilityAccount": "Dónde figura el banco en el balance. Déjelo vacío para que el plan sea solo informativo.",
+      "entitlementMaxBalance": "El techo absoluto, en la unidad del plan.",
+      "entitlementNotifyBalance": "El umbral flexible que señala que un empleado se acerca al límite.",
+      "entitlementPayoutComponent": "La percepción que paga el banco. Para un plan de «deber», es la deducción que lo recupera.",
+      "entitlementScope": "Defina como máximo un alcance. Deje todos los alcances vacíos para el valor predeterminado del plan.",
+      "entitlementTierTarget": "Defina un plan (para elevar su valor de devengo) o un componente de nómina (para hacerlo elegible), no ambos.",
+      "entitlementUnit": "El dinero es muy recomendable. Un banco denominado en horas se revalúa cada vez que suben los salarios, lo que cuesta discretamente la diferencia al empleador.",
+      "equipmentUnitId": "Pague solo por una máquina nombrada. Déjelo vacío y use en cambio el artículo de cargo para cubrir toda una clase de equipo con una sola regla.",
+      "excludeFromWages": "El registro consigna un evento de campo — un día de guardia, una noche de dieta —, no tiempo trabajado. Las reglas de percepciones derivadas lo leen; el cálculo del salario lo omite.",
+      "excludedJobTitles": "Los empleados cuyo puesto de trabajo figure aquí nunca devengan esta regla. Las exclusiones prevalecen sobre las inclusiones. La coincidencia ignora mayúsculas y espacios.",
+      "filingAccountDefault": "Los empleados cuyo perfil no nombre ninguna cuenta se declaran y remiten bajo la cuenta predeterminada de su país.",
+      "holidayEffectiveTo": "Déjelo vacío si no hay fecha de fin. Las fechas de vigencia se comparan con la fecha del festivo, así que los ciclos pasados conservan el calendario con el que se ejecutaron.",
+      "holidayIsObserved": "Desactivado suprime un festivo opcional elegido anteriormente.",
+      "holidayIsPaid": "Desactivado lo convierte en un cierre cuyo día no se paga. Los festivos legales siempre se pagan.",
+      "holidayJurisdiction": "La jurisdicción cuyo calendario cambia esto. Use la provincia que cubra a sus empleados, o Canadá (federal) para un empleador de regulación federal.",
+      "holidayName": "El nombre del festivo de empresa que añade. Déjelo vacío cuando esta fila sea una elección sobre un festivo legal.",
+      "holidayObservance": "Los festivos legales conservan su fecha y la ley otorga en cambio un día libre sustituto. Elija un desplazamiento solo para un festivo de empresa que realmente mueva.",
+      "holidayPackKey": "El festivo legal al que aplica esta elección, por ejemplo boxing_day o heritage_day. Déjelo vacío para añadir un festivo propio de la empresa. Solo los festivos opcionales pueden desactivarse: uno obligatorio se rechaza.",
+      "holidayRuleNth": "1 es el primer día de la semana del mes; -1 es el último.",
+      "holidayRuleOffset": "Un número negativo cuenta hacia atrás. El Viernes Santo es -2 y el Lunes de Pascua es 1.",
+      "holidayRuleWeekday": "0 es domingo y 6 es sábado.",
+      "includeInDisposableEarnings": "Si este componente pertenece a la base protegida. Las percepciones en la base la aumentan; las deducciones en la base la reducen. Desactívelo para una asignación o un beneficio que deba quedar fuera de la porción embargable.",
+      "includedJobTitles": "Solo los empleados cuyo puesto de trabajo figure aquí devengan esta regla: elija entre los puestos de la plantilla o escriba uno nuevo. Déjelo vacío para pagar a todos. La coincidencia ignora mayúsculas y espacios.",
+      "itemId": "Pague por cada unidad que cargue mediante este artículo del catálogo: «todas las excavadoras» en una sola regla en lugar de una regla por máquina.",
+      "maxAssessable": "La junta de compensación laboral deja de cotizar sobre los ingresos de un empleado más allá de esta cantidad anual (el máximo asegurable por trabajador de la junta). Déjelo en blanco si no hay tope.",
+      "payScheduleAnchor": "La fecha de FIN de un período cualquiera; todos los demás períodos derivan de ella. El bimensual lee el día del mes: el 20 significa períodos que terminan el 5 y el 20, y el 15 (o el último día de un mes de 30-31 días) significa el 15 y el fin de mes. El 14 y el último día de febrero no nombran ningún calendario y se rechazan.",
+      "protectionBase": "Contra qué se mide el tope de la deducción. El pago neto es el pago tras cualquier otra deducción. Los ingresos disponibles solo cuentan las percepciones y deducciones marcadas en la base siguiente: así es como una asignación o un beneficio queda fuera de la porción.",
+      "protectionMaxPercent": "Lo máximo que esta deducción puede tomar de esa base: 20 % para un embargo ordinario en Ontario, 50 % para manutención familiar, 25 % bajo la CCPA estadounidense. Lo que no quepa se informa como faltante en el ciclo de nómina.",
+      "protectionPriority": "Qué orden prevalece cuando varias deducciones protegidas compiten por la misma paga. Primero la menor; las órdenes de manutención normalmente superan a los acreedores ordinarios.",
+      "stateCode": "Obligatorio para, y solo para, tipos de programa registrados por estado o región (como cuentas estatales de desempleo): se valida contra la declaración del paquete reglamentario del país al guardar la cuenta."
     },
     "options": {
       "timeClassification": {
@@ -2600,6 +2821,153 @@
         "t4a020": "T4A 020 — Comisiones de trabajo autónomo",
         "t4a048": "T4A 048 — Honorarios por servicios",
         "t4a022": "T4A 022 — Impuesto sobre la renta retenido"
+      },
+      "consolidationMethod": {
+        "equity": "Método de participación",
+        "full": "Consolidación total",
+        "proportionate": "Consolidación proporcional"
+      },
+      "derivedCosting": {
+        "firstProjectOfDay": "La primera obra del día",
+        "none": "Sin costeo de obra",
+        "source": "La obra de origen del hecho"
+      },
+      "derivedQuantity": {
+        "count": "Número de unidades",
+        "countNights": "Número de noches",
+        "sumBillAmount": "Importe total facturado",
+        "sumHours": "Total de horas",
+        "sumQuantity": "Total de unidades cargadas"
+      },
+      "derivedRate": {
+        "fixedPerUnit": "Importe fijo por unidad",
+        "percentOfGross": "Porcentaje del bruto",
+        "percentOfQuantity": "Porcentaje del importe cargado",
+        "rateCard": "Desde el componente de nómina"
+      },
+      "derivedTrigger": {
+        "distinctDay": "Cada día trabajado",
+        "distinctProjectDay": "Cada obra, cada día",
+        "equipmentCharge": "Mensual, sobre cargos de equipo",
+        "monthEnd": "Mensual, tras el fin de mes",
+        "nightStayed": "Cada noche fuera",
+        "timeEntry": "Cada registro de horas"
+      },
+      "entitlementAccrualMethod": {
+        "fixedPerPeriod": "Fijo por período de pago",
+        "manual": "Solo manual",
+        "perHourWorked": "Por hora trabajada",
+        "percentOfEarnings": "Porcentaje de ingresos"
+      },
+      "entitlementCapBehavior": {
+        "autoPayout": "Pagar el excedente",
+        "block": "Bloquear el ciclo",
+        "warn": "Advertir"
+      },
+      "entitlementDirection": {
+        "accrue": "El empleador debe al empleado",
+        "owe": "El empleado debe al empleador"
+      },
+      "entitlementUnit": {
+        "hours": "Horas",
+        "money": "Dinero"
+      },
+      "filingFrequency": {
+        "annual": "Anual",
+        "bimonthly": "Bimestral",
+        "monthly": "Mensual",
+        "quarterly": "Trimestral",
+        "semiannual": "Semestral"
+      },
+      "holidayJurisdiction": {
+        "ca": "Canadá (regulación federal)",
+        "caAb": "Alberta",
+        "caBc": "Columbia Británica",
+        "caOn": "Ontario",
+        "caQc": "Quebec",
+        "caSk": "Saskatchewan",
+        "us": "Estados Unidos"
+      },
+      "holidayObservance": {
+        "nearestWeekday": "Mover al día laborable más próximo",
+        "nextMonday": "Mover al siguiente día laborable",
+        "none": "Conservar la fecha"
+      },
+      "holidayRuleKind": {
+        "date": "Una fecha concreta",
+        "easterOffset": "Relativo al Domingo de Pascua",
+        "fixed": "La misma fecha cada año",
+        "nthWeekday": "El enésimo día de semana del mes",
+        "weekdayBefore": "El último día de semana antes de una fecha"
+      },
+      "jurisdictionLevel": {
+        "city": "Ciudad",
+        "country": "País",
+        "county": "Condado",
+        "federal": "Federal",
+        "special": "Distrito especial",
+        "state": "Estado / Provincia"
+      },
+      "nciMeasurement": {
+        "fairValue": "Valor razonable",
+        "proportionate": "Parte proporcional del activo neto"
+      },
+      "payComponentBasis": {
+        "fixedAmount": "Importe fijo",
+        "perHour": "Por hora",
+        "percentOfGross": "Porcentaje del bruto"
+      },
+      "payComponentCountry": {
+        "CA": "Canadá",
+        "US": "Estados Unidos"
+      },
+      "payComponentKind": {
+        "deduction": "Deducción",
+        "earning": "Percepción",
+        "employerContribution": "Aportación patronal"
+      },
+      "payFrequency": {
+        "biweekly": "Quincenal",
+        "monthly": "Mensual",
+        "semiMonthly": "Bimensual",
+        "weekly": "Semanal"
+      },
+      "payProtectionBase": {
+        "disposableEarnings": "Ingresos disponibles",
+        "gross": "Pago bruto",
+        "netPay": "Pago neto",
+        "none": "Sin protección"
+      },
+      "payTaxTreatment": {
+        "alimony": "Pensión alimenticia (F2)",
+        "none": "Después de impuestos",
+        "pensionF": "Pensión (RPP/RRSP, factor F)",
+        "unionDues": "Cuotas sindicales (U1)"
+      },
+      "payrollProgramType": {
+        "caRp": "Programa de nómina de la CRA (RP)",
+        "usEin": "Número de identificación patronal de EE. UU. (EIN)",
+        "usStateSui": "Desempleo estatal (SUI)"
+      },
+      "payrollRemitterType": {
+        "accelerated1": "Acelerado — umbral 1",
+        "accelerated2": "Acelerado — umbral 2",
+        "quarterly": "Trimestral",
+        "regular": "Regular (mensual)"
+      },
+      "sourceKind": {
+        "builtin": "Integrado",
+        "custom": "Personalizado"
+      },
+      "taxType": {
+        "consumption": "Impuesto al consumo",
+        "gst": "GST",
+        "hst": "HST",
+        "other": "Otro",
+        "pst": "PST",
+        "qst": "QST",
+        "salesUse": "Impuesto sobre ventas y uso",
+        "vat": "VAT"
       }
     },
     "laborCosting": {
@@ -2937,14 +3305,55 @@
         "blockingCompliancePolicies": "{count, plural, one {# política que bloquea el pago} other {# políticas que bloquean el pago}}",
         "openLienWaivers": "{count, plural, one {# renuncia pendiente de firma} other {# renuncias pendientes de firma}}",
         "draftInformationReturns": "{count, plural, one {# declaración informativa en curso} other {# declaraciones informativas en curso}}",
-        "unfiledInformationReturns": "{count, plural, one {# declaración finalizada sin presentar} other {# declaraciones finalizadas sin presentar}}"
+        "unfiledInformationReturns": "{count, plural, one {# declaración finalizada sin presentar} other {# declaraciones finalizadas sin presentar}}",
+        "activeAllocationRules": "{count, plural, one {# regla de distribución activa} other {# reglas de distribución activas}}",
+        "activeApiKeys": "{count, plural, one {# clave API activa} other {# claves API activas}}",
+        "activeBankFeeds": "{count, plural, one {# conexión bancaria automática activa} other {# conexiones bancarias automáticas activas}}",
+        "activeBankImportSchedules": "{count, plural, one {# programación de importación bancaria SFTP activa} other {# programaciones de importación bancaria SFTP activas}}",
+        "activeProjects": "{count, plural, one {# proyecto activo} other {# proyectos activos}}",
+        "activePropertyLeases": "{count, plural, one {# arrendamiento activo} other {# arrendamientos activos}}",
+        "activeScripts": "{count, plural, one {# script activo} other {# scripts activos}}",
+        "activeSubcontractPaymentControls": "{count, plural, one {# control de pago de subcontrato activo} other {# controles de pago de subcontrato activos}}",
+        "activeSubcontracts": "{count, plural, one {# subcontrato activo} other {# subcontratos activos}}",
+        "activeSubscriptions": "{count, plural, one {# suscripción activa} other {# suscripciones activas}}",
+        "activeWipHolds": "{count, plural, one {# retención de trabajo en curso activa} other {# retenciones de trabajo en curso activas}}",
+        "advancedSubscriptionContracts": "{count, plural, one {# contrato de suscripción versionado activo} other {# contratos de suscripción versionados activos}}",
+        "assets": "{count, plural, one {# activo fijo} other {# activos fijos}}",
+        "bankStatements": "{count, plural, one {# extracto bancario} other {# extractos bancarios}}",
+        "controlCheckUnavailable": "una comprobación de integridad que no pudo completarse",
+        "foreignTxns": "{count, plural, one {# apunte en moneda extranjera} other {# apuntes en moneda extranjera}}",
+        "inventoryMovements": "{count, plural, one {# movimiento de inventario} other {# movimientos de inventario}}",
+        "openChangeOrders": "{count, plural, one {# orden de cambio en borrador} other {# órdenes de cambio en borrador}}",
+        "openFieldTickets": "{count, plural, one {# parte de campo abierto} other {# partes de campo abiertos}}",
+        "openOrders": "{count, plural, one {# orden emitida con saldo sin convertir} other {# órdenes emitidas con saldos sin convertir}}",
+        "openPayApplications": "{count, plural, one {# solicitud de pago abierta} other {# solicitudes de pago abiertas}}",
+        "openPrebills": "{count, plural, one {# prefactura pendiente de terminación} other {# prefacturas pendientes de terminación}}",
+        "openProjectBillingRequests": "{count, plural, one {# solicitud de facturación de proyecto abierta} other {# solicitudes de facturación de proyecto abiertas}}",
+        "openProjectDocuments": "{count, plural, one {# documento de proyecto sin contabilizar} other {# documentos de proyecto sin contabilizar}}",
+        "openProjectTimeEntries": "{count, plural, one {# registro de horas de proyecto sin aprobar} other {# registros de horas de proyecto sin aprobar}}",
+        "openVendorPayApplications": "{count, plural, one {# solicitud de pago de proveedor en curso} other {# solicitudes de pago de proveedor en curso}}",
+        "outstandingRetainage": "retención en garantía pendiente",
+        "postedPayRuns": "{count, plural, one {# ciclo de nómina contabilizado en el libro mayor} other {# ciclos de nómina contabilizados en el libro mayor}}",
+        "previewedAllocationRuns": "{count, plural, one {# ejecución de distribución previsualizada} other {# ejecuciones de distribución previsualizadas}}",
+        "projects": "{count, plural, one {# proyecto} other {# proyectos}}",
+        "reconciliations": "{count, plural, one {# conciliación} other {# conciliaciones}}",
+        "revenueSchedules": "{count, plural, one {# programa de ingresos diferidos} other {# programas de ingresos diferidos}}",
+        "scheduledTasks": "{count, plural, one {# actividad programada} other {# actividades programadas}}",
+        "securityDepositTransactions": "{count, plural, one {# operación de depósito en garantía} other {# operaciones de depósito en garantía}}",
+        "submittedTimeEntries": "{count, plural, one {# registro de horas enviado pendiente de revisión} other {# registros de horas enviados pendientes de revisión}}",
+        "subsidiaryTxns": "{count, plural, one {# filial tiene} other {# filiales tienen}} transacciones contabilizadas"
       },
       "runWizard": "Ejecutar el asistente de configuración",
       "errors": {
         "blocked": "Esta función no se puede desactivar — sus datos son estructurales para el libro mayor.",
         "dependency": "Active primero la función requerida: {features}.",
         "dependents": "Desactive primero la función dependiente: {features}."
-      }
+      },
+      "affectsNote": "Desactivar oculta {items}: los datos se conservan y vuelven si reactiva.",
+      "blockedReason": "No se puede desactivar: {items}.",
+      "childOptions": "{count, plural, one {# opción al activar} other {# opciones al activar}}",
+      "confirmDisable": "¿Desactivar {name}?\n\nEsto oculta {items}. Los datos se conservan y vuelven si reactiva.",
+      "countOn": "{n} de {total} activos"
     },
     "bankFeeds": {
       "navTitle": "Feeds bancarios"
@@ -3000,7 +3409,39 @@
       "navTitle": "Facturación"
     },
     "taxSetup": {
-      "navTitle": "Configuración fiscal"
+      "navTitle": "Configuración fiscal",
+      "countryPackReady": "Paquete reglamentario respaldado por fuentes",
+      "countryTaxSetup": "Configuración fiscal del país",
+      "detailedPack": "Paquete detallado",
+      "installed": "Configurado",
+      "jurisdictionSetup": "Configuración de jurisdicciones",
+      "packInDevelopment": "Paquete reglamentario en desarrollo",
+      "provisionHint": "Los paquetes detallados crean contenido mantenido: jurisdicciones, códigos fiscales, tasas, declaraciones y nexos. La configuración fiscal del país instala la declaración madre y las tasas datadas definidas por ese paquete reglamentario versionado. La configuración de jurisdicciones crea datos de referencia controlados y un borrador de nexo inactivo sin inventar contenido legal faltante. Revise cada registro antes de salir en vivo.",
+      "provisionSelected": "{count, plural, =0 {Configurar jurisdicciones} one {Configurar # jurisdicción} other {Configurar # jurisdicciones}}",
+      "provisionSuccess": "Se crearon {jurisdictions} jurisdicciones, {codes} códigos fiscales y {groups} grupos fiscales; se prepararon {nexus} registros de nexo",
+      "provisioning": "Configurando…",
+      "searchPlaceholder": "Buscar países o jurisdicciones…",
+      "statesAvailable": "{count, plural, one {# jurisdicción disponible} other {# jurisdicciones disponibles}}",
+      "statesSelected": "{count, plural, one {# jurisdicción seleccionada} other {# jurisdicciones seleccionadas}}",
+      "step1": {
+        "description": "Elija países y expándalos para una cobertura completa de provincias, territorios, estados y distritos. Cada opción muestra si hay un paquete detallado mantenido disponible.",
+        "title": "Elija dónde opera"
+      },
+      "step2": {
+        "cta": "Abrir jurisdicciones",
+        "description": "Los países, estados y localidades que crearon sus paquetes. Añada o anide más a mano.",
+        "stat": "{count, plural, =0 {Aún ninguna jurisdicción} one {# jurisdicción} other {# jurisdicciones}}",
+        "title": "Revise las jurisdicciones"
+      },
+      "step3": {
+        "cta": "Configurar el nexo",
+        "description": "Registre dónde la empresa está registrada para recaudar y remitir, su frecuencia de declaración y la declaración que presenta.",
+        "stat": "{count, plural, =0 {Aún ningún registro} one {# registro} other {# registros}}",
+        "title": "Declare su nexo"
+      },
+      "subtitle": "Elija cada país, provincia, territorio, estado o distrito donde puedan surgir obligaciones fiscales. Canadá y Estados Unidos incluyen cobertura completa de jurisdicciones de primer nivel.",
+      "title": "Configuración fiscal",
+      "toggleStates": "Mostrar jurisdicciones de {country}"
     },
     "payroll": {
       "navTitle": "Nómina"
@@ -3385,6 +3826,23 @@
         "actionDone": "Revisar cierres",
         "actionReview": "Abrir el espacio de cierre"
       }
+    },
+    "filterAll": "Todos",
+    "sections": {
+      "basisCaps": "Topes de base",
+      "deductionProtection": "Protección de deducciones",
+      "holidayCompanyDay": "Festivo de empresa",
+      "holidayElection": "Elección sobre un festivo legal"
+    },
+    "segmentValues": {
+      "builtinLink": "Abrir {name}",
+      "builtinNotice": "{name} es una dimensión integrada. Sus valores se gestionan en la pestaña {name}.",
+      "builtinNoticeNoLink": "{name} es una dimensión integrada. Sus valores se gestionan en su pestaña dedicada.",
+      "builtinTitle": "Dimensión integrada",
+      "description": "Valores seleccionables para el segmento {name}.",
+      "empty": "Aún no hay valores: añada el primero.",
+      "new": "Nuevo valor",
+      "searchPlaceholder": "Buscar valores…"
     }
   },
   "flows": {
@@ -3635,8 +4093,13 @@
         "subject": "Registro",
         "started": "Iniciada",
         "finished": "Terminada",
-        "error": "Error"
-      }
+        "error": "Error",
+        "actions": "Acciones"
+      },
+      "retried": "Ejecución repetida",
+      "retry": "Reintentar",
+      "retryFailed": "Reintento fallido",
+      "retrying": "Reintentando…"
     }
   },
   "features": {
@@ -3717,52 +4180,349 @@
       "description": "Certificados de seguro, renuncias de gravamen y declaraciones 1099-NEC/MISC y T4A, con retención de pagos cuando la cobertura de un subcontratista caduca."
     },
     "advancedClose": {
-      "title": "Gobernanza de cierre avanzado"
+      "title": "Gobernanza de cierre avanzado",
+      "description": "Plantillas de cierre con abundante evidencia, enrutamiento de aprobación independiente, bloqueos controlados y publicación gobernada del paquete de cierre. El cierre mensual básico sigue disponible cuando esto está desactivado."
     },
     "advancedSubscriptions": {
-      "title": "Ciclo de vida avanzado de suscripciones"
+      "title": "Ciclo de vida avanzado de suscripciones",
+      "description": "Planes versionados, múltiples componentes, pruebas, renovaciones, cotérmino, enmiendas y facturación anticipada o vencida."
     },
     "allocations": {
-      "title": "Repartos"
+      "title": "Repartos",
+      "description": "Un solo modelo de reglas versionado que distribuye el costo común a destinos mediante un inductor: claves de distribución al registrar, líneas adicionales del libro mayor al contabilizar y barridos programados de fin de período, con trazabilidad completa."
     },
     "allocationsAtEntry": {
-      "title": "Repartos al registrar"
+      "title": "Repartos al registrar",
+      "description": "Permita que las reglas de distribución desglosen una línea de documento guardada en un grupo de líneas hijas entre cuentas y dimensiones."
     },
     "allocationsAtPosting": {
-      "title": "Repartos al contabilizar"
+      "title": "Repartos al contabilizar",
+      "description": "Permita que las reglas de distribución y los scripts autorizados aporten líneas adicionales del libro mayor al propio asiento de una transacción al contabilizar."
     },
     "apiAccess": {
-      "title": "API REST"
+      "title": "API REST",
+      "description": "Cree claves API de alcance limitado y exponga la API REST versionada y multientidad con su referencia en vivo."
     },
     "mcpAccess": {
-      "title": "Acceso MCP"
+      "title": "Acceso MCP",
+      "description": "Exponga las herramientas gobernadas de OpenBooks a clientes MCP mediante autenticación con clave API de alcance limitado."
     },
     "multiCurrency": {
-      "title": "Multimoneda"
+      "title": "Multimoneda",
+      "description": "Opere en monedas distintas de su moneda base, con tipos de cambio, revaluación y ganancias y pérdidas cambiarias realizadas y no realizadas. Activa la fuente de tipos de cambio y las tablas de tipos."
     },
     "multiSubsidiary": {
-      "title": "Multifilial"
+      "title": "Multifilial",
+      "description": "Opere más de una entidad jurídica, cada una con su moneda y sus libros, y luego consolide. Activa filiales, operaciones intercompañía y tipos de cambio consolidados."
     },
     "payroll": {
-      "title": "Nómina"
+      "title": "Nómina",
+      "description": "Ciclos de nómina, calendarios de pago, perfiles de empleados, paquetes reglamentarios de retención por país y pasivos de remesas. Canadá (CRA T4127) y Estados Unidos (49 estados admitidos: 40 motores fiscales + 9 sin impuestos; DC y NM rechazados a la espera de referencias oficiales)."
     },
     "projectScheduling": {
-      "title": "Programación de proyectos"
+      "title": "Programación de proyectos",
+      "description": "Diagramas de Gantt, ruta crítica y nivelación de recursos para cronogramas de proyectos."
     },
     "propertyManagement": {
-      "title": "Gestión inmobiliaria"
+      "title": "Gestión inmobiliaria",
+      "description": "Propiedades, unidades, arrendamientos de inquilinos, rentas recurrentes, escalamientos, recargos por mora, depósitos en garantía y conciliación de gastos comunes."
     },
     "queryConsole": {
-      "title": "Consola de consultas"
+      "title": "Consola de consultas",
+      "description": "Permita a los usuarios autorizados ejecutar SQL de solo lectura, limitado a su entidad, contra el esquema de informes en vivo."
     },
     "scripts": {
-      "title": "Scripts"
+      "title": "Scripts",
+      "description": "Ejecute JavaScript aislado en puntos de activación controlados de transacciones, programaciones, procesos masivos, clientes y endpoints."
     },
     "subcontracts": {
-      "title": "Subcontratos y facturación de avance"
+      "title": "Subcontratos y facturación de avance",
+      "description": "Compromisos con proveedores, cambios de subcontratos, programas de valores y solicitudes de pago de proveedores, retenciones en garantía por pagar, liberaciones, cheques conjuntos y retenciones de pago."
     },
     "wipBilling": {
-      "title": "Trabajo en curso y prefacturación"
+      "title": "Trabajo en curso y prefacturación",
+      "description": "Revise el trabajo facturable de proyectos, retenga o ajuste líneas con evidencia, apruebe prefacturas y supervise la antigüedad del trabajo en curso, la realización y las fugas."
     }
+  },
+  "backupsManager": {
+    "alerts": {
+      "noObjectStorageBody": "Esta implementación no tiene almacenamiento de objetos S3 (S3_ENDPOINT / S3_BUCKET / credenciales), por lo que las copias de seguridad almacenadas y programadas no están disponibles. La transmisión solo desde el navegador está desactivada intencionalmente porque no puede proporcionar la evidencia hash necesaria para una restauración. Utilice el flujo de trabajo del operador <cli>backup-local-cli.ts</cli>.",
+      "noObjectStorageTitle": "El almacenamiento de objetos no está configurado",
+      "workerOfflineBody": "Las copias de seguridad almacenadas y programadas se ejecutan en el trabajador en segundo plano, que no ha dado señales de vida recientemente. Las nuevas ejecuciones permanecerán en cola hasta que se inicie.",
+      "workerOfflineTitle": "El trabajador en segundo plano está sin conexión"
+    },
+    "autoCard": {
+      "body": "Haga copias de seguridad en el almacenamiento de objetos S3 de la implementación según una programación. Solo se conservan las <keep>copias más recientes</keep>: las anteriores se eliminan automáticamente después de cada ejecución correcta.",
+      "daily": "Diaria",
+      "dayOfMonth": "Día del mes",
+      "dayOfWeek": "Día de la semana",
+      "enabled": "Activado",
+      "frequency": "Frecuencia",
+      "keepNewest": "Conservar las más recientes",
+      "lastSuccess": " · Última copia correcta: {when}",
+      "monthly": "Mensual",
+      "nextRun": "Próxima ejecución programada: {when} (programación UTC)",
+      "off": "Las copias de seguridad programadas están desactivadas.",
+      "saveSchedule": "Guardar programación",
+      "timeUtc": "Hora (UTC)",
+      "title": "Copias de seguridad automáticas",
+      "weekly": "Semanal"
+    },
+    "deleteConfirm": "¿Eliminar la copia almacenada{fileName}? Esta acción no se puede deshacer.",
+    "errors": {
+      "couldNotDelete": "no se pudo eliminar la copia de seguridad",
+      "couldNotSave": "no se pudo guardar la política de copias de seguridad",
+      "couldNotStart": "no se pudo iniciar la copia de seguridad"
+    },
+    "exportsCard": {
+      "body": "Cree abajo una copia almacenada y luego descargue tanto su <archive>archivo</archive> como su <manifest>manifiesto</manifest>. El manifiesto incluye el SHA-256 completo y los recuentos que exige la CLI de restauración; conserve ambos archivos juntos. Una transmisión sin procesar del navegador sin esa evidencia no se admite como entrada de restauración.",
+      "title": "Exportaciones aptas para restauración"
+    },
+    "storedCard": {
+      "backUpNow": "Hacer copia ahora",
+      "body": "Las {count} copias terminadas más recientes se conservan en el almacenamiento de objetos; las demás se eliminan. Eliminar una copia la quita del almacenamiento de inmediato.",
+      "noneYet": "Aún no hay copias almacenadas.",
+      "title": "Copias almacenadas"
+    },
+    "table": {
+      "actionsSr": "Acciones",
+      "archive": "Archivo",
+      "contents": "Contenido",
+      "created": "Creado",
+      "delete": "Eliminar",
+      "inProgress": "en curso…",
+      "kept": "conservada",
+      "kind": "Tipo",
+      "manifest": "Manifiesto",
+      "purged": "purgada ({reason}) · {when}",
+      "retention": "Retención",
+      "rowsTables": "{rows} filas · {tables} tablas",
+      "sha256": "SHA-256",
+      "size": "Tamaño",
+      "status": "Estado"
+    },
+    "toasts": {
+      "deleted": "Copia eliminada",
+      "scheduleOff": "Copias programadas desactivadas",
+      "scheduleSaved": "Programación de copias guardada",
+      "started": "Copia iniciada — aparecerá abajo"
+    },
+    "weekdays": {
+      "0": "domingo",
+      "1": "lunes",
+      "2": "martes",
+      "3": "miércoles",
+      "4": "jueves",
+      "5": "viernes",
+      "6": "sábado"
+    }
+  },
+  "pageLayouts": {
+    "actions": {
+      "openPreview": "Abrir vista previa",
+      "remove": "Quitar la personalización",
+      "removed": "Personalización eliminada; la página muestra el diseño integrado.",
+      "restore": "Restaurar",
+      "restored": "Esa versión vuelve a estar activa.",
+      "save": "Guardar diseño",
+      "saved": "Diseño guardado.",
+      "undo": "Deshacer",
+      "validate": "Comprobar",
+      "validated": "Este diseño es válido."
+    },
+    "blocks": {
+      "filter-bar": "Barra de filtros",
+      "frame": "Contenedor",
+      "grid": "Grupo",
+      "heading": "Encabezado",
+      "page-header": "Encabezado de página",
+      "pagination": "Paginación",
+      "panel": "Panel",
+      "paper": "Hoja de informe",
+      "repeat": "Grupo repetitivo",
+      "stat-tile": "Mosaico de estadísticas",
+      "summary-line": "Línea de resumen",
+      "table": "Tabla",
+      "text": "Texto",
+      "widget": "Componente"
+    },
+    "columns": {
+      "module": "Módulo",
+      "note": "Nota",
+      "route": "Ruta",
+      "status": "Estado",
+      "updated": "Actualizado"
+    },
+    "description": "Cambie lo que muestra una página para todos en esta organización o restablezca el diseño original de la aplicación.",
+    "drawer": {
+      "builtIn": "Esta página muestra el diseño original de la aplicación.",
+      "customized": "Esta página muestra el diseño de su organización.",
+      "customizedByYou": "Esta página muestra su diseño personal.",
+      "note": "Nota",
+      "notePlaceholder": "Por qué se cambió esta página",
+      "replacesWarning": "Un diseño guardado reemplaza la página integrada en lugar de ajustarla, por lo que las mejoras posteriores de esta página no aparecerán hasta que quite la personalización."
+    },
+    "empty": "Ninguna página coincide con esta búsqueda.",
+    "errors": {
+      "json": "Eso no es JSON válido: {message}"
+    },
+    "fields": {
+      "count": "{count, plural, one {# fila} other {# filas}}",
+      "help": "Rutas que un diseño puede enlazar, tomadas de los datos propios de esta página. Las rutas con sangría pertenecen a una fila de la lista superior.",
+      "truncated": "Se omitieron algunos campos más profundos para que esta lista sea legible."
+    },
+    "history": {
+      "active": "Activa",
+      "empty": "Esta página nunca se ha personalizado.",
+      "help": "Todos los diseños guardados para esta ruta. Los guardados nunca eliminan el anterior, por lo que un cambio puede deshacerse después.",
+      "loading": "Cargando…"
+    },
+    "outline": {
+      "body": "Cuerpo",
+      "conditional": "A veces oculto",
+      "count": "{count, plural, one {# parte} other {# partes}}",
+      "header": "Encabezado",
+      "hide": "Ocultar este bloque",
+      "moveDown": "Mover hacia abajo",
+      "moveUp": "Mover hacia arriba"
+    },
+    "preview": {
+      "help": "Abre la página real con su diseño sin guardar. Solo usted la ve y deja de aplicarse pasados 30 minutos.",
+      "newTab": "Se abre en una pestaña nueva: la aplicación se niega a mostrarse dentro de un marco, que es la protección que impide que otro sitio incruste sus páginas.",
+      "opened": "Abierta"
+    },
+    "scope": {
+      "legend": "¿Para quién es este diseño?",
+      "org": "Todos en esta organización",
+      "orgHelp": "Cambia la página para cada persona aquí. Es la opción habitual.",
+      "user": "Solo yo",
+      "userHelp": "Cambia la página solo para usted y deja a los demás en el diseño de la organización."
+    },
+    "searchPlaceholder": "Buscar rutas y módulos",
+    "status": {
+      "builtIn": "Integrado",
+      "customized": "Personalizado",
+      "filter": "Estado",
+      "personal": "Personal"
+    },
+    "summary": "{customized} de {total} páginas personalizadas.",
+    "tabs": {
+      "aria": "Secciones del editor de diseño",
+      "fields": "Campos disponibles",
+      "history": "Historial",
+      "json": "Avanzado",
+      "preview": "Vista previa",
+      "structure": "Estructura"
+    },
+    "title": "Diseños de página",
+    "unavailable": {
+      "empty": "Esta página no le muestra nada, por lo que no hay ningún diseño que leer.",
+      "notFound": "Esta página le responde «no encontrada», por lo que no hay ningún diseño que leer.",
+      "redirect": "Esta página lo envía a {href} en lugar de mostrarse. Suele ser un permiso que no tiene o una función desactivada.",
+      "segment": "Esta ruta necesita un registro que mostrar — añada ?param.{segment}=… a la dirección para editarla."
+    }
+  },
+  "extensions": {
+    "actions": {
+      "advanced": "Fuente avanzada del paquete",
+      "deactivate": "Desactivar",
+      "drafts": "Borradores pendientes de revisión",
+      "new": "Nueva aplicación",
+      "publish": "Publicar en la biblioteca",
+      "reactivate": "Reactivar",
+      "updateListing": "Actualizar la ficha de la biblioteca"
+    },
+    "columns": {
+      "contents": "Contenido",
+      "key": "Clave",
+      "name": "Nombre",
+      "status": "Estado",
+      "updated": "Actualizado",
+      "version": "Versión"
+    },
+    "description": "Cree, importe, edite y administre las aplicaciones de su organización.",
+    "draft": {
+      "action": "Acción de backend: {name}",
+      "actionCount": "Acciones",
+      "activate": "Activar la aplicación",
+      "added": "Añadido",
+      "backToReview": "Volver a la revisión",
+      "changed": "Cambiado",
+      "changes": "Cambios respecto a la versión instalada",
+      "closed": "Este borrador ya se ha aplicado o reemplazado.",
+      "confirm": "He revisado esta versión y el acceso que solicita.",
+      "contents": "Contenido del paquete",
+      "customApp": "Interfaz personalizada",
+      "discard": "Descartar el borrador",
+      "discardConfirm": "¿Descartar este borrador? El paquete pendiente se elimina. Nada activo cambia.",
+      "discardEdits": "¿Descartar los cambios sin guardar del paquete?",
+      "editPackage": "Editar el paquete",
+      "explore": "Explorar la aplicación",
+      "exploreHelp": "Abra una pantalla para probar su diseño y formularios con datos de ejemplo.",
+      "failed": "La aplicación no se pudo activar.",
+      "field": "Campo personalizado: {name}",
+      "files": "{count} archivos de paquete",
+      "grants": "Permisos de esta versión: {permissions}",
+      "nativeApp": "Aplicación nativa",
+      "nav": "Entrada de navegación: {name}",
+      "newPackage": "Nueva aplicación",
+      "noPermissions": "No se solicitan permisos de plataforma.",
+      "page": "Personalización de página: {name}",
+      "pending": "Pendiente de revisión",
+      "permission": "Permiso: {name}",
+      "permissions": "Acceso solicitado",
+      "preview": "Vista previa",
+      "previewNotice": "Vista previa sin publicar · Solo datos de ejemplo. Pruebe la lista y los formularios; los cambios no se guardan y las acciones de backend no se ejecutan.",
+      "previewPage": "Página de vista previa: {route}",
+      "proposalNotes": "Notas de la propuesta",
+      "recordType": "Espacio de registros: {name}",
+      "removed": "Eliminado",
+      "retainedData": "Quitar una definición del paquete no elimina los registros existentes ni el historial de auditoría.",
+      "reviewReady": "Revisar antes de activar",
+      "reviewTab": "Cambios y acceso",
+      "revise": "Solicitar cambios",
+      "saveEditsFirst": "Guarde los cambios del paquete como un nuevo borrador antes de activar.",
+      "screenCount": "Pantallas",
+      "screenKind": {
+        "action": "Formulario de acción",
+        "page": "Página",
+        "records": "Espacio de registros"
+      },
+      "setting": "Ajuste: {name}",
+      "source": "Avanzado: fuente y huella del paquete",
+      "title": "Revisión del borrador",
+      "unpublished": "Esta propuesta no está activa. Revise sus pantallas, el acceso solicitado y los cambios antes de activarla.",
+      "workspaceCount": "Tipos de registro"
+    },
+    "empty": "Ninguna aplicación coincide. Cree una aplicación para empezar.",
+    "native": {
+      "actionComplete": "Acción completada.",
+      "actionFailed": "La acción no se pudo completar. Reintente para comprobar el mismo envío.",
+      "actionRunning": "En curso…",
+      "existingRecordsPreview": "Esta pantalla hace referencia a un tipo de registro existente. Los registros reales estarán disponibles tras la activación para los usuarios con acceso.",
+      "previewAction": "Solo vista previa del formulario. Las acciones de backend se ejecutan tras la activación, con la versión instalada y sus permisos.",
+      "previewRecords": "Vista previa del formulario con la definición de registros propuesta. Tras la activación, este espacio usará la lista de registros compartida, los filtros y los paneles.",
+      "sampleNumber": "Ejemplo {number}",
+      "sampleOnly": "Los cambios de la vista previa no se guardan.",
+      "sampleReference": "Referencia de ejemplo",
+      "sampleValue": "Ejemplo {field} {number}"
+    },
+    "request": {
+      "agentHelp": "Guía de creación de aplicaciones",
+      "agentInstruction": "Cree una aplicación para esta solicitud. Empiece con describe_app_vocabulary. Use draft_app para preparar un paquete sin publicar y deme sus enlaces de revisión y vista previa. Pida solo los requisitos de negocio faltantes. No la active hasta que yo la haya revisado.",
+      "brief": "¿Qué le gustaría crear?",
+      "help": "Describa la aplicación que necesita y créela con el asistente, o empiece desde un paquete a continuación.",
+      "placeholder": "Por ejemplo: un espacio de inspección de equipos con listas de verificación, notas e historial de inspecciones.",
+      "reviewHelp": "Puede obtener una vista previa y solicitar cambios antes de activar nada. Los agentes conectados también pueden preparar borradores con las herramientas de aplicación.",
+      "start": "Crear con el asistente"
+    },
+    "searchPlaceholder": "Buscar aplicaciones…",
+    "status": "Estado",
+    "statuses": {
+      "awaitingApproval": "En espera de aprobación",
+      "disabled": "Desactivado",
+      "installed": "Instalado"
+    },
+    "title": "Aplicaciones"
   }
 }
