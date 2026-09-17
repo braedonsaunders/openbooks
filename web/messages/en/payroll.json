@@ -723,7 +723,9 @@
           "fit": "Federal income tax payable",
           "fica": "FICA payable (Social Security + Medicare)",
           "futa": "FUTA payable",
-          "suta": "State unemployment payable"
+          "suta": "State unemployment payable",
+          "state_income_tax": "State income tax payable",
+          "local_income_tax": "Local income tax payable"
         }
       },
       "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
