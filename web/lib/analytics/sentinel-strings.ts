@@ -54,11 +54,74 @@ export interface SentinelStrings {
     daysSpan: number;
     others: string;
   }): string;
+  /**
+   * One-line audit-trail summary (F-t09-006): who did what to which record.
+   * `verb` is a stable code the bundle maps to words; `action` is the raw
+   * audit_log action, used verbatim only for `other`. `actor`, `table`,
+   * `row` and `fields` are ledger data (short ids, field names) and travel
+   * verbatim in every language.
+   */
+  auditEvent(args: {
+    verb: "created" | "updated" | "deleted" | "other";
+    action: string;
+    actor: string;
+    table: string;
+    row: string;
+    fields: string;
+  }): string;
   riskGhosts(count: number): SentinelRiskArea;
   riskSequential(count: number): SentinelRiskArea;
   riskDuplicates(count: number): SentinelRiskArea;
   riskTraps(count: number): SentinelRiskArea;
   riskBenford(): SentinelRiskArea;
+}
+
+/** Stable verb codes for audit-trail summaries; the bundle maps them to words. */
+export type AuditVerb = "created" | "updated" | "deleted" | "other";
+
+export interface AuditEventArgs {
+  verb: AuditVerb;
+  action: string;
+  actor: string;
+  table: string;
+  row: string;
+  fields: string;
+}
+
+/**
+ * Assemble the locale-free arguments for an audit-trail summary (F-t09-006).
+ * Pure data shaping, no display copy: the action maps to a stable verb
+ * code, actor/row collapse to short ledger identifiers (a missing actor is
+ * the system), and the changed-field list comes from the changes envelope
+ * (unparseable — e.g. truncated — envelopes simply name no fields). All
+ * literals are lowercase codes, never sentences.
+ */
+export function auditEventArgs(
+  action: string,
+  actorId: string | null,
+  tableName: string,
+  rowId: string | null,
+  changesText: string | null,
+): AuditEventArgs {
+  const lower = (action ?? "").toLowerCase();
+  const verb: AuditVerb =
+    lower === "insert" ? "created" : lower === "update" ? "updated" : lower === "delete" ? "deleted" : "other";
+  let fields = "";
+  try {
+    const parsed: unknown = JSON.parse(changesText ?? "");
+    const keys = parsed !== null && typeof parsed === "object" ? Object.keys(parsed) : [];
+    fields = keys.slice(0, 3).join(", ") + (keys.length > 3 ? ", …" : "");
+  } catch {
+    fields = "";
+  }
+  return {
+    verb,
+    action: lower || action,
+    actor: actorId ? actorId.slice(0, 8) : "system",
+    table: tableName,
+    row: (rowId ?? "").slice(0, 8),
+    fields,
+  };
 }
 
 /**
@@ -87,6 +150,8 @@ export const englishSentinelStrings: SentinelStrings = {
   ghostName: (vendor, employee) => `Vendor "${vendor}" matches employee name "${employee}"`,
   duplicateGroupReason: ({ count, currency, amount, sharedReference, daysSpan, others }) =>
     `${count} matching document${count === 1 ? "" : "s"} — same vendor, kind, amount (${currency} ${amount})${sharedReference ? `, shared reference ${sharedReference}` : ""} (${daysSpan} day${daysSpan === 1 ? "" : "s"} span): ${others}`,
+  auditEvent: ({ verb, action, actor, table, row, fields }) =>
+    `${actor} ${verb === "other" ? action : verb === "created" ? "created" : verb === "updated" ? "updated" : "deleted"} ${table} ${row}${fields ? ` (${fields})` : ""}`,
   riskGhosts: (count) => ({ area: "Ghost Vendors", message: `${count} vendor${count === 1 ? "" : "s"} match employee names` }),
   riskSequential: (count) => ({ area: "Sequential Invoices", message: `${count} vendor${count === 1 ? "" : "s"} with gap-free invoice runs` }),
   riskDuplicates: (count) => ({ area: "Duplicate Payments", message: `${count} duplicate group${count === 1 ? "" : "s"} (one finding per group)` }),
@@ -132,6 +197,14 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
           : "",
         daysSpan,
         others,
+      }),
+    auditEvent: ({ verb, action, actor, table, row, fields }) =>
+      t("sentinel.forensics.auditEvent", {
+        actor,
+        verb: verb === "other" ? action : t(`sentinel.forensics.auditVerb.${verb}`),
+        table,
+        row,
+        fieldsFrag: fields ? t("sentinel.forensics.auditFields", { fields }) : "",
       }),
     riskGhosts: (count) => ({
       area: t("sentinel.forensics.riskGhosts.area"),

@@ -2439,6 +2439,8 @@ test('analytics copy ships translated in fr, es and de', () => {
     "de:analytics.hub.cards.sentinelTitle|Sentinel",
     "de:analytics.sentinel.coverage.benfordBold|Benford",
     "de:analytics.sentinel.flag.rsf|RSF",
+    "de:analytics.sentinel.forensics.auditEvent|{actor} {verb} {table} {row}{fieldsFrag}",
+    "de:analytics.sentinel.forensics.auditFields| ({fields})",
     "de:analytics.sentinel.kind.journal|Journal",
     "de:analytics.sentinel.kpi.benford|Benford",
     "de:analytics.sentinel.kpi.signal|Signal",
@@ -2485,6 +2487,7 @@ test('analytics copy ships translated in fr, es and de', () => {
     "es:analytics.sentinel.drill.top|top {count}",
     "es:analytics.sentinel.flag.rsf|RSF",
     "es:analytics.sentinel.kpi.benford|Benford",
+    "es:analytics.sentinel.forensics.auditFields| ({fields})",
     "es:analytics.sentinel.no|No",
     "es:analytics.sentinel.sequential.runTotal| — total {total} ({first} → {last})",
     "es:analytics.sentinel.sub.twoD|2D: {value}",
@@ -2566,6 +2569,8 @@ test('analytics copy ships translated in fr, es and de', () => {
     "fr:analytics.sentinel.kpi.signal|Signal",
     "fr:analytics.sentinel.sequential.runTotal| — total {total} ({first} → {last})",
     "fr:analytics.sentinel.sub.documents|documents",
+    "fr:analytics.sentinel.forensics.auditEvent|{actor} {verb} {table} {row}{fieldsFrag}",
+    "fr:analytics.sentinel.forensics.auditFields| ({fields})",
     "fr:analytics.sentinel.table.action|Action",
     "fr:analytics.sentinel.table.date|Date",
     "fr:analytics.sentinel.table.doc1|Doc 1",
@@ -2626,8 +2631,8 @@ test('analytics copy ships translated in fr, es and de', () => {
     'analytics.categoryManager.',
   ]
   const icuWanted = wanted.filter((key) => icuOwned.some((prefix) => key.startsWith(prefix)))
-  assert.equal(icuWanted.length, 1251, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
-  assert.equal(wanted.length, 1886, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(icuWanted.length, 1256, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 1891, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -2842,6 +2847,7 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
     'zh:analytics.customer.table.m|M',
     'zh:analytics.customer.table.r|R',
     'zh:analytics.sentinel.flag.rsf|RSF',
+    'zh:analytics.sentinel.forensics.auditEvent|{actor} {verb} {table} {row}{fieldsFrag}',
     'zh:analytics.sentinel.table.z|Z',
     'zh:analytics.sentinel.title|Sentinel',
     'zh:analytics.utilization.whatif.na|N/A',
@@ -2857,6 +2863,8 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
     'pt-BR:analytics.customer.table.m|M',
     'pt-BR:analytics.customer.table.r|R',
     'pt-BR:analytics.customer.tier.bronze|Bronze',
+    'pt-BR:analytics.sentinel.forensics.auditEvent|{actor} {verb} {table} {row}{fieldsFrag}',
+    'pt-BR:analytics.sentinel.forensics.auditFields| ({fields})',
     'pt-BR:analytics.sentinel.analysis.zscoreWord|Z-score',
     'pt-BR:analytics.sentinel.coverage.benfordBold|Benford',
     'pt-BR:analytics.sentinel.drill.top|top {count}',
@@ -2888,7 +2896,7 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
   ]
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
-  assert.equal(wanted.length, 1251, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 1256, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)

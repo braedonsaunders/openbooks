@@ -2022,6 +2022,9 @@
       "ghostName": "供应商“{vendor}”与员工姓名“{employee}”一致",
       "duplicateGroup": "{count, plural, one {# 张匹配单据} other {# 张匹配单据}}——同一供应商、类型和金额（{currency} {amount}）{sharedRef}（跨度{daysSpan, plural, one {# 天} other {# 天}}）：{others}",
       "duplicateSharedRef": "，共享参考号{reference}",
+      "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
+      "auditFields": "\uff08{fields}\uff09",
+      "auditVerb": { "created": "\u521b\u5efa", "updated": "\u66f4\u65b0", "deleted": "\u5220\u9664" },
       "riskGhosts": {
         "area": "幽灵供应商",
         "message": "{count, plural, one {# 个供应商} other {# 个供应商}}与员工吻合"
