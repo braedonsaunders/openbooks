@@ -595,7 +595,7 @@
     "operational": {
       "title": "Conexiones bancarias",
       "manage": "Gestionar feeds",
-      "none": "No hay conexiones bancarias activas. Configure una en Company Settings → Bank Feeds.",
+      "none": "No hay conexiones bancarias activas. Configure una en Configuración → Feeds bancarios.",
       "lastSync": "Última sincronización",
       "lastAttempt": "Último intento",
       "never": "Nunca"

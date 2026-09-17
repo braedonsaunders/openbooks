@@ -595,7 +595,7 @@
     "operational": {
       "title": "Connexions de flux bancaires",
       "manage": "Gérer les flux",
-      "none": "Aucune connexion de flux bancaire active. Configurez-en une dans Company Settings → Bank Feeds.",
+      "none": "Aucune connexion de flux bancaire active. Configurez-en une dans Configuration → Flux bancaires.",
       "lastSync": "Dernière synchronisation",
       "lastAttempt": "Dernière tentative",
       "never": "Jamais"
