@@ -17,6 +17,11 @@ Fleet-6 closeout on top of alpha.12. No new migration.
 - The platform workspace switcher lives in the account menu.
 - Allocation-rule wizard destination menus stay above the modal and
   match on any dimension, with codes in the option labels.
+- Pre-flow vendor bank accounts can be submitted into the current
+  approval flow; party payloads publish the canonical OCC token so
+  Edit-then-Save no longer 409s.
+- French and Spanish property type/status labels agree with the
+  masculine building noun.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
