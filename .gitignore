@@ -60,3 +60,8 @@ engine/src/sim/personas/
 # investigation. Findings that matter graduate into tests, the conformance
 # corpus, or the maintained documentation rather than into a running log.
 docs/operations/production-audit.md
+
+# scratch left by ad-hoc probe sessions (see 9dfb98f7f)
+sim-runs/
+ob-retainage-gaps.probe.test.ts
+engine/src/zz-retainage-gaps.probe.test.ts
