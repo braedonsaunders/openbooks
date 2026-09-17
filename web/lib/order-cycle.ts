@@ -24,7 +24,15 @@ import {
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
+import {
+  assertStockLocationAdmitsSubsidiary,
+  InventoryError,
+  InventoryOwnershipError,
+} from '@openbooks/engine/src/inventory.ts'
+import { loadSubsidiaryContext } from '@openbooks/engine/src/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales-orders.ts'
+import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
+import { isUuid } from './list-params'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -84,6 +92,36 @@ export class ConversionError extends Error {
 
 /** Machine-readable code for a goods receipt refused over a missing RNB account. */
 export const ITEM_MISSING_RNB_ACCOUNT = 'ITEM_MISSING_RNB_ACCOUNT'
+
+/**
+ * Machine-readable code for a fulfillment/receipt refused because a stocked
+ * order line has no warehouse and the org has no single default to fall
+ * back to (F-coord-004). Details carry the offending lineNumber and the
+ * active warehouse count the message was built from.
+ */
+export const ORDER_LINE_WAREHOUSE_REQUIRED = 'ORDER_LINE_WAREHOUSE_REQUIRED'
+
+export interface UnwarehousedOrderLine {
+  lineNumber: number
+  itemId: string | null
+}
+
+/**
+ * Selected order lines that cannot ship or receive: stocked (profiled)
+ * lines with no warehouse when the warehouse choice is ambiguous. With
+ * exactly one active warehouse the posting reader falls back silently, so
+ * there is nothing to refuse. Pure so the rule is unit-testable; the
+ * fulfillment/receipt writers throw the refusal.
+ */
+export function missingOrderLineWarehouses(
+  lines: { lineNumber: number; itemId: string | null; hasInventoryProfile: boolean; stockLocationId: string | null }[],
+  activeWarehouseCount: number,
+): UnwarehousedOrderLine[] {
+  if (activeWarehouseCount === 1) return []
+  return lines
+    .filter((line) => line.hasInventoryProfile && !line.stockLocationId)
+    .map((line) => ({ lineNumber: line.lineNumber, itemId: line.itemId }))
+}
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
@@ -318,6 +356,39 @@ export async function fulfillSalesOrder(
     if (uncostedInventoryLine) {
       throw new ConversionError(
         `Sales-order line ${uncostedInventoryLine.line.line_number} is an inventory item without a costing profile`,
+      )
+    }
+
+    // Orders approved before line warehouses existed carry NULL warehouses
+    // and are storage-immutable, so fulfillment would otherwise fail deep
+    // inside the inventory kernel with a generic stock-location error.
+    // Refuse up front naming the line and the way forward (F-coord-004).
+    const activeWarehouses = await activeStockLocations(orgId)
+    const unwarehoused = missingOrderLineWarehouses(
+      selected.map(({ line }) => ({
+        lineNumber: line.line_number,
+        itemId: line.item_id,
+        hasInventoryProfile: line.has_inventory_profile,
+        stockLocationId: line.stock_location_id,
+      })),
+      activeWarehouses.length,
+    )
+    const warehouseless = unwarehoused[0]
+    if (warehouseless) {
+      const details = { lineNumber: warehouseless.lineNumber, activeWarehouses: activeWarehouses.length }
+      if (activeWarehouses.length === 0) {
+        throw new ConversionError(
+          `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then fulfill again`,
+          422,
+          ORDER_LINE_WAREHOUSE_REQUIRED,
+          details,
+        )
+      }
+      throw new ConversionError(
+        `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has ${activeWarehouses.length} active warehouses, so fulfillment cannot choose one — assign a warehouse to the line, then fulfill again`,
+        422,
+        ORDER_LINE_WAREHOUSE_REQUIRED,
+        details,
       )
     }
 
@@ -623,6 +694,37 @@ export async function receivePurchaseOrder(
       return { request, line }
     })
 
+    // Same legacy trap as the sales side: a NULL warehouse on a stocked
+    // line would fail inside the inventory kernel with a generic error.
+    // Refuse up front naming the line and the way forward (F-coord-004).
+    const receiptWarehouses = await activeStockLocations(orgId)
+    const unwarehousedReceipt = missingOrderLineWarehouses(
+      selected.map(({ line }) => ({
+        lineNumber: line.line_number,
+        itemId: line.item_id,
+        hasInventoryProfile: line.has_inventory_profile,
+        stockLocationId: line.stock_location_id,
+      })),
+      receiptWarehouses.length,
+    )[0]
+    if (unwarehousedReceipt) {
+      const details = { lineNumber: unwarehousedReceipt.lineNumber, activeWarehouses: receiptWarehouses.length }
+      if (receiptWarehouses.length === 0) {
+        throw new ConversionError(
+          `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then receive again`,
+          422,
+          ORDER_LINE_WAREHOUSE_REQUIRED,
+          details,
+        )
+      }
+      throw new ConversionError(
+        `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has ${receiptWarehouses.length} active warehouses, so receipt cannot choose one — assign a warehouse to the line, then receive again`,
+        422,
+        ORDER_LINE_WAREHOUSE_REQUIRED,
+        details,
+      )
+    }
+
     const documentNumber = await nextDocumentNumber(orgId, PURCHASE_RECEIPT_KIND, 'RCPT-', source.subsidiary_id)
     const receiptId = randomUUID()
     const custom = { receiptIdempotencyKey: idempotencyKey, purchaseReceiptCommand: command }
@@ -755,6 +857,172 @@ async function receivePurchaseOrderRemainder(
  * remaining (quantity − quantity_billed). Records a document_links edge and
  * advances quantity_billed on the source lines. Runs in one transaction.
  */
+export interface AssignOrderLineWarehouseInput {
+  orgId: string
+  userId: string
+  orderId: string
+  kind: 'sales_order' | 'purchase_order'
+  lineId: string
+  stockLocationId: string
+  expectedUpdatedAt: string
+}
+
+/**
+ * Assign a warehouse to one line of an approved-but-unfulfilled order
+ * (F-coord-004). Orders approved before line warehouses existed carry NULL
+ * warehouses and their lines are storage-immutable (migration 0034), so
+ * fulfillment could never name a location and failed closed with no way
+ * forward. Setting the warehouse changes no posted amount — it only routes
+ * future shipments/receipts — so this reopens the header inside one
+ * transaction (the established fulfill/convert pattern), writes the single
+ * column, restores approved, and audits the assignment. Drafts stay on the
+ * normal edit path; anything not approved is refused.
+ */
+export async function assignOrderLineWarehouse(
+  input: AssignOrderLineWarehouseInput,
+): Promise<{ lineId: string; lineNumber: number; stockLocationId: string }> {
+  const orderLabel = input.kind === 'sales_order' ? 'Sales order' : 'Purchase order'
+  const lineLabel = input.kind === 'sales_order' ? 'Sales-order line' : 'Purchase-order line'
+  if (!isUuid(input.orderId) || !isUuid(input.lineId) || !isUuid(input.stockLocationId)) {
+    throw new ConversionError('Invalid order line warehouse assignment', 422)
+  }
+  return db.transaction(async (tx) => {
+    const doc = (await tx.execute<{
+      id: string
+      kind: string
+      status: string
+      subsidiary_id: string | null
+      updated_at: string
+    }>(sql`
+      select id, kind, status, subsidiary_id,
+             ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
+        from documents
+       where id = ${input.orderId} and org_id = ${input.orgId}
+       for update
+    `)).rows[0]
+    if (!doc || doc.kind !== input.kind) throw new ConversionError('Order not found', 404)
+    if (doc.status === 'draft') {
+      throw new ConversionError(
+        `This ${orderLabel.toLowerCase()} is still a draft; set the warehouse by editing the draft`,
+        422,
+      )
+    }
+    if (doc.status !== 'approved') throw new ConversionError(`This ${orderLabel.toLowerCase()} is ${doc.status}`, 422)
+    if (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== doc.updated_at) {
+      throw new ConversionError('this order changed after you opened it; reload and review the latest revision', 409)
+    }
+    const line = (await tx.execute<{
+      id: string
+      line_number: number
+      item_id: string | null
+      stock_location_id: string | null
+    }>(sql`
+      select id, line_number, item_id, stock_location_id
+        from document_lines
+       where id = ${input.lineId} and org_id = ${input.orgId} and document_id = ${input.orderId}
+       for update
+    `)).rows[0]
+    if (!line) throw new ConversionError('Order line not found', 404)
+    if (line.stock_location_id === input.stockLocationId) {
+      return { lineId: line.id, lineNumber: line.line_number, stockLocationId: input.stockLocationId }
+    }
+    if (!line.item_id) {
+      throw new ConversionError(
+        `${lineLabel} ${line.line_number} is not a stocked item; a warehouse does not apply`,
+        422,
+        ORDER_LINE_WAREHOUSE_REQUIRED,
+        { lineNumber: line.line_number },
+      )
+    }
+    const profiled = (await tx.execute<{ item_id: string }>(sql`
+      select item_id from item_inventory_profiles
+       where org_id = ${input.orgId} and item_id = ${line.item_id}
+    `)).rows[0]
+    if (!profiled) {
+      throw new ConversionError(
+        `${lineLabel} ${line.line_number} is not a stocked item; a warehouse does not apply`,
+        422,
+        ORDER_LINE_WAREHOUSE_REQUIRED,
+        { lineNumber: line.line_number },
+      )
+    }
+    // The drawer's own validation reader: the choice must name an active
+    // warehouse of this org. Subsidiary admission is checked next with the
+    // same rule posting enforces, so the assignment cannot strand the line.
+    const resolved = resolveLineStockLocation(line.line_number, line.item_id, input.stockLocationId, {
+      active: await activeStockLocations(input.orgId),
+      profiled: new Set([line.item_id]),
+    })
+    if ('error' in resolved) {
+      throw new ConversionError(
+        resolved.error,
+        422,
+        ORDER_LINE_WAREHOUSE_REQUIRED,
+        { lineNumber: line.line_number },
+      )
+    }
+    const locationId = resolved.locationId ?? input.stockLocationId
+    const ctx = await loadSubsidiaryContext(tx, input.orgId)
+    try {
+      await assertStockLocationAdmitsSubsidiary(tx, input.orgId, ctx, locationId, doc.subsidiary_id ?? ctx.rootId)
+    } catch (error) {
+      if (error instanceof InventoryOwnershipError) {
+        throw new ConversionError(
+          error.message,
+          403,
+          ORDER_LINE_WAREHOUSE_REQUIRED,
+          { lineNumber: line.line_number },
+        )
+      }
+      if (error instanceof InventoryError) {
+        throw new ConversionError(
+          error.message,
+          422,
+          ORDER_LINE_WAREHOUSE_REQUIRED,
+          { lineNumber: line.line_number },
+        )
+      }
+      throw error
+    }
+    const reopened = (await tx.execute<{ id: string }>(sql`
+      update documents
+         set status = 'draft', updated_by = ${input.userId}
+       where id = ${input.orderId} and org_id = ${input.orgId} and status = 'approved'
+      returning id
+    `)).rows[0]
+    if (!reopened) throw new ConversionError('Order changed while assigning the warehouse', 409)
+    await tx.execute(sql`
+      update document_lines
+         set stock_location_id = ${locationId}, updated_by = ${input.userId}
+       where id = ${line.id} and org_id = ${input.orgId}
+    `)
+    const restored = (await tx.execute<{ id: string }>(sql`
+      update documents
+         set status = 'approved', updated_by = ${input.userId}
+       where id = ${input.orderId} and org_id = ${input.orgId} and status = 'draft'
+      returning id
+    `)).rows[0]
+    if (!restored) throw new ConversionError('Order changed while assigning the warehouse', 409)
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${input.orgId}, 'document_lines', ${line.id}, 'update',
+        ${JSON.stringify({
+          mode: 'order_line_warehouse_assigned',
+          orderId: input.orderId,
+          kind: input.kind,
+          lineNumber: line.line_number,
+          from: line.stock_location_id,
+          to: locationId,
+        })}::jsonb,
+        ${input.userId}
+      )
+    `)
+    return { lineId: line.id, lineNumber: line.line_number, stockLocationId: locationId }
+  })
+}
+
 export async function convertOrder(
   orgId: string,
   userId: string,
