@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   automationGraphSchema,
   planAutomation,
@@ -310,6 +310,144 @@ export async function runRecordFlows(
     console.error(`[flows] dispatch failed (${event.kind} ${subjectKind}/${subjectId}):`, e);
     return { runs: [], gatesCreated: 0, failed: true };
   }
+}
+
+/**
+ * A retry refusal: the run is not in a retryable state (missing, not failed,
+ * superseded, unplannable). Callers map this to a 4xx — retrying the wrong
+ * run is request state, not a server defect.
+ */
+export class FlowRetryError extends Error {
+  readonly name = "FlowRetryError";
+}
+
+export interface RetryFlowRunResult {
+  runId: string;
+  status: "completed" | "waiting" | "failed" | "cancelled";
+  gatesCreated: number;
+}
+
+/**
+ * Rebuild the stored trigger as a plan event. Lifecycle kinds carry no event
+ * extras (or, for on_update, lose them — see below), so the stored trigger
+ * string is enough. Anything else (status_change needs its `to`, manual
+ * needs its button, scheduled carries its occurrence) cannot be faithfully
+ * rebuilt from the run row and must be re-fired from the record.
+ */
+function retryEvent(trigger: string): TriggerEvent {
+  switch (trigger) {
+    case "on_create": return { kind: "on_create" };
+    case "on_submit": return { kind: "on_submit" };
+    case "before_post": return { kind: "before_post" };
+    case "after_post": return { kind: "after_post" };
+    case "before_void": return { kind: "before_void" };
+    // The original edit's changedFields/old_* are not stored on the run:
+    // re-plan against CURRENT values with an empty change set, so
+    // material-change conditions evaluate against now, not then.
+    case "on_update": return { kind: "on_update", changedFields: [], changedLineFields: [] };
+    default: throw new FlowRetryError(`a ${trigger} run cannot be retried; re-fire it from the record`);
+  }
+}
+
+/**
+ * Re-drive a FAILED run after its failure cause is fixed (F-t04-004: a gate
+ * that resolved to zero assignees strands its subject with no path forward).
+ * The stored trigger is re-planned against the CURRENT flow graph and CURRENT
+ * subject values — assignees, conditions and recipients all resolve live —
+ * and re-executed on the SAME run row, so effect checkpoints make the resume
+ * idempotent (completed effects are skipped, the failed node re-runs).
+ *
+ * Safety rails: only a failed run, only the latest run for its flow+subject
+ * (effect checkpoints are per-run, so re-driving a superseded run could
+ * double-fire a newer run's completed effects), and only when the trigger
+ * still plans to something — otherwise the retry refuses instead of
+ * silently completing a run that did nothing.
+ */
+export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<RetryFlowRunResult> {
+  const [run] = await db
+    .select()
+    .from(schema.flowRuns)
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+  if (!run) throw new FlowRetryError("flow run not found");
+  if (run.status !== "failed") throw new FlowRetryError("only a failed run can be retried");
+
+  // Timestamps round-trip at millisecond precision while storage keeps
+  // microseconds, so a row-wise `>` self-matches: exclude self by id and
+  // compare `>=` (a same-millisecond older sibling refuses safe — a retry
+  // refusal never corrupts, a wrongful re-drive could double-fire).
+  const newer = await db.execute<{ id: string }>(sql`
+    select id from flow_runs
+     where org_id = ${ctx.orgId} and flow_id = ${run.flowId} and subject_id = ${run.subjectId}
+       and id <> ${run.id} and started_at >= ${run.startedAt}
+     limit 1
+  `);
+  if (newer.rows[0]) {
+    throw new FlowRetryError("only the latest run for this record can be retried; retry that one instead");
+  }
+
+  const adapter = getFlowAdapter(run.subjectKind);
+  if (!adapter) throw new FlowRetryError(`no flow adapter for subject kind "${run.subjectKind}"`);
+  const [flow] = await db
+    .select()
+    .from(schema.flows)
+    .where(and(eq(schema.flows.id, run.flowId), eq(schema.flows.orgId, ctx.orgId)));
+  if (!flow) throw new FlowRetryError("the flow for this run no longer exists");
+  if (!flow.enabled) throw new FlowRetryError("the flow for this run is disabled");
+  const graph = parseFlowGraph(flow.id, flow.graph);
+  if (!graph) throw new FlowRetryError("the flow for this run has an invalid graph");
+  const subject = await adapter.loadContext(run.subjectId);
+  if (!subject) throw new FlowRetryError("the run's subject no longer exists");
+
+  const event = retryEvent(run.trigger);
+  const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
+  let plan = planAutomation(graph, event, evalCtx);
+  if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
+    plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
+  }
+  if (planIsEmpty(plan)) {
+    throw new FlowRetryError("the run's trigger no longer matches its flow; re-fire it from the record");
+  }
+
+  await db
+    .update(schema.flowRuns)
+    .set({ status: "running", error: null, finishedAt: null })
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+
+  let status: RetryFlowRunResult["status"];
+  let gatesCreated = 0;
+  try {
+    const res = await executeFlowPlan(ctx, adapter, {
+      flow: { id: flow.id, name: flow.name, subjectKind: run.subjectKind, graph: flow.graph },
+      runId,
+      subjectId: run.subjectId,
+      plan,
+      evalCtx,
+      submitterUserId: subject.submitterUserId,
+    });
+    gatesCreated = res.gatesCreated;
+    status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
+    await db
+      .update(schema.flowRuns)
+      .set({
+        status,
+        error: res.failed.length > 0 ? res.failed.join("; ") : null,
+        finishedAt: status === "waiting" ? null : new Date(),
+      })
+      .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+    if (res.failed.length > 0) {
+      console.error(`[flows] retried run ${runId} (flow "${flow.name}") failed again:`, res.failed.join("; "));
+    }
+  } catch (e) {
+    status = "failed";
+    const reason = e instanceof Error ? e.message : String(e);
+    console.error(`[flows] retried run ${runId} (flow "${flow.name}") crashed:`, e);
+    await db
+      .update(schema.flowRuns)
+      .set({ status: "failed", error: reason, finishedAt: new Date() })
+      .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)))
+      .catch(() => {});
+  }
+  return { runId, status, gatesCreated };
 }
 
 /**

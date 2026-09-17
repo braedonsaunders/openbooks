@@ -271,6 +271,9 @@
     "waitingOthers": "Recorded — waiting on the other approvers",
     "alreadyDecided": "This approval was already decided — refreshing",
     "decisionFailed": "Decision failed",
+    "retryRun": "Retry approval",
+    "retried": "Approval re-driven — the new gate is on the worklist",
+    "retryFailed": "Retry failed",
     "historyTitle": "Approvals",
     "historyEmpty": "No approvals required for this record.",
     "events": {

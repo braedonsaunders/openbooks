@@ -11,6 +11,8 @@ interface RouteState {
   status: string | null;
   scopeChecks: Array<string | null>;
   statusCalls: string[];
+  runRows: Array<Record<string, unknown>>;
+  canRetry: boolean;
 }
 
 const stateKey = Symbol.for("openbooks.flow-record-state-route-test");
@@ -23,6 +25,8 @@ const routeState: RouteState = {
   status: "pending_approval",
   scopeChecks: [],
   statusCalls: [],
+  runRows: [],
+  canRetry: false,
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -32,7 +36,11 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
-      export const db = { execute: async () => ({ rows: [] }) }
+      const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
+      export const db = { execute: async (query) => {
+        if (JSON.stringify(query).includes('flow_runs')) return { rows: state.runRows ?? [] }
+        return { rows: [] }
+      } }
       export async function withOrgContext(_orgId, fn) { return fn() }
     `,
   ],
@@ -57,6 +65,7 @@ const mockSources = new Map<string, string>([
     "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
+      export function can() { return state.canRetry ?? false }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         state.scopeChecks.push(subsidiaryId ?? null)
         if (authz.allowedSubsidiaryIds !== null &&
@@ -114,6 +123,8 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.status = "pending_approval";
   routeState.scopeChecks = [];
   routeState.statusCalls = [];
+  routeState.runRows = [];
+  routeState.canRetry = false;
 }
 
 function request(): Request {
@@ -140,4 +151,34 @@ test("an in-scope caller may read approval state", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.scopeChecks, ["sub-hidden"]);
   assert.deepEqual(routeState.statusCalls, ["subject-1"]);
+});
+
+/** F-t04-004: a latest failed run surfaces for the row retry affordance. */
+test("a failed latest run surfaces as failedRun with the retry capability", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.canRetry = true;
+  routeState.runRows = [
+    {
+      id: "run-1",
+      status: "failed",
+      error: 'gate (gate "Approval" resolved to zero assignees)',
+      finishedAt: new Date("2026-09-10T12:00:01.000Z"),
+      startedAt: new Date("2026-09-10T12:00:00.000Z"),
+      submitterName: null,
+    },
+  ];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    failedRun: { id: string; error: string | null; at: string } | null;
+    canRetry: boolean;
+  };
+  assert.deepEqual(body.failedRun, {
+    id: "run-1",
+    error: 'gate (gate "Approval" resolved to zero assignees)',
+    at: "2026-09-10T12:00:01.000Z",
+  });
+  assert.equal(body.canRetry, true);
 });
