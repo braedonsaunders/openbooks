@@ -166,10 +166,12 @@ export function MatchWorkspace({
         headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })
-      const d = await res.json() as MatchActionResult
-      if (!res.ok) { toast.error(d.error ?? tBanking('errors.requestFailed')); return null }
+      // Never let the read itself throw: an unreadable error body would
+      // otherwise go silent with an unhandled rejection (F-t05-017/019).
+      const d = await res.json().catch(() => null) as MatchActionResult | null
+      if (!res.ok) { toast.error(d?.error ?? tBanking('errors.requestFailed')); return null }
       return d
-    } finally { setBusy(false) }
+    } catch { toast.error(tBanking('errors.requestFailed')); return null } finally { setBusy(false) }
   }
 
   function pickAccount(id: string) {
