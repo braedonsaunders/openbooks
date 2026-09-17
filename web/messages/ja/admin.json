@@ -2162,7 +2162,12 @@
     },
     "features": {
       "runWizard": "セットアップウィザードを実行",
-      "navTitle": "機能"
+      "navTitle": "機能",
+      "errors": {
+        "blocked": "この機能は無効にできません — 台帳の基盤となるデータが含まれています。",
+        "dependency": "先に必要な機能を有効にしてください: {features}。",
+        "dependents": "先に従属する機能を無効にしてください: {features}。"
+      }
     },
     "taxSetup": {
       "navTitle": "税務設定"
@@ -2435,6 +2440,54 @@
     "onlinePayments": {
       "title": "オンライン決済",
       "description": "請求書のホスト型決済リンク（Stripe / Adyen / GoCardless銀行引落）、サーチャージルール、入金を自動消込するWebhook。"
+    },
+    "advancedClose": {
+      "title": "高度な決算管理"
+    },
+    "advancedSubscriptions": {
+      "title": "高度なサブスクリプション管理"
+    },
+    "allocations": {
+      "title": "配賦"
+    },
+    "allocationsAtEntry": {
+      "title": "入力時配賦"
+    },
+    "allocationsAtPosting": {
+      "title": "計上時配賦"
+    },
+    "apiAccess": {
+      "title": "REST API"
+    },
+    "mcpAccess": {
+      "title": "MCPアクセス"
+    },
+    "multiCurrency": {
+      "title": "複数通貨"
+    },
+    "multiSubsidiary": {
+      "title": "複数子会社"
+    },
+    "payroll": {
+      "title": "給与計算"
+    },
+    "projectScheduling": {
+      "title": "プロジェクトスケジュール管理"
+    },
+    "propertyManagement": {
+      "title": "不動産管理"
+    },
+    "queryConsole": {
+      "title": "クエリコンソール"
+    },
+    "scripts": {
+      "title": "スクリプト"
+    },
+    "subcontracts": {
+      "title": "下請契約と出来高請求"
+    },
+    "wipBilling": {
+      "title": "仕掛品と前請求"
     }
   }
 }

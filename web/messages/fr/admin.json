@@ -2936,7 +2936,12 @@
         "draftInformationReturns": "{count, plural, one {# déclaration de renseignements en cours} other {# déclarations de renseignements en cours}}",
         "unfiledInformationReturns": "{count, plural, one {# déclaration finalisée non déposée} other {# déclarations finalisées non déposées}}"
       },
-      "runWizard": "Lancer l'assistant de configuration"
+      "runWizard": "Lancer l'assistant de configuration",
+      "errors": {
+        "blocked": "Cette fonctionnalité ne peut pas être désactivée — ses données sont structurelles pour le grand livre.",
+        "dependency": "Activez d’abord la fonctionnalité requise : {features}.",
+        "dependents": "Désactivez d’abord la fonctionnalité dépendante : {features}."
+      }
     },
     "bankFeeds": {
       "navTitle": "Flux bancaires"
@@ -3326,6 +3331,54 @@
     "subcontractorCompliance": {
       "title": "Conformité des sous-traitants",
       "description": "Attestations d'assurance, renonciations au privilège et déclarations 1099-NEC/MISC et T4A, avec blocage des paiements lorsque la couverture d'un sous-traitant expire."
+    },
+    "advancedClose": {
+      "title": "Gouvernance de clôture avancée"
+    },
+    "advancedSubscriptions": {
+      "title": "Cycle de vie avancé des abonnements"
+    },
+    "allocations": {
+      "title": "Répartitions"
+    },
+    "allocationsAtEntry": {
+      "title": "Répartitions à la saisie"
+    },
+    "allocationsAtPosting": {
+      "title": "Répartitions à la comptabilisation"
+    },
+    "apiAccess": {
+      "title": "API REST"
+    },
+    "mcpAccess": {
+      "title": "Accès MCP"
+    },
+    "multiCurrency": {
+      "title": "Multidevise"
+    },
+    "multiSubsidiary": {
+      "title": "Multi-filiales"
+    },
+    "payroll": {
+      "title": "Paie"
+    },
+    "projectScheduling": {
+      "title": "Planification de projets"
+    },
+    "propertyManagement": {
+      "title": "Gestion immobilière"
+    },
+    "queryConsole": {
+      "title": "Console de requêtes"
+    },
+    "scripts": {
+      "title": "Scripts"
+    },
+    "subcontracts": {
+      "title": "Sous-traitance et facturation d’avancement"
+    },
+    "wipBilling": {
+      "title": "Travaux en cours et préfacturation"
     }
   }
 }

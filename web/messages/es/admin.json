@@ -2892,7 +2892,12 @@
         "draftInformationReturns": "{count, plural, one {# declaración informativa en curso} other {# declaraciones informativas en curso}}",
         "unfiledInformationReturns": "{count, plural, one {# declaración finalizada sin presentar} other {# declaraciones finalizadas sin presentar}}"
       },
-      "runWizard": "Ejecutar el asistente de configuración"
+      "runWizard": "Ejecutar el asistente de configuración",
+      "errors": {
+        "blocked": "Esta función no se puede desactivar — sus datos son estructurales para el libro mayor.",
+        "dependency": "Active primero la función requerida: {features}.",
+        "dependents": "Desactive primero la función dependiente: {features}."
+      }
     },
     "bankFeeds": {
       "navTitle": "Feeds bancarios"
@@ -3282,6 +3287,54 @@
     "subcontractorCompliance": {
       "title": "Cumplimiento de subcontratistas",
       "description": "Certificados de seguro, renuncias de gravamen y declaraciones 1099-NEC/MISC y T4A, con retención de pagos cuando la cobertura de un subcontratista caduca."
+    },
+    "advancedClose": {
+      "title": "Gobernanza de cierre avanzado"
+    },
+    "advancedSubscriptions": {
+      "title": "Ciclo de vida avanzado de suscripciones"
+    },
+    "allocations": {
+      "title": "Repartos"
+    },
+    "allocationsAtEntry": {
+      "title": "Repartos al registrar"
+    },
+    "allocationsAtPosting": {
+      "title": "Repartos al contabilizar"
+    },
+    "apiAccess": {
+      "title": "API REST"
+    },
+    "mcpAccess": {
+      "title": "Acceso MCP"
+    },
+    "multiCurrency": {
+      "title": "Multimoneda"
+    },
+    "multiSubsidiary": {
+      "title": "Multifilial"
+    },
+    "payroll": {
+      "title": "Nómina"
+    },
+    "projectScheduling": {
+      "title": "Programación de proyectos"
+    },
+    "propertyManagement": {
+      "title": "Gestión inmobiliaria"
+    },
+    "queryConsole": {
+      "title": "Consola de consultas"
+    },
+    "scripts": {
+      "title": "Scripts"
+    },
+    "subcontracts": {
+      "title": "Subcontratos y facturación de avance"
+    },
+    "wipBilling": {
+      "title": "Trabajo en curso y prefacturación"
     }
   }
 }
