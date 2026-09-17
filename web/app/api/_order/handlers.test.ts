@@ -563,6 +563,7 @@ const mockSources = new Map<string, string>([
   `],
   ['mock:json', `
     export const jsonObject = {}
+    export const assignWarehouseBody = {}
     export async function parseJsonBody(request) {
       try { return { ok: true, data: await request.json() } }
       catch { return { ok: false, response: Response.json({ error: 'invalid JSON' }, { status: 400 }) } }

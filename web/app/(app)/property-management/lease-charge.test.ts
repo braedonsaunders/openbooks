@@ -32,15 +32,26 @@ test('English sources every property-management toast', () => {
 })
 
 for (const locale of LOCALES) {
-  test(`${locale} tracks the property-management toasts as English fallback`, () => {
+  test(`${locale} localizes the property-management toasts or declares a fallback`, () => {
+    const catalog = JSON.parse(readFileSync(join(MESSAGES, locale, 'entities.json'), 'utf8')) as {
+      propertyManagement?: { toasts?: Record<string, string> }
+    }
     const manifest = JSON.parse(readFileSync(join(MESSAGES, 'untranslated-fallbacks.json'), 'utf8')) as {
       fallbacks?: Record<string, string[]>
     }
     const declared = manifest.fallbacks?.[locale] ?? []
     for (const key of TOAST_KEYS) {
+      const path = `entities.propertyManagement.toasts.${key}`
+      const label = catalog.propertyManagement?.toasts?.[key]
+      const translated = Boolean(label && label !== key)
+      const fallback = declared.includes(path)
       assert.ok(
-        declared.includes(`entities.propertyManagement.toasts.${key}`),
-        `${locale} fallback manifest is missing entities.propertyManagement.toasts.${key}`,
+        translated || fallback,
+        `${locale} must translate ${path} or list it in the fallback manifest`,
+      )
+      assert.ok(
+        !(translated && fallback),
+        `${locale} translated ${path} must leave the fallback manifest`,
       )
     }
   })

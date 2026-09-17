@@ -2631,7 +2631,11 @@
       "equipmentUnitId": "Equipment unit",
       "extensionKey": "App",
       "settingKey": "Setting",
-      "reason": "Reason for change"
+      "reason": "Reason for change",
+      "allocatedThrough": "Allocated through",
+      "dateBasis": "Date basis",
+      "unitsTotal": "Total units",
+      "depreciationMethodId": "Depreciation method"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",

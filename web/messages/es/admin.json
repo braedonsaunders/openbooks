@@ -2586,7 +2586,11 @@
       "unionName": "Sindicato",
       "unit": "Unidad",
       "vacationable": "Cuenta para pago de vacaciones",
-      "value": "Valor"
+      "value": "Valor",
+      "allocatedThrough": "Asignado hasta",
+      "dateBasis": "Base de fecha",
+      "unitsTotal": "Unidades totales",
+      "depreciationMethodId": "Método de depreciación"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",

@@ -2631,7 +2631,11 @@
       "equipmentUnitId": "Unidade de equipamento",
       "extensionKey": "App",
       "settingKey": "Definição",
-      "reason": "Motivo da alteração"
+      "reason": "Motivo da alteração",
+      "allocatedThrough": "Alocado até",
+      "dateBasis": "Base de data",
+      "unitsTotal": "Unidades totais",
+      "depreciationMethodId": "Método de depreciação"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",

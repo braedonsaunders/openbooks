@@ -2699,7 +2699,11 @@
       "timeTypeId": "時間種別",
       "tradeId": "職種",
       "trigger": "起因",
-      "unit": "単位"
+      "unit": "単位",
+      "allocatedThrough": "割当済み番号",
+      "dateBasis": "日付基準",
+      "unitsTotal": "総単位数",
+      "depreciationMethodId": "減価償却方法"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",

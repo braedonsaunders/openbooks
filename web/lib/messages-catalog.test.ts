@@ -2750,6 +2750,8 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // extensions rendered English inside otherwise translated screens.
   // Every leaf must exist, keep its ICU placeholders, and differ from
   // English except for reviewed cognates, pinned to the exact term.
+  // F-coord-008 grew the source to 3362 keys (allocatedThrough, dateBasis,
+  // unitsTotal, depreciationMethodId); all four ship translated in zh/pt-BR.
   const identicalByFact = new Set([
     'zh:admin.ai.agents.units.percent|%',
     'zh:admin.backupsManager.table.sha256|SHA-256',
@@ -2868,7 +2870,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3359, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3362, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3204,8 +3206,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3359
-  const ADMIN_I2_SOURCE_HASH = 'f249c44e3a421fdddeb1f20a2670a78e4fafb9b3b7fcceab2e8192edc8e16cb4'
+  const ADMIN_I2_SOURCE_COUNT = 3362
+  const ADMIN_I2_SOURCE_HASH = 'e1cba1a9548eee18229509421de0daf0642869bf212d2c5741b1041dec5845ec'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

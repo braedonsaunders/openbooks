@@ -2699,7 +2699,11 @@
       "timeTypeId": "Zeitart",
       "tradeId": "Gewerk",
       "trigger": "Ausgelöst durch",
-      "unit": "Einheit"
+      "unit": "Einheit",
+      "allocatedThrough": "Zugeteilt bis",
+      "dateBasis": "Datumsbasis",
+      "unitsTotal": "Gesamteinheiten",
+      "depreciationMethodId": "Abschreibungsmethode"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
