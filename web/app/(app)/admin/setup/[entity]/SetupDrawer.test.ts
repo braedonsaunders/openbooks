@@ -75,3 +75,19 @@ test('typed validation failures render their message verbatim (F-t06-023)', () =
   )
   assert.match(source, /errorMessage\(data\)/, 'call sites pass the whole body')
 })
+
+test('server required-field refusals render through the field label (F-t06-022 follow-up)', () => {
+  // A server-side "X is required" still names the registry key: errorMessage
+  // must map it through fields.* into validation.required — the same string
+  // client-side validate() produces — instead of echoing camelCase.
+  assert.match(
+    source,
+    /is required\$\//,
+    'errorMessage must recognize the server required-field shape',
+  )
+  assert.match(
+    source,
+    /t\('validation\.required', \{ field: t\(`fields\./,
+    'server required-field refusals must render through the field label',
+  )
+})

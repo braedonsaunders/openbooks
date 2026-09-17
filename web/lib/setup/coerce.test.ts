@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildRow, coerceField } from './coerce.ts'
+import { buildRow, coerceField, describeDbError } from './coerce.ts'
 import { SETUP_ENTITY_BY_KEY, type SetupField } from './registry.ts'
 
 const countryField: SetupField = { key: 'country', kind: 'country' }
@@ -127,6 +127,46 @@ test('setup date fields reject impossible calendar dates, not just malformed sha
   for (const bad of ['2023-02-29', '2024-02-30', '2024-04-31', '2024-13-01', '2024-00-10', '0000-01-01', 'not-a-date', '2024-1-1']) {
     assert.deepEqual(coerceField(field, bad), { error: 'effectiveFrom must be a date' })
   }
+})
+
+test('blank keepDefault fields fall through to database defaults instead of refusing (F-t06-022)', () => {
+  // keepDefault columns are NOT NULL WITH a database default: the drawer
+  // sends explicit empty strings for untouched inputs, and the server must
+  // omit them (buildRow drops null/undefined) rather than refuse with a
+  // camelCase "X is required" the dialog then echoes.
+  const rate: SetupField = { key: 'acquisitionRate', kind: 'decimal', required: true, keepDefault: true }
+  assert.deepEqual(coerceField(rate, ''), { column: 'acquisition_rate', value: null })
+  assert.deepEqual(coerceField(rate, undefined), { column: 'acquisition_rate', value: null })
+  const nci: SetupField = {
+    key: 'nciMeasurement', kind: 'select', required: true, keepDefault: true,
+    options: [{ value: 'proportionate', labelKey: 'options.nciMeasurement.proportionate' }],
+  }
+  assert.deepEqual(coerceField(nci, ''), { column: 'nci_measurement', value: undefined })
+  // Explicit keepDefault values still bind exactly.
+  assert.deepEqual(coerceField(rate, '1.37'), { column: 'acquisition_rate', value: '1.3700000000' })
+  assert.deepEqual(coerceField(nci, 'proportionate'), { column: 'nci_measurement', value: 'proportionate' })
+  // Non-keepDefault required blanks still refuse — the exemption is narrow.
+  assert.deepEqual(coerceField({ key: 'ownershipPercent', kind: 'percent', required: true }, ''), {
+    error: 'ownershipPercent is required',
+  })
+})
+
+test('database errors never echo SQL text to the client (F-t06-022)', () => {
+  // Drizzle wraps driver failures with the full SQL + params in its own
+  // message; only the driver's cause text (plain Postgres, e.g. a trigger's
+  // user-language refusal) may surface.
+  const refusal = Object.assign(new Error('full consolidation requires goodwill and fair-value adjustment accounts'), { code: 'P0001' })
+  const wrapper = Object.assign(
+    new Error('Failed query: insert into subsidiary_ownership_interests (org_id) values ($1)\nparams: 00000000-0000-0000-0000-000000000000'),
+    { query: 'insert into subsidiary_ownership_interests (org_id) values ($1)', params: ['00000000-0000-0000-0000-000000000000'], cause: refusal },
+  )
+  assert.equal(describeDbError(wrapper), 'full consolidation requires goodwill and fair-value adjustment accounts')
+  // A wrapper with no driver message degrades to generic, never SQL.
+  const bare = Object.assign(new Error('Failed query: insert into t values (1)'), { query: 'insert into t values (1)' })
+  assert.equal(describeDbError(bare), 'save failed')
+  // Mapped constraint codes and plain non-driver errors keep prior behavior.
+  assert.equal(describeDbError(Object.assign(new Error('x'), { code: '23505' })), 'duplicate')
+  assert.equal(describeDbError(new Error('boom')), 'boom')
 })
 
 test('setup booleans accept documented scalar spellings and reject malformed controls', () => {

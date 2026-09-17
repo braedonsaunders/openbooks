@@ -237,6 +237,14 @@ export function SetupDrawer({
     if (code === 'archive-only') return t('errors.archiveOnly')
     if (code === 'invalid-url') return t('errors.invalidUrl')
     if (code === 'invalid-depreciation-formula') return t('errors.invalidDepreciationFormula')
+    // A server-side required-field refusal still names the registry key
+    // (F-t06-022 follow-up): render it through the field label — exactly as
+    // client-side validate() does — instead of leaking camelCase into the
+    // dialog.
+    const missingField = code === 'invalid' && typeof message === 'string'
+      ? /^([A-Za-z][A-Za-z0-9]*) is required$/.exec(message)?.[1]
+      : undefined
+    if (missingField) return t('validation.required', { field: t(`fields.${missingField}`) })
     if (typeof message === 'string' && message) return message
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
