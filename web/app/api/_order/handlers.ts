@@ -6,7 +6,7 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
+import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, exactOrderUnitPrice, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
 import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
@@ -653,6 +653,77 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
       if (e instanceof SalesOrderIssueError) {
         return NextResponse.json(
           { error: e.message, code: e.code, credit: e.details },
+          { status: e.status },
+        )
+      }
+      return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    }
+  }
+}
+
+/**
+ * POST assign-warehouse: set one line's warehouse on an approved order
+ * (F-coord-004). Approved lines are storage-immutable, so legacy orders
+ * approved before line warehouses existed could never gain one and their
+ * fulfillment failed closed with no way forward. Only sales and purchase
+ * orders are wired: quotes never relieve stock. Setting the warehouse
+ * changes no posted amount — it only routes future shipments/receipts.
+ */
+export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
+  return async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
+    if (gate instanceof NextResponse) return gate
+    const { user } = gate
+    const { id } = await params
+    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (cfg.kind !== 'sales_order' && cfg.kind !== 'purchase_order') {
+      return NextResponse.json({ error: 'warehouse assignment applies to sales and purchase orders only' }, { status: 422 })
+    }
+    const parsedBody = await parseJsonBody(req, jsonObject)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data as { lineId?: unknown; stockLocationId?: unknown; expectedUpdatedAt?: unknown }
+    if (typeof body.lineId !== 'string' || !isUuid(body.lineId)) {
+      return NextResponse.json({ error: 'Order line id must be a UUID' }, { status: 422 })
+    }
+    if (typeof body.stockLocationId !== 'string' || !isUuid(body.stockLocationId)) {
+      return NextResponse.json({ error: 'Warehouse must be a UUID' }, { status: 422 })
+    }
+
+    // Scope check: the order must be this kind, in the caller's org, and
+    // inside the caller's subsidiary scope. The engine re-locks the
+    // aggregate and re-checks the revision inside its transaction, so a
+    // row that changes after this probe still cannot be assigned stale.
+    const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    ))
+    const source = owns.rows[0]
+    if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
+    if (denied) return denied
+    if (staleRevision(body.expectedUpdatedAt, source.updated_at)) {
+      return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+    }
+
+    try {
+      await assignOrderLineWarehouse({
+        orgId: user.orgId,
+        userId: user.id,
+        orderId: id,
+        kind: cfg.kind,
+        lineId: body.lineId,
+        stockLocationId: body.stockLocationId,
+        expectedUpdatedAt: typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : '',
+      })
+      const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
+      return NextResponse.json(order)
+    } catch (e) {
+      if (e instanceof ConversionError) {
+        return NextResponse.json(
+          {
+            error: e.message,
+            ...(e.code ? { code: e.code } : {}),
+            ...(e.details !== undefined ? { details: e.details } : {}),
+          },
           { status: e.status },
         )
       }

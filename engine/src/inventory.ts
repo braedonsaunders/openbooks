@@ -131,7 +131,7 @@ function assertMovementOwner(ctx: SubsidiaryContext, subsidiaryId: string): void
  * transferring through a location that does not admit the posting entity is
  * exactly how one subsidiary ends up holding another's goods.
  */
-async function assertStockLocationAdmitsSubsidiary(
+export async function assertStockLocationAdmitsSubsidiary(
   tx: Runner,
   orgId: string,
   ctx: SubsidiaryContext,
@@ -3878,8 +3878,9 @@ export async function loadDocumentInventoryLines(
     const lineLabel = `document line ${row.line_number} (item ${row.item_id})`;
     if (!loc) {
       throw new InventoryError(
-        `${lineLabel}: inventory item requires a stock location; ` +
-          "the organization does not have exactly one active stock location",
+        `${lineLabel}: inventory item requires a stock location and the ` +
+          "organization does not have exactly one active stock location to " +
+          "fall back to; assign a warehouse to the line and retry",
       );
     }
     try {
