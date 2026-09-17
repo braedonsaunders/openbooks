@@ -14,10 +14,10 @@ const catalog = (locale: string, file: string): Record<string, unknown> =>
 // must carry its own title — never the English fallback.
 for (const locale of ['fr', 'es']) {
   test(`F-x6-001: assistant setup heading is translated in ${locale}`, () => {
-    const value = catalog(locale, 'assistant.json').notConfiguredTitle
-    const english = catalog('en', 'assistant.json').notConfiguredTitle
+    const value: unknown = catalog(locale, 'assistant.json').notConfiguredTitle
+    const english: unknown = catalog('en', 'assistant.json').notConfiguredTitle
     assert.equal(typeof value, 'string', `${locale}/assistant.json must define notConfiguredTitle`)
-    assert.ok(value.trim().length > 0, 'title must not be empty')
+    assert.ok((value as string).trim().length > 0, 'title must not be empty')
     assert.notEqual(value, english, 'title must not be the English fallback')
   })
 }
