@@ -84,12 +84,17 @@ export async function SetupEntitySection({
   searchParams: sp,
   basePath,
   canManage,
+  allowedSubsidiaryIds = null,
 }: {
   entity: SetupEntity
   orgId: string
   searchParams: Record<string, string | string[] | undefined>
   basePath: string
   canManage: boolean
+  // Subsidiary-scoped callers only see their vendors in ref pickers (NULL
+  // subsidiary stays org-wide visible) — without this the remittance-vendor
+  // listbox cannot scope its options (F-t08-015).
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -135,7 +140,7 @@ export async function SetupEntitySection({
        order by ${sql.raw(orderExpr(entity))}
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
     (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
-    loadRefOptions(entity, orgId),
+    loadRefOptions(entity, orgId, allowedSubsidiaryIds),
   ])
   const rows = (rowsRes.rows)
   const total = Number(countRes.rows[0]?.n ?? 0)
