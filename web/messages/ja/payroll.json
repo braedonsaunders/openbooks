@@ -1,197 +1,271 @@
 {
-  "openingBalances": {
-    "fields": {
-      "cpp2BonusYtd": "賞与CPP2拠出",
-      "qcCsbYtd": "賞与追加QPP拠出",
-      "ficaWithheldYtd": "源泉徴収FICA税",
-      "qpipEmployerYtd": "雇用主QPIP保険料",
-      "wcbAssessableYtd": "WCB算定対象賃金"
-    }
-  },
-  "checklist": {
-    "incomplete": "未設定の給与管理勘定が {count} 件あります:",
-    "openSettings": "給与設定を開く"
-  },
-  "columns": {
-    "employees": "従業員",
-    "gross": "総支給額",
-    "net": "手取額",
-    "number": "番号",
-    "payDate": "支給日",
-    "period": "期間",
-    "schedule": "スケジュール",
-    "status": "ステータス"
-  },
+  "title": "給与",
   "description": "給与計算、従業員の給与プロファイル、および法定控除。",
-  "empty": {
-    "profiles": "従業員の給与プロファイルはまだありません。追加すると従業員が計算対象になります。",
-    "runs": "給与計算はまだありません。給与スケジュールから作成して開始してください。"
+  "tabs": {
+    "runs": "給与計算",
+    "employees": "従業員 ({count})"
   },
   "home": {
-    "actions": {
-      "remittances": "納付",
-      "resume": "計算を再開",
-      "reviewPost": "確認して転記",
-      "startRun": "給与計算を実行",
-      "viewRuns": "給与計算",
-      "yearEnd": "年末調整"
-    },
-    "current": {
-      "noSchedules": "有効な給与スケジュールがありません。給与処理を開始するにはスケジュールを作成してください。",
-      "title": "今期の給与期間"
-    },
-    "directory": {
-      "employees": "従業員",
-      "employeesHint": "有効な給与プロファイル",
-      "openingBalances": "期首残高",
-      "parallelRun": "並行計算",
-      "retro": "遡及支給",
-      "runs": "給与計算",
-      "runsHint": "処理中 · 合計 {total}",
-      "setup": "給与設定",
-      "setupHint": "管理勘定が未設定",
-      "title": "給与を探索"
-    },
-    "exceptions": {
-      "allClear": "全従業員の給与準備ができています。",
-      "missingProfile": "{name} に給与プロファイルがありません",
-      "missingWage": "{name} に本日有効な賃金レートがありません",
-      "moreMissingProfiles": "給与プロファイルのない従業員が他に {count} 名",
-      "moreMissingWages": "賃金レートのない従業員が他に {count} 名",
-      "title": "要確認"
-    },
-    "frequency": {
-      "biweekly": "隔週",
-      "monthly": "毎月",
-      "semi_monthly": "半月ごと",
-      "weekly": "毎週"
-    },
-    "previous": {
-      "none": "完了した給与計算はまだありません。",
-      "title": "前期の給与期間"
-    },
     "tabs": {
       "overview": "給与",
-      "remittances": "納付",
       "runs": "給与計算",
+      "remittances": "納付",
       "separations": "退職",
+      "yearEnd": "年末調整"
+    },
+    "actions": {
+      "viewRuns": "給与計算",
+      "startRun": "給与計算を実行",
+      "resume": "計算を再開",
+      "reviewPost": "確認して転記",
+      "remittances": "納付",
       "yearEnd": "年末調整"
     },
     "vitals": {
       "employees": "給与対象者",
       "employeesSub": "有効な給与プロファイル",
-      "nextPayDate": "次回支給日",
-      "noSchedule": "有効なスケジュールなし",
-      "periodsOf": "{ran} / {total}",
       "periodsRan": "給与期間 {year}",
+      "periodsOf": "{ran} / {total}",
       "periodsRanSub": "当年に確定した税年度",
-      "ytdEmployerCost": "+{amount} 事業主負担",
       "ytdGross": "年累計総支給額",
+      "ytdEmployerCost": "+{amount} 事業主負担",
       "ytdNet": "年累計手取額",
-      "ytdNetSub": "確定済み計算から"
+      "ytdNetSub": "確定済み計算から",
+      "nextPayDate": "次回支給日",
+      "noSchedule": "有効なスケジュールなし"
+    },
+    "current": {
+      "title": "今期の給与期間",
+      "noSchedules": "有効な給与スケジュールがありません。給与処理を開始するにはスケジュールを作成してください。"
+    },
+    "frequency": {
+      "weekly": "毎週",
+      "biweekly": "隔週",
+      "semi_monthly": "半月ごと",
+      "monthly": "毎月"
+    },
+    "previous": {
+      "title": "前期の給与期間",
+      "none": "完了した給与計算はまだありません。"
+    },
+    "exceptions": {
+      "title": "要確認",
+      "allClear": "全従業員の給与準備ができています。",
+      "missingProfile": "{name} に給与プロファイルがありません",
+      "moreMissingProfiles": "{count, plural, one {給与プロファイルのない従業員が他に # 名} other {給与プロファイルのない従業員が他に # 名}}",
+      "missingWage": "{name} に本日有効な賃金レートがありません",
+      "moreMissingWages": "{count, plural, one {賃金レートのない従業員が他に # 名} other {賃金レートのない従業員が他に # 名}}"
+    },
+    "directory": {
+      "title": "給与を探索",
+      "runs": "給与計算",
+      "runsHint": "処理中 · 合計 {total}",
+      "employees": "従業員",
+      "employeesHint": "有効な給与プロファイル",
+      "setup": "給与設定",
+      "setupHint": "管理勘定が未設定",
+      "openingBalances": "期首残高",
+      "parallelRun": "並行計算",
+      "retro": "遡及支給"
     }
   },
   "list": {
+    "title": "給与計算",
     "description": "すべての給与計算。ステージまたはスケジュールで検索・絞り込み、計算を開いて処理します。",
     "open": "計算を開く",
-    "stageFilter": "ステージ",
-    "title": "給与計算"
+    "stageFilter": "ステージ"
   },
-  "newRun": {
-    "create": "新規給与計算",
-    "description": "この計算の対象期間を確認してください。スケジュールの次期が初期表示されます。臨時・遡及の計算では日付を変更してください。",
-    "employees": "支給対象者",
-    "employeesHint": "最終精算では蓄積されたバンクをすべて払い出して清算するため、ここで指定した従業員のみが対象です。",
-    "invalidWindow": "期間終了は開始日以降、支給日は期間終了日以降である必要があります。",
-    "noSchedules": "有効な給与スケジュールがありません",
-    "noTerminated": "このスケジュールには退職日の登録がある従業員がいません。先に従業員に退職日を登録してください。退職日がないと最終精算は計算できません。",
-    "notBegun": "この期間は {date} 開始で、まだ始まっていません。進行中または完了した期間を選んでください。",
-    "payDateHint": "従業員への支給日。法定料率はこの日から決まります。",
-    "periodEnd": "期間終了",
-    "periodStart": "期間開始",
-    "runType": "計算種別",
-    "runTypeHint": {
-      "bonus": "賞与・歩合の臨時支給。給与・時間・定期控除なし。賞与課税方式で課税されます。",
-      "regular": "通常の定期給与:給与、承認済み時間、定期的な支給・控除項目。",
-      "termination": "退職者の最終精算。蓄積された休暇残高の払い出しを含みます。"
-    },
-    "schedule": "給与スケジュール"
-  },
-  "register": {
-    "cppFica": "CPP / FICA",
-    "otherDeductions": "その他の控除",
-    "print": "印刷",
-    "title": "給与台帳",
-    "totals": "合計 (従業員 {count} 名)"
-  },
-  "remittances": {
-    "apLink": "買掛請求書を開く",
-    "apNote": "納付請求書は通常の仕入請求書です:",
-    "apply": "適用",
-    "assignVendor": "コンポーネント上でベンダーを割り当ててください",
-    "back": "給与",
-    "billCreated": "請求書ドラフト {number} を作成しました。買掛金で確認・転記してください。",
-    "context": "給与総額 {gross} · 期間中の従業員 {employees} 名",
-    "createAnother": "別の請求書を作成",
-    "createBill": "納付請求書を作成",
-    "description": "期間ごとの納付先別の源泉徴収額と事業主負担額。請求書の作成で負債勘定に借方記入し、支払を買掛金に引き渡します。",
-    "dueOn": "納期限 {dueDate} · {authority}",
-    "employer": "事業主",
-    "empty": "この期間に納付対象額のある確定済み計算はありません。",
-    "from": "開始",
-    "noAccount": "負債勘定なし",
-    "title": "給与納付",
-    "to": "終了",
-    "total": "納付合計",
-    "unassigned": "納付先ベンダーが未割当",
-    "withheld": "源泉徴収額"
-  },
-  "run": {
-    "approvalNotRequired": "給与計算に適用される承認ポリシーはありません",
-    "approvalPending": "承認待ち ({count} 件) — 確定と転記はブロックされています",
-    "approvalSubmitted": "証跡パッケージとともに承認に送付しました",
-    "calculate": "計算",
-    "calculateDone": "給与計算が完了しました。",
-    "commit": "確定",
-    "commitDone": "給与計算を確定しました。",
-    "employerCost": "事業主負担",
-    "empty": "明細がありません。計算を実行して生成してください。",
-    "lineKind": {
-      "deduction": "控除",
-      "earning": "支給",
-      "employer_contribution": "事業主"
-    },
-    "post": "転記",
-    "postDone": "給与計算を転記しました。",
-    "printSet": "印刷セット (印刷配布のみ)",
-    "stub": {
-      "employee": "従業員",
-      "lines": "給与明細行",
-      "tax": "税",
-      "trace": "{engine} トレース"
-    },
-    "stubsPrintOnly": "{count} 名は印刷のみでメール送信されていません",
-    "submitApproval": "承認に提出",
-    "title": "給与計算"
-  },
-  "runType": {
-    "bonus": "臨時賞与",
-    "regular": "通常",
-    "termination": "退職精算"
-  },
-  "status": {
-    "calculated": "計算済み",
-    "committed": "確定済み",
-    "draft": "下書き",
-    "posted": "転記済み",
-    "void": "無効"
-  },
-  "tabs": {
-    "employees": "従業員 ({count})",
-    "runs": "給与計算"
-  },
-  "title": "給与",
   "wizard": {
+    "stepsAria": "給与計算の手順",
+    "steps": {
+      "period": "対象範囲",
+      "readiness": "事前確認",
+      "review": "明細を確認",
+      "gl": "総勘定プレビューと確定",
+      "finish": "転記して完了"
+    },
+    "voided": "この給与計算は無効化されており、読み取り専用です。",
+    "stale": {
+      "title": "計算後に条件が変更されました（{reasons}）。確定する前に再計算してください。",
+      "reason": {
+        "adjustments": "調整",
+        "time": "承認済み時間",
+        "wages": "賃金レート",
+        "roster": "従業員プロファイル",
+        "missing": "計算自体",
+        "components": "従業員の支給項目",
+        "componentDefinitions": "支給項目の設定",
+        "derivedRules": "派生支給ルール",
+        "entitlements": "バンク",
+        "workerComp": "労災保険料率",
+        "timeTypes": "勤怠種別の設定",
+        "settings": "給与設定",
+        "ytd": "他の計算の年累計",
+        "openingBalances": "期首残高（繰越）"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# 件がこの計算をブロックしています} other {# 件がこの計算をブロックしています}}",
+      "blockedHint": "計算する前に各項目を解決してください。すべて修正先へリンクしています。",
+      "readyTitle": "計算可能です · {count, plural, one {# 名の従業員} other {# 名の従業員}}",
+      "readyHint": "設定、期間管理、従業員レコードがそろっています。",
+      "warningsHint": "{count, plural, one {# 件} other {# 件}}の確認が必要です。確認して続行してください。",
+      "blockersTitle": "ブロック項目",
+      "warningsTitle": "続行前の確認事項",
+      "acknowledge": "これらの項目を確認し、続行します",
+      "allClear": "ブロックも警告もありません。この計算は計算可能です。",
+      "fix": "解決",
+      "andMore": "+{count} 件",
+      "dryRun": "試算",
+      "dryRunTitle": "試算結果",
+      "dryRunHint": "何も保存されていません。計算を実行すると明細が実際に作成されます。",
+      "codes": {
+        "retro": {
+          "sourceVoided": "この計算が精算する元の期間が無効化されています（{detail}）。",
+          "crossTaxYear": "元の期間が{detail}の法定年度外です。修正申告を行ってください。",
+          "stale": "元の期間の条件が数量化後に変更されました。遡及計算を作り直してください。",
+          "doubleSettled": "同じ期間を精算する別の未確定の遡及計算が既にあります。",
+          "componentRetired": "この計算が支給する支給項目が廃止されています。",
+          "zeroDelta": "この計算では従業員への支給がありません。期間差額がゼロになります。"
+        },
+        "setup": {
+          "pack": "給与カントリーパックがインストールされていません。",
+          "wageExpense": "賃金費用勘定が設定されていません。",
+          "netPay": "手取額未払金勘定が設定されていません。",
+          "laborClearing": "賃金は労務費クリアリングに転記されますが、クリアリング勘定が設定されていません。",
+          "slot": "法定勘定が未割当です：{detail}",
+          "schedule": "有効な給与スケジュールがありません。",
+          "remittanceVendor": "法定納付先ベンダーが未設定です：{detail}",
+          "paymentRail": "設定済みのEFTオリジネータープロファイルがなく、小切手フォールバックもオフのため、支払手段がありません。",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
+        },
+        "period": {
+          "missing": "支給日{detail}を含む会計期間がありません。",
+          "closed": "会計期間{detail}は総勘定元帳への転記が締め切られています。"
+        },
+        "scope": {
+          "empty": "この計算に含まれる従業員がいません。"
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}この期間に有効な賃金レートがありません。",
+          "zeroHours": "{count, plural, one {# 名の時間給従業員に} other {# 名の時間給従業員に}}この期間の承認済み時間がありません。",
+          "paidInPeriod": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}重複する期間ですでに支給されています。",
+          "terminated": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}期間末日以前に退職しています。",
+          "noBankDetails": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}直接入金で支給予定ですが承認済み口座がなく、この計算では小切手で支給されます。",
+          "noSin": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}年末申告用のSIN/SSNが登録されていません。",
+          "eftNoBankDetails": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}直接入金で支給予定ですが承認済み口座がなく、小切手フォールバックもオフのため、支払手段がありません。",
+          "noOpeningBalance": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}前給与システムからの{detail}期首残高がなく、この計算から年間法定上限がゼロから再開します。",
+          "noOpeningComponentYtd": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}年額上限のある{detail}の期首年累計がなく、上限がこの計算からゼロで再開するため、年額上限いっぱいまで2回拠出できる状態です。",
+          "noOpeningEntitlement": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}前給与システムからの残高を持ち越していますが、{detail}の期首残高がありません。この残高を動かす最初の給与計算のため、バンクはゼロから始まります。"
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "法定休日給を計算できません：{detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# 名の従業員の} other {# 名の従業員の}}労働管轄がこの給与計算に対応していません：{detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
+        }
+      }
+    },
+    "funding": {
+      "title": "資金調達",
+      "netPay": "必要な資金",
+      "liabilities": "計上済み負債",
+      "totalCost": "雇用主の総コスト",
+      "accounts": "銀行口座",
+      "leadTime": "{days, plural, =0 {支払日は今日です} one {支払日まであと#営業日} other {支払日まであと#営業日}} · {date}",
+      "payDatePast": "支払日{date}は過ぎています",
+      "short": "必要な{amount}を満たす銀行口座がありません。",
+      "rail": {
+        "eft": "直接入金 ({count, plural, one {#名} other {#名}})",
+        "cheque": "小切手 ({count, plural, one {#名} other {#名}})"
+      }
+    },
+    "period": {
+      "taxYear": "税年度",
+      "employeesTitle": "対象従業員（{count}名）",
+      "hint": "このスケジュールで有効な給与プロファイルを持つ全員。",
+      "calculatedNote": "時間と総支給額は計算済み明細から取得します。",
+      "approvedHours": "承認済み時間",
+      "recalculate": "再計算",
+      "empty": "このスケジュールで有効な給与プロファイルを持つ従業員はまだいません。",
+      "wageMissing": "賃金レートなし",
+      "zeroHours": "時間なし",
+      "ready": "準備完了",
+      "scopeSaved": "計算範囲を保存しました：{count, plural, one {# 名} other {# 名}}。",
+      "allBases": "すべての支給形態",
+      "onlyWithHours": "時間ありのみ",
+      "hideIneligible": "対象外を非表示",
+      "department": "部門",
+      "selectAll": "表示中の従業員をすべて選択",
+      "selectEmployee": "{name}を選択",
+      "selectedCount": "{total}名中{selected}名を選択",
+      "selectedHours": "{hours}時間",
+      "selectedBlocked": "{count, plural, one {選択中の# 名に賃金レートがありません} other {選択中の# 名に賃金レートがありません}}",
+      "applyScope": "選択を適用",
+      "noneMatch": "条件に一致する従業員がいません。",
+      "noWage": "賃金レートなし",
+      "paidInPeriod": "支給済み",
+      "terminated": "退職済み",
+      "excluded": "除外",
+      "included": "対象",
+      "runType": "計算種別",
+      "continue": "事前確認へ進む",
+      "dimension": {
+        "all": "すべて",
+        "department": "部門",
+        "trade": "職種",
+        "job_title": "役職",
+        "subsidiary": "法人",
+        "payment_method": "支給方法"
+      }
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# 件の計算例外} other {# 件の計算例外}}",
+      "varianceFlag": "{count, plural, one {# 件の明細} other {# 件の明細}}で手取額が前回明細から±{percent}%超変動しました。確定前に確認してください。",
+      "varianceColumn": "Δ 手取額",
+      "newEmployee": "初回明細",
+      "needsCalculation": "計算を実行して明細を生成してください。確定するまで金額は編集できます。",
+      "drawerDescription": "この明細の支給行と法定計算トレース。",
+      "drawerVariance": "手取額が前回明細から{percent}%変動しました。",
+      "downloadPdf": "PDFをダウンロード",
+      "close": "閉じる",
+      "registerTitle": "台帳プレビュー",
+      "selectAll": "すべての明細を選択",
+      "selectedCount": "{count, plural, one {# 件選択中} other {# 件選択中}}",
+      "bulkEdit": "選択分を編集",
+      "bulkDescription": "この計算の{count, plural, one {# 名} other {# 名}}に1つの支給項目額を適用します。",
+      "bulkApply": "{count, plural, one {# 名} other {# 名}}に適用",
+      "changedColumn": "変更",
+      "noChange": "変更なし",
+      "changedTitle": "{date}以降の変更",
+      "noChangeDetail": "前回明細からの変更はありません。",
+      "changedTotals": "前回明細比：手取額{net} · 時間{hours}。",
+      "changeKind": {
+        "added": "新規",
+        "removed": "削除",
+        "changed": "変更"
+      },
+      "protectionShortfallTitle": "{count, plural, one {# 件の明細で保護控除を全額控除できませんでした} other {# 件の明細で保護控除を全額控除できませんでした}}",
+      "protectionShortfallHint": "保護対象支給額の上限により控除が制限されました。未払残高は未払いのままです。債権者に連絡するか、次回計算に繰り越してください。"
+    },
+    "gl": {
+      "needsCalculation": "計算を実行して総勘定元帳への影響をプレビューしてください。",
+      "setupIncomplete": "給与設定が未完了です",
+      "openSetup": "勘定と転記設定を開く",
+      "retry": "再試行",
+      "loading": "総勘定プレビューを作成中…",
+      "hint": "確定時に書き込む仕訳です。借方を先に、続けて貸方を表示します。この段階では何も転記されません。",
+      "account": "勘定",
+      "description": "説明",
+      "debits": "借方",
+      "credits": "貸方",
+      "balanced": "貸借一致",
+      "staleBlocked": "確定する前に計算をやり直してください。",
+      "commitHint": "確定すると明細が凍結され、この明細行が給与計算書類に書き込まれます。転記するまで確認は可能です。"
+    },
     "finish": {
       "notCommitted": "転記する前に総勘定元帳ステップでその処理をコミットしてください。",
       "postTitle": "転記可能です",
@@ -214,23 +288,26 @@
       "printStubs": "全明細を印刷",
       "register": "給与台帳",
       "emailStubs": "明細をメール送信",
-      "stubsEmailed": "{sent}件の明細をメール送信しました。",
+      "stubsEmailed": "{sent, plural, one {# 件の明細をメール送信しました。} other {# 件の明細をメール送信しました。}}",
       "stubsEmailedPartial": "{sent}件送信済み。スキップ（メールアドレスなし／失敗）:{skipped}",
-      "printCheques": "{count}枚の小切手を印刷"
+      "printCheques": "{count, plural, one {# 枚の小切手を印刷} other {# 枚の小切手を印刷}}"
     },
-    "funding": {
-      "title": "資金調達",
-      "netPay": "必要な資金",
-      "liabilities": "計上済み負債",
-      "totalCost": "雇用主の総コスト",
-      "accounts": "銀行口座",
-      "leadTime": "{days, plural, =0 {支払日は今日です} one {支払日まであと#営業日} other {支払日まであと#営業日}} · {date}",
-      "payDatePast": "支払日{date}は過ぎています",
-      "short": "必要な{amount}を満たす銀行口座がありません。",
-      "rail": {
-        "eft": "直接入金 ({count, plural, one {#名} other {#名}})",
-        "cheque": "小切手 ({count, plural, one {#名} other {#名}})"
-      }
+    "adjust": {
+      "title": "調整",
+      "applied": "調整を適用しました。明細を再計算しました。",
+      "excludedLabel": "この計算から除外：",
+      "include": "含める",
+      "exclude": "この計算から除外",
+      "component": "支給項目",
+      "amount": "金額",
+      "note": "理由・メモ（任意）",
+      "replace": "計算行を置き換える",
+      "replaceHelp": "加算ではなく、この支給項目の計算行を置き換えます",
+      "add": "調整を追加",
+      "remove": "削除",
+      "replaces": "計算値を置換",
+      "earnings": "支給",
+      "deductions": "控除"
     },
     "bankFile": {
       "title": "直接入金",
@@ -277,24 +354,1001 @@
         "default": "銀行口座未登録 — 小切手で支払い",
         "eftFallback": "EFTに設定されていますが承認済み口座がありません — 小切手で支払い"
       }
-    },
-    "steps": {
-      "finish": "転記して完了",
-      "gl": "総勘定プレビューと確定",
-      "period": "対象範囲",
-      "readiness": "事前確認",
-      "review": "明細を確認"
     }
   },
+  "links": {
+    "paySchedules": "給与スケジュール",
+    "payComponents": "支給項目"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {未設定の給与管理勘定が # 件あります:} other {未設定の給与管理勘定が # 件あります:}}",
+    "openSettings": "給与設定を開く"
+  },
+  "runType": {
+    "regular": "通常",
+    "bonus": "臨時賞与",
+    "termination": "退職精算"
+  },
+  "newRun": {
+    "runType": "計算種別",
+    "runTypeHint": {
+      "regular": "通常の定期給与:給与、承認済み時間、定期的な支給・控除項目。",
+      "bonus": "賞与・歩合の臨時支給。給与・時間・定期控除なし。賞与課税方式で課税されます。",
+      "termination": "退職者の最終精算。蓄積された休暇残高の払い出しを含みます。"
+    },
+    "employees": "支給対象者",
+    "employeesHint": "最終精算では蓄積されたバンクをすべて払い出して清算するため、ここで指定した従業員のみが対象です。",
+    "noTerminated": "このスケジュールには退職日の登録がある従業員がいません。先に従業員に退職日を登録してください。退職日がないと最終精算は計算できません。",
+    "schedule": "給与スケジュール",
+    "noSchedules": "有効な給与スケジュールがありません",
+    "create": "新規給与計算",
+    "description": "この計算の対象期間を確認してください。スケジュールの次期が初期表示されます。臨時・遡及の計算では日付を変更してください。",
+    "periodStart": "期間開始",
+    "periodEnd": "期間終了",
+    "payDateHint": "従業員への支給日。法定料率はこの日から決まります。",
+    "invalidWindow": "期間終了は開始日以降、支給日は期間終了日以降である必要があります。",
+    "notBegun": "この期間は {date} 開始で、まだ始まっていません。進行中または完了した期間を選んでください。"
+  },
+  "columns": {
+    "number": "番号",
+    "schedule": "スケジュール",
+    "period": "期間",
+    "payDate": "支給日",
+    "status": "ステータス",
+    "gross": "総支給額",
+    "net": "手取額",
+    "employees": "従業員"
+  },
+  "status": {
+    "draft": "下書き",
+    "calculated": "計算済み",
+    "committed": "確定済み",
+    "posted": "転記済み",
+    "void": "無効"
+  },
+  "empty": {
+    "runs": "給与計算はまだありません。給与スケジュールから作成して開始してください。",
+    "profiles": "従業員の給与プロファイルはまだありません。追加すると従業員が計算対象になります。"
+  },
+  "run": {
+    "title": "給与計算",
+    "employerCost": "事業主負担",
+    "calculate": "計算",
+    "commit": "確定",
+    "post": "転記",
+    "calculateDone": "給与計算が完了しました。",
+    "commitDone": "給与計算を確定しました。",
+    "postDone": "給与計算を転記しました。",
+    "empty": "明細がありません。計算を実行して生成してください。",
+    "lineKind": {
+      "earning": "支給",
+      "deduction": "控除",
+      "employer_contribution": "事業主"
+    },
+    "stub": {
+      "employee": "従業員",
+      "tax": "税",
+      "lines": "給与明細行",
+      "trace": "{engine} トレース"
+    },
+    "submitApproval": "承認に提出",
+    "approvalSubmitted": "証跡パッケージとともに承認に送付しました",
+    "approvalNotRequired": "給与計算に適用される承認ポリシーはありません",
+    "approvalPending": "承認待ち ({count} 件) — 確定と転記はブロックされています",
+    "printSet": "印刷セット (印刷配布のみ)",
+    "stubsPrintOnly": "{count} 名は印刷のみでメール送信されていません"
+  },
+  "profiles": {
+    "addEmployee": "プロファイル未登録の従業員",
+    "new": "プロファイルを追加",
+    "saved": "プロファイルを保存しました。",
+    "editorDescription": "この従業員のTD1情報、スケジュール、控除申告、休暇ポリシー。",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "active": "有効",
+    "inactive": "無効",
+    "columns": {
+      "employee": "従業員",
+      "schedule": "スケジュール",
+      "province": "州",
+      "basis": "支給形態",
+      "claims": "申告額（連邦／州）",
+      "vacation": "休暇",
+      "status": "ステータス"
+    },
+    "basis": {
+      "hourly": "時間給",
+      "salary": "固定給"
+    },
+    "vacation": {
+      "accrue": "積立",
+      "pay_each_period": "毎期支給"
+    },
+    "fields": {
+      "schedule": "給与スケジュール",
+      "province": "勤務州（カナダ）",
+      "labourJurisdiction": "労働管轄",
+      "payBasis": "支給形態",
+      "additionalTax": "期ごとの追加税額",
+      "federalClaimCode": "連邦申告コード",
+      "federalClaimAmount": "連邦申告額",
+      "provincialClaimCode": "州申告コード",
+      "provincialClaimAmount": "州申告額",
+      "claimAmountHint": "申告コードより優先されます",
+      "vacationPercent": "休暇率",
+      "vacationMethod": "休暇方式",
+      "cppExempt": "CPP適用除外",
+      "eiExempt": "EI適用除外",
+      "taxExempt": "所得税適用除外",
+      "isActive": "有効",
+      "country": "国",
+      "state": "勤務州（米国）",
+      "filingStatus": "申告ステータス（W-4 Step 1c）",
+      "dependentCredits": "扶養等の控除（年額、W-4 Step 3）",
+      "otherIncomeAnnual": "その他所得（年額、W-4 Step 4a）",
+      "deductionsAnnual": "控除額（年額、W-4 Step 4b）",
+      "multipleJobs": "複数勤務・配偶者の就労あり（W-4 Step 2）",
+      "w4Pre2020": "登録のW-4は2019年以前の様式",
+      "w4Allowances": "源泉控除額（2019年以前のW-4）",
+      "ficaExempt": "FICA適用除外",
+      "futaExempt": "FUTA/SUI適用除外",
+      "fitExempt": "連邦所得税適用除外（W-4の「Exempt」）",
+      "sin": "SIN / SSN",
+      "sinPlaceholder": "9桁。暗号化して保存し、再表示しません。",
+      "filingAccount": "申告用口座",
+      "stubDelivery": "明細の配布方法",
+      "paymentMethod": "支給方法"
+    },
+    "country": {
+      "CA": "カナダ",
+      "US": "アメリカ合衆国"
+    },
+    "filingStatus": {
+      "single": "独身または夫婦個別申告",
+      "married_joint": "夫婦合算申告",
+      "head_household": "世帯主申告"
+    },
+    "loading": "給与プロファイルを読み込み中…",
+    "loadFailed": "給与プロファイルを読み込めませんでした。",
+    "noSchedules": "給与プロファイルを設定する前に給与スケジュールを作成してください。",
+    "openSchedules": "給与スケジュールを開く",
+    "filingAccountDefault": "既定口座",
+    "stubDelivery": {
+      "email": "メール",
+      "print": "印刷",
+      "both": "メールと印刷"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "勤務州の管轄に従う",
+      "help": "この雇用に適用される労働基準を定める労働管轄 — 法定休日カレンダーと休日給の計算式が決まります。「勤務州の管轄に従う」のままでほとんどの雇用に適合します。連邦規制業種の登録雇用主など、別の労働管轄の規制を受ける場合のみ設定してください。源泉徴収は変わらず勤務州に従います。"
+    },
+    "paymentMethod": {
+      "eft": "直接入金",
+      "cheque": "小切手",
+      "help": "この従業員への支給方法。口座未登録者への小切手支給など、他の従業員と異なる場合を除き、従業員既定のままにしてください。給与計算は支給日を2つの経路に分けてそれぞれ資金手当てします。",
+      "inherit": "従業員既定を使用"
+    }
+  },
+  "setupWizard": {
+    "cta": {
+      "title": "給与を設定",
+      "description": "ガイド付きの初回設定：カントリーパック、管理勘定、給与スケジュール、納付先ベンダー、支給経路 — 給与計算が計算前に検証する項目と同じです。",
+      "start": "給与を設定",
+      "relaunch": "設定ウィザード",
+      "missing": "{count, plural, one {未設定の必須項目があと# 件あります} other {未設定の必須項目があと# 件あります}}。"
+    },
+    "back": "戻る",
+    "next": "次へ",
+    "close": "閉じる",
+    "finish": "設定を完了",
+    "packs": {
+      "title": "カントリーパックをインストール",
+      "description": "パックは1つの法域の法定エンジンです：源泉徴収計算、支給項目、休日、申告を含みます。",
+      "note": "パックのインストールにより法定支給項目が初期登録され、その法域の源泉徴収エンジンが有効になります。既存の項目は上書きされず、パックはこのウィザードの再実行で後から追加できます。"
+    },
+    "accounts": {
+      "title": "管理勘定",
+      "description": "賃金と手取額の転記先、およびインストール済みパックが宣言する法定源泉徴収ごとの負債勘定。",
+      "wageExpenseHelp": "給与計算の確定時に総支給賃金を借方記入する費用勘定。",
+      "netPayHelp": "支給日の資金が銀行から出るまで手取額を貸方記入する負債勘定。",
+      "slotHelp": "納付まで法定源泉徴収額を計上する負債勘定。"
+    },
+    "schedule": {
+      "title": "給与スケジュール",
+      "description": "支給カレンダー：支給頻度と、周期の基準となる期間末日。",
+      "addAnother": "別のスケジュールを作成",
+      "created": "給与スケジュール「{name}」を作成しました。",
+      "name": "名称",
+      "nameHelp": "計算や従業員プロファイルでの表示名 — 例：「隔週 — 全員」。",
+      "namePlaceholder": "隔週 — 全員",
+      "frequency": "頻度",
+      "frequencyHelp": "このカレンダーの支給頻度。年間期数は頻度ごとの法定表に従います。",
+      "periods": "年間期数",
+      "periodsHelp": "源泉徴収エンジンが年換算に用いる法定の期数 — 毎週52、隔週26、半月24、毎月12。",
+      "anchor": "基準期間末日",
+      "anchorHelp": "このカレンダー上の実在する期間末日のいずれか。他のすべての期間はここから前後に算出されます。",
+      "noPermission": "給与スケジュールの作成には設定権限が必要です。給与スケジュールタブで管理者に作成を依頼してから続行してください。"
+    },
+    "vendors": {
+      "title": "納付先ベンダー",
+      "description": "インストール済みパックが宣言する法定納付先ごとのベンダー。",
+      "help": "源泉徴収額はこのベンダーに対して計上され、納付時に当局への通常の未払金が立ちます。",
+      "note": "ベンダーは通常のベンダーレコードです。未登録の場合は先に取引先 → ベンダーで当局を作成してから選択してください。"
+    },
+    "rails": {
+      "title": "支給経路",
+      "description": "支給日の手取額の銀行からの出し方：直接入金ファイルと、EFT予定者に口座がない場合の扱い。",
+      "eftTitle": "EFTオリジネータープロファイル",
+      "eftNone": "給与対応のオリジネータープロファイルはまだありません。直接入金ファイルには必要です。設定されるまで従業員には小切手で支給します。",
+      "needsConfig": "オリジネーター情報が未設定",
+      "manageProfiles": "支払業務でオリジネータープロファイルを管理"
+    },
+    "review": {
+      "title": "確認して完了",
+      "description": "この組織の給与設定の現状と、給与計算がまだ停止する条件。",
+      "packsLabel": "カントリーパック",
+      "scheduleLabel": "給与スケジュール",
+      "remainingTitle": "未解決の項目",
+      "allClear": "必要な設定はすべてそろっています。給与計算を計算できます。",
+      "seedNote": "完了時に各インストール済みパックの法定項目シードを再実行します — 冪等であり、既存の項目は上書きされません。"
+    },
+    "applying": {
+      "title": "給与設定を完了しています…",
+      "description": "法定支給項目を初期登録しています。"
+    },
+    "done": {
+      "title": "給与の準備ができました",
+      "description": "従業員と給与プロファイルを追加し、最初の計算を開始してください。"
+    }
+  },
+  "settingsPage": {
+    "title": "給与",
+    "description": "給与カントリーパックのインストール、転記勘定の設定、給与スケジュール・支給項目・労働協約の管理。",
+    "saved": "保存しました。",
+    "save": "保存",
+    "accounts": {
+      "title": "管理勘定",
+      "description": "賃金、事業主負担、手取額の転記先。法定源泉徴収の勘定は下のインストール済みカントリーパックごとに設定します。"
+    },
+    "posting": {
+      "title": "転記",
+      "description": "時間連動賃金の元帳への計上方法と、法定源泉徴収の納付先。"
+    },
+    "wagesTo": {
+      "expense": "賃金費用（プロジェクト配賦あり）",
+      "laborClearing": "労務費クリアリング（標準原価の洗い替え）",
+      "help": "労務費クリアリングは勤怠承認時に計上した標準原価を洗い替えます。労務費計算の設定にある労務費クリアリング管理勘定が必要です。"
+    },
+    "fields": {
+      "wageExpenseAccountId": "賃金費用",
+      "burdenExpenseAccountId": "事業主負担費用",
+      "netPayAccountId": "手取額未払金",
+      "cppPayableAccountId": "CPP未払金",
+      "eiPayableAccountId": "EI未払金",
+      "taxPayableAccountId": "所得税未払金",
+      "vacationPayableAccountId": "休暇給未払金",
+      "wagesTo": "賃金の転記先",
+      "craRemittancePartyId": "CRA納付ベンダー",
+      "rqRemittancePartyId": "Revenu Québec納付ベンダー",
+      "rqRemittancePartyIdHelp": "様式TPZ-1015.Rでケベック州源泉控除を納付する請求先ベンダー — ケベック州従業員のQPP・QPP2・QPIPはこちらに計上し、CRAベンダーには計上しません。"
+    },
+    "tabsAria": "給与設定セクション",
+    "groups": {
+      "foundations": "基盤",
+      "earnings": "支給と賃金",
+      "entitlements": "バンクと付与",
+      "payday": "支給日"
+    },
+    "payday": {
+      "eftTitle": "EFTと銀行ファイル",
+      "eftDescription": "直接入金ファイルは給与対応のオリジネータープロファイルから作成します。プロファイルは支払業務で管理します。このパネルでは状態を確認できます。",
+      "eftNone": "給与対応のオリジネータープロファイルはまだありません。設定されるまで直接入金の従業員は小切手フォールバックに依存します。",
+      "eftManage": "支払業務でオリジネータープロファイルを管理",
+      "eftNeedsConfig": "オリジネーター情報が未設定"
+    },
+    "tabs": {
+      "packs": "カントリーパック",
+      "accounts": "勘定と転記",
+      "schedules": "給与スケジュール",
+      "components": "支給項目",
+      "union": "労働組合",
+      "filing": "申告用口座",
+      "entitlements": "付与プラン",
+      "limits": "バンク上限",
+      "service": "勤続スケジュール",
+      "derived": "派生支給",
+      "derivedPreview": "ルールプレビュー",
+      "holidays": "休日",
+      "holidayCalendar": "休日カレンダー",
+      "payday": "支給日",
+      "rates": "法定料率",
+      "workSchedules": "勤務スケジュール"
+    },
+    "packs": {
+      "installed": "インストール済み",
+      "install": "パックをインストール",
+      "reinstall": "項目シードを再実行",
+      "installSuccess": "カントリーパックをインストールしました。",
+      "componentCount": "{count, plural, one {法定支給項目# 件をインストール} other {法定支給項目# 件をインストール}}",
+      "hint": "パックのインストールにより法定支給項目が初期登録され、その法域の源泉徴収エンジンが有効になります。既存の項目は上書きされません。",
+      "canada": {
+        "title": "カナダ",
+        "description": "カナダの給与計算・納付・年末調整のための法定源泉徴収。",
+        "edition": "{edition, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}版（発効：{effective}）",
+        "engine": "CRA T4127法定エンジン —",
+        "coverage": "全州・準州に対応。ケベック州：QPP・QPIP、連邦および州所得税の源泉徴収を含みます。州所得税はRevenu Québecが管理します。",
+        "components": "法定支給項目：基本給、残業代、賞与、休暇給、所得税、CPP、EI、QPIP。",
+        "verified": "CRA PDOCと1セント単位で一致することを検証済み。"
+      },
+      "us": {
+        "title": "アメリカ合衆国",
+        "description": "米国給与計算の連邦法定源泉徴収：所得税、社会保障税、メディケア税、失業保険税。",
+        "engine": "IRS Pub 15-Tパーセンテージ法エンジン（2026年版、W-4 Step 2〜4および2019年以前の控除額に対応）。",
+        "coverage": "対応49州：課税エンジン40州と非課税9州（AK、FL、NV、NH、SD、TN、TX、WA、WY）。DCとNMは公式ゴールデン待ちのため対象外です。",
+        "components": "法定支給項目：連邦所得税、社会保障税、メディケア税（追加メディケア税含む）、FUTA、SUI。",
+        "config": "SUI料率と賃金基礎額は事業主ごとに経験料率で決まります。勘定と転記で入力してください。"
+      },
+      "uninstall": "アンインストール",
+      "uninstallTitle": "カントリーパックのアンインストール",
+      "uninstallConfirm": "このパックの法定支給項目を削除し、源泉徴収エンジンを無効にしますか？従業員や給与レコードがパックに依存している間はアンインストールできません。",
+      "uninstallSuccess": "カントリーパックをアンインストールしました。",
+      "taxYears": "法定表の搭載年",
+      "taxYearDraft": "{year} · 下書き（未転記）",
+      "taxYearNone": "法定表が未搭載"
+    },
+    "packAccounts": {
+      "none": "給与カントリーパックがまだインストールされていないため、設定する法定源泉徴収勘定がありません。",
+      "installLink": "カントリーパックをインストール",
+      "CA": {
+        "title": "カナダ — CRA法定勘定",
+        "description": "CRAパックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
+        "slots": {
+          "income_tax": "所得税未払金",
+          "qc_income_tax": "ケベック州所得税未払金（Revenu Québec）",
+          "cpp": "CPP未払金（CPP2含む）",
+          "ei": "EI未払金",
+          "qpip": "QPIP未払金（ケベック州）",
+          "vacation": "休暇給未払金",
+          "wcb": "労災保険料未払金（WCB/WSIB）",
+          "eht": "雇用主医療税未払金"
+        }
+      },
+      "US": {
+        "title": "アメリカ合衆国 — 連邦法定勘定",
+        "description": "米国パックが源泉徴収・計上する金額の負債勘定。各選択は対象項目の従業員負担・事業主負担の両方に適用されます。",
+        "slots": {
+          "fit": "連邦所得税未払金",
+          "fica": "FICA未払金（社会保障税＋メディケア税）",
+          "futa": "FUTA未払金",
+          "suta": "州失業保険税未払金",
+          "state_income_tax": "州所得税未払金",
+          "local_income_tax": "地方所得税未払金"
+        }
+      },
+      "ratesLink": "事業主が入力する料率 — 失業保険税、医療負担金 — は法定料率タブにあります。"
+    },
+    "usConfig": {
+      "title": "失業保険料率",
+      "description": "FUTAと州失業保険税は事業主負担です。SUI料率は事業主ごとに経験料率で決まるため、ここで入力し、推定値は使いません。",
+      "futaRate": "実効FUTA料率",
+      "futaRateHelp": "小数で入力：0.006は全額州控除後の標準0.6%です。クレジット削減州では引き上げてください。",
+      "suiTitle": "州失業保険（SUI）",
+      "suiHelp": "雇用する州ごとに行を追加：査定料率を小数で（0.027 = 2.7%）、州の課税賃金基礎額とともに。",
+      "suiState": "州",
+      "suiRate": "料率",
+      "suiWageBase": "賃金基礎額",
+      "addState": "州を追加",
+      "removeState": "削除"
+    },
+    "caConfig": {
+      "title": "事業主負担の給与税",
+      "description": "CAパックが毎回の計算で計上する事業主負担税：労災保険料とオンタリオ州雇用主医療税。",
+      "ehtEnabled": "オンタリオ州雇用主医療税（EHT）を計上",
+      "ehtRate": "EHT料率（%）",
+      "ehtRateHelp": "百分率で入力：1.95はオンタリオ州の上限料率です。料率はオンタリオ州給与総額により決まります。",
+      "ehtExemption": "年額免除額",
+      "ehtExemptionHelp": "毎年免除されるオンタリオ州報酬額（対象の民間事業主の多くは$1,000,000。関連事業主は1つの免除額を共有）。",
+      "wcbNote": "労災保険（WCB/WSIB）の料率と年間算定上限は、人事設定の労災グループで料率区分ごとに設定します。"
+    },
+    "stubPassword": {
+      "title": "メール送信明細のパスワード",
+      "description": "メール送信する給与明細を暗号化し、従業員への周知ルールからパスワードを生成します。",
+      "enabled": "メール送信明細を暗号化",
+      "unavailable": "このサーバーではPDF暗号化を利用できません — qpdfツールがインストールされていません。",
+      "expression": "パスワードルール",
+      "expressionHelp": "トークン：{surname}、{givenName}、{employeeNumber}（:3で最初の3文字）と{dob}（書式MMDDYYYY、DDMMYYYY、YYYYMMDD、MMDDYY、DDMMYY、YYMMDD、MMDD、YYYY）。大文字小文字の変換は|upperまたは|lower。例：{surname:3|upper}{dob:MMDDYYYY}。"
+    },
+    "derivedPreview": {
+      "title": "派生支給ルールをプレビュー",
+      "description": "有効化前に、ルールの対象従業員・対象日と支給額を確認できます。",
+      "rule": "ルール",
+      "selectRule": "ルールを選択…",
+      "from": "期間開始",
+      "to": "期間終了",
+      "noRules": "派生支給ルールはまだ設定されていません。",
+      "pickRule": "ルールを選んで期間をプレビューしてください。",
+      "enabled": "有効",
+      "disabled": "まだ有効化されていません",
+      "employeesPaid": "支給対象者",
+      "employee": "従業員",
+      "jobTitle": "役職",
+      "day": "日",
+      "project": "ジョブ",
+      "quantity": "数量",
+      "amount": "金額",
+      "total": "合計",
+      "empty": "このルールは選択期間に何も支給しません。",
+      "grossEstimated": "このルールは総支給額の一定割合を支給します。プレビューは承認済み時間と適用賃金から総支給額を見積もります。給与計算の計算結果が正式です。",
+      "excludedTitle": "役職による除外",
+      "excludedDescription": "この従業員はルールの除外リストにより対象外です — 覚えておく必要のなくなった除外設定です。",
+      "coverageTitle": "このルールはまだ当月を確定できません",
+      "coverageBody": "精算対象月の設備利用料の一部に、どのオペレーターが運転したか記録がなく、奨励金の支給先を特定できません。計上分だけで支給すると過少支給になるため、支給を見送ります。それらの利用料にオペレーターを記録するか、対象外となるようルールを狭めてください。",
+      "coverageUnattributed": "オペレーター不明の利用料"
+    },
+    "paymentMethods": {
+      "title": "賃金の支給方法",
+      "description": "承認済み口座のない従業員には小切手で支給します。直接入金予定者に口座がない場合の扱いを決めます。",
+      "fallback": "直接入金情報がない場合は小切手で支給",
+      "fallbackOn": "計算は続行し、従業員は小切手一括分に含まれ、事前確認ステップに警告が表示されます。",
+      "fallbackOff": "従業員に承認済み口座が登録されるか、小切手に切り替えるまで計算はブロックされます。"
+    },
+    "holidayCalendar": {
+      "title": "法定休日カレンダー",
+      "description": "この管轄が定める休日に独自の選択を適用した一覧。法定休日はカントリーパック由来で無効化できません。任意休日・会社休日は休日タブで設定します。",
+      "jurisdiction": "管轄",
+      "year": "年",
+      "citation": "出典",
+      "date": "適用日",
+      "holiday": "休日",
+      "statutoryDate": "当日",
+      "source": "出典",
+      "paid": "有給",
+      "statutory": "法定",
+      "elected": "任意 — 選択",
+      "company": "会社",
+      "yes": "はい",
+      "unpaid": "無給休業",
+      "empty": "この年は適用される休日がありません。",
+      "noMandate": "この管轄は法定休日給を義務付けていないため、カレンダーは休業と稼働日の計算にのみ使われます。自社ポリシーによる有給休暇は別途可能です。",
+      "payRule": "休日給の計算方法",
+      "regularWages": "通常賃金",
+      "overtime": "残業代",
+      "vacationPay": "休暇給",
+      "priorHolidayPay": "過去の休日給",
+      "workSchedules": "勤務スケジュール",
+      "normalDay": "記録された勤務スケジュールによる通常勤務1日分の賃金",
+      "normalDayStandardHours": "管轄の標準時間を満たす従業員については、",
+      "normalDayOtherwise": "それ以外の場合",
+      "beforeTheDay": "休日の前",
+      "beforeTheWeek": "休日週の前",
+      "daysWorked": "その期間の勤務日数",
+      "daysWorkedOrEarned": "勤務日または賃金が発生した日数",
+      "daysEntitledToPay": "支給済みまたは支給対象の日数"
+    },
+    "statHolidayPay": {
+      "title": "法定休日給",
+      "description": "従業員の管轄が定める計算式で、毎回の給与計算で法定休日給と休日勤務割増を計算します。計算式の定めがない管轄の従業員は、期間内に休日がある場合に氏名付きで計算不可となります。",
+      "enabled": "法定休日給を計算"
+    },
+    "rates": {
+      "title": "法定料率",
+      "description": "刊行物にない料率、または地域・登録口座ごとに当局が定める料率。その他 — 税率表、拠出上限、控除額 — はカントリーパック由来でここでは編集できません。",
+      "noPacks": "事業主入力の法定料率を宣言するインストール済みカントリーパックがありません。カントリーパックタブでインストールしてください。",
+      "tablesLoaded": "法定表の搭載年",
+      "draftEdition": "下書き（未転記）",
+      "notLoaded": "未搭載",
+      "year": "税年度",
+      "yearHelp": "法定料率は税年度ごとに割り当てます — 州の料率通知、クレジット削減の決定、州の免除など。ある年に登録した料率が他の年の給与計算に適用されることはありません。",
+      "add": "料率を追加",
+      "remove": "削除",
+      "empty": "この年の法定料率は登録されていません。",
+      "gapsTitle": "この年は未設定",
+      "allAccounts": "すべての口座",
+      "regionHelp": "料率が適用される地域。ある地域に登録した料率が他の地域に適用されることはありません。",
+      "accountHelp": "この料率は登録口座に割り当てます。同一地域に2つの口座を持つ事業主は2つの料率を持ちます。地域内の全口座に同じ値を使う場合はすべての口座のままにしてください。",
+      "scope": {
+        "org": "事業主全体",
+        "region": "地域ごと",
+        "subRegion": "課税地域ごと",
+        "account": "申告口座ごと"
+      },
+      "columns": {
+        "levy": "料率",
+        "scope": "範囲",
+        "region": "地域",
+        "subRegion": "課税地域",
+        "account": "申告用口座",
+        "values": "値",
+        "country": "カントリーパック"
+      },
+      "subRegionHelp": "地域内の課税地域 — ペンシルベニア州PSDコード、オハイオ州の市町村、ミシガン州の市など。地域ごとに料率が異なるため個別に登録します。料率未登録の地域は、源泉徴収ゼロとせず、従業員名を示して給与計算を停止します。"
+    },
+    "workSchedules": {
+      "title": "勤務スケジュール",
+      "description": "各従業員の通常の勤務時間・勤務日。いくつもの管轄がここから法定休日給を計算します — 通常勤務1日分の賃金 — スケジュール未登録者の8時間日を仮定せず、計算を停止します。",
+      "add": "新規スケジュール",
+      "editTitle": "勤務スケジュール",
+      "drawerDescription": "開始日から置換・終了まで適用されます。過去期間の休日給は、当時適用されていたパターンで常に解決され、今日のパターンでは解決されません。",
+      "empty": "勤務スケジュールはまだありません。",
+      "columns": {
+        "appliesTo": "適用対象",
+        "pattern": "パターン",
+        "effectiveFrom": "適用開始",
+        "status": "ステータス"
+      },
+      "scope": {
+        "organization": "全員",
+        "employee": "従業員1名",
+        "jobTitle": "役職",
+        "trade": "職種",
+        "department": "部門",
+        "subsidiary": "子会社"
+      },
+      "pattern": {
+        "cycle": "繰り返しパターン",
+        "cycleHint": "繰り返す曜日・日数の周期 — 通常週は7日、圧縮隔週は14日、4勤4休のローテーションは8日。",
+        "varies": "時間が不定",
+        "variesHint": "定まったスケジュールはなく、期間ごとに時間を設定します。これは空欄ではなく正式な回答です — 時間不定の従業員には別の計算式を適用する管轄がいくつもあり、登録することで計算可能になります。"
+      },
+      "summary": {
+        "cycle": "{cycle}ごとに{days}日で{hours}時間",
+        "week": "週",
+        "cycleDays": "{count}日周期",
+        "total": "{hours}時間（稼働{days}日／周期）。"
+      },
+      "fields": {
+        "name": "名称",
+        "namePlaceholder": "フルタイム、月曜〜金曜",
+        "appliesTo": "適用対象",
+        "selectEmployee": "従業員を選択",
+        "selectScope": "選択してください",
+        "effectiveFrom": "適用開始日",
+        "effectiveTo": "適用終了日",
+        "pattern": "パターン",
+        "cycleDays": "周期（日数）",
+        "cycleAnchor": "周期の初日",
+        "hours": "1日あたり時間"
+      },
+      "help": {
+        "scope": "最も具体的なスケジュールが優先されます：従業員1名が役職に、役職が職種に、職種が部門に、部門が子会社に、子会社が全員設定に優先します。賃金と付与上限の解決順序と同じです。",
+        "effectiveFrom": "今日ではなく勤務日で比較します。3月にフルタイムからパートタイムに変わった従業員の1月の休日給は、フルタイムのパターンで計算されます。",
+        "pattern": "従業員が繰り返しパターンで勤務するか、定まったスケジュールがまったくないか。この違いがいくつもの管轄の計算式を決めます。",
+        "cycleDays": "何日でパターンが繰り返すか。通常週は7です。9日間隔週は14、週に合わせない4勤4休ローテーションは8で表します。",
+        "cycleAnchor": "周期を数え始める日。週パターンでは日曜日から始まるため、下の欄は日曜〜土曜で表示されます。",
+        "hours": "周期の各位置での通常勤務時間。休日は空欄にしてください。この時間から通常勤務1日分の休日給を計算するため、1日10時間の週4日勤務では8時間ではなく10時間分の休日給になります。"
+      },
+      "grid": {
+        "sunday": "日曜日",
+        "monday": "月曜日",
+        "tuesday": "火曜日",
+        "wednesday": "水曜日",
+        "thursday": "木曜日",
+        "friday": "金曜日",
+        "saturday": "土曜日",
+        "day": "第{n}日",
+        "weekDay": "第{week}週 · {day}"
+      }
+    }
+  },
+  "remittances": {
+    "title": "給与納付",
+    "description": "期間ごとの納付先別の源泉徴収額と事業主負担額。請求書の作成で負債勘定に借方記入し、支払を買掛金に引き渡します。",
+    "back": "給与",
+    "from": "開始",
+    "to": "終了",
+    "apply": "適用",
+    "empty": "この期間に納付対象額のある確定済み計算はありません。",
+    "unassigned": "納付先ベンダーが未割当",
+    "assignVendor": "コンポーネント上でベンダーを割り当ててください",
+    "context": "給与総額 {gross} · {employees, plural, one {期間中の従業員 # 名} other {期間中の従業員 # 名}}",
+    "withheld": "源泉徴収額",
+    "employer": "事業主",
+    "noAccount": "負債勘定なし",
+    "total": "納付合計",
+    "createBill": "納付請求書を作成",
+    "createAnother": "別の請求書を作成",
+    "billCreated": "請求書ドラフト {number} を作成しました。買掛金で確認・転記してください。",
+    "dueOn": "納期限 {dueDate} · {authority}",
+    "apNote": "納付請求書は通常の仕入請求書です:",
+    "apLink": "買掛請求書を開く"
+  },
   "yearEnd": {
+    "title": "年末調整",
+    "description": "導入済み給与パックが定める年次・四半期申告を、確定済み明細から作成 — すべての欄が明細トレースと一致します。",
+    "noFilings": "この組織に該当する給与年末申告はありません。",
     "cadence": {
       "annual": "年次申告",
       "annualHelp": "税年度ごとに1回提出 (T4、W-2、RL-1)。上の税年度選択で表示対象が決まります。",
       "quarterly": "四半期申告",
       "quarterlyHelp": "暦四半期ごとに1回提出 (Form 941) — 選択年内の四半期ごとに行が表示されます。"
+    }
+  },
+  "filings": {
+    "yearLabel": "税年度",
+    "rowCount": "{count, plural, =0 {行なし} one {# 行} other {# 行}}",
+    "notInstalled": "パック未インストール",
+    "emptyDefault": "この年の行はありません。",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "PDFをダウンロード"
     },
-    "description": "導入済み給与パックが定める年次・四半期申告を、確定済み明細から作成 — すべての欄が明細トレースと一致します。",
-    "noFilings": "この組織に該当する給与年末申告はありません。",
-    "title": "年末調整"
+    "issue": {
+      "reason": "発行理由",
+      "reasonHelp": "欄16は、支給停止理由の事業主申告です。理由を選ぶとこの従業員はROE Webファイルに含まれ、未設定のままでは含まれません。",
+      "comment": "コメント",
+      "notIncluded": "ファイルに含まれていません",
+      "included": "ファイルに含まれています — 理由{code}",
+      "commentRequired": "この理由コードにはコメントが必要です。"
+    },
+    "lifecycle": {
+      "title": "申告ステータス",
+      "statusColumn": "申告ステータス",
+      "help": "発行済み申告は当局への申告内容の証跡であり、上書きされることはありません。訂正はそれに置き換わる新しい成果物であり、元のファイルはダウンロード可能なまま残ります。金額は確定済み給与明細から常に再計算されます — 給与データを修正してから訂正してください。",
+      "history": "申告履歴",
+      "recordOriginal": "申告済みとして記録",
+      "note": "申告メモ",
+      "notePlaceholder": "申告方法（任意）",
+      "notIssued": "まだ申告済みとして記録されていません。",
+      "issuedCount": "発行済み成果物",
+      "latest": "最新",
+      "changedCount": "申告後の変更",
+      "absentCount": "元帳に存在しない",
+      "resurrectedCount": "取消済みだが元帳に存在する",
+      "slipsCovered": "対象スリップ",
+      "supersedes": "を置換",
+      "noArtifact": "電子ファイルはありません — 下のスリップの写しが記録です。",
+      "correction": "訂正",
+      "correctionForm": "訂正申告書",
+      "correctionHelp": "訂正は、存在すべきスリップの再記述です。取消は、そのスリップが存在すべきでなかったことの宣言です。数値は確定済み給与明細から再計算され、手入力で上書きされることはありません — 先に給与データを修正すれば訂正に反映されます。",
+      "unfiledHelp": "このスリップは申告済みとして記録されていないため、訂正対象がありません。",
+      "addedHelp": "このスリップは申告後に現れました。後から見つかったスリップは訂正ではなく追加の原本として申告するもので、ここでは作成しません — 当局のサービスから申告してください。",
+      "absentHelp": "給与元帳ではこのスリップが生成されなくなったため、再記述する内容がありません。当局の保持を止めるため取消してください。",
+      "resurrectedHelp": "このスリップは取消済みですが、給与元帳ではまだ生成されます。基の計算を無効化・調整しないと、次回申告で再び申告されます。",
+      "box": "欄",
+      "field": "項目",
+      "asFiled": "申告時",
+      "now": "現在",
+      "redacted": "変更あり — 値は表示しません",
+      "previewAmended": "訂正をプレビュー",
+      "issueAmended": "訂正を発行",
+      "previewCancelled": "取消をプレビュー",
+      "issueCancelled": "このスリップを取消",
+      "status": {
+        "unfiled": "未申告",
+        "unchanged": "申告済み",
+        "changed": "申告後に変更",
+        "absent": "元帳に存在しない",
+        "withdrawn": "取消済み",
+        "resurrected": "取消済みだが元帳に存在する"
+      }
+    },
+    "run": {
+      "title": "{label}",
+      "help": "申告対象の全員と計上数値。行が正しいことを確認してからファイルを作成してください — 発行済み申告は証跡であり、訂正は編集ではなく訂正申告で行います。",
+      "issue": "申告済みとして記録",
+      "viewAll": "すべて表示"
+    }
+  },
+  "separations": {
+    "title": "退職",
+    "description": "インストール済み給与パックが宣言する退職時申告 — 年末ではなく、支給中断から数日以内に従業員の事由ごとに提出します。",
+    "noFilings": "この組織の給与退職時申告は宣言されていません。",
+    "run": {
+      "title": "{label}を発行",
+      "help": "退職時申告は支給中断から数日以内に提出します — 年末を待たず、この処理で従業員ごとに発行してください。",
+      "issue": "確認して発行",
+      "viewAll": "すべての退職"
+    }
+  },
+  "register": {
+    "title": "給与台帳",
+    "print": "印刷",
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "その他の控除",
+    "totals": "{count, plural, one {合計 (従業員 # 名)} other {合計 (従業員 # 名)}}"
+  },
+  "entitlements": {
+    "title": "バンク",
+    "hint": "積立時間、休暇、および従業員が返済すべき残高。残高は付与元帳であり、数値の直接編集ではなく給与計算を通じて動かします。",
+    "managePlans": "プランを管理",
+    "noPlans": "この組織の付与プランはまだ設定されていません。",
+    "noMovements": "異動はまだありません。",
+    "overLimit": "上限超過",
+    "nearLimit": "上限接近",
+    "hoursSuffix": "時間",
+    "hoursAtWage": "現在の賃金{wage}/時間で{hours}時間分",
+    "worthToday": "今日の賃金で{amount}相当",
+    "owedBack": "事業主への返済分 — 将来の支給から回収します。",
+    "limitLine": "上限{limit}（{scope}が設定）",
+    "plan": "プラン",
+    "amount": "金額",
+    "source": "発生元",
+    "movementDate": "日付",
+    "movementKind": "種別",
+    "scope": {
+      "employee": "この従業員",
+      "job_title": "役職",
+      "trade": "職種",
+      "department": "部門",
+      "subsidiary": "法人",
+      "plan": "プラン既定"
+    },
+    "kind": {
+      "opening": "期首",
+      "accrual": "積立",
+      "bank_in": "バンク預入",
+      "payout": "払出",
+      "repayment": "返済",
+      "adjustment": "調整"
+    }
+  },
+  "paymentMethod": {
+    "eft": "直接入金",
+    "cheque": "小切手",
+    "inherit": "従業員既定を使用",
+    "help": "既定のままにすると従業員レコードに従います：承認済み口座があれば直接入金、なければ印刷小切手。"
+  },
+  "openingBalances": {
+    "title": "期首残高",
+    "description": "前給与システムから各従業員が持ち越すすべて：法定年累計、使いかけの年額上限、休暇と積立時間の残高。これらを供給できるものは他になく、なければすべての上限とバンクがゼロから再開します。",
+    "hint": "最初の給与期間の前日時点の、前事業者の年累計レポートから転記してください。当年分の支給がない従業員は空欄のままにしてください。",
+    "yearLabel": "税年度",
+    "employee": "従業員",
+    "onlyMissing": "繰越なしの従業員のみ",
+    "bulkImport": "ファイルから一括登録",
+    "export": "エクスポート",
+    "entered": "繰越済み",
+    "locked": "ロック済み",
+    "lockedShort": "ロック済み",
+    "lockedBy": "確定済み給与計算",
+    "none": "なし",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "期首残高を保存しました。",
+    "saveFailed": "何も保存されませんでした。",
+    "rejected": "何も保存されませんでした — 先に修正してください。",
+    "empty": "有効な給与プロファイルを持つ従業員はまだいません。",
+    "fields": {
+      "pensionableYtd": "年金対象／FICA賃金",
+      "insurableYtd": "保険対象／失業保険賃金",
+      "cppYtd": "CPP拠出額",
+      "cpp2Ytd": "CPP2拠出額",
+      "eiYtd": "EI保険料",
+      "qpipYtd": "QPIP保険料",
+      "taxableYtd": "課税支給額",
+      "taxYtd": "源泉徴収所得税",
+      "nonPeriodicYtd": "賞与・臨時支給額",
+      "cpp2BonusYtd": "賞与CPP2拠出",
+      "qcCsbYtd": "賞与追加QPP拠出",
+      "ficaWithheldYtd": "源泉徴収FICA税",
+      "qpipEmployerYtd": "雇用主QPIP保険料",
+      "wcbAssessableYtd": "WCB算定対象賃金"
+    },
+    "componentHelp": "前給与システムで従業員が当年すでに使用した、この項目の年額上限の消費分。なければ上限がゼロから再開し、従業員は年額上限いっぱいまで2回拠出できる状態になります。",
+    "componentCap": "年額上限",
+    "componentInertHelp": "この項目には年額上限がなくなったため、下の金額は無効で編集できません。入力者がいたため保持しています。上限が再設定される場合があります。",
+    "entitlements": {
+      "title": "バンク繰越（休暇、積立時間）",
+      "employee": "従業員",
+      "asOf": "繰越基準日",
+      "asOfHelp": "繰越を計上する導入日。給与計算は支給日以前の異動のみ数えるため、ここでの初回給与計算より前でなければなりません。税年度ではありません。バンク残高は生涯で1つです。",
+      "entered": "繰越済み",
+      "save": "保存",
+      "saving": "保存中…",
+      "saved": "バンク繰越を保存しました。",
+      "saveFailed": "何も保存されませんでした。",
+      "rejected": "何も保存されませんでした — 先に修正してください。",
+      "bulkImport": "ファイルから一括登録",
+      "export": "エクスポート",
+      "empty": "有効な給与プロファイルを持つ従業員はまだいません。",
+      "noPlans": "付与プランが未設定のため、繰り越すバンクがありません。",
+      "configurePlans": "付与プランを設定",
+      "lockedBy": "確定済み給与計算",
+      "blocked": "支給日：",
+      "blockedHint": "より後に繰越日を設定",
+      "legacyShort": "旧制度",
+      "legacyTitle": "未移行の休暇残高があります",
+      "legacyBody": "これらの従業員は、どのバンクにも表示されない旧期首残高列に休暇残高を持っています。誰も管理していない負債です。ここで登録するか、scripts/migrate-vacation-to-entitlements.tsを実行して履歴全体を再現してください。",
+      "legacyPrefill": "休暇列にコピー",
+      "moneyHelp": "繰越残高（金額）。バンクは獲得時の金額で保存し、現在の賃金での時間数で表示します。",
+      "hoursHelp": "繰越残高（時間数）。",
+      "oweHelp": "従業員が事業主に対して負う残高のためマイナスです — 1,200の未返済なら−1200と入力してください。ちょうどゼロになるまで将来の支給から回収されます。"
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "法人は給与計算を実行できません",
+    "jurisdictionEmployee": "従業員の管轄が支給法人と一致しません"
+  },
+  "parallelRun": {
+    "title": "並行計算",
+    "description": "移行元の給与システムと給与期間を1セント単位で照合します。旧事業者の台帳を取り込み、同じ期間の計算を選んで比較してください。",
+    "compare": "照合",
+    "comparing": "照合中…",
+    "compareFailed": "照合を実行できませんでした。",
+    "cleanToast": "すべての金額が完全に一致しました。",
+    "toleranceToast": "許容差の適用により一致しました。",
+    "differencesToast": "差異があります — 照合結果を開いてください。",
+    "importRegister": "台帳を取り込み",
+    "export": "エクスポート",
+    "tolerances": "許容差",
+    "tolerancesDescription": "既定ではすべての項目を完全に照合します。旧システムの丸めが真に異なる場合のみ許容値を追加してください — 使用したすべての照合に表示されます。",
+    "addTolerance": "許容差を追加",
+    "toleranceSaved": "許容差を保存しました。",
+    "noTolerances": "許容差は設定されていません — すべての項目を完全に照合します。",
+    "comparisonsTitle": "照合履歴",
+    "noComparisons": "照合はまだ実行されていません。",
+    "registersTitle": "取り込み済み台帳",
+    "noRegisters": "旧台帳はまだ取り込まれていません。台帳の取り込みから始めてください。",
+    "noRegistersRow": "まだ取り込みがありません。",
+    "registerDiscarded": "取り込み済み台帳を破棄しました。",
+    "discard": "破棄",
+    "openReport": "突合レポートを開く",
+    "periodMismatch": "両者は支給日が異なる期間です。比較すると期間不一致が差異として報告されます。",
+    "emptyRegister": "この台帳に従業員がいません。これとの比較は正常ではなく「照合なし」と報告されます。",
+    "unmappedWarning": "この台帳の未割当の列：",
+    "unmappedTitle": "誰も割当てなかった元列",
+    "nothingCompared": "照合なし",
+    "toleranceTitle": "適用中の許容差",
+    "showMatches": "完全一致を表示",
+    "clearEmployee": "全従業員",
+    "cleanNote": "照合したすべての金額が1セント単位で一致し、許容差も未割当列もありません。",
+    "noFindings": "この照合に所見はまったくありません。",
+    "noExceptions": "例外なし — すべてのセルが完全に一致しました。",
+    "loading": "読み込み中…",
+    "saving": "保存中…",
+    "exact": "完全一致",
+    "notPresent": "存在しない",
+    "allMapped": "すべて割当済み",
+    "matched": "一致",
+    "differ": "不一致",
+    "oneSidedShort": "片側のみ",
+    "toleratedShort": "許容差内",
+    "employeesShort": "従業員",
+    "amountsShort": "金額",
+    "rowsShort": "行",
+    "valuedRows": "金額があったのは",
+    "comparedOf": "照合対象／",
+    "onRegister": "台帳側",
+    "inRun": "計算側",
+    "fromColumn": "由来",
+    "paid": "支給済み",
+    "vsOurs": "当方",
+    "columns": {
+      "outcome": "結果",
+      "register": "旧台帳",
+      "payRun": "給与計算",
+      "compared": "照合済み",
+      "differences": "差異",
+      "netDifference": "正味差額",
+      "comparedAt": "照合日時",
+      "loaded": "取込日時",
+      "stated": "申告総額／手取額",
+      "unmapped": "未割当列",
+      "employee": "従業員",
+      "component": "支給項目",
+      "priorSystem": "旧システム",
+      "thisSystem": "当システム",
+      "difference": "差額",
+      "tolerance": "許容差",
+      "result": "結果"
+    },
+    "fields": {
+      "register": "旧台帳",
+      "registerPlaceholder": "台帳を選択…",
+      "payRun": "当方の給与計算",
+      "payRunPlaceholder": "給与計算を選択…",
+      "component": "支給項目",
+      "componentPlaceholder": "選択…",
+      "tolerance": "許容値",
+      "reason": "理由"
+    },
+    "kinds": {
+      "earning": "支給",
+      "deduction": "控除",
+      "employer_contribution": "事業主負担",
+      "total": "申告合計"
+    },
+    "statuses": {
+      "clean": "完全に一致",
+      "clean_within_tolerance": "許容差内で一致",
+      "differences": "要解決の差異",
+      "no_comparable_data": "照合なし"
+    },
+    "classes": {
+      "match": "完全一致",
+      "within_tolerance": "許容差内",
+      "difference": "差異",
+      "prior_only": "旧システムのみ",
+      "our_only": "当方のみ",
+      "employee_prior_only": "当方の計算に従業員がいません",
+      "employee_our_only": "台帳に従業員がいません",
+      "unattributed": "どの項目にも属さない"
+    },
+    "tiles": {
+      "gross": "総支給額",
+      "net": "手取額",
+      "unattributed": "不明な正味額",
+      "cells": "セル"
+    },
+    "help": {
+      "register": "移行元の給与システムから取り込んだ台帳 — 1給与期間、従業員ごと1行。インポートとエクスポートのリソース「旧給与台帳」から取り込み、旧システムの列名をこの給与の支給項目に割り当てます。",
+      "payRun": "照合対象の計算。確定済みの計算が対象です。並行計算の目的は送金前に数値を証明することであり、下書きの計算には明細がなく比較できません。",
+      "compared": "両側に存在する従業員と、各側の件数に対する内訳。誰も照合しなかった比較は一致ではなく「照合なし」と報告されます。",
+      "unmapped": "ファイルの列のうち、どの項目も引き受けなかったもの。中身は照合されないため、金額が見落とされる可能性があります。割り当てて再取り込みするか、金額がないことを確認してください。",
+      "tolerance": "許容値を設定しない限り、すべての項目を完全に照合します。適用中の許容値はここと照合結果に表示されます。見えない許容差では検証の意味がなくなるためです。",
+      "unattributed": "正味差額のうち、照合した項目で説明できない部分。ゼロ以外は、対応する項目なしに合計を動かした金額があることを意味します — 多くは未割当の元列が原因です。",
+      "toleranceSlot": "支給項目、または台帳の申告合計のいずれか。許容差は従業員ごと・期間ごとに適用されます。",
+      "toleranceAmount": "絶対額であり、割合ではありません。変動する基準額に対する割合は許容差を静かに拡大させます。ゼロで許容値を解除します。",
+      "toleranceReason": "必須です。差異の調査を打ち切る合意は、誰が何の理由でした決定か記録しなければなりません。"
+    }
+  },
+  "workSchedules": {
+    "title": "勤務スケジュール",
+    "description": "各従業員の通常の勤務時間・勤務日。いくつもの管轄がここから法定休日給を計算します — 通常勤務1日分の賃金 — スケジュール未登録者の8時間日を仮定せず、計算を停止します。",
+    "add": "新規スケジュール",
+    "editTitle": "勤務スケジュール",
+    "drawerDescription": "開始日から置換・終了まで適用されます。過去期間の休日給は、当時適用されていたパターンで常に解決され、今日のパターンでは解決されません。",
+    "empty": "勤務スケジュールはまだありません。",
+    "columns": {
+      "appliesTo": "適用対象",
+      "pattern": "パターン",
+      "effectiveFrom": "適用開始",
+      "status": "ステータス"
+    },
+    "scope": {
+      "organization": "全員",
+      "employee": "従業員1名",
+      "jobTitle": "役職",
+      "trade": "職種",
+      "department": "部門",
+      "subsidiary": "子会社"
+    },
+    "pattern": {
+      "cycle": "繰り返しパターン",
+      "cycleHint": "繰り返す曜日・日数の周期 — 通常週は7日、圧縮隔週は14日、4勤4休のローテーションは8日。",
+      "varies": "時間が不定",
+      "variesHint": "定まったスケジュールはなく、期間ごとに時間を設定します。これは空欄ではなく正式な回答です — 時間不定の従業員には別の計算式を適用する管轄がいくつもあり、登録することで計算可能になります。"
+    },
+    "summary": {
+      "cycle": "{cycle}ごとに{days}日で{hours}時間",
+      "week": "週",
+      "cycleDays": "{count}日周期",
+      "total": "{hours}時間（稼働{days}日／周期）。"
+    },
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "フルタイム、月曜〜金曜",
+      "appliesTo": "適用対象",
+      "selectEmployee": "従業員を選択",
+      "selectScope": "選択してください",
+      "effectiveFrom": "適用開始日",
+      "effectiveTo": "適用終了日",
+      "pattern": "パターン",
+      "cycleDays": "周期（日数）",
+      "cycleAnchor": "周期の初日",
+      "hours": "1日あたり時間"
+    },
+    "help": {
+      "scope": "最も具体的なスケジュールが優先されます：従業員1名が役職に、役職が職種に、職種が部門に、部門が子会社に、子会社が全員設定に優先します。賃金と付与上限の解決順序と同じです。",
+      "effectiveFrom": "今日ではなく勤務日で比較します。3月にフルタイムからパートタイムに変わった従業員の1月の休日給は、フルタイムのパターンで計算されます。",
+      "pattern": "従業員が繰り返しパターンで勤務するか、定まったスケジュールがまったくないか。この違いがいくつもの管轄の計算式を決めます。",
+      "cycleDays": "何日でパターンが繰り返すか。通常週は7です。9日間隔週は14、週に合わせない4勤4休ローテーションは8で表します。",
+      "cycleAnchor": "周期を数え始める日。週パターンでは日曜日から始まるため、下の欄は日曜〜土曜で表示されます。",
+      "hours": "周期の各位置での通常勤務時間。休日は空欄にしてください。この時間から通常勤務1日分の休日給を計算するため、1日10時間の週4日勤務では8時間ではなく10時間分の休日給になります。"
+    },
+    "grid": {
+      "sunday": "日曜日",
+      "monday": "月曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日",
+      "thursday": "木曜日",
+      "friday": "金曜日",
+      "saturday": "土曜日",
+      "day": "第{n}日",
+      "weekDay": "第{week}週 · {day}"
+    }
+  },
+  "retro": {
+    "title": "遡及支給"
   }
 }
