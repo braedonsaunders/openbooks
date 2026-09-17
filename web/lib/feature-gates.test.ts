@@ -1919,7 +1919,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/property-management/PropertyDrawer.tsx'),
-    /\{fixedAssetsEnabled \? <Field label="Fixed asset">/,
+    /\{fixedAssetsEnabled \? <Field label=\{t\("fixedAsset"\)\}>/,
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
   assert.match(
