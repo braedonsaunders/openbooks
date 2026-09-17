@@ -351,15 +351,18 @@ export async function DELETE(req: Request) {
     const key = existing.rows[0];
     if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
-    // Destroy the stored lookup artifacts with a discarded secret. A direct
-    // is_active=true write therefore cannot revive the compromised bearer.
+    // Destroy the credential hash with a discarded secret. A direct
+    // is_active=true write therefore cannot revive the compromised bearer
+    // (no presented secret can match the destroyed hash, and the API
+    // refuses reactivation of revoked keys). The stored prefix/preview are
+    // deliberately kept: they were already visible while the key was
+    // active, and keeping them keeps the masked display stable across
+    // revoke (F-t01-011).
     const destroyed = generateApiKey();
     await db.execute(sql`
       update api_keys
          set is_active = false,
              key_hash = ${destroyed.keyHash},
-             key_prefix = ${destroyed.keyPrefix},
-             key_preview = ${destroyed.keyPreview},
              updated_at = now(),
              updated_by = ${actor.id}
        where id = ${id} and org_id = ${actor.orgId}`);
@@ -377,7 +380,7 @@ export async function DELETE(req: Request) {
         },
         after: {
           name: key.name,
-          key_prefix: "[destroyed]",
+          key_prefix: key.key_prefix,
           is_active: false,
           credential_material: "destroyed",
         },

@@ -344,9 +344,37 @@ test('revocation destroys the stored credential material so the secret can never
   assert.ok(update, 'the revocation update committed')
   assert.match(update!, /is_active = false/)
   assert.match(update!, /key_hash/, 'the original hash is replaced — the old secret can never resolve again')
-  assert.match(update!, /key_preview/, 'the preview of the destroyed secret is replaced too')
   assert.ok(
     state.committed.some((t) => t.includes('insert into audit_log')),
     'the revocation evidence committed in the same unit',
+  )
+})
+
+test('revocation keeps the stored fingerprint stable while destroying the credential', async () => {
+  reset()
+  state.keyRow = { id: KEY_ID, name: 'leaked key', key_prefix: 'ob_live_deadbee', is_active: true }
+
+  const response = await revokeKey(KEY_ID)
+
+  assert.equal(response.status, 200)
+  const update = state.committed.find((t) => t.includes('update api_keys'))
+  assert.ok(update, 'the revocation update committed')
+  assert.match(update!, /key_hash/, 'the original hash is replaced — the old secret can never resolve again')
+  assert.equal(
+    update!.includes('key_prefix'),
+    false,
+    'the stored prefix is kept — the masked display stays stable across revoke (F-t01-011)',
+  )
+  assert.equal(
+    update!.includes('key_preview'),
+    false,
+    'the stored preview is kept — the masked display stays stable across revoke (F-t01-011)',
+  )
+  const audit = state.committed.find((t) => t.includes('insert into audit_log'))
+  assert.ok(audit, 'the revocation evidence committed in the same unit')
+  assert.equal(
+    audit!.includes('[destroyed]'),
+    false,
+    'the audit keeps the original fingerprint, not a destroyed marker',
   )
 })
