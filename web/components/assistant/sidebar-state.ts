@@ -43,6 +43,42 @@ export function removeConversationRow(
 }
 
 /**
+ * Ids this tab deleted. A module-level tombstone set — NOT component state —
+ * so a deleted thread stays gone across remounts: after a delete, App Router
+ * may serve a stale prefetched server payload on the next navigation (a
+ * remount re-seeds state from those props), and the background revalidation
+ * that follows must not resurrect it either. Ids are UUIDs and never reused,
+ * so a tombstone can never hide a legitimate thread; a failed delete removes
+ * its tombstone again (restore-on-failure).
+ */
+const deletedConversationIds = new Set<string>();
+
+export function rememberDeletedConversation(id: string): void {
+  deletedConversationIds.add(id);
+}
+
+export function forgetDeletedConversation(id: string): void {
+  deletedConversationIds.delete(id);
+}
+
+/** Test/support reset for the tab-lifetime tombstone set. */
+export function clearDeletedConversations(): void {
+  deletedConversationIds.clear();
+}
+
+export function isDeletedConversation(id: string): boolean {
+  return deletedConversationIds.has(id);
+}
+
+/** Strip tombstoned ids from any server list, however stale. */
+export function withoutDeletedConversations(
+  list: SidebarConversation[],
+): SidebarConversation[] {
+  if (deletedConversationIds.size === 0) return list;
+  return list.filter((c) => !deletedConversationIds.has(c.id));
+}
+
+/**
  * Merge the server list back after a stream ends. The server is authoritative
  * for every thread it knows; rows the client created (provisional ids) that
  * the server does not list yet stay pinned at the top in first-seen order, so
@@ -59,4 +95,35 @@ export function reconcileConversations(
   const remaining = new Set<string>();
   for (const c of pending) remaining.add(c.id);
   return { items: [...pending, ...server], provisionalIds: remaining };
+}
+
+/**
+ * Fold a server conversation list into the sidebar (navigation, refresh,
+ * refetch) while honouring this tab's deletions. Stale payloads — a
+ * prefetched route served after a delete, a refetch that raced it — still
+ * carry deleted ids; the tombstones filter them before the merge. The viewed
+ * thread survives even outside the server's top-N window (deep link into a
+ * long history); a tombstoned thread never does.
+ */
+export function syncServerConversations(
+  local: SidebarConversation[],
+  server: SidebarConversation[],
+  provisionalIds: ReadonlySet<string>,
+  activeId: string | null,
+): { items: SidebarConversation[]; provisionalIds: Set<string> } {
+  const { items, provisionalIds: remaining } = reconcileConversations(
+    local,
+    withoutDeletedConversations(server),
+    provisionalIds,
+  );
+  const active =
+    activeId && !isDeletedConversation(activeId)
+      ? local.find((c) => c.id === activeId)
+      : undefined;
+  if (active && !items.some((c) => c.id === active.id)) {
+    const next = [...items];
+    next.splice(Math.min(local.indexOf(active), next.length), 0, active);
+    return { items: next, provisionalIds: remaining };
+  }
+  return { items, provisionalIds: remaining };
 }
