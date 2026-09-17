@@ -16,3 +16,11 @@ test('lead/prospect owner picker uses the translated crm unassigned label', () =
     'the owner empty option must use the reviewed crm.unassigned label shipped in every locale',
   )
 })
+
+test('lead/prospect first save carries the party revision token', () => {
+  assert.match(
+    source,
+    /fetch\(`\/api\/parties\/\$\{party\.id\}`[\s\S]*?expectedUpdatedAt:\s*party\.updated_at/,
+    'the identity PATCH must echo the loaded updated_at revision: /api/parties/[id] answers 409 without it, so a token-less first save can never succeed',
+  )
+})
