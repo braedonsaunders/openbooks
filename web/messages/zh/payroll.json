@@ -1,197 +1,271 @@
 {
-  "openingBalances": {
-    "fields": {
-      "cpp2BonusYtd": "奖金 CPP2 缴款",
-      "qcCsbYtd": "奖金额外 QPP 缴款",
-      "ficaWithheldYtd": "已代扣 FICA 税",
-      "qpipEmployerYtd": "雇主 QPIP 缴款",
-      "wcbAssessableYtd": "WCB 应评税工资"
-    }
-  },
-  "checklist": {
-    "incomplete": "有 {count} 个工资统驭科目尚未配置:",
-    "openSettings": "打开工资设置"
-  },
-  "columns": {
-    "employees": "员工",
-    "gross": "应发",
-    "net": "实发",
-    "number": "编号",
-    "payDate": "发薪日期",
-    "period": "期间",
-    "schedule": "计划",
-    "status": "状态"
-  },
+  "title": "工资",
   "description": "工资核算、员工工资档案和法定代扣。",
-  "empty": {
-    "profiles": "尚无员工工资档案。请添加档案以将员工纳入核算。",
-    "runs": "尚无工资核算。请从发薪计划创建一条以开始。"
+  "tabs": {
+    "runs": "工资核算",
+    "employees": "员工 ({count})"
   },
   "home": {
-    "actions": {
-      "remittances": "代缴",
-      "resume": "继续核算",
-      "reviewPost": "复核并过账",
-      "startRun": "运行工资核算",
-      "viewRuns": "工资核算",
-      "yearEnd": "年终"
-    },
-    "current": {
-      "noSchedules": "没有有效的发薪计划。请创建计划以开始处理工资。",
-      "title": "当前工资周期"
-    },
-    "directory": {
-      "employees": "员工",
-      "employeesHint": "有效的工资档案",
-      "openingBalances": "期初余额",
-      "parallelRun": "并行核算",
-      "retro": "补发工资",
-      "runs": "工资核算",
-      "runsHint": "进行中 · 共 {total}",
-      "setup": "工资设置",
-      "setupHint": "缺少统驭科目",
-      "title": "浏览工资"
-    },
-    "exceptions": {
-      "allClear": "所有员工均已就绪，可以核算工资。",
-      "missingProfile": "{name} 没有工资档案",
-      "missingWage": "{name} 没有当日有效的工资标准",
-      "moreMissingProfiles": "还有 {count} 名员工没有工资档案",
-      "moreMissingWages": "还有 {count} 名员工没有工资标准",
-      "title": "需要注意"
-    },
-    "frequency": {
-      "biweekly": "每两周",
-      "monthly": "每月",
-      "semi_monthly": "半月",
-      "weekly": "每周"
-    },
-    "previous": {
-      "none": "尚无已完成的工资核算。",
-      "title": "上一工资周期"
-    },
     "tabs": {
       "overview": "工资",
-      "remittances": "代缴",
       "runs": "工资核算",
+      "remittances": "代缴",
       "separations": "离职",
+      "yearEnd": "年终"
+    },
+    "actions": {
+      "viewRuns": "工资核算",
+      "startRun": "运行工资核算",
+      "resume": "继续核算",
+      "reviewPost": "复核并过账",
+      "remittances": "代缴",
       "yearEnd": "年终"
     },
     "vitals": {
       "employees": "在册发薪",
       "employeesSub": "有效的工资档案",
-      "nextPayDate": "下次发薪日期",
-      "noSchedule": "无有效计划",
-      "periodsOf": "{ran} / {total}",
       "periodsRan": "{year} 工资周期",
+      "periodsOf": "{ran} / {total}",
       "periodsRanSub": "本纳税年度已确认",
-      "ytdEmployerCost": "+{amount} 雇主成本",
       "ytdGross": "累计应发",
+      "ytdEmployerCost": "+{amount} 雇主成本",
       "ytdNet": "累计实发",
-      "ytdNetSub": "来自已确认的核算"
+      "ytdNetSub": "来自已确认的核算",
+      "nextPayDate": "下次发薪日期",
+      "noSchedule": "无有效计划"
+    },
+    "current": {
+      "title": "当前工资周期",
+      "noSchedules": "没有有效的发薪计划。请创建计划以开始处理工资。"
+    },
+    "frequency": {
+      "weekly": "每周",
+      "biweekly": "每两周",
+      "semi_monthly": "半月",
+      "monthly": "每月"
+    },
+    "previous": {
+      "title": "上一工资周期",
+      "none": "尚无已完成的工资核算。"
+    },
+    "exceptions": {
+      "title": "需要注意",
+      "allClear": "所有员工均已就绪，可以核算工资。",
+      "missingProfile": "{name} 没有工资档案",
+      "moreMissingProfiles": "{count, plural, one {还有 # 名员工没有工资档案} other {还有 # 名员工没有工资档案}}",
+      "missingWage": "{name} 没有当日有效的工资标准",
+      "moreMissingWages": "{count, plural, one {还有 # 名员工没有工资标准} other {还有 # 名员工没有工资标准}}"
+    },
+    "directory": {
+      "title": "浏览工资",
+      "runs": "工资核算",
+      "runsHint": "进行中 · 共 {total}",
+      "employees": "员工",
+      "employeesHint": "有效的工资档案",
+      "setup": "工资设置",
+      "setupHint": "缺少统驭科目",
+      "openingBalances": "期初余额",
+      "parallelRun": "并行核算",
+      "retro": "补发工资"
     }
   },
   "list": {
+    "title": "工资核算",
     "description": "全部工资核算。按阶段或计划搜索筛选，然后打开一条核算进行处理。",
     "open": "打开核算",
-    "stageFilter": "阶段",
-    "title": "工资核算"
+    "stageFilter": "阶段"
   },
-  "newRun": {
-    "create": "新建工资核算",
-    "description": "确认本次核算覆盖的期间。已预填计划的下一期间;周期外或补核算请更改日期。",
-    "employees": "发薪员工",
-    "employeesHint": "最终结算会兑现并清零所有累计银行,因此仅包括此处点名的员工。",
-    "invalidWindow": "期间结束不得早于开始,发薪日期不得早于期间结束。",
-    "noSchedules": "无有效的发薪计划",
-    "noTerminated": "该计划中没有已登记离职日期的员工。请先在员工档案中登记——没有离职日期无法计算最终结算。",
-    "notBegun": "该期间自 {date} 开始,尚未开始。请选择进行中或已完成的期间。",
-    "payDateHint": "向员工发薪的日期。法定税率依此日期确定。",
-    "periodEnd": "期间结束",
-    "periodStart": "期间开始",
-    "runType": "核算类型",
-    "runTypeHint": {
-      "bonus": "奖金和佣金的周期外发放。无薪资、工时或经常性扣款;所得按奖金计税方法计税。",
-      "regular": "计划内的常规工资:薪资、已审批工时、经常性项目和扣款。",
-      "termination": "离职员工的最终结算。包括累计假期余额的兑现。"
-    },
-    "schedule": "发薪计划"
-  },
-  "register": {
-    "cppFica": "CPP / FICA",
-    "otherDeductions": "其他扣款",
-    "print": "打印",
-    "title": "工资登记簿",
-    "totals": "合计(员工 {count} 名)"
-  },
-  "remittances": {
-    "apLink": "打开应付账单",
-    "apNote": "代缴账单是普通的供应商账单:",
-    "apply": "应用",
-    "assignVendor": "请在项目上指定供应商",
-    "back": "工资",
-    "billCreated": "账单草稿 {number} 已创建。请在应付账款中复核并过账。",
-    "context": "工资总额 {gross} · 本期间 {employees} 名员工",
-    "createAnother": "再创建一张账单",
-    "createBill": "创建代缴账单",
-    "description": "一段期间内按缴纳对象归集的累计代扣和雇主缴款。创建账单会借记负债科目,并将付款移交应付账款。",
-    "dueOn": "{dueDate} 到期 · {authority}",
-    "employer": "雇主",
-    "empty": "本期间没有含可代缴金额的已确认核算。",
-    "from": "自",
-    "noAccount": "无负债科目",
-    "title": "工资代缴",
-    "to": "至",
-    "total": "应代缴合计",
-    "unassigned": "未指定代缴供应商",
-    "withheld": "已代扣"
-  },
-  "run": {
-    "approvalNotRequired": "没有适用于工资核算的审批政策",
-    "approvalPending": "等待审批(还有 {count} 项)——确认和过账已被阻止",
-    "approvalSubmitted": "已连同证据包送审",
-    "calculate": "计算",
-    "calculateDone": "工资核算已计算。",
-    "commit": "确认",
-    "commitDone": "工资核算已确认。",
-    "employerCost": "雇主成本",
-    "empty": "没有工资条。请计算本次核算以生成。",
-    "lineKind": {
-      "deduction": "扣款项",
-      "earning": "应发项",
-      "employer_contribution": "雇主"
-    },
-    "post": "过账",
-    "postDone": "工资核算已过账。",
-    "printSet": "打印套件(仅用于打印分发)",
-    "stub": {
-      "employee": "员工",
-      "lines": "工资行",
-      "tax": "税款",
-      "trace": "{engine} 跟踪"
-    },
-    "stubsPrintOnly": "{count} 名员工仅打印,未发送邮件",
-    "submitApproval": "提交审批",
-    "title": "工资核算"
-  },
-  "runType": {
-    "bonus": "周期外奖金",
-    "regular": "常规",
-    "termination": "离职结算"
-  },
-  "status": {
-    "calculated": "已计算",
-    "committed": "已确认",
-    "draft": "草稿",
-    "posted": "已过账",
-    "void": "已作废"
-  },
-  "tabs": {
-    "employees": "员工 ({count})",
-    "runs": "工资核算"
-  },
-  "title": "工资",
   "wizard": {
+    "stepsAria": "工资核算步骤",
+    "steps": {
+      "period": "范围",
+      "readiness": "就绪检查",
+      "review": "复核工资条",
+      "gl": "总账预览与确认",
+      "finish": "过账并完成"
+    },
+    "voided": "本次工资核算已作废,只读。",
+    "stale": {
+      "title": "本次核算计算完成后输入已变更({reasons})。提交前请重新计算。",
+      "reason": {
+        "adjustments": "调整",
+        "time": "已审批工时",
+        "wages": "工资标准",
+        "roster": "员工档案",
+        "missing": "本次核算本身",
+        "components": "员工工资组成",
+        "componentDefinitions": "工资组成设置",
+        "derivedRules": "衍生应发规则",
+        "entitlements": "工资银行",
+        "workerComp": "工伤保险费率",
+        "timeTypes": "工时类型设置",
+        "settings": "工资设置",
+        "ytd": "另一核算的累计发生额",
+        "openingBalances": "期初余额(转入)"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# 项阻止本次核算} other {# 项阻止本次核算}}",
+      "blockedHint": "计算前请逐项解决。每一项都链接到解决位置。",
+      "readyTitle": "可以计算 · {count, plural, one {# 名员工} other {# 名员工}}",
+      "readyHint": "配置、期间控制和员工记录均已完整。",
+      "warningsHint": "{count, plural, one {# 项需要} other {# 项需要}}复核。确认后可继续。",
+      "blockersTitle": "阻止项",
+      "warningsTitle": "继续前请复核",
+      "acknowledge": "我已复核这些项目,希望继续",
+      "allClear": "没有阻止项或警告。本次核算可以计算。",
+      "fix": "解决",
+      "andMore": "+另外 {count} 项",
+      "dryRun": "试算",
+      "dryRunTitle": "试算结果",
+      "dryRunHint": "未保存任何内容。运行“计算”才会真正生成工资条。",
+      "codes": {
+        "retro": {
+          "sourceVoided": "本次核算结算的源期间已被作废({detail})。",
+          "crossTaxYear": "源期间落在 {detail} 法定年度之外——请改为申报更正申报表。",
+          "stale": "本次核算量化之后源期间的输入已变更。请重建补发核算。",
+          "doubleSettled": "另一未关闭的补发核算已为该员工结算同一期间。",
+          "componentRetired": "本次核算发放所依据的工资组成已停用。",
+          "zeroDelta": "本次核算未向该员工发放任何款项;期间差额为零。"
+        },
+        "setup": {
+          "pack": "未安装工资国家包。",
+          "wageExpense": "未配置工资费用科目。",
+          "netPay": "未配置实发工资应付科目。",
+          "laborClearing": "工资过账至劳务清算,但未配置清算科目。",
+          "slot": "法定科目未映射:{detail}",
+          "schedule": "不存在有效的发薪计划。",
+          "remittanceVendor": "未设置法定代缴供应商:{detail}",
+          "paymentRail": "没有已配置的 EFT 发起方档案,且支票兜底已关闭——无法向任何人付款。",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
+        },
+        "period": {
+          "missing": "没有会计期间覆盖发薪日 {detail}。",
+          "closed": "会计期间 {detail} 已关闭,不再接受总账过账。"
+        },
+        "scope": {
+          "empty": "本次核算未包含任何员工。"
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# 名员工} other {# 名员工}}没有本期间有效的工资标准。",
+          "zeroHours": "{count, plural, one {# 名计时员工} other {# 名计时员工}}本期间没有已审批工时。",
+          "paidInPeriod": "{count, plural, one {# 名员工} other {# 名员工}}已有重叠期间的发薪。",
+          "terminated": "{count, plural, one {# 名员工} other {# 名员工}}已在期间结束当日或之前离职。",
+          "noBankDetails": "{count, plural, one {# 名员工} other {# 名员工}}设为直接存款但没有已审核的银行账户,因此本次核算将改用支票支付。",
+          "noSin": "{count, plural, one {# 名员工} other {# 名员工}}没有存档的 SIN/SSN,无法做年终申报。",
+          "eftNoBankDetails": "{count, plural, one {# 名员工} other {# 名员工}}设为直接存款但没有已审核的银行账户,且支票兜底已关闭,因此无法向其付款。",
+          "noOpeningBalance": "{count, plural, one {# 名员工} other {# 名员工}}没有原工资系统的 {detail} 期初余额,因此其年度法定上限将在本次核算从零起算。",
+          "noOpeningComponentYtd": "{count, plural, one {# 名员工} other {# 名员工}}没有 {detail} 的期初本年累计(该项目有年度上限)——上限将在本次核算从零起算,因此其全年可能缴足两次年度限额。",
+          "noOpeningEntitlement": "{count, plural, one {# 名员工} other {# 名员工}}在原工资系统有结存,但没有 {detail} 的期初余额。这是首个结转该余额的工资核算,因此其银行从零起算。"
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "无法计算法定假日工资:{detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# 名员工} other {# 名员工}}的劳动管辖区是本工资核算无法适用的:{detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
+        }
+      }
+    },
+    "funding": {
+      "title": "资金",
+      "netPay": "所需现金",
+      "liabilities": "已确认负债",
+      "totalCost": "雇主总成本",
+      "accounts": "银行账户",
+      "leadTime": "{days, plural, =0 {发薪日为今天} one {距发薪日还有#个工作日} other {距发薪日还有#个工作日}} · {date}",
+      "payDatePast": "发薪日{date}已过",
+      "short": "没有银行账户可以覆盖所需的{amount}。",
+      "rail": {
+        "eft": "直接存款 ({count, plural, one {#名员工} other {#名员工}})",
+        "cheque": "支票 ({count, plural, one {#名员工} other {#名员工}})"
+      }
+    },
+    "period": {
+      "taxYear": "纳税年度",
+      "employeesTitle": "已含员工({count} 名)",
+      "hint": "该计划下所有有有效工资档案的员工。",
+      "calculatedNote": "工时和应发来自已计算的工资条。",
+      "approvedHours": "已审批工时",
+      "recalculate": "重新计算",
+      "empty": "该计划下尚无有有效工资档案的员工。",
+      "wageMissing": "无工资标准",
+      "zeroHours": "无工时",
+      "ready": "就绪",
+      "scopeSaved": "核算范围已保存:{count, plural, one {# 名员工} other {# 名员工}}。",
+      "allBases": "全部计薪方式",
+      "onlyWithHours": "仅有工时",
+      "hideIneligible": "隐藏不符合者",
+      "department": "部门",
+      "selectAll": "全选所示员工",
+      "selectEmployee": "选择 {name}",
+      "selectedCount": "已选 {selected} / {total} 名员工",
+      "selectedHours": "{hours} 小时",
+      "selectedBlocked": "{count, plural, one {# 名所选员工没有工资标准} other {# 名所选员工没有工资标准}}",
+      "applyScope": "应用选择",
+      "noneMatch": "没有员工符合这些筛选。",
+      "noWage": "无工资标准",
+      "paidInPeriod": "已发薪",
+      "terminated": "已离职",
+      "excluded": "已排除",
+      "included": "已包含",
+      "runType": "核算类型",
+      "continue": "继续到就绪检查",
+      "dimension": {
+        "all": "全部",
+        "department": "部门",
+        "trade": "工种",
+        "job_title": "岗位",
+        "subsidiary": "实体",
+        "payment_method": "付款方式"
+      }
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# 个计算异常} other {# 个计算异常}}",
+      "varianceFlag": "{count, plural, one {# 张工资条} other {# 张工资条}}实发较上一张工资条变动超过 ±{percent}%。提交前请复核。",
+      "varianceColumn": "Δ 实发",
+      "newEmployee": "首张工资条",
+      "needsCalculation": "请计算本次核算以生成工资条。提交前金额仍可编辑。",
+      "drawerDescription": "该工资条的工资行和法定计算跟踪。",
+      "drawerVariance": "实发较该员工上一张工资条变动 {percent}%。",
+      "downloadPdf": "下载 PDF",
+      "close": "关闭",
+      "registerTitle": "登记簿预览",
+      "selectAll": "全选工资条",
+      "selectedCount": "{count, plural, one {已选 # 项} other {已选 # 项}}",
+      "bulkEdit": "编辑所选",
+      "bulkDescription": "将一个组成金额应用到本次核算的{count, plural, one {# 名员工} other {# 名员工}}。",
+      "bulkApply": "应用到{count, plural, one {# 名员工} other {# 名员工}}",
+      "changedColumn": "已变更",
+      "noChange": "无变更",
+      "changedTitle": "自 {date} 以来的变更",
+      "noChangeDetail": "与上一张工资条相比无任何变更。",
+      "changedTotals": "实发 {net} · 工时 {hours},与上一张工资条相比。",
+      "changeKind": {
+        "added": "新增",
+        "removed": "移除",
+        "changed": "已变更"
+      },
+      "protectionShortfallTitle": "{count, plural, one {# 张工资条} other {# 张工资条}}未能足额扣除受保护扣款",
+      "protectionShortfallHint": "受保护收入上限限制了这些扣款。未缴余额仍欠——请告知债权人或结转至下次核算。"
+    },
+    "gl": {
+      "needsCalculation": "请计算本次核算以预览其总账影响。",
+      "setupIncomplete": "工资设置不完整",
+      "openSetup": "打开科目与过账",
+      "retry": "重试",
+      "loading": "正在生成总账预览…",
+      "hint": "提交分录将写入。先借后贷。此阶段不做过账。",
+      "account": "科目",
+      "description": "摘要",
+      "debits": "借方",
+      "credits": "贷方",
+      "balanced": "已平衡",
+      "staleBlocked": "提交前请重新计算本次核算。",
+      "commitHint": "确认将冻结工资条并将这些分录写入工资核算单据。过账前核算仍可复核。"
+    },
     "finish": {
       "notCommitted": "请先在总账步骤提交本轮计算，然后再过账。",
       "postTitle": "可以过账",
@@ -214,23 +288,26 @@
       "printStubs": "打印全部工资单",
       "register": "工资登记簿",
       "emailStubs": "发送工资单邮件",
-      "stubsEmailed": "已通过邮件发送 {sent} 份工资单。",
+      "stubsEmailed": "{sent, plural, one {已通过邮件发送 # 份工资单。} other {已通过邮件发送 # 份工资单。}}",
       "stubsEmailedPartial": "已发送 {sent}；已跳过（无邮箱或失败）：{skipped}",
-      "printCheques": "打印 {count} 张支票"
+      "printCheques": "{count, plural, one {打印 # 张支票} other {打印 # 张支票}}"
     },
-    "funding": {
-      "title": "资金",
-      "netPay": "所需现金",
-      "liabilities": "已确认负债",
-      "totalCost": "雇主总成本",
-      "accounts": "银行账户",
-      "leadTime": "{days, plural, =0 {发薪日为今天} one {距发薪日还有#个工作日} other {距发薪日还有#个工作日}} · {date}",
-      "payDatePast": "发薪日{date}已过",
-      "short": "没有银行账户可以覆盖所需的{amount}。",
-      "rail": {
-        "eft": "直接存款 ({count, plural, one {#名员工} other {#名员工}})",
-        "cheque": "支票 ({count, plural, one {#名员工} other {#名员工}})"
-      }
+    "adjust": {
+      "title": "调整",
+      "applied": "调整已应用。工资条已重算。",
+      "excludedLabel": "本次核算已排除:",
+      "include": "包含",
+      "exclude": "从本次核算排除",
+      "component": "组成",
+      "amount": "金额",
+      "note": "原因/备注(可选)",
+      "replace": "替换计算行",
+      "replaceHelp": "替换该组成的计算行,而不是累加",
+      "add": "添加调整",
+      "remove": "移除",
+      "replaces": "替换计算值",
+      "earnings": "应发",
+      "deductions": "扣款"
     },
     "bankFile": {
       "title": "直接存款",
@@ -277,24 +354,1001 @@
         "default": "无银行账户记录——支票支付",
         "eftFallback": "已设为EFT但无已审核银行账户——支票支付"
       }
-    },
-    "steps": {
-      "finish": "过账并完成",
-      "gl": "总账预览与确认",
-      "period": "范围",
-      "readiness": "就绪检查",
-      "review": "复核工资条"
     }
   },
+  "links": {
+    "paySchedules": "发薪计划",
+    "payComponents": "工资组成"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {有 # 个工资统驭科目尚未配置:} other {有 # 个工资统驭科目尚未配置:}}",
+    "openSettings": "打开工资设置"
+  },
+  "runType": {
+    "regular": "常规",
+    "bonus": "周期外奖金",
+    "termination": "离职结算"
+  },
+  "newRun": {
+    "runType": "核算类型",
+    "runTypeHint": {
+      "regular": "计划内的常规工资:薪资、已审批工时、经常性项目和扣款。",
+      "bonus": "奖金和佣金的周期外发放。无薪资、工时或经常性扣款;所得按奖金计税方法计税。",
+      "termination": "离职员工的最终结算。包括累计假期余额的兑现。"
+    },
+    "employees": "发薪员工",
+    "employeesHint": "最终结算会兑现并清零所有累计银行,因此仅包括此处点名的员工。",
+    "noTerminated": "该计划中没有已登记离职日期的员工。请先在员工档案中登记——没有离职日期无法计算最终结算。",
+    "schedule": "发薪计划",
+    "noSchedules": "无有效的发薪计划",
+    "create": "新建工资核算",
+    "description": "确认本次核算覆盖的期间。已预填计划的下一期间;周期外或补核算请更改日期。",
+    "periodStart": "期间开始",
+    "periodEnd": "期间结束",
+    "payDateHint": "向员工发薪的日期。法定税率依此日期确定。",
+    "invalidWindow": "期间结束不得早于开始,发薪日期不得早于期间结束。",
+    "notBegun": "该期间自 {date} 开始,尚未开始。请选择进行中或已完成的期间。"
+  },
+  "columns": {
+    "number": "编号",
+    "schedule": "计划",
+    "period": "期间",
+    "payDate": "发薪日期",
+    "status": "状态",
+    "gross": "应发",
+    "net": "实发",
+    "employees": "员工"
+  },
+  "status": {
+    "draft": "草稿",
+    "calculated": "已计算",
+    "committed": "已确认",
+    "posted": "已过账",
+    "void": "已作废"
+  },
+  "empty": {
+    "runs": "尚无工资核算。请从发薪计划创建一条以开始。",
+    "profiles": "尚无员工工资档案。请添加档案以将员工纳入核算。"
+  },
+  "run": {
+    "title": "工资核算",
+    "employerCost": "雇主成本",
+    "calculate": "计算",
+    "commit": "确认",
+    "post": "过账",
+    "calculateDone": "工资核算已计算。",
+    "commitDone": "工资核算已确认。",
+    "postDone": "工资核算已过账。",
+    "empty": "没有工资条。请计算本次核算以生成。",
+    "lineKind": {
+      "earning": "应发项",
+      "deduction": "扣款项",
+      "employer_contribution": "雇主"
+    },
+    "stub": {
+      "employee": "员工",
+      "tax": "税款",
+      "lines": "工资行",
+      "trace": "{engine} 跟踪"
+    },
+    "submitApproval": "提交审批",
+    "approvalSubmitted": "已连同证据包送审",
+    "approvalNotRequired": "没有适用于工资核算的审批政策",
+    "approvalPending": "等待审批(还有 {count} 项)——确认和过账已被阻止",
+    "printSet": "打印套件(仅用于打印分发)",
+    "stubsPrintOnly": "{count} 名员工仅打印,未发送邮件"
+  },
+  "profiles": {
+    "addEmployee": "无档案员工",
+    "new": "添加档案",
+    "saved": "档案已保存。",
+    "editorDescription": "该员工的 TD1 事实、发薪计划、豁免和假期政策。",
+    "save": "保存",
+    "cancel": "取消",
+    "active": "有效",
+    "inactive": "停用",
+    "columns": {
+      "employee": "员工",
+      "schedule": "发薪计划",
+      "province": "省份",
+      "basis": "计薪方式",
+      "claims": "抵免额(联邦/省)",
+      "vacation": "假期",
+      "status": "状态"
+    },
+    "basis": {
+      "hourly": "计时",
+      "salary": "月薪"
+    },
+    "vacation": {
+      "accrue": "累计",
+      "pay_each_period": "每期发放"
+    },
+    "fields": {
+      "schedule": "发薪计划",
+      "province": "就业所在省/州",
+      "labourJurisdiction": "劳动管辖区",
+      "payBasis": "计薪方式",
+      "additionalTax": "每期额外税款",
+      "federalClaimCode": "联邦抵免代码",
+      "federalClaimAmount": "联邦抵免额",
+      "provincialClaimCode": "省抵免代码",
+      "provincialClaimAmount": "省抵免额",
+      "claimAmountHint": "覆盖抵免代码",
+      "vacationPercent": "假期比例",
+      "vacationMethod": "假期方式",
+      "cppExempt": "CPP 豁免",
+      "eiExempt": "EI 豁免",
+      "taxExempt": "所得税豁免",
+      "isActive": "有效",
+      "country": "国家",
+      "state": "就业所在州",
+      "filingStatus": "申报身份(W-4 第 1c 步)",
+      "dependentCredits": "被扶养人及其他抵免,年度(W-4 第 3 步)",
+      "otherIncomeAnnual": "其他收入,年度(W-4 第 4a 步)",
+      "deductionsAnnual": "扣除,年度(W-4 第 4b 步)",
+      "multipleJobs": "多份工作/配偶工作(W-4 第 2 步复选框)",
+      "w4Pre2020": "存档 W-4 为 2019 年或更早版本",
+      "w4Allowances": "预扣减免数(2020 年前 W-4)",
+      "ficaExempt": "FICA 豁免",
+      "futaExempt": "FUTA/SUI 豁免",
+      "fitExempt": "联邦所得税豁免(W-4“免税”)",
+      "sin": "SIN / SSN",
+      "sinPlaceholder": "9 位数字。密封存储,永不再显示。",
+      "filingAccount": "申报账户",
+      "stubDelivery": "工资条分发",
+      "paymentMethod": "付款方式"
+    },
+    "country": {
+      "CA": "加拿大",
+      "US": "美国"
+    },
+    "filingStatus": {
+      "single": "单身或已婚分开申报",
+      "married_joint": "已婚联合申报",
+      "head_household": "户主"
+    },
+    "loading": "正在加载工资档案…",
+    "loadFailed": "无法加载工资档案。",
+    "noSchedules": "请先创建发薪计划,再设置工资档案。",
+    "openSchedules": "打开发薪计划",
+    "filingAccountDefault": "默认账户",
+    "stubDelivery": {
+      "email": "邮件",
+      "print": "打印",
+      "both": "邮件和打印"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "按就业所在省/州",
+      "help": "管辖该雇佣关系的劳动管辖区——其法定假日日历和假日工资公式。保持“按就业所在省/州”即可,几乎所有雇佣都适用;仅当另一劳动管辖区规管登记雇主(如联邦监管雇主)时才需设置。它不改变代扣,代扣一律按就业所在省/州。"
+    },
+    "paymentMethod": {
+      "eft": "直接存款",
+      "cheque": "支票",
+      "help": "该员工的付款方式。除非此人与其余人员不同(如档案中无银行账户者用支票),否则保持员工默认值。工资核算将发薪日在两条通道之间拆分并分别筹资。",
+      "inherit": "使用员工默认值"
+    }
+  },
+  "setupWizard": {
+    "cta": {
+      "title": "设置工资",
+      "description": "引导式首次运行:国家包、统驭科目、发薪计划、代缴供应商和付款通道——与工资核算计算前校验的项目相同。",
+      "start": "设置工资",
+      "relaunch": "设置向导",
+      "missing": "{count, plural, one {还有 # 个必配项} other {还有 # 个必配项}}待配置。"
+    },
+    "back": "返回",
+    "next": "下一步",
+    "close": "关闭",
+    "finish": "完成设置",
+    "packs": {
+      "title": "安装国家包",
+      "description": "一个包即一个辖区的法定引擎:其代扣计算、工资组成、假日和申报。",
+      "note": "安装包会植入其法定工资组成并启用该辖区的代扣引擎。现有组成绝不覆盖,以后重跑本向导还可追加包。"
+    },
+    "accounts": {
+      "title": "统驭科目",
+      "description": "工资和实发的过账位置,以及已安装包申报的每项法定代扣背后的负债科目。",
+      "wageExpenseHelp": "工资核算提交时,应发工资借记的费用科目。",
+      "netPayHelp": "发薪日资金离行前,实发工资贷记的负债科目。",
+      "slotHelp": "该法定代扣在汇缴前累积的负债科目。"
+    },
+    "schedule": {
+      "title": "发薪计划",
+      "description": "发薪日历:发薪频率,以及哪个期末锚定周期。",
+      "addAnother": "再创建一个计划",
+      "created": "已创建发薪计划“{name}”。",
+      "name": "名称",
+      "nameHelp": "该日历在核算和员工档案中的显示方式——如“双周 — 全体员工”。",
+      "namePlaceholder": "双周 — 全体员工",
+      "frequency": "频率",
+      "frequencyHelp": "该日历的发薪频率。年期间数按频率法定表确定。",
+      "periods": "年期间数",
+      "periodsHelp": "代扣引擎年化所用的法定期间数——每周 52、双周 26、半月 24、每月 12。",
+      "anchor": "锚定期末",
+      "anchorHelp": "该日历上任何真实的期末日期;其余期间都以此向前向后推算。",
+      "noPermission": "创建发薪计划需要设置权限。请管理员在发薪计划页签添加一个,然后继续。"
+    },
+    "vendors": {
+      "title": "代缴供应商",
+      "description": "已安装包申报的每个法定机构对应的代缴供应商。",
+      "help": "代扣金额挂靠该供应商累积,以便代缴时向该机构产生一笔普通应付款。",
+      "note": "供应商是普通供应商记录——如尚不存在,请先在实体 → 供应商下创建该机构,再在此处选择。"
+    },
+    "rails": {
+      "title": "付款通道",
+      "description": "发薪日实发如何离行:直接存款文件,以及设为 EFT 却无银行账户的员工如何处理。",
+      "eftTitle": "EFT 发起方档案",
+      "eftNone": "尚无可用于工资的发起方档案。直接存款文件需要它;在那之前员工均用支票支付。",
+      "needsConfig": "缺少发起方明细",
+      "manageProfiles": "在付款业务中管理发起方档案"
+    },
+    "review": {
+      "title": "复核并完成",
+      "description": "本组织工资现状,以及工资核算仍会卡住的事项。",
+      "packsLabel": "国家包",
+      "scheduleLabel": "发薪计划",
+      "remainingTitle": "待解决",
+      "allClear": "所有必需配置均已就绪。工资核算可以计算。",
+      "seedNote": "完成会为每个已安装包重跑法定组成植入——幂等,现有组成绝不覆盖。"
+    },
+    "applying": {
+      "title": "正在完成工资设置…",
+      "description": "正在植入法定组成。"
+    },
+    "done": {
+      "title": "工资已就绪",
+      "description": "添加员工及其工资档案,然后开始首次核算。"
+    }
+  },
+  "settingsPage": {
+    "title": "工资",
+    "description": "安装工资国家包,配置过账科目,管理发薪计划、组成和工会协议。",
+    "saved": "已保存。",
+    "save": "保存",
+    "accounts": {
+      "title": "统驭科目",
+      "description": "工资、雇主负担和实发的过账位置。各已安装国家包的法定代扣科目在下方按包配置。"
+    },
+    "posting": {
+      "title": "过账",
+      "description": "工时驱动工资如何上账,以及法定代扣向谁汇缴。"
+    },
+    "wagesTo": {
+      "expense": "工资费用(含项目拆分)",
+      "laborClearing": "劳务清算(冲销标准成本)",
+      "help": "劳务清算冲销工时审批时过账的标准成本;需要劳务成本核算的劳务清算统驭科目。"
+    },
+    "fields": {
+      "wageExpenseAccountId": "工资费用",
+      "burdenExpenseAccountId": "雇主负担费用",
+      "netPayAccountId": "实发工资应付",
+      "cppPayableAccountId": "CPP 应付",
+      "eiPayableAccountId": "EI 应付",
+      "taxPayableAccountId": "所得税应付",
+      "vacationPayableAccountId": "假期工资应付",
+      "wagesTo": "工资过账至",
+      "craRemittancePartyId": "CRA 代缴供应商",
+      "rqRemittancePartyId": "Revenu Québec 代缴供应商",
+      "rqRemittancePartyIdHelp": "按 TPZ-1015.R 表汇缴魁北克源泉扣款的供应商——魁北克员工的 QPP、QPP2 和 QPIP 走这里,绝不走 CRA 供应商。"
+    },
+    "tabsAria": "工资设置分区",
+    "groups": {
+      "foundations": "基础",
+      "earnings": "薪酬与应发",
+      "entitlements": "银行与权益",
+      "payday": "发薪日"
+    },
+    "payday": {
+      "eftTitle": "EFT 与银行文件",
+      "eftDescription": "直接存款文件取自可用于工资的发起方档案。档案在付款业务中管理;本面板报告其状态。",
+      "eftNone": "尚无可用于工资的发起方档案。在配置好之前,应直接存款的员工依赖支票兜底。",
+      "eftManage": "在付款业务中管理发起方档案",
+      "eftNeedsConfig": "缺少发起方明细"
+    },
+    "tabs": {
+      "packs": "国家包",
+      "accounts": "科目与过账",
+      "schedules": "发薪计划",
+      "components": "组成",
+      "union": "工会",
+      "filing": "申报账户",
+      "entitlements": "权益计划",
+      "limits": "银行限额",
+      "service": "服务计划",
+      "derived": "衍生应发",
+      "derivedPreview": "规则预览",
+      "holidays": "假日",
+      "holidayCalendar": "假日日历",
+      "payday": "发薪日",
+      "rates": "法定税率",
+      "workSchedules": "工作时间表"
+    },
+    "packs": {
+      "installed": "已安装",
+      "install": "安装包",
+      "reinstall": "重跑组成植入",
+      "installSuccess": "国家包已安装。",
+      "componentCount": "{count, plural, one {已安装 # 个法定组成} other {已安装 # 个法定组成}}",
+      "hint": "安装包会植入法定工资组成并启用该辖区的代扣引擎。现有组成绝不覆盖。",
+      "canada": {
+        "title": "加拿大",
+        "description": "加拿大工资核算、代缴和年终的法定代扣。",
+        "edition": "{edition, selectordinal, one {第#版} two {第#版} few {第#版} other {第#版}}(自 {effective} 生效)",
+        "engine": "CRA T4127 法定引擎 —",
+        "coverage": "覆盖全部省和地区。魁北克:含 QPP、QPIP、联邦和省所得税代扣;省所得税由 Revenu Québec 征管。",
+        "components": "法定工资组成:基本工资、加班、奖金、假期、所得税、CPP、EI、QPIP。",
+        "verified": "已按 CRA PDOC 逐分钱核验。"
+      },
+      "us": {
+        "title": "美国",
+        "description": "美国工资核算的联邦法定代扣:所得税、社会保障税、医疗保险税和失业税。",
+        "engine": "IRS Pub 15-T 百分比法引擎(2026),含 W-4 第 2–4 步和 2020 年前减免数。",
+        "coverage": "支持 49 个州:40 个计税引擎 + 9 个无税州(AK、FL、NV、NH、SD、TN、TX、WA、WY)。DC 和 NM 待官方金标,暂拒。",
+        "components": "法定工资组成:联邦所得税、社会保障税、医疗保险税(含附加医疗保险税)、FUTA 和 SUI。",
+        "config": "SUI 税率和工资基数按雇主核定。在科目与过账下录入。"
+      },
+      "uninstall": "卸载",
+      "uninstallTitle": "卸载国家包",
+      "uninstallConfirm": "移除该包的法定组成并关闭其代扣引擎吗?员工或工资记录仍依赖该包时,卸载会被阻止。",
+      "uninstallSuccess": "国家包已卸载。",
+      "taxYears": "已加载法定表的",
+      "taxYearDraft": "{year} · 已搭架,未转录",
+      "taxYearNone": "未加载法定表"
+    },
+    "packAccounts": {
+      "none": "尚无已安装的工资国家包,因此没有可配置的法定代扣科目。",
+      "installLink": "安装国家包",
+      "CA": {
+        "title": "加拿大 — CRA 法定科目",
+        "description": "CRA 包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "income_tax": "所得税应付",
+          "qc_income_tax": "魁北克所得税应付(Revenu Québec)",
+          "cpp": "CPP 应付(含 CPP2)",
+          "ei": "EI 应付",
+          "qpip": "QPIP 应付(魁北克)",
+          "vacation": "假期工资应付",
+          "wcb": "工伤赔偿应付(WCB/WSIB)",
+          "eht": "雇主健康税应付"
+        }
+      },
+      "US": {
+        "title": "美国 — 联邦法定科目",
+        "description": "美国包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
+        "slots": {
+          "fit": "联邦所得税应付",
+          "fica": "FICA 应付(社会保障税 + 医疗保险税)",
+          "futa": "FUTA 应付",
+          "suta": "州失业税应付",
+          "state_income_tax": "州所得税应付",
+          "local_income_tax": "地方所得税应付"
+        }
+      },
+      "ratesLink": "需录入的税率——失业税、健康征费——在法定税率页签。"
+    },
+    "usConfig": {
+      "title": "失业税率",
+      "description": "FUTA 和州失业税由雇主缴纳。SUI 税率按雇主核定,因此在此录入,绝不假设。",
+      "futaRate": "有效 FUTA 税率",
+      "futaRateHelp": "小数形式:0.006 即足额州抵免后的标准 0.6%。抵免削减州请调高。",
+      "suiTitle": "州失业保险(SUI)",
+      "suiHelp": "每个雇佣州一行:核定的税率(小数,0.027 即 2.7%)和该州的计税工资基数。",
+      "suiState": "州",
+      "suiRate": "税率",
+      "suiWageBase": "工资基数",
+      "addState": "添加州",
+      "removeState": "移除"
+    },
+    "caConfig": {
+      "title": "雇主工资税",
+      "description": "CA 包每次核算累积的雇主缴纳税:工伤赔偿保费和安大略雇主健康税。",
+      "ehtEnabled": "累积安大略雇主健康税(EHT)",
+      "ehtRate": "EHT 税率(%)",
+      "ehtRateHelp": "百分比形式:1.95 为安大略最高档。贵单位税率取决于安大略工资总额。",
+      "ehtExemption": "年度豁免额",
+      "ehtExemptionHelp": "每年免税的安大略薪酬(多数符合条件的私营雇主为 $1,000,000;关联雇主共用一个豁免额)。",
+      "wcbNote": "工伤赔偿(WCB/WSIB)费率和年度可评税上限按费率组设在人员设置下的工伤组中。"
+    },
+    "stubPassword": {
+      "title": "邮件工资条密码",
+      "description": "加密邮件发送的工资条,按贵单位公布给员工的规则生成每人密码。",
+      "enabled": "加密邮件发送的工资条",
+      "unavailable": "本服务器不支持 PDF 加密——未安装 qpdf 工具。",
+      "expression": "密码规则",
+      "expressionHelp": "标记:{surname}、{givenName}、{employeeNumber}(加 :3 取前三个字符)和 {dob} 加格式(MMDDYYYY、DDMMYYYY、YYYYMMDD、MMDDYY、DDMMYY、YYMMDD、MMDD、YYYY)。加 |upper 或 |lower 变换大小写。示例:{surname:3|upper}{dob:MMDDYYYY}。"
+    },
+    "derivedPreview": {
+      "title": "预览衍生应发规则",
+      "description": "启用前查看规则会命中哪些员工和日期、发放多少。",
+      "rule": "规则",
+      "selectRule": "选择规则…",
+      "from": "期间开始",
+      "to": "期间结束",
+      "noRules": "尚无已配置的衍生应发规则。",
+      "pickRule": "选择规则以预览期间。",
+      "enabled": "已启用",
+      "disabled": "尚未启用",
+      "employeesPaid": "发放员工",
+      "employee": "员工",
+      "jobTitle": "岗位",
+      "day": "日期",
+      "project": "项目",
+      "quantity": "数量",
+      "amount": "金额",
+      "total": "合计",
+      "empty": "该规则在所选期间无发放。",
+      "grossEstimated": "该规则按应发的一定比例发放。预览根据已审批工时和有效工资估算应发;以工资核算自身的计算为准。",
+      "excludedTitle": "按岗位排除",
+      "excludedDescription": "这些员工被规则的排除名单剔除——再也不需要靠记住删除了。",
+      "coverageTitle": "该规则尚无法结算本月",
+      "coverageBody": "结算月份的部分设备费用未记录操作设备的人员,因此激励无法确定欠谁。它拒绝按碰巧有归属的费用发放——那样会少发。请在这些费用上补记操作人员,或收窄该规则使其排除这些费用。",
+      "coverageUnattributed": "无操作人员的费用"
+    },
+    "paymentMethods": {
+      "title": "工资发放方式",
+      "description": "没有已审核银行账户的员工用支票支付。本设置决定设为直接存款却无账户时如何处理。",
+      "fallback": "无直接存款账户时改用支票支付",
+      "fallbackOn": "核算继续,该员工纳入支票批次,并在就绪步骤提示警告。",
+      "fallbackOff": "核算被阻止,直到该员工有已审核的银行账户或改用支票。"
+    },
+    "holidayCalendar": {
+      "title": "法定假日日历",
+      "description": "本辖区执行的假日及贵单位的选择。法定假日来自国家包,不可关闭;可选和公司假日在假日页签配置。",
+      "jurisdiction": "辖区",
+      "year": "年份",
+      "citation": "依据",
+      "date": "放假日期",
+      "holiday": "假日",
+      "statutoryDate": "实际日期",
+      "source": "来源",
+      "paid": "带薪",
+      "statutory": "法定",
+      "elected": "可选 — 已选",
+      "company": "公司",
+      "yes": "是",
+      "unpaid": "无薪闭假",
+      "empty": "本年度无执行假日。",
+      "noMandate": "本辖区无强制法定假日工资,因此日历仅用于闭假和工作日计算。按贵单位政策休息日仍可带薪。",
+      "payRule": "假日工资计算方式",
+      "regularWages": "常规工资",
+      "overtime": "加班",
+      "vacationPay": "假期工资",
+      "priorHolidayPay": "此前假日工资",
+      "workSchedules": "工作时间表",
+      "normalDay": "按员工登记的工作时间表折算的一个正常工作日的工资",
+      "normalDayStandardHours": "对达到辖区标准工时的员工,",
+      "normalDayOtherwise": "否则",
+      "beforeTheDay": "假日前",
+      "beforeTheWeek": "假日所在周前",
+      "daysWorked": "其中工作的天数",
+      "daysWorkedOrEarned": "工作或取得工资的天数",
+      "daysEntitledToPay": "已获工资或应获工资的天数"
+    },
+    "statHolidayPay": {
+      "title": "法定假日工资",
+      "description": "每次工资核算按员工辖区公布的公式计算法定假日工资和假日工作津贴。期间逢假日而辖区无公布公式的员工,将按姓名拒算。",
+      "enabled": "计算法定假日工资"
+    },
+    "rates": {
+      "title": "法定税率",
+      "description": "出版物无法提供、或机构按地区或注册账户公布的税率。其余一切——税级、缴款上限、抵免额——均来自国家包,此处不可编辑。",
+      "noPacks": "已安装的国家包均未申报需雇主录入的法定税率。请在国家包页签安装包。",
+      "tablesLoaded": "已加载法定表的",
+      "draftEdition": "已搭架,未转录",
+      "notLoaded": "未加载",
+      "year": "纳税年度",
+      "yearHelp": "法定税率为纳税年度指定——州税率通知、抵免削减认定、省豁免。为一年录入的税率绝不适用于另一年的工资核算。",
+      "add": "添加税率",
+      "remove": "移除",
+      "empty": "本年度未录入法定税率。",
+      "gapsTitle": "本年度未配置",
+      "allAccounts": "全部账户",
+      "regionHelp": "税率适用的地区。为一地区录入的税率绝不用于另一地区。",
+      "accountHelp": "该税率指定给一个注册账户,因此一地区有两个账户的雇主有两个税率。保持“全部账户”即对该地区所有账户用同一值。",
+      "scope": {
+        "org": "全雇主",
+        "region": "按地区",
+        "subRegion": "按征税辖区",
+        "account": "按申报账户"
+      },
+      "columns": {
+        "levy": "税率",
+        "scope": "范围",
+        "region": "地区",
+        "subRegion": "征税辖区",
+        "account": "申报账户",
+        "values": "值",
+        "country": "国家包"
+      },
+      "subRegionHelp": "地区内的征税辖区——宾州 PSD 代码、俄亥俄市镇、密歇根城市。各辖区税率自定,因此逐个录入;无存档税率的辖区将按姓名拒算,而不是零代扣。"
+    },
+    "workSchedules": {
+      "title": "工作时间表",
+      "description": "每位员工正常排班的工时和日期。多辖区据此计算法定假日工资——一个正常工作日的工资;排班未登记者的八小时工作日绝不假设,拒算。",
+      "add": "新建时间表",
+      "editTitle": "工作时间表",
+      "drawerDescription": "自生效日起适用,直到被取代或终止。过往期间的假日工资一律按当时有效模式计算,绝不按今日。",
+      "empty": "尚无工作时间表。",
+      "columns": {
+        "appliesTo": "适用于",
+        "pattern": "模式",
+        "effectiveFrom": "生效",
+        "status": "状态"
+      },
+      "scope": {
+        "organization": "全体",
+        "employee": "一名员工",
+        "jobTitle": "岗位",
+        "trade": "工种",
+        "department": "部门",
+        "subsidiary": "子公司"
+      },
+      "pattern": {
+        "cycle": "循环模式",
+        "cycleHint": "按日循环的周期——普通周七天,压缩双周十四天,做四休四八天。",
+        "varies": "工时不定",
+        "variesHint": "无固定排班,工时按期确定。这是真实答案而非留空——多辖区对工时不定员工用另一公式,记下它才能计算。"
+      },
+      "summary": {
+        "cycle": "每 {cycle} {hours} 小时 / {days} 天",
+        "week": "周",
+        "cycleDays": "{count} 天周期",
+        "total": "每周期 {hours} 小时 / {days} 个工作日。"
+      },
+      "fields": {
+        "name": "名称",
+        "namePlaceholder": "全职,周一至周五",
+        "appliesTo": "适用于",
+        "selectEmployee": "选择员工",
+        "selectScope": "选择一项",
+        "effectiveFrom": "生效自",
+        "effectiveTo": "有效至",
+        "pattern": "模式",
+        "cycleDays": "周期长度(天)",
+        "cycleAnchor": "周期首日",
+        "hours": "每日工时"
+      },
+      "help": {
+        "scope": "最具体的时间表胜出:一名员工优先于岗位,岗位优先于工种,再到部门、子公司、全体。工资和权益限额也按此顺序确定。",
+        "effectiveFrom": "按工作日期比较,绝不按今日。三月从全职转兼职者,一月假日工资仍按全职模式计算。",
+        "pattern": "员工是按循环模式工作,还是根本没有固定排班。这一区别决定多辖区用哪套公式。",
+        "cycleDays": "模式多少天循环一次。普通周为七。十四表示九天双周;八表示刻意与周错开的做四休四。",
+        "cycleAnchor": "周期从哪天起算。周模式下为周日,因此下方格子按周日至周六标注。",
+        "hours": "周期每个位置正常工作的工时。休息日留空。假日工资按此计算一个正常工作日的工资,因此四天十小时制的一个假日值十小时,而非八小时。"
+      },
+      "grid": {
+        "sunday": "星期日",
+        "monday": "星期一",
+        "tuesday": "星期二",
+        "wednesday": "星期三",
+        "thursday": "星期四",
+        "friday": "星期五",
+        "saturday": "星期六",
+        "day": "第 {n} 天",
+        "weekDay": "第 {week} 周 · {day}"
+      }
+    }
+  },
+  "remittances": {
+    "title": "工资代缴",
+    "description": "一段期间内按缴纳对象归集的累计代扣和雇主缴款。创建账单会借记负债科目,并将付款移交应付账款。",
+    "back": "工资",
+    "from": "自",
+    "to": "至",
+    "apply": "应用",
+    "empty": "本期间没有含可代缴金额的已确认核算。",
+    "unassigned": "未指定代缴供应商",
+    "assignVendor": "请在项目上指定供应商",
+    "context": "工资总额 {gross} · {employees, plural, one {本期间 # 名员工} other {本期间 # 名员工}}",
+    "withheld": "已代扣",
+    "employer": "雇主",
+    "noAccount": "无负债科目",
+    "total": "应代缴合计",
+    "createBill": "创建代缴账单",
+    "createAnother": "再创建一张账单",
+    "billCreated": "账单草稿 {number} 已创建。请在应付账款中复核并过账。",
+    "dueOn": "{dueDate} 到期 · {authority}",
+    "apNote": "代缴账单是普通的供应商账单:",
+    "apLink": "打开应付账单"
+  },
   "yearEnd": {
+    "title": "年终",
+    "description": "已安装工资包规定的所有年度和季度申报,依据已确认工资条生成——每个申报栏都与工资条跟踪核对一致。",
+    "noFilings": "本组织没有规定的工资年终申报。",
     "cadence": {
       "annual": "年度申报",
       "annualHelp": "每个纳税年度申报一次(T4、W-2、RL-1)。上方税年度选择器决定显示哪一年的人员。",
       "quarterly": "季度申报",
       "quarterlyHelp": "每个日历季度申报一次(941 表)——人员表在所选税年度内按季度分行显示。"
+    }
+  },
+  "filings": {
+    "yearLabel": "纳税年度",
+    "rowCount": "{count, plural, =0 {无行} one {# 行} other {# 行}}",
+    "notInstalled": "未安装包",
+    "emptyDefault": "本年度无行。",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "下载 PDF"
     },
-    "description": "已安装工资包规定的所有年度和季度申报,依据已确认工资条生成——每个申报栏都与工资条跟踪核对一致。",
-    "noFilings": "本组织没有规定的工资年终申报。",
-    "title": "年终"
+    "issue": {
+      "reason": "签发原因",
+      "reasonHelp": "第 16 栏是雇主对收入中断原因的声明。选择原因即把该员工纳入 ROE Web 文件;留空则排除。",
+      "comment": "备注",
+      "notIncluded": "未纳入文件",
+      "included": "已纳入文件——原因 {code}",
+      "commentRequired": "该原因代码必须填写备注。"
+    },
+    "lifecycle": {
+      "title": "申报状态",
+      "statusColumn": "申报状态",
+      "help": "已签发的申报是向机构申报内容的证据,因此绝不覆盖:更正是以新文件取代,原文件保留可下载。金额一律按已确认工资条重算——先更正工资数据,再修订。",
+      "history": "申报历史",
+      "recordOriginal": "登记为已申报",
+      "note": "申报备注",
+      "notePlaceholder": "申报方式(可选)",
+      "notIssued": "尚未登记为已申报。",
+      "issuedCount": "已签发文件",
+      "latest": "最新",
+      "changedCount": "申报后变更",
+      "absentCount": "账面已无",
+      "resurrectedCount": "已撤销但账面仍有",
+      "slipsCovered": "覆盖申报单",
+      "supersedes": "取代",
+      "noArtifact": "无电子文件——下方申报单快照即记录。",
+      "correction": "更正",
+      "correctionForm": "更正表",
+      "correctionHelp": "修订是重述本应存在的申报单;撤销是声明该申报单本不应存在。数字按已确认工资条重算——绝不手工涂改——因此先更正工资数据,修订随之而来。",
+      "unfiledHelp": "该申报单尚未登记为已申报,无可更正。",
+      "addedHelp": "该申报单在申报后出现。后发现的申报单按新增原件申报,而非更正,不在此产生——请通过机构自有服务申报。",
+      "absentHelp": "工资账面不再产生该申报单,无可重述。请撤销,以便机构不再持有它。",
+      "resurrectedHelp": "该申报单已撤销,但工资账面仍在产生。请作废或调整底层核算,否则下次申报还会再次报出。",
+      "box": "栏",
+      "field": "字段",
+      "asFiled": "申报时",
+      "now": "现在",
+      "redacted": "已变更——值不显示",
+      "previewAmended": "预览更正",
+      "issueAmended": "签发修订",
+      "previewCancelled": "预览撤销",
+      "issueCancelled": "撤销该申报单",
+      "status": {
+        "unfiled": "未申报",
+        "unchanged": "已申报",
+        "changed": "申报后变更",
+        "absent": "账面已无",
+        "withdrawn": "已撤销",
+        "resurrected": "已撤销但账面仍有"
+      }
+    },
+    "run": {
+      "title": "{label}",
+      "help": "该申报覆盖的全部人员及所载数字。行无误后再生成文件——已签发的申报是证据,更正意味着修订而非编辑。",
+      "issue": "登记为已申报",
+      "viewAll": "查看全部"
+    }
+  },
+  "separations": {
+    "title": "离职",
+    "description": "已安装工资包申报的离职申报——按员工事件在收入中断数日内到期,不等年终。",
+    "noFilings": "本组织未申报工资离职申报。",
+    "run": {
+      "title": "签发 {label}",
+      "help": "离职申报在收入中断数日内到期——在此按员工签发,不等年终。",
+      "issue": "复核并签发",
+      "viewAll": "全部离职"
+    }
+  },
+  "register": {
+    "title": "工资登记簿",
+    "print": "打印",
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "其他扣款",
+    "totals": "{count, plural, one {合计(员工 # 名)} other {合计(员工 # 名)}}"
+  },
+  "entitlements": {
+    "title": "工资银行",
+    "hint": "存班、假期及员工欠回的余额。余额即权益账——经工资核算流转,绝不直接改数。",
+    "managePlans": "管理计划",
+    "noPlans": "本组织尚无已配置的权益计划。",
+    "noMovements": "尚无变动。",
+    "overLimit": "超限",
+    "nearLimit": "近限",
+    "hoursSuffix": "小时",
+    "hoursAtWage": "按现行工资 {wage}/小时折 {hours} 小时",
+    "worthToday": "按今日工资值 {amount}",
+    "owedBack": "欠雇主——从以后工资扣回。",
+    "limitLine": "限额 {limit}(由 {scope} 设定)",
+    "plan": "计划",
+    "amount": "金额",
+    "source": "来源",
+    "movementDate": "日期",
+    "movementKind": "类型",
+    "scope": {
+      "employee": "本员工",
+      "job_title": "岗位",
+      "trade": "工种",
+      "department": "部门",
+      "subsidiary": "法律实体",
+      "plan": "计划默认"
+    },
+    "kind": {
+      "opening": "期初",
+      "accrual": "累计",
+      "bank_in": "存班",
+      "payout": "兑现",
+      "repayment": "偿还",
+      "adjustment": "调整"
+    }
+  },
+  "paymentMethod": {
+    "eft": "直接存款",
+    "cheque": "支票",
+    "inherit": "使用员工默认值",
+    "help": "保持默认即跟随员工记录:有已审核银行账户走直接存款,否则打印支票。"
+  },
+  "openingBalances": {
+    "title": "期初余额",
+    "description": "每位员工从原工资系统带入的一切:法定本年累计、已部分使用的年度上限、假期和存班余额。别无他源,缺了它每个上限和银行都从零起算。",
+    "hint": "按首次核算前一天的原供应商本年累计报表抄录。本年度在贵单位无发薪的员工留空。",
+    "yearLabel": "纳税年度",
+    "employee": "员工",
+    "onlyMissing": "仅无转入者",
+    "bulkImport": "从文件批量导入",
+    "export": "导出",
+    "entered": "已转入",
+    "locked": "已锁定",
+    "lockedShort": "已锁定",
+    "lockedBy": "已确认的工资核算",
+    "none": "无",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "期初余额已保存。",
+    "saveFailed": "未保存任何内容。",
+    "rejected": "未保存任何内容——请先修正这些。",
+    "empty": "尚无有有效工资档案的员工。",
+    "fields": {
+      "pensionableYtd": "可养老金/FICA 工资",
+      "insurableYtd": "可保险/失业工资",
+      "cppYtd": "CPP 缴款",
+      "cpp2Ytd": "CPP2 缴款",
+      "eiYtd": "EI 保费",
+      "qpipYtd": "QPIP 保费",
+      "taxableYtd": "应税所得",
+      "taxYtd": "已代扣所得税",
+      "nonPeriodicYtd": "奖金/补充所得",
+      "cpp2BonusYtd": "奖金 CPP2 缴款",
+      "qcCsbYtd": "奖金额外 QPP 缴款",
+      "ficaWithheldYtd": "已代扣 FICA 税",
+      "qpipEmployerYtd": "雇主 QPIP 缴款",
+      "wcbAssessableYtd": "WCB 应评税工资"
+    },
+    "componentHelp": "该员工本年度在原工资系统已使用的该组成年度上限额度。缺了它上限从零起算,员工可能缴足第二次全年限额。",
+    "componentCap": "年度上限",
+    "componentInertHelp": "该组成已无年度上限,因此下方金额不改变任何内容且不可编辑。保留是因为有人录入过,以后还可能再设上限。",
+    "entitlements": {
+      "title": "银行转入(假期、存班)",
+      "employee": "员工",
+      "asOf": "转入截止",
+      "asOfHelp": "转入的起算日期。工资核算只计发薪日当日或之前的变动,因此该日期必须早于贵单位首次工资核算。它不是纳税年度:银行只有一个终身余额。",
+      "entered": "已转入",
+      "save": "保存",
+      "saving": "保存中…",
+      "saved": "银行转入已保存。",
+      "saveFailed": "未保存任何内容。",
+      "rejected": "未保存任何内容——请先修正这些。",
+      "bulkImport": "从文件批量导入",
+      "export": "导出",
+      "empty": "尚无有有效工资档案的员工。",
+      "noPlans": "尚无已设置的权益计划,因此没有可转入余额的银行。",
+      "configurePlans": "设置权益计划",
+      "lockedBy": "已确认的工资核算",
+      "blocked": "发放于",
+      "blockedHint": "将转入日期定在其后",
+      "legacyShort": "遗留",
+      "legacyTitle": "发现未迁移的假期余额",
+      "legacyBody": "这些员工在已停用的期初余额栏有假期余额,却无银行承接。这是无人跟踪的负债。请在此录入,或运行 scripts/migrate-vacation-to-entitlements.ts 重放全部历史。",
+      "legacyPrefill": "将其复制到假期栏",
+      "moneyHelp": "转入的余额,按金额。银行按赚取时的金额存储,按员工现行工资折小时显示。",
+      "hoursHelp": "转入的余额,按小时。",
+      "oweHelp": "员工欠雇主的余额,为负数——欠 1,200 请录入 −1200。从以后工资扣回,直到恰好为零。"
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "法律实体不能运行工资",
+    "jurisdictionEmployee": "员工辖区与付款实体不一致"
+  },
+  "parallelRun": {
+    "title": "并行核算",
+    "description": "与正要离开的工资系统逐分钱核对发薪期间。导入原供应商的登记簿,选择覆盖同一期间的核算,比较。",
+    "compare": "比较",
+    "comparing": "比较中…",
+    "compareFailed": "无法运行比较。",
+    "cleanToast": "每笔金额完全对平。",
+    "toleranceToast": "已对平,应用了容差。",
+    "differencesToast": "发现差异——打开比较。",
+    "importRegister": "导入登记簿",
+    "export": "导出",
+    "tolerances": "容差",
+    "tolerancesDescription": "默认每个组成精确比较。仅在原系统确实四舍五入不同的地方加容忍——使用它的每次比较都会显示。",
+    "addTolerance": "添加容差",
+    "toleranceSaved": "容差已保存。",
+    "noTolerances": "未配置容差——每个组成精确比较。",
+    "comparisonsTitle": "比较",
+    "noComparisons": "尚未运行比较。",
+    "registersTitle": "已导入登记簿",
+    "noRegisters": "尚未导入原登记簿。请从“导入登记簿”开始。",
+    "noRegistersRow": "尚未导入。",
+    "registerDiscarded": "已导入登记簿已丢弃。",
+    "discard": "丢弃",
+    "openReport": "打开对账报告",
+    "periodMismatch": "两侧覆盖的发薪日不同。比较将报告实为期间错配的差异。",
+    "emptyRegister": "该登记簿没有员工。与之比较将报告“未比较任何内容”,而非无差异。",
+    "unmappedWarning": "该登记簿中有从未映射的栏:",
+    "unmappedTitle": "无人映射的来源栏",
+    "nothingCompared": "未比较任何内容",
+    "toleranceTitle": "生效的容差",
+    "showMatches": "显示完全匹配",
+    "clearEmployee": "全部员工",
+    "cleanNote": "每笔比较金额逐分钱一致,无容差、无未映射栏。",
+    "noFindings": "本次比较没有任何发现。",
+    "noExceptions": "无异常——每个单元格完全匹配。",
+    "loading": "加载中…",
+    "saving": "保存中…",
+    "exact": "精确",
+    "notPresent": "缺席",
+    "allMapped": "全部已映射",
+    "matched": "已匹配",
+    "differ": "有差异",
+    "oneSidedShort": "单边",
+    "toleratedShort": "已容忍",
+    "employeesShort": "员工",
+    "amountsShort": "金额",
+    "rowsShort": "行",
+    "valuedRows": "在以下有值",
+    "comparedOf": "比较于",
+    "onRegister": "登记簿上",
+    "inRun": "核算中",
+    "fromColumn": "来自",
+    "paid": "已发放",
+    "vsOurs": "我方",
+    "columns": {
+      "outcome": "结果",
+      "register": "原登记簿",
+      "payRun": "工资核算",
+      "compared": "已比较",
+      "differences": "差异",
+      "netDifference": "净差异",
+      "comparedAt": "比较于",
+      "loaded": "导入于",
+      "stated": "列示总额/净额",
+      "unmapped": "未映射栏",
+      "employee": "员工",
+      "component": "组成",
+      "priorSystem": "原系统",
+      "thisSystem": "本系统",
+      "difference": "差异",
+      "tolerance": "容差",
+      "result": "结果"
+    },
+    "fields": {
+      "register": "原登记簿",
+      "registerPlaceholder": "选择登记簿…",
+      "payRun": "我方工资核算",
+      "payRunPlaceholder": "选择工资核算…",
+      "component": "组成",
+      "componentPlaceholder": "选择…",
+      "tolerance": "容忍额",
+      "reason": "原因"
+    },
+    "kinds": {
+      "earning": "应发",
+      "deduction": "扣款",
+      "employer_contribution": "雇主缴款",
+      "total": "列示合计"
+    },
+    "statuses": {
+      "clean": "完全对平",
+      "clean_within_tolerance": "在容差内对平",
+      "differences": "待解决差异",
+      "no_comparable_data": "未比较任何内容"
+    },
+    "classes": {
+      "match": "完全匹配",
+      "within_tolerance": "容差内",
+      "difference": "差异",
+      "prior_only": "仅原系统有",
+      "our_only": "仅本系统有",
+      "employee_prior_only": "我方核算缺该员工",
+      "employee_our_only": "登记簿缺该员工",
+      "unattributed": "无组成可解释"
+    },
+    "tiles": {
+      "gross": "应发",
+      "net": "实发",
+      "unattributed": "未解释净额",
+      "cells": "单元格"
+    },
+    "help": {
+      "register": "从正要离开的工资系统导入的登记簿——一个发薪期间、每员工一行。在导入导出中经“原工资登记簿”资源加载,把原系统的栏名映射到本工资的组成上。",
+      "payRun": "要核对的核算。已计算的核算计入:并行核算要在钱离行前证明数字。草稿核算无工资条,无法比较。",
+      "compared": "两侧都有的员工,占各自总数的比例。无人被比较的比较报告为“未比较任何内容”,绝不报告为一致。",
+      "unmapped": "文件中无组成认领的栏。其中的金额无人比较,因此可能有金额躺在那里无人问津。请映射后重导,或确认其不带金额。",
+      "tolerance": "除非有人为某组成配置了容忍,各组成一律精确比较。生效的容忍在此和比较上都显示,因为看不见的容忍会毁掉整个练习。",
+      "unattributed": "比较组成解释不了的净差异部分。非零意味着有金额影响了总额却无可比组成支撑——多为来源栏无人映射。",
+      "toleranceSlot": "组成,或登记簿列示总额之一。容忍按员工按期间计。",
+      "toleranceAmount": "绝对金额,绝不按百分比:以变动基数取百分比,容忍会悄悄长大。零即取消容忍。",
+      "toleranceReason": "必填。同意不再追查一笔差异,是必须可归因到人和原因的决定。"
+    }
+  },
+  "workSchedules": {
+    "title": "工作时间表",
+    "description": "每位员工正常排班的工时和日期。多辖区据此计算法定假日工资——一个正常工作日的工资;排班未登记者的八小时工作日绝不假设,拒算。",
+    "add": "新建时间表",
+    "editTitle": "工作时间表",
+    "drawerDescription": "自生效日起适用,直到被取代或终止。过往期间的假日工资一律按当时有效模式计算,绝不按今日。",
+    "empty": "尚无工作时间表。",
+    "columns": {
+      "appliesTo": "适用于",
+      "pattern": "模式",
+      "effectiveFrom": "生效",
+      "status": "状态"
+    },
+    "scope": {
+      "organization": "全体",
+      "employee": "一名员工",
+      "jobTitle": "岗位",
+      "trade": "工种",
+      "department": "部门",
+      "subsidiary": "子公司"
+    },
+    "pattern": {
+      "cycle": "循环模式",
+      "cycleHint": "按日循环的周期——普通周七天,压缩双周十四天,做四休四八天。",
+      "varies": "工时不定",
+      "variesHint": "无固定排班,工时按期确定。这是真实答案而非留空——多辖区对工时不定员工用另一公式,记下它才能计算。"
+    },
+    "summary": {
+      "cycle": "每 {cycle} {hours} 小时 / {days} 天",
+      "week": "周",
+      "cycleDays": "{count} 天周期",
+      "total": "每周期 {hours} 小时 / {days} 个工作日。"
+    },
+    "fields": {
+      "name": "名称",
+      "namePlaceholder": "全职,周一至周五",
+      "appliesTo": "适用于",
+      "selectEmployee": "选择员工",
+      "selectScope": "选择一项",
+      "effectiveFrom": "生效自",
+      "effectiveTo": "有效至",
+      "pattern": "模式",
+      "cycleDays": "周期长度(天)",
+      "cycleAnchor": "周期首日",
+      "hours": "每日工时"
+    },
+    "help": {
+      "scope": "最具体的时间表胜出:一名员工优先于岗位,岗位优先于工种,再到部门、子公司、全体。工资和权益限额也按此顺序确定。",
+      "effectiveFrom": "按工作日期比较,绝不按今日。三月从全职转兼职者,一月假日工资仍按全职模式计算。",
+      "pattern": "员工是按循环模式工作,还是根本没有固定排班。这一区别决定多辖区用哪套公式。",
+      "cycleDays": "模式多少天循环一次。普通周为七。十四表示九天双周;八表示刻意与周错开的做四休四。",
+      "cycleAnchor": "周期从哪天起算。周模式下为周日,因此下方格子按周日至周六标注。",
+      "hours": "周期每个位置正常工作的工时。休息日留空。假日工资按此计算一个正常工作日的工资,因此四天十小时制的一个假日值十小时,而非八小时。"
+    },
+    "grid": {
+      "sunday": "星期日",
+      "monday": "星期一",
+      "tuesday": "星期二",
+      "wednesday": "星期三",
+      "thursday": "星期四",
+      "friday": "星期五",
+      "saturday": "星期六",
+      "day": "第 {n} 天",
+      "weekDay": "第 {week} 周 · {day}"
+    }
+  },
+  "retro": {
+    "title": "补发工资"
   }
 }
