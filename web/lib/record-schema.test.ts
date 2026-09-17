@@ -9,6 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { FormSection } from '@openbooks/forms-core'
 import {
+  formatFieldValue,
   lintRecordFields,
   normalizeSectionsInput,
   splitRecordData,
@@ -191,6 +192,28 @@ test('withComputedFormulas computes per-row formulas and the header rollup', () 
   assert.equal(lines[0]!.amount, 10) // 2 * 5
   assert.equal(lines[1]!.amount, 30) // 3 * 10
   assert.equal(out.grand_total, 40) // sum of amounts
+})
+
+test('formatFieldValue formats currency without a float round-trip (F-u1 P10)', () => {
+  const price = { id: 'price', type: 'currency', label: 'Price' } as const
+  // Past 2^53 the double cannot hold the cents: the exact ledger string must
+  // reach Intl, exactly as pdfMoney and the statement renderer do.
+  assert.equal(formatFieldValue(price, '12345678901234567.89'), '12,345,678,901,234,567.89')
+  assert.equal(formatFieldValue(price, '99999999999999.99'), '99,999,999,999,999.99')
+  // The 2.675 case pdfMoney's own comment cites: the exact decimal rounds up.
+  assert.equal(formatFieldValue(price, '2.675'), '2.68')
+  // Negative zero collapses, matching the sibling money paths.
+  assert.equal(formatFieldValue(price, '-0.0000'), '0.00')
+  // Ordinary values are untouched by the exact path.
+  assert.equal(formatFieldValue(price, '1234.5'), '1,234.50')
+  assert.equal(formatFieldValue(price, 42), '42.00')
+})
+
+test('formatFieldValue formats percentages without a float round-trip', () => {
+  const pct = { id: 'rate', type: 'percentage', label: 'Rate' } as const
+  assert.equal(formatFieldValue(pct, '2.675'), '2.68%')
+  assert.equal(formatFieldValue(pct, '99999999999999.99'), '99,999,999,999,999.99%')
+  assert.equal(formatFieldValue(pct, '5'), '5%')
 })
 
 test('withComputedFormulas resolves chained formulas in headers and repeating rows', () => {

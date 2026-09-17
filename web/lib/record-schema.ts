@@ -450,11 +450,30 @@ export type FieldDisplayFormat = {
   money: (value: string | number) => string
 }
 
-function formatAmount(n: number, decimals: number, locale = 'en-CA'): string {
-  return n.toLocaleString(locale, {
+// Ledger decimals arrive as exact numeric STRINGS. Coercing them through
+// Number() first silently loses precision past 2^53, so a displayed record
+// value could disagree with the ledger (and with the exact-string money
+// paths in report-pdf-detail and @openbooks/pdf) by real money. Exact
+// decimal text therefore goes straight to Intl, whose mathematical-value
+// parsing never builds a double — anything else keeps the old Number path.
+const EXACT_DECIMAL_TEXT = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/
+const NEGATIVE_ZERO_TEXT = /^-0(?:\.0*)?(?:[eE][-+]?\d+)?$/
+
+function formatAmount(n: string | number, decimals: number, locale = 'en-CA'): string {
+  const options = {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  })
+  }
+  if (typeof n === 'number') {
+    // A computed double is already binary; -0 still collapses so a zeroed
+    // formula never prints "-0.00", matching the sibling money paths.
+    return (Object.is(n, -0) ? 0 : n).toLocaleString(locale, options)
+  }
+  const exact = n.trim()
+  if (!EXACT_DECIMAL_TEXT.test(exact)) return Number(n).toLocaleString(locale, options)
+  // Collapse "-0"/"-0.0000" so a zeroed value never prints "-0.00".
+  const normalized = NEGATIVE_ZERO_TEXT.test(exact) ? '0' : exact
+  return new Intl.NumberFormat(locale, options).format(normalized as never)
 }
 
 function formatDateValue(v: string): string {
@@ -486,9 +505,9 @@ export function formatFieldValue(
   if (value === null || value === undefined || value === '') return ''
   switch (field.type) {
     case 'currency':
-      return display?.money(String(value)) ?? formatAmount(Number(value), 2)
+      return display?.money(String(value)) ?? formatAmount(String(value), 2)
     case 'percentage':
-      return `${formatAmount(Number(value), 2, display?.locale).replace(/[.,]00$/, '')}%`
+      return `${formatAmount(String(value), 2, display?.locale).replace(/[.,]00$/, '')}%`
     case 'number': {
       const unit = typeof field.config?.unit === 'string' ? field.config.unit : ''
       const text = Number(value).toLocaleString(display?.locale ?? 'en-CA', { maximumFractionDigits: 6 })
