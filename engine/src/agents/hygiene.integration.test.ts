@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { addCalendarDays } from "../business-date.ts";
 import { defaultContinuousCloseDetectors } from "../continuous-close-config.ts";
 import { db, withBypass, withBypassContext } from "../db.ts";
 import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
@@ -130,6 +131,83 @@ test(
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
       await withBypass(() => dropScratchOrg(other.orgId));
+    }
+  },
+);
+
+/**
+ * A bank-typed account carrying a persistent credit-normal balance that
+ * nobody reconciles is either miscategorised (Rassaun 5910 'Provision for
+ * Future Income Tax' sat at -CA$40,000 inside asset_bank, so dashboard cash
+ * and both cash-flow statements counted a tax provision as cash) or an
+ * unmanaged overdraft. Either way the product should say so: the finding is
+ * a warning with a review path, never a retype.
+ */
+test(
+  "bank-typed credit balances flag only when unmanaged and persistent",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const seedBank = async (number: string, name: string, reconcilable: boolean): Promise<string> => {
+        const id = randomUUID();
+        await withBypassContext(() => db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, reconcilable, currency_restriction)
+          values (${id}, ${org.orgId}, ${number}, ${name}, 'asset_bank', ${reconcilable}, ${reconcilable ? "CAD" : null})`));
+        return id;
+      };
+      const postBalanced = async (postingDate: string, debitAccount: string, creditAccount: string, amount: string) => {
+        const entryId = randomUUID();
+        await withBypassContext(() => db.execute(sql`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+          values
+            (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`HX-${entryId.slice(0, 8)}`},
+             ${postingDate}, ${org.periodId}, 'hygiene bank-credit seed', 'draft', 'manual')`));
+        await withBypassContext(() => db.execute(sql`
+          insert into journal_lines
+            (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values
+            (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${debitAccount}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, '1'),
+            (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${creditAccount}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD', ${`-${amount}`}, '1')`));
+        await withBypassContext(() => db.execute(sql`
+          update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`));
+      };
+      const oldDate = addCalendarDays(org.date, -120);
+
+      // The 5910 shape: credit-normal before the trailing window and still
+      // credit-normal today, never reconciled.
+      const reserve = await seedBank("5970", "Harbor Reserve", false);
+      await postBalanced(oldDate, org.accounts.adjustment, reserve, "40000");
+      // A managed facility: credit-normal but statement-reconcilable.
+      const facility = await seedBank("5971", "Harbor Facility", true);
+      await postBalanced(org.date, org.accounts.cogs, facility, "100000");
+      // Genuine cash: debit-normal.
+      const operating = await seedBank("5972", "Harbor Operating", false);
+      await postBalanced(org.date, operating, org.accounts.revenue, "50000");
+      // A fresh overdraft: positive before the window, negative today.
+      const swing = await seedBank("5973", "Harbor Swing", false);
+      await postBalanced(oldDate, swing, org.accounts.revenue, "100000");
+      await postBalanced(org.date, org.accounts.cogs, swing, "150000");
+
+      const findings = await withBypassContext(() =>
+        hygieneFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("hygiene")),
+      );
+      const subjects = new Set(
+        findings
+          .filter(
+            (finding) =>
+              finding.findingType === "control_account_type_mismatch" &&
+              finding.summary.reason === "bank_credit_balance",
+          )
+          .map((finding) => finding.subjectId),
+      );
+      assert.ok(subjects.has(reserve), "unmanaged persistent credit-balance bank flags");
+      assert.ok(!subjects.has(facility), "a reconciled facility stays silent");
+      assert.ok(!subjects.has(operating), "debit-normal cash stays silent");
+      assert.ok(!subjects.has(swing), "a fresh overdraft stays silent");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
 );

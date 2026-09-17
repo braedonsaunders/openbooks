@@ -52,6 +52,7 @@ test("control mismatches surface with stable fingerprints and no proposals", asy
         reason: "name_type",
         detail: "named like provision but typed asset_bank",
         sampleDocId: null,
+        balance: null,
       },
     ],
   });
@@ -62,6 +63,30 @@ test("control mismatches surface with stable fingerprints and no proposals", asy
   assert.equal(findings[0]!.materiality, "0.0000");
   assert.equal(findings[0]!.proposal ?? null, null, "retype vs rename needs a human");
   assert.equal(findings[0]!.summary.href, "/accounts");
+});
+
+test("bank credit balances carry their balance and a cash review", async () => {
+  const loaders = stubLoaders({
+    controlMismatches: async () => [
+      {
+        accountId: "a9",
+        accountNumber: "5910",
+        accountName: "Harbor Reserve",
+        accountType: "asset_bank",
+        reason: "bank_credit_balance",
+        detail: "typed asset_bank but carries a credit-normal balance",
+        sampleDocId: null,
+        balance: "-40000.0000",
+      },
+    ],
+  });
+  const findings = await hygieneFindings(ORG, "1000.0000", policies(), loaders);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.fingerprint, "hygiene-control:a9");
+  assert.equal(findings[0]!.summary.reason, "bank_credit_balance");
+  assert.equal(findings[0]!.summary.balance, "-40000.0000");
+  assert.match(String(findings[0]!.summary.review), /reconcile it as a bank account/);
+  assert.equal(findings[0]!.proposal ?? null, null, "retype vs reconcile needs a human");
 });
 
 test("duplicate parties rank tax-id matches above name matches", async () => {
