@@ -1,0 +1,362 @@
+{
+  "title": "Conformidade de subcontratados",
+  "description": "Certificados de seguro, quitações e declarações informativas de fim de ano para quem você paga.",
+  "tabs": {
+    "overview": "Visão geral",
+    "vendors": "Subcontratados",
+    "lienWaivers": "Quitações",
+    "informationReturns": "Declarações informativas"
+  },
+  "setup": {
+    "prompt": "Nada está sendo exigido ainda. Defina as classes de contraparte e os certificados que cada uma deve manter.",
+    "action": "Configurar conformidade"
+  },
+  "stats": {
+    "tracked": "Subcontratados acompanhados",
+    "trackedHint": "{count} apólices em vigor",
+    "compliant": "Cobertos",
+    "compliantHint": "{expiring} vencendo em breve",
+    "blocked": "Bloqueados",
+    "blockedHint": "{bills} contas a pagar afetadas",
+    "exposure": "Exposição bloqueada",
+    "exposureHint": "Valores a pagar que não podem ser liberados"
+  },
+  "panels": {
+    "blocked": "Pagamentos retidos pelo controle",
+    "blockedHint": "Reavaliados continuamente com as evidências de hoje",
+    "blockedEmpty": "Nada retido. Todas as contas a pagar de subcontratados em aberto estão liberadas.",
+    "expiring": "Vencendo este mês",
+    "expiringHint": "Cobre estes antes que vençam",
+    "expiringEmpty": "Nenhum certificado dentro da janela de aviso.",
+    "waivers": "Quitações pendentes",
+    "waiversHint": "Solicitadas ou recebidas, mas ainda não assinadas",
+    "waiversEmpty": "Nenhuma quitação aguardando assinatura.",
+    "waiversAction": "Todas as quitações",
+    "readiness": "Prontidão 1099 — {year}",
+    "readinessHint": "Corrija estes antes de janeiro",
+    "readinessEmpty": "Todo fornecedor declaravel tem o que a declaração exige.",
+    "readinessAction": "Declarações"
+  },
+  "empty": {
+    "title": "Nenhum subcontratado em acompanhamento",
+    "description": "Atribua uma classe de conformidade a um fornecedor para começar a exigir certificados."
+  },
+  "states": {
+    "compliant": "Coberto",
+    "expiring": "Vencendo",
+    "waived": "Dispensado",
+    "missing": "Ausente",
+    "expired": "Vencido",
+    "insufficient": "Insuficiente",
+    "awaiting_verification": "Não verificado",
+    "rejected": "Rejeitado"
+  },
+  "reasons": {
+    "no_evidence": "nada arquivado",
+    "rejected": "rejeitado",
+    "awaiting_verification": "aguardando verificação",
+    "not_yet_effective": "ainda sem vigência",
+    "expired": "vencido",
+    "coverage_below_minimum": "limite por ocorrência abaixo do mínimo",
+    "aggregate_below_minimum": "limite agregado abaixo do mínimo",
+    "coverage_currency_mismatch": "limite expresso em outra moeda",
+    "coverage_amount_missing": "sem limite indicado no certificado",
+    "missing_additional_insured": "não nomeado como segurado adicional",
+    "missing_waiver_of_subrogation": "sem renúncia à sub-rogação",
+    "missing_primary_noncontributory": "não primário e não contributivo"
+  },
+  "decision": {
+    "cleared": "Liberado",
+    "warned": "Atenção",
+    "blocked": "Bloqueado",
+    "overridden": "Com exceção"
+  },
+  "certificateStatus": {
+    "pending_review": "Aguardando revisão",
+    "active": "Verificado",
+    "rejected": "Rejeitado",
+    "superseded": "Substituído"
+  },
+  "waiverStatus": {
+    "draft": "Rascunho",
+    "requested": "Solicitada",
+    "received": "Recebida",
+    "signed": "Assinada",
+    "rejected": "Rejeitada",
+    "void": "Anulada"
+  },
+  "filingStatus": {
+    "draft": "Rascunho",
+    "computed": "Calculada",
+    "finalized": "Finalizada",
+    "filed": "Enviada",
+    "void": "Anulada"
+  },
+  "recipientStatus": {
+    "included": "A declarar",
+    "excluded": "Excluído",
+    "corrected": "Corrigida",
+    "void": "Anulada"
+  },
+  "filingChannel": {
+    "iris": "IRS IRIS",
+    "fire": "IRS FIRE",
+    "provider": "Provedor de envio",
+    "paper": "Papel",
+    "other": "Outro"
+  },
+  "direction": {
+    "received": "Do subcontratado",
+    "issued": "Emitida por nós"
+  },
+  "waiverType": {
+    "conditional_progress": "Condicional — medição",
+    "unconditional_progress": "Incondicional — medição",
+    "conditional_final": "Condicional — final",
+    "unconditional_final": "Incondicional — final"
+  },
+  "waiverTypeHint": {
+    "conditional_progress": "Libera o serviço até a data somente após a compensação do pagamento no banco.",
+    "unconditional_progress": "Libera o serviço até a data na hora — mesmo que o pagamento nunca seja compensado.",
+    "conditional_final": "Libera o contrato inteiro, incluindo a retenção, após a compensação do pagamento final.",
+    "unconditional_final": "Libera o contrato inteiro, incluindo a retenção, na hora e sem condições."
+  },
+  "taxClassification": {
+    "individual": "Pessoa física",
+    "sole_proprietor": "Empresário individual",
+    "partnership": "Sociedade de pessoas",
+    "c_corp": "Sociedade tipo C",
+    "s_corp": "Sociedade tipo S",
+    "llc": "LLC",
+    "trust_estate": "Fideicomisso ou espólio",
+    "government": "Órgão público",
+    "nonprofit": "Entidade sem fins lucrativos",
+    "other": "Outro"
+  },
+  "tinType": {
+    "ein": "EIN",
+    "ssn": "SSN",
+    "itin": "ITIN",
+    "atin": "ATIN",
+    "sin": "SIN (Canadá)",
+    "bn": "Número da empresa (Canadá)",
+    "unknown": "Desconhecido"
+  },
+  "readiness": {
+    "unflagged": "Pago acima do limite, mas não marcado como declaravel",
+    "missingTin": "Sem TIN arquivado",
+    "noForm": "Sem declaração informativa atribuída"
+  },
+  "vendors": {
+    "title": "Matriz de conformidade de subcontratados",
+    "description": "Uma linha por subcontratado acompanhado, uma coluna por política. A mesma avaliação executada no pagamento.",
+    "columns": {
+      "vendor": "Subcontratado",
+      "class": "Classe",
+      "status": "Status",
+      "exposure": "Valores a pagar em aberto"
+    },
+    "filters": {
+      "class": "Classe",
+      "allClasses": "Todas as classes",
+      "state": "Status",
+      "allStates": "Todos os status",
+      "attention": "Precisam de atenção",
+      "expiring": "Vencendo em breve"
+    },
+    "empty": {
+      "title": "Nenhum subcontratado acompanhado corresponde",
+      "description": "Atribua uma classe de conformidade na aba Conformidade do fornecedor para incluí-lo na matriz."
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "certificates": "Certificados",
+      "identification": "Identificação fiscal",
+      "exceptions": "Exceções",
+      "aria": "Seções de conformidade"
+    }
+  },
+  "certificates": {
+    "empty": "Nada arquivado para este subcontratado ainda.",
+    "recordTitle": "Registrar um certificado",
+    "record": "Registrar certificado",
+    "recordHint": "Registrado como aguardando revisão. Outra pessoa precisa verificá-lo para que passe a valer.",
+    "noPolicies": "Nenhuma política se aplica à classe deste subcontratado ainda.",
+    "noExpiry": "sem vencimento",
+    "limits": "Por ocorrência {occurrence} · agregado {aggregate}",
+    "additionalInsured": "Segurado adicional",
+    "waiverOfSubrogation": "Renúncia à sub-rogação",
+    "primaryNoncontributory": "Primário e não contributivo",
+    "verify": "Verificar",
+    "reject": "Rejeitar",
+    "rejectTitle": "Rejeitar este certificado",
+    "rejectReason": "Por que está sendo rejeitado?",
+    "verifiedBy": "Verificado por {who} em {when}",
+    "selfVerifyBlocked": "Um certificado precisa ser verificado por alguém diferente de quem o registrou."
+  },
+  "exceptions": {
+    "intro": "Uma exceção é a única forma de contornar um requisito bloqueante. Ela sempre vence e é sempre registrada.",
+    "empty": "Nenhuma exceção em vigor.",
+    "grantTitle": "Conceder uma exceção",
+    "grant": "Conceder exceção",
+    "grantHint": "Máximo de 120 dias. Uma suspensão mais longa é uma mudança de política, não uma exceção.",
+    "revoke": "Revogar",
+    "revokeTitle": "Revogar esta exceção",
+    "revokeReason": "Por que está sendo revogada?",
+    "window": "{from} → {to}"
+  },
+  "lienWaivers": {
+    "title": "Quitações",
+    "description": "Quitações legais trocadas pelo pagamento da obra — recebidas de subcontratados, emitidas para proprietários.",
+    "new": "Nova quitação",
+    "create": "Criar quitação",
+    "columns": {
+      "number": "Quitação",
+      "direction": "Direção",
+      "party": "Parte",
+      "project": "Projeto",
+      "type": "Tipo",
+      "through": "Até",
+      "amount": "Valor",
+      "status": "Status",
+      "jurisdiction": "Jurisdição",
+      "bill": "Conta a pagar coberta",
+      "requested": "Solicitada"
+    },
+    "filters": {
+      "direction": "Direção",
+      "allDirections": "Todas as direções",
+      "status": "Status",
+      "allStatuses": "Todos os status"
+    },
+    "empty": {
+      "title": "Nenhuma quitação ainda",
+      "description": "Crie uma ao solicitar uma quitação de um subcontratado, ou emita uma junto com uma solicitação de pagamento."
+    },
+    "jurisdictionHint": "A lei cujo formulário é seguido, ex. US-CA ou CA-ON. Impresso no documento.",
+    "editTitle": "Termos da quitação",
+    "notesHint": "Exceções e créditos contestados impressos na quitação.",
+    "copyFromBill": "Copiar o valor de uma conta a pagar…",
+    "request": "Marcar como solicitada",
+    "receive": "Marcar como recebida",
+    "reject": "Rejeitar",
+    "rejectTitle": "Rejeitar esta quitação",
+    "rejectReason": "Por que está sendo rejeitada?",
+    "void": "Anular",
+    "voidTitle": "Anular esta quitação",
+    "voidReason": "Por que está sendo anulada?",
+    "recordSignature": "Registrar a quitação assinada",
+    "recordSignatureHint": "Marcar uma quitação como assinada é o que libera um pagamento bloqueado. Faça isso apenas com o documento assinado em mãos.",
+    "signedByName": "Assinado por",
+    "signedByTitle": "Cargo",
+    "signedAt": "Data da assinatura",
+    "notarized": "Firma reconhecida",
+    "markSigned": "Marcar como assinada",
+    "signedBy": "Assinada por {who} {title} em {when}",
+    "printForm": "Imprimir formulário",
+    "executedCopy": "Cópia assinada",
+    "executedCopyHint": "Anexe aqui a quitação assinada digitalizada. Ela fica no Arquivo de documentos e vinculada a este registro.",
+    "errors": {
+      "partyAndProject": "Escolha uma parte e um projeto — a garantia recai sobre um projeto específico."
+    }
+  },
+  "informationReturns": {
+    "title": "Declarações informativas",
+    "description": "1099-NEC, 1099-MISC e T4A, calculados a partir do caixa efetivamente pago no ano-calendário.",
+    "new": "Abrir uma declaração",
+    "create": "Abrir declaração",
+    "orgRoot": "Organização inteira",
+    "columns": {
+      "year": "Ano",
+      "form": "Formulário",
+      "entity": "Entidade declarante",
+      "recipients": "Beneficiários",
+      "total": "Declarado",
+      "status": "Status",
+      "attention": "Atenção",
+      "vendor": "Fornecedor",
+      "issue": "Pendência",
+      "classification": "Classificação",
+      "paid": "Pago",
+      "recipient": "Beneficiário",
+      "tin": "TIN"
+    },
+    "empty": {
+      "title": "Nenhuma declaração ainda",
+      "description": "Abra uma declaração de um ano-calendário encerrado e calcule-a a partir do razão."
+    },
+    "excluded": "+{count} excluídos",
+    "missingTin": "{count} sem TIN",
+    "readinessTitle": "Prontidão — {year}",
+    "readinessDescription": "Fornecedores que farão uma declaração sair errada se ninguém cobrá-los antes.",
+    "readinessClear": "Todo fornecedor declaravel tem TIN e formulário atribuído.",
+    "detailDescription": "{entity} · limite de declaração {threshold}",
+    "compute": "Calcular a partir do razão",
+    "recompute": "Recalcular",
+    "computed": "{count} beneficiários calculados com {exceptions} exceções para revisar.",
+    "finalize": "Finalizar",
+    "markFiled": "Registrar como enviada",
+    "printCopies": "Cópias dos beneficiários",
+    "exportTransmittal": "Arquivo de transmissão",
+    "void": "Anular declaração",
+    "voidTitle": "Anular esta declaração",
+    "voidReason": "Por que está sendo anulada?",
+    "frozenNotice": "Esta declaração está congelada. Valores e exclusões refletem o que foi transmitido; correções vão em uma nova declaração.",
+    "noRecipients": "Nada calculado ainda. Calcule a declaração para rastrear os pagamentos do ano.",
+    "computedNoRecipients": "Calculado — nenhum beneficiário atingiu o limite de declaração.",
+    "adjust": "Ajustar",
+    "adjustDescription": "Ajustes são deltas assinados contra o valor do razão, para que o rastreio nunca seja sobrescrito.",
+    "adjustReason": "Motivo do ajuste",
+    "delta": "Δ",
+    "ledgerFigure": "Razão: {value}",
+    "exclude": "Excluir este beneficiário da declaração",
+    "exclusionReason": "Motivo da exclusão",
+    "channel": "Canal de envio",
+    "reference": "Referência de confirmação",
+    "referenceHint": "O recibo ou protocolo de envio retornado pelo canal.",
+    "filedVia": "Enviada via {channel} · {reference}",
+    "footnote": "Os valores são o caixa pago no ano-calendário, rastreado pelas solicitações até as contas de despesa de cada conta a pagar. Um asterisco marca um valor ajustado por uma pessoa."
+  },
+  "fields": {
+    "requirement": "Requisito",
+    "select": "Selecionar…",
+    "none": "Nenhum",
+    "issuer": "Seguradora ou autoridade emissora",
+    "policyNumber": "Número da apólice ou do certificado",
+    "effectiveFrom": "Vigência a partir de",
+    "expiresOn": "Vence em",
+    "expiryRequired": "Este requisito exige data de vencimento.",
+    "coverageAmount": "Limite por ocorrência",
+    "aggregateAmount": "Limite agregado",
+    "coverageCurrency": "Moeda do limite",
+    "coverageCurrencyHint": "Deve ser {currency} — os limites nunca são convertidos para comparação.",
+    "project": "Projeto",
+    "allProjects": "Todos os projetos",
+    "supersedes": "Renova",
+    "notes": "Notas",
+    "reason": "Motivo",
+    "save": "Salvar",
+    "complianceClass": "Classe de conformidade",
+    "complianceClassHint": "Sem classe, este fornecedor não é acompanhado e nunca bloqueia um pagamento.",
+    "notTracked": "Não acompanhado",
+    "taxClassification": "Classificação fiscal",
+    "unknown": "Desconhecida",
+    "reportable": "Declaravel em declaração informativa",
+    "informationReturnForm": "Formulário",
+    "inheritClass": "Herdar da classe",
+    "notReportable": "Não declaravel",
+    "informationReturnBox": "Campo padrão",
+    "defaultBox": "Padrão do formulário",
+    "tinType": "Tipo de TIN",
+    "tin": "Número de identificação fiscal",
+    "tinPlaceholder": "9 dígitos",
+    "tinHint": "Criptografado em repouso. Apenas os últimos quatro dígitos voltam a ser exibidos.",
+    "backupWithholding": "Sujeito à retenção de backup"
+  },
+  "errors": {
+    "saveFailed": "Não foi possível salvar.",
+    "pickRequirement": "Escolha o requisito que este certificado atende.",
+    "exceptionIncomplete": "Uma exceção exige um requisito e uma data de término."
+  }
+}
