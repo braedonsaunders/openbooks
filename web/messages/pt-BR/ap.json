@@ -68,8 +68,14 @@
     "configure": "Configure em Central de administração → IA.",
     "search": "Buscar arquivos, fornecedores, números de fatura…",
     "status": {
-      "queued": "Na fila", "extracting": "Extraindo", "needs_review": "Requer revisão", "ready": "Pronto",
-      "duplicate": "Possível duplicata", "failed": "Falhou", "materialized": "Rascunho criado", "rejected": "Rejeitado"
+      "queued": "Na fila",
+      "extracting": "Extraindo",
+      "needs_review": "Requer revisão",
+      "ready": "Pronto",
+      "duplicate": "Possível duplicata",
+      "failed": "Falhou",
+      "materialized": "Rascunho criado",
+      "rejected": "Rejeitado"
     },
     "emptyTitle": "Nenhum documento capturado",
     "emptyDescription": "Envie documentos de fornecedor em PDF, JPEG, PNG ou TIFF para começar.",
@@ -88,7 +94,15 @@
     "openDraft": "Abrir rascunho de contas a pagar",
     "bill": "Conta a pagar de fornecedor",
     "credit": "Crédito de fornecedor",
-    "columns": { "document": "Documento", "vendor": "Fornecedor", "invoice": "Nº da fatura", "date": "Data da fatura", "total": "Total", "status": "Status", "received": "Recebido" },
+    "columns": {
+      "document": "Documento",
+      "vendor": "Fornecedor",
+      "invoice": "Nº da fatura",
+      "date": "Data da fatura",
+      "total": "Total",
+      "status": "Status",
+      "received": "Recebido"
+    },
     "saving": "Salvando correções…",
     "unsaved": "Correções não salvas",
     "saved": "Todas as correções salvas",
@@ -100,14 +114,30 @@
     "confidencePercent": "{percent}%",
     "highlightEvidence": "Destacar esta evidência no documento de origem",
     "fields": {
-      "kind": "Tipo de documento", "vendor": "Fornecedor", "vendorPlaceholder": "Selecionar fornecedor…",
-      "invoiceNumber": "Número da fatura", "invoiceDate": "Data da fatura", "dueDate": "Data de vencimento", "currency": "Moeda",
-      "purchaseOrder": "Pedido de compra", "purchaseOrderPlaceholder": "Selecionar pedido de compra…", "memo": "Memorando",
-      "subtotal": "Subtotal", "taxTotal": "Imposto", "total": "Total"
+      "kind": "Tipo de documento",
+      "vendor": "Fornecedor",
+      "vendorPlaceholder": "Selecionar fornecedor…",
+      "invoiceNumber": "Número da fatura",
+      "invoiceDate": "Data da fatura",
+      "dueDate": "Data de vencimento",
+      "currency": "Moeda",
+      "purchaseOrder": "Pedido de compra",
+      "purchaseOrderPlaceholder": "Selecionar pedido de compra…",
+      "memo": "Memorando",
+      "subtotal": "Subtotal",
+      "taxTotal": "Imposto",
+      "total": "Total"
     },
     "lines": {
-      "title": "Linhas extraídas", "add": "Adicionar linha", "description": "Descrição", "account": "Conta",
-      "accountPlaceholder": "Selecionar conta…", "quantity": "Qtd", "unitPrice": "Preço unitário", "amount": "Valor", "tax": "Imposto",
+      "title": "Linhas extraídas",
+      "add": "Adicionar linha",
+      "description": "Descrição",
+      "account": "Conta",
+      "accountPlaceholder": "Selecionar conta…",
+      "quantity": "Qtd",
+      "unitPrice": "Preço unitário",
+      "amount": "Valor",
+      "tax": "Imposto",
       "remove": "Remover linha {line}"
     },
     "issues": {
@@ -139,5 +169,56 @@
     "createDraftFailed": "Não foi possível criar um rascunho",
     "deleted": "Documento excluído",
     "deleteFailed": "Falha ao excluir"
+  },
+  "cockpit": {
+    "title": "Contas a Pagar",
+    "description": "Sua central de contas a pagar — o que você deve, o que está vencido e o que pagar esta semana.",
+    "tabs": {
+      "overview": "Visão geral",
+      "bills": "Contas a pagar"
+    },
+    "current": "em dia",
+    "vendor": "Fornecedor",
+    "overdueCol": "Vencido",
+    "openCol": "Em aberto",
+    "noPayables": "Sem contas a pagar em aberto. Você está em dia.",
+    "stats": {
+      "openPayables": "Contas a pagar em aberto",
+      "overdue": "Vencido",
+      "overdueSub": "{count} contas · {pct} das em aberto",
+      "dueThisWeek": "Vence esta semana",
+      "next30": "Próximos 30 dias",
+      "dpo": "Prazo médio de pagamento (DPO)",
+      "dpoSub": "Média de dias para pagar",
+      "days": "{n}d"
+    },
+    "panels": {
+      "payRun": "Planejador de pagamentos",
+      "payRunHint": "Contas previstas para esta semana — selecione e monte um lote de pagamento",
+      "payRunHintScheduled": "Recomendado dentro da sua capacidade semanal — mais antigas primeiro",
+      "aging": "Antiguidade das contas a pagar",
+      "schedule": "Cronograma de desembolsos",
+      "scheduleHint": "Pagamentos previstos em {weeks} semanas",
+      "byVendor": "Contas a pagar por fornecedor"
+    },
+    "payRun": {
+      "noCap": "Vence esta semana",
+      "weeklyCap": "Teto semanal",
+      "safeCapacity": "Capacidade segura",
+      "startingCash": "Caixa disponível {amount}",
+      "overCap": "Acima da capacidade",
+      "deferred": "{amount} fica para semanas seguintes",
+      "selected": "{count} selecionadas",
+      "build": "Montar lote de pagamento",
+      "empty": "Sem contas previstas para esta semana."
+    },
+    "deferralNote": "{amount} das contas a pagar não cabem no horizonte com as configurações atuais de capacidade — o atraso passa da última semana. Ajuste o teto na configuração da previsão de fluxo de caixa.",
+    "forecastLink": {
+      "pre": "Quer modelar as próximas semanas?",
+      "link": "Abrir a previsão de fluxo de caixa"
+    },
+    "configure": "Configurar",
+    "configTitle": "Regra de seleção de pagamentos",
+    "configDescription": "Como o lote de pagamento da semana é escolhido — o teto semanal, a trava de capacidade segura e o modelo de agendamento por trás da recomendação."
   }
 }
