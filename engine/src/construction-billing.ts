@@ -320,6 +320,13 @@ async function projectRetainageSettlement(
   projectId: string,
   currentApplicationNumber: number,
 ): Promise<{ minorUnits: number; priorExactRetainage: string[] }> {
+  // Serialize the replay on the project row, like release creation: two
+  // concurrent submits must not read the same settled history, or both
+  // settle the same residual and strand a minor unit of dust.
+  const owned = (await tx.execute(sql`
+    select 1 from projects where org_id = ${orgId} and id = ${projectId} for update
+  `));
+  if (!owned.rows.length) throw new ConstructionBillingError("Project not found");
   const scope = (await tx.execute<{ currency: string | null }>(sql`
     select coalesce(nullif(trim(s.base_currency), ''), o.base_currency) as currency
       from projects p
