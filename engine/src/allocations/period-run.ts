@@ -55,6 +55,24 @@ export interface PeriodRunDeps {
   driverResolver?: DriverResolver;
 }
 
+/**
+ * User-facing run-computation failures (F-t06-017). Every fail-closed throw
+ * on the preview path — missing records, inactive/mismatched configuration,
+ * empty pools and empty driver vectors — carries one of these codes so API
+ * routes can answer 404/422 with the message instead of an untyped 500 the
+ * UI cannot render. Messages stay plain user language; unexpected defects
+ * keep throwing untyped errors and stay 500s.
+ */
+export class AllocationRunError extends Error {
+  readonly code: "NOT_FOUND" | "INVALID";
+
+  constructor(code: "NOT_FOUND" | "INVALID", message: string) {
+    super(message);
+    this.name = "AllocationRunError";
+    this.code = code;
+  }
+}
+
 export interface PreviewAllocationRunOptions {
   orgId: string;
   ruleId: string;
@@ -202,12 +220,12 @@ async function loadRule(tx: Tx, orgId: string, ruleId: string): Promise<RuleRow>
       from allocation_rules where id = ${ruleId} for share`)).rows;
   const rule = rows[0];
   if (!rule || rule.org_id !== orgId) {
-    throw new Error(`allocation rule ${ruleId} does not belong to this organization`);
+    throw new AllocationRunError("NOT_FOUND", `allocation rule ${ruleId} does not belong to this organization`);
   }
   if (rule.mode !== "period") {
-    throw new Error(`allocation rule ${rule.key} is a ${rule.mode} rule and cannot run as a period sweep`);
+    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} is a ${rule.mode} rule and cannot run as a period sweep`);
   }
-  if (!rule.is_active) throw new Error(`allocation rule ${rule.key} is not active`);
+  if (!rule.is_active) throw new AllocationRunError("INVALID", `allocation rule ${rule.key} is not active`);
   return rule;
 }
 
@@ -240,7 +258,7 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Pro
        and (effective_to is null or effective_to >= ${period.starts_on})
      order by version_no desc limit 1 for share`)).rows[0];
   if (!published) {
-    throw new Error(`allocation rule ${rule.key} has no published version in effect for period ${period.name}`);
+    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} has no published version in effect for period ${period.name}`);
   }
   return published;
 }
@@ -262,7 +280,7 @@ async function loadPeriod(tx: Tx, orgId: string, periodId: string): Promise<Peri
       from accounting_periods where id = ${periodId} for share`)).rows;
   const period = rows[0];
   if (!period || period.org_id !== orgId) {
-    throw new Error(`accounting period ${periodId} does not belong to this organization`);
+    throw new AllocationRunError("NOT_FOUND", `accounting period ${periodId} does not belong to this organization`);
   }
   return period;
 }
@@ -274,7 +292,7 @@ async function loadBook(tx: Tx, orgId: string, bookId: string): Promise<{ id: st
      where id = ${bookId} and is_active and posts_gl for share`)).rows;
   const book = rows[0];
   if (!book || book.org_id !== orgId) {
-    throw new Error(`accounting book ${bookId} does not belong to this organization`);
+    throw new AllocationRunError("NOT_FOUND", `accounting book ${bookId} does not belong to this organization`);
   }
   return { id: book.id, code: book.code, isPrimary: book.is_primary };
 }
@@ -282,7 +300,7 @@ async function loadBook(tx: Tx, orgId: string, bookId: string): Promise<{ id: st
 async function requireSubsidiary(tx: Tx, orgId: string, subsidiaryId: string): Promise<void> {
   const rows = (await tx.execute<{ id: string }>(sql`
     select id from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId} and is_active for share`)).rows;
-  if (!rows[0]) throw new Error(`subsidiary ${subsidiaryId} does not belong to this organization`);
+  if (!rows[0]) throw new AllocationRunError("NOT_FOUND", `subsidiary ${subsidiaryId} does not belong to this organization`);
 }
 
 /** Fail closed when the GL module is shut for any subsidiary this run touches. */
@@ -557,7 +575,7 @@ async function resolveDriverVectorForRun(
   vector: DriverVector;
   temporal: ReportDriverTemporal | null;
 }> {
-  if (!opts.version.driver_id) throw new Error(`allocation rule ${opts.ruleKey} uses a driver basis but names no driver`);
+  if (!opts.version.driver_id) throw new AllocationRunError("INVALID", `allocation rule ${opts.ruleKey} uses a driver basis but names no driver`);
   const rows = (await tx.execute<{
     id: string; org_id: string; key: string; name: string; unit: string | null;
     dimension: string; source_kind: AllocationDriver["sourceKind"]; config: Record<string, unknown>;
@@ -568,9 +586,9 @@ async function resolveDriverVectorForRun(
      where id = ${opts.version.driver_id} for share`)).rows;
   const driver = rows[0];
   if (!driver || driver.org_id !== opts.orgId) {
-    throw new Error(`allocation driver ${opts.version.driver_id} does not belong to this organization`);
+    throw new AllocationRunError("NOT_FOUND", `allocation driver ${opts.version.driver_id} does not belong to this organization`);
   }
-  if (!driver.is_active) throw new Error(`allocation driver ${driver.key} is not active`);
+  if (!driver.is_active) throw new AllocationRunError("INVALID", `allocation driver ${driver.key} is not active`);
   // A2's dispatcher covers every source_kind; report_definition needs the
   // production runner, which the single service factory provides by default.
   // Callers may still inject a test double through deps.
@@ -581,7 +599,7 @@ async function resolveDriverVectorForRun(
       select id from accounting_periods
        where org_id = ${opts.orgId} and not is_adjustment and ends_on < ${opts.period.starts_on}
        order by ends_on desc limit 1`)).rows[0];
-    if (!prior) throw new Error(`no prior period exists for driver lookback on ${opts.period.name}`);
+    if (!prior) throw new AllocationRunError("INVALID", `no prior period exists for driver lookback on ${opts.period.name}`);
     asOf = { periodId: prior.id };
   } else if (opts.version.driver_as_of === "document_date") {
     asOf = { date: opts.period.ends_on };
@@ -698,12 +716,12 @@ async function resolveTargets(
       dimension?: AllocationDimension; include?: string[]; exclude?: string[]; minWeight?: string; targetAccountId?: string | null;
     };
     const dimension = dynamic.dimension;
-    if (!dimension) throw new Error("dynamic allocation targets name no dimension");
+    if (!dimension) throw new AllocationRunError("INVALID", "dynamic allocation targets name no dimension");
     if (opts.version.basis_kind !== "driver") {
-      throw new Error("dynamic allocation targets need a driver basis");
+      throw new AllocationRunError("INVALID", "dynamic allocation targets need a driver basis");
     }
     const table = DIMENSION_TABLES[dimension];
-    if (!table) throw new Error(`dynamic allocation targets on ${dimension} are not supported yet`);
+    if (!table) throw new AllocationRunError("INVALID", `dynamic allocation targets on ${dimension} are not supported yet`);
     const include = dynamic.include ?? [];
     const exclude = dynamic.exclude ?? [];
     const minWeight = dynamic.minWeight ?? "0";
@@ -719,7 +737,7 @@ async function resolveTargets(
       const weight = resolved.vector.get(value.id) ?? "0";
       return cmp(weight, minWeight) > 0;
     });
-    if (values.length === 0) throw new Error("no dynamic allocation target clears the minimum weight");
+    if (values.length === 0) throw new AllocationRunError("INVALID", "no dynamic allocation target clears the minimum weight");
     const resolvedTargets: ResolvedTarget[] = values.map((value) => {
       const coordinate: Coordinate = {
         accountId: dynamic.targetAccountId ?? "",
@@ -753,7 +771,7 @@ async function resolveTargets(
     const resolvedTargets: ResolvedTarget[] = opts.targets.map((target) => {
       const value = targetDimensionValue(target, driverDimension);
       if (!value) {
-        throw new Error("explicit driver-basis targets must carry a value in the driver dimension");
+        throw new AllocationRunError("INVALID", "explicit driver-basis targets must carry a value in the driver dimension");
       }
       const coordinate: Coordinate = {
         accountId: target.target_account_id ?? "",
@@ -842,13 +860,14 @@ async function buildComputation(
   deps: PeriodRunDeps,
 ): Promise<BuiltComputation> {
   if (!opts.version.definition_hash) {
-    throw new Error(`allocation rule ${opts.rule.key} has a published version with no definition hash`);
+    throw new AllocationRunError("INVALID", `allocation rule ${opts.rule.key} has a published version with no definition hash`);
   }
   // Reciprocal (simultaneous) solving is not implemented — publication
   // refuses it, and this guard covers versions published before the refusal
   // so no entry point can silently execute them sequentially instead.
   if (opts.version.solve_method === "simultaneous") {
-    throw new Error(
+    throw new AllocationRunError(
+      "INVALID",
       `allocation rule ${opts.rule.key} uses simultaneous solving, which is not supported; republish it as sequential`,
     );
   }
@@ -858,12 +877,12 @@ async function buildComputation(
       select id from accounting_books
        where org_id = ${opts.orgId} and is_primary and is_active limit 1 for share`)).rows[0];
     if (!primary || primary.id !== opts.bookId) {
-      throw new Error(`allocation rule ${opts.rule.key} is scoped to the primary book`);
+      throw new AllocationRunError("INVALID", `allocation rule ${opts.rule.key} is scoped to the primary book`);
     }
   } else if (opts.version.book_scope === "books") {
     const allowed = (opts.version.book_ids ?? []) as string[];
     if (!allowed.includes(opts.bookId)) {
-      throw new Error(`allocation rule ${opts.rule.key} does not cover the requested book`);
+      throw new AllocationRunError("INVALID", `allocation rule ${opts.rule.key} does not cover the requested book`);
     }
   }
 
@@ -882,7 +901,8 @@ async function buildComputation(
   // later period with real data cannot post. Fail closed: run when there is
   // something to allocate.
   if (pool.sources.length === 0) {
-    throw new Error(
+    throw new AllocationRunError(
+      "INVALID",
       `allocation rule ${opts.rule.key} found no source lines for period ${opts.period.name}; refusing to post an empty run`,
     );
   }
@@ -901,12 +921,12 @@ async function buildComputation(
     },
     deps,
   );
-  if (targetSet.resolved.length === 0) throw new Error("allocation produced no targets");
+  if (targetSet.resolved.length === 0) throw new AllocationRunError("INVALID", "allocation produced no targets");
   // Zero weights carry no basis: A1 would split equally, which invents
   // attribution for driver/manual targets, so fail closed instead. Percent
   // grids always sum to 100 and never trip this.
   if (cmp(sum(targetSet.weights.map((weight) => weight.weight)), "0") === 0) {
-    throw new Error("allocation produced no positive target weight");
+    throw new AllocationRunError("INVALID", "allocation produced no positive target weight");
   }
 
   // A1's absorber precedence: an explicit residual key wins, else a sole

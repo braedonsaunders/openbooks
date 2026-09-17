@@ -508,6 +508,7 @@ export function RunsTab() {
               />
             </Field>
           </div>
+          {notice ? <p className="text-sm text-red-600 dark:text-red-400">{notice}</p> : null}
           {preview ? <ComputationView computation={preview} /> : null}
         </div>
       </Drawer>
