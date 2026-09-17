@@ -15,7 +15,9 @@
     },
     "folderRow": "Ordner"
   },
-  "systemFolders": { "apCapture": "Erfassung Eingangsrechnungen" },
+  "systemFolders": {
+    "apCapture": "Erfassung Eingangsrechnungen"
+  },
   "columns": {
     "name": "Name",
     "size": "Größe",
@@ -48,6 +50,11 @@
       "parentLabel": "Übergeordneter Ordner",
       "submit": "Ordner erstellen"
     },
+    "tabs": {
+      "details": "Details",
+      "sharing": "Freigabe",
+      "activity": "Aktivität"
+    },
     "edit": {
       "title": "Ordner bearbeiten",
       "nameLabel": "Ordnername",
@@ -62,6 +69,7 @@
       "title": "Diesen Ordner löschen?",
       "body": "Alle Dateien in diesem Ordner werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden."
     },
+    "downloadZip": "Als ZIP herunterladen",
     "systemNoDelete": "Systemordner können nicht gelöscht oder umbenannt werden.",
     "subfolderCount": "{count, plural, one {# Ordner} other {# Ordner}}",
     "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
@@ -70,6 +78,12 @@
   "file": {
     "drawer": {
       "title": "Dateidetails",
+      "tabs": {
+        "preview": "Vorschau",
+        "details": "Details",
+        "sharing": "Freigabe",
+        "activity": "Aktivität"
+      },
       "name": "Name",
       "folder": "Ordner",
       "type": "Typ",
@@ -115,7 +129,82 @@
     "attachExisting": "Vorhandene Datei anhängen",
     "uploadNew": "Neue Datei hochladen"
   },
+  "share": {
+    "title": "Freigabe",
+    "subtitle": "Standardmäßig kann jeder in Ihrem Unternehmen {kind} ansehen. Gewähren Sie Personen oder Rollen hier zusätzlichen Zugriff (Bearbeiten oder Verwalten); machen Sie einen Ordner unter Details privat, um einzuschränken, wer ihn sehen kann.",
+    "kindFolder": "diesen Ordner",
+    "kindFile": "diese Datei",
+    "noGrants": "Für jeden in Ihrem Unternehmen sichtbar. Fügen Sie unten Personen oder Rollen hinzu, um Bearbeiter- oder Manager-Zugriff zu gewähren.",
+    "addPrincipal": "Person oder Rolle hinzufügen",
+    "selectPrincipal": "Person oder Rolle auswählen…",
+    "usersGroup": "Personen",
+    "rolesGroup": "Rollen",
+    "add": "Hinzufügen",
+    "remove": "Entfernen",
+    "you": "Sie",
+    "inheritedHint": "Der Ordnerzugriff wird an die darin enthaltenen Dateien und Unterordner vererbt.",
+    "tiers": {
+      "viewer": "Betrachter",
+      "editor": "Bearbeiter",
+      "manager": "Manager",
+      "viewerHint": "Ansehen und herunterladen",
+      "editorHint": "Hochladen, umbenennen, verschieben, ersetzen",
+      "managerHint": "Volle Kontrolle, einschließlich Löschen und Freigabe"
+    }
+  },
+  "bulk": {
+    "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
+    "download": "Herunterladen",
+    "delete": "Löschen",
+    "clear": "Auswahl aufheben",
+    "selectAll": "Alle auswählen",
+    "deleteConfirm": {
+      "title": "Ausgewählte Elemente in den Papierkorb verschieben?",
+      "body": "Die ausgewählten Dateien und Ordner werden in den Papierkorb verschoben. Sie können sie später wiederherstellen."
+    },
+    "deleted": "{count} in den Papierkorb verschoben",
+    "deleteFailed": "Auswahl konnte nicht gelöscht werden",
+    "downloadFailed": "Auswahl konnte nicht heruntergeladen werden",
+    "nothingDownloadable": "Wählen Sie Dateien zum Herunterladen aus"
+  },
+  "trash": {
+    "title": "Papierkorb",
+    "link": "Papierkorb",
+    "description": "Gelöschte Dateien und Ordner. Stellen Sie sie wieder her oder löschen Sie sie endgültig.",
+    "empty": "Der Papierkorb ist leer.",
+    "back": "Zurück zur Dokumentenablage",
+    "restore": "Wiederherstellen",
+    "deleteForever": "Endgültig löschen",
+    "purgeConfirm": {
+      "title": "Endgültig löschen?",
+      "body": "Dieses Element und sein Inhalt werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden."
+    },
+    "folderLabel": "Ordner",
+    "inLocation": "in {location}",
+    "restored": "Wiederhergestellt",
+    "restoreFailed": "Konnte nicht wiederhergestellt werden",
+    "purged": "Endgültig gelöscht",
+    "purgeFailed": "Konnte nicht gelöscht werden"
+  },
+  "activity": {
+    "title": "Aktivität",
+    "empty": "Noch keine Aktivitäten.",
+    "events": {
+      "create": "erstellt",
+      "upload": "hochgeladen",
+      "rename": "umbenannt",
+      "move": "verschoben",
+      "replace": "neue Version hochgeladen",
+      "delete": "gelöscht",
+      "restore": "wiederhergestellt",
+      "share": "freigegeben",
+      "unshare": "Freigabe entfernt"
+    }
+  },
   "toasts": {
+    "shareUpdated": "Freigabe aktualisiert",
+    "shareFailed": "Freigabe konnte nicht aktualisiert werden",
+    "shareRemoved": "Zugriff entfernt",
     "folderCreated": "Ordner erstellt",
     "folderCreateFailed": "Ordner konnte nicht erstellt werden",
     "folderRenamed": "Ordner umbenannt",
@@ -153,6 +242,8 @@
   "rowMenu": {
     "open": "Öffnen",
     "openFolder": "Ordner öffnen",
+    "properties": "Eigenschaften",
+    "manageAccess": "Zugriff verwalten",
     "copyLink": "Link kopieren"
   },
   "rename": {

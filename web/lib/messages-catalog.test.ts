@@ -755,7 +755,7 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     // fallbacks (F-t09-017). i10 remediated entities leaseSections/detail
     // (F-i10): remaining fallbacks are reviewed identicals only.
     const expectedPmFallbacks: Record<string, number> = {
-      de: 166,
+      de: 8,
       es: 2,
       fr: 11,
       ja: 164,
