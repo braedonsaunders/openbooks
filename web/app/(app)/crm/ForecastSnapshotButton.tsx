@@ -24,11 +24,13 @@ export function ForecastSnapshotButton({
   async function create() {
     setBusy(true)
     try {
-      const target = ownerUserId ? { ownerUserId } : salesTeamId ? { ownerUserId: null, salesTeamId } : {}
+      // The snapshot must file the scope the summary displays: an unfiltered
+      // page sends explicit nulls (an organization snapshot), never the
+      // key-absent personal default (F-t02-002).
       const response = await fetch('/api/crm/forecasts', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ periodStart, periodEnd, ...target }),
+        body: JSON.stringify({ periodStart, periodEnd, ownerUserId: ownerUserId ?? null, salesTeamId: salesTeamId ?? null }),
       })
       if (!response.ok) throw new Error()
       toast.success(t('forecasts.snapshotCreated'))

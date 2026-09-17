@@ -58,11 +58,12 @@ export async function POST(req: NextRequest) {
   const periodStart = String(body.periodStart ?? '')
   const periodEnd = String(body.periodEnd ?? '')
   if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
-  // An explicit null means the caller is targeting a team. When the key is
-  // absent we retain the convenient personal-snapshot default.
+  // An explicit null means the caller is targeting a team (or, with both
+  // null, the whole organization). When the owner key is absent we retain the
+  // convenient personal-snapshot default.
   const ownerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
   const salesTeamId = body.salesTeamId ?? null
-  if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) !== 1 || (ownerUserId && !isUuid(ownerUserId)) || (salesTeamId && !isUuid(salesTeamId))) return NextResponse.json({ error: 'choose exactly one owner or team' }, { status: 422 })
+  if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) > 1 || (ownerUserId && !isUuid(ownerUserId)) || (salesTeamId && !isUuid(salesTeamId))) return NextResponse.json({ error: 'choose at most one owner or team' }, { status: 422 })
   const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
     ? null
     : canonicalDecimal(body.overrideAmount, 4)
