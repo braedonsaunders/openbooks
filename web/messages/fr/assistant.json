@@ -15,6 +15,7 @@
   "send": "Envoyer",
   "stop": "Arrêter",
   "responding": "L'assistant répond",
+  "jumpToLatest": "Aller au plus récent",
   "loadEarlier": "Charger les messages précédents",
   "loadingEarlier": "Chargement des messages précédents…",
   "loadEarlierFailed": "Impossible de charger les messages précédents.",

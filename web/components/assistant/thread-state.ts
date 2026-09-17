@@ -46,6 +46,21 @@ export function anchorScrollTop(
   return prevScrollTop + (nextScrollHeight - prevScrollHeight);
 }
 
+/**
+ * Stick-to-bottom gate for the streaming viewport: auto-scroll follows new
+ * chunks only while the reader is already at the bottom. Any upward scroll
+ * detaches (the reader is looking at history); jumping back re-attaches.
+ * Short content that fits without scrolling counts as at the bottom.
+ */
+export function isViewportAtBottom(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  threshold = 48,
+): boolean {
+  return scrollHeight - scrollTop - clientHeight <= threshold;
+}
+
 /** Number of assistant turns witnessed (the persistence-gap floor). */
 export function countAssistantTurns(list: ThreadMessage[]): number {
   return list.reduce((count, message) => count + (message.role === "assistant" ? 1 : 0), 0);

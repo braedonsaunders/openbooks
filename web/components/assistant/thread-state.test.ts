@@ -4,6 +4,7 @@ import {
   anchorScrollTop,
   countAssistantTurns,
   formatMessageTimestamp,
+  isViewportAtBottom,
   MESSAGE_PAGE_SIZE,
   reconcileThreadAfterStop,
   withLastAssistantParts,
@@ -52,6 +53,18 @@ test("history pages match the server window and prepending holds position", () =
   // 500px of new rows above a reader sitting at 1200px leaves them at 1700px.
   assert.equal(anchorScrollTop(1200, 4000, 4500), 1700);
   assert.equal(anchorScrollTop(0, 1000, 1000), 0);
+});
+
+test("stick-to-bottom holds only while the reader is at the bottom", () => {
+  // Exactly at the bottom, and within the threshold above it: stuck.
+  assert.equal(isViewportAtBottom(500, 500, 1000), true);
+  assert.equal(isViewportAtBottom(460, 500, 1000), true);
+  // Scrolled up past the threshold: detached.
+  assert.equal(isViewportAtBottom(400, 500, 1000), false);
+  assert.equal(isViewportAtBottom(0, 500, 1000), false);
+  // Short content that fits without scrolling counts as at the bottom.
+  assert.equal(isViewportAtBottom(0, 500, 300), true);
+  assert.equal(isViewportAtBottom(0, 0, 0), true);
 });
 
 test("timestamps show time today, date + time otherwise", () => {
