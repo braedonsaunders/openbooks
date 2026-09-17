@@ -71,6 +71,16 @@ export interface FlowSubjectAdapter {
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
   ): Promise<void>;
+  /**
+   * Park the subject awaiting approval after a (re-)driven run created gates.
+   * submitForApproval owns this transition on the first attempt; retryFlowRun
+   * owns it on retries — without it the subject sits in its pre-approval
+   * state behind a live gate and the engine-enforced release (which only acts
+   * while awaiting approval, by design) no-ops. Only acts from the subject's
+   * pre-approval state; a no-op when already awaiting approval. Optional:
+   * subjects whose hook site owns the pending transition omit it.
+   */
+  markAwaitingApproval?(subjectId: string, ctx: FlowExecCtx): Promise<void>;
   /** set_field action — writableFields only, throws on violation. */
   setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void>;
   /**

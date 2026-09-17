@@ -253,6 +253,26 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       await auditFlowDocumentUpdate(subjectId, ctx, before);
     },
 
+    async markAwaitingApproval(subjectId: string, ctx: FlowExecCtx): Promise<void> {
+      // Submit parity for retried runs (flows/run.ts): the draft → pending
+      // transition submitForApproval owns on the first attempt. Only acts
+      // from draft, so replays and already-parked records are no-ops.
+      const doc = await loadDoc(subjectId, ctx.orgId);
+      if (!doc || doc.status !== "draft") return;
+      const before = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
+      await db
+        .update(schema.documents)
+        .set({
+          status: "pending_approval",
+          submittedBy: ctx.userId ?? doc.createdBy,
+          submittedAt: new Date(),
+          updatedBy: ctx.userId ?? doc.createdBy,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
+      await auditFlowDocumentUpdate(subjectId, ctx, before);
+    },
+
     async releaseApproval(
       subjectId: string,
       outcome: "approved" | "rejected",
