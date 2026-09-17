@@ -15,9 +15,9 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
-import { reportSubsidiaryView } from '../../../lib/consolidation'
+import { reportSubsidiaryScope, reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { bankingHome, type BankingAccountRow, type BankingHome } from '../../../lib/module-home/banking'
+import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { userPageLayout } from '../../../lib/page-layout'
 import { groupTabs } from '../../../components/module-home/group-tabs'
@@ -66,34 +66,11 @@ const STALE_STATEMENT_DAYS = 30
 type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
 type Tabs = Awaited<ReturnType<typeof groupTabs>>
 
-/**
- * Fail-closed home figures for a rates-blocked workspace (F-t06-027): every
- * vital reads empty/zero, so nothing presents a scoped number beside the
- * banner. Navigation keeps working — switching to a single-subsidiary view
- * loads real figures.
- */
-const BLOCKED_HOME: BankingHome = {
-  accounts: [],
-  totalCash: 0,
-  totalCards: 0,
-  unmatchedLines: 0,
-  openRecons: 0,
-  netFlow7d: 0,
-  trend: [],
-  badges: {
-    activeRules: 0,
-    totalRules: 0,
-    statements: 0,
-    lastImportedAt: null,
-    txns7d: 0,
-  },
-}
-
 export interface BankingData {
   title: string
   description: string
   /** Set when underived consolidated rates block the workspace (F-t06-027):
-   * the page renders a typed banner with a derive link above empty vitals. */
+   * the page renders a typed banner with a derive link above live vitals. */
   ratesBlocked: RatesBlockedNotice | null
   layoutPrefs: Record<string, unknown>
   subsidiaryPicker: SubsidiaryPicker
@@ -152,9 +129,12 @@ export async function loadBanking(
   const tr = await getTranslations('reports')
 
   // Underived consolidated rates must not throw out of SSR (F-t06-027):
-  // the page renders a typed banner with a derive link above empty vitals.
-  // Anything else is a real defect and still throws. Home figures load only
-  // with a resolved subsidiary scope — BLOCKED_HOME otherwise (fail-closed).
+  // the page renders a typed banner with a derive link, and the workspace
+  // below it keeps reading the ONE banking figures reader (F-t06-001) —
+  // the roster translates at dated spot rates, not period consolidated
+  // rates, so it agrees with the Match picker and the per-account pages
+  // even before close derives the period's rates. Anything else is a real
+  // defect and still throws.
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let ratesBlocked: RatesBlockedNotice | null = null
   try {
@@ -168,16 +148,26 @@ export async function loadBanking(
       deriveLabel: tr('statement.ratesBlockedAction'),
       deriveHref: '/close',
     }
+    // The refusal carries no scope, so resolve it leniently: same
+    // visibility, same picker rows (the switcher stays an escape to a
+    // single-entity view), figures included.
+    const scoped = await reportSubsidiaryScope(sp.sub as string | undefined, await resolveAsOf(authz.user.orgId))
+    subView = {
+      subsidiary: scoped.subsidiary,
+      currency: scoped.currency,
+      label: scoped.label,
+      consolidated: scoped.consolidated,
+      options: scoped.options,
+      picker: scoped.picker,
+    }
   }
 
   const [data, rosterPrefs, navGroups] = await Promise.all([
-    subView
-      ? bankingHome(
-          authz.user.orgId,
-          subView.subsidiary?.ids,
-          subView.subsidiary?.includeNullSubsidiary,
-        )
-      : BLOCKED_HOME,
+    bankingHome(
+      authz.user.orgId,
+      subView?.subsidiary?.ids,
+      subView?.subsidiary?.includeNullSubsidiary,
+    ),
     userPageLayout(authz.user.id, 'banking-accounts'),
     resolveNav(
       authz.user.orgId,

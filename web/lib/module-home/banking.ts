@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { BANK_KINDS } from '../documents'
+import { reconcilableBankMembership } from '../banking-accounts'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { mulDecimal } from '@openbooks/engine/src/money.ts'
@@ -77,6 +78,12 @@ export async function bankingHome(
   // binds as an empty uuid array so every `= any(...)` leg matches nothing.
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
+  // Roster membership is the ONE banking reader (F-t06-001): the same
+  // reconcilable/active/bank-type predicate the Match picker and the
+  // account-page guard filter through, with this query's own subsidiary
+  // scope appended after it. The badges below intentionally keep their own
+  // wider scope (all active accounts).
+  const membership = reconcilableBankMembership()
   const acctScope = subArr ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${subArr}))` : sql``
   // Document-side counts match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
@@ -123,8 +130,7 @@ export async function bankingHome(
           select s.statement_date, s.imported_at from bank_statements s
            where s.account_id = a.id and s.org_id = a.org_id
            order by s.imported_at desc limit 1) st on true
-       where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
-         and a.type in ('asset_bank', 'liability_card')${acctScope}
+       where a.org_id = ${orgId} and ${membership}${acctScope}
        order by a.type, coalesce(bal.balance, 0) desc
     `),
     // Weekly net flow per account over the sparkline window (+ the trailing
@@ -141,8 +147,7 @@ export async function bankingHome(
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')${bookScope}
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
-       where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
-         and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
+       where a.org_id = ${orgId} and ${membership}${acctScope}${lineScope}
          and je.posting_date >= ${trendFrom}
        group by 1, 2, 3
     `),

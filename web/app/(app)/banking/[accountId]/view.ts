@@ -28,6 +28,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can } from '../../../../lib/authz'
+import { reconcilableBankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
 
@@ -247,6 +248,11 @@ export async function loadBankingAccount(
   const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone })
   const formatTimestamp = (value: string) => timestampFormatter.format(new Date(value))
 
+  // Membership comes from the ONE banking reader (F-t06-001) — the same
+  // reconcilable/active/bank-type predicate the overview roster and the
+  // Match picker filter through — so a non-bank page never renders for an
+  // account its siblings refuse to list.
+  if (!(await reconcilableBankAccount(orgId, accountId))) notFound()
   const accountRes = (await db.execute<AccountRow>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl
@@ -261,7 +267,7 @@ export async function loadBankingAccount(
              where r.account_id = a.id and r.org_id = a.org_id and r.status <> 'signed_off'
              order by r.created_at desc limit 1) as open_reconciliation_id
       from accounts a
-     where a.id = ${accountId} and a.org_id = ${orgId} and a.reconcilable
+     where a.id = ${accountId} and a.org_id = ${orgId}
   `))
   const account = accountRes.rows[0]
   if (!account) notFound()

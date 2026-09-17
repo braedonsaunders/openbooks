@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
+import { listReconcilableBankAccounts } from '../../../../lib/banking-accounts'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
 import type { MatchWorkspace } from './MatchWorkspace'
 import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
@@ -26,10 +27,8 @@ import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
 
 type MatchWorkspaceProps = Parameters<typeof MatchWorkspace>[0]
 
-interface AccountRow extends Record<string, unknown> {
+interface UnmatchedRow extends Record<string, unknown> {
   id: string
-  number: string | null
-  name: string
   unmatched: string | number
 }
 interface OffsetAccountRow extends Record<string, unknown> {
@@ -68,16 +67,21 @@ export async function loadMatch(
   const accountId = pickString(sp.account)
   const tab = (pickString(sp.tab) ?? 'match') as 'match' | 'review' | 'excluded'
 
-  // reconcilable accounts (the picker) + offset accounts (add-journal)
-  const [accountsRes, offsetRes] = (await Promise.all([
-    db.execute<AccountRow>(sql`
-      select a.id, a.number, a.name,
-             coalesce((select count(*) from bank_statement_lines l
-                         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
-                        where s.account_id = a.id and s.org_id = a.org_id and l.org_id = a.org_id and l.currency = a.currency_restriction and l.match_status = 'unmatched'), 0) as unmatched
-        from accounts a
-       where a.org_id = ${orgId} and a.reconcilable and not a.is_summary and a.is_active
-       order by a.number nulls last
+  // Reconcilable accounts (the picker) come from the ONE banking reader
+  // (F-t06-001) — the same membership the overview roster and the
+  // account-page guard filter through — with per-account unmatched counts
+  // grouped in one pass (statement lines in the account's own settlement
+  // currency still awaiting a match).
+  const [accountRefs, unmatchedRes, offsetRes] = (await Promise.all([
+    listReconcilableBankAccounts(orgId),
+    db.execute<UnmatchedRow>(sql`
+      select s.account_id as id, count(*) as unmatched
+        from bank_statement_lines l
+        join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+        join accounts a on a.id = s.account_id and a.org_id = s.org_id
+       where s.org_id = ${orgId} and l.org_id = ${orgId}
+         and l.currency = a.currency_restriction and l.match_status = 'unmatched'
+       group by s.account_id
     `),
     db.execute<OffsetAccountRow>(sql`
       select id, number, name from accounts
@@ -86,17 +90,18 @@ export async function loadMatch(
     `),
   ]))
 
-  const accounts = accountsRes.rows.map((a) => ({
+  const unmatchedByAccount = new Map(unmatchedRes.rows.map((r) => [r.id, Number(r.unmatched)]))
+  const accounts = accountRefs.map((a) => ({
     id: a.id,
     label: [a.number, a.name].filter(Boolean).join(' · '),
-    unmatched: Number(a.unmatched),
+    unmatched: unmatchedByAccount.get(a.id) ?? 0,
   }))
   const offsetAccounts = offsetRes.rows.map((a) => ({
     id: a.id,
     label: [a.number, a.name].filter(Boolean).join(' · '),
   }))
 
-  const account = accountId && isUuid(accountId) ? accountsRes.rows.find((a) => a.id === accountId) : null
+  const account = accountId && isUuid(accountId) ? accountRefs.find((a) => a.id === accountId) : null
 
   // No account selected → the workspace renders just its picker, so the
   // loader stops here rather than querying for a session that cannot exist.
