@@ -71,6 +71,7 @@
     "overdueCol": "延滞",
     "openCol": "未回収",
     "noReceivables": "未回収の売掛金はありません。すべて回収済みです。",
+    "noCustomerMatch": "現在のフィルターに一致する顧客はいません。",
     "customerSearch": "顧客を検索…",
     "customerStatus": "顧客の状態",
     "customerOverdueOnly": "延滞残高あり",

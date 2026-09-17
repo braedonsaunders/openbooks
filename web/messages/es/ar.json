@@ -71,6 +71,7 @@
     "overdueCol": "Vencido",
     "openCol": "Abierto",
     "noReceivables": "No hay cuentas por cobrar abiertas. Todo está cobrado.",
+    "noCustomerMatch": "Ningún cliente coincide con los filtros actuales.",
     "customerSearch": "Buscar clientes…",
     "customerStatus": "Estado del cliente",
     "customerOverdueOnly": "Con saldo vencido",

@@ -71,6 +71,7 @@
     "overdueCol": "逾期",
     "openCol": "未结清",
     "noReceivables": "没有未结清的应收账款，所有款项均已收回。",
+    "noCustomerMatch": "没有客户符合当前筛选条件。",
     "customerSearch": "搜索客户…",
     "customerStatus": "客户状态",
     "customerOverdueOnly": "有逾期余额",

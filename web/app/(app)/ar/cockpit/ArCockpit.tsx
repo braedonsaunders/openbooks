@@ -227,7 +227,7 @@ export function ArCockpit({
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {filteredCustomers.length === 0 ? (
                   <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-                    {t("noReceivables")}
+                    {customerQuery || customerStatus ? t("noCustomerMatch") : t("noReceivables")}
                   </p>
                 ) : (
                   <table className="w-full text-sm">
