@@ -42,7 +42,7 @@
     "documents": "Archivo de documentos",
     "sql": "Consola de consultas",
     "saved-searches": "Vistas guardadas",
-    "apps": "Apps",
+    "apps": "Aplicaciones",
     "records": "Registros personalizados",
     "admin-custom-fields": "Campos personalizados",
     "admin-scripts": "Scripts",
@@ -66,7 +66,13 @@
     "compliance": "Cumplimiento",
     "compliance-vendors": "Subcontratistas",
     "lien-waivers": "Renuncias de gravamen",
-    "information-returns": "Declaraciones informativas"
+    "information-returns": "Declaraciones informativas",
+    "payroll": "Nómina",
+    "wip-billing": "Trabajo en curso y prefacturación",
+    "property-management": "Gestión inmobiliaria",
+    "subcontracts": "Subcontratos",
+    "admin-page-layouts": "Diseños de página",
+    "admin-extensions": "Aplicaciones"
   },
   "modulesShort": {
     "ap": "Por pagar",

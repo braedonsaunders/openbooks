@@ -83,7 +83,8 @@
       "number_in_use": "Ese número de cuenta ya está en uso.",
       "account_changed": "Esta cuenta cambió mientras la editaba. Vuelva a abrirla e inténtelo de nuevo.",
       "invalid_idempotency_key": "No se pudo reintentar la solicitud de cuenta de forma segura.",
-      "save_failed": "No se pudo guardar la cuenta."
+      "save_failed": "No se pudo guardar la cuenta.",
+      "reconcilable_currency_required": "Las cuentas conciliables requieren una moneda de liquidación; elíjala antes de guardar."
     },
     "monetary": "Reconversión cambiaria (partida monetaria)",
     "monetaryDefault": "Según el tipo de cuenta",

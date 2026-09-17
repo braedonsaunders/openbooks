@@ -266,6 +266,8 @@ const ES_NEUTRAL_STATUS_EXPECTATIONS: Record<string, string> = {
   'status.error': 'Error',
   'status.ok': 'OK',
   'status.pending_approval': 'Enviado/a',
+  'status.calculated': 'Calculado/a',
+  'status.committed': 'Confirmado/a',
 }
 
 /** The filed agreement key, pinned in every locale. */

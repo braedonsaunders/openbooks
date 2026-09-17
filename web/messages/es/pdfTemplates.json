@@ -9,7 +9,14 @@
     "builtInStarter": "Diseño integrado",
     "starterHint": "Se imprime cuando no existe una plantilla personalizada — duplíquelo para personalizarlo",
     "duplicate": "Duplicar",
-    "isDefault": "Predeterminada"
+    "isDefault": "Predeterminada",
+    "builtIn": "Integrada",
+    "type": "Tipo de registro",
+    "allTypes": "Todos los tipos de registro",
+    "previewNote": "Vista previa de solo lectura del diseño inicial integrado, con datos de ejemplo. Duplíquelo para crear una plantilla editable.",
+    "previewFailed": "No se pudo mostrar la vista previa",
+    "empty": "Ninguna plantilla coincide.",
+    "starterNamed": "{type} inicial"
   },
   "editor": {
     "back": "Plantillas PDF",

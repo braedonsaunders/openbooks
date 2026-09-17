@@ -16,7 +16,18 @@
       "unconfigured": "sin configurar"
     },
     "mirrorBadge": "espejo: {schedule}",
-    "lastRun": "Última ejecución: {lastRun} · Sincronizado hasta: {cursor}"
+    "lastRun": "Última ejecución: {lastRun} · Sincronizado hasta: {cursor}",
+    "schedule": "Calendario del espejo",
+    "mirrorHealth": "Espejo",
+    "attachmentHealth": "Adjuntos",
+    "sourceDeletions": "Transacciones eliminadas en el origen",
+    "sourceDeletionHint": "Elija si OpenBooks debe conservar la transacción auditada o revertirla y anularla. Los documentos contabilizados con aplicaciones de pago deben desaplicarse primero.",
+    "schedules": {
+      "hourly": "Cada hora",
+      "every_6_hours": "Cada 6 horas",
+      "daily": "Cada día",
+      "weekly": "Cada semana"
+    }
   },
   "actions": {
     "connect": "Conectar",
@@ -30,7 +41,9 @@
     "pauseMirror": "Pausar espejo",
     "enableMirror": "Activar espejo",
     "edit": "Editar",
-    "downloadQwc": "Descargar Web Connector"
+    "downloadQwc": "Descargar Web Connector",
+    "retainDeletion": "Conservar con evidencia",
+    "voidDeletion": "Revertir y anular"
   },
   "runs": {
     "heading": "Ejecuciones recientes",
@@ -97,7 +110,8 @@
       "CONNECTION_UNCONFIGURED": "Añada credenciales antes de ejecutar esta conexión.",
       "INVALID_MODE": "Elija una acción de migración válida.",
       "ATTACHMENTS_UNSUPPORTED": "Esta conexión no admite la migración de archivos adjuntos.",
-      "PROJECT_FINANCIALS_UNSUPPORTED": "Esta conexión no ofrece sincronización de entradas financieras de proyectos."
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Esta conexión no ofrece sincronización de entradas financieras de proyectos.",
+      "RUN_ALREADY_ACTIVE": "Ya hay un ciclo de este tipo activo para esta conexión."
     },
     "testing": "Probando la conexión…",
     "connected": "Conectado",
@@ -108,7 +122,9 @@
     "created": "Conexión creada",
     "updated": "Conexión actualizada",
     "copied": "URI de redirección copiada",
-    "copyFailed": "No se pudo copiar — seleccione y copie el texto manualmente"
+    "copyFailed": "No se pudo copiar — seleccione y copie el texto manualmente",
+    "deletionRetained": "Eliminación en origen conservada con evidencia del contralor",
+    "deletionVoided": "Transacción eliminada en origen revertida y anulada"
   },
   "confirmDelete": "¿Eliminar la conexión \"{name}\"? Los datos migrados se conservan; solo se elimina el vínculo.",
   "drawer": {
@@ -124,7 +140,13 @@
     "name": "Nombre de la conexión",
     "select": "Seleccionar…",
     "credentials": "Credenciales (cifradas en reposo, nunca se vuelven a mostrar)",
-    "keepCurrent": "Dejar en blanco para conservar la actual"
+    "keepCurrent": "Dejar en blanco para conservar la actual",
+    "postedChanges": {
+      "label": "Cambios en transacciones contabilizadas en origen",
+      "review": "Detener y requerir revisión",
+      "automatic": "Anexar reversión y reemplazo automáticamente",
+      "help": "Las correcciones automáticas nunca reescriben el historial contabilizado. OpenBooks conserva el original, contabiliza una reversión y un reemplazo vinculados, transfiere las aplicaciones elegibles y aun así se detiene ante conciliaciones, períodos cerrados, inventario, reconocimiento de ingresos o documentos derivados."
+    }
   },
   "oauth": {
     "title": "Configuración única de la aplicación en el <link>{portal}</link>",
@@ -192,5 +214,7 @@
         "Copie el Client ID, genere un Client Secret, pegue ambos en este formulario, guarde y luego haga clic en Conectar."
       ]
     }
-  }
+  },
+  "confirmRetainSourceDeletion": "¿Conservar en OpenBooks la transacción {ref} eliminada en origen y registrarlo como decisión del contralor?",
+  "confirmVoidSourceDeletion": "¿Revertir y anular la transacción {ref} eliminada en origen? Esto contabiliza una reversión contable y no se puede deshacer desde esta pantalla."
 }

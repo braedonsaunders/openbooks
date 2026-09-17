@@ -76,5 +76,65 @@
       "value": "Por valor",
       "quantity": "Por cantidad"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "Fallido"
+    },
+    "toasts": {
+      "saved": "Guardado"
+    },
+    "transfers": {
+      "newOrder": "Nueva orden de traslado",
+      "from": "De",
+      "to": "A",
+      "item": "Artículo",
+      "qty": "Cant.",
+      "inTransitAccount": "Cuenta de tránsito (reemplazo opcional)",
+      "useControlAccount": "Usar cuenta de control",
+      "createDraft": "Crear borrador",
+      "help": "El envío contabiliza DR tránsito / CR inventario. La recepción liquida el tránsito en destino. Define controlAccounts.inventoryInTransit si no hay reemplazo.",
+      "table": {
+        "number": "Número",
+        "fromTo": "De → A",
+        "status": "Estado",
+        "ordered": "Ordenado"
+      },
+      "ship": "Enviar",
+      "receive": "Recibir",
+      "noneYet": "Aún no hay órdenes de traslado."
+    },
+    "landed": {
+      "newVoucher": "Vale de flete y aranceles multirrecepción",
+      "amount": "Monto",
+      "basis": "Base",
+      "basisValue": "Por valor",
+      "basisQuantity": "Por cantidad",
+      "basisWeight": "Por peso",
+      "freightAccount": "Cuenta de flete",
+      "targetItem": "Artículo destino",
+      "location": "Ubicación",
+      "addTarget": "Añadir destino",
+      "remove": "quitar",
+      "postVoucher": "Contabilizar vale",
+      "table": {
+        "number": "Número",
+        "date": "Fecha",
+        "basis": "Base",
+        "amount": "Monto",
+        "status": "Estado"
+      },
+      "noneYet": "Aún no hay vales de flete y aranceles."
+    },
+    "lots": {
+      "lotNumber": "Número de lote",
+      "openRecallReport": "Abrir informe de retiro",
+      "table": {
+        "lot": "Lote",
+        "item": "Artículo",
+        "expiry": "Vencimiento"
+      },
+      "noneYet": "Aún no hay lotes; reciba stock con número de lote."
+    }
   }
 }

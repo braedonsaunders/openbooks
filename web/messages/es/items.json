@@ -7,7 +7,10 @@
     "emptyTitle": "Aún no hay artículos",
     "emptyDescription": "Agregue el primer servicio, mano de obra o cargo para iniciar el catálogo.",
     "newButton": "Nuevo artículo",
-    "createDraftFailed": "No se pudo crear un borrador de artículo"
+    "createDraftFailed": "No se pudo crear un borrador de artículo",
+    "view": "Vista",
+    "viewCatalog": "Catálogo",
+    "viewRateBooks": "Baremos"
   },
   "labels": {
     "code": "Código",
@@ -137,5 +140,56 @@
       "exclude": "Excluir",
       "software": "Software (residual)"
     }
+  },
+  "costing": {
+    "title": "Costeo de inventario",
+    "description": "Cómo se valúa y controla el stock de este artículo: método, cuentas y puntos de reorden.",
+    "configure": "Configurar costeo",
+    "empty": "Aún no hay perfil de costeo; configúralo antes de recibir stock.",
+    "method": "Método de costeo",
+    "methods": {
+      "fifo": "PEPS",
+      "moving_average": "Promedio",
+      "standard": "Costo estándar"
+    },
+    "tracking": "Seguimiento",
+    "trackingOptions": {
+      "none": "Ninguno",
+      "lot": "Lote",
+      "serial": "Serie"
+    },
+    "baseUnit": "Unidad base",
+    "assetAccount": "Cuenta de inventario",
+    "cogsAccount": "Cuenta de costo de ventas",
+    "adjustmentAccount": "Cuenta de ajustes",
+    "varianceAccount": "Cuenta de desviaciones",
+    "receivedNotBilledAccount": "Cuenta de recibido no facturado",
+    "standardCost": "Costo estándar",
+    "reorderPoint": "Punto de reorden",
+    "preferredStockLevel": "Nivel de stock preferido",
+    "selectAccount": "Selecciona una cuenta",
+    "separationConflict": "Debe ser distinta de la cuenta de inventario",
+    "separationBlocked": "Corrige las cuentas resaltadas antes de guardar: las contrapartidas deben ser distintas de la cuenta de inventario.",
+    "allowNegativeInventory": "Permitir inventario negativo",
+    "negativeCostBasis": "Base de costo provisional",
+    "provisionalUnitCost": "Costo unitario provisional configurado",
+    "negativeCostBasisOptions": {
+      "last_receipt": "Costo de la última recepción",
+      "standard": "Costo estándar",
+      "configured": "Costo configurado"
+    }
+  },
+  "fairValue": {
+    "title": "Precios de valor razonable",
+    "description": "Precios de venta independientes (SSP) fechados por moneda, usados para distribuir el ingreso de paquetes entre obligaciones.",
+    "new": "Nuevo precio",
+    "currency": "Moneda",
+    "unitPrice": "Precio unitario",
+    "lowValue": "Valor mínimo",
+    "highValue": "Valor máximo",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
+    "empty": "Aún no hay precios de valor razonable; se usa el SSP único de arriba.",
+    "confirmDelete": "¿Eliminar este precio de valor razonable?"
   }
 }

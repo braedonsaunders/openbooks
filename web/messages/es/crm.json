@@ -50,7 +50,8 @@
     "number": "Número",
     "projectedAmount": "Importe previsto",
     "periodStart": "Inicio del período",
-    "periodEnd": "Fin del período"
+    "periodEnd": "Fin del período",
+    "weightedAmount": "Monto ponderado"
   },
   "accounts": {
     "newFallback": "Nueva cuenta",
@@ -243,7 +244,9 @@
       "isClosed": "Estado cerrado",
       "isWon": "Estado ganado",
       "isDefault": "Predeterminado",
-      "isActive": "Activo"
+      "isActive": "Activo",
+      "rulesHint": "Opcional. Cada regla compara un campo con un valor para dirigir prospectos aquí. Campos: region, country, annualRevenue. Operadores: equals, contains, in, gte, lte.",
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]"
     },
     "states": {
       "active": "Activo",

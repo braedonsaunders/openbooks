@@ -13,6 +13,25 @@
   "sso": "Inicio de sesión único",
   "ssoFailed": "No se pudo completar el inicio de sesión único",
   "reset": {
-    "requestFailed": "No se pudo solicitar el enlace de restablecimiento — compruebe su conexión e inténtelo de nuevo."
-  }
+    "requestFailed": "No se pudo solicitar el enlace de restablecimiento — compruebe su conexión e inténtelo de nuevo.",
+    "requestTitle": "Restablezca su contraseña",
+    "chooseTitle": "Elija una nueva contraseña",
+    "requestHelp": "Introduzca su correo electrónico y le enviaremos un enlace de restablecimiento si coincide con una cuenta.",
+    "sendLink": "Enviar enlace",
+    "sending": "Enviando…",
+    "sent": "Si ese correo coincide con una cuenta, un enlace de restablecimiento va en camino. El enlace es de un solo uso y caduca en 30 minutos.",
+    "newPassword": "Nueva contraseña",
+    "confirmPassword": "Confirmar nueva contraseña",
+    "passwordHelp": "Al menos 10 caracteres.",
+    "mismatch": "Esas contraseñas no coinciden",
+    "weakPassword": "La contraseña debe tener al menos 10 caracteres",
+    "invalidToken": "Este enlace de restablecimiento no es válido o ha caducado; solicite uno nuevo",
+    "setPassword": "Definir nueva contraseña",
+    "saving": "Guardando…",
+    "changed": "Su contraseña ha cambiado. Inicie sesión con ella ahora; las demás sesiones se han cerrado.",
+    "backToSignIn": "Volver al inicio de sesión"
+  },
+  "forgotPassword": "¿Olvidó su contraseña?",
+  "tooManyAttempts": "Demasiados intentos; inténtelo de nuevo en {seconds} segundos",
+  "busyTryAgain": "El servicio de inicio de sesión está ocupado; inténtelo en un momento"
 }
