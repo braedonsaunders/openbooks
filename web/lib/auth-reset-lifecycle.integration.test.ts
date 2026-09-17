@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db, env } from '@openbooks/engine/src/db.ts';
+import { db, env, withBypassContext } from '@openbooks/engine/src/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/test-fixtures.ts';
 
 registerHooks({
@@ -15,7 +15,7 @@ registerHooks({
 
 for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollment'] as const) {
   test(`password reset invalidates ${scenario} from the previous credential`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     const priorSecret = env.SESSION_SECRET;
     env.SESSION_SECRET = randomBytes(32).toString('hex');
     try {
@@ -23,17 +23,24 @@ for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollme
       const { completePasswordReset } = await import('./auth-reset');
       const { sealSecret } = await import('./secrets');
       const { generateTotpSecret, totpCode } = await import('./auth-totp');
-      const userId = (await seedFlowActors(org.orgId)).adminId;
-      const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
       const oldPassword = 'Old isolated account password 2941';
       const newPassword = 'New isolated account password 7832';
-      await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
-      await db.execute(sql`update users set password_hash=${await auth.hashPassword(oldPassword)} where id=${userId}`);
       const context = { networkAddress: '127.0.0.1', userAgent: 'isolated reset regression' };
       const secret = generateTotpSecret();
-      if (scenario === 'pending login') {
-        await db.execute(sql`insert into auth_mfa_factors (user_id,secret_encrypted,enabled_at) values (${userId},${sealSecret(secret)},now())`);
-      }
+      // Fixture seeds under explicit bypass: importing ./auth above pulls in
+      // the web request-org resolver, which denies every unscoped query under
+      // pooled RLS (bare setup dies with 42501). The auth calls under test
+      // scope their own queries internally.
+      const { userId, email } = await withBypassContext(async () => {
+        const userId = (await seedFlowActors(org.orgId)).adminId;
+        const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+        await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
+        await db.execute(sql`update users set password_hash=${await auth.hashPassword(oldPassword)} where id=${userId}`);
+        if (scenario === 'pending login') {
+          await db.execute(sql`insert into auth_mfa_factors (user_id,secret_encrypted,enabled_at) values (${userId},${sealSecret(secret)},now())`);
+        }
+        return { userId, email };
+      });
       const login = await auth.login(email, oldPassword, context);
       let enrollment: Awaited<ReturnType<typeof auth.beginMfaSetup>> = null;
       let sessionId = '';
@@ -53,7 +60,9 @@ for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollme
         return;
       }
       const rawToken = randomBytes(32).toString('base64url');
-      await db.execute(sql`insert into auth_password_resets (user_id,token_hash,expires_at) values (${userId},${createHash('sha256').update(rawToken).digest('hex')},now()+interval '30 minutes')`);
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into auth_password_resets (user_id,token_hash,expires_at) values (${userId},${createHash('sha256').update(rawToken).digest('hex')},now()+interval '30 minutes')`);
+      });
       assert.deepEqual(await completePasswordReset(rawToken, newPassword), { ok: true });
       if (scenario === 'pending login') {
         assert.ok(login.kind === 'mfa_required');
@@ -70,7 +79,7 @@ for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollme
     } finally {
       if (priorSecret === undefined) delete env.SESSION_SECRET;
       else env.SESSION_SECRET = priorSecret;
-      await dropScratchOrg(org.orgId);
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   });
 }
