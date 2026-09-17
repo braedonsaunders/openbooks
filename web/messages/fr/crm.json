@@ -46,7 +46,8 @@
     "number": "Numéro",
     "projectedAmount": "Montant prévu",
     "periodStart": "Début de la période",
-    "periodEnd": "Fin de la période"
+    "periodEnd": "Fin de la période",
+    "weightedAmount": "Montant pondéré"
   },
   "accounts": {
     "newFallback": "Nouveau compte",
@@ -239,7 +240,9 @@
       "isClosed": "Statut fermé",
       "isWon": "Statut gagné",
       "isDefault": "Par défaut",
-      "isActive": "Actif"
+      "isActive": "Actif",
+      "rulesHint": "Facultatif. Chaque règle compare un champ à une valeur pour router les pistes ici. Champs : region, country, annualRevenue. Opérateurs : equals, contains, in, gte, lte.",
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]"
     },
     "states": {
       "active": "Actif",

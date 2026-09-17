@@ -20,7 +20,9 @@
     "organizationWorkspace": "Espace de l’organisation",
     "organizationWorkspaceDescription": "Modules de l’organisation actuelle",
     "platformDescription": "Outils d’opérateur pour tout le déploiement",
-    "security": "Sécurité de connexion"
+    "security": "Sécurité de connexion",
+    "sampleCompany": "société exemple",
+    "sandbox": "sandbox"
   },
   "language": {
     "label": "Langue",
@@ -141,6 +143,13 @@
     "askAdministrator": "Si vous ne pouvez pas effectuer ce changement, demandez à votre administrateur.",
     "deniedTitle": "Vous n'avez pas accès",
     "deniedDescription": "Cette section nécessite l'autorisation {permission}.",
-    "operatorDescription": "La console de plateforme est réservée aux opérateurs de plateforme. Les paramètres de votre organisation se trouvent sous Administration."
+    "operatorDescription": "La console de plateforme est réservée aux opérateurs de plateforme. Les paramètres de votre organisation se trouvent sous Administration.",
+    "errorTitle": "Un problème est survenu",
+    "errorDescription": "Cette page n’a pas pu se charger. Réessayez, ou retournez au tableau de bord si le problème persiste.",
+    "errorReference": "Référence {id}",
+    "notFoundTitle": "Page introuvable",
+    "notFoundDescription": "La page recherchée n’existe pas ou vous n’y avez pas accès.",
+    "backToDashboard": "Aller au tableau de bord",
+    "backToSignIn": "Aller à l’ouverture de session"
   }
 }

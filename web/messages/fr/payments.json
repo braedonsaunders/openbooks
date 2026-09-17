@@ -89,7 +89,12 @@
       "autosaveFailed": "Échec de l’enregistrement automatique",
       "postFailed": "Échec de la comptabilisation",
       "posted": "{side, select, ap {Paiement comptabilisé et appliqué} other {Paiement client comptabilisé et appliqué}}"
-    }
+    },
+    "deleteConfirmTitle": "Supprimer ce paiement ?",
+    "deleteConfirmBody": "Cette action supprime définitivement le paiement brouillon. Elle est irréversible.",
+    "deleteConfirmAction": "Supprimer",
+    "deleted": "Paiement supprimé",
+    "deleteFailed": "La suppression a échoué"
   },
   "eft": {
     "notConfiguredTitle": "L’émission EFT n’est pas configurée",

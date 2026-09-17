@@ -31,7 +31,8 @@
       "ordersTitle": "Pipeline de commandes",
       "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion",
       "cashFlowIndirectTitle": "Flux de trésorerie (indirect)",
-      "cashFlowIndirectDescription": "Méthode indirecte — résultat net rapproché des flux opérationnels avec le détail du fonds de roulement"
+      "cashFlowIndirectDescription": "Méthode indirecte — résultat net rapproché des flux opérationnels avec le détail du fonds de roulement",
+      "payrollDescription": "Rapport de paie intégré sur les bulletins — les données de salaire exigent la permission paie."
     },
     "groups": {
       "financial": "États financiers",
@@ -40,7 +41,8 @@
       "budgeting": "Budgets",
       "custom": "Personnalisés et enregistrés",
       "projects": "Projets",
-      "orders": "Ventes et commandes"
+      "orders": "Ventes et commandes",
+      "payroll": "Paie"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -514,7 +516,9 @@
         "fri": "vendredi",
         "sat": "samedi"
       }
-    }
+    },
+    "drawerDescription": "Envoyez ce rapport par courriel à intervalle régulier. Les planifications utilisent les filtres enregistrés à leur création.",
+    "loading": "Chargement des planifications…"
   },
   "catalog": {
     "entities": {
@@ -1113,7 +1117,22 @@
       "purchases": "Achats",
       "both": "Les deux",
       "true": "Oui",
-      "false": "Non"
+      "false": "Non",
+      "earning": "Gain",
+      "deduction": "Retenue",
+      "employer_contribution": "Cotisation patronale",
+      "match": "Rapprochement exact",
+      "within_tolerance": "Dans la tolérance",
+      "difference": "Écart",
+      "prior_only": "Seulement dans l’ancien système",
+      "our_only": "Seulement ici",
+      "employee_prior_only": "Employé absent de notre paie",
+      "employee_our_only": "Employé absent du registre",
+      "unattributed": "Qu’aucune composante n’explique",
+      "clean": "Rapproché exactement",
+      "clean_within_tolerance": "Rapproché dans la tolérance",
+      "differences": "Écarts à résoudre",
+      "no_comparable_data": "Rien n’a été comparé"
     }
   },
   "operators": {
@@ -1172,7 +1191,9 @@
       "fiscal_year": "exercice fiscal"
     },
     "csvSection": "Section",
-    "exportTruncated": "Affichage des {shown} premières lignes sur {total} — réduisez la période ou ajoutez des filtres pour tout voir."
+    "exportTruncated": "Affichage des {shown} premières lignes sur {total} — réduisez la période ou ajoutez des filtres pour tout voir.",
+    "grandTotals": "Totaux généraux",
+    "subtotal": "{level} — total"
   },
   "builtIns": {
     "ap-aging-by-vendor": {
@@ -1194,6 +1215,30 @@
     "lot-recall": {
       "name": "Rappel de lot",
       "description": "Chaque mouvement de stock lié à un lot, avec article, expiration, quantité, emplacement, document source et tiers pour les rappels et la traçabilité."
+    },
+    "payroll-journal": {
+      "name": "Journal de paie",
+      "description": "Le dossier d’audit complet de la période de paie, une section par employé : chaque gain, retenue et cotisation patronale avec heures, taux, montant de la période et cumul annuel. Choisissez une seule période de paie dans le menu des périodes pour correspondre à un cycle. Exige la permission paie."
+    },
+    "payroll-deductions-register": {
+      "name": "Registre des retenues et cotisations",
+      "description": "Chaque retenue et cotisation patronale, par composante : qui a payé quoi sur la période et en cumul annuel. Le détail justificatif des versements et des assureurs. Exige la permission paie."
+    },
+    "payroll-cost-by-department": {
+      "name": "Coût de la paie par département",
+      "description": "Répartition de la main-d’œuvre : montants de paie par département et nature de composante (gains, retenues, charges patronales). Exige la permission paie."
+    },
+    "payroll-employee-totals": {
+      "name": "Totaux par employé (cumul annuel)",
+      "description": "Une ligne par employé : brut, impôt retenu, paie nette et totaux du coût patronal avec nombre de bulletins pour la période. Exige la permission paie."
+    },
+    "payroll-parallel-run": {
+      "name": "Rapprochement du cycle parallèle",
+      "description": "Le contrôle d’adoption : pour une période de paie, chaque employé et chaque composante comparés à l’ancien fournisseur de paie, par résultat pour lire d’abord les écarts significatifs et les employés unilatéraux, puis les rapprochements exacts. La tolérance, lorsqu’elle est configurée, figure dans sa propre colonne."
+    },
+    "payroll-parallel-run-totals": {
+      "name": "Totaux du cycle parallèle par composante",
+      "description": "Le même rapprochement cumulé : par composante, ce que l’ancien fournisseur a payé au total, ce que cette paie calcule, et l’écart — pour attribuer un écart de période aux composantes qui l’ont produit."
     }
   },
   "generalLedger": {

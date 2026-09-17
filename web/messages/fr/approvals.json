@@ -58,7 +58,8 @@
     "reasonLabel": "Motif du rejet (appliqué à chaque élément sélectionné)",
     "approvedCount": "{count} approuvée(s)",
     "rejectedCount": "{count} rejetée(s)",
-    "failedCount": "{count} en échec ({error})"
+    "failedCount": "{count} en échec ({error})",
+    "signatureBlocked": "Certaines approbations sélectionnées exigent une signature — approuvez-les une par une."
   },
   "ooo": {
     "button": "Absence du bureau",
@@ -84,7 +85,10 @@
     "badges": {
       "quorumAll": "Tous les approbateurs",
       "reminder": "Rappel {date}",
-      "escalates": "Escalade {date}"
-    }
+      "escalates": "Escalade {date}",
+      "signature": "Signature requise"
+    },
+    "signTitle": "Signer pour approuver",
+    "signLabel": "Saisissez votre nom complet pour signer cette approbation"
   }
 }

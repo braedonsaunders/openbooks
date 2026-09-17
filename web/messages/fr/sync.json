@@ -16,7 +16,18 @@
       "unconfigured": "non configurée"
     },
     "mirrorBadge": "miroir : {schedule}",
-    "lastRun": "Dernière exécution : {lastRun} · Synchronisé jusqu’au : {cursor}"
+    "lastRun": "Dernière exécution : {lastRun} · Synchronisé jusqu’au : {cursor}",
+    "schedule": "Calendrier du miroir",
+    "mirrorHealth": "Miroir",
+    "attachmentHealth": "Pièces jointes",
+    "sourceDeletions": "Transactions supprimées à la source",
+    "sourceDeletionHint": "Choisissez si OpenBooks doit conserver la transaction auditée ou la contre-passer et l’annuler. Les documents comptabilisés avec des affectations de paiement doivent d’abord être désaffectés.",
+    "schedules": {
+      "hourly": "Toutes les heures",
+      "every_6_hours": "Toutes les 6 heures",
+      "daily": "Tous les jours",
+      "weekly": "Toutes les semaines"
+    }
   },
   "actions": {
     "connect": "Connecter",
@@ -30,7 +41,9 @@
     "pauseMirror": "Suspendre le miroir",
     "enableMirror": "Activer le miroir",
     "edit": "Modifier",
-    "downloadQwc": "Télécharger Web Connector"
+    "downloadQwc": "Télécharger Web Connector",
+    "retainDeletion": "Conserver avec preuve",
+    "voidDeletion": "Contre-passer et annuler"
   },
   "runs": {
     "heading": "Exécutions récentes",
@@ -97,7 +110,8 @@
       "CONNECTION_UNCONFIGURED": "Ajoutez les identifiants avant d’exécuter cette connexion.",
       "INVALID_MODE": "Choisissez une action de migration valide.",
       "ATTACHMENTS_UNSUPPORTED": "Cette connexion ne prend pas en charge la migration des pièces jointes.",
-      "PROJECT_FINANCIALS_UNSUPPORTED": "Cette connexion ne fournit pas la synchronisation des données financières des projets."
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Cette connexion ne fournit pas la synchronisation des données financières des projets.",
+      "RUN_ALREADY_ACTIVE": "Un cycle de ce type est déjà actif pour cette connexion."
     },
     "testing": "Test de la connexion…",
     "connected": "Connecté",
@@ -108,7 +122,9 @@
     "created": "Connexion créée",
     "updated": "Connexion mise à jour",
     "copied": "URI de redirection copiée",
-    "copyFailed": "Copie impossible — sélectionnez et copiez le texte manuellement"
+    "copyFailed": "Copie impossible — sélectionnez et copiez le texte manuellement",
+    "deletionRetained": "Suppression à la source conservée avec preuve du contrôleur",
+    "deletionVoided": "Transaction supprimée à la source contre-passée et annulée"
   },
   "confirmDelete": "Supprimer la connexion « {name} » ? Les données migrées sont conservées ; seul le lien est supprimé.",
   "drawer": {
@@ -124,7 +140,13 @@
     "name": "Nom de la connexion",
     "select": "Sélectionner…",
     "credentials": "Identifiants (chiffrés au repos, jamais réaffichés)",
-    "keepCurrent": "Laisser vide pour conserver la valeur actuelle"
+    "keepCurrent": "Laisser vide pour conserver la valeur actuelle",
+    "postedChanges": {
+      "label": "Modifications des transactions comptabilisées à la source",
+      "review": "Arrêter et exiger une révision",
+      "automatic": "Ajouter automatiquement la contre-passation et le remplacement",
+      "help": "Les corrections automatiques ne réécrivent jamais l’historique comptabilisé. OpenBooks conserve l’original, comptabilise une contre-passation et un remplacement liés, transfère les affectations admissibles, et s’arrête quand même pour les rapprochements, les périodes clôturées, les stocks, la comptabilisation du revenu ou les documents en aval."
+    }
   },
   "oauth": {
     "title": "Configuration unique de l’application dans le <link>{portal}</link>",
@@ -193,5 +215,7 @@
         "Copiez l’ID client, générez un secret client, collez les deux dans ce formulaire, enregistrez, puis cliquez sur Connecter."
       ]
     }
-  }
+  },
+  "confirmRetainSourceDeletion": "Conserver la transaction {ref} supprimée à la source dans OpenBooks et consigner la décision du contrôleur ?",
+  "confirmVoidSourceDeletion": "Contre-passer et annuler la transaction {ref} supprimée à la source ? Une contre-passation comptable sera comptabilisée et ne pourra pas être annulée depuis cet écran."
 }

@@ -64,7 +64,24 @@
     "importAnother": "Importer un autre fichier",
     "postMode": "Mode d'import",
     "postDraft": "Créer des brouillons (réviser et comptabiliser plus tard)",
-    "postPost": "Créer et comptabiliser au grand livre"
+    "postPost": "Créer et comptabiliser au grand livre",
+    "resourcePlaceholder": "Choisir une cible d’import…",
+    "truncatedWarning": "Seules les {n} premières lignes ont été lues — le reste du fichier a été ignoré. Fractionnez le fichier et importez le reste séparément.",
+    "warnings": "Avertissements",
+    "sample": {
+      "title": "Explorer une société exemple complète",
+      "description": "Ouvrez une société réaliste de votre secteur avec clients, fournisseurs, transactions, rapports, projets et périodes clôturées déjà en place.",
+      "industry": "Société exemple",
+      "create": "Créer la société exemple",
+      "open": "Ouvrir la société exemple",
+      "preparing": "Préparation de la société…",
+      "created": "La société exemple est prête",
+      "ready": "Ouverture de votre société exemple",
+      "error": "La société exemple n’a pas pu être préparée",
+      "firstGeneration": "La première copie peut prendre quelques minutes pendant la génération de son modèle vérifié",
+      "safety": "Les données exemple sont copiées dans un espace de travail distinct et clairement identifié. Elles n’entrent jamais dans vos livres réels, et les effets courriel, paiement, API et intégration restent désactivés.",
+      "orFile": "ou importez votre propre fichier"
+    }
   },
   "history": {
     "title": "Historique des imports",

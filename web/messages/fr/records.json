@@ -157,7 +157,10 @@
         "max": "Maximum",
         "concat": "Joindre le texte"
       }
-    }
+    },
+    "publishNeedsField": "Ajoutez au moins un champ avant de publier.",
+    "publishNeedsSave": "Attendez l’enregistrement des modifications, puis publiez.",
+    "publishResolveIssues": "Résolvez les problèmes ci-dessus avant de publier."
   },
   "module": {
     "defaultDescription": "{pluralName} suivis comme type d’enregistrement personnalisé.",

@@ -7,7 +7,10 @@
     "emptyTitle": "Aucun article pour l’instant",
     "emptyDescription": "Ajoutez un premier service, poste de main-d’œuvre ou frais pour démarrer le catalogue.",
     "newButton": "Nouvel article",
-    "createDraftFailed": "Impossible de créer un article brouillon"
+    "createDraftFailed": "Impossible de créer un article brouillon",
+    "view": "Vue",
+    "viewCatalog": "Catalogue",
+    "viewRateBooks": "Barèmes"
   },
   "labels": {
     "code": "Code",
@@ -137,5 +140,56 @@
       "exclude": "Exclure",
       "software": "Logiciel (résiduel)"
     }
+  },
+  "costing": {
+    "title": "Valorisation des stocks",
+    "description": "Valorisation et suivi du stock de cet article — méthode, comptes et seuils de réapprovisionnement.",
+    "configure": "Configurer la valorisation",
+    "empty": "Aucun profil de coût pour l’instant — configurez-en un avant de réceptionner du stock.",
+    "method": "Méthode de valorisation",
+    "methods": {
+      "fifo": "PEPS",
+      "moving_average": "Coût moyen pondéré",
+      "standard": "Coût standard"
+    },
+    "tracking": "Suivi",
+    "trackingOptions": {
+      "none": "Aucun",
+      "lot": "Lot",
+      "serial": "Numéro de série"
+    },
+    "baseUnit": "Unité de base",
+    "assetAccount": "Compte de stock",
+    "cogsAccount": "Compte de CMV",
+    "adjustmentAccount": "Compte d’ajustement",
+    "varianceAccount": "Compte d’écarts",
+    "receivedNotBilledAccount": "Compte de réception non facturée",
+    "standardCost": "Coût standard",
+    "reorderPoint": "Seuil de réapprovisionnement",
+    "preferredStockLevel": "Niveau de stock souhaité",
+    "selectAccount": "Sélectionnez un compte",
+    "separationConflict": "Doit différer du compte de stock",
+    "separationBlocked": "Corrigez les comptes surlignés avant d’enregistrer — les comptes de contrepartie doivent différer du compte de stock.",
+    "allowNegativeInventory": "Autoriser les stocks négatifs",
+    "negativeCostBasis": "Base de coût provisoire",
+    "provisionalUnitCost": "Coût unitaire provisoire configuré",
+    "negativeCostBasisOptions": {
+      "last_receipt": "Coût de la dernière réception",
+      "standard": "Coût standard",
+      "configured": "Coût configuré"
+    }
+  },
+  "fairValue": {
+    "title": "Justes valeurs",
+    "description": "Prix de vente autonomes (SSP) datés par devise, utilisés pour répartir le revenu des offres groupées entre les obligations.",
+    "new": "Nouveau prix",
+    "currency": "Devise",
+    "unitPrice": "Prix unitaire",
+    "lowValue": "Valeur basse",
+    "highValue": "Valeur haute",
+    "effectiveFrom": "En vigueur depuis",
+    "effectiveTo": "En vigueur jusqu’au",
+    "empty": "Aucune juste valeur pour l’instant — le prix SSP unique ci-dessus est utilisé.",
+    "confirmDelete": "Supprimer ce prix en juste valeur ?"
   }
 }

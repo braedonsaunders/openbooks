@@ -76,5 +76,65 @@
       "value": "Par valeur",
       "quantity": "Par quantité"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "Échec"
+    },
+    "toasts": {
+      "saved": "Enregistré"
+    },
+    "transfers": {
+      "newOrder": "Nouvel ordre de transfert",
+      "from": "De",
+      "to": "À",
+      "item": "Article",
+      "qty": "Qté",
+      "inTransitAccount": "Compte de transit (dérogation facultative)",
+      "useControlAccount": "Utiliser le compte de contrôle",
+      "createDraft": "Créer un brouillon",
+      "help": "L’expédition comptabilise DR transit / CR stock. La réception solde le transit à destination. Renseignez controlAccounts.inventoryInTransit hors dérogation.",
+      "table": {
+        "number": "Numéro",
+        "fromTo": "De → À",
+        "status": "Statut",
+        "ordered": "Commandé"
+      },
+      "ship": "Expédier",
+      "receive": "Réceptionner",
+      "noneYet": "Aucun ordre de transfert pour l’instant."
+    },
+    "landed": {
+      "newVoucher": "Bon de coûts rendus multi-réceptions",
+      "amount": "Montant",
+      "basis": "Base",
+      "basisValue": "À la valeur",
+      "basisQuantity": "À la quantité",
+      "basisWeight": "Au poids",
+      "freightAccount": "Compte de fret",
+      "targetItem": "Article cible",
+      "location": "Emplacement",
+      "addTarget": "Ajouter une cible",
+      "remove": "retirer",
+      "postVoucher": "Comptabiliser le bon",
+      "table": {
+        "number": "Numéro",
+        "date": "Date",
+        "basis": "Base",
+        "amount": "Montant",
+        "status": "Statut"
+      },
+      "noneYet": "Aucun bon de coûts rendus pour l’instant."
+    },
+    "lots": {
+      "lotNumber": "Numéro de lot",
+      "openRecallReport": "Ouvrir le rapport de rappel",
+      "table": {
+        "lot": "Lot",
+        "item": "Article",
+        "expiry": "Expiration"
+      },
+      "noneYet": "Aucun lot pour l’instant — réceptionnez du stock avec un numéro de lot."
+    }
   }
 }

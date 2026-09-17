@@ -40,7 +40,8 @@
     "project_charge": "Charge de projet",
     "field_ticket": "Bon de régie",
     "fixed_asset": "Immobilisation",
-    "property": "Propriété"
+    "property": "Propriété",
+    "pay_run": "Cycle de paie"
   },
   "property": {
     "tabs": {
@@ -166,7 +167,12 @@
         "text": "Texte"
       },
       "customFields": "Champs personnalisés",
-      "noCustomFields": "Aucun champ personnalisé défini pour ce type."
+      "noCustomFields": "Aucun champ personnalisé défini pour ce type.",
+      "tabsSection": "Onglets",
+      "tabsHelp": "Les onglets affichés par le panneau de cette fiche. Masquez ceux que vous n’utilisez pas, réordonnez-les selon votre travail, renommez-les dans votre vocabulaire, ou ajoutez votre propre onglet pour vos champs personnalisés.",
+      "addTab": "Ajouter un onglet",
+      "customTab": "Personnalisé",
+      "tabLocked": "Cet onglet affiche les champs propres à la fiche et ne peut pas être masqué."
     },
     "list": {
       "new": "Nouvelle vue",
@@ -198,7 +204,7 @@
       "removeFilter": "Retirer le filtre",
       "noFilters": "Aucun filtre — cette vue montre tout.",
       "sortColumn": "Trier par",
-      "sortDir": "Direction",
+      "sortDir": "Sens",
       "asc": "Croissant",
       "desc": "Décroissant",
       "perPage": "Lignes par page"
