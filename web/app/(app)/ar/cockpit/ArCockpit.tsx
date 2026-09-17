@@ -4,7 +4,8 @@ import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
+import { overdueOpenPct } from './overdue-pct'
 import {
   Wallet,
   TriangleAlert,
@@ -67,10 +68,9 @@ export function ArCockpit({
     null,
   );
 
-  const overduePct =
-    compareMoney(data.outstanding, '0.0000') > 0
-      ? formatExactPercent(divideMoney(data.overdue, data.outstanding))
-      : '0%';
+  // Bare number on purpose: the overdueSub message already appends "%",
+  // so formatExactPercent's suffixed value rendered "100%%" (F-t12-003).
+  const overduePct = overdueOpenPct(data.overdue, data.outstanding);
   const customerQuery = (search.get("customerQ") ?? "")
     .trim()
     .toLocaleLowerCase();
