@@ -1,5 +1,27 @@
 {
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "A ação falhou",
+      "camPoolCreated": "Grupo de despesas criado",
+      "camPoolReopened": "Grupo de despesas reaberto para correção",
+      "camPoolUpdated": "Grupo de despesas atualizado",
+      "chargeAdded": "Cobrança adicionada",
+      "couldNotLoad": "Não foi possível carregar os imóveis",
+      "depositPosted": "Caução registrada",
+      "depositReversed": "Caução revertida",
+      "escalationApplied": "Reajuste aplicado",
+      "escalationScheduled": "Reajuste agendado",
+      "lateFeesAssessed": "Multas por atraso da carteira aplicadas",
+      "leaseCreated": "Locação criada",
+      "leaseUpdated": "Locação atualizada",
+      "propertyCreated": "Imóvel criado",
+      "propertyDeleted": "Imóvel excluído",
+      "propertyUpdated": "Imóvel atualizado",
+      "rentBilled": "Aluguéis da carteira faturados",
+      "unitAdded": "Unidade adicionada",
+      "unitDeleted": "Unidade excluída",
+      "unitUpdated": "Unidade atualizada"
+    },
     "workspace": {
       "title": "Gestão de imóveis",
       "description": "Opere imóveis, locações, aluguéis, conciliações de despesas comuns e cauções.",
@@ -56,6 +78,197 @@
         "propertyType": "Tipo",
         "occupancy": "Ocupação",
         "currency": "Moeda"
+      }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "charge": "Cobrança",
+          "frequency": "Frequência",
+          "effective": "Vigência",
+          "amount": "Valor",
+          "open": "Em aberto"
+        },
+        "addTitle": "Adicionar cobrança recorrente",
+        "labels": {
+          "type": "Tipo",
+          "description": "Descrição",
+          "amount": "Valor",
+          "frequency": "Frequência",
+          "effectiveFrom": "Vigente desde",
+          "effectiveTo": "Vigente até",
+          "incomeAccount": "Conta de receita"
+        },
+        "types": {
+          "cam": "Despesas comuns",
+          "parking": "Estacionamento",
+          "storage": "Armazenamento",
+          "utility": "Serviços públicos",
+          "other": "Outro"
+        },
+        "frequencies": {
+          "monthly": "Mensal",
+          "quarterly": "Trimestral",
+          "annually": "Anual",
+          "one_time": "Única"
+        },
+        "propertyDefault": "Padrão do imóvel",
+        "addCharge": "Adicionar cobrança"
+      },
+      "escalations": {
+        "table": {
+          "effective": "Vigência",
+          "method": "Método",
+          "value": "Valor",
+          "result": "Resultado"
+        },
+        "apply": "Aplicar",
+        "emptyTitle": "Sem reajustes de aluguel",
+        "emptyDetail": "Programe alterações contratuais percentuais, de valor fixo ou de substituição de aluguel.",
+        "scheduleTitle": "Agendar reajuste",
+        "labels": {
+          "effectiveOn": "Data de vigência",
+          "method": "Método",
+          "value": "Valor"
+        },
+        "methods": {
+          "percent": "Aumento percentual",
+          "fixed": "Aumento fixo",
+          "new_amount": "Novo valor mensal"
+        },
+        "schedule": "Agendar"
+      },
+      "deposits": {
+        "required": "Obrigatório",
+        "held": "Retido",
+        "notice": "As transações de caução são lançadas imediatamente e não podem ser editadas nem excluídas. Reverta uma transação incorreta e lance sua substituição corrigida abaixo.",
+        "emptyTitle": "Sem movimentação de cauções",
+        "emptyDetail": "Registre o recebimento para estabelecer o passivo de cauções de inquilinos.",
+        "reverseTitle": "Reverter transação de caução",
+        "reverseLabels": {
+          "reversalDate": "Data da reversão",
+          "reason": "Motivo"
+        },
+        "cancel": "Cancelar",
+        "postReversal": "Lançar estorno",
+        "recordTitle": "Registrar transação de caução",
+        "labels": {
+          "transaction": "Transação",
+          "date": "Data",
+          "amount": "Valor",
+          "bankAccount": "Conta bancária",
+          "tenantInvoice": "Fatura do inquilino",
+          "offsetAccount": "Conta de contrapartida",
+          "memo": "Memorando"
+        },
+        "kinds": {
+          "received": "Recebido",
+          "interest": "Juros",
+          "applied": "Aplicar na fatura do inquilino",
+          "refunded": "Reembolsado",
+          "adjustment_increase": "Ajuste de aumento",
+          "adjustment_decrease": "Ajuste de redução"
+        },
+        "propertyDefault": "Padrão do imóvel",
+        "selectPostedInvoice": "Selecionar fatura lançada",
+        "selectAccount": "Selecionar conta",
+        "postTransaction": "Lançar transação"
+      },
+      "toasts": {
+        "chargeAdded": "Cobrança de locação adicionada",
+        "escalationApplied": "Reajuste de aluguel aplicado",
+        "escalationScheduled": "Reajuste agendado",
+        "depositReversed": "Transação de caução revertida",
+        "depositPosted": "Transação de caução lançada"
+      }
+    },
+    "detail": {
+      "selectEmpty": "Não associado",
+      "fields": {
+        "name": "Nome",
+        "code": "Código",
+        "propertyType": "Tipo de imóvel",
+        "subsidiary": "Subsidiária",
+        "location": "Localização",
+        "fixedAsset": "Ativo imobilizado",
+        "currency": "Moeda",
+        "street": "Rua",
+        "city": "Cidade",
+        "region": "Província / estado",
+        "postalCode": "CEP",
+        "rentIncomeAccount": "Conta de receitas de aluguel",
+        "camIncomeAccount": "Conta de receitas de encargos comuns",
+        "depositLiabilityAccount": "Conta de passivo de cauções",
+        "defaultBankAccount": "Conta bancária padrão"
+      },
+      "selectSubsidiary": "Selecionar subsidiária",
+      "tabsLabelMap": {
+        "overview": "Visão geral",
+        "units": "Unidades",
+        "leases": "Locações",
+        "rent": "Aluguéis",
+        "deposits": "Cauções",
+        "cam": "Despesas comuns"
+      },
+      "tabsAria": "Detalhes do imóvel",
+      "noLocation": "Sem localização",
+      "cancel": "Cancelar",
+      "saving": "Salvando…",
+      "save": "Salvar",
+      "edit": "Editar",
+      "actions": "Ações",
+      "customForm": "Formulário personalizado",
+      "customizeForm": "Personalizar formulário",
+      "deactivate": "Desativar imóvel",
+      "reactivate": "Reativar imóvel",
+      "deleteConfirm": "Excluir {name}? Somente imóveis sem uso podem ser excluídos permanentemente.",
+      "deleteProperty": "Excluir imóvel",
+      "units": {
+        "title": "Unidades alugáveis",
+        "description": "Ocupação, área locável e capacidade de locação por unidade.",
+        "addUnit": "Adicionar unidade",
+        "table": {
+          "unit": "Unidade",
+          "type": "Tipo",
+          "rentableArea": "Área locável",
+          "bedrooms": "Quartos"
+        },
+        "emptyTitle": "Ainda não há unidades",
+        "emptyDetail": "Adicione a primeira unidade alugável a partir deste registro de imóvel."
+      },
+      "leases": {
+        "title": "Locações do imóvel",
+        "description": "Contratos de inquilinos vigentes e históricos deste imóvel.",
+        "newLease": "Nova locação",
+        "table": {
+          "lease": "Locação",
+          "unit": "Unidade",
+          "tenant": "Inquilino",
+          "term": "Prazo"
+        },
+        "wholeProperty": "Imóvel inteiro",
+        "openTerm": "Em aberto",
+        "emptyTitle": "Ainda não há locações",
+        "emptyDetail": "Crie uma locação na aba Locações do espaço de trabalho."
+      },
+      "rent": {
+        "title": "Cronograma de aluguéis",
+        "description": "Aluguéis programados e faturados das locações deste imóvel.",
+        "assessLateFees": "Aplicar multas por atraso",
+        "billDueRent": "Faturar aluguéis vencidos"
+      },
+      "depositsTab": {
+        "title": "Cauções",
+        "description": "Movimentação de cauções de inquilinos deste imóvel, somente adição."
+      },
+      "cam": {
+        "title": "Conciliações de despesas comuns",
+        "description": "Grupos de despesas operacionais, rateios e acertos dos inquilinos deste imóvel.",
+        "newPool": "Novo grupo de despesas"
+      },
+      "toasts": {
+        "lateFeesAssessed": "Multas por atraso do imóvel aplicadas",
+        "rentBilled": "Aluguéis do imóvel faturados"
       }
     },
     "propertyDrawer": {

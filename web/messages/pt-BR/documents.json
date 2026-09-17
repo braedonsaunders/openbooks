@@ -15,7 +15,9 @@
     },
     "folderRow": "Pasta"
   },
-  "systemFolders": { "apCapture": "Captura de contas a pagar" },
+  "systemFolders": {
+    "apCapture": "Captura de contas a pagar"
+  },
   "columns": {
     "name": "Nome",
     "size": "Tamanho",
@@ -48,6 +50,11 @@
       "parentLabel": "Pasta pai",
       "submit": "Criar pasta"
     },
+    "tabs": {
+      "details": "Detalhes",
+      "sharing": "Compartilhamento",
+      "activity": "Atividade"
+    },
     "edit": {
       "title": "Editar pasta",
       "nameLabel": "Nome da pasta",
@@ -62,6 +69,7 @@
       "title": "Excluir esta pasta?",
       "body": "Todos os arquivos desta pasta serão excluídos permanentemente. Isso não pode ser desfeito."
     },
+    "downloadZip": "Baixar como ZIP",
     "systemNoDelete": "Pastas do sistema não podem ser excluídas ou renomeadas.",
     "subfolderCount": "{count, plural, one {# pasta} other {# pastas}}",
     "fileCount": "{count, plural, one {# arquivo} other {# arquivos}}",
@@ -70,6 +78,12 @@
   "file": {
     "drawer": {
       "title": "Detalhes do arquivo",
+      "tabs": {
+        "preview": "Pré-visualização",
+        "details": "Detalhes",
+        "sharing": "Compartilhamento",
+        "activity": "Atividade"
+      },
       "name": "Nome",
       "folder": "Pasta",
       "type": "Tipo",
@@ -115,7 +129,82 @@
     "attachExisting": "Anexar arquivo existente",
     "uploadNew": "Enviar novo arquivo"
   },
+  "share": {
+    "title": "Compartilhamento",
+    "subtitle": "Todos na sua empresa podem visualizar {kind} por padrão. Conceda aqui a pessoas ou funções acesso extra (edição ou administração); torne uma pasta privada em Detalhes para restringir quem pode vê-la.",
+    "kindFolder": "esta pasta",
+    "kindFile": "este arquivo",
+    "noGrants": "Visível para todos na sua empresa. Adicione pessoas ou funções abaixo para conceder acesso de Editor ou Administrador.",
+    "addPrincipal": "Adicionar pessoa ou função",
+    "selectPrincipal": "Escolha uma pessoa ou função…",
+    "usersGroup": "Pessoas",
+    "rolesGroup": "Papéis",
+    "add": "Adicionar",
+    "remove": "Remover",
+    "you": "você",
+    "inheritedHint": "O acesso à pasta é herdado pelos arquivos e subpastas dentro dela.",
+    "tiers": {
+      "viewer": "Visualizador",
+      "editor": "Editor",
+      "manager": "Administrador",
+      "viewerHint": "Visualizar e baixar",
+      "editorHint": "Enviar, renomear, mover, substituir",
+      "managerHint": "Controle total, incluindo exclusão e compartilhamento"
+    }
+  },
+  "bulk": {
+    "selected": "{count, plural, one {# selecionado} other {# selecionados}}",
+    "download": "Baixar",
+    "delete": "Excluir",
+    "clear": "Limpar",
+    "selectAll": "Selecionar tudo",
+    "deleteConfirm": {
+      "title": "Mover os itens selecionados para a Lixeira?",
+      "body": "Os arquivos e pastas selecionados serão movidos para a Lixeira. Você pode restaurá-los mais tarde."
+    },
+    "deleted": "{count} movidos para a Lixeira",
+    "deleteFailed": "Não foi possível excluir a seleção",
+    "downloadFailed": "Não foi possível baixar a seleção",
+    "nothingDownloadable": "Selecione arquivos para baixar"
+  },
+  "trash": {
+    "title": "Lixeira",
+    "link": "Lixeira",
+    "description": "Arquivos e pastas excluídos. Restaure-os ou exclua-os permanentemente.",
+    "empty": "A Lixeira está vazia.",
+    "back": "Voltar ao Arquivo",
+    "restore": "Restaurar",
+    "deleteForever": "Excluir permanentemente",
+    "purgeConfirm": {
+      "title": "Excluir permanentemente?",
+      "body": "Este item e seu conteúdo serão excluídos permanentemente. Não é possível desfazer."
+    },
+    "folderLabel": "Pasta",
+    "inLocation": "em {location}",
+    "restored": "Restaurado",
+    "restoreFailed": "Não foi possível restaurar",
+    "purged": "Excluído permanentemente",
+    "purgeFailed": "Não foi possível excluir"
+  },
+  "activity": {
+    "title": "Atividade",
+    "empty": "Nenhuma atividade registrada ainda.",
+    "events": {
+      "create": "criado",
+      "upload": "enviado",
+      "rename": "renomeado",
+      "move": "movido",
+      "replace": "enviou uma nova versão",
+      "delete": "excluído",
+      "restore": "restaurado",
+      "share": "compartilhado",
+      "unshare": "compartilhamento removido"
+    }
+  },
   "toasts": {
+    "shareUpdated": "Compartilhamento atualizado",
+    "shareFailed": "Não foi possível atualizar o compartilhamento",
+    "shareRemoved": "Acesso removido",
     "folderCreated": "Pasta criada",
     "folderCreateFailed": "Não foi possível criar a pasta",
     "folderRenamed": "Pasta renomeada",
@@ -153,6 +242,8 @@
   "rowMenu": {
     "open": "Abrir",
     "openFolder": "Abrir pasta",
+    "properties": "Propriedades",
+    "manageAccess": "Gerenciar acesso",
     "copyLink": "Copiar link"
   },
   "rename": {
