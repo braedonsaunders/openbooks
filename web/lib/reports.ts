@@ -108,4 +108,4 @@ export {
   type ProjectProfitTotals,
 } from "./reports/projects";
 
-export { currentFiscalYearEnd, fiscalYearRange } from "./reports/periods";
+export { fiscalYearRange } from "./reports/periods";

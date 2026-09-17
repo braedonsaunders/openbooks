@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "./db.ts";
 import { COUNTRY_TAX_PACKS, countryTaxPackForReturn } from "./country-tax-packs/index.ts";
-import type { TaxBoxBasis, TaxBoxMap, TaxReturnPack, TaxReturnPackBox, TaxReturnPackJurisdiction } from "./country-tax-packs/types.ts";
+import type { TaxReturnPack, TaxReturnPackBox, TaxReturnPackJurisdiction } from "./country-tax-packs/types.ts";
 
 export type { TaxBoxBasis, TaxBoxMap, TaxReturnPack, TaxReturnPackBox, TaxReturnPackJurisdiction } from "./country-tax-packs/types.ts";
 
@@ -30,20 +30,6 @@ type TaxPackExecutor = Pick<typeof db, "execute">;
 
 export function taxReturnPack(code: string): TaxReturnPack | undefined {
   return TAX_RETURN_PACKS.find((pack) => pack.code === code);
-}
-
-/** Idempotently install or reset one versioned country-pack return for a tenant. */
-export async function installTaxReturnPack(
-  orgId: string,
-  packCode: string,
-  actorId: string | null = null,
-): Promise<SeedTaxFormsResult> {
-  const pack = taxReturnPack(packCode);
-  if (!pack) throw new Error(`unknown tax return pack "${packCode}"`);
-
-  return withOrgTransaction(orgId, () =>
-    db.transaction((tx) => installTaxReturnPackWith(tx, orgId, pack, actorId))
-  );
 }
 
 /** Install several country-pack returns atomically so a failure never leaves a partial installation. */

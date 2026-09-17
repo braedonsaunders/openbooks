@@ -1,4 +1,4 @@
-import { currentFiscalYear, fiscalStartMonth, fiscalYearRangeFor } from "../fiscal";
+import { fiscalStartMonth, fiscalYearRangeFor } from "../fiscal";
 
 /**
  * Fiscal-year start/end dates for a fiscal year (named by its ending calendar
@@ -10,7 +10,4 @@ export async function fiscalYearRange(fyEndYear: number) {
   return fiscalYearRangeFor(fyEndYear, await fiscalStartMonth());
 }
 
-/** The current fiscal year (end year) for today, per the org's start month. */
-export async function currentFiscalYearEnd(today?: string): Promise<number> {
-  return currentFiscalYear(today);
-}
+

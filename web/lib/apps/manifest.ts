@@ -204,11 +204,6 @@ export const appToolSpecSchema = z.object({
 })
 
 export type AppToolConfirmation = z.infer<typeof appToolConfirmationSchema>
-export type AppToolSpec = Omit<z.infer<typeof appToolSpecSchema>, 'confirmation' | 'inputSchema'> & {
-  confirmation: AppToolConfirmation
-  inputSchema: Record<string, unknown>
-}
-
 /**
  * Install-time app-tool contract beyond parseManifest: every tool's
  * requiredPermissions must sit inside the ADMIN-GRANTED set (the admin may

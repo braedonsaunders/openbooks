@@ -21,8 +21,6 @@ export function budgetBaseJoins(allowedSubsidiaryIds?: ReadonlySet<string> | nul
     ) budget_total on true`
 }
 
-export const BUDGET_BASE_JOINS = budgetBaseJoins()
-
 export const BUDGET_BUILT_IN_EXPR: Record<string, SQL> = {
   name: sql`bs.name`,
   book_name: sql`budget_book.name`,

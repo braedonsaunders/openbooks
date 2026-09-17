@@ -26,7 +26,6 @@ import type {
   ContributedLine,
   Coordinate,
   DimensionFilters,
-  DriverResolveRequest,
   DriverResolver,
   DriverVector,
   ReportDriverTemporal,
@@ -124,21 +123,7 @@ export interface RerunAllocationRunResult {
   idempotent: boolean;
 }
 
-/** Test double (and A2 stand-in): a resolver backed by a fixed weight map. */
-export function staticDriverResolver(weights: Record<string, string>): DriverResolver {
-  const entries = Object.entries(weights);
-  return {
-    resolve: async (request: DriverResolveRequest): Promise<DriverVector> => {
-      const vector: DriverVector = new Map();
-      for (const [key, value] of entries) {
-        if (request.include && !request.include.includes(key)) continue;
-        if (request.exclude?.includes(key)) continue;
-        vector.set(key, value);
-      }
-      return vector;
-    },
-  };
-}
+
 
 // ---------------------------------------------------------------------------
 // Apportionment is A1's canonical engine (`./apportion.ts`): exact bigint
