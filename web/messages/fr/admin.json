@@ -747,7 +747,17 @@
     "deactivate": "Désactiver",
     "reactivate": "Réactiver",
     "deactivated": "{name} désactivé",
-    "reactivated": "{name} réactivé"
+    "reactivated": "{name} réactivé",
+    "statusPending": "invitation envoyée",
+    "inviteButton": "Inviter un utilisateur",
+    "inviteTitle": "Inviter un utilisateur",
+    "inviteDescription": "Cette personne recevra un courriel avec un lien pour définir son mot de passe et ouvrir une session.",
+    "inviteEmailLabel": "Courriel",
+    "inviteEmailPlaceholder": "collegue@exemple.fr",
+    "inviteEmailRequired": "Saisissez une adresse courriel",
+    "inviteSend": "Envoyer l’invitation",
+    "inviteSent": "Invitation envoyée à {email}",
+    "inviteCreatedWithoutEmail": "Utilisateur créé, mais le courriel d’invitation n’a pas pu être envoyé. Vérifiez la configuration du courriel, puis demandez à la personne de réinitialiser son mot de passe depuis la page de connexion."
   },
   "permissions": {
     "groups": {

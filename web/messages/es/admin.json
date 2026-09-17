@@ -703,7 +703,17 @@
     "deactivate": "Desactivar",
     "reactivate": "Reactivar",
     "deactivated": "{name} desactivado",
-    "reactivated": "{name} reactivado"
+    "reactivated": "{name} reactivado",
+    "statusPending": "invitación enviada",
+    "inviteButton": "Invitar un usuario",
+    "inviteTitle": "Invitar un usuario",
+    "inviteDescription": "Esta persona recibirá un correo electrónico con un enlace para establecer su contraseña e iniciar sesión.",
+    "inviteEmailLabel": "Correo electrónico",
+    "inviteEmailPlaceholder": "colega@ejemplo.es",
+    "inviteEmailRequired": "Escribe una dirección de correo electrónico",
+    "inviteSend": "Enviar invitación",
+    "inviteSent": "Invitación enviada a {email}",
+    "inviteCreatedWithoutEmail": "Usuario creado, pero no se pudo enviar el correo de invitación. Revisa la configuración del correo y pídele que restablezca su contraseña desde la página de inicio de sesión."
   },
   "permissions": {
     "groups": {

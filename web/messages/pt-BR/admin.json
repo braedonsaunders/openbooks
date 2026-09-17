@@ -720,7 +720,17 @@
     "deactivate": "Desativar",
     "reactivate": "Reativar",
     "deactivated": "{name} desativado",
-    "reactivated": "{name} reativado"
+    "reactivated": "{name} reativado",
+    "statusPending": "convite enviado",
+    "inviteButton": "Convidar usuário",
+    "inviteTitle": "Convidar usuário",
+    "inviteDescription": "Essa pessoa receberá um e-mail com um link para definir a senha e entrar.",
+    "inviteEmailLabel": "E-mail",
+    "inviteEmailPlaceholder": "colega@exemplo.com.br",
+    "inviteEmailRequired": "Digite um endereço de e-mail",
+    "inviteSend": "Enviar convite",
+    "inviteSent": "Convite enviado para {email}",
+    "inviteCreatedWithoutEmail": "Usuário criado, mas o e-mail de convite não pôde ser enviado. Verifique as configurações de e-mail e peça para a pessoa redefinir a senha na página de login."
   },
   "permissions": {
     "groups": {

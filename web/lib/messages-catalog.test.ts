@@ -564,6 +564,36 @@ test('catalog completeness counts missing and declared fallback keys as untransl
   }
 })
 
+test('admin user invite copy is present in every locale and translated', () => {
+  // The Users page invite drawer (F-t01-013) renders these keys; a missing
+  // key shows the raw path and an English paste ships as a rendering glitch.
+  const keys = [
+    'admin.users.statusPending',
+    'admin.users.inviteButton',
+    'admin.users.inviteTitle',
+    'admin.users.inviteDescription',
+    'admin.users.inviteEmailLabel',
+    'admin.users.inviteEmailPlaceholder',
+    'admin.users.inviteEmailRequired',
+    'admin.users.inviteSend',
+    'admin.users.inviteSent',
+    'admin.users.inviteCreatedWithoutEmail',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+})
+
 test('Portuguese fixed-asset tax pool uses the reviewed regime label', () => {
   const catalog = flattenCatalog('pt-BR')
 
