@@ -84,12 +84,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'qualification must be an object' }, { status: 422 })
   }
 
+  const rank = { lead: 0, prospect: 1, customer: 2 }
+  const promoting = !!stage && rank[stage] > rank[row.lifecycle_stage as Stage]
+  let statusStage: string | null = null
   if (statusId && typeof statusId === 'string') {
-    const valid = (await db.execute(sql`
-      select 1 from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId}
-        and lifecycle_stage = ${stage ?? row.lifecycle_stage} and is_active`))
-    if (!valid.rows[0]) return NextResponse.json({ error: 'status does not belong to this stage' }, { status: 422 })
+    const owner = (await db.execute<{ lifecycle_stage: string }>(sql`
+      select lifecycle_stage from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
+    statusStage = owner.rows[0]?.lifecycle_stage ?? null
+    // Unknown or inactive statuses always fail closed. A known status from
+    // another stage is only a conflict when nothing explains it: a forward
+    // stage change re-defaults the status (the drawer sends the whole form,
+    // stale status included), so the stage write must not die with it.
+    if (statusStage === null) return NextResponse.json({ error: 'status does not belong to this stage' }, { status: 422 })
+    if (statusStage !== (stage ?? row.lifecycle_stage) && !promoting) {
+      return NextResponse.json({ error: 'status does not belong to this stage' }, { status: 422 })
+    }
   }
+  // On promotion an explicit status only wins when it names the target stage;
+  // a stale (or cleared) status leaves the default promoteCrmAccount assigned
+  // in place instead of rejecting the save or nulling the fresh default.
+  const statusWrite = promoting && statusStage !== stage ? undefined : statusId
   const referenceChecks = await Promise.all([
     ownerUserId && ownerUserId !== 'invalid' ? db.execute(sql`select 1 from users where id = ${ownerUserId} and org_id = ${user.orgId}`) : null,
     territoryId && territoryId !== 'invalid' ? db.execute(sql`select 1 from crm_sales_territories where id = ${territoryId} and org_id = ${user.orgId}`) : null,
@@ -123,7 +137,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     await tx.execute(sql`
       update crm_account_profiles set
-        status_id = ${statusId !== undefined ? statusId : sql`status_id`},
+        status_id = ${statusWrite !== undefined ? statusWrite : sql`status_id`},
         owner_user_id = ${ownerUserId !== undefined ? ownerUserId : sql`owner_user_id`},
         territory_id = ${territoryId !== undefined ? territoryId : sql`territory_id`},
         lead_source_id = ${leadSourceId !== undefined ? leadSourceId : sql`lead_source_id`},
