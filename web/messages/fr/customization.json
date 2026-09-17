@@ -179,6 +179,7 @@
       "saveFailed": "Impossible d’enregistrer la vue",
       "delete": "Supprimer la vue",
       "deleted": "Vue supprimée",
+      "deleteConfirm": "Supprimer cette vue ? Cette action est irréversible.",
       "columnsSection": "Colonnes",
       "filtersSection": "Filtres",
       "sortSection": "Tri par défaut",
