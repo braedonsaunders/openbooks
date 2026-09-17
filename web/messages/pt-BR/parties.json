@@ -220,6 +220,25 @@
     "noBooks": "Crie primeiro uma tabela de tarifas.",
     "rateBookRequired": "Escolha uma tabela",
     "created": "Tabela atribuída",
-    "confirmDelete": "Remover esta atribuição?"
+    "confirmDelete": "Remover esta atribuição?",
+    "search": "Pesquisar cartões de preço atribuídos…",
+    "statusFilter": "Status da atribuição",
+    "status": {
+      "active": "Ativo",
+      "inactive": "Inativo",
+      "all": "Todos os status"
+    },
+    "openPricing": "Abrir precificação",
+    "count": "{count, plural, one {# atribuição} other {# atribuições}}",
+    "errors": {
+      "invalidRecord": "Escolha um registro válido.",
+      "scope": "Escolha exatamente um cliente ou projeto.",
+      "dates": "Escolha datas de vigência válidas.",
+      "dateOrder": "A data final não pode ser anterior à inicial.",
+      "dateBasis": "Escolha uma data base válida.",
+      "references": "Escolha registros desta organização.",
+      "overlap": "Este registro já tem preço de mão de obra ativo em parte desse intervalo.",
+      "save": "Não foi possível salvar a atribuição de preço de mão de obra."
+    }
   }
 }

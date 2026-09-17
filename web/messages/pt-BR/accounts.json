@@ -10,7 +10,11 @@
     "badges": {
       "inactive": "inativa",
       "summary": "resumo"
-    }
+    },
+    "newAccount": "Nova conta",
+    "viewRegister": "Ver razão",
+    "expand": "Expandir conta",
+    "collapse": "Recolher conta"
   },
   "types": {
     "assetBank": "Banco",
@@ -72,12 +76,20 @@
       "invalid_dimensions": "Escolha dimensões obrigatórias válidas.",
       "invalid_custom_fields": "Revise os valores dos campos personalizados.",
       "number_in_use": "Esse número de conta já está em uso.",
-      "save_failed": "Não foi possível salvar a conta."
+      "save_failed": "Não foi possível salvar a conta.",
+      "parent_type_mismatch": "Pai e filha devem usar o mesmo tipo de conta.",
+      "reconcilable_currency_required": "Contas conciliáveis precisam de moeda de liquidação — escolha uma antes de salvar.",
+      "account_changed": "Esta conta mudou enquanto você a editava. Reabra e tente de novo.",
+      "invalid_idempotency_key": "O pedido da conta não pôde ser repetido com segurança."
     },
     "monetary": "Reconversão cambial (item monetário)",
     "monetaryDefault": "Pelo tipo de conta",
     "monetaryAlways": "Sempre reconverter",
-    "monetaryNever": "Nunca reconverter"
+    "monetaryNever": "Nunca reconverter",
+    "created": "Conta criada",
+    "newTitle": "Nova conta",
+    "newDescription": "Crie uma conta de lançamento ou sintética. Saldos iniciais devem ser informados por um lançamento de diário balanceado.",
+    "create": "Criar conta"
   },
   "register": {
     "notFound": "Conta não encontrada",

@@ -31,7 +31,8 @@
       "ordersTitle": "Funil de pedidos",
       "ordersDescription": "Orçamentos, pedidos de venda e pedidos de compra em aberto — quantidade, valor e conversão",
       "cashFlowIndirectTitle": "Fluxo de caixa (indireto)",
-      "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro"
+      "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro",
+      "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -40,7 +41,8 @@
       "budgeting": "Orçamento",
       "custom": "Personalizados e Salvos",
       "projects": "Projetos",
-      "orders": "Vendas e pedidos"
+      "orders": "Vendas e pedidos",
+      "payroll": "Folha de pagamento"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",
@@ -514,7 +516,9 @@
         "fri": "Sexta-feira",
         "sat": "Sábado"
       }
-    }
+    },
+    "drawerDescription": "Envie este relatório por e-mail em uma cadência. As programações usam os filtros salvos na criação.",
+    "loading": "Carregando programações…"
   },
   "catalog": {
     "entities": {
@@ -1113,7 +1117,22 @@
       "purchases": "Compras",
       "both": "Ambos",
       "true": "Sim",
-      "false": "Não"
+      "false": "Não",
+      "earning": "Provento",
+      "deduction": "Desconto",
+      "employer_contribution": "Contribuição patronal",
+      "match": "Conciliação exata",
+      "within_tolerance": "Dentro da tolerância",
+      "difference": "Diferença",
+      "prior_only": "Só no sistema anterior",
+      "our_only": "Só aqui",
+      "employee_prior_only": "Funcionário ausente da nossa folha",
+      "employee_our_only": "Funcionário ausente do cadastro",
+      "unattributed": "Sem explicação em nenhum componente",
+      "clean": "Conciliado exatamente",
+      "clean_within_tolerance": "Conciliado dentro da tolerância",
+      "differences": "Diferenças a resolver",
+      "no_comparable_data": "Nada foi comparado"
     }
   },
   "operators": {
@@ -1172,7 +1191,9 @@
       "fiscal_year": "ano fiscal"
     },
     "csvSection": "Seção",
-    "exportTruncated": "Mostrando as primeiras {shown} de {total} linhas — restrinja o período ou adicione filtros para ver tudo."
+    "exportTruncated": "Mostrando as primeiras {shown} de {total} linhas — restrinja o período ou adicione filtros para ver tudo.",
+    "subtotal": "{level} — subtotal",
+    "grandTotals": "Totais gerais"
   },
   "export": {
     "pdf": "PDF",
@@ -1211,6 +1232,30 @@
     "lot-recall": {
       "name": "Recolhimento de lote",
       "description": "Cada movimentação de estoque vinculada a um lote, com item, validade, quantidade, local, documento de origem e parte para recolhimento e rastreabilidade."
+    },
+    "payroll-journal": {
+      "name": "Diário da folha",
+      "description": "O registro completo de auditoria do período da folha, uma seção por funcionário: cada provento, desconto e contribuição patronal com horas, taxa, valor do período e acumulado no ano. Escolha um único período da folha no menu de períodos para corresponder a uma apuração. Exige a permissão da folha."
+    },
+    "payroll-deductions-register": {
+      "name": "Registro de descontos e contribuições",
+      "description": "Cada retenção e contribuição patronal, por componente: quem pagou o quê no período e no acumulado do ano. O detalhe de suporte para remessas e operadoras. Exige a permissão da folha."
+    },
+    "payroll-cost-by-department": {
+      "name": "Custo da folha por departamento",
+      "description": "Distribuição de mão de obra: valores da folha por departamento e tipo de componente (proventos, descontos retidos, encargos patronais). Exige a permissão da folha."
+    },
+    "payroll-employee-totals": {
+      "name": "Totais por funcionário (acumulado anual)",
+      "description": "Uma linha por funcionário: bruto, imposto retido, líquido e totais de custo patronal com contagem de contracheques do período. Exige a permissão da folha."
+    },
+    "payroll-parallel-run": {
+      "name": "Conciliação da apuração paralela",
+      "description": "O controle de adoção: para um período da folha, cada funcionário e cada componente comparados com o fornecedor anterior da folha, por resultado para ler primeiro as diferenças materiais e os funcionários unilaterais e por último as conciliações exatas. A tolerância, quando configurada, aparece em coluna própria."
+    },
+    "payroll-parallel-run-totals": {
+      "name": "Totais da apuração paralela por componente",
+      "description": "A mesma conciliação acumulada: por componente, o que o fornecedor anterior pagou no total, o que esta folha calcula e a diferença — para atribuir uma variação do período aos componentes que a produziram."
     }
   },
   "generalLedger": {

@@ -76,5 +76,65 @@
       "value": "Por valor",
       "quantity": "Por quantidade"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "Falhou"
+    },
+    "toasts": {
+      "saved": "Salvo"
+    },
+    "transfers": {
+      "newOrder": "Nova ordem de transferência",
+      "from": "De",
+      "to": "Para",
+      "item": "Item",
+      "qty": "Qtd.",
+      "inTransitAccount": "Conta em trânsito (substituição opcional)",
+      "useControlAccount": "Usar conta de controle",
+      "createDraft": "Criar rascunho",
+      "help": "A saída contabiliza DR em trânsito / CR estoque. O recebimento baixa o trânsito no destino. Defina controlAccounts.inventoryInTransit quando não houver substituição.",
+      "table": {
+        "number": "Número",
+        "fromTo": "De → Para",
+        "status": "Status",
+        "ordered": "Pedido"
+      },
+      "ship": "Expedir",
+      "receive": "Receber",
+      "noneYet": "Ainda sem ordens de transferência."
+    },
+    "landed": {
+      "newVoucher": "Comprovante de custos landed multirrecebimento",
+      "amount": "Valor",
+      "basis": "Base",
+      "basisValue": "Por valor",
+      "basisQuantity": "Por quantidade",
+      "basisWeight": "Por peso",
+      "freightAccount": "Conta de frete",
+      "targetItem": "Item de destino",
+      "location": "Local",
+      "addTarget": "Adicionar destino",
+      "remove": "remover",
+      "postVoucher": "Lançar comprovante",
+      "table": {
+        "number": "Número",
+        "date": "Data",
+        "basis": "Base",
+        "amount": "Valor",
+        "status": "Status"
+      },
+      "noneYet": "Ainda sem comprovantes de custos landed."
+    },
+    "lots": {
+      "lotNumber": "Número do lote",
+      "openRecallReport": "Abrir relatório de recall",
+      "table": {
+        "lot": "Lote",
+        "item": "Item",
+        "expiry": "Validade"
+      },
+      "noneYet": "Ainda sem lotes — receba estoque com número de lote."
+    }
   }
 }

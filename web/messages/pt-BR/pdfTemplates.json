@@ -10,7 +10,13 @@
     "builtIn": "Integrado",
     "starterHint": "Impresso quando não existe modelo personalizado — duplique-o para personalizar",
     "duplicate": "Duplicar",
-    "isDefault": "Padrão"
+    "isDefault": "Padrão",
+    "type": "Tipo de registro",
+    "allTypes": "Todos os tipos de registro",
+    "previewNote": "Prévia somente leitura do design inicial integrado, renderizada com dados de exemplo. Duplique para criar um modelo editável.",
+    "previewFailed": "Não foi possível renderizar a prévia",
+    "empty": "Nenhum modelo corresponde.",
+    "starterNamed": "{type} inicial"
   },
   "editor": {
     "back": "Modelos de PDF",

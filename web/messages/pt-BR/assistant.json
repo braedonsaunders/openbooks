@@ -66,5 +66,14 @@
     "placeholder": "Pergunte qualquer coisa sobre a sua contabilidade…",
     "submit": "Perguntar",
     "hint": "Enter para perguntar · Esc para fechar · abre o assistente"
-  }
+  },
+  "context": {
+    "attached": "Contexto do achado anexado",
+    "remove": "Remover contexto do achado"
+  },
+  "responding": "O assistente está respondendo",
+  "jumpToLatest": "Ir para a mais recente",
+  "loadEarlier": "Carregar mensagens anteriores",
+  "loadingEarlier": "Carregando mensagens anteriores…",
+  "loadEarlierFailed": "Não foi possível carregar mensagens anteriores."
 }

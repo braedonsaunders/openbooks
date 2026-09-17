@@ -64,7 +64,24 @@
     "importAnother": "Importar outro arquivo",
     "postMode": "Como importar",
     "postDraft": "Criar rascunhos (revisar e lançar depois)",
-    "postPost": "Criar e lançar no razão"
+    "postPost": "Criar e lançar no razão",
+    "resourcePlaceholder": "Escolha um destino de importação…",
+    "truncatedWarning": "Só as primeiras {n} linhas foram lidas — o resto do arquivo ficou de fora. Divida o arquivo e importe o restante separadamente.",
+    "warnings": "Avisos",
+    "sample": {
+      "title": "Explore uma empresa de exemplo completa",
+      "description": "Abra uma empresa realista do seu setor com clientes, fornecedores, transações, relatórios, projetos e períodos encerrados já prontos.",
+      "industry": "Empresa de exemplo",
+      "create": "Criar empresa de exemplo",
+      "open": "Abrir empresa de exemplo",
+      "preparing": "Preparando empresa…",
+      "created": "A empresa de exemplo está pronta",
+      "ready": "Abrindo sua empresa de exemplo",
+      "error": "Não foi possível preparar a empresa de exemplo",
+      "firstGeneration": "A primeira cópia pode levar alguns minutos enquanto seu modelo verificado é gerado",
+      "safety": "Os dados de exemplo são copiados para um espaço de trabalho separado e claramente marcado. Nunca entram nos seus livros reais, e efeitos de e-mail, pagamento, API e integração ficam desativados.",
+      "orFile": "ou importe seu próprio arquivo"
+    }
   },
   "history": {
     "title": "Histórico de importações",
@@ -75,6 +92,10 @@
     "format": "Formato",
     "status": "Status",
     "rows": "Registros",
-    "by": "Por"
+    "by": "Por",
+    "jobStatus": {
+      "committed": "Comprometido",
+      "failed": "Falhou"
+    }
   }
 }

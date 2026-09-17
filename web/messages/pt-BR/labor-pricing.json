@@ -134,5 +134,15 @@
     "term": "Preencha cada termo com um código único.",
     "custom": "Preencha os campos personalizados obrigatórios.",
     "save": "Não foi possível salvar a tabela."
+  },
+  "filters": {
+    "time": "Período vigente",
+    "active": "Ativo agora",
+    "scheduled": "Agendado",
+    "expired": "Expirado",
+    "allTime": "Todos os períodos",
+    "dimension": "Dimensão",
+    "allDimensions": "Todas as dimensões",
+    "unscoped": "Padrão da organização"
   }
 }

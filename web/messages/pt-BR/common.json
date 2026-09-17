@@ -51,7 +51,8 @@
     "submitForApproval": "Enviar para aprovação",
     "glImpact": "Impacto no razão",
     "done": "Concluído",
-    "sending": "Enviando…"
+    "sending": "Enviando…",
+    "retire": "Aposentar"
   },
   "transactionTypes": {
     "vendorBill": "Conta a pagar", "bill": "Conta a pagar",
@@ -156,7 +157,10 @@
     "active": "Ativo",
     "inactive": "Inativo",
     "error": "Erro",
-    "ok": "OK"
+    "ok": "OK",
+    "pending_approval": "Enviado",
+    "calculated": "Calculado",
+    "committed": "Comprometido"
   },
   "filters": {
     "showInactive": "Mostrar inativos"
@@ -217,14 +221,18 @@
     "loadFailedTitle": "Trilha de auditoria indisponível",
     "loadFailedDescription": "Não foi possível carregar a trilha de auditoria. Tente novamente em instantes.",
     "retry": "Tentar novamente",
-    "actions": { "insert": "Criado", "update": "Atualizado", "delete": "Excluído", "post": "Lançado", "void": "Anulado", "approve": "Aprovado", "reject": "Rejeitado" }
+    "actions": { "insert": "Criado", "update": "Atualizado", "delete": "Excluído", "post": "Lançado", "void": "Anulado", "approve": "Aprovado", "reject": "Rejeitado",
+      "retired": "Aposentado" }
   },
   "amendment": {
     "title": "Explique a alteração do documento lançado",
     "deleteTitle": "Explique por que o documento lançado será excluído",
     "reason": "Motivo da alteração",
     "placeholder": "Descreva o que mudou e por quê",
-    "deletePlaceholder": "Descreva por que é necessário excluir a transação lançada"
+    "deletePlaceholder": "Descreva por que é necessário excluir a transação lançada",
+    "voidTitle": "Anular esta transação?",
+    "correctionCreated": "Rascunho de correção criado",
+    "voidPlaceholder": "Descreva por que a transação deve ser revertida"
   },
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",
@@ -250,6 +258,11 @@
     "badges": {
       "delegated": "Delegado",
       "escalated": "Escalado"
-    }
+    },
+    "signTitle": "Assinar esta aprovação",
+    "signLabel": "Digite seu nome como atesto de aprovação",
+    "retryRun": "Tentar aprovação de novo",
+    "retried": "Aprovação reimpulsionada — a nova etapa está na lista de trabalho",
+    "retryFailed": "Nova tentativa falhou"
   }
 }

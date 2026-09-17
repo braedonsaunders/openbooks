@@ -20,7 +20,9 @@
     "organizationWorkspace": "Espaço da organização",
     "organizationWorkspaceDescription": "Módulos da organização atual",
     "platformDescription": "Ferramentas de operador de toda a instalação",
-    "security": "Segurança de login"
+    "security": "Segurança de login",
+    "sandbox": "sandbox",
+    "sampleCompany": "empresa de exemplo"
   },
   "language": {
     "label": "Idioma",
@@ -141,6 +143,13 @@
     "askAdministrator": "Se você não puder fazer essa alteração, peça ao seu administrador.",
     "deniedTitle": "Você não tem acesso",
     "deniedDescription": "Esta área requer a permissão {permission}.",
-    "operatorDescription": "O console da plataforma é reservado aos operadores da plataforma. As configurações da sua organização estão em Administração."
+    "operatorDescription": "O console da plataforma é reservado aos operadores da plataforma. As configurações da sua organização estão em Administração.",
+    "errorTitle": "Algo deu errado",
+    "errorDescription": "Não foi possível carregar esta página. Tente de novo ou volte ao painel se o problema persistir.",
+    "errorReference": "Referência {id}",
+    "notFoundTitle": "Página não encontrada",
+    "notFoundDescription": "A página procurada não existe ou você não tem acesso a ela.",
+    "backToDashboard": "Ir ao painel",
+    "backToSignIn": "Ir ao login"
   }
 }

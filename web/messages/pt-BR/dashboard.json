@@ -26,7 +26,8 @@
     "openReceivables": "Contas a receber em aberto",
     "overdueReceivables": "Contas a receber vencidas",
     "openPayables": "Contas a pagar em aberto",
-    "overduePayables": "Contas a pagar vencidas"
+    "overduePayables": "Contas a pagar vencidas",
+    "agentFindings": "Achados dos agentes"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -34,7 +35,10 @@
     "baseCurrency": "Moeda base · {currency}",
     "outstanding": "Em aberto",
     "pastDue": "Vencido",
-    "asOf": "Em {date}"
+    "asOf": "Em {date}",
+    "agentProposals": "{count} com propostas",
+    "agentLastRun": "última execução {date}",
+    "agentClear": "Tudo certo"
   },
   "categories": {
     "kpi": "Destaques",
@@ -59,7 +63,8 @@
     "openReceivables": "Faturas de clientes não pagas na moeda base.",
     "overdueReceivables": "Faturas de clientes vencidas na moeda base.",
     "openPayables": "Contas a pagar de fornecedores não pagas na moeda base.",
-    "overduePayables": "Contas a pagar de fornecedores vencidas na moeda base."
+    "overduePayables": "Contas a pagar de fornecedores vencidas na moeda base.",
+    "agentFindings": "Abra os achados dos agentes em segundo plano — vá para a bancada."
   },
   "grid": {
     "customizing": "Personalizando seu painel",

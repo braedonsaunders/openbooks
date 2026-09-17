@@ -26,7 +26,12 @@
     "label": "Exportação de cópia de trabalho",
     "pdf": "PDF de cópia de trabalho",
     "csv": "CSV de cópia de trabalho",
-    "xlsx": "Excel de cópia de trabalho"
+    "xlsx": "Excel de cópia de trabalho",
+    "menu": "Exportar",
+    "groupForm": "Formulário da declaração",
+    "groupData": "Dados de trabalho",
+    "facsimile": "PDF do formulário",
+    "json": "JSON estruturado"
   },
   "official": {
     "download": "Formulário oficial preenchido"
@@ -175,5 +180,9 @@
       "auto": "auto",
       "manual": "manual"
     }
+  },
+  "tabs": {
+    "prepare": "Preparar uma declaração",
+    "history": "Entregas anteriores"
   }
 }
