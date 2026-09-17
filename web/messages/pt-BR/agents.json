@@ -3,6 +3,11 @@
   "title": "Agentes",
   "description": "Todos os achados dos agentes em uma caixa de entrada priorizada — faça a triagem, aplique propostas e comece o dia informado.",
   "configure": "Configurar agentes",
+  "movedNotice": {
+    "title": "O fechamento contínuo agora está aqui",
+    "description": "A página do fechamento contínuo agora faz parte dos Agentes. Seus favoritos e links continuam funcionando; a aba de relatórios permanece onde estava.",
+    "dismiss": "Descartar"
+  },
   "search": "Buscar achados…",
   "facets": {
     "pack": "Agente",

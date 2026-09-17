@@ -140,6 +140,15 @@
     "errorReference": "Reference {id}",
     "notFoundTitle": "Page not found",
     "notFoundDescription": "The page you're looking for doesn't exist or you don't have access to it.",
+    "featureOffTitle": "{name} is turned off",
+    "featureOffDescription": "This area needs the {name} feature. Turning it on keeps all existing data.",
+    "featureOnTitle": "{name} is already on",
+    "featureOnDescription": "It was turned on after you arrived here. Head back and try the page again.",
+    "turnOnFeature": "Open Features",
+    "askAdministrator": "If you can't make this change, ask your administrator.",
+    "deniedTitle": "You don't have access",
+    "deniedDescription": "This area requires the {permission} permission.",
+    "operatorDescription": "The platform console is reserved for platform operators. Your organization's settings live under Administration.",
     "backToDashboard": "Go to dashboard",
     "backToSignIn": "Go to sign in"
   }

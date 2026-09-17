@@ -3,6 +3,11 @@
   "title": "Agenten",
   "description": "Alle Befunde der Hintergrund-Agenten in einem priorisierten Posteingang — prüfen, Vorschläge übernehmen und informiert in den Tag starten.",
   "configure": "Agenten konfigurieren",
+  "movedNotice": {
+    "title": "Kontinuierlicher Abschluss ist jetzt hier",
+    "description": "Die Startseite des kontinuierlichen Abschlusses gehört jetzt zu den Agenten. Lesezeichen und Links funktionieren weiterhin; die Berichtsregisterkarte bleibt, wo sie war.",
+    "dismiss": "Schließen"
+  },
   "search": "Befunde suchen…",
   "facets": {
     "pack": "Pack",

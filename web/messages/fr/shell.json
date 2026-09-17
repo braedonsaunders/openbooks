@@ -131,5 +131,16 @@
     "title": "Notifications",
     "empty": "Vous êtes à jour",
     "markAllRead": "Tout marquer comme lu"
+  },
+  "routeState": {
+    "featureOffTitle": "La fonctionnalité {name} est désactivée",
+    "featureOffDescription": "Cette section nécessite la fonctionnalité {name}. L'activer conserve toutes les données existantes.",
+    "featureOnTitle": "La fonctionnalité {name} est déjà activée",
+    "featureOnDescription": "Elle a été activée après votre arrivée ici. Revenez en arrière et réessayez.",
+    "turnOnFeature": "Ouvrir les fonctionnalités",
+    "askAdministrator": "Si vous ne pouvez pas effectuer ce changement, demandez à votre administrateur.",
+    "deniedTitle": "Vous n'avez pas accès",
+    "deniedDescription": "Cette section nécessite l'autorisation {permission}.",
+    "operatorDescription": "La console de plateforme est réservée aux opérateurs de plateforme. Les paramètres de votre organisation se trouvent sous Administration."
   }
 }

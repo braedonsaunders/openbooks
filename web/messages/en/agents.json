@@ -3,6 +3,11 @@
   "title": "Agents",
   "description": "Every background-agent finding in one ranked inbox — triage, apply proposals, and start the day informed.",
   "configure": "Configure agents",
+  "movedNotice": {
+    "title": "Continuous close moved here",
+    "description": "The continuous-close home now lives in the Agent Workbench. Bookmarks and links keep working; the reports tab stays where it was.",
+    "dismiss": "Dismiss"
+  },
   "search": "Search findings…",
   "facets": {
     "pack": "Pack",

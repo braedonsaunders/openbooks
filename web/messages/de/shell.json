@@ -131,5 +131,16 @@
     "title": "Benachrichtigungen",
     "empty": "Sie sind auf dem neuesten Stand",
     "markAllRead": "Alle als gelesen markieren"
+  },
+  "routeState": {
+    "featureOffTitle": "{name} ist deaktiviert",
+    "featureOffDescription": "Dieser Bereich benötigt die Funktion {name}. Beim Aktivieren bleiben alle vorhandenen Daten erhalten.",
+    "featureOnTitle": "{name} ist bereits aktiviert",
+    "featureOnDescription": "Sie wurde aktiviert, nachdem Sie hierher gelangt sind. Kehren Sie zurück und versuchen Sie es erneut.",
+    "turnOnFeature": "Funktionen öffnen",
+    "askAdministrator": "Wenn Sie diese Änderung nicht vornehmen können, wenden Sie sich an Ihren Administrator.",
+    "deniedTitle": "Kein Zugriff",
+    "deniedDescription": "Dieser Bereich erfordert die Berechtigung {permission}.",
+    "operatorDescription": "Die Plattformkonsole ist Plattformbetreibern vorbehalten. Die Einstellungen Ihrer Organisation finden Sie unter Administration."
   }
 }

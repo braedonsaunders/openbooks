@@ -131,5 +131,16 @@
     "title": "通知",
     "empty": "未読はありません",
     "markAllRead": "すべて既読にする"
+  },
+  "routeState": {
+    "featureOffTitle": "{name}は無効です",
+    "featureOffDescription": "このエリアには{name}機能が必要です。有効にしても既存のデータは保持されます。",
+    "featureOnTitle": "{name}はすでに有効です",
+    "featureOnDescription": "こちらに到着した後に有効化されました。戻ってもう一度お試しください。",
+    "turnOnFeature": "機能を開く",
+    "askAdministrator": "この変更ができない場合は、管理者に依頼してください。",
+    "deniedTitle": "アクセス権がありません",
+    "deniedDescription": "このエリアには{permission}権限が必要です。",
+    "operatorDescription": "プラットフォームコンソールはプラットフォーム運営者専用です。組織の設定は管理メニューにあります。"
   }
 }
