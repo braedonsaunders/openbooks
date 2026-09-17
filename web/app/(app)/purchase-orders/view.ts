@@ -77,23 +77,29 @@ export async function loadPurchaseOrders(
              order by p.display_name limit 2000`),
           db.execute<ElementOf<OrderDrawerProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
           db.execute<ElementOf<OrderDrawerProps['items']>>(sql`
-            select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit
-              from items
-             where org_id = ${authz.user.orgId} and is_active
+            select it.id, it.code, it.name, it.default_rate, it.income_account_id, it.expense_account_id, it.tax_code_id, it.unit,
+                   exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
+              from items it
+             where it.org_id = ${authz.user.orgId} and it.is_active
                and (
-                 ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
-                 or id in (
+                 ${inventoryEnabled ? sql`true` : sql`it.kind not in ('inventory', 'assembly', 'kit')`}
+                 or it.id in (
                    select item_id from document_lines
                     where org_id = ${authz.user.orgId} and document_id = ${openId} and item_id is not null
                  )
                )
-             order by name limit 2000`),
+             order by it.name limit 2000`),
           taxCodeOptions(authz.user.orgId),
           taxGroupOptions(authz.user.orgId),
           db.execute<ElementOf<OrderDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
           db.execute<ElementOf<OrderDrawerProps['projects']>>(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
           customSegmentOptions(authz.user.orgId),
           subsidiaryUiOptions(authz.user.orgId),
+          inventoryEnabled
+            ? db.execute<ElementOf<OrderDrawerProps['stockLocations']>>(sql`
+              select id, code from stock_locations
+               where org_id = ${authz.user.orgId} and is_active order by code`)
+            : null,
         ])
       : null,
   ])
@@ -121,6 +127,7 @@ export async function loadPurchaseOrders(
             parties: pickers[0].rows,
             accounts: pickers[1].rows,
             items: pickers[2].rows,
+            stockLocations: pickers[9]?.rows ?? [],
             taxCodes: pickers[3],
             taxGroups: pickers[4],
             departments: pickers[5].rows,

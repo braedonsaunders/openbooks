@@ -37,6 +37,8 @@ type Opt = {
   tax_code_id?: string | null
   unit?: string | null
   tax_components?: TaxComponentConfig[]
+  /** True when the item carries an inventory costing profile (line pickers). */
+  has_inventory_profile?: boolean | null
 };
 interface LineRow extends Record<string, unknown> {
   itemId: string
@@ -48,6 +50,9 @@ interface LineRow extends Record<string, unknown> {
   taxProfileId: string
   departmentId: string
   projectId: string
+  /** Warehouse for fulfil/receipt effects; blank unless the line's item is
+   *  stocked (F-t07-003 pickers). */
+  stockLocationId: string
 }
 interface SegmentOption {
   key: string
@@ -208,6 +213,7 @@ const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
   taxProfileId: '',
   departmentId: '',
   projectId: '',
+  stockLocationId: '',
   ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, ''])),
 })
 
@@ -222,6 +228,7 @@ function toRow(l: Record<string, any>, segments: SegmentOption[]): LineRow {
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
+    stockLocationId: l.stock_location_id ?? '',
     ...Object.fromEntries(segments.map((segment) => [`seg_${segment.key}`, l.extra_dims?.[segment.key] ?? ''])),
   }
 }
@@ -233,6 +240,7 @@ export function OrderDrawer({
   parties,
   accounts,
   items,
+  stockLocations = [],
   taxCodes,
   taxGroups,
   departments,
@@ -249,6 +257,9 @@ export function OrderDrawer({
   parties: Opt[]
   accounts: Opt[]
   items: Opt[]
+  /** Active warehouses for the line-level stock-location picker. Empty (or a
+   *  single location, stamped silently by the draft writer) renders NO picker. */
+  stockLocations?: { id: string; code: string | null }[]
   taxCodes: Opt[]
   taxGroups: Opt[]
   departments: Opt[]
@@ -393,6 +404,7 @@ export function OrderDrawer({
           taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
+          stockLocationId: r.stockLocationId || null,
           extraDims: Object.fromEntries(
             segments
               .filter((segment) => segment.showOnLines)
@@ -620,6 +632,28 @@ export function OrderDrawer({
     router.refresh()
   }
 
+  // -- line warehouse picker (F-t07-003) ------------------------------------
+  // Stocked lines relieve a warehouse at fulfil/receipt/posting, so an order
+  // line for stocked goods must name one. The picker appears only when the
+  // choice is real (several active locations) and only on stocked rows; a
+  // single location is stamped silently by the draft writer instead.
+  const stockedItemIds = useMemo(
+    () => new Set(items.filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
+    [items],
+  )
+  const warehouseColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
+    if (stockLocations.length < 2) return null
+    if (!rows.some((row) => row.itemId !== '' && stockedItemIds.has(row.itemId))) return null
+    return {
+      key: 'stockLocationId',
+      label: tCommon('labels.warehouse'),
+      width: '150px',
+      type: 'select',
+      options: [{ value: '', label: '—' }, ...stockLocations.map((l) => ({ value: l.id, label: l.code ?? '' }))],
+      isCellEditable: (row) => stockedItemIds.has(String(row.itemId ?? '')),
+    }
+  }, [stockLocations, rows, stockedItemIds, tCommon])
+
   // -- grid columns ----------------------------------------------------------
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => {
@@ -691,6 +725,9 @@ export function OrderDrawer({
       })
       return [
         ...placed,
+        // The warehouse picker is force-shown like a mandatory dimension:
+        // tenant layouts predate the key, so placement alone would hide it.
+        ...(warehouseColumn ? [warehouseColumn] : []),
         ...segments.filter((segment) => segment.showOnLines).map((segment): LineGridColumn<LineRow> => ({
           key: `seg_${segment.key}`,
           label: segment.name,
@@ -702,7 +739,7 @@ export function OrderDrawer({
       ]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon],
+    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn],
   )
 
   const field = 'space-y-1.5'

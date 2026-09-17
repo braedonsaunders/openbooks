@@ -63,6 +63,8 @@ export interface OrderLineInput {
   taxGroupId?: string | null
   departmentId?: string | null
   projectId?: string | null
+  /** Warehouse relieve/fulfil effects use for a stocked line. */
+  stockLocationId?: string | null
   extraDims?: Record<string, string | null>
 }
 
@@ -124,7 +126,7 @@ export async function loadOrder(
     select l.id, l.line_number, l.item_id, l.account_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount,
            l.tax_amount, l.quantity_billed,
-           l.department_id, l.project_id, l.extra_dims,
+           l.department_id, l.project_id, l.stock_location_id, l.extra_dims,
            i.name as item_name, a.number as account_number, a.name as account_name, tc.code as tax_code
       from document_lines l
       left join items i on i.id = l.item_id and i.org_id = l.org_id

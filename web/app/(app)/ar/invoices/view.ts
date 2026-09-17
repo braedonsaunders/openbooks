@@ -64,6 +64,7 @@ export interface ArInvoicesDrawer {
   segments: DocumentDrawerProps['segments']
   builtinSegments: DocumentDrawerProps['builtinSegments']
   items: Record<string, unknown>[]
+  stockLocations: { id: string; code: string | null }[]
   subsidiaries: DocumentDrawerProps['subsidiaries']
   headerDefs: DocumentDrawerProps['headerDefs']
   lineDefs: DocumentDrawerProps['lineDefs']
@@ -141,17 +142,19 @@ export async function loadArInvoices(
           taxGroupOptions(),
           dimensionOptions(),
           db.execute(sql`
-            select id, code, name from items
-             where org_id = ${authz.user.orgId} and is_active
+            select it.id, it.code, it.name,
+                   exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
+             from items it
+             where it.org_id = ${authz.user.orgId} and it.is_active
                and (
-                 ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
-                 ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
-                 or id in (
+                 ${inventoryEnabled ? sql`true` : sql`it.kind not in ('inventory', 'assembly', 'kit')`}
+                 ${equipmentEnabled ? sql`` : sql`and it.kind <> 'equipment_charge'`}
+                 or it.id in (
                    select item_id from document_lines
                     where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
                  )
                )
-             order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
+             order by coalesce(it.code, it.name), it.name limit 2000`).then((r) => r.rows),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
             if (!multi) return null
@@ -160,6 +163,14 @@ export async function loadArInvoices(
               ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
               : options
           }),
+          // Warehouses for the line-level stock-location picker (customer
+          // invoices only). Empty hides the picker; a single location is
+          // stamped silently by the edit writer instead.
+          inventoryEnabled
+            ? db.execute(sql`
+              select id, code from stock_locations
+               where org_id = ${authz.user.orgId} and is_active order by code`).then((r) => r.rows)
+            : [],
         ])
       : null,
     drawerOpen
@@ -219,6 +230,7 @@ export async function loadArInvoices(
           segments: pickers[4].segments,
           builtinSegments: pickers[4].builtinSegments,
           items: pickers[5],
+          stockLocations: (pickers[7] ?? []) as { id: string; code: string | null }[],
           subsidiaries: pickers[6] ?? undefined,
           headerDefs: headerDefs as DocumentDrawerProps['headerDefs'],
           lineDefs: lineDefs as DocumentDrawerProps['lineDefs'],

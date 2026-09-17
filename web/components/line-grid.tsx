@@ -48,6 +48,14 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   options?: LineGridOption[]
   placeholder?: string
   required?: boolean
+  /**
+   * Per-row edit gate for editable cells (line warehouse pickers): when
+   * present and false for a row, the cell renders empty instead of a
+   * control, so a picker never appears on a line it does not apply to
+   * (e.g. a non-stocked item). Read-only grids and readonly columns are
+   * unaffected. Defaults to editable.
+   */
+  isCellEditable?: (row: Row, index: number) => boolean
   /** Renderer for readonly columns (computed cells, e.g. line tax). */
   render?: (row: Row, index: number) => React.ReactNode
   /**
@@ -670,6 +678,11 @@ function RowCells<Row extends Record<string, unknown>>({
               {display}
             </div>
           )
+        }
+        // A row the column does not apply to keeps an empty cell — never a
+        // control with one meaningless choice, and never a stale label.
+        if (c.isCellEditable && !c.isCellEditable(row, i)) {
+          return <div key={c.key} className={cn(cellBase, 'px-2.5 text-sm')} />
         }
         return (
           <div

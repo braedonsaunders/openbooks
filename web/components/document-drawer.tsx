@@ -64,6 +64,8 @@ type Opt = {
   tax_components?: TaxComponentConfig[]
   /** Settlement currency the account accepts (null = any; F-t06-002). */
   currency_restriction?: string | null
+  /** True when the item carries an inventory costing profile (line pickers). */
+  has_inventory_profile?: boolean | null
 };
 
 interface SubsidiaryOpt {
@@ -100,6 +102,9 @@ interface LineRow extends Record<string, unknown> {
   projectId: string
   locationId: string
   classId: string
+  /** Warehouse for inventory receipt/issue effects; blank unless the line's
+   *  item is stocked (F-t07-003 pickers). */
+  stockLocationId: string
   taxProfileId: string
   amount: string
   taxInputAmount: string
@@ -475,6 +480,7 @@ const emptyLine = (): LineRow => ({
   projectId: '',
   locationId: '',
   classId: '',
+  stockLocationId: '',
   taxProfileId: '',
   amount: '',
   taxInputAmount: '',
@@ -569,6 +575,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     projectId: l.project_id ?? '',
     locationId: l.location_id ?? '',
     classId: l.class_id ?? '',
+    stockLocationId: l.stock_location_id ?? '',
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     amount: l.amount != null ? String(l.amount) : '',
     taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
@@ -689,6 +696,10 @@ export interface DocumentDrawerProps {
   segments?: SegmentOpt[]
   builtinSegments?: BuiltinSegmentOpt[]
   items?: Opt[]
+  /** Active warehouses for the line-level stock-location picker. Only passed
+   *  by loaders for kinds with inventory lines; empty/undefined (or a single
+   *  location, which the writer stamps silently) renders NO picker. */
+  stockLocations?: { id: string; code: string | null }[]
   /** The org's subsidiaries (depth-first tree order). Only passed by pages in
    *  multi-subsidiary orgs — empty/undefined renders NO subsidiary UI. */
   subsidiaries?: SubsidiaryOpt[]
@@ -740,6 +751,7 @@ export function DocumentDrawer({
   segments = [],
   builtinSegments = [],
   items,
+  stockLocations,
   subsidiaries,
   headerDefs,
   lineDefs,
@@ -1312,6 +1324,7 @@ export function DocumentDrawer({
                 projectId: r.projectId || null,
                 locationId: r.locationId || null,
                 classId: r.classId || null,
+                stockLocationId: r.stockLocationId || null,
                 // Entry-mode distribution staging for A4's save path: a
                 // blank key is skipped server-side; the lock rides as the
                 // tri-state's explicit edge (absent would mean "stored").
@@ -1625,6 +1638,31 @@ export function DocumentDrawer({
     router.refresh()
   }
 
+  // -- line warehouse picker (F-t07-003) ------------------------------------
+  // Stocked lines relieve a warehouse at posting, so a customer invoice for
+  // stocked goods must name one per line. The picker appears only when the
+  // choice is real (several active locations) and only on stocked rows; a
+  // single location is stamped silently by the edit writer instead.
+  const stockedItemIds = useMemo(
+    () => new Set((items ?? []).filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
+    [items],
+  )
+  const showWarehousePicker =
+    recordType === 'customer_invoice' &&
+    (stockLocations ?? []).length > 1 &&
+    rows.some((row) => row.itemId !== '' && stockedItemIds.has(row.itemId))
+  const warehouseColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
+    if (!showWarehousePicker) return null
+    return {
+      key: 'stockLocationId',
+      label: tCommon('labels.warehouse'),
+      width: '150px',
+      type: 'select',
+      options: [{ value: '', label: '—' }, ...(stockLocations ?? []).map((l) => ({ value: l.id, label: l.code ?? '' }))],
+      isCellEditable: (row) => stockedItemIds.has(String(row.itemId ?? '')),
+    }
+  }, [showWarehousePicker, stockLocations, stockedItemIds, tCommon])
+
   // -- grid columns (line-based kinds; transfer uses its own fields) --------
   const columns = useMemo<LineGridColumn<LineRow>[]>(() => {
     const cols: LineGridColumn<LineRow>[] = [
@@ -1654,6 +1692,7 @@ export function DocumentDrawer({
         placeholder: '—',
       },
     ]
+    if (warehouseColumn) cols.push(warehouseColumn)
     if (config.hasTax) {
       cols.push({
         key: 'taxProfileId',
@@ -1703,7 +1742,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -1890,9 +1929,15 @@ export function DocumentDrawer({
         }
       })
       .filter((c): c is LineGridColumn<LineRow> => c !== null)
-    return [...configured, ...columns.filter((column) => String(column.key).startsWith('seg_'))]
+    // The warehouse picker is force-shown like the subsidiary header field:
+    // tenant layouts predate the key, so placement alone would hide it.
+    return [
+      ...configured,
+      ...(warehouseColumn ? [warehouseColumn] : []),
+      ...columns.filter((column) => String(column.key).startsWith('seg_')),
+    ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, warehouseColumn])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {

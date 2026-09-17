@@ -12,6 +12,7 @@ import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
 import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from '../../../lib/bills'
+import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
@@ -364,6 +365,26 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           valid.push({ ...line, quantity, unitPrice })
         }
       }
+      // Line warehouses resolve here, before totals: an explicit choice must
+      // name an active warehouse of this org, while a blank stocked line
+      // silently takes the org's only active location (F-t07-003 pickers).
+      if (valid.length > 0) {
+        const scope = {
+          active: await activeStockLocations(user.orgId),
+          profiled: await profiledItemIds(
+            user.orgId,
+            valid.map((line) => line.itemId).filter((id): id is string => typeof id === 'string' && id.length > 0),
+          ),
+        }
+        for (let i = 0; i < valid.length; i++) {
+          const line = valid[i]!
+          const resolved = resolveLineStockLocation(i + 1, line.itemId ?? null, line.stockLocationId, scope)
+          if ('error' in resolved) {
+            return NextResponse.json({ error: resolved.error }, { status: 422 })
+          }
+          line.stockLocationId = resolved.locationId
+        }
+      }
       const computed = computeOrderTotals(
         valid,
         await orderTaxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
@@ -464,11 +485,11 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                         tax_input_amount, tax_amount,
-                                        department_id, project_id, extra_dims)
+                                        department_id, project_id, stock_location_id, extra_dims)
             values (${user.orgId}, ${id}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
                     ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
                     ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
-                    ${l.departmentId ?? null}, ${l.projectId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
+                    ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
             returning id
           `))
           await persistLineTaxComponents(tx, {

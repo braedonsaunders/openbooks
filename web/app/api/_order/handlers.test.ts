@@ -77,6 +77,7 @@ class OrderRouteHarness {
   deleted = false
   voidFailure: string | null = null
   convertFailure: { message: string; status?: number; code?: string; details?: unknown } | null = null
+  stockLocationFailure: string | null = null
 
   private readonly transactions = new AsyncLocalStorage<TransactionContext>()
   private lockHeld = false
@@ -119,6 +120,7 @@ class OrderRouteHarness {
     this.deleted = false
     this.voidFailure = null
     this.convertFailure = null
+    this.stockLocationFailure = null
     this.submitPause = null
     this.voidPause = null
   }
@@ -513,6 +515,15 @@ const mockSources = new Map<string, string>([
     export function compareDecimal(left, right) { return Math.sign(Number(left) - Number(right)) }
   `],
   ['mock:bills', `export async function persistLineTaxComponents() { return undefined }`],
+  ['mock:stock-locations', `
+    const state = ${stateExpression}
+    export async function activeStockLocations() { return [] }
+    export async function profiledItemIds(orgId, ids) { return new Set(ids) }
+    export function resolveLineStockLocation(n, itemId, locationId) {
+      if (state.stockLocationFailure) return { error: state.stockLocationFailure }
+      return { locationId: locationId ?? null }
+    }
+  `],
   ['mock:segments', `
     export async function segmentRegistry() { return [] }
     export function validateExtraDims(value) { return { ok: true, cleaned: value ?? {} } }
@@ -568,6 +579,7 @@ const resolutionMocks = new Map<string, string>([
   ['@openbooks/engine/src/money.ts', 'mock:money'],
   ['../../../lib/exact-decimal', 'mock:exact-decimal'],
   ['../../../lib/bills', 'mock:bills'],
+  ['../../../lib/stock-locations', 'mock:stock-locations'],
   ['../../../lib/segments', 'mock:segments'],
   ['@openbooks/engine/src/crm.ts', 'mock:crm'],
   ['../../../lib/features', 'mock:features'],
@@ -1425,6 +1437,17 @@ test('an exact revision token admits draft save, issue, and discard', async () =
   assert.deepEqual(await discarded.json(), { ok: true })
   assert.equal(harness.deleteCalls, 1)
   assert.equal(harness.deleted, true)
+})
+
+test('a refused line warehouse fails the draft save before any write', async () => {
+  harness.reset('draft')
+  harness.stockLocationFailure = 'Line 1: stock location is not an active warehouse in this organization'
+  const refused = await patch({
+    lines: [{ itemId: '11111111-0000-4000-8000-000000000001', quantity: '2', unitPrice: '89' }],
+  })
+  assert.equal(refused.status, 422)
+  assert.deepEqual(await refused.json(), { error: harness.stockLocationFailure })
+  assert.equal(harness.headerWrites, 0)
 })
 
 test('void and convert honor the exact revision of their source', async () => {
