@@ -6,6 +6,7 @@ import { can } from './authz'
 import { disabledDocKinds } from './documents'
 import { isFeatureEnabled } from './features'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { JOURNAL_GL_NATIVE_ORIGINS } from './customization/entity-list-query/journal-entries'
 import {
   moduleDrawerHref,
   TRANSACTION_KINDS,
@@ -15,10 +16,14 @@ import {
 
 /**
  * Global search — one query fans out across every primary entity (contacts,
- * transactions, accounts, items, projects) in parallel and returns grouped,
- * ranked hits. Matching is trigram-fuzzy (`col % q`, typo-tolerant via pg_trgm)
- * OR substring (`ILIKE`), ranked by `similarity()`; a numeric query also matches
- * transaction totals and document numbers. Org-scoped and permission-filtered.
+ * transactions, accounts, items, projects, journal entries) in parallel and
+ * returns grouped, ranked hits. Matching is trigram-fuzzy (`col % q`,
+ * typo-tolerant via pg_trgm) OR substring (`ILIKE`), ranked by
+ * `similarity()`; a numeric query also matches transaction totals and
+ * document numbers. An exact document/entry number always wins: it bypasses
+ * the recency-capped fuzzy candidate legs (which can exclude an old exact
+ * row on a large tenant) and orders first. Org-scoped and
+ * permission-filtered.
  *
  * The pg_trgm GIN indexes (migration 0016) make the `%` / ILIKE predicates and
  * the similarity ordering fast at scale.
@@ -139,12 +144,16 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
   const canAccounts = can(authz, 'gl.read')
   const canItems = can(authz, 'items.read')
   const canProjects = can(authz, 'projects.read') && await isFeatureEnabled(orgId, 'projects')
+  // Journal entries carry their own numbers in journal_entries; the gate is
+  // the journal module's own read permission, like every other entity above.
+  const journalPermission = transactionModule('journal')?.requiredPermission
+  const canJournals = Boolean(journalPermission && can(authz, journalPermission))
 
   // Subsidiary visibility rides alongside permissions: a restricted caller's
   // search must never surface records their lists would hide.
   const scope = authz.allowedSubsidiaryIds
 
-  const [contacts, txns, accounts, items, projects] = await Promise.all([
+  const [contacts, txns, accounts, items, projects, journals] = await Promise.all([
     canContacts ? searchContacts(orgId, q, like, scope) : empty(),
     transactionKinds.length
       ? searchTransactions(orgId, q, like, num, transactionKinds, scope)
@@ -152,12 +161,18 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
     canAccounts ? searchAccounts(orgId, q, like, scope) : empty(),
     canItems ? searchItems(orgId, q, like) : empty(),
     canProjects ? searchProjects(orgId, q, like, scope) : empty(),
+    canJournals ? searchJournalEntries(orgId, q, like, scope) : empty(),
   ])
 
   // Numeric queries most likely want a transaction; else contacts lead.
+  // Journal entries ride inside the transactions group (each leg internally
+  // exact-first) rather than growing a sixth group the palette would have
+  // to learn. An exact document/entry number tops the merged group no
+  // matter which leg produced it.
+  const txnHits = exactNumberFirst([...txns, ...journals], q)
   const ordered: SearchGroup[] = numeric
-    ? [group('transaction', 'transactions', txns), group('contact', 'contacts', contacts)]
-    : [group('contact', 'contacts', contacts), group('transaction', 'transactions', txns)]
+    ? [group('transaction', 'transactions', txnHits), group('contact', 'contacts', contacts)]
+    : [group('contact', 'contacts', contacts), group('transaction', 'transactions', txnHits)]
   ordered.push(
     group('account', 'accounts', accounts),
     group('item', 'items', items),
@@ -170,6 +185,18 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
 
 function group(type: SearchType, labelKey: string, hits: SearchHit[]): SearchGroup {
   return { type, labelKey, hits }
+}
+
+/**
+ * Stable exact-first partition for merged transaction hits. Hit titles end
+ * in the record's number (`<Module label> <document_number>`,
+ * `Journal <entry_number>`), so an exact-number query lifts its record
+ * above fuzzy neighbors from every leg. Otherwise a no-op.
+ */
+function exactNumberFirst(hits: SearchHit[], q: string): SearchHit[] {
+  const suffix = ` ${q}`
+  if (!hits.some((hit) => hit.title.endsWith(suffix))) return hits
+  return [...hits.filter((hit) => hit.title.endsWith(suffix)), ...hits.filter((hit) => !hit.title.endsWith(suffix))]
 }
 async function empty(): Promise<SearchHit[]> {
   return []
@@ -271,6 +298,17 @@ async function searchTransactions(
       : sql``
   const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
   const numOrder = num != null ? sql`(${amtExpr} = ${num}) desc, ` : sql``
+  // Exact document numbers bypass the recency-capped fuzzy legs: on a large
+  // tenant the newest-200 cap can exclude an old exact row (and admit a
+  // different neighbor set as new documents arrive), so an exact query
+  // missed its record and ranked unstably. Equality carries the same kind
+  // and subsidiary allowlists as every other leg.
+  const exactLeg = sql`
+        union
+        (select d.id from documents d
+          where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
+            and d.document_number = ${q}
+          limit 5)`
   const r = (await db.execute<SearchTransactionRow>(sql`
     with cand as (
       (select d.id from documents d
@@ -282,7 +320,7 @@ async function searchTransactions(
       (select d.id from documents d
         where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter} and d.party_id in (
           select p.id from parties p where p.org_id = ${orgId} ${partySubsidiaryFilter} and p.display_name % ${q})
-        order by d.created_at desc limit 200)${amtLeg}
+        order by d.created_at desc limit 200)${amtLeg}${exactLeg}
     )
     select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status, d.project_id,
            pr.display_name as party_name,
@@ -295,7 +333,7 @@ async function searchTransactions(
       join cand on cand.id = d.id
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
      where true ${visibleKindFilter}${documentSubsidiaryFilter}
-     order by ${numOrder}sim desc, d.created_at desc
+     order by (d.document_number = ${q}) desc, ${numOrder}sim desc, d.created_at desc
      limit ${PER_GROUP + 2}`))
   // No generic journal fallback: a stored kind without an authorized native
   // module is dropped rather than linked into the wrong module's ledger view.
@@ -314,6 +352,54 @@ async function searchTransactions(
       amount: money(row.amount),
     }]
   })
+}
+
+type SearchJournalEntryRow = {
+  id: string
+  entry_number: string
+  memo: string | null
+  status: string
+}
+
+/**
+ * Journal entries carry their own numbers (JE-…) in journal_entries, and
+ * GL-native entries (closing, allocation, …) have no source document at
+ * all — the documents legs can never surface them, so an exact JE number
+ * searched total zero. Scope mirrors the journal list: journal/pay_run
+ * backed entries plus GL-native origins (entries posted from other
+ * subledgers stay discoverable through their document). Hits link through
+ * the entry compatibility redirect (/journal/[id]), which lands
+ * document-backed entries in their drawer and native ones in the ledger
+ * flyout.
+ */
+async function searchJournalEntries(
+  orgId: string,
+  q: string,
+  like: string,
+  scope: ReadonlySet<string> | null,
+): Promise<SearchHit[]> {
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)
+  const r = (await db.execute<SearchJournalEntryRow>(sql`
+    select e.id, e.entry_number, e.memo, e.status
+      from journal_entries e
+     where e.org_id = ${orgId} ${subsidiaryFilter}
+       and (e.entry_number % ${q} or e.entry_number ilike ${like} or e.memo ilike ${like})
+       and (exists (select 1 from documents d
+                     where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
+            or (not exists (select 1 from documents d
+                             where d.posted_entry_id = e.id and d.org_id = e.org_id)
+                and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})))
+     order by (e.entry_number = ${q}) desc, similarity(e.entry_number, ${q}) desc, e.created_at desc
+     limit ${PER_GROUP}`))
+  return r.rows.map((row): SearchHit => ({
+    id: row.id,
+    type: 'transaction',
+    title: `Journal ${row.entry_number}`,
+    subtitle: row.memo || undefined,
+    href: `/journal/${row.id}`,
+    iconKey: 'journal',
+    badge: row.status && row.status !== 'posted' ? row.status : undefined,
+  }))
 }
 
 async function searchAccounts(

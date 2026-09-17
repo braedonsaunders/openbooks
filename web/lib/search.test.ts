@@ -37,9 +37,18 @@ interface ProjectFixture {
   name: string
 }
 
+interface JournalEntryFixture {
+  id: string
+  entry_number: string
+  memo: string | null
+  status: string
+  subsidiary_id: string
+}
+
 interface SearchTestState {
   disabledKinds: string[]
   documents: SearchFixture[]
+  entries: JournalEntryFixture[]
   featureChecks: string[]
   features: Record<string, boolean>
   kindFeatures: Record<string, string>
@@ -96,9 +105,18 @@ const UNMAPPED_DOCUMENT: SearchFixture = {
 }
 
 const stateKey = Symbol.for('openbooks.search-permission-test')
+const JE_POSTED: JournalEntryFixture = {
+  id: 'je-posted',
+  entry_number: 'JE-26188661',
+  memo: 'je-posted:memo:confidential',
+  status: 'posted',
+  subsidiary_id: ALLOWED_SUBSIDIARY,
+}
+
 const state: SearchTestState = {
   disabledKinds: [],
   documents: [...BASE_DOCUMENTS, UNMAPPED_DOCUMENT],
+  entries: [],
   featureChecks: [],
   features: { banking: true, fieldTickets: true, projects: true },
   kindFeatures: { ...DOC_KIND_FEATURE } as Record<string, string>,
@@ -155,6 +173,18 @@ const mockSources = new Map<string, string>([
           state.queries.push({ text: query.text, values: [...query.values] })
           if (query.text.includes('select id, code, name from projects')) {
             return { rows: state.projectRows }
+          }
+          if (query.text.includes('from journal_entries')) {
+            let rows = state.entries
+            // Entries keep the documents rule: restricted callers see only
+            // their subsidiaries (entries never have a null subsidiary).
+            const subsidiaryIds = new Set(query.values
+              .filter((value) => typeof value === 'string' && /^\\{.*\\}$/.test(value))
+              .flatMap((value) => value.slice(1, -1).split(',').filter(Boolean)))
+            if (query.text.includes('e.subsidiary_id') && subsidiaryIds.size > 0) {
+              rows = rows.filter((row) => subsidiaryIds.has(row.subsidiary_id))
+            }
+            return { rows }
           }
           if (!query.text.includes('with cand as')) return { rows: [] }
 
@@ -277,16 +307,19 @@ function scopedAuthz(
 function reset({
   disabledKinds = [],
   documents = [...BASE_DOCUMENTS, UNMAPPED_DOCUMENT],
+  entries = [],
   features = {},
   projects = [PROJECT_FIXTURE],
 }: {
   disabledKinds?: string[]
   documents?: SearchFixture[]
+  entries?: JournalEntryFixture[]
   features?: Record<string, boolean>
   projects?: ProjectFixture[]
 } = {}): void {
   state.disabledKinds = disabledKinds
   state.documents = documents
+  state.entries = entries
   state.featureChecks.length = 0
   state.features = { banking: true, fieldTickets: true, projects: true, ...features }
   state.kindFeatures = { ...DOC_KIND_FEATURE } as Record<string, string>
@@ -398,8 +431,8 @@ test('each transaction module permission exposes only its own document kinds', a
     assert.deepEqual(boundKinds(query), expectedKinds, `${permission}: SQL kind allowlist`)
     assert.equal(
       query.text.match(/d\.kind in/g)?.length,
-      3,
-      `${permission}: both candidate legs and the final read must be permission-filtered`,
+      4,
+      `${permission}: both candidate legs, the exact-number leg, and the final read must be permission-filtered`,
     )
   }
 })
@@ -452,11 +485,11 @@ test('numeric amount candidates carry the same permission allowlist as text cand
   const query = transactionQuery()
   assert.equal(
     query.text.match(/d\.kind in/g)?.length,
-    4,
-    'text, party, amount, and final result legs must all be permission-filtered',
+    5,
+    'text, party, amount, exact-number, and final result legs must all be permission-filtered',
   )
   for (const kind of expectedKinds) {
-    assert.equal(query.values.filter((value) => value === kind).length, 4, kind)
+    assert.equal(query.values.filter((value) => value === kind).length, 5, kind)
   }
 })
 
@@ -555,8 +588,8 @@ test('subsidiary restrictions fence documents before sensitive fields are return
   const query = transactionQuery()
   assert.equal(
     query.text.match(/d\.subsidiary_id = any/g)?.length,
-    3,
-    'both text candidates and the final sensitive-field read must be subsidiary scoped',
+    4,
+    'both text candidates, the exact-number leg, and the final sensitive-field read must be subsidiary scoped',
   )
   assert.ok(query.values.includes(`{${ALLOWED_SUBSIDIARY}}`))
 
@@ -643,4 +676,66 @@ test('repaired project and recall record links never regress to legacy destinati
   const recallEntry = source('app/(app)/reports/lot-recall/page.tsx')
   assert.match(recallEntry, /redirect\(`\/reports\/custom\/run\//, 'must forward to the shared engine runner')
   assert.doesNotMatch(recallEntry, /\/documents\//, 'no generic document links')
+})
+
+// F-t11-011: an exact document number must escape the recency-capped fuzzy
+// legs (the newest-200 cap excluded old exact rows and ranked unstably as
+// new documents arrived) and order first.
+test('exact document numbers bypass the candidate cap and order first', async () => {
+  reset()
+  const response = await globalSearch(authz('ap.pay'), 'VENDOR_PAYMENT')
+  assert.ok(transactionHitIds(response).includes('vendor_payment'))
+
+  const query = transactionQuery()
+  assert.match(query.text, /d\.document_number = \?/, 'exact-equality candidate leg')
+  assert.match(
+    query.text,
+    /order by \(d\.document_number = \?\) desc/,
+    'exact matches order before fuzzy neighbors',
+  )
+  assert.ok(query.values.includes('VENDOR_PAYMENT'), 'exact leg binds the raw query')
+})
+
+// F-t11-011: journal entries were unindexed — an exact JE number searched
+// total zero because only documents was queried. Entries surface inside the
+// transactions group through the entry compatibility redirect.
+test('journal entries are indexed and link through the entry redirect', async () => {
+  reset({ entries: [JE_POSTED] })
+  const response = await globalSearch(authz('gl.read'), 'JE-26188661')
+  const hits = transactionHits(response)
+  const hit = hits.find((candidate) => candidate.id === 'je-posted')
+  assert.ok(hit, 'the exact journal entry must surface')
+  assert.equal(hit.title, 'Journal JE-26188661')
+  assert.equal(hit.href, '/journal/je-posted')
+  assert.equal(hit.iconKey, 'journal')
+  assert.equal(hit.subtitle, 'je-posted:memo:confidential')
+
+  const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
+  assert.ok(entriesQuery, 'entries must be queried')
+  assert.match(entriesQuery.text, /\(e\.entry_number = \?\) desc/, 'exact entries order first')
+})
+
+test('journal entries stay gated by the journal read permission', async () => {
+  reset({ entries: [JE_POSTED] })
+  const denied = await globalSearch(authz('ap.read'), 'JE-26188661')
+  assert.ok(!transactionHitIds(denied).includes('je-posted'))
+  assert.ok(
+    !state.queries.some((query) => query.text.includes('from journal_entries')),
+    'no entries query without gl.read',
+  )
+})
+
+test('journal entries keep the documents subsidiary rule', async () => {
+  const deniedEntry: JournalEntryFixture = {
+    ...JE_POSTED,
+    id: 'je-denied',
+    entry_number: 'JE-DENIED',
+    memo: 'denied:memo:confidential',
+    subsidiary_id: DENIED_SUBSIDIARY,
+  }
+  reset({ entries: [JE_POSTED, deniedEntry] })
+  const response = await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], 'gl.read'), 'JE-')
+  assert.ok(transactionHitIds(response).includes('je-posted'))
+  assert.ok(!transactionHitIds(response).includes('je-denied'))
+  assert.ok(!JSON.stringify(response).includes('denied:memo:confidential'))
 })
