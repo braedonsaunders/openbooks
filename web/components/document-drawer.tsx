@@ -400,6 +400,34 @@ const STATUS_KEYS: Record<string, string> = {
   voided: 'voided',
 }
 
+/**
+ * Drawer title row: type badge + document number + status pill. The status
+ * is decision-relevant (open/paid/voided), so the pill must never be the
+ * thing that clips on narrow viewports — it keeps its width and wraps to
+ * its own line instead (F-t12-013).
+ */
+export function DocumentDrawerTitle({
+  kind,
+  documentNumber,
+  statusLabel,
+  statusVariant,
+}: {
+  kind: string
+  documentNumber: string
+  statusLabel: string
+  statusVariant: 'default' | 'success' | 'secondary' | 'warning' | 'outline'
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      <DocTypeBadge kind={kind} />
+      <span className="font-mono">{documentNumber}</span>
+      <Badge variant={statusVariant} className="shrink-0">
+        {statusLabel}
+      </Badge>
+    </span>
+  )
+}
+
 const emptyLine = (): LineRow => ({
   accountId: '',
   itemId: '',
@@ -2061,15 +2089,14 @@ export function DocumentDrawer({
       canEditAttachments={canCreate}
       panelClassName={docTypeMeta(config.kind).surfaceCls}
       title={
-        <span className="flex items-center gap-2.5">
-          <DocTypeBadge kind={config.kind} />
-          <span className="font-mono">{displayDocumentNumber(doc.document_number, (doc as { reference_number?: unknown }).reference_number)}</span>
-          <Badge variant={STATUS_VARIANT[displayStatus] ?? 'secondary'}>
-            {STATUS_KEYS[displayStatus]
-              ? tCommon(`status.${STATUS_KEYS[displayStatus]}`)
-              : String(displayStatus).replace('_', ' ')}
-          </Badge>
-        </span>
+        <DocumentDrawerTitle
+          kind={config.kind}
+          documentNumber={displayDocumentNumber(doc.document_number, (doc as { reference_number?: unknown }).reference_number)}
+          statusLabel={STATUS_KEYS[displayStatus]
+            ? tCommon(`status.${STATUS_KEYS[displayStatus]}`)
+            : String(displayStatus).replace('_', ' ')}
+          statusVariant={STATUS_VARIANT[displayStatus] ?? 'secondary'}
+        />
       }
       description={mode === 'edit' ? t('drawer.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
