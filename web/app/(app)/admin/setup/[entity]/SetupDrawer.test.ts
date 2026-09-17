@@ -39,6 +39,21 @@ test('a failed transport cannot wedge the save button on (F-t06-018)', () => {
   assert.match(saveBlock(), /finally/, 'save() must reset busy in a finally block')
 })
 
+test('blank keepDefault fields never block saving (F-t06-022)', () => {
+  // keepDefault columns are NOT NULL WITH a DB default: the server omits
+  // blanks and the default applies (coerce.ts). The drawer requiring them
+  // made ownership creates (acquisitionRate, nciMeasurement, …) unsubmittable
+  // with no user-discoverable workaround. Blank keepDefault must validate.
+  const validateStart = source.indexOf('function validate()')
+  const saveStart = source.indexOf('async function save()')
+  assert.ok(validateStart >= 0 && saveStart > validateStart, 'validate() must exist')
+  assert.match(
+    source.slice(validateStart, saveStart),
+    /keepDefault/,
+    'validate() must honor keepDefault blanks as legal',
+  )
+})
+
 test('typed server conflicts resolve through their code, never the raw message (F-t06-019)', () => {
   // Setup 409s carry {error: <human message>, code: 'duplicate'}: the drawer
   // must map through the code so a server-worded message still resolves to
