@@ -175,21 +175,28 @@ test("F-t13-001: starter Duplicate pre-fills a non-colliding name", async () => 
   try {
     // The shared prompt module outlives each tree: an earlier test may have
     // left a request unsettled, and this tree's PromptRoot renders it on
-    // mount. Dismiss it so the Duplicate click below starts clean.
+    // mount. Dismiss it so the Duplicate click below starts clean. The 25ms
+    // flush covers the rAF shim plus the request/effect round-trip even when
+    // sibling files load the machine in a combined run.
     await act(async () => {
       const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
         (b) => b.textContent?.trim() === "Cancel",
       );
       staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 25));
     });
+    assert.equal(
+      document.body.querySelector('[role="dialog"]'),
+      null,
+      "stale prompt must be dismissed before the Duplicate click",
+    );
     const buttons = [...host.querySelectorAll("button")].filter((b) =>
       b.textContent?.trim().startsWith("Duplicate"),
     );
     assert.ok(buttons.length > 0, "row Duplicate button must render");
     await act(async () => {
       buttons[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 25));
     });
     const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
     assert.ok(input, "name prompt dialog must open from the list row");
