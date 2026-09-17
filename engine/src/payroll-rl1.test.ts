@@ -93,7 +93,7 @@ test("the boxes the data cannot populate are published, not implied", () => {
 
 const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
   pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
-  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ...overrides,
+  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0", ...overrides,
 });
 
 test("RL-1 carry-in: pre-adoption YTD is additive with committed QC stubs", () => {

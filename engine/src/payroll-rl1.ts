@@ -325,6 +325,8 @@ async function openingRl1YtdByEmployee(
     qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
     taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
     taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+    // RL-1 is Québec employment: US FICA withholding never applies here.
+    ficaWithheldYtd: "0",
   }]));
 }
 

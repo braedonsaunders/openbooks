@@ -27,7 +27,7 @@ import type { OpeningYearEndYtd, T4Slip, W2Slip } from "./payroll-yearend.ts";
 
 const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
   pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
-  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ...overrides,
+  eiYtd: "0", qpipYtd: "0", taxableYtd: "0", taxYtd: "0", ficaWithheldYtd: "0", ...overrides,
 });
 
 const t4 = (employeePartyId: string, overrides: Partial<T4Slip> = {}): T4Slip => ({
@@ -243,4 +243,43 @@ test("an opening with no country profile is Canadian, while an explicit US openi
     assert.match(query.sql, /coalesce\(prof\.country, 'CA'\) = \$1/);
     assert.doesNotMatch(query.sql, /coalesce\(prof\.country, \$1\)/);
   }
+});
+
+test("a FICA tax withheld carry-in splits into W-2 boxes 4 and 6", () => {
+  // F-t08-010: the combined FICA carry-in reached no box, so an adopted
+  // workforce filed $0 SS/Medicare tax. The split is wage-implied — Social
+  // Security is 6.2% of FICA wages up to the wage base, Medicare is the
+  // withheld remainder (Box 6 includes Additional Medicare) — so the two
+  // boxes always account for every withheld dollar exactly.
+  const before = w2("e1", { box4SsTax: "0", box6MedicareTax: "0" });
+  const after = openingYtdIntoW2Slip(
+    before,
+    opening({ pensionableYtd: "45000.00", ficaWithheldYtd: "3442.50" }),
+    { ssRate: "0.062", ssWageBase: "184500" },
+  );
+  assert.equal(after.box4SsTax, "2790.0000");
+  assert.equal(after.box6MedicareTax, "652.5000");
+});
+
+test("the FICA split caps Social Security at the wage base", () => {
+  const before = w2("e1", { box4SsTax: "0", box6MedicareTax: "0" });
+  const after = openingYtdIntoW2Slip(
+    before,
+    opening({ pensionableYtd: "250000.00", ficaWithheldYtd: "15000.00" }),
+    { ssRate: "0.062", ssWageBase: "184500" },
+  );
+  // 6.2% of the 184,500 base, not of 250,000 in wages.
+  assert.equal(after.box4SsTax, "11439.0000");
+  assert.equal(after.box6MedicareTax, "3561.0000");
+});
+
+test("the FICA split never attributes more than was withheld", () => {
+  const before = w2("e1", { box4SsTax: "0", box6MedicareTax: "0" });
+  const after = openingYtdIntoW2Slip(
+    before,
+    opening({ pensionableYtd: "45000.00", ficaWithheldYtd: "100.00" }),
+    { ssRate: "0.062", ssWageBase: "184500" },
+  );
+  assert.equal(after.box4SsTax, "100.0000");
+  assert.equal(after.box6MedicareTax, "0.0000");
 });
