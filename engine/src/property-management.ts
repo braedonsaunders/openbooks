@@ -835,6 +835,11 @@ export async function cancelPropertyLease(orgId: string, actorId: string, leaseI
   });
 }
 
+/** Optional uuid refs arrive as "" from unfilled form fields; blanks are absent. */
+export function emptyRefToNull(value: string | null | undefined): string | null {
+  return value == null || value.trim() === "" ? null : value;
+}
+
 export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; requestId?: string | null }): Promise<{ id: string }> {
   // Base rent versions exclusively through the lease term and its controlled
   // escalations; a caller-supplied second base_rent beside the canonical row
@@ -869,10 +874,13 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
         where org_id=${input.orgId} and id=${input.itemId} and is_active) as ok`));
       if (!item.rows[0]?.ok) throw new PropertyManagementError("Charge item must be an active item");
     }
-    if (input.taxCodeId != null) {
-      if (!UUID_RE.test(input.taxCodeId)) throw new PropertyManagementError("Charge tax code is invalid");
+    // The charge form has no tax field and posts an empty string when unset;
+    // treat it as absent like a missing value rather than a malformed uuid.
+    const taxCodeId = emptyRefToNull(input.taxCodeId);
+    if (taxCodeId != null) {
+      if (!UUID_RE.test(taxCodeId)) throw new PropertyManagementError("Charge tax code is invalid");
       const tax = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from tax_codes
-        where org_id=${input.orgId} and id=${input.taxCodeId} and is_active) as ok`));
+        where org_id=${input.orgId} and id=${taxCodeId} and is_active) as ok`));
       if (!tax.rows[0]?.ok) throw new PropertyManagementError("Charge tax code must be an active tax code");
     }
     const result = (await tx.execute<{
@@ -882,7 +890,7 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
       insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
       select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${effectiveFrom},${effectiveTo},
         coalesce(${input.incomeAccountId ?? null},case when ${input.chargeType}='cam' then p.cam_income_account_id else p.rent_income_account_id end)::uuid,
-        ${input.itemId ?? null},${input.taxCodeId ?? null},${input.actorId},${input.actorId}
+        ${input.itemId ?? null},${taxCodeId},${input.actorId},${input.actorId}
         from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
        where l.org_id=${input.orgId} and l.id=${input.leaseId} and l.status in ('draft','active')
        returning id,charge_type as "chargeType",description,amount::text,frequency,effective_from::text as "effectiveFrom",

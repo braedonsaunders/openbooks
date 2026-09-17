@@ -161,6 +161,7 @@ export function ChargesSection({
                     ...form,
                     effectiveTo: form.effectiveTo || null,
                     incomeAccountId: form.incomeAccountId || null,
+                    taxCodeId: form.taxCodeId || null,
                   },
                   t("toasts.chargeAdded"),
                 )

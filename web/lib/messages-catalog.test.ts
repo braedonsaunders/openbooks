@@ -319,7 +319,7 @@ test('the generated fallback manifest exactly identifies untranslated property-m
 
   assert.equal(manifest.sourceLocale, 'en')
   assert.deepEqual(Object.keys(manifest.fallbacks).sort(), translatedLocales)
-  assert.equal(propertyKeys.length, 178, 'the property-management source inventory changed')
+  assert.equal(propertyKeys.length, 198, 'the property-management source inventory changed')
   assert.deepEqual(manifest, generateFallbackManifest(), 'fallback manifest must be regenerated')
 
   for (const locale of translatedLocales) {
@@ -448,7 +448,7 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     }
     assert.equal(
       declaredFallbacks.filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX)).length,
-      178,
+      198,
       `${row.locale} must report all property-management values as untranslated fallbacks`,
     )
     t.diagnostic(
