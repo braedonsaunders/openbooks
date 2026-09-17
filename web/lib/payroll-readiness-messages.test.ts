@@ -46,6 +46,44 @@ function messageAt(catalog: Record<string, unknown>, code: string): unknown {
   return node
 }
 
+/**
+ * The readiness screen is country-agnostic: the same run can pay Canadians
+ * and Americans, and an org may only have one pack installed. A message that
+ * names one country's programs (F-t08-004: a US-only org warned about
+ * Canadian CPP/EI ceilings) is wrong for everyone on the other side, so no
+ * readiness message may name a country-specific program or agency. Wording
+ * must stay neutral ("annual statutory ceilings") and leave the specifics
+ * to the linked fix screen.
+ */
+const COUNTRY_PROGRAM = /\b(CPP2?|QPP|QPIP|EI|FICA|FUTA|SUTA|TD1|T4127|T4|W-2|W-4|401\(k\)|ROE|CRA|IRS)\b/
+
+function allMessages(node: unknown, path: string, out: Array<{ path: string; text: string }>): void {
+  if (typeof node === 'string') {
+    out.push({ path, text: node })
+    return
+  }
+  if (node !== null && typeof node === 'object') {
+    for (const [key, value] of Object.entries(node)) {
+      allMessages(value, path ? `${path}.${key}` : key, out)
+    }
+  }
+}
+
+test('no readiness message names a country-specific payroll program', () => {
+  const catalog = JSON.parse(readFileSync(MESSAGES, 'utf8')) as Record<string, unknown>
+  const found: Array<{ path: string; text: string }> = []
+  allMessages((catalog as { wizard?: unknown }).wizard, 'wizard', found)
+  const codes = found.filter((entry) => entry.path.startsWith('wizard.readiness.codes.'))
+  assert.ok(codes.length >= 15, `only ${codes.length} readiness messages were found — the scan broke`)
+  const offending = codes.filter((entry) => COUNTRY_PROGRAM.test(entry.text))
+  assert.deepEqual(
+    offending.map((entry) => entry.path),
+    [],
+    'these readiness messages name a country-specific program on a country-agnostic screen:\n'
+      + offending.map((entry) => `  payroll.${entry.path}: ${entry.text}`).join('\n'),
+  )
+})
+
 test('every readiness code the engine emits has a message', () => {
   const codes = emittedCodes(readFileSync(READINESS, 'utf8'))
   // A scan that silently matched nothing would pass this file vacuously.
