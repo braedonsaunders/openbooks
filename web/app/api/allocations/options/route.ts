@@ -40,9 +40,12 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
 
-  const named = async (table: string, order: string): Promise<Option[]> => {
+  const named = async (table: string, order: string, hasCode = true): Promise<Option[]> => {
+    const label = hasCode
+      ? sql`case when coalesce(code, '') <> '' then code || ' · ' || name else name end`
+      : sql`name`;
     const rows = await db.execute<{ id: string; label: string }>(sql`
-      select id::text as id, name as label from ${sql.raw(table)}
+      select id::text as id, ${label} as label from ${sql.raw(table)}
        where org_id = ${orgId} and is_active order by ${sql.raw(order)}`);
     return rows.rows;
   };
@@ -90,7 +93,7 @@ export async function GET() {
 
   let subsidiaries: Option[];
   if (gate.allowedSubsidiaryIds === null) {
-    subsidiaries = await named("subsidiaries", "name");
+    subsidiaries = await named("subsidiaries", "name", false);
   } else {
     const ids = [...gate.allowedSubsidiaryIds];
     subsidiaries = ids.length === 0 ? [] : (

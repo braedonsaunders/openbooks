@@ -8,12 +8,12 @@ import {
   ArrowLeft,
   ArrowRight,
   BookPlus,
-  Building2,
   CalendarClock,
   Check,
   Loader2,
   Sparkles,
   Split,
+  X,
 } from 'lucide-react'
 import { Input, Label, SearchSelect, cn } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
@@ -21,11 +21,14 @@ import { useMoney } from '../../../../../components/money-provider'
 import { WizardShell } from '../wizard/WizardShell'
 import { apiError, definitionPayload } from './rule-drawer-form'
 import {
+  BUILTIN_TARGET_DIMENSIONS,
+  SOURCE_FILTER_KEYS,
   WIZARD_DOCUMENT_KINDS,
   WIZARD_STEPS,
-  TARGET_DIMENSIONS,
-  defaultSourceDepartmentMode,
+  allowsUntagged,
+  defaultSourceFilters,
   defaultWizardDraft,
+  emptySourceFilter,
   filledTargets,
   hrefWithRule,
   keyFromName,
@@ -39,7 +42,9 @@ import {
   wizardTargetPercents,
   wizardUsesExplicitTargets,
   type AllocationWizardMode,
-  type SourceDepartmentMode,
+  type SourceFilter,
+  type SourceFilterKey,
+  type SourceMatchMode,
   type TargetDimension,
   type WizardDocumentKind,
   type WizardDraft,
@@ -51,11 +56,21 @@ interface Option {
   label: string
 }
 
+interface SegmentOption {
+  key: string
+  label: string
+  values: Option[]
+}
+
 interface PickerOptions {
   departments: Option[]
   locations: Option[]
   classes: Option[]
   projects: Option[]
+  subsidiaries: Option[]
+  parties: Option[]
+  items: Option[]
+  segments: SegmentOption[]
 }
 
 /**
@@ -72,7 +87,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [draft, setDraft] = useState<WizardDraft>(defaultWizardDraft)
   const [keyTouched, setKeyTouched] = useState(false)
-  const [sourceDeptTouched, setSourceDeptTouched] = useState(false)
+  const [sourceFiltersTouched, setSourceFiltersTouched] = useState(false)
   const [options, setOptions] = useState<PickerOptions | null>(null)
   const [drivers, setDrivers] = useState<WizardDriver[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -95,12 +110,19 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         setLoadError(t('wizard.loadFailed'))
         return
       }
-      const payload = (await optionsRes.json()) as Record<string, Option[]>
+      const payload = (await optionsRes.json()) as Record<string, unknown>
+      const rawSegments = Array.isArray(payload['segments']) ? (payload['segments'] as SegmentOption[]) : []
       setOptions({
-        departments: payload['departments'] ?? [],
-        locations: payload['locations'] ?? [],
-        classes: payload['classes'] ?? [],
-        projects: payload['projects'] ?? [],
+        departments: asOptions(payload['departments']),
+        locations: asOptions(payload['locations']),
+        classes: asOptions(payload['classes']),
+        projects: asOptions(payload['projects']),
+        subsidiaries: asOptions(payload['subsidiaries']),
+        parties: asOptions(payload['parties']),
+        items: asOptions(payload['items']),
+        segments: rawSegments
+          .filter((segment) => typeof segment?.key === 'string' && typeof segment.label === 'string')
+          .map((segment) => ({ key: segment.key, label: segment.label, values: asOptions(segment.values) })),
       })
       if (driversRes.ok) {
         const body = (await driversRes.json()) as { drivers?: WizardDriver[] }
@@ -126,7 +148,7 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
     setDraft((prev) => ({
       ...prev,
       mode,
-      sourceDepartmentMode: sourceDeptTouched ? prev.sourceDepartmentMode : defaultSourceDepartmentMode(mode),
+      sourceFilters: sourceFiltersTouched ? prev.sourceFilters : defaultSourceFilters(mode),
     }))
   }
 
@@ -154,14 +176,53 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
     }))
   }
 
-  const dimensionOptions = (dimension: TargetDimension): Option[] => {
+  const dimensionOptions = (dimension: string): Option[] => {
     if (!options) return []
-    return {
-      department: options.departments,
-      location: options.locations,
-      class: options.classes,
-      project: options.projects,
-    }[dimension]
+    if (dimension === 'department') return options.departments
+    if (dimension === 'location') return options.locations
+    if (dimension === 'class') return options.classes
+    if (dimension === 'project') return options.projects
+    if (dimension === 'subsidiary') return options.subsidiaries
+    if (dimension === 'party') return options.parties
+    if (dimension === 'item') return options.items
+    if (dimension.startsWith('extra:')) {
+      const key = dimension.slice('extra:'.length)
+      return options.segments.find((segment) => segment.key === key)?.values ?? []
+    }
+    return []
+  }
+
+  const dimLabel = (dimension: string): string => {
+    if (dimension === 'department') return t('rules.definition.filters.department')
+    if (dimension === 'location') return t('rules.definition.filters.location')
+    if (dimension === 'class') return t('rules.definition.filters.class')
+    if (dimension === 'project') return t('rules.definition.filters.project')
+    if (dimension === 'subsidiary') return t('rules.definition.filters.subsidiary')
+    if (dimension === 'party') return t('rules.definition.filters.party')
+    if (dimension === 'item') return t('rules.definition.filters.item')
+    if (dimension.startsWith('extra:')) {
+      const key = dimension.slice('extra:'.length)
+      return options?.segments.find((segment) => segment.key === key)?.label ?? key
+    }
+    return dimension
+  }
+
+  const targetDimensions = ((): { id: TargetDimension; label: string }[] => {
+    if (!options) return BUILTIN_TARGET_DIMENSIONS.map((id) => ({ id, label: id }))
+    return [
+      ...BUILTIN_TARGET_DIMENSIONS.map((id) => ({ id, label: dimLabel(id) })),
+      ...options.segments.map((segment) => ({ id: `extra:${segment.key}` as const, label: segment.label })),
+    ]
+  })()
+
+  const setSourceFilter = (key: SourceFilterKey, filter: SourceFilter) => {
+    setSourceFiltersTouched(true)
+    setDraft((prev) => ({ ...prev, sourceFilters: { ...prev.sourceFilters, [key]: filter } }))
+  }
+
+  const setExtraFilter = (key: string, filter: SourceFilter) => {
+    setSourceFiltersTouched(true)
+    setDraft((prev) => ({ ...prev, sourceExtraDims: { ...prev.sourceExtraDims, [key]: filter } }))
   }
 
   const selectedDriver = drivers.find((driver) => driver.id === draft.driverId) ?? null
@@ -290,19 +351,6 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
         return tc('transactionTypes.cardCharge')
       case 'expense_report':
         return tc('transactionTypes.expenseReport')
-    }
-  }
-
-  const dimLabel = (dimension: TargetDimension): string => {
-    switch (dimension) {
-      case 'department':
-        return t('rules.definition.filters.department')
-      case 'location':
-        return t('rules.definition.filters.location')
-      case 'class':
-        return t('rules.definition.filters.class')
-      case 'project':
-        return t('rules.definition.filters.project')
     }
   }
 
@@ -454,50 +502,42 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
             <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{t('wizard.source.anyKind')}</p>
           </div>
           <div className="space-y-2">
-            <Label help={t('wizard.source.departmentHint')}>{t('wizard.source.department')}</Label>
-            {(['specific', 'untagged', 'any'] as const).map((mode) => (
-              <ChoiceCard
-                key={mode}
-                compact
-                active={draft.sourceDepartmentMode === mode}
-                icon={<Building2 size={16} />}
-                title={sourceDeptTitle(t, mode)}
-                description={sourceDeptHint(t, mode)}
-                onClick={() => {
-                  setSourceDeptTouched(true)
-                  set('sourceDepartmentMode', mode)
-                }}
-              />
-            ))}
-            {draft.sourceDepartmentMode === 'specific' ? (
-              options.departments.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">{t('wizard.source.noDepartments')}</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {options.departments.map((department) => {
-                    const on = draft.sourceDepartmentIds.includes(department.id)
-                    return (
-                      <button
-                        key={department.id}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() =>
-                          set(
-                            'sourceDepartmentIds',
-                            on
-                              ? draft.sourceDepartmentIds.filter((id) => id !== department.id)
-                              : [...draft.sourceDepartmentIds, department.id],
-                          )
-                        }
-                        className={chipClass(on)}
-                      >
-                        {department.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              )
-            ) : null}
+            <Label help={t('wizard.source.filtersHint')}>{t('wizard.source.filters')}</Label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('wizard.source.filtersAny')}</p>
+            <div className="space-y-2">
+              {SOURCE_FILTER_KEYS.map((key) => (
+                <SourceFilterRow
+                  key={key}
+                  label={dimLabel(key)}
+                  filter={draft.sourceFilters[key]}
+                  values={dimensionOptions(key)}
+                  allowUntagged={allowsUntagged(key)}
+                  pickLabel={t('wizard.source.pickValue')}
+                  noValuesLabel={t('wizard.source.noValues')}
+                  modeAny={t('wizard.source.modeAny')}
+                  modeUntagged={t('wizard.source.modeUntagged')}
+                  modeSpecific={t('wizard.source.modeSpecific')}
+                  removeLabel={tc('actions.remove')}
+                  onChange={(next) => setSourceFilter(key, next)}
+                />
+              ))}
+              {options.segments.map((segment) => (
+                <SourceFilterRow
+                  key={`extra:${segment.key}`}
+                  label={segment.label}
+                  filter={draft.sourceExtraDims[segment.key] ?? emptySourceFilter()}
+                  values={segment.values}
+                  allowUntagged={false}
+                  pickLabel={t('wizard.source.pickValue')}
+                  noValuesLabel={t('wizard.source.noValues')}
+                  modeAny={t('wizard.source.modeAny')}
+                  modeUntagged={t('wizard.source.modeUntagged')}
+                  modeSpecific={t('wizard.source.modeSpecific')}
+                  removeLabel={tc('actions.remove')}
+                  onChange={(next) => setExtraFilter(segment.key, next)}
+                />
+              ))}
+            </div>
           </div>
         </StepFrame>
       ) : null}
@@ -548,15 +588,21 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
             <>
               <Field label={t('wizard.targets.dimension')}>
                 <div className="flex flex-wrap gap-2">
-                  {TARGET_DIMENSIONS.map((dimension) => (
+                  {targetDimensions.map((dimension) => (
                     <button
-                      key={dimension}
+                      key={dimension.id}
                       type="button"
-                      aria-pressed={draft.targetDimension === dimension}
-                      onClick={() => set('targetDimension', dimension)}
-                      className={chipClass(draft.targetDimension === dimension)}
+                      aria-pressed={draft.targetDimension === dimension.id}
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          targetDimension: dimension.id,
+                          targets: prev.targets.map((row) => ({ ...row, valueId: '' })),
+                        }))
+                      }
+                      className={chipClass(draft.targetDimension === dimension.id)}
                     >
-                      {dimLabel(dimension)}
+                      {dimension.label}
                     </button>
                   ))}
                 </div>
@@ -728,17 +774,9 @@ export function AllocationRuleWizard({ closeHref }: { closeHref: string }) {
                 ? t('wizard.review.sourceAnyKind')
                 : t('wizard.review.sourceKinds', { kinds: draft.documentKinds.map(kindLabel).join(', ') })}
             </ReviewLine>
-            <ReviewLine>
-              {draft.sourceDepartmentMode === 'any'
-                ? t('wizard.review.sourceAnyDept')
-                : draft.sourceDepartmentMode === 'untagged'
-                  ? t('wizard.review.sourceUntagged')
-                  : t('wizard.review.sourceDepts', {
-                      departments: draft.sourceDepartmentIds
-                        .map((id) => options.departments.find((department) => department.id === id)?.label ?? id)
-                        .join(', '),
-                    })}
-            </ReviewLine>
+            {sourceReviewLines(t, draft, dimLabel, dimensionOptions).map((line) => (
+              <ReviewLine key={line}>{line}</ReviewLine>
+            ))}
             <ReviewLine>{splitReview(t, draft, selectedDriver, previewPercents)}</ReviewLine>
             {explicit ? (
               <ReviewLine>
@@ -886,16 +924,134 @@ function chipClass(on: boolean): string {
   )
 }
 
-function sourceDeptTitle(t: (key: string) => string, mode: SourceDepartmentMode): string {
-  if (mode === 'specific') return t('wizard.source.deptSpecific')
-  if (mode === 'untagged') return t('wizard.source.deptUntagged')
-  return t('wizard.source.deptAny')
+function asOptions(value: unknown): Option[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is { id: string; label: string } => {
+      return typeof item === 'object' && item !== null && typeof (item as { id?: unknown }).id === 'string' && typeof (item as { label?: unknown }).label === 'string'
+    })
+    .map((item) => ({ id: item.id, label: item.label }))
 }
 
-function sourceDeptHint(t: (key: string) => string, mode: SourceDepartmentMode): string {
-  if (mode === 'specific') return t('wizard.source.deptSpecificHint')
-  if (mode === 'untagged') return t('wizard.source.deptUntaggedHint')
-  return t('wizard.source.deptAnyHint')
+function SourceFilterRow(props: {
+  label: string
+  filter: SourceFilter
+  values: Option[]
+  allowUntagged: boolean
+  pickLabel: string
+  noValuesLabel: string
+  modeAny: string
+  modeUntagged: string
+  modeSpecific: string
+  removeLabel: string
+  onChange: (next: SourceFilter) => void
+}) {
+  const modes: { mode: SourceMatchMode; label: string }[] = [
+    { mode: 'any', label: props.modeAny },
+    ...(props.allowUntagged ? [{ mode: 'untagged' as const, label: props.modeUntagged }] : []),
+    { mode: 'specific', label: props.modeSpecific },
+  ]
+  const selected = props.values.filter((item) => props.filter.ids.includes(item.id))
+  const available = props.values.filter((item) => !props.filter.ids.includes(item.id))
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{props.label}</span>
+        <div className="flex flex-wrap gap-1">
+          {modes.map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              aria-pressed={props.filter.mode === item.mode}
+              onClick={() => props.onChange({ mode: item.mode, ids: item.mode === 'specific' ? props.filter.ids : [] })}
+              className={chipClass(props.filter.mode === item.mode)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {props.filter.mode === 'specific' ? (
+        <div className="mt-2 space-y-2">
+          {props.values.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">{props.noValuesLabel}</p>
+          ) : (
+            <>
+              {available.length > 0 ? (
+                <SearchSelect
+                  value=""
+                  onChange={(value) => {
+                    if (value === '' || props.filter.ids.includes(value)) return
+                    props.onChange({ mode: 'specific', ids: [...props.filter.ids, value] })
+                  }}
+                  options={available.map((item) => ({ value: item.id, label: item.label }))}
+                  placeholder={props.pickLabel}
+                  sheetTitle={props.label}
+                  ariaLabel={props.label}
+                />
+              ) : null}
+              {selected.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {selected.map((item) => (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
+                    >
+                      {item.label}
+                      <button
+                        type="button"
+                        aria-label={`${props.removeLabel} ${item.label}`}
+                        className="text-teal-600 hover:text-teal-900 dark:text-teal-300"
+                        onClick={() =>
+                          props.onChange({ mode: 'specific', ids: props.filter.ids.filter((id) => id !== item.id) })
+                        }
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function sourceReviewLines(
+  t: (key: string, values?: Record<string, string>) => string,
+  draft: WizardDraft,
+  labelFor: (dimension: string) => string,
+  valuesFor: (dimension: string) => Option[],
+): string[] {
+  const lines: string[] = []
+  for (const key of SOURCE_FILTER_KEYS) {
+    const filter = draft.sourceFilters[key]
+    if (filter.mode === 'any') continue
+    if (filter.mode === 'untagged') {
+      lines.push(t('wizard.review.sourceUntagged', { dimension: labelFor(key) }))
+      continue
+    }
+    lines.push(
+      t('wizard.review.sourceValues', {
+        dimension: labelFor(key),
+        values: filter.ids.map((id) => valuesFor(key).find((item) => item.id === id)?.label ?? id).join(', '),
+      }),
+    )
+  }
+  for (const [key, filter] of Object.entries(draft.sourceExtraDims)) {
+    if (filter.mode !== 'specific' || filter.ids.length === 0) continue
+    const dimension = `extra:${key}`
+    lines.push(
+      t('wizard.review.sourceValues', {
+        dimension: labelFor(dimension),
+        values: filter.ids.map((id) => valuesFor(dimension).find((item) => item.id === id)?.label ?? id).join(', '),
+      }),
+    )
+  }
+  return lines.length === 0 ? [t('wizard.review.sourceAnyDims')] : lines
 }
 
 function policyTitle(t: (key: string) => string, copy: 'applyAutomatic' | 'applySuggest' | 'applyManual'): string {
@@ -914,7 +1070,8 @@ function driverDimensionLabel(t: (key: string) => string, dimension: string | un
   if (dimension === 'location') return t('rules.definition.filters.location')
   if (dimension === 'class') return t('rules.definition.filters.class')
   if (dimension === 'project') return t('rules.definition.filters.project')
-  if (dimension === 'subsidiary') return t('drivers.dimensions.subsidiary')
+  if (dimension === 'subsidiary') return t('rules.definition.filters.subsidiary')
+  if (dimension?.startsWith('extra:')) return dimension.slice('extra:'.length)
   return t('rules.definition.filters.department')
 }
 
