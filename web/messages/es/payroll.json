@@ -1,197 +1,271 @@
 {
-  "openingBalances": {
-    "fields": {
-      "cpp2BonusYtd": "Aportaciones CPP2 sobre bonificaciones",
-      "qcCsbYtd": "Aportaciones QPP adicionales sobre bonificaciones",
-      "ficaWithheldYtd": "Impuesto FICA retenido",
-      "qpipEmployerYtd": "Primas QPIP del empleador",
-      "wcbAssessableYtd": "Ingresos evaluables WCB"
-    }
-  },
-  "checklist": {
-    "incomplete": "{count, plural, one {# cuenta de control de nómina está} other {# cuentas de control de nómina están}} sin configurar:",
-    "openSettings": "Abrir configuración de nómina"
-  },
-  "columns": {
-    "employees": "Empleados",
-    "gross": "Bruto",
-    "net": "Neto",
-    "number": "Número",
-    "payDate": "Fecha de pago",
-    "period": "Período",
-    "schedule": "Calendario",
-    "status": "Estado"
-  },
+  "title": "Nómina",
   "description": "Ciclos de nómina, perfiles de nómina de empleados y retenciones obligatorias.",
-  "empty": {
-    "profiles": "Aún no hay perfiles de nómina de empleados. Añada uno para incluir a un empleado en los ciclos.",
-    "runs": "Aún no hay ciclos de nómina. Cree uno desde un calendario de nómina para empezar."
+  "tabs": {
+    "runs": "Nóminas",
+    "employees": "Empleados ({count})"
   },
   "home": {
-    "actions": {
-      "remittances": "Remesas",
-      "resume": "Reanudar el ciclo",
-      "reviewPost": "Revisar y contabilizar",
-      "startRun": "Ejecutar la nómina",
-      "viewRuns": "Nóminas",
-      "yearEnd": "Cierre anual"
-    },
-    "current": {
-      "noSchedules": "No hay calendarios de nómina activos. Cree un calendario para empezar a procesar la nómina.",
-      "title": "Período de nómina actual"
-    },
-    "directory": {
-      "employees": "Empleados",
-      "employeesHint": "perfiles de nómina activos",
-      "openingBalances": "Saldos iniciales",
-      "parallelRun": "Nómina paralela",
-      "retro": "Pago retroactivo",
-      "runs": "Nóminas",
-      "runsHint": "en curso · {total} en total",
-      "setup": "Configuración de nómina",
-      "setupHint": "faltan cuentas de control",
-      "title": "Explorar la nómina"
-    },
-    "exceptions": {
-      "allClear": "Todos los empleados están listos para la nómina.",
-      "missingProfile": "{name} no tiene perfil de nómina",
-      "missingWage": "{name} no tiene tarifa salarial vigente hoy",
-      "moreMissingProfiles": "{count, plural, one {# empleado más} other {# empleados más}} sin perfil de nómina",
-      "moreMissingWages": "{count, plural, one {# empleado más} other {# empleados más}} sin tarifa salarial",
-      "title": "Requiere atención"
-    },
-    "frequency": {
-      "biweekly": "Bisemanal",
-      "monthly": "Mensual",
-      "semi_monthly": "Quincenal",
-      "weekly": "Semanal"
-    },
-    "previous": {
-      "none": "Aún no hay ciclos de nómina terminados.",
-      "title": "Período de nómina anterior"
-    },
     "tabs": {
       "overview": "Nómina",
-      "remittances": "Remesas",
       "runs": "Nóminas",
+      "remittances": "Remesas",
       "separations": "Bajas",
+      "yearEnd": "Cierre anual"
+    },
+    "actions": {
+      "viewRuns": "Nóminas",
+      "startRun": "Ejecutar la nómina",
+      "resume": "Reanudar el ciclo",
+      "reviewPost": "Revisar y contabilizar",
+      "remittances": "Remesas",
       "yearEnd": "Cierre anual"
     },
     "vitals": {
       "employees": "En nómina",
       "employeesSub": "perfiles de nómina activos",
-      "nextPayDate": "Próxima fecha de pago",
-      "noSchedule": "sin calendario activo",
-      "periodsOf": "{ran} de {total}",
       "periodsRan": "Períodos de nómina {year}",
+      "periodsOf": "{ran} de {total}",
       "periodsRanSub": "contabilizados este año fiscal",
-      "ytdEmployerCost": "+{amount} costo del empleador",
       "ytdGross": "Bruto acumulado",
+      "ytdEmployerCost": "+{amount} costo del empleador",
       "ytdNet": "Neto acumulado",
-      "ytdNetSub": "de ciclos contabilizados"
+      "ytdNetSub": "de ciclos contabilizados",
+      "nextPayDate": "Próxima fecha de pago",
+      "noSchedule": "sin calendario activo"
+    },
+    "current": {
+      "title": "Período de nómina actual",
+      "noSchedules": "No hay calendarios de nómina activos. Cree un calendario para empezar a procesar la nómina."
+    },
+    "frequency": {
+      "weekly": "Semanal",
+      "biweekly": "Bisemanal",
+      "semi_monthly": "Quincenal",
+      "monthly": "Mensual"
+    },
+    "previous": {
+      "title": "Período de nómina anterior",
+      "none": "Aún no hay ciclos de nómina terminados."
+    },
+    "exceptions": {
+      "title": "Requiere atención",
+      "allClear": "Todos los empleados están listos para la nómina.",
+      "missingProfile": "{name} no tiene perfil de nómina",
+      "moreMissingProfiles": "{count, plural, one {# empleado más} other {# empleados más}} sin perfil de nómina",
+      "missingWage": "{name} no tiene tarifa salarial vigente hoy",
+      "moreMissingWages": "{count, plural, one {# empleado más} other {# empleados más}} sin tarifa salarial"
+    },
+    "directory": {
+      "title": "Explorar la nómina",
+      "runs": "Nóminas",
+      "runsHint": "en curso · {total} en total",
+      "employees": "Empleados",
+      "employeesHint": "perfiles de nómina activos",
+      "setup": "Configuración de nómina",
+      "setupHint": "faltan cuentas de control",
+      "openingBalances": "Saldos iniciales",
+      "parallelRun": "Nómina paralela",
+      "retro": "Pago retroactivo"
     }
   },
   "list": {
+    "title": "Nóminas",
     "description": "Todos los ciclos de nómina. Busque y filtre por etapa o calendario, luego abra un ciclo para procesarlo.",
     "open": "Abrir ciclo",
-    "stageFilter": "Etapa",
-    "title": "Nóminas"
+    "stageFilter": "Etapa"
   },
-  "newRun": {
-    "create": "Nuevo ciclo de nómina",
-    "description": "Confirme el período que cubre este ciclo. El siguiente período del calendario viene precargado; cambie las fechas para un ciclo fuera de ciclo o de recuperación.",
-    "employees": "Empleados pagados",
-    "employeesHint": "Un ciclo final paga y liquida cada banco acumulado, por lo que solo incluye a los empleados nombrados aquí.",
-    "invalidWindow": "El fin del período debe ser igual o posterior al inicio, y la fecha de pago igual o posterior al fin del período.",
-    "noSchedules": "Sin calendarios de nómina activos",
-    "noTerminated": "Ningún empleado de este calendario tiene fecha de baja registrada. Regístrela primero en el empleado — sin ella no se puede calcular un finiquito.",
-    "notBegun": "Este período comienza el {date} y aún no ha empezado. Elija un período en curso o terminado.",
-    "payDateHint": "La fecha en que se paga a los empleados. Las tasas obligatorias se determinan a partir de esta fecha.",
-    "periodEnd": "Fin del período",
-    "periodStart": "Inicio del período",
-    "runType": "Tipo de ciclo",
-    "runTypeHint": {
-      "bonus": "Pago fuera de ciclo para bonos y comisiones. Sin salario, tiempo ni deducciones recurrentes; las percepciones tributan por el método de bonos.",
-      "regular": "La nómina normal del calendario: salario, tiempo aprobado, conceptos y deducciones recurrentes.",
-      "termination": "Pago final para empleados que se van. Incluye el pago del saldo vacacional acumulado."
-    },
-    "schedule": "Calendario de nómina"
-  },
-  "register": {
-    "cppFica": "CPP / FICA",
-    "otherDeductions": "Otras deducciones",
-    "print": "Imprimir",
-    "title": "Registro de nómina",
-    "totals": "Totales ({count, plural, one {# empleado} other {# empleados}})"
-  },
-  "remittances": {
-    "apLink": "abrir facturas de proveedor",
-    "apNote": "Las facturas de remesa son facturas de proveedor ordinarias:",
-    "apply": "Aplicar",
-    "assignVendor": "Asigne un proveedor en los conceptos",
-    "back": "Nómina",
-    "billCreated": "Borrador de factura {number} creado. Revíselo y contabilícelo en cuentas por pagar.",
-    "context": "Nómina bruta {gross} · {employees, plural, one {# empleado} other {# empleados}} en el período",
-    "createAnother": "Crear otra factura",
-    "createBill": "Crear factura de remesa",
-    "description": "Retenciones acumuladas y aportaciones patronales por destino para un período. Crear una factura carga las cuentas de pasivo y entrega el pago a cuentas por pagar.",
-    "dueOn": "Vence el {dueDate} · {authority}",
-    "employer": "Empleador",
-    "empty": "No hay ciclos contabilizados con montos remitibles en este período.",
-    "from": "Desde",
-    "noAccount": "Sin cuenta de pasivo",
-    "title": "Remesas de nómina",
-    "to": "Hasta",
-    "total": "Total a remitir",
-    "unassigned": "Sin proveedor de remesa asignado",
-    "withheld": "Retenido"
-  },
-  "run": {
-    "approvalNotRequired": "Ninguna política de aprobación aplica a los ciclos de nómina",
-    "approvalPending": "En espera de aprobación ({count} pendientes) — la confirmación y contabilización están bloqueadas",
-    "approvalSubmitted": "Enviado a aprobación con el paquete de evidencia",
-    "calculate": "Calcular",
-    "calculateDone": "Nómina calculada.",
-    "commit": "Confirmar",
-    "commitDone": "Nómina confirmada.",
-    "employerCost": "Costo del empleador",
-    "empty": "Sin recibos. Calcule el ciclo para generarlos.",
-    "lineKind": {
-      "deduction": "Deducción",
-      "earning": "Percepción",
-      "employer_contribution": "Empleador"
-    },
-    "post": "Contabilizar",
-    "postDone": "Nómina contabilizada.",
-    "printSet": "Juego de impresión (solo impresión)",
-    "stub": {
-      "employee": "Empleado",
-      "lines": "Líneas de nómina",
-      "tax": "Impuesto",
-      "trace": "traza {engine}"
-    },
-    "stubsPrintOnly": "{count} empleados son solo impresión y no recibieron correo",
-    "submitApproval": "Enviar a aprobación",
-    "title": "Ciclo de nómina"
-  },
-  "runType": {
-    "bonus": "Bono fuera de ciclo",
-    "regular": "Ordinario",
-    "termination": "Finiquito"
-  },
-  "status": {
-    "calculated": "Calculado",
-    "committed": "Confirmado",
-    "draft": "Borrador",
-    "posted": "Contabilizado",
-    "void": "Anulado"
-  },
-  "tabs": {
-    "employees": "Empleados ({count})",
-    "runs": "Nóminas"
-  },
-  "title": "Nómina",
   "wizard": {
+    "stepsAria": "Pasos del ciclo de nómina",
+    "steps": {
+      "period": "Alcance",
+      "readiness": "Preparación",
+      "review": "Revisar recibos",
+      "gl": "Vista previa contable y confirmación",
+      "finish": "Contabilizar y terminar"
+    },
+    "voided": "Este ciclo está anulado y es de solo lectura.",
+    "stale": {
+      "title": "Los insumos cambiaron desde que se calculó este ciclo ({reasons}). Recalcule antes de contabilizar.",
+      "reason": {
+        "adjustments": "ajustes",
+        "time": "horas aprobadas",
+        "wages": "tarifas salariales",
+        "roster": "perfiles de empleados",
+        "missing": "el ciclo mismo",
+        "components": "componentes de nómina de empleados",
+        "componentDefinitions": "configuración de componentes de nómina",
+        "derivedRules": "reglas de percepciones derivadas",
+        "entitlements": "bancos de pago",
+        "workerComp": "tasas de compensación laboral",
+        "timeTypes": "configuración de tipos de hora",
+        "settings": "configuración de nómina",
+        "ytd": "los acumulados anuales de otro ciclo",
+        "openingBalances": "saldos iniciales (arrastres)"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# elemento bloquea este ciclo} other {# elementos bloquean este ciclo}}",
+      "blockedHint": "Resuelva cada elemento antes de calcular. Cada uno enlaza a donde se corrige.",
+      "readyTitle": "Listo para calcular · {count, plural, one {# empleado} other {# empleados}}",
+      "readyHint": "La configuración, el control del período y los registros de empleados están completos.",
+      "warningsHint": "{count, plural, one {# elemento necesita} other {# elementos necesitan}} revisión. Confirme para continuar.",
+      "blockersTitle": "Bloqueos",
+      "warningsTitle": "Revisar antes de continuar",
+      "acknowledge": "He revisado estos elementos y quiero continuar",
+      "allClear": "Sin bloqueos ni advertencias. Este ciclo está listo para calcular.",
+      "fix": "Resolver",
+      "andMore": "+{count} más",
+      "dryRun": "Cálculo de prueba",
+      "dryRunTitle": "Resultados del cálculo de prueba",
+      "dryRunHint": "Nada se guardó. Ejecute Calcular para construir los recibos de verdad.",
+      "codes": {
+        "retro": {
+          "sourceVoided": "Un período de origen que este ciclo liquida se ha anulado ({detail}).",
+          "crossTaxYear": "Un período de origen cae fuera del año legal {detail} — presente una declaración modificada en su lugar.",
+          "stale": "Los insumos de un período de origen cambiaron tras cuantificar este ciclo. Recree el ciclo retroactivo.",
+          "doubleSettled": "Otro ciclo retroactivo abierto ya liquida el mismo período para este empleado.",
+          "componentRetired": "Un componente de nómina que este ciclo paga se ha retirado.",
+          "zeroDelta": "Este ciclo no paga nada al empleado; la diferencia del período es cero."
+        },
+        "setup": {
+          "pack": "No hay ningún paquete de nómina de país instalado.",
+          "wageExpense": "No hay cuenta de gastos salariales configurada.",
+          "netPay": "No hay cuenta de neto a pagar configurada.",
+          "laborClearing": "Los salarios se contabilizan al clearing de mano de obra, pero no hay cuenta de clearing configurada.",
+          "slot": "Cuenta legal no mapeada: {detail}",
+          "schedule": "No existe ningún calendario de nómina activo.",
+          "remittanceVendor": "Proveedor de remesas legal no definido: {detail}",
+          "paymentRail": "Sin perfil de emisor EFT configurado, y la alternativa de cheque está desactivada — no hay forma de pagar a nadie.",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
+        },
+        "period": {
+          "missing": "Ningún período contable cubre la fecha de pago {detail}.",
+          "closed": "El período contable {detail} está cerrado a contabilizaciones."
+        },
+        "scope": {
+          "empty": "Ningún empleado está incluido en este ciclo."
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ninguna tarifa salarial vigente para este período.",
+          "zeroHours": "{count, plural, one {# empleado por hora no tiene} other {# empleados por hora no tienen}} horas aprobadas en este período.",
+          "paidInPeriod": "{count, plural, one {# empleado ya fue} other {# empleados ya fueron}} pagados por un período superpuesto.",
+          "terminated": "{count, plural, one {# empleado terminó} other {# empleados terminaron}} su empleo a más tardar al fin del período.",
+          "noBankDetails": "{count, plural, one {# empleado va} other {# empleados van}} a pagarse por depósito directo pero sin datos bancarios aprobados, así que en este ciclo se les pagará con cheque.",
+          "noSin": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ningún SIN/SSN en archivo para la declaración anual.",
+          "eftNoBankDetails": "{count, plural, one {# empleado va} other {# empleados van}} a pagarse por depósito directo sin datos bancarios aprobados, y la alternativa de cheque está desactivada, así que no hay forma de pagarles.",
+          "noOpeningBalance": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ningún saldo inicial {detail} de su sistema de nómina anterior, así que sus topes legales anuales reiniciarán en cero en este ciclo.",
+          "noOpeningComponentYtd": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ningún acumulado inicial para {detail}, que tiene un límite anual — el límite reinicia en cero en este ciclo, así que pueden aportar un segundo límite anual completo.",
+          "noOpeningEntitlement": "{count, plural, one {# empleado trae} other {# empleados traen}} un saldo de su sistema de nómina anterior pero ningún saldo inicial para {detail}. Este es el primer ciclo que lo mueve, así que su banco parte de cero."
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "El pago de festivos no puede calcularse: {detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# empleado tiene} other {# empleados tienen}} una jurisdicción laboral que esta nómina no puede honrar: {detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
+        }
+      }
+    },
+    "funding": {
+      "title": "Financiación",
+      "netPay": "Efectivo necesario",
+      "liabilities": "Pasivos registrados",
+      "totalCost": "Costo total del empleador",
+      "accounts": "Cuentas bancarias",
+      "leadTime": "{days, plural, =0 {La fecha de pago es hoy} one {# día hábil hasta la fecha de pago} other {# días hábiles hasta la fecha de pago}} · {date}",
+      "payDatePast": "La fecha de pago {date} ya pasó",
+      "short": "Ninguna cuenta bancaria cubre los {amount} requeridos.",
+      "rail": {
+        "eft": "Depósito directo ({count, plural, one {# empleado} other {# empleados}})",
+        "cheque": "Cheques ({count, plural, one {# empleado} other {# empleados}})"
+      }
+    },
+    "period": {
+      "taxYear": "Año fiscal",
+      "employeesTitle": "Empleados incluidos ({count})",
+      "hint": "Todos con un perfil de nómina activo en este calendario.",
+      "calculatedNote": "Las horas y el bruto vienen de los recibos calculados.",
+      "approvedHours": "Horas aprobadas",
+      "recalculate": "Recalcular",
+      "empty": "Aún ningún empleado tiene un perfil de nómina activo en este calendario.",
+      "wageMissing": "Sin tarifa salarial",
+      "zeroHours": "Sin horas",
+      "ready": "Listo",
+      "scopeSaved": "Alcance del ciclo guardado: {count, plural, one {# empleado} other {# empleados}}.",
+      "allBases": "Todas las bases de pago",
+      "onlyWithHours": "Solo con horas",
+      "hideIneligible": "Ocultar no elegibles",
+      "department": "Departamento",
+      "selectAll": "Seleccionar todos los empleados visibles",
+      "selectEmployee": "Seleccionar a {name}",
+      "selectedCount": "{selected} de {total} empleados seleccionados",
+      "selectedHours": "{hours} horas",
+      "selectedBlocked": "{count, plural, one {# empleado seleccionado sin tarifa salarial} other {# empleados seleccionados sin tarifa salarial}}",
+      "applyScope": "Aplicar selección",
+      "noneMatch": "Ningún empleado coincide con estos filtros.",
+      "noWage": "Sin tarifa salarial",
+      "paidInPeriod": "Ya pagado",
+      "terminated": "Baja",
+      "excluded": "Excluido",
+      "included": "Incluido",
+      "runType": "Tipo de ciclo",
+      "continue": "Continuar a la revisión",
+      "dimension": {
+        "all": "Todo",
+        "department": "Departamento",
+        "trade": "Oficio",
+        "job_title": "Puesto de trabajo",
+        "subsidiary": "Entidad",
+        "payment_method": "Pagado por"
+      }
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# excepción de cálculo} other {# excepciones de cálculo}}",
+      "varianceFlag": "{count, plural, one {# recibo cambió} other {# recibos cambiaron}} más de ±{percent} % en neto a pagar frente al recibo anterior. Revise antes de contabilizar.",
+      "varianceColumn": "Δ neto",
+      "newEmployee": "primer recibo",
+      "needsCalculation": "Calcule el ciclo para generar recibos. Los montos siguen editables hasta contabilizar el ciclo.",
+      "drawerDescription": "Líneas de pago y la traza del cálculo legal de este recibo.",
+      "drawerVariance": "El neto a pagar se movió {percent} % frente al recibo anterior de este empleado.",
+      "downloadPdf": "Descargar PDF",
+      "close": "Cerrar",
+      "registerTitle": "Vista previa del registro",
+      "selectAll": "Seleccionar todos los recibos",
+      "selectedCount": "{count, plural, one {# seleccionado} other {# seleccionados}}",
+      "bulkEdit": "Editar selección",
+      "bulkDescription": "Aplicar un monto de componente a {count, plural, one {# empleado} other {# empleados}} en este ciclo.",
+      "bulkApply": "Aplicar a {count, plural, one {# empleado} other {# empleados}}",
+      "changedColumn": "Cambiado",
+      "noChange": "sin cambios",
+      "changedTitle": "Cambios desde el {date}",
+      "noChangeDetail": "Nada cambió frente al recibo anterior.",
+      "changedTotals": "Neto {net} · horas {hours} frente al recibo anterior.",
+      "changeKind": {
+        "added": "Nuevo",
+        "removed": "Quitado",
+        "changed": "Cambiado"
+      },
+      "protectionShortfallTitle": "{count, plural, one {# recibo no pudo tomar una deducción protegida completa} other {# recibos no pudieron tomar una deducción protegida completa}}",
+      "protectionShortfallHint": "Los ingresos protegidos toparon estas deducciones. El saldo impago sigue adeudado — avise al acreedor o llévelo al próximo ciclo."
+    },
+    "gl": {
+      "needsCalculation": "Calcule el ciclo para previsualizar su impacto contable.",
+      "setupIncomplete": "La configuración de nómina está incompleta",
+      "openSetup": "Abrir Cuentas y contabilización",
+      "retry": "Reintentar",
+      "loading": "Construyendo la vista previa contable…",
+      "hint": "El asiento que la contabilización escribirá. Debes primero, luego haberes. Nada se contabiliza en esta etapa.",
+      "account": "Cuenta",
+      "description": "Descripción",
+      "debits": "Debe",
+      "credits": "Haber",
+      "balanced": "Cuadrado",
+      "staleBlocked": "Recalcule el ciclo antes de contabilizar.",
+      "commitHint": "Contabilizar congela los recibos y escribe estas líneas en el documento del ciclo. El ciclo sigue revisable hasta su contabilización."
+    },
     "finish": {
       "notCommitted": "Confirme el ciclo en el paso de contabilidad antes de contabilizar.",
       "postTitle": "Listo para contabilizar",
@@ -218,19 +292,22 @@
       "stubsEmailedPartial": "{sent} enviados; omitidos (sin correo o fallidos): {skipped}",
       "printCheques": "Imprimir {count, plural, one {# cheque de nómina} other {# cheques de nómina}}"
     },
-    "funding": {
-      "title": "Financiación",
-      "netPay": "Efectivo necesario",
-      "liabilities": "Pasivos registrados",
-      "totalCost": "Costo total del empleador",
-      "accounts": "Cuentas bancarias",
-      "leadTime": "{days, plural, =0 {La fecha de pago es hoy} one {# día hábil hasta la fecha de pago} other {# días hábiles hasta la fecha de pago}} · {date}",
-      "payDatePast": "La fecha de pago {date} ya pasó",
-      "short": "Ninguna cuenta bancaria cubre los {amount} requeridos.",
-      "rail": {
-        "eft": "Depósito directo ({count, plural, one {# empleado} other {# empleados}})",
-        "cheque": "Cheques ({count, plural, one {# empleado} other {# empleados}})"
-      }
+    "adjust": {
+      "title": "Ajustes",
+      "applied": "Ajuste aplicado. Recibos recalculados.",
+      "excludedLabel": "Excluidos de este ciclo:",
+      "include": "Incluir",
+      "exclude": "Excluir de este ciclo",
+      "component": "Componente",
+      "amount": "Monto",
+      "note": "Motivo / nota (opcional)",
+      "replace": "Reemplazar líneas calculadas",
+      "replaceHelp": "Reemplazar las líneas calculadas de este componente en vez de sumar a ellas",
+      "add": "Añadir ajuste",
+      "remove": "Quitar",
+      "replaces": "reemplaza lo calculado",
+      "earnings": "Percepciones",
+      "deductions": "Deducciones"
     },
     "bankFile": {
       "title": "Depósito directo",
@@ -277,24 +354,1001 @@
         "default": "Sin datos bancarios registrados — pagado con cheque",
         "eftFallback": "Configurado como EFT pero sin datos bancarios aprobados — pagado con cheque"
       }
-    },
-    "steps": {
-      "finish": "Contabilizar y terminar",
-      "gl": "Vista previa contable y confirmación",
-      "period": "Alcance",
-      "readiness": "Preparación",
-      "review": "Revisar recibos"
     }
   },
+  "links": {
+    "paySchedules": "Calendarios de nómina",
+    "payComponents": "Componentes de nómina"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# cuenta de control de nómina está} other {# cuentas de control de nómina están}} sin configurar:",
+    "openSettings": "Abrir configuración de nómina"
+  },
+  "runType": {
+    "regular": "Ordinario",
+    "bonus": "Bono fuera de ciclo",
+    "termination": "Finiquito"
+  },
+  "newRun": {
+    "runType": "Tipo de ciclo",
+    "runTypeHint": {
+      "regular": "La nómina normal del calendario: salario, tiempo aprobado, conceptos y deducciones recurrentes.",
+      "bonus": "Pago fuera de ciclo para bonos y comisiones. Sin salario, tiempo ni deducciones recurrentes; las percepciones tributan por el método de bonos.",
+      "termination": "Pago final para empleados que se van. Incluye el pago del saldo vacacional acumulado."
+    },
+    "employees": "Empleados pagados",
+    "employeesHint": "Un ciclo final paga y liquida cada banco acumulado, por lo que solo incluye a los empleados nombrados aquí.",
+    "noTerminated": "Ningún empleado de este calendario tiene fecha de baja registrada. Regístrela primero en el empleado — sin ella no se puede calcular un finiquito.",
+    "schedule": "Calendario de nómina",
+    "noSchedules": "Sin calendarios de nómina activos",
+    "create": "Nuevo ciclo de nómina",
+    "description": "Confirme el período que cubre este ciclo. El siguiente período del calendario viene precargado; cambie las fechas para un ciclo fuera de ciclo o de recuperación.",
+    "periodStart": "Inicio del período",
+    "periodEnd": "Fin del período",
+    "payDateHint": "La fecha en que se paga a los empleados. Las tasas obligatorias se determinan a partir de esta fecha.",
+    "invalidWindow": "El fin del período debe ser igual o posterior al inicio, y la fecha de pago igual o posterior al fin del período.",
+    "notBegun": "Este período comienza el {date} y aún no ha empezado. Elija un período en curso o terminado."
+  },
+  "columns": {
+    "number": "Número",
+    "schedule": "Calendario",
+    "period": "Período",
+    "payDate": "Fecha de pago",
+    "status": "Estado",
+    "gross": "Bruto",
+    "net": "Neto",
+    "employees": "Empleados"
+  },
+  "status": {
+    "draft": "Borrador",
+    "calculated": "Calculado",
+    "committed": "Confirmado",
+    "posted": "Contabilizado",
+    "void": "Anulado"
+  },
+  "empty": {
+    "runs": "Aún no hay ciclos de nómina. Cree uno desde un calendario de nómina para empezar.",
+    "profiles": "Aún no hay perfiles de nómina de empleados. Añada uno para incluir a un empleado en los ciclos."
+  },
+  "run": {
+    "title": "Ciclo de nómina",
+    "employerCost": "Costo del empleador",
+    "calculate": "Calcular",
+    "commit": "Confirmar",
+    "post": "Contabilizar",
+    "calculateDone": "Nómina calculada.",
+    "commitDone": "Nómina confirmada.",
+    "postDone": "Nómina contabilizada.",
+    "empty": "Sin recibos. Calcule el ciclo para generarlos.",
+    "lineKind": {
+      "earning": "Percepción",
+      "deduction": "Deducción",
+      "employer_contribution": "Empleador"
+    },
+    "stub": {
+      "employee": "Empleado",
+      "tax": "Impuesto",
+      "lines": "Líneas de nómina",
+      "trace": "traza {engine}"
+    },
+    "submitApproval": "Enviar a aprobación",
+    "approvalSubmitted": "Enviado a aprobación con el paquete de evidencia",
+    "approvalNotRequired": "Ninguna política de aprobación aplica a los ciclos de nómina",
+    "approvalPending": "En espera de aprobación ({count} pendientes) — la confirmación y contabilización están bloqueadas",
+    "printSet": "Juego de impresión (solo impresión)",
+    "stubsPrintOnly": "{count} empleados son solo impresión y no recibieron correo"
+  },
+  "profiles": {
+    "addEmployee": "Empleado sin perfil",
+    "new": "Añadir perfil",
+    "saved": "Perfil guardado.",
+    "editorDescription": "Datos TD1, calendario, exenciones y política de vacaciones de este empleado.",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "columns": {
+      "employee": "Empleado",
+      "schedule": "Calendario",
+      "province": "Provincia",
+      "basis": "Base de pago",
+      "claims": "Solicitudes (fed / prov)",
+      "vacation": "Vacaciones",
+      "status": "Estado"
+    },
+    "basis": {
+      "hourly": "Por hora",
+      "salary": "Salario"
+    },
+    "vacation": {
+      "accrue": "Devengar",
+      "pay_each_period": "Pagar cada período"
+    },
+    "fields": {
+      "schedule": "Calendario de nómina",
+      "province": "Provincia de empleo",
+      "labourJurisdiction": "Jurisdicción laboral",
+      "payBasis": "Base de pago",
+      "additionalTax": "Impuesto adicional por período",
+      "federalClaimCode": "Código de solicitud federal",
+      "federalClaimAmount": "Monto de solicitud federal",
+      "provincialClaimCode": "Código de solicitud provincial",
+      "provincialClaimAmount": "Monto de solicitud provincial",
+      "claimAmountHint": "Reemplaza el código de solicitud",
+      "vacationPercent": "Porcentaje de vacaciones",
+      "vacationMethod": "Método de vacaciones",
+      "cppExempt": "Exento CPP",
+      "eiExempt": "Exento EI",
+      "taxExempt": "Exento de impuesto sobre la renta",
+      "isActive": "Activo",
+      "country": "País",
+      "state": "Estado de empleo",
+      "filingStatus": "Estado civil (W-4 paso 1c)",
+      "dependentCredits": "Dependientes y otros créditos, anuales (W-4 paso 3)",
+      "otherIncomeAnnual": "Otros ingresos, anuales (W-4 paso 4a)",
+      "deductionsAnnual": "Deducciones, anuales (W-4 paso 4b)",
+      "multipleJobs": "Empleos múltiples / cónyuge trabaja (W-4 paso 2, casilla)",
+      "w4Pre2020": "El W-4 en archivo es de 2019 o anterior",
+      "w4Allowances": "Asignaciones de retención (W-4 anterior a 2020)",
+      "ficaExempt": "Exento FICA",
+      "futaExempt": "Exento FUTA/SUI",
+      "fitExempt": "Exento de impuesto federal sobre la renta (W-4 «Exempt»)",
+      "sin": "SIN / SSN",
+      "sinPlaceholder": "9 dígitos. Se guarda sellado y nunca se muestra de nuevo.",
+      "filingAccount": "Cuenta de declaración",
+      "stubDelivery": "Entrega de recibos",
+      "paymentMethod": "Pagado por"
+    },
+    "country": {
+      "CA": "Canadá",
+      "US": "Estados Unidos"
+    },
+    "filingStatus": {
+      "single": "Soltero o casado con declaración separada",
+      "married_joint": "Casado con declaración conjunta",
+      "head_household": "Jefe de familia"
+    },
+    "loading": "Cargando perfil de nómina…",
+    "loadFailed": "No se pudo cargar el perfil de nómina.",
+    "noSchedules": "Cree un calendario de nómina antes de configurar perfiles de nómina.",
+    "openSchedules": "Abrir calendarios de nómina",
+    "filingAccountDefault": "Cuenta predeterminada",
+    "stubDelivery": {
+      "email": "Correo",
+      "print": "Impresión",
+      "both": "Correo e impresión"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "De la provincia de empleo",
+      "help": "La jurisdicción laboral cuyas normas de empleo rigen este empleo — su calendario de festivos y su fórmula de pago de festivos. Déjelo en «de la provincia de empleo», que es lo correcto para casi todos los empleos; cámbielo solo cuando otra jurisdicción laboral regule al empleador registrado, como un empleador regulado federalmente. No cambia las retenciones, que siempre siguen a la provincia de empleo."
+    },
+    "paymentMethod": {
+      "eft": "Depósito directo",
+      "cheque": "Cheque",
+      "help": "Cómo se paga a este empleado. Déjelo en el valor de la parte salvo que esta persona se pague distinto del resto — un cheque para alguien sin datos bancarios en archivo, por ejemplo. El ciclo divide el día de pago entre los dos rieles y fondea cada uno por separado.",
+      "inherit": "Usar el valor de la parte"
+    }
+  },
+  "setupWizard": {
+    "cta": {
+      "title": "Configurar la nómina",
+      "description": "Un primer recorrido guiado: paquetes de país, cuentas de control, un calendario de nómina, proveedores de remesas y rieles de pago — las mismas revisiones que un ciclo verifica antes de calcular.",
+      "start": "Configurar la nómina",
+      "relaunch": "Asistente de configuración",
+      "missing": "{count, plural, one {# elemento requerido} other {# elementos requeridos}} aún por configurar."
+    },
+    "back": "Atrás",
+    "next": "Siguiente",
+    "close": "Cerrar",
+    "finish": "Terminar la configuración",
+    "packs": {
+      "title": "Instale sus paquetes de país",
+      "description": "Un paquete es el motor legal de una jurisdicción: su cálculo de retenciones, sus componentes de nómina, sus festivos y sus declaraciones.",
+      "note": "Instalar un paquete siembra sus componentes de nómina legales y enciende el motor de retenciones de esa jurisdicción. Los componentes existentes nunca se sobrescriben, y un paquete puede añadirse después repitiendo este asistente."
+    },
+    "accounts": {
+      "title": "Cuentas de control",
+      "description": "Dónde se contabilizan los salarios y el neto a pagar, y la cuenta de pasivo detrás de cada retención legal que prevén los paquetes instalados.",
+      "wageExpenseHelp": "La cuenta de gastos donde los salarios brutos se debitan cuando un ciclo se contabiliza.",
+      "netPayHelp": "La cuenta de pasivo donde el neto a pagar se acredita hasta que los fondos del día de pago salen del banco.",
+      "slotHelp": "La cuenta de pasivo donde esta retención legal se acumula hasta su remesa."
+    },
+    "schedule": {
+      "title": "Calendario de nómina",
+      "description": "El calendario de pagos: qué tan seguido se paga y qué fines de período anclan el ciclo.",
+      "addAnother": "Crear otro calendario",
+      "created": "Calendario de nómina «{name}» creado.",
+      "name": "Nombre",
+      "nameHelp": "Cómo aparece este calendario en ciclos y perfiles de empleados — p. ej. «Bisemanal — todo el personal».",
+      "namePlaceholder": "Bisemanal — todo el personal",
+      "frequency": "Frecuencia",
+      "frequencyHelp": "Qué tan seguido paga este calendario. Los períodos por año siguen la tabla legal de la frecuencia.",
+      "periods": "Períodos por año",
+      "periodsHelp": "El conteo legal de períodos con el que el motor de retenciones anualiza — 52 semanales, 26 bisemanales, 24 quincenales, 12 mensuales.",
+      "anchor": "Fin del período de anclaje",
+      "anchorHelp": "Cualquier fecha real de fin de período en este calendario; todos los demás períodos se proyectan hacia adelante y hacia atrás desde ella.",
+      "noPermission": "Crear calendarios de nómina requiere el permiso de Configuración. Pida a un administrador que añada uno en la pestaña Calendarios de nómina, luego continúe."
+    },
+    "vendors": {
+      "title": "Proveedores de remesas",
+      "description": "El proveedor al que se remite cada autoridad legal, según lo previsto por los paquetes instalados.",
+      "help": "Los montos retenidos se acumulan contra este proveedor para que una remesa genere un exigible normal a la autoridad.",
+      "note": "Los proveedores son registros de proveedores ordinarios — cree primero la autoridad en Entidades → Proveedores si aún no existe, luego elíjala aquí."
+    },
+    "rails": {
+      "title": "Rieles de pago",
+      "description": "Cómo el neto a pagar sale del banco el día de pago: archivos de depósito directo, y qué pasa cuando un empleado marcado para EFT no tiene datos bancarios.",
+      "eftTitle": "Perfiles de emisor EFT",
+      "eftNone": "Aún no existe un perfil de emisor apto para nómina. Los archivos de depósito directo requieren uno; mientras tanto los empleados se pagan con cheque.",
+      "needsConfig": "faltan datos del emisor",
+      "manageProfiles": "Gestionar perfiles de emisor en Operaciones de pago"
+    },
+    "review": {
+      "title": "Revisar y terminar",
+      "description": "Cómo se ve ahora la nómina de esta organización, y en qué aún se detendría un ciclo.",
+      "packsLabel": "Paquetes de país",
+      "scheduleLabel": "Calendarios de nómina",
+      "remainingTitle": "Aún por resolver",
+      "allClear": "Toda la configuración requerida está en su lugar. Un ciclo puede calcular.",
+      "seedNote": "Terminar repite la siembra de componentes legales para cada paquete instalado — idempotente, y los componentes existentes nunca se sobrescriben."
+    },
+    "applying": {
+      "title": "Terminando la configuración de nómina…",
+      "description": "Sembrando componentes legales."
+    },
+    "done": {
+      "title": "La nómina está lista",
+      "description": "Añada empleados y sus perfiles de nómina, luego inicie el primer ciclo."
+    }
+  },
+  "settingsPage": {
+    "title": "Nómina",
+    "description": "Instale paquetes de nómina por país, conecte las cuentas de contabilización, y gestione calendarios de pago, componentes y convenios sindicales.",
+    "saved": "Guardado.",
+    "save": "Guardar",
+    "accounts": {
+      "title": "Cuentas de control",
+      "description": "Dónde se contabilizan salarios, cargas patronales y neto a pagar. Las cuentas de retenciones legales se configuran por paquete de país instalado, abajo."
+    },
+    "posting": {
+      "title": "Contabilización",
+      "description": "Cómo los salarios por horas llegan al libro, y a quién se remiten las retenciones legales."
+    },
+    "wagesTo": {
+      "expense": "Gastos salariales (con divisiones por proyecto)",
+      "laborClearing": "Clearing de mano de obra (lava el costo estándar)",
+      "help": "El clearing de mano de obra lava el costo estándar contabilizado al aprobar horas; necesita la cuenta de control de clearing de mano de obra de Costeo de mano de obra."
+    },
+    "fields": {
+      "wageExpenseAccountId": "Gastos salariales",
+      "burdenExpenseAccountId": "Gastos de cargas patronales",
+      "netPayAccountId": "Neto a pagar",
+      "cppPayableAccountId": "CPP por pagar",
+      "eiPayableAccountId": "EI por pagar",
+      "taxPayableAccountId": "Impuesto sobre la renta por pagar",
+      "vacationPayableAccountId": "Vacaciones por pagar",
+      "wagesTo": "Los salarios se contabilizan a",
+      "craRemittancePartyId": "Proveedor de remesas CRA",
+      "rqRemittancePartyId": "Proveedor de remesas Revenu Québec",
+      "rqRemittancePartyIdHelp": "Proveedor facturado por las deducciones de origen de Quebec remitidas en el formulario TPZ-1015.R — el QPP, QPP2 y QPIP de un empleado de QC van aquí, nunca al proveedor CRA."
+    },
+    "tabsAria": "Secciones de configuración de nómina",
+    "groups": {
+      "foundations": "Fundamentos",
+      "earnings": "Pago y percepciones",
+      "entitlements": "Bancos y derechos",
+      "payday": "Día de pago"
+    },
+    "payday": {
+      "eftTitle": "EFT y archivos bancarios",
+      "eftDescription": "Los archivos de depósito directo salen de un perfil de emisor apto para nómina. Los perfiles se gestionan en Operaciones de pago; este panel informa su estado.",
+      "eftNone": "Aún no existe un perfil de emisor apto para nómina. Hasta que se configure uno, los empleados de depósito directo dependen de la alternativa de cheque.",
+      "eftManage": "Gestionar perfiles de emisor en Operaciones de pago",
+      "eftNeedsConfig": "faltan datos del emisor"
+    },
+    "tabs": {
+      "packs": "Paquetes de país",
+      "accounts": "Cuentas y contabilización",
+      "schedules": "Calendarios de nómina",
+      "components": "Componentes",
+      "union": "Sindicato",
+      "filing": "Cuentas de declaración",
+      "entitlements": "Planes de derechos",
+      "limits": "Límites de bancos",
+      "service": "Calendarios de servicio",
+      "derived": "Percepciones derivadas",
+      "derivedPreview": "Vista previa de reglas",
+      "holidays": "Días festivos",
+      "holidayCalendar": "Calendario de festivos",
+      "payday": "Día de pago",
+      "rates": "Tasas legales",
+      "workSchedules": "Horarios de trabajo"
+    },
+    "packs": {
+      "installed": "Instalado",
+      "install": "Instalar paquete",
+      "reinstall": "Repetir siembra de componentes",
+      "installSuccess": "Paquete de país instalado.",
+      "componentCount": "{count, plural, one {# componente legal instalado} other {# componentes legales instalados}}",
+      "hint": "Instalar un paquete siembra los componentes de nómina legales y enciende el motor de retenciones de esa jurisdicción. Los componentes existentes nunca se sobrescriben.",
+      "canada": {
+        "title": "Canadá",
+        "description": "Retenciones legales para ciclos canadienses, remesas y cierre anual.",
+        "edition": "edición {edition, selectordinal, one {#º} two {#º} few {#º} other {#º}} (vigente {effective})",
+        "engine": "Motor legal CRA T4127 —",
+        "coverage": "Todas las provincias y territorios. Quebec: QPP, QPIP y retenciones de impuesto federal y provincial incluidas; el impuesto provincial lo administra Revenu Québec.",
+        "components": "Componentes de nómina legales: pago base, horas extra, bonos, vacaciones, impuesto sobre la renta, CPP, EI, QPIP.",
+        "verified": "Verificado al centavo contra PDOC de CRA."
+      },
+      "us": {
+        "title": "Estados Unidos",
+        "description": "Retenciones legales federales para ciclos de EE. UU.: impuesto sobre la renta, Seguro Social, Medicare y desempleo.",
+        "engine": "Motor IRS Pub 15-T por método de porcentaje (2026) con W-4 pasos 2–4 y asignaciones previas a 2020.",
+        "coverage": "49 estados admitidos: 40 motores fiscales más los nueve estados sin impuestos (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC y NM se rechazan a la espera de los archivos de referencia oficiales.",
+        "components": "Componentes de nómina legales: impuesto federal sobre la renta, Seguro Social, Medicare (incl. Medicare adicional), FUTA y SUI.",
+        "config": "Las tasas y bases SUI se tarifican por empleador según su experiencia. Ingrese las suyas en Cuentas y contabilización."
+      },
+      "uninstall": "Desinstalar",
+      "uninstallTitle": "Desinstalar paquete de país",
+      "uninstallConfirm": "¿Quitar los componentes legales de este paquete y apagar su motor de retenciones? Desinstalar se bloquea mientras empleados o registros de nómina aún dependan del paquete.",
+      "uninstallSuccess": "Paquete de país desinstalado.",
+      "taxYears": "Tablas legales cargadas para",
+      "taxYearDraft": "{year} · esbozado, no transcrito",
+      "taxYearNone": "sin tablas legales cargadas"
+    },
+    "packAccounts": {
+      "none": "Aún no hay ningún paquete de nómina de país instalado, así que no hay cuentas de retenciones legales que configurar.",
+      "installLink": "Instalar un paquete de país",
+      "CA": {
+        "title": "Canadá — cuentas legales CRA",
+        "description": "Cuentas de pasivo para los montos que el paquete CRA retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "income_tax": "Impuesto sobre la renta por pagar",
+          "qc_income_tax": "Impuesto sobre la renta de Quebec por pagar (Revenu Québec)",
+          "cpp": "CPP por pagar (incluye CPP2)",
+          "ei": "EI por pagar",
+          "qpip": "QPIP por pagar (Quebec)",
+          "vacation": "Vacaciones por pagar",
+          "wcb": "Compensación laboral por pagar (WCB/WSIB)",
+          "eht": "Impuesto de salud del empleador por pagar"
+        }
+      },
+      "US": {
+        "title": "Estados Unidos — cuentas legales federales",
+        "description": "Cuentas de pasivo para los montos que el paquete US retiene y devenga. Cada elección aplica a todos los componentes que cubre la casilla (partes de empleado y empleador juntas).",
+        "slots": {
+          "fit": "Impuesto federal sobre la renta por pagar",
+          "fica": "FICA por pagar (Seguro Social + Medicare)",
+          "futa": "FUTA por pagar",
+          "suta": "Desempleo estatal por pagar",
+          "state_income_tax": "Impuesto estatal sobre la renta por pagar",
+          "local_income_tax": "Impuesto local sobre la renta por pagar"
+        }
+      },
+      "ratesLink": "Las tasas que usted aporta — desempleo, gravámenes de salud — están en la pestaña Tasas legales."
+    },
+    "usConfig": {
+      "title": "Tasas de desempleo",
+      "description": "FUTA y el desempleo estatal los paga el empleador. Las tasas SUI se tarifican por empleador según su experiencia, así que se ingresan aquí, nunca se suponen.",
+      "futaRate": "Tasa FUTA efectiva",
+      "futaRateHelp": "Como decimal: 0.006 es el 0.6% estándar tras el crédito estatal completo. Súbala para estados con reducción de crédito.",
+      "suiTitle": "Seguro de desempleo estatal (SUI)",
+      "suiHelp": "Una fila por estado donde emplea: su tasa asignada como decimal (0.027 = 2.7%) y la base salarial gravable del estado.",
+      "suiState": "Estado",
+      "suiRate": "Tasa",
+      "suiWageBase": "Base salarial",
+      "addState": "Añadir estado",
+      "removeState": "Quitar"
+    },
+    "caConfig": {
+      "title": "Impuestos patronales sobre la nómina",
+      "description": "Impuestos patronales sobre la nómina que el paquete CA devenga cada ciclo: primas de compensación laboral e impuesto de salud del empleador de Ontario.",
+      "ehtEnabled": "Devengar el impuesto de salud del empleador (EHT) de Ontario",
+      "ehtRate": "Tasa EHT (%)",
+      "ehtRateHelp": "Como porcentaje: 1.95 es la tasa máxima de Ontario. Su tasa depende de la nómina total de Ontario.",
+      "ehtExemption": "Exención anual",
+      "ehtExemptionHelp": "Remuneración de Ontario exenta cada año ($1,000,000 para la mayoría de empleadores privados elegibles; los empleadores asociados comparten una exención).",
+      "wcbNote": "Las tasas de compensación laboral (WCB/WSIB) y el máximo asegurable anual se fijan por clase de tasa en grupos de compensación, bajo configuración de Personal."
+    },
+    "stubPassword": {
+      "title": "Contraseña de recibos por correo",
+      "description": "Cifre los recibos enviados por correo y derive la contraseña de cada empleado de una regla que publica a su personal.",
+      "enabled": "Cifrar recibos enviados por correo",
+      "unavailable": "El cifrado PDF no está disponible en este servidor — la herramienta qpdf no está instalada.",
+      "expression": "Regla de contraseña",
+      "expressionHelp": "Elementos: {surname}, {givenName}, {employeeNumber} (añada :3 para los tres primeros caracteres) y {dob} con un formato (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Añada |upper o |lower para cambiar mayúsculas. Ejemplo: {surname:3|upper}{dob:MMDDYYYY}."
+    },
+    "derivedPreview": {
+      "title": "Previsualizar una regla de percepciones derivadas",
+      "description": "Vea a qué empleados y días afectaría una regla, y qué pagaría, antes de activarla.",
+      "rule": "Regla",
+      "selectRule": "Elija una regla…",
+      "from": "Inicio del período",
+      "to": "Fin del período",
+      "noRules": "Aún no hay reglas de percepciones derivadas configuradas.",
+      "pickRule": "Elija una regla para previsualizar el período.",
+      "enabled": "Activada",
+      "disabled": "Aún no activada",
+      "employeesPaid": "Empleados pagados",
+      "employee": "Empleado",
+      "jobTitle": "Puesto de trabajo",
+      "day": "Día",
+      "project": "Obra",
+      "quantity": "Unidades",
+      "amount": "Monto",
+      "total": "Total",
+      "empty": "Esta regla no paga nada en el período elegido.",
+      "grossEstimated": "Esta regla paga un porcentaje del bruto. La vista previa estima el bruto desde horas aprobadas y la tarifa vigente; el cálculo propio del ciclo es autoritativo.",
+      "excludedTitle": "Excluidos por puesto",
+      "excludedDescription": "Estos empleados quedan fuera por la lista de exclusión de la regla — la eliminación que nadie tiene que recordar más.",
+      "coverageTitle": "Esta regla aún no puede liquidar el mes",
+      "coverageBody": "Algunos cargos de equipo del mes liquidado no registran qué operador manejó la unidad, así que el incentivo no puede saber a quién se debe. Se niega en vez de pagar sobre los cargos que por azar están atribuidos, lo que pagaría de menos. Registre al operador en esos cargos, o acote esta regla para dejarlos fuera.",
+      "coverageUnattributed": "cargos sin operador"
+    },
+    "paymentMethods": {
+      "title": "Cómo se pagan los salarios",
+      "description": "Un empleado sin datos bancarios aprobados se paga con cheque. Esto decide qué pasa cuando alguien marcado para depósito directo no tiene.",
+      "fallback": "Pagar con cheque cuando faltan datos de depósito directo",
+      "fallbackOn": "El ciclo continúa y el empleado entra en el lote de cheques, con una advertencia en el paso de revisión.",
+      "fallbackOff": "El ciclo se bloquea hasta que el empleado tenga datos bancarios aprobados o se cambie a cheque."
+    },
+    "holidayCalendar": {
+      "title": "Calendario de festivos legales",
+      "description": "Los días que observa esta jurisdicción, con sus propias elecciones aplicadas. Los días legales vienen del paquete de país y no pueden apagarse; los opcionales y de empresa se configuran en la pestaña Días festivos.",
+      "jurisdiction": "Jurisdicción",
+      "year": "Año",
+      "citation": "Fuente",
+      "date": "Observado",
+      "holiday": "Festivo",
+      "statutoryDate": "Cae en",
+      "source": "Origen",
+      "paid": "Pagado",
+      "statutory": "Legal",
+      "elected": "Opcional — elegido",
+      "company": "Empresa",
+      "yes": "Sí",
+      "unpaid": "Cierre sin pago",
+      "empty": "No se observa ningún festivo este año.",
+      "noMandate": "Esta jurisdicción no exige pago de festivos, así que el calendario solo rige cierres y aritmética de días laborables. Los días libres aún pueden pagarse bajo su propia política.",
+      "payRule": "Cómo se calcula el pago de un festivo",
+      "regularWages": "salario regular",
+      "overtime": "horas extra",
+      "vacationPay": "pago de vacaciones",
+      "priorHolidayPay": "pago de festivos anterior",
+      "workSchedules": "Horarios de trabajo",
+      "normalDay": "el salario de un día normal de trabajo, del horario de trabajo registrado del empleado",
+      "normalDayStandardHours": "para empleados que trabajan al menos las horas estándar de la jurisdicción, ",
+      "normalDayOtherwise": "De lo contrario",
+      "beforeTheDay": "antes del festivo",
+      "beforeTheWeek": "antes de la semana del festivo",
+      "daysWorked": "días trabajados en él",
+      "daysWorkedOrEarned": "días trabajados o en que se devengó salario",
+      "daysEntitledToPay": "días en que el empleado recibió pago, o tenía derecho a recibirlo, por"
+    },
+    "statHolidayPay": {
+      "title": "Pago de festivos",
+      "description": "Calcule el pago de festivos y las primas de festivo trabajado en cada ciclo, con la fórmula que prevé la jurisdicción del empleado. Los empleados de una jurisdicción sin fórmula prevista se rechazan por su nombre cuando un festivo cae en el período.",
+      "enabled": "Calcular el pago de festivos"
+    },
+    "rates": {
+      "title": "Tasas legales",
+      "description": "Tasas que ninguna publicación puede aportar, o que los organismos publican por región o por cuenta registrada. Todo lo demás — tramos de impuesto, máximos de aportación, montos de crédito — viene del paquete de país y no se puede editar aquí.",
+      "noPacks": "Ningún paquete de país instalado prevé una tasa legal ingresada por el empleador. Instale un paquete en la pestaña Paquetes de país.",
+      "tablesLoaded": "Tablas legales cargadas para",
+      "draftEdition": "esbozado, no transcrito",
+      "notLoaded": "no cargado",
+      "year": "Año fiscal",
+      "yearHelp": "Las tasas legales se asignan para un año fiscal — un aviso de tasa estatal, una determinación de reducción de crédito, una exención provincial. Las tasas ingresadas para un año nunca reinterpretan la nómina de otro año.",
+      "add": "Añadir una tasa",
+      "remove": "Quitar",
+      "empty": "No hay tasas legales ingresadas para este año.",
+      "gapsTitle": "No configurado para este año",
+      "allAccounts": "Todas las cuentas",
+      "regionHelp": "La región donde aplica la tasa. Una tasa ingresada para una región nunca se aplica a otra.",
+      "accountHelp": "Esta tasa se asigna a una cuenta registrada, así que un empleador con dos cuentas en una región tiene dos tasas. Déjelo en Todas las cuentas para usar un valor para todas las cuentas de la región.",
+      "scope": {
+        "org": "Todo el empleador",
+        "region": "Por región",
+        "subRegion": "Por jurisdicción fiscal",
+        "account": "Por cuenta de declaración"
+      },
+      "columns": {
+        "levy": "Tasa",
+        "scope": "Alcance",
+        "region": "Región",
+        "subRegion": "Jurisdicción fiscal",
+        "account": "Cuenta de declaración",
+        "values": "Valores",
+        "country": "Paquete de país"
+      },
+      "subRegionHelp": "La jurisdicción fiscal dentro de la región — un código PSD de Pensilvania, un municipio de Ohio, una ciudad de Míchigan. Cada una fija su propia tasa, así que cada una se ingresa por separado; una jurisdicción sin tasa en archivo rechaza el ciclo por su nombre en vez de no retener nada."
+    },
+    "workSchedules": {
+      "title": "Horarios de trabajo",
+      "description": "Las horas y días que cada empleado trabaja normalmente. Varias jurisdicciones calculan el pago de festivos desde esto — el salario de un día normal de trabajo — y se negarán a calcular antes que suponer un día de ocho horas para alguien cuyo horario no está registrado.",
+      "add": "Nuevo horario",
+      "editTitle": "Horario de trabajo",
+      "drawerDescription": "Aplica desde la fecha de inicio hasta que se reemplaza o termina. El pago de festivos de un período pasado siempre se resuelve contra el patrón vigente entonces, nunca el de hoy.",
+      "empty": "Aún no hay horarios de trabajo.",
+      "columns": {
+        "appliesTo": "Aplica a",
+        "pattern": "Horario",
+        "effectiveFrom": "Vigente",
+        "status": "Estado"
+      },
+      "scope": {
+        "organization": "Todos",
+        "employee": "Un empleado",
+        "jobTitle": "Puesto de trabajo",
+        "trade": "Oficio",
+        "department": "Departamento",
+        "subsidiary": "Filial"
+      },
+      "pattern": {
+        "cycle": "Un patrón repetitivo",
+        "cycleHint": "Un ciclo de días que se repite — siete días para una semana ordinaria, catorce para una quincena comprimida, ocho para una rotación de cuatro días de trabajo y cuatro libres.",
+        "varies": "Horas variables",
+        "variesHint": "Sin horario regular; las horas se fijan período a período. Es una respuesta real, no un vacío — varias jurisdicciones pagan a un empleado de horas variables con una fórmula distinta, y registrarlo es lo que les permite calcular."
+      },
+      "summary": {
+        "cycle": "{hours} horas en {days} días por {cycle}",
+        "week": "semana",
+        "cycleDays": "ciclo de {count} días",
+        "total": "{hours} horas en {days} días laborables por ciclo."
+      },
+      "fields": {
+        "name": "Nombre",
+        "namePlaceholder": "Tiempo completo, de lunes a viernes",
+        "appliesTo": "Aplica a",
+        "selectEmployee": "Elija un empleado",
+        "selectScope": "Elija uno",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente hasta",
+        "pattern": "Horario",
+        "cycleDays": "Duración del ciclo (días)",
+        "cycleAnchor": "Primer día del ciclo",
+        "hours": "Horas por día"
+      },
+      "help": {
+        "scope": "El horario más específico gana: un empleado supera a un puesto, que supera a un oficio, luego a un departamento, luego a una filial, luego a todos. El mismo orden en que se resuelven tarifas y límites de derechos.",
+        "effectiveFrom": "Comparado contra la FECHA DE TRABAJO, nunca hoy. Alguien que pasa de tiempo completo a parcial en marzo conserva su pago de festivos de enero calculado sobre el patrón de tiempo completo.",
+        "pattern": "Si el empleado sigue un patrón repetitivo, o no tiene ningún horario regular. La diferencia decide qué fórmula usan varias jurisdicciones.",
+        "cycleDays": "Cuántos días pasan antes de que el patrón se repita. Siete es la semana ordinaria. Catorce expresa una quincena comprimida de nueve días; ocho expresa una rotación de cuatro días de trabajo y cuatro libres que deliberadamente nunca coincide con la semana.",
+        "cycleAnchor": "El día desde el que el ciclo empieza a contar. Para un patrón semanal es domingo, así que las casillas siguientes se rotulan de domingo a sábado.",
+        "hours": "Las horas normalmente trabajadas en cada posición del ciclo. Deje un día en blanco para un día libre. De estas horas se calcula el pago de festivos de un día normal de trabajo: una semana de cuatro días de diez horas vale entonces diez horas por festivo, no ocho."
+      },
+      "grid": {
+        "sunday": "Domingo",
+        "monday": "Lunes",
+        "tuesday": "Martes",
+        "wednesday": "Miércoles",
+        "thursday": "Jueves",
+        "friday": "Viernes",
+        "saturday": "Sábado",
+        "day": "Día {n}",
+        "weekDay": "Semana {week} · {day}"
+      }
+    }
+  },
+  "remittances": {
+    "title": "Remesas de nómina",
+    "description": "Retenciones acumuladas y aportaciones patronales por destino para un período. Crear una factura carga las cuentas de pasivo y entrega el pago a cuentas por pagar.",
+    "back": "Nómina",
+    "from": "Desde",
+    "to": "Hasta",
+    "apply": "Aplicar",
+    "empty": "No hay ciclos contabilizados con montos remitibles en este período.",
+    "unassigned": "Sin proveedor de remesa asignado",
+    "assignVendor": "Asigne un proveedor en los conceptos",
+    "context": "Nómina bruta {gross} · {employees, plural, one {# empleado} other {# empleados}} en el período",
+    "withheld": "Retenido",
+    "employer": "Empleador",
+    "noAccount": "Sin cuenta de pasivo",
+    "total": "Total a remitir",
+    "createBill": "Crear factura de remesa",
+    "createAnother": "Crear otra factura",
+    "billCreated": "Borrador de factura {number} creado. Revíselo y contabilícelo en cuentas por pagar.",
+    "dueOn": "Vence el {dueDate} · {authority}",
+    "apNote": "Las facturas de remesa son facturas de proveedor ordinarias:",
+    "apLink": "abrir facturas de proveedor"
+  },
   "yearEnd": {
+    "title": "Cierre anual",
+    "description": "Cada declaración anual y trimestral que prevén los paquetes de nómina instalados, construida desde recibos contabilizados — cada casilla concilia con las trazas de recibos.",
+    "noFilings": "No hay declaraciones de cierre de nómina previstas para esta organización.",
     "cadence": {
       "annual": "Declaraciones anuales",
       "annualHelp": "Se presentan una vez por año fiscal (T4, W-2, RL-1). El selector de año fiscal de arriba elige la población mostrada.",
       "quarterly": "Declaraciones trimestrales",
       "quarterlyHelp": "Se presentan una vez por trimestre calendario (formulario 941) — la tabla de población muestra una fila por trimestre dentro del año fiscal elegido."
+    }
+  },
+  "filings": {
+    "yearLabel": "Año fiscal",
+    "rowCount": "{count, plural, =0 {Sin filas} one {# fila} other {# filas}}",
+    "notInstalled": "Paquete no instalado",
+    "emptyDefault": "Sin filas para este año.",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "Descargar PDF"
     },
-    "description": "Cada declaración anual y trimestral que prevén los paquetes de nómina instalados, construida desde recibos contabilizados — cada casilla concilia con las trazas de recibos.",
-    "noFilings": "No hay declaraciones de cierre de nómina previstas para esta organización.",
-    "title": "Cierre anual"
+    "issue": {
+      "reason": "Motivo de emisión",
+      "reasonHelp": "La casilla 16 es la declaración del empleador sobre por qué cesaron los ingresos. Elegir un motivo incluye a este empleado en el archivo de ROE Web; dejarlo vacío lo excluye.",
+      "comment": "Comentario",
+      "notIncluded": "No incluido en el archivo",
+      "included": "Incluido en el archivo — motivo {code}",
+      "commentRequired": "Se requiere un comentario para este código de motivo."
+    },
+    "lifecycle": {
+      "title": "Estado de la declaración",
+      "statusColumn": "Estado de declaración",
+      "help": "Una declaración emitida es evidencia de lo declarado al organismo, así que nunca se sobrescribe: una corrección es un artefacto nuevo que la reemplaza, y el archivo original sigue descargable. Los montos siempre se recalculan desde recibos contabilizados — corrija los datos de nómina, luego modifique.",
+      "history": "Historial de declaraciones",
+      "recordOriginal": "Registrar como presentado",
+      "note": "Nota de declaración",
+      "notePlaceholder": "Cómo se presentó (opcional)",
+      "notIssued": "Aún no registrado como presentado.",
+      "issuedCount": "Artefactos emitidos",
+      "latest": "Más reciente",
+      "changedCount": "Cambiados desde la presentación",
+      "absentCount": "Ya no está en el libro",
+      "resurrectedCount": "Cancelado pero aún en el libro",
+      "slipsCovered": "Comprobantes cubiertos",
+      "supersedes": "reemplaza",
+      "noArtifact": "Sin archivo electrónico — la imagen del comprobante siguiente es el registro.",
+      "correction": "Corrección",
+      "correctionForm": "Formulario de corrección",
+      "correctionHelp": "Modificar rectifica un comprobante que debería existir; cancelar declara que el comprobante nunca debió existir. Las cifras se recalculan desde recibos contabilizados — nunca se escriben encima — así que corrija primero los datos de nómina y la modificación sigue.",
+      "unfiledHelp": "Este comprobante no se ha registrado como presentado, así que no hay nada que corregir.",
+      "addedHelp": "Este comprobante apareció después de presentar la declaración. Un comprobante descubierto tarde se presenta como un original adicional, no como una corrección, y eso no se produce aquí — preséntelo por el servicio propio del organismo.",
+      "absentHelp": "El libro de nómina ya no produce este comprobante, así que no hay nada que rectificar. Cancélelo para que el organismo deje de tenerlo.",
+      "resurrectedHelp": "Este comprobante se canceló, pero el libro de nómina aún lo produce. Anule o ajuste el ciclo subyacente, o la próxima declaración lo presentará de nuevo.",
+      "box": "Casilla",
+      "field": "Campo",
+      "asFiled": "Como se presentó",
+      "now": "Ahora",
+      "redacted": "Cambiado — valor no mostrado",
+      "previewAmended": "Vista previa de la corrección",
+      "issueAmended": "Emitir la modificación",
+      "previewCancelled": "Vista previa de la cancelación",
+      "issueCancelled": "Cancelar este comprobante",
+      "status": {
+        "unfiled": "No presentado",
+        "unchanged": "Presentado",
+        "changed": "Cambiado desde la presentación",
+        "absent": "Ya no está en el libro",
+        "withdrawn": "Cancelado",
+        "resurrected": "Cancelado pero aún en el libro"
+      }
+    },
+    "run": {
+      "title": "{label}",
+      "help": "Todos los que cubre esta declaración, con las cifras que llevará. Produzca el archivo solo cuando las filas estén bien — una declaración emitida es evidencia, y corregirla exige una modificación en vez de una edición.",
+      "issue": "Registrar como presentado",
+      "viewAll": "Ver todo"
+    }
+  },
+  "separations": {
+    "title": "Bajas",
+    "description": "Las declaraciones de baja que prevén los paquetes de nómina instalados — debidas dentro de días tras una interrupción de ingresos, por evento de empleado, no al cierre anual.",
+    "noFilings": "No hay declaraciones de baja de nómina previstas para esta organización.",
+    "run": {
+      "title": "Emitir {label}",
+      "help": "Una declaración de baja vence dentro de días tras la interrupción de ingresos — emítala desde este ciclo, por empleado, en lugar de esperar al cierre anual.",
+      "issue": "Revisar y emitir",
+      "viewAll": "Todas las bajas"
+    }
+  },
+  "register": {
+    "title": "Registro de nómina",
+    "print": "Imprimir",
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Otras deducciones",
+    "totals": "Totales ({count, plural, one {# empleado} other {# empleados}})"
+  },
+  "entitlements": {
+    "title": "Bancos de pago",
+    "hint": "Tiempo acumulado, vacaciones y cualquier saldo que este empleado deba devolver. Los saldos son el libro de derechos — se mueven por la nómina, nunca editando un número.",
+    "managePlans": "Gestionar planes",
+    "noPlans": "Aún no hay planes de derechos configurados para esta organización.",
+    "noMovements": "Aún no hay movimientos.",
+    "overLimit": "Sobre el límite",
+    "nearLimit": "Cerca del límite",
+    "hoursSuffix": "h",
+    "hoursAtWage": "{hours} horas a la tarifa vigente de {wage}/h",
+    "worthToday": "Vale {amount} a la tarifa de hoy",
+    "owedBack": "Adeudado al empleador — se recupera de pagos futuros.",
+    "limitLine": "Límite {limit} (fijado por {scope})",
+    "plan": "Plan",
+    "amount": "Monto",
+    "source": "Origen",
+    "movementDate": "Fecha",
+    "movementKind": "Tipo",
+    "scope": {
+      "employee": "este empleado",
+      "job_title": "el puesto de trabajo",
+      "trade": "el oficio",
+      "department": "el departamento",
+      "subsidiary": "la entidad jurídica",
+      "plan": "el valor del plan"
+    },
+    "kind": {
+      "opening": "Inicial",
+      "accrual": "Devengo",
+      "bank_in": "Acumulado",
+      "payout": "Pago",
+      "repayment": "Devolución",
+      "adjustment": "Ajuste"
+    }
+  },
+  "paymentMethod": {
+    "eft": "Depósito directo",
+    "cheque": "Cheque",
+    "inherit": "Usar el valor del empleado",
+    "help": "Déjelo en el valor predeterminado para seguir el registro del empleado: depósito directo cuando existan datos bancarios aprobados, de lo contrario un cheque impreso."
+  },
+  "openingBalances": {
+    "title": "Saldos iniciales",
+    "description": "Todo lo que cada empleado trae de su sistema de nómina anterior: acumulados legales del año, los límites anuales que ya usó en parte, y sus saldos de vacaciones y tiempo acumulado. Nada más aporta estos datos, así que sin ellos cada límite y cada banco reinicia en cero.",
+    "hint": "Cópielos del informe de acumulados anuales del proveedor saliente, a la fecha del día anterior a su primer período de pago aquí. Deje en blanco a un empleado si no recibió pagos suyos antes en el año.",
+    "yearLabel": "Año fiscal",
+    "employee": "Empleado",
+    "onlyMissing": "Solo empleados sin arrastre",
+    "bulkImport": "Carga masiva desde un archivo",
+    "export": "Exportar",
+    "entered": "Arrastrado",
+    "locked": "Bloqueado",
+    "lockedShort": "bloqueado",
+    "lockedBy": "Ciclo contabilizado",
+    "none": "ninguno",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Saldos iniciales guardados.",
+    "saveFailed": "Nada se guardó.",
+    "rejected": "Nada se guardó — corrija esto primero.",
+    "empty": "Aún ningún empleado tiene un perfil de nómina activo.",
+    "fields": {
+      "pensionableYtd": "Salarios pensionables / FICA",
+      "insurableYtd": "Salarios asegurables / desempleo",
+      "cppYtd": "Aportaciones CPP",
+      "cpp2Ytd": "Aportaciones CPP2",
+      "eiYtd": "Primas EI",
+      "qpipYtd": "Primas QPIP",
+      "taxableYtd": "Ingresos gravables",
+      "taxYtd": "Impuesto retenido",
+      "nonPeriodicYtd": "Bonos / ingresos complementarios",
+      "cpp2BonusYtd": "Aportaciones CPP2 sobre bonificaciones",
+      "qcCsbYtd": "Aportaciones QPP adicionales sobre bonificaciones",
+      "ficaWithheldYtd": "Impuesto FICA retenido",
+      "qpipEmployerYtd": "Primas QPIP del empleador",
+      "wcbAssessableYtd": "Ingresos evaluables WCB"
+    },
+    "componentHelp": "Cuánto del límite anual de este componente ya usó el empleado este año, en su sistema de nómina anterior. Sin esto el límite reinicia en cero y el empleado puede aportar un segundo límite anual completo.",
+    "componentCap": "Límite anual",
+    "componentInertHelp": "Este componente ya no tiene límite anual, así que el monto siguiente no cambia nada y no se puede editar. Se conserva porque alguien lo ingresó y porque un límite podría fijarse de nuevo.",
+    "entitlements": {
+      "title": "Arrastre de bancos (vacaciones, tiempo acumulado)",
+      "employee": "Empleado",
+      "asOf": "Arrastrado al",
+      "asOfHelp": "La fecha de adopción a la que se fecha el arrastre. Un ciclo solo cuenta movimientos fechados a más tardar en su fecha de pago, así que esta debe ser anterior a su primer ciclo aquí. No es un año fiscal: un banco tiene un solo saldo de por vida.",
+      "entered": "Arrastrado",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Arrastres de bancos guardados.",
+      "saveFailed": "Nada se guardó.",
+      "rejected": "Nada se guardó — corrija esto primero.",
+      "bulkImport": "Carga masiva desde un archivo",
+      "export": "Exportar",
+      "empty": "Aún ningún empleado tiene un perfil de nómina activo.",
+      "noPlans": "No hay planes de derechos configurados, así que ningún banco puede recibir un saldo arrastrado.",
+      "configurePlans": "Configurar planes de derechos",
+      "lockedBy": "Ciclo contabilizado",
+      "blocked": "Pagado el",
+      "blockedHint": "feche el arrastre después de esa fecha",
+      "legacyShort": "histórico",
+      "legacyTitle": "Saldos de vacaciones sin migrar encontrados",
+      "legacyBody": "Estos empleados traen un saldo de vacaciones en la antigua columna de saldos iniciales que ningún banco muestra. Es un pasivo que nadie sigue. Cárguelo aquí, o ejecute scripts/migrate-vacation-to-entitlements.ts para repetir todo el historial.",
+      "legacyPrefill": "Copiarlos a la columna Vacaciones",
+      "moneyHelp": "El saldo arrastrado, en dólares. Los bancos se guardan como el dinero a la tarifa a la que se ganó, y se muestran en horas a la tarifa vigente del empleado.",
+      "hoursHelp": "El saldo arrastrado, en horas.",
+      "oweHelp": "Un saldo que EL EMPLEADO debe al empleador, así que es negativo — ingrese −1200 para un descubierto de 1 200. Se recupera de pagos futuros hasta llegar exactamente a cero."
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "La entidad jurídica no puede ejecutar la nómina",
+    "jurisdictionEmployee": "La jurisdicción del empleado no coincide con la entidad pagadora"
+  },
+  "parallelRun": {
+    "title": "Nómina paralela",
+    "description": "Verifique un período de pago contra el sistema de nómina que deja, centavo a centavo. Importe el registro del proveedor anterior, elija el ciclo que cubre el mismo período, y compare.",
+    "compare": "Comparar",
+    "comparing": "Comparando…",
+    "compareFailed": "La comparación no pudo ejecutarse.",
+    "cleanToast": "Cada monto concilió exactamente.",
+    "toleranceToast": "Conciliado, con una tolerancia aplicada.",
+    "differencesToast": "Diferencias encontradas — abra la comparación.",
+    "importRegister": "Importar un registro",
+    "export": "Exportar",
+    "tolerances": "Tolerancias",
+    "tolerancesDescription": "Cada componente compara exacto por defecto. Añada un margen solo donde el sistema anterior realmente redondea distinto — se mostrará en cada comparación que lo use.",
+    "addTolerance": "Añadir tolerancia",
+    "toleranceSaved": "Tolerancia guardada.",
+    "noTolerances": "Ninguna tolerancia configurada — cada componente compara exacto.",
+    "comparisonsTitle": "Comparaciones",
+    "noComparisons": "Aún no se ha ejecutado ninguna comparación.",
+    "registersTitle": "Registros importados",
+    "noRegisters": "Aún no se ha importado ningún registro anterior. Empiece con Importar un registro.",
+    "noRegistersRow": "Nada importado aún.",
+    "registerDiscarded": "El registro importado se descartó.",
+    "discard": "Descartar",
+    "openReport": "Abrir el informe de conciliación",
+    "periodMismatch": "Estos dos lados cubren distintas fechas de pago. Compararlos informará diferencias que en realidad son un desfase de período.",
+    "emptyRegister": "Este registro no contiene empleados. Una comparación contra él informará «Nada se comparó», no un resultado limpio.",
+    "unmappedWarning": "Columnas de este registro nunca se mapearon:",
+    "unmappedTitle": "Columnas de origen que nadie mapeó",
+    "nothingCompared": "Nada se comparó",
+    "toleranceTitle": "Tolerancias vigentes",
+    "showMatches": "Mostrar coincidencias exactas",
+    "clearEmployee": "Todos los empleados",
+    "cleanNote": "Cada monto comparado coincidió al centavo, sin tolerancia ni columna sin mapear.",
+    "noFindings": "Esta comparación no tiene ningún hallazgo.",
+    "noExceptions": "Sin excepciones — cada celda coincidió exactamente.",
+    "loading": "Cargando…",
+    "saving": "Guardando…",
+    "exact": "exacta",
+    "notPresent": "ausente",
+    "allMapped": "Todos mapeados",
+    "matched": "coinciden",
+    "differ": "difieren",
+    "oneSidedShort": "unilateral",
+    "toleratedShort": "tolerado",
+    "employeesShort": "empleados",
+    "amountsShort": "montos",
+    "rowsShort": "fila(s)",
+    "valuedRows": "traían valor en",
+    "comparedOf": "comparados de",
+    "onRegister": "en el registro",
+    "inRun": "en el ciclo",
+    "fromColumn": "de",
+    "paid": "pagado",
+    "vsOurs": "los nuestros",
+    "columns": {
+      "outcome": "Resultado",
+      "register": "Registro anterior",
+      "payRun": "Nómina",
+      "compared": "Comparados",
+      "differences": "Diferencias",
+      "netDifference": "Diferencia neta",
+      "comparedAt": "Comparado",
+      "loaded": "Cargado",
+      "stated": "Bruto / neto declarados",
+      "unmapped": "Columnas sin mapear",
+      "employee": "Empleado",
+      "component": "Componente",
+      "priorSystem": "Sistema anterior",
+      "thisSystem": "Este sistema",
+      "difference": "Diferencia",
+      "tolerance": "Tolerancia",
+      "result": "Resultado"
+    },
+    "fields": {
+      "register": "Registro anterior",
+      "registerPlaceholder": "Elija un registro…",
+      "payRun": "Nuestro ciclo",
+      "payRunPlaceholder": "Elija un ciclo…",
+      "component": "Componente",
+      "componentPlaceholder": "Elegir…",
+      "tolerance": "Margen",
+      "reason": "Motivo"
+    },
+    "kinds": {
+      "earning": "Percepción",
+      "deduction": "Deducción",
+      "employer_contribution": "Contribución patronal",
+      "total": "Total declarado"
+    },
+    "statuses": {
+      "clean": "Conciliado exacto",
+      "clean_within_tolerance": "Conciliado dentro de la tolerancia",
+      "differences": "Diferencias por resolver",
+      "no_comparable_data": "Nada se comparó"
+    },
+    "classes": {
+      "match": "Coincidencia exacta",
+      "within_tolerance": "Dentro de la tolerancia",
+      "difference": "Diferencia",
+      "prior_only": "Solo en el sistema anterior",
+      "our_only": "Solo aquí",
+      "employee_prior_only": "Empleado ausente de nuestro ciclo",
+      "employee_our_only": "Empleado ausente del registro",
+      "unattributed": "Sin explicar por ningún componente"
+    },
+    "tiles": {
+      "gross": "Bruto",
+      "net": "Neto",
+      "unattributed": "Neto sin explicar",
+      "cells": "Celdas"
+    },
+    "help": {
+      "register": "Un registro importado del sistema de nómina que deja — un período de pago, una fila por empleado. Cárguelo por Importación y exportación, recurso «Registro de nómina anterior», donde mapea los nombres de columna del sistema anterior sobre los componentes de esta nómina.",
+      "payRun": "El ciclo a verificar. Los ciclos calculados cuentan: el punto de una nómina paralela es probar los números antes de que salga el dinero. Un ciclo en borrador no tiene recibos y no se puede comparar.",
+      "compared": "Empleados presentes en AMBOS lados, sobre el conteo propio de cada lado. Una comparación que no comparó a nadie se informa como «Nada se comparó», nunca como acuerdo.",
+      "unmapped": "Columnas de su archivo que ningún componente reclamó. Nada de lo que contienen se compara, así que un monto podría estar ahí sin contabilizar. Reimporte con ellas mapeadas, o confirme que no llevan dinero.",
+      "tolerance": "Cada componente compara exacto salvo que alguien haya configurado un margen para él. Todo margen vigente se muestra aquí y en la comparación, porque una tolerancia que nadie puede ver anularía todo el ejercicio.",
+      "unattributed": "La parte de la diferencia neta que los componentes comparados no explican. Todo lo distinto de cero significa que un monto movió un total sin un componente comparable detrás — lo más común, una columna de origen que nadie mapeó.",
+      "toleranceSlot": "El componente, o uno de los totales declarados del registro. Una tolerancia es por empleado, por período.",
+      "toleranceAmount": "Un monto absoluto, nunca un porcentaje: un porcentaje de una base móvil es como una tolerancia crece en silencio. Cero elimina el margen.",
+      "toleranceReason": "Requerido. Aceptar dejar de mirar una diferencia es una decisión que debe ser atribuible a alguien y a un motivo."
+    }
+  },
+  "workSchedules": {
+    "title": "Horarios de trabajo",
+    "description": "Las horas y días que cada empleado trabaja normalmente. Varias jurisdicciones calculan el pago de festivos desde esto — el salario de un día normal de trabajo — y se negarán a calcular antes que suponer un día de ocho horas para alguien cuyo horario no está registrado.",
+    "add": "Nuevo horario",
+    "editTitle": "Horario de trabajo",
+    "drawerDescription": "Aplica desde la fecha de inicio hasta que se reemplaza o termina. El pago de festivos de un período pasado siempre se resuelve contra el patrón vigente entonces, nunca el de hoy.",
+    "empty": "Aún no hay horarios de trabajo.",
+    "columns": {
+      "appliesTo": "Aplica a",
+      "pattern": "Horario",
+      "effectiveFrom": "Vigente",
+      "status": "Estado"
+    },
+    "scope": {
+      "organization": "Todos",
+      "employee": "Un empleado",
+      "jobTitle": "Puesto de trabajo",
+      "trade": "Oficio",
+      "department": "Departamento",
+      "subsidiary": "Filial"
+    },
+    "pattern": {
+      "cycle": "Un patrón repetitivo",
+      "cycleHint": "Un ciclo de días que se repite — siete días para una semana ordinaria, catorce para una quincena comprimida, ocho para una rotación de cuatro días de trabajo y cuatro libres.",
+      "varies": "Horas variables",
+      "variesHint": "Sin horario regular; las horas se fijan período a período. Es una respuesta real, no un vacío — varias jurisdicciones pagan a un empleado de horas variables con una fórmula distinta, y registrarlo es lo que les permite calcular."
+    },
+    "summary": {
+      "cycle": "{hours} horas en {days} días por {cycle}",
+      "week": "semana",
+      "cycleDays": "ciclo de {count} días",
+      "total": "{hours} horas en {days} días laborables por ciclo."
+    },
+    "fields": {
+      "name": "Nombre",
+      "namePlaceholder": "Tiempo completo, de lunes a viernes",
+      "appliesTo": "Aplica a",
+      "selectEmployee": "Elija un empleado",
+      "selectScope": "Elija uno",
+      "effectiveFrom": "Vigente desde",
+      "effectiveTo": "Vigente hasta",
+      "pattern": "Horario",
+      "cycleDays": "Duración del ciclo (días)",
+      "cycleAnchor": "Primer día del ciclo",
+      "hours": "Horas por día"
+    },
+    "help": {
+      "scope": "El horario más específico gana: un empleado supera a un puesto, que supera a un oficio, luego a un departamento, luego a una filial, luego a todos. El mismo orden en que se resuelven tarifas y límites de derechos.",
+      "effectiveFrom": "Comparado contra la FECHA DE TRABAJO, nunca hoy. Alguien que pasa de tiempo completo a parcial en marzo conserva su pago de festivos de enero calculado sobre el patrón de tiempo completo.",
+      "pattern": "Si el empleado sigue un patrón repetitivo, o no tiene ningún horario regular. La diferencia decide qué fórmula usan varias jurisdicciones.",
+      "cycleDays": "Cuántos días pasan antes de que el patrón se repita. Siete es la semana ordinaria. Catorce expresa una quincena comprimida de nueve días; ocho expresa una rotación de cuatro días de trabajo y cuatro libres que deliberadamente nunca coincide con la semana.",
+      "cycleAnchor": "El día desde el que el ciclo empieza a contar. Para un patrón semanal es domingo, así que las casillas siguientes se rotulan de domingo a sábado.",
+      "hours": "Las horas normalmente trabajadas en cada posición del ciclo. Deje un día en blanco para un día libre. De estas horas se calcula el pago de festivos de un día normal de trabajo: una semana de cuatro días de diez horas vale entonces diez horas por festivo, no ocho."
+    },
+    "grid": {
+      "sunday": "Domingo",
+      "monday": "Lunes",
+      "tuesday": "Martes",
+      "wednesday": "Miércoles",
+      "thursday": "Jueves",
+      "friday": "Viernes",
+      "saturday": "Sábado",
+      "day": "Día {n}",
+      "weekDay": "Semana {week} · {day}"
+    }
+  },
+  "retro": {
+    "title": "Pago retroactivo"
   }
 }
