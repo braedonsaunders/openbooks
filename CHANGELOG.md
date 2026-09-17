@@ -35,6 +35,9 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
   fail, so revenue cannot land without its matching COGS.
 - Fulfilment is a sales-order conversion target; an approved order is
   no longer a dead end.
+- Orders approved before line warehouse pickers existed name the
+  warehouseless line and offer assignment instead of a generic
+  conversion failure.
 - Depreciation runs that post nothing name the next due line.
   Equipment activation names the missing charge item.
 - Directly submitted budgets reach the approvals inbox.
@@ -99,10 +102,11 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
   list.
 - Send-for-signature refusals pin as a dialog alert.
 - Banking, AP, close, and continuous-close catalogs are translated in
-  all six non-English locales.
-- Aging and cash-basis statement precision suites now scope their
-  reader to the scratch org, so they verify arithmetic against real
-  rows instead of an unscoped empty set.
+  all six non-English locales and pinned with placeholder-parity so
+  English cannot be pasted back.
+- Aging, statement, budget-drill, and book-selection precision suites
+  now seed and read under the scratch org, so they verify arithmetic
+  against real rows instead of an unscoped empty set.
 - Lien-waiver project-required refusals pin on the record.
 
 ## [0.1.0-alpha.14] - 2026-09-17
