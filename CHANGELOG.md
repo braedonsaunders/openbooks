@@ -6,6 +6,30 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11] - 2026-09-16
+
+UI and session-gate fixes on top of the self-deploy release. The
+per-process database pool size is now configurable.
+
+### UI
+
+- Open receivables read the as-of book; the AR overdue subtitle takes a
+  bare percent; recent journal widgets link through the posted-entry route.
+- Approvals show loading/pending/empty states; document lines derive amount
+  from quantity × unit price; project create activates the placeholder on
+  a completing save.
+- Customization form edits PATCH the member route, remount per session,
+  confirm before deleting the org-default form, and expose visibility
+  toggle pressed state.
+- Banking fails closed at the root route error boundary; Business Central
+  invoice numbers land as `documentNumber`; US state/local income-tax
+  statutory slots are labeled.
+
+### Platform
+
+- The session gate fails closed per request with a request id.
+- The per-process connection pool size is configurable.
+
 ## [0.1.0-alpha.10] - 2026-09-16
 
 Integrity fixes on top of the allocations release, and production now
