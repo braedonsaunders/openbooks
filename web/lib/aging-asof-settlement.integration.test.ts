@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { agingByParty, agingDetail } = await import('./reports/aging')
@@ -57,18 +57,23 @@ test('aging as-of reconstructs opens before later settlements', { skip: !env.OPE
       const live = (await db.execute<{ open_balance: string }>(sql`select open_balance::text from documents where id = ${id}`)).rows[0]!
       assert.equal(live.open_balance, '0.0000')
     })
-    // … but the August aging must still show the invoice as open.
+    // … but the August aging must still show the invoice as open. Reads run
+    // in the scratch org's scope: importing the aging reader pulls in the
+    // web request-org resolver, which denies every query outside an explicit
+    // scope (pooled RLS), so a bare read sees zero rows.
     const asOf = '2026-08-31'
-    const aging = await agingByParty('ar', asOf, undefined, scratch.orgId)
-    assert.equal(aging.rows.length, 1)
-    assert.equal(aging.totals.total, '100.0000')
-    const detail = await agingDetail('ar', asOf, undefined, scratch.orgId)
-    assert.equal(detail.rows.length, 1)
-    assert.equal(detail.totals.total, '100.0000')
-    // And a September as-of agrees with the settled live balance.
-    const sept = await agingByParty('ar', '2026-09-30', undefined, scratch.orgId)
-    assert.equal(sept.totals.total, '0.0000')
-    assert.equal(sept.rows.length, 0)
+    await withOrgContext(scratch.orgId, async () => {
+      const aging = await agingByParty('ar', asOf, undefined, scratch.orgId)
+      assert.equal(aging.rows.length, 1)
+      assert.equal(aging.totals.total, '100.0000')
+      const detail = await agingDetail('ar', asOf, undefined, scratch.orgId)
+      assert.equal(detail.rows.length, 1)
+      assert.equal(detail.totals.total, '100.0000')
+      // And a September as-of agrees with the settled live balance.
+      const sept = await agingByParty('ar', '2026-09-30', undefined, scratch.orgId)
+      assert.equal(sept.totals.total, '0.0000')
+      assert.equal(sept.rows.length, 0)
+    })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

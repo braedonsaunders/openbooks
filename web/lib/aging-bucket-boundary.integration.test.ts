@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { agingByParty, agingDetail, bucketOf } = await import('./reports/aging')
@@ -37,12 +37,17 @@ test('aging puts a 90-day-old invoice in the 90+ bucket', { skip: !env.OPENBOOKS
     })
     assert.equal(bucketOf(90), 'b4')
     assert.equal(bucketOf(89), 'b3')
-    const aging = await agingByParty('ar', '2026-08-31', undefined, scratch.orgId)
-    assert.equal(aging.rows.length, 1)
-    assert.equal(aging.totals.b4, '100.0000')
-    assert.equal(aging.totals.b3, '0.0000')
-    const detail = await agingDetail('ar', '2026-08-31', undefined, scratch.orgId)
-    assert.equal(detail.rows[0]?.bucket, 'b4')
+    // Reads run in the scratch org's scope: importing the aging reader pulls
+    // in the web request-org resolver, which denies every query outside an
+    // explicit scope (pooled RLS), so a bare read sees zero rows.
+    await withOrgContext(scratch.orgId, async () => {
+      const aging = await agingByParty('ar', '2026-08-31', undefined, scratch.orgId)
+      assert.equal(aging.rows.length, 1)
+      assert.equal(aging.totals.b4, '100.0000')
+      assert.equal(aging.totals.b3, '0.0000')
+      const detail = await agingDetail('ar', '2026-08-31', undefined, scratch.orgId)
+      assert.equal(detail.rows[0]?.bucket, 'b4')
+    })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

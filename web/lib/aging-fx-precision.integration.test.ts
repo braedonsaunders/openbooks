@@ -7,16 +7,16 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { agingByParty, agingDetail } = await import('./reports/aging')
 
 /**
- * Foreign-currency aging must survive an open balance whose FX translation
- * carries material digits past 4dp: 100.0000 EUR x 1.2345678901 =
- * 123.45678901 functional. The per-row translated value is rounded to ledger
- * scale (4dp) before bucketing so the exact-decimal JS rollup never throws
+ * Foreign-currency aging must survive an FX translation that carries material
+ * digits past 4dp: 100.0000 EUR x 1.2345678901 = 123.45678901 functional.
+ * The poster stores the base open rounded to ledger scale (123.4568) and the
+ * aging reads that stored base, so the exact-decimal JS rollup never throws
  * and buckets always tie to the total.
  */
 test('foreign-currency aging rounds translated opens to 4dp and ties out', { skip: !env.OPENBOOKS_DB_URL }, async () => {
@@ -36,22 +36,28 @@ test('foreign-currency aging rounds translated opens to 4dp and ties out', { ski
       await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
       await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
     })
-    const doc = (await db.execute<{ open_balance: string; fx_rate: string }>(sql`
-      select open_balance::text, fx_rate::text from documents where id = ${id}`)).rows[0]!
-    assert.equal(doc.open_balance, '100.0000')
-    assert.equal(doc.fx_rate, '1.2345678901')
+    // Reads run in the scratch org's scope: importing the aging reader pulls
+    // in the web request-org resolver, which denies every query outside an
+    // explicit scope (pooled RLS), so a bare read sees zero rows.
+    await withOrgContext(scratch.orgId, async () => {
+      const doc = (await db.execute<{ open_balance: string; fx_rate: string }>(sql`
+        select open_balance::text, fx_rate::text from documents where id = ${id}`)).rows[0]!
+      assert.equal(doc.open_balance, '100.0000')
+      assert.equal(doc.fx_rate, '1.2345678901')
 
-    const aging = await agingByParty('ar', scratch.date, undefined, scratch.orgId)
-    assert.equal(aging.rows.length, 1)
-    // round(123.45678901, 4) = 123.4568 — theBucket tie-out must hold exactly.
-    assert.equal(aging.totals.total, '123.4568')
-    assert.equal(aging.rows[0]?.current, '123.4568')
-    assert.equal(aging.totals.current, '123.4568')
+      const aging = await agingByParty('ar', scratch.date, undefined, scratch.orgId)
+      assert.equal(aging.rows.length, 1)
+      // The poster stores round(100 x 1.2345678901, 4) = 123.4568 as the
+      // base open, and the aging reads that stored base — the tie-out holds.
+      assert.equal(aging.totals.total, '123.4568')
+      assert.equal(aging.rows[0]?.current, '123.4568')
+      assert.equal(aging.totals.current, '123.4568')
 
-    const detail = await agingDetail('ar', scratch.date, undefined, scratch.orgId)
-    assert.equal(detail.rows.length, 1)
-    assert.equal(detail.rows[0]?.open, '123.4568')
-    assert.equal(detail.totals.total, '123.4568')
+      const detail = await agingDetail('ar', scratch.date, undefined, scratch.orgId)
+      assert.equal(detail.rows.length, 1)
+      assert.equal(detail.rows[0]?.open, '123.4568')
+      assert.equal(detail.totals.total, '123.4568')
+    })
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
