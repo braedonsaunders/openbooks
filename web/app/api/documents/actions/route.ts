@@ -99,7 +99,21 @@ export async function POST(req: Request) {
         if (current !== 'draft') {
           return { kind: 'invalid_status' as const, status: current ?? 'missing' }
         }
-        return { kind: 'submitted' as const, ...(await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)) }
+        const result = await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
+        // The audit trail reads audit_log, and neither the auto-release nor a
+        // gated submission evidences the document row there (human approvals
+        // evidence through their own gate decisions), so the route records
+        // the lifecycle transition itself: submit always, plus the approval
+        // the auto-release performed on the submitter's behalf.
+        if (!result.gated && !result.flowError) {
+          await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'approved', auto_approved: true })}::jsonb, ${user.id}),
+                   (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true })}::jsonb, ${user.id})`)
+        } else if (result.gated) {
+          await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'pending_approval', run_id: result.runId })}::jsonb, ${user.id})`)
+        }
+        return { kind: 'submitted' as const, ...result }
       })
       if (submission.kind === 'invalid_status') {
         return NextResponse.json({ error: `document is ${submission.status}, not draft` }, { status: 422 })
@@ -139,8 +153,16 @@ export async function POST(req: Request) {
           return { kind: 'flow_error' as const, error: submission.flowError }
         }
         if (submission.gated) {
+          await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'pending_approval', run_id: submission.runId })}::jsonb, ${user.id})`)
           return { kind: 'pending' as const, requestId: submission.runId }
         }
+        // Same lifecycle evidence as the submit branch: the auto-release the
+        // direct post performs must show in the audit trail (postDocument
+        // evidences the post itself through its audit option below).
+        await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'approved', auto_approved: true })}::jsonb, ${user.id}),
+                 (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true })}::jsonb, ${user.id})`)
       } else if (previousStatus !== 'approved') {
         return { kind: 'invalid_status' as const, status: previousStatus }
       }
