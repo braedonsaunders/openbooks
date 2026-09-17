@@ -537,6 +537,39 @@ test("an open item can be reserved by only one live payment run at a time", { sk
   }
 });
 
+/** F-t04-005: the duplicate-bill refusal must name the bill and the live run
+ * holding it — a generic "another live payment run" leaves the operator
+ * guessing which selection to drop. */
+test("a duplicate-bill run refusal names the bill and the holding run", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+
+    await withOrgContext(org.orgId, async () => {
+      const createRun = () =>
+        createPaymentRun({
+          orgId: org.orgId,
+          createdBy: options.actorId,
+          paymentBankProfileId: options.profileId,
+          billDocumentIds: [options.billId],
+          scheduledFor: org.date,
+        });
+      const firstRun = await createRun();
+      await assert.rejects(createRun, (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /BILL-RESERVE-1/);
+        assert.ok(
+          error.message.includes(firstRun.runNumber),
+          `the refusal must name the holding run ${firstRun.runNumber}: ${error.message}`,
+        );
+        return true;
+      });
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("one run's instruction lifecycle cannot release another run's live reservation", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
