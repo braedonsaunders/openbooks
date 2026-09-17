@@ -31,8 +31,10 @@ predict the ledger before anything posts.
 ## Guided setup
 
 New rule on Setup → Allocations opens the house wizard (the same stepper as
-payroll onboarding): when it fires, which lines it catches, how the amount
-splits, where the money goes, and what the books should do. A **1 : 2 : 3 : 4**
+payroll onboarding): when it fires, which lines it catches (transaction type
+plus any matcher dimension — department, location, class, project, subsidiary,
+party, item, or a custom segment), how the amount splits, where the money
+goes, and what the books should do. A **1 : 2 : 3 : 4**
 ratio is a first-class answer — the wizard stores it as percents that sum to
 100 so entry, posting, and period sweeps all run. Drivers stay a separate
 registry; pick one on the split step only when the weights should change each

@@ -11,10 +11,10 @@ import { cn } from './utils'
 //   sidebar      : z-10
 //   header       : z-20
 //   sticky-bars  : z-30
-//   drawer       : z-50
+//   drawer/modal : z-50     — Drawer, WizardShell
 //   floating UI  : z-[60]   — Popover, SearchSelect dropdown, confirm dialog.
 //                          Body-portaled so it always sits above the drawer
-//                          it was opened from (z-50) and below toasts (z-70).
+//                          or wizard it was opened from (z-50) and below toasts (z-70).
 //   toast        : z-70
 
 export type DrawerSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'

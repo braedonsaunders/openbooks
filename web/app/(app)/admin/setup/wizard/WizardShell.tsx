@@ -11,6 +11,10 @@ import { cn } from '@openbooks/ui'
  * SetupWizard so every module wizard (payroll onboarding, …) IS the same
  * stepper rather than a lookalike. Step CONTENT stays with the caller; this
  * component owns only the composition.
+ *
+ * z-50 is the drawer/modal layer (see packages/ui drawer scale). SearchSelect,
+ * confirm, and other body-portaled menus sit at z-[60]; toasts at z-70. A
+ * higher wizard scrim hides those destination lists behind the modal.
  */
 export function WizardShell(props: {
   testId: string
@@ -36,7 +40,7 @@ export function WizardShell(props: {
         exit={reduceMotion ? undefined : { opacity: 0 }}
         transition={{ duration: 0.2 }}
         data-testid={props.testId}
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
       >
         {props.skip && (
           <button

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const wizardSource = readFileSync(fileURLToPath(new URL('./AllocationRuleWizard.tsx', import.meta.url)), 'utf8')
 const drawerSource = readFileSync(fileURLToPath(new URL('./RuleDrawer.tsx', import.meta.url)), 'utf8')
+const shellSource = readFileSync(fileURLToPath(new URL('../wizard/WizardShell.tsx', import.meta.url)), 'utf8')
 
 test('new-rule create is the house WizardShell, not a second stepper', () => {
   assert.match(wizardSource, /<WizardShell/)
@@ -45,4 +46,27 @@ test('wizard copy is catalogued and never interpolated as a key', () => {
   assert.ok(!/t\(`[^`]*\$\{/.test(wizardSource), 'no dynamic i18n keys')
   assert.ok(wizardSource.includes('transactionTypes.vendorBill'), 'transaction types reuse common.*')
   assert.ok(wizardSource.includes('transactionTypes.journal'), 'journals are a first-class type')
+})
+
+test('destination SearchSelect sits above the wizard scrim', () => {
+  assert.match(shellSource, /z-50/)
+  assert.ok(!shellSource.includes('z-[100]'), 'wizard must not cover SearchSelect (z-[60])')
+  assert.match(wizardSource, /<SearchSelect/)
+  assert.match(wizardSource, /wizard\.targets\.value/)
+})
+
+test('source and destination pickers cover every matcher dimension', () => {
+  for (const fragment of [
+    'SOURCE_FILTER_KEYS',
+    'sourceExtraDims',
+    'subsidiaries',
+    'parties',
+    'items',
+    'segments',
+    'BUILTIN_TARGET_DIMENSIONS',
+  ]) {
+    assert.ok(wizardSource.includes(fragment), `${fragment} must be wired`)
+  }
+  assert.ok(!wizardSource.includes('sourceDepartmentMode'), 'department-only source cards are gone')
+  assert.ok(!wizardSource.includes('sourceDepartmentIds'), 'department chip wall is gone')
 })

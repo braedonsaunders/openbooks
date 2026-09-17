@@ -13,15 +13,35 @@ export type WizardStep = (typeof WIZARD_STEPS)[number]
 
 export type AllocationWizardMode = 'entry' | 'post' | 'period'
 export type WizardSplitKind = 'ratio' | 'percent' | 'driver'
-export type SourceDepartmentMode = 'any' | 'untagged' | 'specific'
-export type TargetDimension = 'department' | 'location' | 'class' | 'project'
+export type SourceMatchMode = 'any' | 'untagged' | 'specific'
+export type SourceFilterKey = 'department' | 'location' | 'class' | 'project' | 'subsidiary' | 'party' | 'item'
+export type BuiltinTargetDimension = 'department' | 'location' | 'class' | 'project' | 'subsidiary'
+export type TargetDimension = BuiltinTargetDimension | `extra:${string}`
 
-export const TARGET_DIMENSIONS: readonly TargetDimension[] = [
+export const SOURCE_FILTER_KEYS: readonly SourceFilterKey[] = [
   'department',
   'location',
   'class',
   'project',
+  'subsidiary',
+  'party',
+  'item',
 ]
+
+export const UNTAGGABLE_SOURCE_KEYS: readonly SourceFilterKey[] = ['department', 'location', 'class', 'project']
+
+export const BUILTIN_TARGET_DIMENSIONS: readonly BuiltinTargetDimension[] = [
+  'department',
+  'location',
+  'class',
+  'project',
+  'subsidiary',
+]
+
+export interface SourceFilter {
+  mode: SourceMatchMode
+  ids: string[]
+}
 
 /**
  * Document kinds the wizard offers as "transaction type". The values are the
@@ -60,8 +80,8 @@ export interface WizardDraft {
   key: string
   description: string
   documentKinds: WizardDocumentKind[]
-  sourceDepartmentMode: SourceDepartmentMode
-  sourceDepartmentIds: string[]
+  sourceFilters: Record<SourceFilterKey, SourceFilter>
+  sourceExtraDims: Record<string, SourceFilter>
   splitKind: WizardSplitKind
   driverId: string
   targetDimension: TargetDimension
@@ -82,8 +102,8 @@ export function defaultWizardDraft(): WizardDraft {
     key: '',
     description: '',
     documentKinds: [],
-    sourceDepartmentMode: 'specific',
-    sourceDepartmentIds: [],
+    sourceFilters: defaultSourceFilters('entry'),
+    sourceExtraDims: {},
     splitKind: 'ratio',
     driverId: '',
     targetDimension: 'department',
@@ -201,10 +221,51 @@ export function nextTargetWeight(draft: WizardDraft): string {
   return String(draft.targets.length + 1)
 }
 
-export function defaultSourceDepartmentMode(mode: AllocationWizardMode): SourceDepartmentMode {
-  if (mode === 'period') return 'untagged'
-  if (mode === 'post') return 'any'
-  return 'specific'
+export function emptySourceFilter(): SourceFilter {
+  return { mode: 'any', ids: [] }
+}
+
+export function allowsUntagged(key: string): boolean {
+  return (UNTAGGABLE_SOURCE_KEYS as readonly string[]).includes(key)
+}
+
+export function defaultSourceFilters(mode: AllocationWizardMode): Record<SourceFilterKey, SourceFilter> {
+  const filters = Object.fromEntries(SOURCE_FILTER_KEYS.map((key) => [key, emptySourceFilter()])) as Record<
+    SourceFilterKey,
+    SourceFilter
+  >
+  if (mode === 'period') filters.department = { mode: 'untagged', ids: [] }
+  return filters
+}
+
+export function sourceFilterComplete(filter: SourceFilter): boolean {
+  return filter.mode !== 'specific' || filter.ids.length > 0
+}
+
+export function sourceFiltersComplete(
+  filters: Record<SourceFilterKey, SourceFilter>,
+  extra: Record<string, SourceFilter>,
+): boolean {
+  return SOURCE_FILTER_KEYS.every((key) => sourceFilterComplete(filters[key])) && Object.values(extra).every(sourceFilterComplete)
+}
+
+function filterFormKey(key: SourceFilterKey): keyof DefinitionForm {
+  switch (key) {
+    case 'department':
+      return 'filterDepartmentIds'
+    case 'location':
+      return 'filterLocationIds'
+    case 'class':
+      return 'filterClassIds'
+    case 'project':
+      return 'filterProjectIds'
+    case 'subsidiary':
+      return 'filterSubsidiaryIds'
+    case 'party':
+      return 'filterPartyIds'
+    case 'item':
+      return 'filterItemIds'
+  }
 }
 
 export function wizardUsesExplicitTargets(draft: WizardDraft): boolean {
@@ -218,8 +279,7 @@ export function wizardStepComplete(step: WizardStep, draft: WizardDraft): boolea
       return draft.mode === 'entry' || draft.mode === 'post' || draft.mode === 'period'
     case 'source':
       if (draft.name.trim() === '' || !isRuleKey(draft.key)) return false
-      if (draft.sourceDepartmentMode === 'specific') return draft.sourceDepartmentIds.length > 0
-      return true
+      return sourceFiltersComplete(draft.sourceFilters, draft.sourceExtraDims)
     case 'split':
       if (draft.splitKind === 'driver') return draft.driverId !== ''
       return draft.splitKind === 'ratio' || draft.splitKind === 'percent'
@@ -237,17 +297,8 @@ export function wizardStepComplete(step: WizardStep, draft: WizardDraft): boolea
   }
 }
 
-function targetDimensionField(dimension: TargetDimension): 'departmentId' | 'locationId' | 'classId' | 'projectId' {
-  switch (dimension) {
-    case 'department':
-      return 'departmentId'
-    case 'location':
-      return 'locationId'
-    case 'class':
-      return 'classId'
-    case 'project':
-      return 'projectId'
-  }
+function extraSegmentKey(dimension: TargetDimension): string | null {
+  return dimension.startsWith('extra:') ? dimension.slice('extra:'.length) : null
 }
 
 export function wizardTargetPercents(draft: WizardDraft): string[] {
@@ -268,11 +319,22 @@ export function wizardDefinitionForm(draft: WizardDraft, effectiveFrom: string, 
   form.solveMethod = 'sequential'
   form.runPolicy = draft.mode === 'period' ? draft.runPolicy : 'manual'
   form.runOffsetDays = '0'
-  if (draft.sourceDepartmentMode === 'specific') {
-    form.filterDepartmentIds = [...draft.sourceDepartmentIds]
-  } else if (draft.sourceDepartmentMode === 'untagged') {
-    form.requireUntagged = ['department']
+  const requireUntagged: DefinitionForm['requireUntagged'] = []
+  for (const key of SOURCE_FILTER_KEYS) {
+    const filter = draft.sourceFilters[key]
+    if (filter.mode === 'untagged' && allowsUntagged(key)) {
+      requireUntagged.push(key as (typeof requireUntagged)[number])
+    } else if (filter.mode === 'specific') {
+      const formKey = filterFormKey(key)
+      form[formKey] = [...filter.ids] as never
+    }
   }
+  form.requireUntagged = requireUntagged
+  form.filterExtraDims = Object.fromEntries(
+    Object.entries(draft.sourceExtraDims)
+      .filter(([, filter]) => filter.mode === 'specific' && filter.ids.length > 0)
+      .map(([key, filter]) => [key, [...filter.ids]]),
+  )
   if (draft.splitKind === 'driver' && driver) {
     form.basisKind = 'driver'
     form.driverId = driver.id
@@ -292,16 +354,17 @@ export function wizardDefinitionForm(draft: WizardDraft, effectiveFrom: string, 
 export function wizardTargetPayload(draft: WizardDraft): Record<string, unknown>[] {
   const rows = filledTargets(draft)
   const percents = wizardTargetPercents(draft)
-  const field = targetDimensionField(draft.targetDimension)
+  const dimension = draft.targetDimension
+  const extraKey = extraSegmentKey(dimension)
   return rows.map((row, index) => ({
     sequence: index,
     targetAccountId: null,
-    departmentId: field === 'departmentId' ? row.valueId : null,
-    locationId: field === 'locationId' ? row.valueId : null,
-    classId: field === 'classId' ? row.valueId : null,
-    projectId: field === 'projectId' ? row.valueId : null,
-    subsidiaryId: null,
-    extraDims: {},
+    departmentId: dimension === 'department' ? row.valueId : null,
+    locationId: dimension === 'location' ? row.valueId : null,
+    classId: dimension === 'class' ? row.valueId : null,
+    projectId: dimension === 'project' ? row.valueId : null,
+    subsidiaryId: dimension === 'subsidiary' ? row.valueId : null,
+    extraDims: extraKey ? { [extraKey]: row.valueId } : {},
     fixedPercent: percents[index] ?? null,
     weight: null,
     isRemainder: false,
@@ -309,12 +372,13 @@ export function wizardTargetPayload(draft: WizardDraft): Record<string, unknown>
   }))
 }
 
-export function knownDriverDimension(dimension: string): dimension is TargetDimension | 'subsidiary' {
+export function knownDriverDimension(dimension: string): dimension is TargetDimension {
   return (
     dimension === 'department'
     || dimension === 'location'
     || dimension === 'class'
     || dimension === 'project'
     || dimension === 'subsidiary'
+    || dimension.startsWith('extra:')
   )
 }

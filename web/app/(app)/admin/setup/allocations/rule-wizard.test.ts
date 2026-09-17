@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  defaultSourceDepartmentMode,
+  defaultSourceFilters,
   defaultWizardDraft,
   filledTargets,
   hrefWithRule,
@@ -69,10 +69,10 @@ test('hrefWithRule keeps the tab and sets the created rule', () => {
   assert.equal(hrefWithRule('/admin/setup/allocations', 'rule-1'), '/admin/setup/allocations?rule=rule-1')
 })
 
-test('period defaults to the untagged pool; entry defaults to a specific department', () => {
-  assert.equal(defaultSourceDepartmentMode('period'), 'untagged')
-  assert.equal(defaultSourceDepartmentMode('entry'), 'specific')
-  assert.equal(defaultSourceDepartmentMode('post'), 'any')
+test('period defaults department to the untagged pool; entry and post leave every dimension open', () => {
+  assert.equal(defaultSourceFilters('period').department.mode, 'untagged')
+  assert.equal(defaultSourceFilters('entry').department.mode, 'any')
+  assert.equal(defaultSourceFilters('post').location.mode, 'any')
 })
 
 test('the 1:2:3:4 department split writes percents the kernel can publish', () => {
@@ -80,7 +80,7 @@ test('the 1:2:3:4 department split writes percents the kernel can publish', () =
   draft.name = 'Overhead split'
   draft.key = 'overhead-split'
   draft.documentKinds = ['vendor_bill']
-  draft.sourceDepartmentIds = ['dept-overhead']
+  draft.sourceFilters.department = { mode: 'specific', ids: ['dept-overhead'] }
   draft.targets = [
     { valueId: 'eng', weight: '1' },
     { valueId: 'sales', weight: '2' },
@@ -115,7 +115,7 @@ test('a month-end untagged sweep with a driver uses dynamic targets', () => {
   draft.mode = 'period'
   draft.name = 'IT by headcount'
   draft.key = 'it-headcount'
-  draft.sourceDepartmentMode = 'untagged'
+  draft.sourceFilters.department = { mode: 'untagged', ids: [] }
   draft.splitKind = 'driver'
   draft.driverId = 'drv-1'
   assert.equal(wizardUsesExplicitTargets(draft), false)
@@ -134,6 +134,43 @@ test('a month-end untagged sweep with a driver uses dynamic targets', () => {
   assert.equal(form.dynamicDimension, 'department')
   assert.equal(form.driverAsOf, 'period')
   assert.equal(form.sourceMeasure, 'period_activity')
+})
+
+test('subsidiary and custom-segment destinations write the matching target field', () => {
+  const draft = defaultWizardDraft()
+  draft.targetDimension = 'subsidiary'
+  draft.targets = [
+    { valueId: 'sub-a', weight: '1' },
+    { valueId: 'sub-b', weight: '1' },
+  ]
+  assert.deepEqual(
+    wizardTargetPayload(draft).map((row) => row['subsidiaryId']),
+    ['sub-a', 'sub-b'],
+  )
+  draft.targetDimension = 'extra:region'
+  draft.targets = [
+    { valueId: 'east', weight: '1' },
+    { valueId: 'west', weight: '1' },
+  ]
+  assert.deepEqual(
+    wizardTargetPayload(draft).map((row) => row['extraDims']),
+    [{ region: 'east' }, { region: 'west' }],
+  )
+})
+
+test('source filters write every matcher dimension, not only department', () => {
+  const draft = defaultWizardDraft()
+  draft.name = 'Multi filter'
+  draft.key = 'multi-filter'
+  draft.sourceFilters.department = { mode: 'specific', ids: ['dept-1'] }
+  draft.sourceFilters.location = { mode: 'untagged', ids: [] }
+  draft.sourceFilters.party = { mode: 'specific', ids: ['party-1'] }
+  draft.sourceExtraDims = { region: { mode: 'specific', ids: ['east'] } }
+  const form = wizardDefinitionForm(draft, '2026-09-17', null)
+  assert.deepEqual(form.filterDepartmentIds, ['dept-1'])
+  assert.deepEqual(form.requireUntagged, ['location'])
+  assert.deepEqual(form.filterPartyIds, ['party-1'])
+  assert.deepEqual(form.filterExtraDims, { region: ['east'] })
 })
 
 test('filledTargets drops blank rows and next weight follows the count', () => {
