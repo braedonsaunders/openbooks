@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Copy, KeyRound, ShieldAlert } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, Textarea, UrlDrawer } from '@openbooks/ui'
+import { Button, Input, Label, Textarea, UrlDrawer } from '@openbooks/ui'
 import { PERMISSION_GROUPS, type CataloguePermission } from '@/lib/permissions'
 
 export type KeyRow = {

@@ -10,5 +10,5 @@ export default async function Reports({
 }) {
   const sp = await searchParams
   const data = await loadReportsHub()
-  return <ModuleView spec={reportsHubSpec(data)} data={data} searchParams={sp} trusted />
+  return <ModuleView spec={reportsHubSpec()} data={data} searchParams={sp} trusted />
 }

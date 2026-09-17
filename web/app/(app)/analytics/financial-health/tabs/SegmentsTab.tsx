@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Network, PieChart, BarChart3, Table2 } from 'lucide-react'
+import { Network, PieChart, BarChart3 } from 'lucide-react'
 import { cn, EmptyState } from '@openbooks/ui'
 import type { HealthData, SegmentRow } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'

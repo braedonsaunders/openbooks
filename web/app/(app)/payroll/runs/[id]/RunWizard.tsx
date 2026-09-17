@@ -24,11 +24,7 @@ import {
   Button,
   Drawer,
   FieldHelp,
-  Table,
-  TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
   cn,
 } from '@openbooks/ui'
@@ -922,9 +918,6 @@ function PeriodStep({
   const selectedRows = roster.filter((r) => selected.has(r.employee_party_id))
   const estimatedHours = selectedRows.reduce((sum, r) => sum + hoursOf(r), 0)
   const blocked = selectedRows.filter((r) => flagsOf(r).noWage).length
-
-  const CONTROL =
-    'h-8 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
 
   return (
     <div className="space-y-4">
@@ -2075,27 +2068,6 @@ function GlStep({
   const debits = gl.legs.filter((leg) => decimalCmp(leg.amount, '0') > 0)
   const credits = gl.legs.filter((leg) => decimalCmp(leg.amount, '0') < 0)
   const creditTotal = decimalNeg(decimalSum(credits.map((leg) => leg.amount)))
-
-  const legRows = (legs: GlLeg[], negate: boolean) =>
-    legs.map((leg, index) => (
-      <TableRow key={index}>
-        <TableCell className="font-medium">{leg.accountLabel}</TableCell>
-        <TableCell className="text-slate-600 dark:text-slate-300">
-          {leg.description}
-          {(leg.partyName || leg.projectName) && (
-            <span className="ml-1.5 text-xs text-slate-400">
-              {[leg.partyName, leg.projectName].filter(Boolean).join(' · ')}
-            </span>
-          )}
-        </TableCell>
-        <TableCell className="text-right tabular-nums">
-          {negate ? '' : fmt(leg.amount)}
-        </TableCell>
-        <TableCell className="text-right tabular-nums">
-          {negate ? fmt(decimalAbs(leg.amount)) : ''}
-        </TableCell>
-      </TableRow>
-    ))
 
   return (
     <div className="space-y-4">

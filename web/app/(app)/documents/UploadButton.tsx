@@ -18,7 +18,7 @@ const ACCEPT =
 export function UploadButton({ folderId }: { folderId?: string }) {
   const t = useTranslations('documents')
   const router = useRouter()
-  const search = useSearchParams()
+  useSearchParams()
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(0)
 

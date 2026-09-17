@@ -59,7 +59,6 @@ export function ListViewDesigner({
   recordType,
   def,
   canManageOrg,
-  userId,
   showInListDefs,
   filterOptions,
   inventoryEnabled,

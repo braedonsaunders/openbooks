@@ -538,7 +538,6 @@ function RowCells<Row extends Record<string, unknown>>({
   insertRow,
   duplicateRow,
   removeRow,
-  moveRow,
   canRemove,
   formatAmount,
   groupHeader,

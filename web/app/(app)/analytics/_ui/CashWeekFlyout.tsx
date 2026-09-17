@@ -105,7 +105,7 @@ export function CashWeekFlyout({
       ? { ar: week.arEntries, ap: week.apEntries }
       : null,
   )
-  const [loadingEntries, setLoadingEntries] = useState(false)
+  const [, setLoadingEntries] = useState(false)
   useEffect(() => {
     if (fetched) return
     let cancelled = false

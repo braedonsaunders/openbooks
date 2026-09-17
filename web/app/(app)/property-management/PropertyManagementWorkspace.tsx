@@ -24,7 +24,6 @@ import { CamCorrectionDrawer, CamDrawer } from "./CamDrawers";
 import type { CamPool, PropertyWorkspace } from "./types";
 
 type Tab = "properties" | "rentRoll" | "cam" | "depositReconciliation";
-type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 type LeaseCreateContext = { propertyId: string; unitId?: string | null };
 type CamCreateContext = { propertyId?: string; poolId?: string };
 type ActionPayload = Record<string, unknown>;

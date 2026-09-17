@@ -185,7 +185,7 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
 const f = ref<SetupReadinessData>()
 const item = field
 
-export function setupReadinessSpec(data: SetupReadinessData): PageSpec {
+export function setupReadinessSpec(): PageSpec {
   return page({
     route: '/admin/setup/readiness',
     layout: 'bare',

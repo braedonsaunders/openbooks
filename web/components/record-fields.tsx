@@ -17,7 +17,7 @@ import {
   type FormSection,
   type PartyPickerKind,
 } from '@openbooks/forms-core'
-import { Button, cn, FieldLabel, Input, Label, SearchSelect, Textarea, type SelectOption } from '@openbooks/ui'
+import { Button, cn, FieldLabel, Input, SearchSelect, Textarea, type SelectOption } from '@openbooks/ui'
 import {
   formatFieldValue,
   isNumericField,

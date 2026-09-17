@@ -6,7 +6,6 @@ import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Trash2, Upload } from 'lucide-react'
 import {
-  Badge,
   Button,
   Input,
   Label,

@@ -10,7 +10,7 @@
 
 import { REPORT_ENTITY_MAP, SqlParams, compileSubsidiaryScope, bindReportFromAsOf, compileRuleGroup } from '@openbooks/reports'
 import { getSource } from './catalog'
-import { fieldRef, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
+import { sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
   AggFn,
   CompiledQuery,

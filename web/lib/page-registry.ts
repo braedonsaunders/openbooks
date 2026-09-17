@@ -552,7 +552,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/admin/setup/readiness/view')
       return {
         load: () => m.loadSetupReadiness(),
-        spec: (data) => m.setupReadinessSpec(data as never),
+        spec: () => m.setupReadinessSpec(),
       }
     },
   },
@@ -1716,7 +1716,7 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       const m = await import('../app/(app)/reports/view')
       return {
         load: () => m.loadReportsHub(),
-        spec: (data) => m.reportsHubSpec(data as never),
+        spec: () => m.reportsHubSpec(),
       }
     },
   },

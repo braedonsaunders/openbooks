@@ -1244,7 +1244,7 @@ export interface WipAnalytics {
   leakage: { writeDowns: string; heldOver90: string; total: string }
 }
 
-function eligibleWipSources(orgId: string, asOf: string, scope: SubsidiaryScope) {
+function eligibleWipSources(orgId: string, scope: SubsidiaryScope) {
   return sql`
     with raw_sources as (
       select 'time_entry'::text as source_type, te.id as source_id, te.project_id,
@@ -1359,7 +1359,7 @@ export async function wipAnalytics(orgId: string, asOf?: string, scope: Subsidia
   requireDate(asOfDate, 'As-of date')
   const [agingResult, realizationResult, leakageResult] = await Promise.all([
     db.execute<WipAnalytics['aging']>(sql`
-      ${eligibleWipSources(orgId, asOfDate, scope)}
+      ${eligibleWipSources(orgId, scope)}
       select coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date <= 0),0)::text as current,
              coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 1 and 30),0)::text as "days1to30",
              coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 31 and 60),0)::text as "days31to60",
@@ -1391,7 +1391,7 @@ export async function wipAnalytics(orgId: string, asOf?: string, scope: Subsidia
   const original = Number(realization.original)
   const percent = original === 0 ? null : Number(realization.billed) / original
   const heldOver90Result = (await db.execute<{ amount: string }>(sql`
-    ${eligibleWipSources(orgId, asOfDate, scope)}
+    ${eligibleWipSources(orgId, scope)}
     select coalesce(sum(source_value) filter (where held and ${asOfDate}::date-source_date > 90),0)::text as amount
       from eligible_sources
   `))

@@ -11,5 +11,5 @@ export default async function SetupReadinessPage({
 }) {
   const sp = await searchParams
   const data = await loadSetupReadiness()
-  return <ModuleView spec={setupReadinessSpec(data)} data={data} searchParams={sp} trusted />
+  return <ModuleView spec={setupReadinessSpec()} data={data} searchParams={sp} trusted />
 }

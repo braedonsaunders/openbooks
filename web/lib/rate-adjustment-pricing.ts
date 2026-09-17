@@ -4,7 +4,7 @@
  * Split from the resolver so the arithmetic deciding what a customer is charged
  * can be tested directly, mirroring item-rate-currency alongside item-rates.
  */
-import { add, fromUnits, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money.ts'
 
 /** How a percentage charge lands on the cent. */
 export type AdjustmentRounding = 'half_up' | 'down'

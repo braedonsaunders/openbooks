@@ -36,18 +36,6 @@ type Step = 'packs' | 'accounts' | 'schedule' | 'vendors' | 'rails' | 'review' |
 
 const STEP_ORDER: Step[] = ['packs', 'accounts', 'schedule', 'vendors', 'rails', 'review', 'applying', 'done']
 
-/** Which wizard step resolves each payrollSetupState check code. */
-const STEP_FOR_CODE: Record<string, Step> = {
-  'setup.pack': 'packs',
-  'setup.wageExpense': 'accounts',
-  'setup.netPay': 'accounts',
-  'setup.laborClearing': 'accounts',
-  'setup.slot': 'accounts',
-  'setup.schedule': 'schedule',
-  'setup.remittanceVendor': 'vendors',
-  'setup.paymentRail': 'rails',
-}
-
 interface SetupCheck {
   code: string
   severity: 'blocker' | 'warning'

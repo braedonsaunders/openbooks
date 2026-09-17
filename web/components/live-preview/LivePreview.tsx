@@ -48,7 +48,7 @@ export function LivePreview<T>({
             setLoading(false)
           }
         })
-        .catch((e) => {
+        .catch(() => {
           if (controller.signal.aborted || id !== runId.current) return
           setError(true)
           setLoading(false)
