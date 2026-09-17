@@ -82,7 +82,7 @@ test("a duplicate account number surfaces the already-in-use message", async (t)
     calls.push(`${(init?.method ?? "GET").toUpperCase()} ${String(input)}`);
     return Response.json({ error: "number_in_use", field: "number" }, { status: 422 });
   }) as typeof fetch;
-  globalThis.__acctTestRouter = { push(url: string) {}, replace(url: string) {}, refresh() {} };
+  globalThis.__acctTestRouter = { push() {}, replace() {}, refresh() {} };
   globalThis.__acctTestToasts = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
