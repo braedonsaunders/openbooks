@@ -1079,7 +1079,8 @@
       "assignTo": "割当先…",
       "assignAria": "{name} を割り当て",
       "addUnassigned": "未割当の勘定科目を追加",
-      "add": "+ 追加"
+      "add": "+ 追加",
+      "noCategories": "間接費カテゴリーはまだありません。カテゴリーは `burden` ディメンションの勘定グループです。作成して、これらの勘定を割り当ててくだせい。"
     },
     "deptFlyout": {
       "description": "部門の間接費負担内訳 · {billed, plural, one {請求可能 # 時間} other {請求可能 # 時間}}（{total, plural, one {合計 # 時間} other {合計 # 時間}}）",

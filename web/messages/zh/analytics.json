@@ -1079,7 +1079,8 @@
       "assignTo": "分配至…",
       "assignAria": "分配 {name}",
       "addUnassigned": "添加未分配科目",
-      "add": "+ 添加"
+      "add": "+ 添加",
+      "noCategories": "尚无间接费用类别。类别是 `burden` 维度的科目组——请先创建一个，再将这些科目分配给它。"
     },
     "deptFlyout": {
       "description": "部门间接费用负担明细 · {billed, plural, one {# 个可计费工时} other {# 个可计费工时}}（{total, plural, one {总计 # 小时} other {总计 # 小时}}）",

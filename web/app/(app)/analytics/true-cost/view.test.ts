@@ -64,3 +64,34 @@ test('the open-report copy exists in every locale catalog', () => {
   }
   assert.equal(en.trueCost.openReport, 'Open report')
 })
+
+/**
+ * F-t09-003: the Categories tab Assign picker is fed by `burden`-dimension
+ * account groups, so a group created in any other dimension leaves the
+ * picker empty with no explanation. The empty state must name the
+ * `burden`-dimension requirement in every locale, or true-cost setup cannot
+ * be completed and the composite stays zero.
+ */
+test('the empty-categories guidance names the burden dimension in every locale', () => {
+  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+    const catalog = JSON.parse(readFileSync(join(process.cwd(), 'web', 'messages', locale, 'analytics.json'), 'utf8')) as {
+      trueCost?: { accountsPanel?: { noCategories?: unknown } }
+    }
+    const copy = catalog.trueCost?.accountsPanel?.noCategories
+    assert.equal(typeof copy, 'string', `${locale}/analytics.json needs trueCost.accountsPanel.noCategories`)
+    assert.ok((copy as string).trim(), `${locale}/analytics.json noCategories must not be blank`)
+    assert.match(copy as string, /burden/, `${locale}/analytics.json noCategories must name the burden dimension`)
+  }
+  const en = JSON.parse(readFileSync(join(process.cwd(), 'web', 'messages', 'en', 'analytics.json'), 'utf8')) as {
+    trueCost: { accountsPanel: { noCategories: string } }
+  }
+  assert.equal(
+    en.trueCost.accountsPanel.noCategories,
+    'No overhead categories yet. Categories are account groups in the `burden` dimension — create one, then assign these accounts to it.',
+  )
+})
+
+test('the Categories tab renders the empty-categories guidance when no burden category exists', () => {
+  const viewSource = readFileSync(new URL('./TrueCostView.tsx', import.meta.url), 'utf8')
+  assert.match(viewSource, /accountsPanel\.noCategories/)
+})

@@ -525,6 +525,14 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
 
       {data.unassigned.length ? (
         <Panel title={t('panels.unassignedAccounts')} icon={AlertTriangle} hint={t('hints.assignToCategory')} bodyClassName="p-0">
+          {data.categories.length === 0 ? (
+            <p className="border-b border-slate-200 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              {t('accountsPanel.noCategories')}{' '}
+              <Link href="/admin/setup/account-groups" className="font-medium text-teal-600 hover:underline dark:text-teal-400">
+                {t('actions.newCategory')}
+              </Link>
+            </p>
+          ) : null}
           <table className="w-full text-sm">
             <tbody>
               {data.unassigned.map((a) => (
