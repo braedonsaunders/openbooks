@@ -2631,7 +2631,11 @@
       "equipmentUnitId": "设备单元",
       "extensionKey": "应用",
       "settingKey": "设置",
-      "reason": "变更原因"
+      "reason": "变更原因",
+      "allocatedThrough": "已分配至",
+      "dateBasis": "日期基准",
+      "unitsTotal": "总单位数",
+      "depreciationMethodId": "折旧方法"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",

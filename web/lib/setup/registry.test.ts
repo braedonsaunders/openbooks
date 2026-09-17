@@ -268,3 +268,23 @@ test('every static setup option labelKey resolves under admin.setup', () => {
   }
   assert.deepEqual(missing, [])
 })
+
+test('every setup column, field and filter key has an English label under admin.setup.fields', () => {
+  // The generic setup list/drawer renders headers and labels through
+  // t(`fields.${key}`), so a registry key with no English source entry is
+  // invisible to every locale pin (they compare against English) and renders
+  // raw on the surface (F-coord-008).
+  const catalog = JSON.parse(
+    readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8'),
+  ) as Record<string, unknown>
+  const fields = ((catalog.setup ?? {}) as Record<string, unknown>).fields as Record<string, unknown>
+  const missing: string[] = []
+  for (const entity of SETUP_ENTITIES) {
+    const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
+    for (const carrier of carriers) {
+      const label = fields?.[carrier.key]
+      if (typeof label !== 'string' || label.length === 0) missing.push(`${entity.key}: ${carrier.key}`)
+    }
+  }
+  assert.deepEqual(missing, [])
+})

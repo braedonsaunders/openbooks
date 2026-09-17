@@ -2586,7 +2586,11 @@
       "unionName": "Syndicat",
       "unit": "Unité",
       "vacationable": "Compte pour la paie de vacances",
-      "value": "Valeur"
+      "value": "Valeur",
+      "allocatedThrough": "Attribué jusqu'au",
+      "dateBasis": "Base de dates",
+      "unitsTotal": "Unités totales",
+      "depreciationMethodId": "Méthode d'amortissement"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
