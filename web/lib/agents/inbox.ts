@@ -75,6 +75,12 @@ export interface AgentInboxFacets {
   packs: { key: ContinuousCloseAgentKey; count: number }[];
   severities: { key: InboxSeverity; count: number }[];
   statuses: { key: InboxStatus; count: number }[];
+  /**
+   * Actionable (open + in review) count on the query-independent scope — the
+   * OPEN FINDINGS tile. The free-text query filters rows only, never tiles
+   * (F-t11-005), so this has its own count rather than summing the facet.
+   */
+  openActive: number;
   subsidiaries: { id: string; name: string; count: number }[];
   unresolvedSubsidiary: number;
   withProposals: number;
@@ -162,7 +168,7 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     rows: [],
     total: 0,
     truncated: false,
-    facets: { packs: [], severities: [], statuses: [], subsidiaries: [], unresolvedSubsidiary: 0, withProposals: 0, assignedToMe: 0, unassigned: 0, overdue: 0 },
+    facets: { packs: [], severities: [], statuses: [], openActive: 0, subsidiaries: [], unresolvedSubsidiary: 0, withProposals: 0, assignedToMe: 0, unassigned: 0, overdue: 0 },
     readablePacks: [],
   };
   // Doorway mirrors the finding tools: without assistant.use nothing is
@@ -183,11 +189,13 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
 
   const agentList = sql.join(agents.map((agent) => sql`${agent}`), sql`, `);
   const statusList = sql.join(statuses.map((status) => sql`${status}`), sql`, `);
-  const where = sql`w.org_id = ${authz.user.orgId}
+  // Facet counts keep global scope: the free-text query filters rows only,
+  // never the KPI tiles or filter-chip counts (F-t11-005) — and the status
+  // facet additionally ignores the status clause so every lifecycle state
+  // stays selectable with true counts (F-t11-006).
+  const whereBase = sql`w.org_id = ${authz.user.orgId}
     and w.agent_key in (${agentList})
-    and w.status in (${statusList})
     ${severities.length > 0 ? sql`and w.severity in (${sql.join(severities.map((s) => sql`${s}`), sql`, `)})` : sql``}
-    ${q ? sql`and (w.finding_type ilike ${`%${q}%`} or w.summary::text ilike ${`%${q}%`})` : sql``}
     ${filters.hasProposal === true ? sql`and (w.summary ? 'proposedCommand')` : sql``}
     ${filters.hasProposal === false ? sql`and not (w.summary ? 'proposedCommand')` : sql``}
     ${filters.subsidiaryId ? sql`and subj_acct.subsidiary_id = ${filters.subsidiaryId}` : sql``}
@@ -195,6 +203,11 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     ${filters.assignedToMe ? sql`and w.assignee_user_id = ${authz.user.id}` : sql``}
     ${filters.unassignedOnly ? sql`and w.assignee_user_id is null and w.assignee_role is null` : sql``}
     ${filters.overdueOnly ? sql`and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')` : sql``}`;
+  const statusClause = sql`and w.status in (${statusList})`;
+  const queryClause = q ? sql`and (w.finding_type ilike ${`%${q}%`} or w.summary::text ilike ${`%${q}%`})` : sql``;
+  const where = sql`${whereBase} ${statusClause} ${queryClause}`;
+  const whereNoQuery = sql`${whereBase} ${statusClause}`;
+  const whereStatusFacet = sql`${whereBase} ${queryClause}`;
 
   const assigneeJoin = sql`left join users assignee_u
       on assignee_u.id = w.assignee_user_id and assignee_u.org_id = w.org_id
@@ -205,7 +218,7 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
       on subj_acct.id = w.subject_id and w.subject_type = 'account' and subj_acct.org_id = w.org_id
     left join subsidiaries subj_sub on subj_sub.id = subj_acct.subsidiary_id and subj_sub.org_id = w.org_id`;
 
-  const [rows, totalResult, packCounts, severityCounts, statusCounts, subsidiaryCounts, proposalCount, mineCount, unassignedCount, overdueCount] =
+  const [rows, totalResult, packCounts, severityCounts, statusCounts, openActiveCount, subsidiaryCounts, proposalCount, mineCount, unassignedCount, overdueCount] =
     await Promise.all([
       db.execute<InboxRowRaw>(sql`
         select w.id, w.agent_key, w.finding_type, w.severity, w.status,
@@ -231,36 +244,40 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
       `),
       db.execute<{ agent_key: ContinuousCloseAgentKey; n: string | number }>(sql`
         select w.agent_key, count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} group by w.agent_key
+         where ${whereNoQuery} group by w.agent_key
       `),
       db.execute<{ severity: InboxSeverity; n: string | number }>(sql`
         select w.severity, count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} group by w.severity
+         where ${whereNoQuery} group by w.severity
       `),
       db.execute<{ status: InboxStatus; n: string | number }>(sql`
         select w.status, count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} group by w.status
+         where ${whereStatusFacet} group by w.status
+      `),
+      db.execute<{ n: string | number }>(sql`
+        select count(*) as n from ai_work_items w ${subjectJoin}
+         where ${whereNoQuery} and w.status in ('open', 'in_review')
       `),
       db.execute<{ subsidiary_id: string | null; subsidiary_name: string | null; n: string | number }>(sql`
         select subj_sub.id as subsidiary_id, max(subj_sub.name) as subsidiary_name, count(*) as n
           from ai_work_items w ${subjectJoin}
-         where ${where} group by subj_sub.id
+         where ${whereNoQuery} group by subj_sub.id
       `),
       db.execute<{ n: string | number }>(sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} and (w.summary ? 'proposedCommand')
+         where ${whereNoQuery} and (w.summary ? 'proposedCommand')
       `),
       db.execute<{ n: string | number }>(sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} and w.assignee_user_id = ${authz.user.id}
+         where ${whereNoQuery} and w.assignee_user_id = ${authz.user.id}
       `),
       db.execute<{ n: string | number }>(sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} and w.assignee_user_id is null and w.assignee_role is null
+         where ${whereNoQuery} and w.assignee_user_id is null and w.assignee_role is null
       `),
       db.execute<{ n: string | number }>(sql`
         select count(*) as n from ai_work_items w ${subjectJoin}
-         where ${where} and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')
+         where ${whereNoQuery} and w.due_at is not null and w.due_at < now() and w.status in ('open', 'in_review')
       `),
     ]);
 
@@ -304,7 +321,13 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
     facets: {
       packs: packCounts.rows.map((r) => ({ key: r.agent_key, count: Number(r.n) })),
       severities: severityCounts.rows.map((r) => ({ key: r.severity, count: Number(r.n) })),
-      statuses: statusCounts.rows.map((r) => ({ key: r.status, count: Number(r.n) })),
+      // Every lifecycle state is always present (zero-filled) so the Status
+      // filter can offer resolved/dismissed even when the rows exclude them.
+      statuses: INBOX_STATUSES.map((key) => ({
+        key,
+        count: Number(statusCounts.rows.find((r) => r.status === key)?.n ?? 0),
+      })),
+      openActive: Number(openActiveCount.rows[0]?.n ?? 0),
       subsidiaries: subsidiaryCounts.rows
         .filter((r) => r.subsidiary_id)
         .map((r) => ({ id: String(r.subsidiary_id), name: String(r.subsidiary_name ?? ""), count: Number(r.n) })),
