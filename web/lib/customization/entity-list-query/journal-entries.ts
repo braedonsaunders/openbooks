@@ -54,6 +54,10 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "inventory",
   "lease",
   "tax_provision",
+  // Migration true-ups (TRUEUP-*) are standalone engine journals with no
+  // source document (F-t12-014): without this they post to the GL yet stay
+  // invisible in the list and its counts even with Origin=All.
+  "migration",
 ];
 
 /**

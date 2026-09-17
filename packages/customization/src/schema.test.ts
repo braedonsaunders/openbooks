@@ -360,6 +360,15 @@ test('customer list-filter options drop prospect when CRM is off', () => {
   assert.deepEqual(shown, ['customer', 'prospect'])
 })
 
+test('journal origin filter offers migration alongside the posting origins (F-t12-014)', () => {
+  // Migration true-ups are GL-native journals visible with Origin=All, so
+  // the Origin dropdown must offer Migration as an explicit choice too.
+  const journal = getRecordType('journal')
+  assert.ok(journal)
+  const origins = journal.listFilters.find((filter) => filter.key === 'origin')?.options?.map((option) => option.value) ?? []
+  assert.ok(origins.includes('migration'), `origin options hide migration: ${origins.join(',')}`)
+})
+
 test('between list filters require both bounds', () => {
   const view = defaultListView('vendor_bill')
   view.filters = [{ key: 'document_date', operator: 'between', to: '2026-12-31' }]

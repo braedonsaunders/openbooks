@@ -20,7 +20,8 @@
     "depreciation": "Abschreibung",
     "revenueRecognition": "Umsatzrealisierung",
     "fxSettlement": "Währungsausgleich",
-    "translation": "Umrechnung"
+    "translation": "Umrechnung",
+    "migration": "Migration"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

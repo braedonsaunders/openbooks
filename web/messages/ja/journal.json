@@ -20,7 +20,8 @@
     "depreciation": "減価償却",
     "revenueRecognition": "収益認識",
     "fxSettlement": "為替決済",
-    "translation": "換算"
+    "translation": "換算",
+    "migration": "移行"
   },
   "detail": {
     "notFound": "仕訳が見つかりません",

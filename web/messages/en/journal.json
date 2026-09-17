@@ -20,7 +20,8 @@
     "depreciation": "Depreciation",
     "revenueRecognition": "Revenue recognition",
     "fxSettlement": "FX settlement",
-    "translation": "Translation"
+    "translation": "Translation",
+    "migration": "Migration"
   },
   "detail": {
     "notFound": "Entry not found",

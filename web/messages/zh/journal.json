@@ -20,7 +20,8 @@
     "depreciation": "折旧",
     "revenueRecognition": "收入确认",
     "fxSettlement": "外汇结算",
-    "translation": "折算"
+    "translation": "折算",
+    "migration": "迁移"
   },
   "detail": {
     "notFound": "未找到分录",

@@ -385,6 +385,8 @@ const JOURNAL: RecordTypeMeta = {
         ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
         ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
         ["fx_settlement", "fxSettlement"], ["translation", "translation"],
+        // Migration true-ups are list-visible GL-native journals (F-t12-014).
+        ["migration", "migration"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
     },
     {

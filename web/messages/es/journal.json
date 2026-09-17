@@ -20,7 +20,8 @@
     "depreciation": "Depreciación",
     "revenueRecognition": "Reconocimiento de ingresos",
     "fxSettlement": "Liquidación de divisas",
-    "translation": "Conversión de moneda"
+    "translation": "Conversión de moneda",
+    "migration": "Migración"
   },
   "detail": {
     "notFound": "Asiento no encontrado",

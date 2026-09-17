@@ -20,7 +20,8 @@
     "depreciation": "Amortissement",
     "revenueRecognition": "Constatation des produits",
     "fxSettlement": "Règlement de change",
-    "translation": "Conversion"
+    "translation": "Conversion",
+    "migration": "Migration"
   },
   "detail": {
     "notFound": "Écriture introuvable",
