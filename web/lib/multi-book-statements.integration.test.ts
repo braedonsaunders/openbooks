@@ -12,7 +12,7 @@ test(
       import { randomUUID } from "node:crypto";
       import { readFileSync } from "node:fs";
       import { sql } from "drizzle-orm";
-      import { db, pool, withBypass, withOrg } from "./engine/src/db.ts";
+      import { db, pool, withBypass, withBypassContext, withOrg } from "./engine/src/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
       import {
         createScratchOrg,
@@ -305,60 +305,66 @@ test(
         // Migration atomicity: replaying 0016 inside a transaction that then
         // FAILS must leave the prior summary exactly as it was — same shape,
         // same rows, working trigger maintenance — after rollback recovers it.
-        const migration = readFileSync(
-          "schema/migrations/generated/0016_gl_month_activity_book_id.sql", "utf8");
-        const before = await db.execute(sql\`
-          select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
-            from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
-        const client = await pool.connect();
-        try {
-          await client.query("begin");
-          await client.query(migration);
-          // Force a failure against the NEW constraint mid-flight.
-          await client.query(
-            "insert into gl_month_activity (org_id, account_id, book_id, month, subsidiary_id) " +
-            "select org_id, account_id, book_id, month, subsidiary_id from gl_month_activity limit 1");
-          assert.fail("forced duplicate-key failure did not raise");
-        } catch (error) {
-          await client.query("rollback");
-          assert.match(String((error && error.message) || error), /duplicate key|unique constraint/);
-        } finally {
-          client.release();
-        }
-        const after = await db.execute(sql\`
-          select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
-            from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
-        assert.deepEqual(after.rows, before.rows, "failed migration preserved the prior summary rows");
+        // Explicit bypass scope: the lazy web imports above replace the test
+        // bypass resolver, so past this point an unscoped client runs deny-all
+        // and this whole check goes vacuous (replay touches zero rows, the
+        // forced insert inserts zero rows and never conflicts).
+        await withBypassContext(async () => {
+                const migration = readFileSync(
+                  "schema/migrations/generated/0016_gl_month_activity_book_id.sql", "utf8");
+                const before = await db.execute(sql\`
+                  select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
+                    from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
+                const client = await pool.connect();
+                try {
+                  await client.query("begin");
+                  await client.query(migration);
+                  // Force a failure against the NEW constraint mid-flight.
+                  await client.query(
+                    "insert into gl_month_activity (org_id, account_id, book_id, month, subsidiary_id) " +
+                    "select org_id, account_id, book_id, month, subsidiary_id from gl_month_activity limit 1");
+                  assert.fail("forced duplicate-key failure did not raise");
+                } catch (error) {
+                  await client.query("rollback");
+                  assert.match(String((error && error.message) || error), /duplicate key|unique constraint/);
+                } finally {
+                  client.release();
+                }
+                const after = await db.execute(sql\`
+                  select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
+                    from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
+                assert.deepEqual(after.rows, before.rows, "failed migration preserved the prior summary rows");
 
-        // And the recovered summary still maintains itself: another posting
-        // lands on its own per-book row via the triggers.
-        const extraEntry = randomUUID();
-        await db.execute(sql\`
-          insert into journal_entries
-            (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-             period_id, memo, status, origin)
-          values
-            (\${extraEntry}, \${scratch.orgId}, \${taxBookId}, \${scratch.subsidiaryId},
-             'MULTIBOOK-AFTER', \${scratch.date}, \${scratch.periodId}, 'after',
-             'draft', 'manual')\`);
-        await db.execute(sql\`
-          insert into journal_lines
-            (org_id, entry_id, line_number, account_id, subsidiary_id,
-             amount, currency, txn_amount, fx_rate)
-          values
-            (\${scratch.orgId}, \${extraEntry}, 1, \${scratch.accounts.bank},
-             \${scratch.subsidiaryId}, '50.0000', 'CAD', '50.0000', '1'),
-            (\${scratch.orgId}, \${extraEntry}, 2, \${scratch.accounts.revenue},
-             \${scratch.subsidiaryId}, '-50.0000', 'CAD', '-50.0000', '1')\`);
-        await db.execute(sql\`
-          update journal_entries set status = 'posted', posted_at = now()
-           where id = \${extraEntry}\`);
-        const postRollback = await db.execute(sql\`
-          select g.credit_total from gl_month_activity g
-           where g.org_id = \${scratch.orgId}
-             and g.account_id = \${scratch.accounts.revenue}
-             and g.book_id = \${taxBookId}\`);
-        assert.deepEqual(postRollback.rows.map((r) => r.credit_total).sort(), ["150.0000"]);
+                // And the recovered summary still maintains itself: another posting
+                // lands on its own per-book row via the triggers.
+                const extraEntry = randomUUID();
+                await db.execute(sql\`
+                  insert into journal_entries
+                    (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+                     period_id, memo, status, origin)
+                  values
+                    (\${extraEntry}, \${scratch.orgId}, \${taxBookId}, \${scratch.subsidiaryId},
+                     'MULTIBOOK-AFTER', \${scratch.date}, \${scratch.periodId}, 'after',
+                     'draft', 'manual')\`);
+                await db.execute(sql\`
+                  insert into journal_lines
+                    (org_id, entry_id, line_number, account_id, subsidiary_id,
+                     amount, currency, txn_amount, fx_rate)
+                  values
+                    (\${scratch.orgId}, \${extraEntry}, 1, \${scratch.accounts.bank},
+                     \${scratch.subsidiaryId}, '50.0000', 'CAD', '50.0000', '1'),
+                    (\${scratch.orgId}, \${extraEntry}, 2, \${scratch.accounts.revenue},
+                     \${scratch.subsidiaryId}, '-50.0000', 'CAD', '-50.0000', '1')\`);
+                await db.execute(sql\`
+                  update journal_entries set status = 'posted', posted_at = now()
+                   where id = \${extraEntry}\`);
+                const postRollback = await db.execute(sql\`
+                  select g.credit_total from gl_month_activity g
+                   where g.org_id = \${scratch.orgId}
+                     and g.account_id = \${scratch.accounts.revenue}
+                     and g.book_id = \${taxBookId}\`);
+                assert.deepEqual(postRollback.rows.map((r) => r.credit_total).sort(), ["150.0000"]);
+        });
       } finally {
         await withBypass(() => dropScratchOrg(scratch.orgId));
       }
