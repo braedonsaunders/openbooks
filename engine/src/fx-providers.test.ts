@@ -810,3 +810,54 @@ test(
     }
   },
 );
+
+test("provider rates accept scientific notation and refuse non-positive input", () => {
+  // Small and large exponents expand exactly: 1e1 is ten, 1e-1 is a tenth.
+  assert.equal(ratioRate("1e1", "1"), "10.0000000000");
+  assert.equal(ratioRate("1", "1e-1"), "10.0000000000");
+  assert.equal(ratioRate("1e0", "1"), "1.0000000000");
+  // A dust denominator is a valid (if extreme) rate, not a zero.
+  assert.equal(ratioRate("1", "0.000000000000000001"), "1000000000000000000.0000000000");
+  // Zero, negatives, and negative scientific notation never become rates —
+  // silently absolutizing a provider sign would launder the direction.
+  assert.throws(() => ratioRate("1", "0"), FxProviderError);
+  assert.throws(() => ratioRate("1", "-5"), FxProviderError);
+  assert.throws(() => ratioRate("1", "-1.5e-3"), FxProviderError);
+});
+
+test("ECB parsing tolerates any column order but requires every column", () => {
+  const row = (header: string, body: string): string => [header, body].join("\n");
+  const reordered = parseEcbCsv(row("CURRENCY,OBS_VALUE,TIME_PERIOD", "USD,1.1650,2026-07-14"));
+  assert.deepEqual(reordered, [{
+    date: "2026-07-14",
+    anchor: "EUR",
+    unitsPerAnchor: { EUR: "1", USD: "1.1650" },
+  }]);
+  const dateFirst = parseEcbCsv(row("TIME_PERIOD,CURRENCY,OBS_VALUE", "2026-07-14,USD,1.1650"));
+  assert.equal(dateFirst[0]!.unitsPerAnchor["USD"], "1.1650");
+  const valueFirst = parseEcbCsv(row("OBS_VALUE,TIME_PERIOD,CURRENCY", "1.1650,2026-07-14,USD"));
+  assert.equal(valueFirst[0]!.unitsPerAnchor["USD"], "1.1650");
+  for (const header of ["TIME_PERIOD,CURRENCY", "CURRENCY,OBS_VALUE", "TIME_PERIOD,OBS_VALUE"]) {
+    assert.throws(() => parseEcbCsv(row(header, "USD,2026-07-14")), /missing required columns/, header);
+  }
+});
+
+test("ECB parsing honors quoted fields in the currency column", () => {
+  const snapshots = parseEcbCsv([
+    "CURRENCY,TIME_PERIOD,OBS_VALUE",
+    '"USD",2026-07-14,1.1650',
+    '"U""SD",2026-07-15,1.1700',
+  ].join("\n"));
+  assert.equal(snapshots[0]!.unitsPerAnchor["USD"], "1.1650");
+  // An escaped quote is data, not a delimiter: the second row keys a
+  // three-character currency and stays on its own date.
+  assert.equal(snapshots[1]!.unitsPerAnchor['U"SD'], "1.1700");
+  assert.equal(snapshots[1]!.date, "2026-07-15");
+});
+
+test("daily syncs advance past an exact-hour boundary", () => {
+  const at = (h: number): Date => new Date(Date.UTC(2026, 4, 4, h, 0, 0));
+  assert.equal(computeNextSyncAt("daily", 12, at(12))?.toISOString(), "2026-05-05T12:00:00.000Z");
+  assert.equal(computeNextSyncAt("daily", 12, at(11))?.toISOString(), "2026-05-04T12:00:00.000Z");
+  assert.equal(computeNextSyncAt("manual", 12, at(11)), null);
+});
