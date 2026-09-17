@@ -29,6 +29,16 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
 - Inventory Post refusals pin on the record; line-less budget submits
   refuse with a typed message.
 
+### Inventory, fulfilment, assets, and approvals
+
+- Standalone invoices refuse to post when stock-relief issue effects
+  fail, so revenue cannot land without its matching COGS.
+- Fulfilment is a sales-order conversion target; an approved order is
+  no longer a dead end.
+- Depreciation runs that post nothing name the next due line.
+  Equipment activation names the missing charge item.
+- Directly submitted budgets reach the approvals inbox.
+
 ## [0.1.0-alpha.14] - 2026-09-17
 
 Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.
