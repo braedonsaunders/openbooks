@@ -53,3 +53,36 @@ test('a failed post never wedges the Receive & post button busy', () => {
     'the post action must release busy in a finally: a rejected transport must not wedge the button on',
   )
 })
+
+test('the drawer title never renders a sync source handle (F-t12-004 remainder)', () => {
+  assert.match(
+    source,
+    /displayDocumentNumber\(doc\.document_number,\s*doc\.reference_number\)/,
+    'the receipt title must fall back to the reference through the shared display rule: mirrored rows carry a source handle in document_number',
+  )
+  assert.doesNotMatch(
+    source,
+    /\{doc\.document_number\}/,
+    'no raw document_number render may remain in the drawer',
+  )
+})
+
+test('save and void share the surfaced-refusal pattern (no bare res.json, no wedged busy)', () => {
+  for (const fn of ['save', 'voidPayment'] as const) {
+    assert.match(
+      source,
+      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?readDocumentActionResult\\(res\\)`),
+      `${fn} must read through the shared action-result reader instead of a bare res.json()`,
+    )
+    assert.match(
+      source,
+      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?setActionError\\(message\\)`),
+      `${fn} must pin a typed refusal past its toast`,
+    )
+    assert.match(
+      source,
+      new RegExp(`async function ${fn}\\(\\)[\\s\\S]*?finally\\s*\\{[\\s\\S]*?setBusy\\(false\\)`),
+      `${fn} must release busy in a finally`,
+    )
+  }
+})
