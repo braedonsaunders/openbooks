@@ -150,6 +150,10 @@ export function SetupDrawer({
       if (!f.required || f.kind === 'boolean' || f.kind === 'multiref') continue
       if (!creating && f.lockedOnEdit) continue
       const v = form[f.key]
+      // keepDefault columns carry a DB default the server applies to blanks
+      // (F-t06-022): an empty ownership acquisitionRate/nciMeasurement is
+      // legal input, never a missing requirement.
+      if (f.keepDefault && (v === undefined || v === null || String(v).trim() === '')) continue
       if (v === undefined || v === null || String(v).trim() === '') {
         return t('validation.required', { field: t(`fields.${f.key}`) })
       }
@@ -403,9 +407,10 @@ function FieldControl({
   const help = field.helpTextKey ? t(field.helpTextKey) : undefined
   const locked = forceLocked || (!creating && field.lockedOnEdit)
   // Registry-required fields show a marker (F-t06-018) — exactly the set
-  // validate() enforces (booleans/multirefs/locked keys are never required),
-  // so the mark cannot lie about what blocks saving.
-  const requiredMark = field.required && !locked && field.kind !== 'boolean' && field.kind !== 'multiref'
+  // validate() enforces (booleans/multirefs/locked keys are never required,
+  // and blank keepDefault fields are legal input per F-t06-022), so the mark
+  // cannot lie about what blocks saving.
+  const requiredMark = field.required && !locked && field.kind !== 'boolean' && field.kind !== 'multiref' && !field.keepDefault
     ? <span className="text-red-500" aria-hidden="true"> *</span>
     : null
   const full =
