@@ -75,7 +75,7 @@
     "summary": {
       "transactions": "Transaktionen",
       "openTransactions": "Offene Transaktionen",
-      "openBalance": "Offener Saldo",
+      "openBalance": "Offener Saldo (alle Perioden)",
       "lastTransaction": "Letzte Transaktion",
       "multipleCurrencies": "Mehrere Währungen"
     },

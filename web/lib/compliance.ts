@@ -18,6 +18,8 @@ import {
   type WaiverRecord
 } from '@openbooks/engine/src/compliance.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { addMoney, ZERO_MONEY } from './cash/core'
+import { openItems } from './cash/open-items'
 import { featureRequiredHref } from './gate-targets'
 import {
   GENERAL_THRESHOLD_CHANGE_YEAR,
@@ -120,7 +122,14 @@ export interface MatrixRow {
   blocksPayment: boolean
   blocksBill: boolean
   findings: RequirementFinding[]
-  /** Posted, unpaid bill exposure for this vendor, base currency. */
+  /**
+   * Posted, unpaid bill exposure for this vendor, base currency — grouped off
+   * the shared as-of open-items reader (F-t03-008), the same item set the /ap
+   * dashboard, the aging and the control account read. A date-blind
+   * document-cache aggregate disagreed in both directions at once (SIM
+   * Meridian: future-dated payments zero the cache while the bill is still
+   * open as of the date; future-posted bills count before they post).
+   */
   openBalance: string
   /** Soonest expiry across satisfied requirements. */
   nextExpiry: string | null
@@ -174,19 +183,18 @@ export async function loadComplianceMatrix(args: {
   states?: readonly ComplianceState[]
 }): Promise<ComplianceMatrix> {
   const asOf = args.asOf ?? (await businessToday(args.orgId))
-  const [policies, classes, vendors, records, waivers] = await Promise.all([
+  // Document legs fail closed on null subsidiaries, exactly like the reader's
+  // own scope — so the matrix groups the same item set the dashboard does
+  // under the same gate (F-t03-008).
+  const subIds = args.allowedSubsidiaryIds === null || args.allowedSubsidiaryIds === undefined
+    ? undefined
+    : [...args.allowedSubsidiaryIds]
+  const [policies, classes, vendors, apOpen, records, waivers] = await Promise.all([
     loadRequirementPolicies(args.orgId),
     loadComplianceClasses(args.orgId),
     db.execute(sql`
       select p.id as "partyId", p.display_name as "vendorName",
-             vr.compliance_class_id as "classId", cc.name as "className",
-             coalesce((
-               select sum(round(d.open_balance * d.fx_rate, 4)) from documents d
-                where d.org_id = p.org_id and d.party_id = p.id
-                  and d.kind in ('vendor_bill', 'expense_report')
-                  and d.status = 'posted' and coalesce(d.open_balance, 0) > 0
-                  ${complianceSubsidiaryFilter(sql`d.subsidiary_id`, args.allowedSubsidiaryIds)}
-             ), 0) as "openBalance"
+             vr.compliance_class_id as "classId", cc.name as "className"
         from parties p
         join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
         left join compliance_classes cc on cc.id = vr.compliance_class_id and cc.org_id = p.org_id
@@ -196,6 +204,7 @@ export async function loadComplianceMatrix(args: {
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.display_name
     `),
+    openItems(args.orgId, 'ap', asOf, subIds),
     db.execute(sql`
       select cr.party_id as "partyId", cr.id, cr.requirement_id as "requirementId", cr.project_id as "projectId",
              cr.status, cr.effective_from as "effectiveFrom", cr.expires_on as "expiresOn",
@@ -227,10 +236,17 @@ export async function loadComplianceMatrix(args: {
         vendorName: string
         classId: string | null
         className: string | null
-        openBalance: string
       }[]
     }
   ).rows
+  // The "Open payable" column groups the shared as-of item set — the same
+  // numbers the /ap dashboard shows — not the documents cache (F-t03-008).
+  // Unapplied credits net against the vendor's bills, exactly like the aging.
+  const openByParty = new Map<string, string>()
+  for (const item of apOpen) {
+    if (item.partyId === null) continue
+    openByParty.set(item.partyId, addMoney(openByParty.get(item.partyId) ?? ZERO_MONEY, item.remaining))
+  }
   const recordsByParty = new Map<string, EvidenceRecord[]>()
   for (const row of (records as unknown as { rows: (EvidenceRecord & { partyId: string })[] }).rows) {
     const list = recordsByParty.get(row.partyId) ?? []
@@ -269,7 +285,7 @@ export async function loadComplianceMatrix(args: {
       blocksPayment: status.blocksPayment,
       blocksBill: status.blocksBill,
       findings: status.findings,
-      openBalance: vendor.openBalance,
+      openBalance: openByParty.get(vendor.partyId) ?? ZERO_MONEY,
       nextExpiry: expiries[0] ?? null
     })
   }

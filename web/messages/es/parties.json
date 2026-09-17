@@ -72,7 +72,7 @@
     "summary": {
       "transactions": "Transacciones",
       "openTransactions": "Transacciones abiertas",
-      "openBalance": "Saldo pendiente",
+      "openBalance": "Saldo pendiente (todos los períodos)",
       "lastTransaction": "Última transacción",
       "multipleCurrencies": "Varias monedas"
     },
