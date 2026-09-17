@@ -8,7 +8,7 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.14] - 2026-09-17
 
-First fleet-7 batch on top of alpha.13. Requires migration 0170.
+Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.
 
 ### Locale remediation
 
@@ -26,6 +26,12 @@ First fleet-7 batch on top of alpha.13. Requires migration 0170.
 - Dirty document drawers keep a header Save and confirm before close.
 - PDF template duplication no longer collides on default names; a taken
   name is a typed 409.
+- Currency-mismatched postings refuse with a typed message, never raw
+  SQL. Unapplied credits net against party open balance. AR customer
+  search gives an honest empty state. Close review tasks offer start,
+  evidence, and complete. Customer status facets count without group-by
+  when CRM is off. Catalog placeholder-parity pins no longer match a
+  literal backslash-brace.
 
 ## [0.1.0-alpha.13] - 2026-09-17
 
