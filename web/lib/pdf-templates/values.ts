@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { documentBalanceDueLateral } from '@openbooks/engine/src/balance-due.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money.ts'
 import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
@@ -90,11 +91,9 @@ async function loadDocumentValues(
   orgId: string,
   id: string,
 ): Promise<PdfRecordValues | null> {
-  // `target_transaction_amount`, NOT `amount`: `documents.total` is in the
-  // document's TRANSACTION currency while `applications.amount` is the
-  // base-currency carrying amount. The old subtraction printed a balance in
-  // neither currency on every FX invoice/credit — on paper and in emailed
-  // records (same fix as engine/src/dunning.ts).
+  // Balance due comes from the shared reader (engine/src/balance-due.ts) —
+  // the same applied sum the drawer and dunning use, so the printed figure
+  // cannot drift from what the drawer shows or what dunning acts on.
   const r = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as party_name, p.email as party_email, p.phone as party_phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
@@ -105,12 +104,7 @@ async function loadDocumentValues(
         select * from addresses where party_id = d.party_id
          order by is_default_billing desc, created_at limit 1
       ) a on true
-      left join lateral (
-        select coalesce(sum(x.target_transaction_amount), 0) as applied
-          from journal_lines jl
-          join applications x on x.org_id = jl.org_id and x.to_line_id = jl.id and x.unapplied_at is null
-         where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
-      ) ap on true
+      ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}
   `))
   const doc = r.rows[0]
