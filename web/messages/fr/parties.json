@@ -24,6 +24,7 @@
     "unsavedChanges": "Modifications non enregistrées…",
     "autosaveFailed": "Échec de l’enregistrement automatique",
     "updateFailed": "Échec de la mise à jour",
+    "viewStatement": "Voir le relevé",
     "activated": "Tiers activé",
     "deactivated": "Tiers désactivé",
     "tabs": {

@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { Send } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
 
-export function SendButton({ recordType, recordId }: { recordType: string; recordId: string }) {
+export function SendButton({ recordType, recordId, baseUrl }: { recordType: string; recordId: string; baseUrl?: string }) {
   const t = useTranslations('pdfTemplates')
   const [open, setOpen] = useState(false)
   const [to, setTo] = useState('')
@@ -18,7 +18,9 @@ export function SendButton({ recordType, recordId }: { recordType: string; recor
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const base = `/api/record-pdf/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}/send`
+  // Endpoints that speak the record-pdf send contract (GET { to }, POST
+  // { to, message }) can reuse this composer, e.g. party statements.
+  const base = baseUrl ?? `/api/record-pdf/${encodeURIComponent(recordType)}/${encodeURIComponent(recordId)}/send`
 
   async function onOpenChange(next: boolean) {
     setOpen(next)
