@@ -26,6 +26,7 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
+import { loadComplianceClasses, loadVendorComplianceClass } from '../../../lib/compliance'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import type { PartyDrawer, PartyTab } from './PartyDrawer'
@@ -161,6 +162,7 @@ export async function loadParties(
     requestedPartyTab === 'contacts' ||
     requestedPartyTab === 'addresses' ||
     requestedPartyTab === 'accounting' ||
+    requestedPartyTab === 'compliance' ||
     requestedPartyTab === 'wages'
       ? requestedPartyTab
       : 'overview'
@@ -230,7 +232,7 @@ export async function loadParties(
         )
       : total
 
-  const [openParty, pickers, payrollEnabled, multiCurrency, crmEnabled] = await Promise.all([
+  const [openParty, pickers, payrollEnabled, multiCurrency, crmEnabled, complianceEnabled] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
       : null,
@@ -266,6 +268,7 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'payroll'),
     isFeatureEnabled(orgId, 'multiCurrency'),
     isFeatureEnabled(orgId, 'crm'),
+    isFeatureEnabled(orgId, 'subcontractorCompliance'),
   ])
   const resolvedPartyForm =
     openParty && pickers && role
@@ -278,6 +281,18 @@ export async function loadParties(
           lineDefs: [],
           explicitLayoutId: pickString(sp.partyForm),
         })
+      : null
+
+  // F-t04-003: the vendor Compliance tab needs the assigned class and the
+  // active classes — drawer-open only, vendors only, feature on.
+  const showCompliance =
+    complianceEnabled && openParty != null && (role === 'vendor' || (!role && openParty.vendor != null))
+  const compliance =
+    showCompliance && partyId && isUuid(partyId)
+      ? {
+          classId: await loadVendorComplianceClass(orgId, partyId),
+          classes: await loadComplianceClasses(orgId),
+        }
       : null
 
   const drawer =
@@ -299,6 +314,9 @@ export async function loadParties(
           canManageWages: can(authz, 'admin.setup.manage'),
           payrollEnabled,
           multiCurrency,
+          complianceEnabled,
+          canManageCompliance: can(authz, 'compliance.manage'),
+          compliance,
           initialTab: partyTab,
           initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
           role,

@@ -9,6 +9,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../lib/compliance'
 import { loadParty } from '../../../api/parties/_lib'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
@@ -76,6 +77,7 @@ export async function loadEntityRole(
   const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
   const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
   const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
+  const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
 
@@ -85,7 +87,7 @@ export async function loadEntityRole(
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
-    || requestedPartyTab === 'payroll'
+    || requestedPartyTab === 'payroll' || requestedPartyTab === 'compliance'
     ? requestedPartyTab
     : 'overview'
   const [openParty, pickers] = await Promise.all([
@@ -132,6 +134,15 @@ export async function loadEntityRole(
           remountKey: String(openParty.party.id),
           payload: openParty as unknown as PartyDrawerProps['payload'],
           canManage,
+          complianceEnabled,
+          canManageCompliance: can(authz, 'compliance.manage'),
+          // F-t04-003: the vendor Compliance tab — drawer-open vendors only.
+          compliance: complianceEnabled && role === 'vendor' && partyId && isUuid(partyId)
+            ? {
+                classId: await loadVendorComplianceClass(orgId, partyId),
+                classes: await loadComplianceClasses(orgId),
+              }
+            : null,
           canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
           canManageWages: can(authz, 'admin.setup.manage'),
           canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),

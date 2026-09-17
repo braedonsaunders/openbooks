@@ -36,6 +36,7 @@
       "contacts": "Contatos",
       "addresses": "Endereços",
       "accounting": "Contabilidade",
+      "compliance": "Conformidade",
       "wages": "Taxas salariais",
       "invoicing": "Faturamento",
       "pricing": "Preços"
@@ -177,6 +178,16 @@
       "customer": "Detalhes do cliente",
       "vendor": "Detalhes do fornecedor",
       "employee": "Detalhes do funcionário"
+    },
+    "compliance": {
+      "heading": "Conformidade de subcontratados",
+      "description": "A classe de conformidade decide se os valores deste fornecedor podem ser liberados e inclui o fornecedor na matriz de conformidade.",
+      "classLabel": "Classe de conformidade",
+      "noClass": "Sem classe — não acompanhado",
+      "untrackedHint": "Atribua uma classe para incluir este fornecedor na matriz de conformidade.",
+      "saved": "Classe de conformidade salva.",
+      "saveFailed": "Falha ao salvar a classe de conformidade.",
+      "viewMatrix": "Abrir a matriz de conformidade"
     }
   },
   "rateBookAssignments": {
