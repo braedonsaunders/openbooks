@@ -136,6 +136,78 @@ async function clickRunConsolidation(host: HTMLElement) {
   await tick();
 }
 
+function reviewProps() {
+  const base = props();
+  return {
+    ...base,
+    stage: "review",
+    run: { ...base.run, current_stage: "review" },
+    tasks: [
+      {
+        id: randomUUID(),
+        key: "variance-review",
+        title: "close.defaultSteps.variance-review.title",
+        description: "close.defaultSteps.variance-review.description",
+        status: "ready",
+        completion_mode: "manual",
+        task_type: "approval",
+        gate_type: "hard",
+        workstream: "review",
+        evidence_required: true,
+        reviewer_id: null,
+        due_on: "2026-02-05",
+      },
+      {
+        id: randomUUID(),
+        key: "controller-approval",
+        title: "close.defaultSteps.controller-approval.title",
+        description: "close.defaultSteps.controller-approval.description",
+        status: "blocked",
+        completion_mode: "manual",
+        task_type: "approval",
+        gate_type: "hard",
+        workstream: "review",
+        evidence_required: false,
+        reviewer_id: null,
+        due_on: "2026-02-06",
+      },
+    ],
+  };
+}
+
+async function mountReviewStage() {
+  globalThis.__closeTestRouter = { push() {}, refresh() {} };
+  globalThis.__closeTestToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CloseWizard {...reviewProps()} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  return { host, root };
+}
+
+/** F-t01-002: a Ready review task must be actionable — Start, evidence, and
+ * Complete reach the engine like any manual task, or the run strands short
+ * of sign-off with no path forward. */
+test("a ready approval review task offers start and evidence controls", async (t) => {
+  const { host, root } = await mountReviewStage();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const labels = [...host.querySelectorAll("button")].map((el) => el.textContent?.trim());
+  assert.ok(labels.includes("Start"), "a Ready review task must offer Start");
+  assert.ok(labels.includes("Add evidence"), "an evidence-gated review task must offer Add evidence");
+});
+
 /** F-t06-026: a refused consolidation must persist its reason inline on the task. */
 test("a 422 consolidation refusal persists inline on the task", async (t) => {
   const calls: string[] = [];
