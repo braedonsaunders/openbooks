@@ -432,7 +432,7 @@
       "ei": "EI",
       "tax": "Tax",
       "lines": "Pay lines",
-      "trace": "T4127 trace"
+      "trace": "{engine} trace"
     },
     "submitApproval": "Submit for approval",
     "approvalSubmitted": "Sent for approval with the evidence package",
