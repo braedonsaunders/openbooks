@@ -2514,6 +2514,7 @@
       "lifeMonths": "Nutzungsdauer (Monate)",
       "departmentId": "Abteilung",
       "defaultMethod": "Standardmethode",
+      "defaultDepreciationMethodId": "Standardformel",
       "defaultConvention": "Abschreibungskonvention",
       "endOfLife": "Nutzungsende",
       "defaultLifeMonths": "Standard-Nutzungsdauer (Monate)",

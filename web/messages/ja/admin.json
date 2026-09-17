@@ -2514,6 +2514,7 @@
       "lifeMonths": "耐用期間（月数）",
       "departmentId": "部門",
       "defaultMethod": "既定の方法",
+      "defaultDepreciationMethodId": "既定の計算式",
       "defaultConvention": "減価償却計上規約",
       "endOfLife": "耐用期間終了時",
       "defaultLifeMonths": "既定の耐用期間（月数）",

@@ -2468,6 +2468,7 @@
       "lifeMonths": "Vida útil (meses)",
       "departmentId": "Departamento",
       "defaultMethod": "Método padrão",
+      "defaultDepreciationMethodId": "Fórmula padrão",
       "defaultConvention": "Convenção de depreciação",
       "endOfLife": "Fim da vida útil",
       "defaultLifeMonths": "Vida útil padrão (meses)",
