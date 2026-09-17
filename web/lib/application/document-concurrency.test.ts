@@ -140,7 +140,7 @@ test("REST writers and curated document tools reuse the exact SQL revision proje
   assert.match(recordsSource, /select \*\$\{documentRevisionProjection\(scope\.resolved\.table\)\}/);
   assert.match(writersSource, /documentRevisionCounterSql\(sql\.raw\("revision_seq"\)\).*as "updatedAt"/s);
   assert.equal(
-    toolsSource.match(/documentRevisionSql\(sql\.raw\("d\.updated_at"\)\)/g)?.length,
+    toolsSource.match(/documentRevisionCounterSql\(sql\.raw\("d\.revision_seq"\)\)/g)?.length,
     2,
   );
   assert.match(toolsSource, /updatedAt: r\.documentRevision/);

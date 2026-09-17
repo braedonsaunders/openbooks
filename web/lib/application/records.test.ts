@@ -339,7 +339,7 @@ test(
           data: { title: string }
           updated_at: string
         }
-        assert.match(read.updated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        assert.match(read.updated_at, /^\d{1,20}$/)
         const stale = read.updated_at
 
         // Tab A saves with the fresh token.

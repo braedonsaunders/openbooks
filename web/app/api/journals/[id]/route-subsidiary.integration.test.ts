@@ -72,7 +72,7 @@ hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { documentRevisionSql } = await import("../../../../lib/documents.ts");
+const { documentRevisionCounterSql } = await import("../../../../lib/documents.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -89,7 +89,7 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
 
 async function revisionToken(documentId: string): Promise<string> {
   const row = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionSql(sql.raw("updated_at"))} as "updatedAt"
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
   `));
   return row.rows[0]!.updatedAt;
