@@ -203,6 +203,9 @@ test("a failed run can be retried once its gate resolves", { skip: !DB }, async 
     const gates = await gateRows({ subjectId: docId });
     assert.equal(gates.length, 1, "exactly one live gate must exist after the retry");
     assert.equal(gates[0]!.assigneeUserId, actors.approver1Id);
+    // Submit parity: a retry that gates must park the subject awaiting
+    // approval, or the engine-enforced (pending_approval-only) release no-ops.
+    assert.equal(await docStatus(docId), "pending_approval");
 
     // The approval now completes through the retried run.
     const decision = await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: actors.approver1Id });

@@ -425,17 +425,30 @@ export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<Ret
       submitterUserId: subject.submitterUserId,
     });
     gatesCreated = res.gatesCreated;
-    status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
+    const failures = [...res.failed];
+    if (failures.length === 0 && gatesCreated > 0) {
+      // A retry that now gates must park its subject awaiting approval — the
+      // transition submitForApproval owns on the first attempt. Without it
+      // the subject sits in draft behind a live gate and the engine-enforced
+      // release (pending_approval-only by design) no-ops, so the approval can
+      // never land. A parking failure fails the run closed like any effect.
+      try {
+        await adapter.markAwaitingApproval?.(run.subjectId, ctx);
+      } catch (e) {
+        failures.push(`awaiting approval (${e instanceof Error ? e.message : String(e)})`);
+      }
+    }
+    status = failures.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
     await db
       .update(schema.flowRuns)
       .set({
         status,
-        error: res.failed.length > 0 ? res.failed.join("; ") : null,
+        error: failures.length > 0 ? failures.join("; ") : null,
         finishedAt: status === "waiting" ? null : new Date(),
       })
       .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
-    if (res.failed.length > 0) {
-      console.error(`[flows] retried run ${runId} (flow "${flow.name}") failed again:`, res.failed.join("; "));
+    if (failures.length > 0) {
+      console.error(`[flows] retried run ${runId} (flow "${flow.name}") failed again:`, failures.join("; "));
     }
   } catch (e) {
     status = "failed";
