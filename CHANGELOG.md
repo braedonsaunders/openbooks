@@ -8,10 +8,10 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–29: setup, banking, assistant, payroll, CRM, reports,
+Fleet-6 batches 9–35: setup, banking, assistant, payroll, CRM, reports,
 dashboard, documents, allocations, construction/AR, rates, assets,
-payroll, i18n, drawers/search/mobile, expenses, and compliance UX on
-top of alpha.11.
+payroll, i18n, drawers/search/mobile, expenses, compliance, invites,
+agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
 
 ### Setup and shell
 
@@ -83,6 +83,21 @@ top of alpha.11.
   persists on save.
 - Approvals center binds assignee ids as a PostgreSQL array literal so a
   single user-assigned gate no longer 500s the page.
+
+### Invites, close, agents, AI, and a11y (batches 30–35)
+
+- Users can be invited with a set-password link and a pending state;
+  the period drawer shows pending reopen requests.
+- Agent tiles and status filters no longer depend on the current query;
+  the shortcut legend documents a/d; team roles and banner dates
+  translate; evidence kinds are labeled in en/fr/es.
+- AI Test connection verifies the typed key; load-models errors stay
+  structured. Saved list views and bank-feed disconnects confirm first;
+  discard-draft on an app always confirms (F-t10-007).
+- Open-aging built-ins count application-aware open lines; statement
+  tables stay readable on a phone; cash cockpit, bank feeds, project
+  billing, setup sidebar, and report filter presets translate.
+- Drawer banners wrap at 390px instead of squeezing.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 
