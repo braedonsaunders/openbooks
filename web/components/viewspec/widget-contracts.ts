@@ -164,7 +164,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'forecast-kpi-group': { props: ['currency', 'items'] },
   'forecast-snapshot-button': { props: ['ownerUserId', 'periodEnd', 'periodStart', 'salesTeamId'] },
   'form-default-cell': { props: ['defaultLabel', 'rolesLabel', 'showDefault'] },
-  'form-drawer': { props: ['def', 'duplicateFrom', 'headerDefs', 'lineDefs', 'recordType', 'subsidiaryEnabled'] },
+  'form-drawer': { props: ['def', 'drawerKey', 'duplicateFrom', 'headerDefs', 'lineDefs', 'recordType', 'subsidiaryEnabled'] },
   'grant-access-form': { props: ['actingUsers', 'defaultMemberUserId', 'members', 'options', 'organizations'] },
   'grant-acting-cell': { props: ['email', 'name'] },
   'grant-control-cell': { props: ['grantId', 'isActive'] },
