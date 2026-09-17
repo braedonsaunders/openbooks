@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env, withBypass } from "@openbooks/engine/src/db.ts";
+import { db, env, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
 
 registerHooks({
@@ -15,7 +15,7 @@ registerHooks({
 
 for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] as const) {
   test(`${method} observes MFA enabled while its user lock is pending`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     const priorSecret = env.SESSION_SECRET;
     env.SESSION_SECRET = randomBytes(32).toString("hex");
     let release = () => {};
@@ -25,16 +25,23 @@ for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] a
       const auth = await import("./auth");
       const { sealSecret } = await import("./secrets");
       const { generateTotpSecret, totpCode } = await import("./auth-totp");
-      const userId = (await seedFlowActors(org.orgId)).adminId;
-      const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
       const password = "Isolated MFA transition password 8945";
-      await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
-      await db.execute(sql`update users set password_hash=${await auth.hashPassword(password)} where id=${userId}`);
       const issuer = "https://identity.example.test";
-      if (method === "mapped OIDC identity") {
-        await db.execute(sql`insert into auth_oidc_identities (issuer,subject,user_id,email_at_link)
-          values (${issuer},${userId},${userId},${email})`);
-      }
+      // Fixture seeds under explicit bypass: importing ./auth above pulls in
+      // the web request-org resolver, which denies every unscoped query under
+      // pooled RLS (bare setup dies with 42501, reads see zero rows). The
+      // login calls under test scope their own queries internally.
+      const { userId, email } = await withBypassContext(async () => {
+        const userId = (await seedFlowActors(org.orgId)).adminId;
+        const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+        await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
+        await db.execute(sql`update users set password_hash=${await auth.hashPassword(password)} where id=${userId}`);
+        if (method === "mapped OIDC identity") {
+          await db.execute(sql`insert into auth_oidc_identities (issuer,subject,user_id,email_at_link)
+            values (${issuer},${userId},${userId},${email})`);
+        }
+        return { userId, email };
+      });
       const secret = generateTotpSecret();
       let staged!: () => void;
       const ready = new Promise<void>(resolve => { staged = resolve; });
@@ -58,10 +65,10 @@ for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] a
       const deadline = Date.now() + 10_000;
       let blocked = false;
       while (!settled && Date.now() < deadline) {
-        blocked = (await db.execute<{ blocked: boolean }>(sql`select exists(
+        blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
           select 1 from pg_stat_activity where datname=current_database()
             and ${holderPid}=any(pg_blocking_pids(pid))
-        ) as blocked`)).rows[0]!.blocked;
+        ) as blocked`)).rows[0]!.blocked);
         if (blocked) break;
         await new Promise(resolve => setTimeout(resolve, 10));
       }
@@ -71,14 +78,17 @@ for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] a
       const result = await contender;
       assert.equal(result.kind, "mfa_required", "newly enabled MFA must gate this login");
       assert.ok(result.kind === "mfa_required");
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_sessions where user_id=${userId}`)).rows[0]!.n, 0);
+      // Verification reads run in the scratch org's scope.
+      await withOrgContext(org.orgId, async () => {
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_sessions where user_id=${userId}`)).rows[0]!.n, 0);
+      });
       assert.equal((await auth.completeMfaLogin(result.challengeToken, totpCode(secret)!.code, context)).kind, "success");
     } finally {
       release();
       await Promise.allSettled([held, contender]);
       if (priorSecret === undefined) delete env.SESSION_SECRET;
       else env.SESSION_SECRET = priorSecret;
-      await dropScratchOrg(org.orgId);
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   });
 }
