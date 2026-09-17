@@ -8,7 +8,10 @@ export interface AdminUserRow {
   email: string
   isActive: boolean
   isSelf: boolean
+  /** Invited but never signed in while a set-password link is outstanding. */
+  isPending: boolean
   statusLabel: string
+  statusVariant: 'success' | 'destructive' | 'warning'
   lastSignIn: string
   assigned: { id: string; name: string }[]
 }
@@ -107,7 +110,7 @@ export function AdminUsersTable({
                 </div>
               </td>
               <td className="px-3 py-2">
-                <Badge variant={u.isActive ? 'success' : 'destructive'}>{u.statusLabel}</Badge>
+                <Badge variant={u.statusVariant}>{u.statusLabel}</Badge>
               </td>
               <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{u.lastSignIn}</td>
               <td className="px-3 py-2 text-right">

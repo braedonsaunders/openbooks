@@ -180,6 +180,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'insights-dashboard-builder',
   'insights-tabs',
   'inventory-action-drawer',
+  'invite-user',
   'invoicing-setup-workspace',
   'item-drawer',
   'items-header-actions',

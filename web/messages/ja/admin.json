@@ -720,7 +720,17 @@
     "deactivate": "無効化",
     "reactivate": "再有効化",
     "deactivated": "{name} を無効化しました",
-    "reactivated": "{name} を再有効化しました"
+    "reactivated": "{name} を再有効化しました",
+    "statusPending": "招待中",
+    "inviteButton": "ユーザーを招待",
+    "inviteTitle": "ユーザーを招待",
+    "inviteDescription": "パスワードを設定してサインインするためのリンクを記載したメールが送信されます。",
+    "inviteEmailLabel": "メールアドレス",
+    "inviteEmailPlaceholder": "taro@example.jp",
+    "inviteEmailRequired": "メールアドレスを入力してください",
+    "inviteSend": "招待を送信",
+    "inviteSent": "{email} に招待を送信しました",
+    "inviteCreatedWithoutEmail": "ユーザーは作成されましたが、招待メールを送信できませんでした。メールの設定を確認し、サインインページからパスワードをリセットするようお伝えください。"
   },
   "permissions": {
     "groups": {

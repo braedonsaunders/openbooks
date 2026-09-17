@@ -4,11 +4,15 @@ import { sql } from "drizzle-orm";
 import {
   db,
   type SqlExecutor,
+  withOrgContext,
   withOrgTransaction,
   withTransactionSavepoint,
 } from "@openbooks/engine/src/db.ts";
 import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
+import { requestPasswordReset } from "../../../../lib/auth-reset";
+import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -48,15 +52,18 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
-    action?: "assign" | "unassign" | "set-active";
+    action?: "assign" | "unassign" | "set-active" | "invite";
     userId?: string;
     roleId?: string;
     isActive?: boolean;
+    email?: string;
   };
-  if (typeof body.userId !== "string" || !isUuid(body.userId)) {
-    return NextResponse.json({ error: "userId required" }, { status: 400 });
+  if (body.action !== "invite") {
+    if (typeof body.userId !== "string" || !isUuid(body.userId)) {
+      return NextResponse.json({ error: "userId required" }, { status: 400 });
+    }
   }
-  const userId = body.userId.toLowerCase();
+  const userId = typeof body.userId === "string" ? body.userId.toLowerCase() : "";
 
   // All assignment and activation decisions serialize on the same user row.
   // Grants lock their role first, matching role deletion's role → user order.
@@ -226,6 +233,100 @@ export async function POST(req: Request) {
         }
         return NextResponse.json({ ok: true });
       }));
+    }
+    case "invite": {
+      if (typeof body.email !== "string") {
+        return NextResponse.json({ error: "email required" }, { status: 400 });
+      }
+      const email = normalizeLoginEmail(body.email);
+      if (!email) {
+        return NextResponse.json({ error: "valid email required" }, { status: 400 });
+      }
+      if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
+        return NextResponse.json({ error: "roleId required" }, { status: 400 });
+      }
+      const roleId = body.roleId.toLowerCase();
+      const name = deriveInviteDisplayName(email);
+      // The user row, its first role, and both audit rows commit atomically.
+      // ON CONFLICT DO NOTHING keeps a concurrent double-invite to a single
+      // user: the loser sees no row and reports 409 instead of 500.
+      const created = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        const role = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
+          select id, key, permissions from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
+        if (!role.rows[0])
+          return NextResponse.json({ error: "role not found" }, { status: 404 });
+        if (!actor.isSuperAdmin) {
+          const rolePermissions = Array.isArray(role.rows[0].permissions)
+            ? role.rows[0].permissions.filter((p): p is string => typeof p === "string")
+            : [];
+          const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
+          if (missing.length > 0) {
+            return NextResponse.json(
+              {
+                error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
+                missing,
+              },
+              { status: 403 },
+            );
+          }
+        }
+        const inserted = await db.execute<{ id: string }>(sql`
+          insert into users (org_id, email, name, password_hash, is_active, created_by, updated_by)
+          values (${actor.orgId}, ${email}, ${name}, ${UNUSABLE_PASSWORD_HASH}, true, ${actor.id}, ${actor.id})
+          on conflict do nothing
+          returning id`);
+        const newUserId = inserted.rows[0]?.id;
+        if (!newUserId) {
+          return NextResponse.json(
+            { error: "a user with this email already exists" },
+            { status: 409 },
+          );
+        }
+        const assignment = await db.execute<{ id: string }>(sql`
+          insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+          values (${actor.orgId}, ${newUserId}, ${roleId}, ${actor.id}, ${actor.id})
+          returning id`);
+        await audit(db, {
+          orgId: actor.orgId,
+          tableName: "users",
+          rowId: newUserId,
+          action: "insert",
+          changes: {
+            email: [null, email],
+            name: [null, name],
+          },
+          actorId: actor.id,
+        });
+        if (assignment.rows[0]) {
+          await audit(db, {
+            orgId: actor.orgId,
+            tableName: "role_assignments",
+            rowId: assignment.rows[0].id,
+            action: "insert",
+            changes: {
+              userId: [null, newUserId],
+              roleId: [null, roleId],
+            },
+            actorId: actor.id,
+          });
+        }
+        return { userId: newUserId };
+      }));
+      if (created instanceof NextResponse) return created;
+      // The set-password link travels the ordinary password-reset mail path,
+      // so delivery, logging and expiry behave exactly like a self-service
+      // reset. Mail trouble must not roll the user back: the invite stays
+      // pending and the mailbox owner can always request a fresh link.
+      try {
+        await requestPasswordReset(email, authRequestContext(req));
+      } catch (error) {
+        console.error("[admin-invite] set-password email failed", error);
+      }
+      const queued = await withOrgContext(actor.orgId, async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from auth_password_resets
+         where user_id = ${created.userId} and used_at is null and expires_at > now()
+      `)).rows[0]!.n > 0);
+      return NextResponse.json({ ok: true, userId: created.userId, emailQueued: queued });
     }
     default:
       return NextResponse.json({ error: "unknown action" }, { status: 400 });

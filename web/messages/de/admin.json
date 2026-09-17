@@ -720,7 +720,17 @@
     "deactivate": "Deaktivieren",
     "reactivate": "Reaktivieren",
     "deactivated": "{name} deaktiviert",
-    "reactivated": "{name} reaktiviert"
+    "reactivated": "{name} reaktiviert",
+    "statusPending": "eingeladen",
+    "inviteButton": "Benutzer einladen",
+    "inviteTitle": "Benutzer einladen",
+    "inviteDescription": "Diese Person erhält eine E-Mail mit einem Link, um ein Passwort festzulegen und sich anzumelden.",
+    "inviteEmailLabel": "E-Mail",
+    "inviteEmailPlaceholder": "kollegin@beispiel.de",
+    "inviteEmailRequired": "Geben Sie eine E-Mail-Adresse ein",
+    "inviteSend": "Einladung senden",
+    "inviteSent": "Einladung an {email} gesendet",
+    "inviteCreatedWithoutEmail": "Benutzer erstellt, aber die Einladungs-E-Mail konnte nicht gesendet werden. Prüfen Sie die E-Mail-Einstellungen und bitten Sie die Person, ihr Passwort über die Anmeldeseite zurückzusetzen."
   },
   "permissions": {
     "groups": {

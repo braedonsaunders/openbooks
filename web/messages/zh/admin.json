@@ -720,7 +720,17 @@
     "deactivate": "停用",
     "reactivate": "重新激活",
     "deactivated": "{name} 已停用",
-    "reactivated": "{name} 已重新激活"
+    "reactivated": "{name} 已重新激活",
+    "statusPending": "已邀请",
+    "inviteButton": "邀请用户",
+    "inviteTitle": "邀请用户",
+    "inviteDescription": "对方将收到一封电子邮件，其中包含设置密码并登录的链接。",
+    "inviteEmailLabel": "电子邮件",
+    "inviteEmailPlaceholder": "wang@example.cn",
+    "inviteEmailRequired": "请输入电子邮件地址",
+    "inviteSend": "发送邀请",
+    "inviteSent": "已向 {email} 发送邀请",
+    "inviteCreatedWithoutEmail": "用户已创建，但邀请邮件未能发送。请检查邮件设置，并让对方从登录页面重置密码。"
   },
   "permissions": {
     "groups": {

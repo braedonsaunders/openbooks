@@ -264,6 +264,7 @@ import {
   TaxTabs,
 } from '../../app/(app)/tax/sections'
 import { AdminUsersTable } from '../../app/(app)/admin/users/sections'
+import { InviteUserButton } from '../../app/(app)/admin/users/InviteDialog'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
@@ -2532,6 +2533,14 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       sort={str(props, 'sort') ?? 'name'}
       dir={str(props, 'dir') === 'desc' ? 'desc' : 'asc'}
       labels={props.labels as ComponentProps<typeof AdminUsersTable>['labels']}
+    />
+  ),
+  /** Invite entry point for the Users page header. The button owns its own
+   *  drawer and strings (like the roles page's `new-role`), so the widget
+   *  carries only the role picker options. */
+  'invite-user': (props) => (
+    <InviteUserButton
+      allRoles={(props.allRoles as ComponentProps<typeof InviteUserButton>['allRoles']) ?? []}
     />
   ),
   /** A link wrapped in a Button — the plain form several admin headers use,

@@ -788,7 +788,17 @@
     "deactivate": "Deactivate",
     "reactivate": "Reactivate",
     "deactivated": "{name} deactivated",
-    "reactivated": "{name} reactivated"
+    "reactivated": "{name} reactivated",
+    "statusPending": "invite sent",
+    "inviteButton": "Invite user",
+    "inviteTitle": "Invite user",
+    "inviteDescription": "They will receive an email with a link to set their password and sign in.",
+    "inviteEmailLabel": "Email",
+    "inviteEmailPlaceholder": "colleague@example.com",
+    "inviteEmailRequired": "Enter an email address",
+    "inviteSend": "Send invite",
+    "inviteSent": "Invitation sent to {email}",
+    "inviteCreatedWithoutEmail": "User created, but the invite email could not be sent. Check email settings, then ask them to reset their password from the sign-in page."
   },
   "permissions": {
     "groups": {

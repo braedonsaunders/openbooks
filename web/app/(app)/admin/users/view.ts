@@ -105,8 +105,12 @@ export async function loadAdminUsers(
       email: string
       is_active: boolean
       last_login_at: string | null
+      is_pending: boolean
     }>(sql`
-      select u.id, u.name, u.email, u.is_active, u.last_login_at
+      select u.id, u.name, u.email, u.is_active, u.last_login_at,
+             (u.is_active and u.last_login_at is null
+              and exists (select 1 from auth_password_resets r
+                           where r.user_id = u.id and r.used_at is null and r.expires_at > now())) as is_pending
         from users u
        where ${where}
        order by ${orderBy}
@@ -169,7 +173,13 @@ export async function loadAdminUsers(
       email: u.email,
       isActive: u.is_active,
       isSelf: u.id === authz.user.id,
-      statusLabel: u.is_active ? t('statusActive') : t('statusInactive'),
+      isPending: u.is_pending,
+      statusLabel: u.is_pending
+        ? t('statusPending')
+        : u.is_active
+          ? t('statusActive')
+          : t('statusInactive'),
+      statusVariant: u.is_pending ? 'warning' : u.is_active ? 'success' : 'destructive',
       lastSignIn: u.last_login_at ? dateTime(u.last_login_at) : '—',
       assigned: rolesByUser.get(u.id) ?? [],
     })),
@@ -204,6 +214,9 @@ export function adminUsersSpec(data: AdminUsersData): PageSpec {
         title: f('title'),
         description: f('description'),
         actions: [
+          widget('invite-user', {
+            allRoles: data.allRoles,
+          }),
           widget('plain-link-button', {
             href: data.manageRolesHref,
             label: data.manageRolesLabel,
