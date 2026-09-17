@@ -382,6 +382,62 @@ test('field-ticket multi-section saves fence each request with the prior respons
   assert.match(saveAll, /await saveHeader\(\)[\s\S]*await saveGrid\(\)/)
 })
 
+test('a refused send-for-signature hands the server reason back instead of a fallback (F-t04-001)', async () => {
+  // SIM Northstar has no email transport: the route 422s with the typed
+  // FieldTicketError reason. The mutation must carry that reason to the
+  // caller (toast + pinned dialog alert), never the generic fallback.
+  const refusal = 'Email delivery is not configured — set it up in Admin → Email'
+  const { transport, requests } = scriptedServer([
+    {
+      match: (request) => request.path === '/api/field-tickets/ft-1',
+      respond: () => ({ status: 422, body: { error: refusal } }),
+    },
+  ])
+  const result = await sendFieldTicketMutation({
+    ticketId: 'ft-1',
+    revision: OPENED_REVISION,
+    method: 'POST',
+    body: { action: 'send-signature', to: 'customer@example.test', message: null },
+    fallbackMessage: FALLBACK_MESSAGE,
+    transport,
+  })
+  assert.deepEqual(result, { status: 'error', message: refusal })
+  assert.equal(requests[0]!.body.action, 'send-signature')
+})
+
+test('a refused send-for-signature pins as an alert in the send dialog (F-t04-001)', () => {
+  // The toast alone expires and the failure read as silent: the send form
+  // must pin the refused reason past it, and a retry must clear the stale pin.
+  const sendForm = FIELD_TICKET_DRAWER_SOURCE.slice(
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('ft-send-to'),
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('editor.cancel'),
+  )
+  assert.match(
+    sendForm,
+    /\{ onErrorMessage: setSendError \}/,
+    'a refused send must pin the server reason into dialog state',
+  )
+  assert.match(
+    sendForm,
+    /\{sendError \? \(\s*<p role="alert"/,
+    'the pinned send refusal must render as a persistent alert in the send form',
+  )
+  assert.match(
+    sendForm,
+    /setSendError\(null\)/,
+    'retrying the send must clear the stale refusal pin',
+  )
+  const call = FIELD_TICKET_DRAWER_SOURCE.slice(
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function call('),
+    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function saveHeader('),
+  )
+  assert.match(
+    call,
+    /options\.onErrorMessage\?\.?\(result\.message\)/,
+    'call must forward the refused reason to the pinning sink as well as the toast',
+  )
+})
+
 test('each editor surfaces a genuinely stale token as the server 409 and never retries or re-mints a token', async () => {
   // The server holds CONCURRENT_REVISION; every editor only holds OPENED_REVISION.
   const { transport: conflictTransport } = scriptedServer([
