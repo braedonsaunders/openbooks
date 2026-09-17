@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.11` image digest in
+2. resolves and records the official `0.1.0-alpha.12` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker (scheduled work — scripts, feeds, billing, outbox, flows,
@@ -735,12 +735,11 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.11` is the current community preview. It keeps the
-version-tag release path from `v0.1.0-alpha.10` and adds the fleet-6 UI
-and session-gate fixes (AR as-of book, approvals empty states, form
-designer PATCH/remount/delete/visibility, banking root error boundary,
-document line amounts, project activation) plus a configurable
-per-process database pool. See the changelog for the areas touched.
+`v0.1.0-alpha.12` is the current community preview. It keeps the
+version-tag release path and adds fleet-6 batches 9–14: typed setup
+errors, banking KPI/badge, assistant run persistence and scroll,
+pack-driven payroll stubs/W-2 boxes, CRM revision tokens, and
+allocations Test-tab preview. See the changelog for the areas touched.
 
 Good uses today:
 

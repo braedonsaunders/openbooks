@@ -6,6 +6,36 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12] - 2026-09-16
+
+Fleet-6 batches 9–14: setup, banking, assistant, payroll, CRM, and
+allocations UX on top of alpha.11.
+
+### Setup and shell
+
+- Typed validation and duplicate conflicts with user-language messages;
+  required fields persist errors and reset busy on transport failure;
+  blank `keepDefault` fields are legal; time-classification option labels
+  resolve under `options`.
+- Shell empty-state no longer repeats the boundary copy in the body.
+
+### Banking, approvals, CRM
+
+- Account KPI reads posted+reversed lines; the 7-day work-queue badge
+  counts only posted documents.
+- Approvals render an empty state instead of a blank surface.
+- Lead/prospect first save sends the party revision token; the lead
+  owner picker uses the translated unassigned label.
+
+### Payroll, assistant, allocations
+
+- Stub register buckets and the overview setup checklist come from pack
+  declarations; FICA carry-in splits into W-2 boxes 4 and 6.
+- Assistant runs persist on the server across navigation and stick to
+  the bottom with jump-to-latest.
+- Period-sweep preview runs inline on the rule Test tab; empty
+  dimension options guide the user and bad values speak user language.
+
 ## [0.1.0-alpha.11] - 2026-09-16
 
 UI and session-gate fixes on top of the self-deploy release. The
