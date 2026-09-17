@@ -55,6 +55,7 @@
     "deletePostedBody": "Esto elimina permanentemente el diario y su impacto en el libro mayor. No se puede deshacer.",
     "deleted": "Diario eliminado",
     "deleteFailed": "No se pudo eliminar",
+    "voidStaleRevision": "Este asiento cambió después de abrirlo — la última versión está cargada. Revíselo y anúlelo de nuevo.",
     "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
     "outOfBalance": "Descuadrado · {amount}",
     "balanced": "Cuadrado",

@@ -22,8 +22,24 @@ import { projectRetainageHeldSql } from "./construction-billing.ts";
 import { add, cmp, neg } from "./money.ts";
 import { InventoryError, reverseInventoryMovement } from "./inventory.ts";
 
+/**
+ * Machine-readable void refusal reasons (F-t06-021). The human message
+ * travels unchanged in `message`; `code` lets callers branch — the journal
+ * drawer maps the three actionable refusals to localized copy instead of
+ * toasting raw kernel text. Every other refusal is `invalid`.
+ */
+export type DocumentVoidCode =
+  | "invalid"
+  | "stale-revision"
+  | "reversal-period-uncovered"
+  | "reversal-period-closed";
+
 export class DocumentVoidError extends Error {
-  constructor(message: string, readonly status = 422) { super(message); }
+  constructor(
+    message: string,
+    readonly status = 422,
+    readonly code: DocumentVoidCode = "invalid",
+  ) { super(message); }
 }
 
 /** NOWAIT pre-lock contention anywhere in the cause chain (55P03 lock_not_available). */
@@ -156,6 +172,7 @@ export async function requestDocumentVoid(
         (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== current.revision)) {
       throw new DocumentVoidError(
         "this document changed after you opened it; reload and review the latest revision", 409,
+        "stale-revision",
       );
     }
     // This compare-and-set is the single-winner claim. PostgreSQL locks the
@@ -718,7 +735,11 @@ export async function completeRequestedDocumentVoid(
            limit 1
         `));
         if (!period.rows[0]) {
-          throw new DocumentVoidError(`no accounting period covers ${reversalDate}`);
+          throw new DocumentVoidError(
+            `no accounting period covers ${reversalDate} — generate the period covering that date, then void again`,
+            422,
+            "reversal-period-uncovered",
+          );
         }
         const subsidiaries = (await tx.execute<{ subsidiary_id: string }>(sql`
           select distinct subsidiary_id
@@ -737,6 +758,8 @@ export async function completeRequestedDocumentVoid(
           if (error instanceof CloseError) {
             throw new DocumentVoidError(
               `the reversal period for ${reversalDate} is closed: ${error.message}`,
+              422,
+              "reversal-period-closed",
             );
           }
           throw error;

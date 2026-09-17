@@ -55,6 +55,7 @@
     "deletePostedBody": "Isso exclui permanentemente o lançamento e remove seu impacto no razão. Isso não pode ser desfeito.",
     "deleted": "Lançamento excluído",
     "deleteFailed": "Falha ao excluir",
+    "voidStaleRevision": "Este lançamento foi alterado após a abertura — a versão mais recente está carregada. Revise e anule novamente.",
     "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
     "outOfBalance": "Desbalanceado · {amount}",
     "balanced": "Balanceado",

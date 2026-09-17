@@ -69,7 +69,10 @@ export async function POST(
     expectedUpdatedAt?: string
   }
   if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
-    return NextResponse.json({ error: 'Reload the document and supply its exact revision before voiding' }, { status: 409 })
+    return NextResponse.json(
+      { error: 'Reload the document and supply its exact revision before voiding', code: 'stale-revision' },
+      { status: 409 },
+    )
   }
   try {
     const result = await requestDocumentVoid({
@@ -87,7 +90,7 @@ export async function POST(
     )
   } catch (error) {
     if (error instanceof DocumentVoidError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
     }
     throw error
   }

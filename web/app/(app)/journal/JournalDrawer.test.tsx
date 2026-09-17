@@ -17,6 +17,19 @@ test('journal voids carry the revision token required by the void API', () => {
 // same drawer session always 409s ("changed after you opened it"), and the
 // keyless widget never refires its mount read, so close/reopen cannot heal it
 // either. A successful post must re-pin the canonical revision.
+test('a stale-revision void reloads and says so instead of toasting kernel text', () => {
+  assert.match(
+    source,
+    /data\.code === 'stale-revision'/,
+    'the void failure path must branch on the typed refusal code (F-t06-021): a stale token reloads the canonical revision with a localized message',
+  )
+  assert.match(
+    source,
+    /voidStaleRevision/,
+    'the stale-revision branch must render localized copy, not the raw kernel refusal',
+  )
+})
+
 test('a successful post re-pins the canonical revision so a later void cannot 409', () => {
   const postBlock = source.slice(source.indexOf('async function post()'), source.indexOf('async function remove()'))
   assert.ok(postBlock.includes('async function post()'), 'post() must exist')

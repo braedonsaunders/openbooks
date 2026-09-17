@@ -55,6 +55,7 @@
     "deletePostedBody": "Dadurch wird die Buchung dauerhaft gelöscht und ihre Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
     "deleted": "Buchung gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen",
+    "voidStaleRevision": "Diese Buchung wurde nach dem Öffnen geändert — die neueste Version ist geladen. Prüfen Sie sie und stornieren Sie erneut.",
     "totals": "Soll <strong>{debits}</strong> · Haben <strong>{credits}</strong>",
     "outOfBalance": "Nicht ausgeglichen · {amount}",
     "balanced": "Ausgeglichen",
