@@ -2468,6 +2468,7 @@
       "lifeMonths": "使用寿命（月）",
       "departmentId": "部门",
       "defaultMethod": "默认方法",
+      "defaultDepreciationMethodId": "默认公式",
       "defaultConvention": "折旧惯例",
       "endOfLife": "使用寿命结束",
       "defaultLifeMonths": "默认使用寿命（月）",

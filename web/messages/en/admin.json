@@ -2468,6 +2468,7 @@
       "lifeMonths": "Life (months)",
       "departmentId": "Department",
       "defaultMethod": "Default method",
+      "defaultDepreciationMethodId": "Default formula",
       "defaultConvention": "Depreciation convention",
       "endOfLife": "End of life",
       "defaultLifeMonths": "Default life (months)",
