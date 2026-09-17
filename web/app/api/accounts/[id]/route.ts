@@ -9,7 +9,7 @@ import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/feat
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { assetBankHygieneWarning } from '../../../../lib/accounts-hygiene'
 import { isUuid } from '../../../../lib/list-params'
-import { loadAccount } from '../_lib'
+import { loadAccount, orgBaseCurrency } from '../_lib'
 import { accountInputFields } from '../_input'
 
 export const runtime = 'nodejs'
@@ -69,8 +69,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const parsedBody = await parseJsonBody(request, patchBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
+  // Multi-currency off refuses settlement-currency writes — except the one the
+  // reconcilable invariant forces: a reconcilable account must carry a
+  // currency, and a single-currency org has only its base (the same base-only
+  // pass-through as transaction import).
+  const nextReconcilable = body.reconcilable ?? Boolean(existing.reconcilable)
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    const restriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null
+    const base = await orgBaseCurrency(gate.user.orgId)
+    if (!(nextReconcilable && restriction && base && restriction === base)) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
   }
   if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -104,7 +113,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const nextSummary = body.isSummary ?? Boolean(existing.is_summary)
-  const nextReconcilable = body.reconcilable ?? Boolean(existing.reconcilable)
   if (nextSummary && nextReconcilable) return bad('summary_reconcilable_conflict')
   if (body.isSummary === true && existingPayload.hasTransactions) return bad('summary_has_transactions', 'isSummary')
   if (body.isSummary === false && existingPayload.childCount > 0) return bad('summary_has_children', 'isSummary')

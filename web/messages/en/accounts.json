@@ -73,6 +73,7 @@
       "parent_type_mismatch": "The parent and child must use the same account type.",
       "parent_cycle": "That parent would create a circular account hierarchy.",
       "summary_reconcilable_conflict": "A summary account cannot be reconcilable.",
+      "reconcilable_currency_required": "Reconcilable accounts need a settlement currency — choose one before saving.",
       "summary_has_transactions": "An account with ledger activity cannot become a summary account.",
       "summary_has_children": "An account with active children must remain a summary account.",
       "inactive_has_children": "Deactivate this account’s active children first.",

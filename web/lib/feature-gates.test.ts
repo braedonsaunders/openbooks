@@ -2071,8 +2071,13 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/api/accounts/[id]/route.ts'),
-    /currencyRestriction !== undefined[\s\S]{0,200}status: 404/,
-    'account PATCH must 404 — not persist — currencyRestriction when Multi-currency is off',
+    /currencyRestriction !== undefined[\s\S]{0,400}status: 404/,
+    'account PATCH must 404 — not persist — currencyRestriction when Multi-currency is off (except the reconcilable base-currency pass-through)',
+  )
+  assert.match(
+    read('app/api/accounts/[id]/route.ts'),
+    /orgBaseCurrency/,
+    'account PATCH must let the reconcilable base currency through when Multi-currency is off (F-t05-003)',
   )
   assert.match(
     read('app/api/accounts/route.ts'),
@@ -2081,18 +2086,23 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/api/accounts/route.ts'),
-    /currencyRestriction !== undefined[\s\S]{0,200}status: 404/,
-    'account POST must 404 — not persist — currencyRestriction when Multi-currency is off',
+    /currencyRestriction !== undefined[\s\S]{0,400}status: 404/,
+    'account POST must 404 — not persist — currencyRestriction when Multi-currency is off (except the reconcilable base-currency pass-through)',
+  )
+  assert.match(
+    read('app/api/accounts/route.ts'),
+    /orgBaseCurrency/,
+    'account POST must let the reconcilable base currency through when Multi-currency is off (F-t05-003)',
   )
   assert.match(
     read('app/(app)/accounts/AccountDrawer.tsx'),
-    /multiCurrency \? \{ currencyRestriction/,
-    'the account drawer must not send currencyRestriction when Multi-currency is off',
+    /multiCurrency \|\| form\.reconcilable \? \{ currencyRestriction/,
+    'the account drawer must not send currencyRestriction when Multi-currency is off, except the reconcilable settlement currency (F-t05-003)',
   )
   assert.match(
     read('app/(app)/accounts/AccountDrawer.tsx'),
-    /\{multiCurrency \? \(/,
-    'the account drawer must hide currencyRestriction when Multi-currency is off',
+    /showCurrencyField/,
+    'the account drawer must hide currencyRestriction when Multi-currency is off, except for reconcilable accounts (F-t05-003)',
   )
   assert.match(
     read('app/(app)/accounts/page.tsx'),

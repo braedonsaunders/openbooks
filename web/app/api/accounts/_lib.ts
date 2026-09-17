@@ -11,6 +11,15 @@ export interface AccountPayload {
   activeChildCount: number
 }
 
+/** Org base currency code (e.g. USD) — the only settlement currency a
+ * single-currency org can carry. */
+export async function orgBaseCurrency(orgId: string): Promise<string | null> {
+  const result = await db.execute<{ base_currency: string | null }>(sql`
+    select base_currency from orgs where id = ${orgId}
+  `)
+  return result.rows[0]?.base_currency ?? null
+}
+
 /** Tenant-scoped account payload used by both the list flyout and API. */
 export async function loadAccount(id: string, orgId: string): Promise<AccountPayload | null> {
   const result = (await db.execute<Record<string, unknown>>(sql`
