@@ -168,5 +168,133 @@
       "void": "已作废",
       "expired": "已过期"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "定期发票",
+      "subscriptions": "订阅",
+      "advanced": "高级生命周期",
+      "dunning": "催收"
+    },
+    "errors": {
+      "actionFailed": "操作失败",
+      "couldNotCreate": "无法创建"
+    },
+    "subscriptions": {
+      "mrr": "每月经常性收入",
+      "summary": "{active} 个有效 · {plans, plural, one {# 个套餐} other {# 个套餐}}",
+      "plansTitle": "套餐",
+      "plansTable": {
+        "plan": "套餐",
+        "price": "价格",
+        "billing": "计费"
+      },
+      "archived": "（已归档）",
+      "every": "每 {count}{unit}",
+      "delete": "删除",
+      "noPlans": "暂无套餐。",
+      "planNamePlaceholder": "套餐名称",
+      "pricePlaceholder": "价格",
+      "everyNPlaceholder": "每 N",
+      "defaultIncomeAccount": "默认收入科目",
+      "addPlan": "添加套餐",
+      "subsTitle": "订阅",
+      "subsTable": {
+        "customer": "客户",
+        "plan": "套餐",
+        "qty": "数量",
+        "mrr": "MRR",
+        "nextBill": "下次开票",
+        "status": "状态"
+      },
+      "noSubs": "暂无订阅。",
+      "customerPlaceholder": "客户……",
+      "planPlaceholder": "套餐……",
+      "qtyPlaceholder": "数量",
+      "priceOverridePlaceholder": "价格覆盖（可选）",
+      "firstFullBill": "首次全额开票",
+      "prorateFirstPeriod": "首期按比例计费",
+      "autoPostInvoices": "自动过账发票",
+      "addSubscription": "添加订阅",
+      "prorateHint": "设置开始之后的首次开票日期并勾选“按比例”，即可仅对首个部分周期开票。",
+      "apply": "应用",
+      "billNow": "立即开票",
+      "changeQty": "更改数量",
+      "pause": "暂停",
+      "resume": "恢复",
+      "cancelSub": "取消",
+      "cancelConfirmTitle": "取消订阅？",
+      "cancelConfirmBody": "取消将终止此订阅的定期开票，此操作无法撤销。",
+      "toasts": {
+        "prorated": "按比例调整 {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "数量已更新（无按比例计费）",
+        "billed": "已开票 {documentNumber}",
+        "firstInvoiceProrated": "首张按比例发票 {documentNumber}，金额 {amount}"
+      }
+    },
+    "recurring": {
+      "newSchedule": "新建定期计划",
+      "templateDocLabel": "模板单据 #",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "周期",
+      "cadences": {
+        "weekly": "每周",
+        "biweekly": "每两周",
+        "monthly": "每月",
+        "quarterly": "每季度",
+        "annually": "每年",
+        "custom_cron": "自定义 cron"
+      },
+      "cronLabel": "Cron",
+      "firstRunLabel": "首次运行",
+      "autoPostCheckbox": "自动过账生成的单据",
+      "createSchedule": "创建计划",
+      "table": {
+        "template": "模板",
+        "customer": "客户",
+        "cadence": "周期",
+        "nextRun": "下次运行",
+        "runs": "运行次数",
+        "autoPost": "自动过账",
+        "status": "状态"
+      },
+      "yes": "是",
+      "no": "否",
+      "active": "有效",
+      "paused": "已暂停",
+      "runNow": "立即运行",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除",
+      "actionFailed": "无法完成定期计划操作。",
+      "generatedDocumentsDeleteConflict": "此定期计划已生成单据，无法删除，必须保留其来源历史。",
+      "noneYet": "暂无定期计划。"
+    },
+    "dunning": {
+      "blankStageName": "首次提醒",
+      "newPolicy": "新建催收政策",
+      "policyNameLabel": "政策名称",
+      "policyNamePlaceholder": "标准 net-30 催收",
+      "gracePeriodLabel": "宽限期（逾期天数）",
+      "reminderLadder": "提醒阶梯",
+      "addStage": "+ 添加阶段",
+      "newStageName": "提醒 {n}",
+      "stageLabels": {
+        "name": "名称",
+        "daysPastDue": "逾期天数",
+        "sequence": "顺序"
+      },
+      "subjectLabel": "主题",
+      "bodyLabel": "正文",
+      "removeStage": "删除阶段",
+      "tokensHint": "令牌：",
+      "createPolicy": "创建政策",
+      "policySummary": "{count, plural, one {# 个阶段} other {# 个阶段}} · 宽限 {grace} 天",
+      "off": "关闭",
+      "delete": "删除",
+      "stageDay": "· 第 {day} 天：{name}",
+      "noneYet": "暂无催收政策。",
+      "activeBadge": "已启用"
+    }
   }
 }

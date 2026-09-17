@@ -168,5 +168,133 @@
       "void": "storniert",
       "expired": "abgelaufen"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "Wiederkehrende Rechnungen",
+      "subscriptions": "Abonnements",
+      "advanced": "Erweiterter Lebenszyklus",
+      "dunning": "Mahnwesen"
+    },
+    "errors": {
+      "actionFailed": "Aktion fehlgeschlagen",
+      "couldNotCreate": "Konnte nicht erstellt werden"
+    },
+    "subscriptions": {
+      "mrr": "Monatlich wiederkehrender Umsatz",
+      "summary": "{active} aktiv · {plans, plural, one {# Plan} other {# Pläne}}",
+      "plansTitle": "Pläne",
+      "plansTable": {
+        "plan": "Plan",
+        "price": "Preis",
+        "billing": "Abrechnung"
+      },
+      "archived": "(archiviert)",
+      "every": "alle {count}{unit}",
+      "delete": "Löschen",
+      "noPlans": "Noch keine Pläne.",
+      "planNamePlaceholder": "Planname",
+      "pricePlaceholder": "Preis",
+      "everyNPlaceholder": "alle N",
+      "defaultIncomeAccount": "Standard-Ertragskonto",
+      "addPlan": "Plan hinzufügen",
+      "subsTitle": "Abonnements",
+      "subsTable": {
+        "customer": "Kunde",
+        "plan": "Plan",
+        "qty": "Menge",
+        "mrr": "MRR",
+        "nextBill": "Nächste Abrechnung",
+        "status": "Status"
+      },
+      "noSubs": "Noch keine Abonnements.",
+      "customerPlaceholder": "Kunde…",
+      "planPlaceholder": "Plan…",
+      "qtyPlaceholder": "Menge",
+      "priceOverridePlaceholder": "Preisüberschreibung (optional)",
+      "firstFullBill": "Erste volle Abrechnung",
+      "prorateFirstPeriod": "Ersten Zeitraum anteilig berechnen",
+      "autoPostInvoices": "Rechnungen automatisch buchen",
+      "addSubscription": "Abonnement hinzufügen",
+      "prorateHint": "Legen Sie ein Erstabrechnungsdatum nach dem Start fest und aktivieren Sie „anteilig“, um jetzt nur den ersten Teilzeitraum abzurechnen.",
+      "apply": "Anwenden",
+      "billNow": "Jetzt abrechnen",
+      "changeQty": "Menge ändern",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "cancelSub": "Kündigen",
+      "cancelConfirmTitle": "Abonnement kündigen?",
+      "cancelConfirmBody": "Durch die Kündigung endet die wiederkehrende Abrechnung dieses Abonnements. Dies kann nicht rückgängig gemacht werden.",
+      "toasts": {
+        "prorated": "Anteilige Berechnung {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "Menge aktualisiert (keine anteilige Berechnung fällig)",
+        "billed": "Abgerechnet {documentNumber}",
+        "firstInvoiceProrated": "Erste anteilige Rechnung {documentNumber} über {amount}"
+      }
+    },
+    "recurring": {
+      "newSchedule": "Neuer wiederkehrender Zeitplan",
+      "templateDocLabel": "Vorlagedokument Nr.",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "Rhythmus",
+      "cadences": {
+        "weekly": "Wöchentlich",
+        "biweekly": "Alle zwei Wochen",
+        "monthly": "Monatlich",
+        "quarterly": "Vierteljährlich",
+        "annually": "Jährlich",
+        "custom_cron": "Benutzerdefinierter Cron"
+      },
+      "cronLabel": "Cron",
+      "firstRunLabel": "Erste Ausführung",
+      "autoPostCheckbox": "Erzeugte Dokumente automatisch buchen",
+      "createSchedule": "Zeitplan erstellen",
+      "table": {
+        "template": "Vorlage",
+        "customer": "Kunde",
+        "cadence": "Rhythmus",
+        "nextRun": "Nächste Ausführung",
+        "runs": "Ausführungen",
+        "autoPost": "Auto-Buchung",
+        "status": "Status"
+      },
+      "yes": "Ja",
+      "no": "Nein",
+      "active": "Aktiv",
+      "paused": "Pausiert",
+      "runNow": "Jetzt ausführen",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "delete": "Löschen",
+      "actionFailed": "Die Aktion für den wiederkehrenden Zeitplan konnte nicht abgeschlossen werden.",
+      "generatedDocumentsDeleteConflict": "Dieser wiederkehrende Zeitplan kann nicht gelöscht werden, da er bereits Dokumente erzeugt hat. Deren Ursprungsverlauf muss erhalten bleiben.",
+      "noneYet": "Noch keine wiederkehrenden Zeitpläne."
+    },
+    "dunning": {
+      "blankStageName": "Erste Erinnerung",
+      "newPolicy": "Neue Mahnstrategie",
+      "policyNameLabel": "Name der Strategie",
+      "policyNamePlaceholder": "Standard-Mahnungen netto 30",
+      "gracePeriodLabel": "Karenzzeit (Tage nach Fälligkeit)",
+      "reminderLadder": "Erinnerungsstufen",
+      "addStage": "+ Stufe hinzufügen",
+      "newStageName": "Erinnerung {n}",
+      "stageLabels": {
+        "name": "Name",
+        "daysPastDue": "Tage nach Fälligkeit",
+        "sequence": "Reihenfolge"
+      },
+      "subjectLabel": "Betreff",
+      "bodyLabel": "Text",
+      "removeStage": "Stufe entfernen",
+      "tokensHint": "Token:",
+      "createPolicy": "Strategie erstellen",
+      "policySummary": "{count, plural, one {# Stufe} other {# Stufen}} · Karenz {grace} T.",
+      "off": "Aus",
+      "delete": "Löschen",
+      "stageDay": "· Tag {day}: {name}",
+      "noneYet": "Noch keine Mahnstrategien.",
+      "activeBadge": "Aktiv"
+    }
   }
 }
