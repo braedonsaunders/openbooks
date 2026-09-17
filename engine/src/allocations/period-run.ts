@@ -13,6 +13,7 @@ import {
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
 } from "../project-recognition.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close.ts";
 import { uuidArray } from "../subsidiaries.ts";
 import type {
   AccountScope,
@@ -288,7 +289,13 @@ async function requireSubsidiary(tx: Tx, orgId: string, subsidiaryId: string): P
   if (!rows[0]) throw new AllocationRunError("NOT_FOUND", `subsidiary ${subsidiaryId} does not belong to this organization`);
 }
 
-/** Fail closed when the GL module is shut for any subsidiary this run touches. */
+/**
+ * Fail closed when the GL module is shut for any subsidiary this run
+ * touches. One period gate: the shared GL check replaces the raw
+ * period_module_is_closed query. An allocation posting is new local
+ * activity, not historical replay, so source-owned imported locks refuse
+ * exactly like user locks.
+ */
 async function assertPeriodOpen(
   tx: Tx,
   orgId: string,
@@ -298,10 +305,19 @@ async function assertPeriodOpen(
 ): Promise<void> {
   const distinct = [...new Set(subsidiaryIds)];
   for (const subsidiaryId of distinct) {
-    const rows = (await tx.execute<{ is_closed: boolean }>(sql`
-      select period_module_is_closed(${orgId}, ${period.id}, ${bookId}, ${subsidiaryId}, 'gl') as is_closed`)).rows;
-    if (rows[0]?.is_closed) {
-      throw new Error(`the GL period ${period.name} is closed and cannot take allocation postings`);
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId,
+        periodId: period.id,
+        bookId,
+        subsidiaryIds: [subsidiaryId],
+        modules: ["gl"],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) {
+        throw new Error(`the GL period ${period.name} is closed and cannot take allocation postings`);
+      }
+      throw error;
     }
   }
 }
