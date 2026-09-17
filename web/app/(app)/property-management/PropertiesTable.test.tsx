@@ -4,6 +4,7 @@ import test from "node:test";
 import { NextIntlClientProvider, type AbstractIntlMessages } from "next-intl";
 import enMessages from "../../../messages/en/index";
 import frMessages from "../../../messages/fr/index";
+import esMessages from "../../../messages/es/index";
 import { PropertiesTable } from "./PropertiesTable";
 import type { PropertyWorkspace } from "./types";
 import type { ListViewConfig } from "@openbooks/customization";
@@ -50,6 +51,48 @@ const data = {
       defaultBankAccountId: null,
       unitCount: 10,
       occupiedUnits: 7,
+    },
+    {
+      id: "prop-other",
+      code: "IM-002",
+      name: "Annexe",
+      propertyType: "other",
+      status: "inactive",
+      currency: "EUR",
+      address: null,
+      custom: null,
+      subsidiaryId: "sub-1",
+      subsidiaryName: "Filiale Paris",
+      locationId: null,
+      locationName: null,
+      fixedAssetId: null,
+      rentIncomeAccountId: null,
+      camIncomeAccountId: null,
+      depositLiabilityAccountId: null,
+      defaultBankAccountId: null,
+      unitCount: 4,
+      occupiedUnits: 0,
+    },
+    {
+      id: "prop-sold",
+      code: "IM-003",
+      name: "Vendu",
+      propertyType: "commercial",
+      status: "sold",
+      currency: "EUR",
+      address: null,
+      custom: null,
+      subsidiaryId: "sub-1",
+      subsidiaryName: "Filiale Paris",
+      locationId: null,
+      locationName: null,
+      fixedAssetId: null,
+      rentIncomeAccountId: null,
+      camIncomeAccountId: null,
+      depositLiabilityAccountId: null,
+      defaultBankAccountId: null,
+      unitCount: 6,
+      occupiedUnits: 6,
     },
   ],
   units: [],
@@ -161,6 +204,28 @@ test("property type and status cells resolve through the catalog (F-t09-017)", (
   assert.ok(!html.includes("Residential"), "raw English type must not leak");
   assert.ok(!html.includes("Not mapped"), "English not-mapped must not leak");
   assert.ok(html.includes("Non associé"), "unmapped location needs French copy");
+});
+
+// F-v4-001 twin (es): the same table-only catalog carried feminine agreement
+// in Spanish too (Vendida/Activa/Inactiva, Otra) against the masculine row
+// noun (Inmueble/Tipo/Estado). The drawer catalog already agrees masculine,
+// so the table catalog flips masculine with no shared-gender split.
+test("spanish type and status cells agree masculine with the building noun (F-v4-001)", () => {
+  const messagesEs = merge(enMessages, esMessages) as AbstractIntlMessages;
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="es" messages={messagesEs} timeZone="UTC">
+      <PropertiesTable data={data} view={view} fieldDefs={[]} onOpen={() => {}} />
+    </NextIntlClientProvider>,
+  );
+  for (const header of ["Inmueble", "Tipo", "Estado"]) {
+    assert.ok(html.includes(header), `es render is missing masculine header ${header}`);
+  }
+  for (const masculine of [">Residencial<", ">Otro<", ">Comercial<", ">Vendido<", ">Activo<", ">Inactivo<"]) {
+    assert.ok(html.includes(masculine), `es render must use masculine ${masculine}`);
+  }
+  for (const feminine of [">Otra<", "Vendida", ">Activa<", ">Inactiva<"]) {
+    assert.ok(!html.includes(feminine), `es render must not use feminine ${feminine}`);
+  }
 });
 
 test("property buildings empty state renders French (F-t09-017)", () => {
