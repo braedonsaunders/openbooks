@@ -25,9 +25,14 @@ import { promptDialog } from '../../../lib/prompt'
 import { GateActions, type DelegateOption } from './GateActions'
 
 export interface ApprovalRow {
-  /** Stable selection key: `gate:${id}`. */
+  /** Stable selection key: `gate:${id}` / `doc:${id}` / `payrun:${id}`. */
   key: string
-  gateId: string
+  /**
+   * Flow-gate id for bulk/decide/delegate actions. Document and pay-run rows
+   * carry null: they link to their record (whose drawer decides) and never
+   * enter the gate-scoped bulk payload (F-t01-007).
+   */
+  gateId: string | null
   documentNumber: string
   kind: string
   kindLabel: string
@@ -36,8 +41,8 @@ export interface ApprovalRow {
   party: string | null
   /** Pre-formatted amount (server renders the org's symbol). */
   amount: string | null
-  /** Gate title. */
-  approvalTitle: string
+  /** Gate title (null for document/pay-run rows, which lead with the record). */
+  approvalTitle: string | null
   /** Flow name. */
   engineName: string
   /** ISO timestamp the approval was requested — drives the aging chip. */
@@ -86,15 +91,19 @@ export function ApprovalsTable({
   const [busy, setBusy] = useState(false)
 
   // Selection survives filters upstream; drop keys for rows no longer shown.
+  // Only flow-gate rows are selectable: bulk decide/delegate post gate ids,
+  // so document/pay-run rows (gateId null) never enter the selection.
+  const selectableRows = useMemo(() => rows.filter((r) => r.gateId != null), [rows])
   const visibleSelected = useMemo(
-    () => new Set(rows.filter((r) => selected.has(r.key)).map((r) => r.key)),
-    [rows, selected],
+    () => new Set(selectableRows.filter((r) => selected.has(r.key)).map((r) => r.key)),
+    [selectableRows, selected],
   )
-  const allSelected = rows.length > 0 && visibleSelected.size === rows.length
+  const allSelected =
+    selectableRows.length > 0 && visibleSelected.size === selectableRows.length
   const someSelected = visibleSelected.size > 0 && !allSelected
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.key)))
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map((r) => r.key)))
   }
   function toggle(key: string) {
     setSelected((prev) => {
@@ -106,7 +115,9 @@ export function ApprovalsTable({
   }
 
   async function runBulk(decision: 'approved' | 'rejected') {
-    const chosen = rows.filter((r) => visibleSelected.has(r.key))
+    const chosen = rows.filter(
+      (r): r is ApprovalRow & { gateId: string } => visibleSelected.has(r.key) && r.gateId != null,
+    )
     if (chosen.length === 0) return
     // A signature-required gate must be approved individually (each needs its
     // own typed attestation) — bulk approve can't collect one.
@@ -207,13 +218,15 @@ export function ApprovalsTable({
             <TableRow key={r.key}>
               {bulk ? (
                 <TableCell>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-teal-600"
-                    checked={visibleSelected.has(r.key)}
-                    onChange={() => toggle(r.key)}
-                    aria-label={t('bulk.selectRow', { document: r.documentNumber })}
-                  />
+                  {r.gateId != null ? (
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-teal-600"
+                      checked={visibleSelected.has(r.key)}
+                      onChange={() => toggle(r.key)}
+                      aria-label={t('bulk.selectRow', { document: r.documentNumber })}
+                    />
+                  ) : null}
                 </TableCell>
               ) : null}
               <TableCell className="font-mono text-[13px] font-semibold">
@@ -265,12 +278,14 @@ export function ApprovalsTable({
               ) : null}
               {actionsEnabled ? (
                 <TableCell>
-                  <GateActions
-                    gateId={r.gateId}
-                    canDelegate={r.canDelegate}
-                    users={users}
-                    signatureRequired={r.signatureRequired}
-                  />
+                  {r.gateId != null ? (
+                    <GateActions
+                      gateId={r.gateId}
+                      canDelegate={r.canDelegate}
+                      users={users}
+                      signatureRequired={r.signatureRequired}
+                    />
+                  ) : null}
                 </TableCell>
               ) : null}
             </TableRow>
