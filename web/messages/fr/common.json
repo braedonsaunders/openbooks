@@ -176,7 +176,9 @@
     "inactive": "Inactif",
     "error": "Erreur",
     "ok": "OK",
-    "pending_approval": "Soumis"
+    "pending_approval": "Soumis",
+    "calculated": "Calculé",
+    "committed": "Validé"
   },
   "filters": {
     "showInactive": "Afficher les inactifs"
@@ -288,6 +290,9 @@
     "badges": {
       "delegated": "Délégué",
       "escalated": "Escaladé"
-    }
+    },
+    "retryRun": "Relancer l’approbation",
+    "retried": "Approbation relancée — la nouvelle étape est dans la liste de travail",
+    "retryFailed": "La relance a échoué"
   }
 }

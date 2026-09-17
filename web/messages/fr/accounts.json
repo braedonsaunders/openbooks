@@ -83,7 +83,8 @@
       "number_in_use": "Ce numéro de compte est déjà utilisé.",
       "account_changed": "Ce compte a changé pendant votre modification. Rouvrez-le et réessayez.",
       "invalid_idempotency_key": "La demande de compte n’a pas pu être relancée de façon sécuritaire.",
-      "save_failed": "Le compte n’a pas pu être enregistré."
+      "save_failed": "Le compte n’a pas pu être enregistré.",
+      "reconcilable_currency_required": "Les comptes rapprochables exigent une devise de règlement — choisissez-en une avant d’enregistrer."
     },
     "monetary": "Réévaluation de change (élément monétaire)",
     "monetaryDefault": "Selon le type de compte",

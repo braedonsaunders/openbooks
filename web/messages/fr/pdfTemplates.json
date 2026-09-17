@@ -9,7 +9,14 @@
     "builtInStarter": "Design intégré",
     "starterHint": "Imprimé lorsqu'aucun modèle personnalisé n'existe — dupliquez-le pour le personnaliser",
     "duplicate": "Dupliquer",
-    "isDefault": "Par défaut"
+    "isDefault": "Par défaut",
+    "builtIn": "Intégré",
+    "type": "Type d’enregistrement",
+    "allTypes": "Tous les types d’enregistrement",
+    "previewNote": "Aperçu en lecture seule du modèle de démarrage intégré, rendu avec des données exemple. Dupliquez-le pour créer un modèle modifiable.",
+    "previewFailed": "Impossible d’afficher l’aperçu",
+    "empty": "Aucun modèle ne correspond.",
+    "starterNamed": "{type} de démarrage"
   },
   "editor": {
     "back": "Modèles PDF",

@@ -13,6 +13,25 @@
   "sso": "Authentification unique",
   "ssoFailed": "L’authentification unique n’a pas pu être terminée",
   "reset": {
-    "requestFailed": "Le lien de réinitialisation n’a pas pu être demandé — vérifiez votre connexion et réessayez."
-  }
+    "requestFailed": "Le lien de réinitialisation n’a pas pu être demandé — vérifiez votre connexion et réessayez.",
+    "requestTitle": "Réinitialiser votre mot de passe",
+    "chooseTitle": "Choisir un nouveau mot de passe",
+    "requestHelp": "Saisissez votre courriel et nous vous enverrons un lien de réinitialisation s’il correspond à un compte.",
+    "sendLink": "Envoyer le lien",
+    "sending": "Envoi…",
+    "sent": "Si ce courriel correspond à un compte, un lien de réinitialisation est en route. Le lien est à usage unique et expire dans 30 minutes.",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le nouveau mot de passe",
+    "passwordHelp": "Au moins 10 caractères.",
+    "mismatch": "Ces mots de passe ne correspondent pas",
+    "weakPassword": "Le mot de passe doit compter au moins 10 caractères",
+    "invalidToken": "Ce lien de réinitialisation est invalide ou expiré — demandez-en un nouveau",
+    "setPassword": "Définir le nouveau mot de passe",
+    "saving": "Enregistrement…",
+    "changed": "Votre mot de passe a été modifié. Ouvrez une session avec ce mot de passe — toutes les autres sessions ont été fermées.",
+    "backToSignIn": "Retour à l’ouverture de session"
+  },
+  "forgotPassword": "Mot de passe oublié ?",
+  "tooManyAttempts": "Trop de tentatives — réessayez dans {seconds} secondes",
+  "busyTryAgain": "Le service d’ouverture de session est occupé — réessayez dans un instant"
 }

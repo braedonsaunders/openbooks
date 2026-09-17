@@ -33,6 +33,13 @@
       "debit": "Débit",
       "credit": "Crédit",
       "openItem": "Poste non soldé"
+    },
+    "contributors": {
+      "standardLines": "Lignes standard",
+      "locked": "verrouillé",
+      "ruleGroup": "Règle : {name}",
+      "scriptGroup": "Script : {name}",
+      "otherGroup": "{kind} : {name}"
     }
   },
   "newButton": {

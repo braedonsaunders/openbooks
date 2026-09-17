@@ -58,6 +58,10 @@
     },
     "linksTitle": "Origine / Converti en",
     "linkCreatedFrom": "Créé à partir de",
-    "linkConvertedInto": "Converti en"
+    "linkConvertedInto": "Converti en",
+    "deleteConfirmTitle": "Supprimer cette commande ?",
+    "deleteConfirmMessage": "Cette action supprime définitivement la commande et ses lignes. Elle est irréversible.",
+    "toastDeleted": "Commande supprimée",
+    "issueHint": "Ajoutez un client ou un fournisseur et au moins une ligne pour émettre cette commande."
   }
 }
