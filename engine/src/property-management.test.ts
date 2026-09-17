@@ -109,7 +109,18 @@ test("deposit period-close lookup follows the property's subsidiary", () => {
     join(repoRoot, "engine/src/property-management.ts"),
     "utf8",
   );
-  assert.match(source, /p\.subsidiary_id,'gl'/);
+  // The shared period gate takes its subsidiary from the deposit context
+  // row, which selects the PROPERTY's subsidiary (p.subsidiary_id) — never
+  // the lease row. A lease stamped onto the wrong entity must neither
+  // inherit nor escape that entity's period locks.
+  for (const fn of ["export async function recordSecurityDeposit", "export async function reverseSecurityDepositTransaction"]) {
+    const start = source.indexOf(fn);
+    assert.ok(start >= 0, `${fn} is defined`);
+    const next = source.indexOf("export async function", start + fn.length);
+    const body = source.slice(start, next < 0 ? undefined : next);
+    assert.match(body, /subsidiaryIds: \[row\.subsidiary_id\]/);
+  }
+  assert.match(source, /select l\.tenant_id,p\.subsidiary_id,/);
   assert.doesNotMatch(source, /l\.subsidiary_id,'gl'/);
 });
 

@@ -11,6 +11,7 @@ import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "./close.ts";
 
 export class PropertyManagementError extends Error {
   constructor(message: string, readonly status = 422) {
@@ -1264,13 +1265,28 @@ export async function levelLeaseRentStraightLine(
       `));
       if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No active primary posting book");
       if (!ctx.rows[0]?.period_id) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
+      const levelBookId: string = ctx.rows[0].book_id;
+      const levelPeriodId: string = ctx.rows[0].period_id;
       // Direct journal writes bypass the document posting path, so the GL
       // close fence that guards documents never sees this accrual: refuse a
       // closed target period here instead of tripping the storage guard.
-      const closed = (await db.execute<{ closed: boolean }>(sql`
-        select period_module_is_closed(${orgId},${ctx.rows[0].period_id},${ctx.rows[0].book_id},${lease.subsidiaryId},'gl') as closed`));
-      if (closed.rows[0]?.closed) {
-        throw new PropertyManagementError(`The GL period covering ${asOf} is closed; straight-line rent cannot post into it`);
+      // One period gate: the shared GL check replaces the raw
+      // period_module_is_closed query. Levelling is new local activity, not
+      // historical replay, so source-owned imported locks refuse exactly
+      // like user locks.
+      try {
+        await assertPeriodModulesOpen(db, {
+          orgId,
+          periodId: levelPeriodId,
+          bookId: levelBookId,
+          subsidiaryIds: [lease.subsidiaryId],
+          modules: ["gl"],
+        });
+      } catch (error) {
+        if (error instanceof CloseError) {
+          throw new PropertyManagementError(`The GL period covering ${asOf} is closed; straight-line rent cannot post into it`);
+        }
+        throw error;
       }
 
       const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
@@ -1512,7 +1528,6 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       select l.tenant_id,p.subsidiary_id,p.location_id,p.currency,s.base_currency,p.deposit_liability_account_id,p.default_bank_account_id,
         (select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share) as book_id,
         (select id from accounting_periods where org_id=l.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
-          and not period_module_is_closed(l.org_id,id,(select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share),p.subsidiary_id,'gl')
           order by starts_on desc limit 1) as period_id
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
@@ -1531,6 +1546,24 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     }
     if (!row.book_id) throw new PropertyManagementError("An active primary posting book is required");
     if (!row.period_id) throw new PropertyManagementError("An open GL period is required");
+    // One period gate: the shared GL check replaces the raw
+    // period_module_is_closed finder predicate. Recording a deposit is new
+    // local activity, not historical replay, so source-owned imported
+    // locks refuse exactly like user locks.
+    try {
+      const depositBookId: string = row.book_id;
+      const depositPeriodId: string = row.period_id;
+      await assertPeriodModulesOpen(tx, {
+        orgId: input.orgId,
+        periodId: depositPeriodId,
+        bookId: depositBookId,
+        subsidiaryIds: [row.subsidiary_id],
+        modules: ["gl"],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) throw new PropertyManagementError("An open GL period is required");
+      throw error;
+    }
 
     const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${input.leaseId}`));
     const nextBalance = depositBalance([...prior.rows, { kind: input.kind, amount }]);
@@ -1657,7 +1690,7 @@ export async function reverseSecurityDepositTransaction(input: {
       select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
         exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed,
         (select id from accounting_periods where org_id=t.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
-          and not period_module_is_closed(t.org_id,id,je.book_id,p.subsidiary_id,'gl') order by starts_on desc limit 1) as period_id
+          order by starts_on desc limit 1) as period_id
       from security_deposit_transactions t
       join property_leases l on l.id=t.lease_id and l.org_id=t.org_id
       join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
@@ -1669,6 +1702,23 @@ export async function reverseSecurityDepositTransaction(input: {
     if (!row) throw new PropertyManagementError("Deposit transaction not found");
     if (row.reversal_of_id || row.already_reversed) throw new PropertyManagementError("Deposit transaction is already a reversal or has already been reversed");
     if (!row.period_id) throw new PropertyManagementError("An open GL period is required for the reversal date");
+    // One period gate: the shared GL check replaces the raw
+    // period_module_is_closed finder predicate. A reversal is new local
+    // activity, not historical replay, so source-owned imported locks
+    // refuse exactly like user locks.
+    try {
+      const reversalPeriodId: string = row.period_id;
+      await assertPeriodModulesOpen(tx, {
+        orgId: input.orgId,
+        periodId: reversalPeriodId,
+        bookId: row.book_id,
+        subsidiaryIds: [row.subsidiary_id],
+        modules: ["gl"],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) throw new PropertyManagementError("An open GL period is required for the reversal date");
+      throw error;
+    }
     if (row.currency !== row.base_currency) throw new PropertyManagementError("Security-deposit reversals require functional-currency deposits");
 
     const kind = depositReversalKind(row.kind);
@@ -1922,13 +1972,23 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     }
     // 2. GATE - require those GL modules CLOSED at the property's subsidiary,
     //    so a queued journal cannot merely wait out finalization and post late.
-    const openScope = (await tx.execute<{ name: string; code: string }>(sql`
-      select p.name,b.code from accounting_periods p
+    //    One period gate: the shared GL check replaces the raw
+    //    period_module_is_closed predicate, read in the closed sense. A
+    //    source-owned imported lock counts as closed here exactly as before —
+    //    finalization only observes closure, it never posts into the period.
+    const gateScopes = (await tx.execute<{ period_id: string; book_id: string; name: string; code: string }>(sql`
+      select p.id as period_id,b.id as book_id,p.name,b.code from accounting_periods p
         join accounting_books b on b.org_id=${orgId} and b.id=${bookId}
         where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
-          and not period_module_is_closed(${orgId},p.id,b.id,${pool.subsidiary_id},'gl')
-        order by p.name,b.code limit 1`)).rows[0];
-    if (openScope) throw new PropertyManagementError(`Close the GL module for ${openScope.name} in book ${openScope.code} before finalizing CAM actuals`);
+        order by p.name,b.code`));
+    for (const scope of gateScopes.rows) {
+      if (await arePeriodModulesOpen(tx, {
+        orgId, periodId: scope.period_id, bookId: scope.book_id,
+        subsidiaryIds: [pool.subsidiary_id], modules: ["gl"],
+      })) {
+        throw new PropertyManagementError(`Close the GL module for ${scope.name} in book ${scope.code} before finalizing CAM actuals`);
+      }
+    }
     const sourceTotals = () => tx.execute<{ amount: string; lines: number; last_change: string }>(sql`
       select coalesce(sum(jl.amount),0)::text as amount, count(*)::int as lines,
         coalesce(max(greatest(je.posted_at,je.updated_at))::text,'') as last_change
