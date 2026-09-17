@@ -12,6 +12,7 @@ import {
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
+import { documentBalanceDueLateral } from '@openbooks/engine/src/balance-due.ts'
 import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
 export { documentRevisionCounterSql, documentRevisionSql }
 import { sql, type SQL } from 'drizzle-orm'
@@ -365,17 +366,10 @@ export async function runPostedCorrectionDraftFlows(
 
 /**
  * Full document payload for a drawer: header + lines. For open-item kinds
- * (invoices, credits) the applied amount is summed from un-reversed
- * applications against the posted entry's control open-item line, and
- * `balance_due` = total − applied.
- *
- * `target_transaction_amount`, NOT `amount`: `documents.total` is in the
- * document's TRANSACTION currency while `applications.amount` is the
- * base-currency carrying amount. Subtracting one from the other produced a
- * meaningless number for every FX document — the drawer showed a balance in
- * neither currency, and an FX invoice could read as paid while still open.
- * The transaction leg is the one denominated in the same currency as the
- * total (same fix as engine/src/dunning.ts).
+ * (invoices, credits) `applied` and `balance_due` (= total − applied) come
+ * from the shared balance-due reader (engine/src/balance-due.ts), so the
+ * drawer, the customer PDF, and dunning report the same figure by
+ * construction. Both stay NULL until the document posts.
  */
 export async function loadDocument(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
@@ -387,12 +381,7 @@ export async function loadDocument(id: string, orgId?: string) {
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
-      left join lateral (
-        select coalesce(sum(a.target_transaction_amount), 0) as applied
-          from journal_lines jl
-          join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
-         where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
-      ) ap on true
+      ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${resolvedOrgId}
   `))
   const loaded = doc.rows[0]

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
+import { documentBalanceDueLateral } from "./balance-due.ts";
 import { cmp } from "./money.ts";
 import { enqueueFlowEmail } from "./scheduler-outbox.ts";
 
@@ -201,19 +202,13 @@ async function runDunningInternal(
         }
 
         // Open documents of the policy's kind inside the ladder's reach, with
-        // the live balance due reconstructed from un-reversed applications
-        // against the open-item leg. A stage comes due once
-        // `today >= dueDate + offsetDays`, so the loosest rung bounds the
-        // window: `dueDate <= today - minOffset` (an exact, inclusive bound —
-        // a rung configured for day k fires on day k, never k±1).
-        //
-        // `target_transaction_amount`, NOT `amount`: `documents.total` is in the
-        // document's TRANSACTION currency while `applications.amount` is the
-        // base-currency carrying amount. Subtracting one from the other produced
-        // a meaningless number for every FX invoice — suppressing genuinely
-        // overdue invoices, chasing fully-paid ones, and mailing the customer a
-        // balance that matched neither currency. The transaction leg is the one
-        // denominated in the same currency as the total.
+        // the live balance due from the shared reader
+        // (./balance-due.ts) — the same applied sum the drawer and the
+        // customer PDF use, so dunning can never act on a different figure.
+        // A stage comes due once `today >= dueDate + offsetDays`, so the
+        // loosest rung bounds the window: `dueDate <= today - minOffset` (an
+        // exact, inclusive bound — a rung configured for day k fires on day
+        // k, never k±1).
         const docs = (await db.execute<{
             id: string;
             documentNumber: string;
@@ -238,13 +233,7 @@ async function runDunningInternal(
                  (round(d.total * d.fx_rate, 4) - coalesce(ap.applied_base, 0)) as "balanceDueBase"
             from documents d
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
-            left join lateral (
-              select coalesce(sum(a.target_transaction_amount), 0) as applied,
-                     coalesce(sum(a.amount), 0) as applied_base
-                from journal_lines jl
-                join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
-               where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
-            ) ap on true
+            ${documentBalanceDueLateral("d", { base: true })}
            where d.org_id = ${orgId} and d.kind = ${policy.appliesToKind}
              and d.status = 'posted' and d.due_date is not null
              and d.due_date <= ${addCalendarDays(today, -minOffset)}
