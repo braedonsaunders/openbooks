@@ -86,3 +86,22 @@ test('save and void share the surfaced-refusal pattern (no bare res.json, no wed
     )
   }
 })
+
+test('the delete-payment confirm is fully localized (F-t04-011)', () => {
+  // The es delete dialog rendered hardcoded English copy with a mixed
+  // Cancelar/Delete button pair. Every user-facing string in remove()
+  // must come through the drawer catalog.
+  assert.match(source, /title: t\('drawer\.deleteConfirmTitle'\)/)
+  assert.match(source, /message: t\('drawer\.deleteConfirmBody'\)/)
+  assert.match(source, /confirmLabel: t\('drawer\.deleteConfirmAction'\)/)
+  assert.match(source, /toast\.success\(t\('drawer\.deleted'\)\)/)
+  assert.ok(!source.includes("'Delete this payment?'"), 'no hardcoded English confirm copy may remain')
+  for (const locale of ['en', 'es']) {
+    const catalog = JSON.parse(
+      readFileSync(new URL(`../../../messages/${locale}/payments.json`, import.meta.url), 'utf8'),
+    ) as { drawer: Record<string, string> }
+    for (const key of ['deleteConfirmTitle', 'deleteConfirmBody', 'deleteConfirmAction', 'deleted', 'deleteFailed']) {
+      assert.ok(catalog.drawer[key], `${locale} payments.drawer.${key} must exist`)
+    }
+  }
+})
