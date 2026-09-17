@@ -3,16 +3,34 @@
   "title": "持续结账",
   "description": "持续监控结账就绪度，并呈现有证据支撑的会计与财务异常以供审查。",
   "search": "搜索发现项…",
-  "tabs": { "ariaLabel": "持续结账板块", "findings": "发现项", "reports": "报告" },
+  "tabs": {
+    "ariaLabel": "持续结账板块",
+    "findings": "发现项",
+    "reports": "报告"
+  },
   "agents": {
     "accounting": "会计",
-    "finance": "财务"
+    "finance": "财务",
+    "forensics": "舞弊",
+    "collections": "催收",
+    "payables": "应付款",
+    "reconciliation": "银行对账",
+    "hygiene": "数据卫生",
+    "tax": "税务",
+    "payroll": "薪酬",
+    "projects": "项目",
+    "cash": "资金"
   },
   "metrics": {
     "active": "活跃",
     "critical": "严重",
     "accounting": "会计发现项",
-    "finance": "财务发现项"
+    "finance": "财务发现项",
+    "collections": "催收发现项",
+    "payables": "应付款发现项",
+    "reconciliation": "银行对账发现项",
+    "hygiene": "数据卫生发现项",
+    "forensics": "舞弊发现项"
   },
   "filters": {
     "agent": "代理",
@@ -49,6 +67,78 @@
       "title": "滞留的会计单据",
       "description": "草稿或待处理的会计单据超过配置的时限仍未完成。"
     },
+    "forensic_weekend_postings": {
+      "title": "周末过账",
+      "description": "一笔支出单据在周末过账。"
+    },
+    "forensic_round_dollar": {
+      "title": "整数金额支出",
+      "description": "一笔支出单据恰为整数千元。"
+    },
+    "forensic_threshold_trap": {
+      "title": "略低于限额的金额",
+      "description": "一笔支出单据略低于整数审批限额。"
+    },
+    "forensic_duplicate_bills": {
+      "title": "疑似重复账单",
+      "description": "两笔应付单据在数日内往来方、类型与金额相同。"
+    },
+    "tax_missing_codes": {
+      "title": "缺少税码的单据",
+      "description": "已过账单据中存在未计税行，申报时将遗漏。"
+    },
+    "tax_missing_registration": {
+      "title": "缺少税务登记",
+      "description": "某申报表格没有登记号备案。"
+    },
+    "tax_return_blocked": {
+      "title": "受阻的纳税申报",
+      "description": "某已配置的申报无法计算。"
+    },
+    "tax_unlocked_period": {
+      "title": "未锁定的税务期间",
+      "description": "最近已完成的期间没有已关闭的税务锁定。"
+    },
+    "payroll_remittance_due": {
+      "title": "代扣款待缴纳",
+      "description": "代扣款项已到期，且无账单覆盖。"
+    },
+    "payroll_unknown_accounts": {
+      "title": "未知薪酬科目",
+      "description": "某次已确认运行中存在申报科目和负债科目均无法承接的零星分录。"
+    },
+    "payroll_missing_elections": {
+      "title": "缺少法定申报选择",
+      "description": "员工没有备案的申报选择。"
+    },
+    "payroll_yearend_gaps": {
+      "title": "年末申报缺口",
+      "description": "某项信息申报表要求未满足。"
+    },
+    "project_negative_margin": {
+      "title": "项目亏损",
+      "description": "某个项目正在亏损运营。"
+    },
+    "project_budget_overrun": {
+      "title": "项目预算超支",
+      "description": "成本加承诺已超过批准预算。"
+    },
+    "project_stale_unbilled": {
+      "title": "长期未开票工作",
+      "description": "可开票工作已过截止仍未开票。"
+    },
+    "cash_low_balance": {
+      "title": "资金余额过低",
+      "description": "银行资金低于下限。"
+    },
+    "cash_bill_crunch": {
+      "title": "账单挤兑",
+      "description": "近期到期账单超过手头资金。"
+    },
+    "cash_forecast_shortfall": {
+      "title": "预测资金缺口",
+      "description": "资金预测将跌破零。"
+    },
     "missing_approved_budget": {
       "title": "无已批准预算",
       "description": "由于没有可用的已批准预算，财务监控无法对比实际值。"
@@ -64,6 +154,70 @@
     "gross_margin_decline": {
       "title": "毛利率下滑",
       "description": "毛利率较上一个已完成的期间下滑幅度超过配置的阈值。"
+    },
+    "overdue_customer_balance": {
+      "title": "逾期客户",
+      "description": "某客户欠款超过设定下限，已加入优先外呼清单。"
+    },
+    "broken_payment_promise": {
+      "title": "失信承诺",
+      "description": "某发票已过预期付款日仍未付款。"
+    },
+    "credit_hold_candidate": {
+      "title": "信用冻结候选",
+      "description": "长期欠款应要求新订单预付。"
+    },
+    "duplicate_bills": {
+      "title": "重复账单",
+      "description": "两笔账单在重复判定窗口内供应商、类型与金额相同。"
+    },
+    "bills_due_before_payrun": {
+      "title": "工资核算前到期的账单",
+      "description": "未结账单在工资核算周期内到期。"
+    },
+    "early_pay_discount_opportunity": {
+      "title": "早付折扣",
+      "description": "未结账单处于有效折扣窗口内。"
+    },
+    "bills_missing_approval": {
+      "title": "缺少审批的账单",
+      "description": "账单超过停滞窗口仍处于草稿或待审批。"
+    },
+    "bank_line_match_candidate": {
+      "title": "银行流水匹配候选",
+      "description": "某条未匹配对账单行存在高置信度的日记账行匹配。"
+    },
+    "stale_reconciliation": {
+      "title": "停滞的对账",
+      "description": "某进行中的对账会话超过停滞窗口未被触碰。"
+    },
+    "never_reconciled_account": {
+      "title": "从未对账的科目",
+      "description": "某可对账科目有活动，但从未进行过对账。"
+    },
+    "control_account_type_mismatch": {
+      "title": "统制科目类型不符",
+      "description": "某科目载有未清项，或其名称与其类型矛盾。"
+    },
+    "duplicate_party_identity": {
+      "title": "重复往来方",
+      "description": "两个往来方共享规范化名称或税务身份。"
+    },
+    "item_missing_tax_code": {
+      "title": "缺失税码的物料",
+      "description": "某有效物料未分配税码。"
+    },
+    "project_missing_cost_budget": {
+      "title": "缺少成本预算的项目",
+      "description": "某有效项目没有预算行。"
+    },
+    "budget_scenario_without_lines": {
+      "title": "无明细行的预算方案",
+      "description": "某已批准或已提交的方案不含明细行。"
+    },
+    "unmapped_payroll_component": {
+      "title": "未分配薪酬项目",
+      "description": "某薪酬项目缺少过账科目或汇缴对象。"
     }
   },
   "summary": {
@@ -131,7 +285,35 @@
     "document": "会计单据",
     "reconciliation": "对账",
     "budget_variance": "预算差异",
-    "period_comparison": "期间对比"
+    "period_comparison": "期间对比",
+    "account_mismatch": "科目不符明细",
+    "accounting_period": "会计期间",
+    "broken_promise": "失信承诺",
+    "cash_balance": "资金余额",
+    "cash_crunch": "资金吃紧",
+    "cash_forecast": "资金预测",
+    "credit_hold_case": "信用冻结案例",
+    "discount_bill": "折扣账单",
+    "duplicate_bill_pair": "重复账单一组",
+    "duplicate_party": "重复往来方",
+    "employee": "员工",
+    "empty_scenario": "空预算方案",
+    "match_candidate": "匹配候选项",
+    "overdue_invoice": "逾期发票",
+    "pay_run": "工资核算",
+    "payment_behaviour": "付款行为",
+    "payrun_bill": "工资核算前账单",
+    "project_budget": "项目预算",
+    "project_margin": "项目利润",
+    "project_unbilled": "未开票项目工作",
+    "remittance_group": "汇缴组",
+    "stalled_bill": "停滞账单",
+    "tax_return": "申报表",
+    "tax_return_form": "申报表格",
+    "unbudgeted_project": "无预算项目",
+    "unmapped_component": "未分配薪酬项目",
+    "unreconciled_activity": "未对账活动",
+    "untaxed_item": "缺失税码的物料"
   },
   "actions": {
     "settings": "代理设置",
