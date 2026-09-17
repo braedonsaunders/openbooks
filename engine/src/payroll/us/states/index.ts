@@ -161,10 +161,6 @@ export function usStateWithholdingEngines(): readonly UsStateWithholdingEngine[]
   return REGION_ENGINES;
 }
 
-export function usSubRegionWithholdingEngines(): readonly UsStateWithholdingEngine[] {
-  return SUB_REGION_ENGINES;
-}
-
 /** Every state whose income tax the pack computes end to end, in US_STATES order. */
 export function implementedUsStates(): string[] {
   const implemented = new Set(REGION_ENGINES.map((engine) => engine.state));

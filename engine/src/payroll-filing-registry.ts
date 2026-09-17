@@ -189,12 +189,6 @@ export interface PayrollFilingSlip {
  */
 export type PayrollFilingRevision = "original" | "amended" | "cancelled";
 
-export const PAYROLL_FILING_REVISIONS: readonly PayrollFilingRevision[] = [
-  "original",
-  "amended",
-  "cancelled",
-];
-
 /** The revisions that CORRECT an artifact already issued. */
 export type PayrollFilingCorrectionKind = Exclude<PayrollFilingRevision, "original">;
 

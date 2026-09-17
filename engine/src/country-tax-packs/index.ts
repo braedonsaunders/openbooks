@@ -14,7 +14,7 @@ import { NEW_ZEALAND_TAX_PACK } from "./nz.ts";
 import { SINGAPORE_TAX_PACK } from "./sg.ts";
 import { UNITED_STATES_TAX_PACK } from "./us.ts";
 import { SOUTH_AFRICA_TAX_PACK } from "./za.ts";
-import type { CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
+import type { CountryTaxJurisdictionDefinition, CountryTaxPackDefinition, TaxReturnPackBox } from "./types.ts";
 
 export type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxJurisdictionDefinition, CountryTaxPackDefinition } from "./types.ts";
 
@@ -67,10 +67,6 @@ export function taxReturnPackBox(returnPackCode: string, lineCode: string): TaxR
     if (returnPack) return returnPack.boxes.find((box) => box.lineCode === lineCode);
   }
   return undefined;
-}
-
-export function countryTaxCodeForReturn(returnPackCode: string): CountryTaxCodeDefinition | undefined {
-  return COUNTRY_TAX_PACKS.map((pack) => pack.returnPackTaxCodes[returnPackCode]).find((item) => item !== undefined);
 }
 
 export function jurisdictionSelectionKey(country: string, region: string): string {

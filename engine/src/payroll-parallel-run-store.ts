@@ -1277,9 +1277,4 @@ export async function suggestedPayRunForRegister(
   return rows.rows.length === 1 ? rows.rows[0]!.document_id : null;
 }
 
-/** Slot vocabulary keys, for callers validating an import mapping. */
-export function totalSlotForFieldKey(fieldKey: string): string | null {
-  return TOTAL_FIELD_KEYS[fieldKey] ?? null;
-}
-
 export { TOTAL_SLOTS };

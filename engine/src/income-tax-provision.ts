@@ -436,27 +436,6 @@ async function applicableRateRows(
   }));
 }
 
-/**
- * Blended enacted rate at a date for one subsidiary (or the org when no
- * subsidiary is given), or null when NO active rate row covers it: org-wide
- * rows always apply, subsidiary-scoped rows stack on top of them, and a
- * jurisdiction configured at both scopes fails closed. Null is distinct from a
- * genuine 0% combined rate — an unconfigured entity must fail the provision
- * closed, never compute at zero silently.
- */
-export async function resolveEnactedRate(
-  orgId: string,
-  subsidiaryId: string | null,
-  onDate: string,
-): Promise<EnactedRate | null> {
-  const wide = await applicableRateRows(orgId, null, onDate);
-  const scoped = subsidiaryId
-    ? await applicableRateRows(orgId, subsidiaryId, onDate)
-    : [];
-  if (wide.length === 0 && scoped.length === 0) return null;
-  return stackEnactedRateComponents([...wide, ...scoped]);
-}
-
 // ---------------------------------------------------------------------------
 // Source lineage — the fence that keeps a reviewed draft current
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, sum } from "./money.ts";
+import { cmp, sum } from "./money.ts";
 import { payrollTaxYear } from "./payroll/packs.ts";
 import {
   calculatePayRun,
@@ -1189,23 +1189,6 @@ export async function retroRunFindings(
     rows.rows.filter((row) => cmp(row.delta, "0") === 0));
 
   return findings;
-}
-
-/** Total a retro run will pay, for the wizard's summary line. */
-export async function retroRunTotal(
-  orgId: string, documentId: string,
-  executor: Pick<typeof db, "execute"> = db,
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
-): Promise<string> {
-  const rows = (await executor.execute<{ total: string }>(sql`
-    select coalesce(sum(st.delta), 0)::text as total from payroll_retro_settlements st
-      join documents d on d.id = st.retro_pay_run_document_id and d.org_id = st.org_id
-      join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
-     where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
-       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  return rows.rows[0]?.total ?? "0";
 }
 
 export type { RetroBucket, RetroDifference, RetroEmployeeSummary, RetroReason };

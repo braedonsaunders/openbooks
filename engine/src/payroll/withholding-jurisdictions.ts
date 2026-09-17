@@ -371,10 +371,3 @@ export function subRegionLevy(
     implemented: open.implemented,
   };
 }
-
-/** Every region whose income tax the pack computes end to end, in declared order. */
-export function implementedRegions(country: string): string[] {
-  return packWithholding(country).regions
-    .filter((region) => region.implemented)
-    .map((region) => region.region);
-}

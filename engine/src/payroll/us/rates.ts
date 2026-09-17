@@ -216,7 +216,6 @@ export const US_STATES = [
   "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
   "WV", "WI", "WY",
 ] as const;
-export type UsState = (typeof US_STATES)[number];
 
 /**
  * States with no wage withholding on regular earnings — the coverage of the
