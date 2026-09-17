@@ -27,10 +27,10 @@ test('lead/prospect owner empty option resolves through the real message loader'
   const key = ownerEmptyOptionKey()
   for (const locale of LOCALES) {
     const messages = (await import(`../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
-    const t = createTranslator({ locale, namespace: 'crm', messages: messages as never })
+    const t = createTranslator({ locale, namespace: 'crm', messages: messages as never } as never) as unknown as (lookup: string) => string
     let rendered: string
     try {
-      rendered = t(key as never)
+      rendered = t(key)
     } catch (error) {
       assert.fail(`owner key ${JSON.stringify(key)} misses in the ${locale} catalog: ${String(error)}`)
     }
@@ -40,8 +40,8 @@ test('lead/prospect owner empty option resolves through the real message loader'
     )
   }
   const en = (await import('../../../messages/en/index.ts')).default as Record<string, unknown>
-  const ten = createTranslator({ locale: 'en', namespace: 'crm', messages: en as never })
-  assert.equal(ten(ownerEmptyOptionKey() as never), 'Unassigned')
+  const ten = createTranslator({ locale: 'en', namespace: 'crm', messages: en as never } as never) as unknown as (lookup: string) => string
+  assert.equal(ten(ownerEmptyOptionKey()), 'Unassigned')
 })
 
 test('lead/prospect first save carries the party revision token', () => {
