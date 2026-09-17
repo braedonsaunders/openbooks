@@ -117,6 +117,7 @@
       "saved": "Formulaire enregistré",
       "saveFailed": "Impossible d’enregistrer le formulaire",
       "delete": "Supprimer le formulaire",
+      "deleteDefaultConfirm": "« {name} » est le formulaire par défaut de l’organisation pour ce type d’enregistrement. Sa suppression rétablit la présentation standard pour tous. Supprimer quand même ?",
       "deleted": "Formulaire supprimé",
       "headerSection": "Champs d’en-tête",
       "linesSection": "Colonnes de lignes",

@@ -119,6 +119,7 @@
       "saveFailed": "Could not save the form",
       "delete": "Delete form",
       "deleted": "Form deleted",
+      "deleteDefaultConfirm": "“{name}” is the org default for this record type. Deleting it returns every user to the standard layout. Delete anyway?",
       "headerSection": "Header fields",
       "linesSection": "Line columns",
       "actionsSection": "Record actions",

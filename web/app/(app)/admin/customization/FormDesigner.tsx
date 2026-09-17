@@ -406,6 +406,10 @@ export function FormDesigner({
   }
   async function remove() {
     if (!def?.id) return
+    // Deleting the org default silently drops the record type back to the
+    // standard layout for every user — confirm first, naming the fallback.
+    // F-t10-004.
+    if (def?.isDefault && !window.confirm(t('designer.forms.deleteDefaultConfirm', { name: def.name ?? '' }))) return
     setBusy(true)
     const res = await fetch(`/api/customization/form-layouts/${def.id}`, { method: 'DELETE' })
     if (res.ok) {

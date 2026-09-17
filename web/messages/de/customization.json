@@ -112,6 +112,7 @@
       "saved": "Formular gespeichert",
       "saveFailed": "Formular konnte nicht gespeichert werden",
       "delete": "Formular löschen",
+      "deleteDefaultConfirm": "„{name}“ ist das Organisations-Standardformular für diesen Datensatztyp. Nach dem Löschen gilt für alle wieder das Standardlayout. Trotzdem löschen?",
       "deleted": "Formular gelöscht",
       "headerSection": "Kopffelder",
       "linesSection": "Zeilenspalten",
