@@ -10,7 +10,9 @@
   },
   "view": {
     "onhand": "在库",
-    "movements": "变动"
+    "movements": "变动",
+    "locations": "库位",
+    "bom": "物料清单"
   },
   "labels": {
     "item": "物料",

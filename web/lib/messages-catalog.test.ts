@@ -181,6 +181,48 @@ const ASSET_TAX_LABEL_EXPECTATIONS: Record<string, Record<AssetTaxLabelKey, stri
     'drawer.bonusPercent': '额外折旧（%）',
   },
 }
+const INVENTORY_VIEW_TAB_KEYS = ['view.onhand', 'view.movements', 'view.locations', 'view.bom'] as const
+type InventoryViewTabKey = (typeof INVENTORY_VIEW_TAB_KEYS)[number]
+
+/** Reviewed inventory workspace tab labels for every supported translation locale. */
+const INVENTORY_VIEW_TAB_EXPECTATIONS: Record<string, Record<InventoryViewTabKey, string>> = {
+  de: {
+    'view.onhand': 'Bestand',
+    'view.movements': 'Bewegungen',
+    'view.locations': 'Lagerorte',
+    'view.bom': 'Stückliste',
+  },
+  es: {
+    'view.onhand': 'Existencias',
+    'view.movements': 'Movimientos',
+    'view.locations': 'Ubicaciones',
+    'view.bom': 'Lista de materiales',
+  },
+  fr: {
+    'view.onhand': 'En stock',
+    'view.movements': 'Mouvements',
+    'view.locations': 'Emplacements de stock',
+    'view.bom': 'Nomenclature',
+  },
+  ja: {
+    'view.onhand': '手持在庫',
+    'view.movements': '変動',
+    'view.locations': '保管場所',
+    'view.bom': '部品表',
+  },
+  'pt-BR': {
+    'view.onhand': 'Disponível',
+    'view.movements': 'Movimentações',
+    'view.locations': 'Locais de estoque',
+    'view.bom': 'Lista de materiais',
+  },
+  zh: {
+    'view.onhand': '在库',
+    'view.movements': '变动',
+    'view.locations': '库位',
+    'view.bom': '物料清单',
+  },
+}
 const REMEASURE_BUTTON_SOURCE = readFileSync(
   new URL('../app/(app)/assets/RemeasureButton.tsx', import.meta.url),
   'utf8',
@@ -305,6 +347,25 @@ test('fixed-asset tax labels are structurally complete and semantically localize
         assert.equal(value, expectations?.[key], `${locale}/assets.json has an unreviewed ${fullKey}`)
         assert.notEqual(value, source.get(fullKey), `${locale}/assets.json must localize ${fullKey}`)
       }
+    }
+  }
+})
+
+test('inventory workspace tabs are translated in every locale', () => {
+  const source = flattenCatalog('en')
+
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    const expectations = INVENTORY_VIEW_TAB_EXPECTATIONS[locale]
+    assert.ok(expectations, `${locale}/inventory.json has no reviewed tab expectations`)
+
+    for (const key of INVENTORY_VIEW_TAB_KEYS) {
+      const fullKey = `inventory.${key}`
+      const value = catalog.get(fullKey)
+      assert.ok(value && value.trim(), `${locale}/inventory.json is missing ${fullKey}`)
+      assert.equal(value, expectations[key], `${locale}/inventory.json has an unreviewed ${fullKey}`)
+      assert.notEqual(value, source.get(fullKey), `${locale}/inventory.json must localize ${fullKey}`)
     }
   }
 })

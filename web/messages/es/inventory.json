@@ -10,7 +10,9 @@
   },
   "view": {
     "onhand": "Existencias",
-    "movements": "Movimientos"
+    "movements": "Movimientos",
+    "locations": "Ubicaciones",
+    "bom": "Lista de materiales"
   },
   "labels": {
     "item": "Artículo",

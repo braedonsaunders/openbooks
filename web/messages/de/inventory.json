@@ -10,7 +10,9 @@
   },
   "view": {
     "onhand": "Bestand",
-    "movements": "Bewegungen"
+    "movements": "Bewegungen",
+    "locations": "Lagerorte",
+    "bom": "Stückliste"
   },
   "labels": {
     "item": "Artikel",

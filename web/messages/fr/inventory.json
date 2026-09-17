@@ -10,7 +10,9 @@
   },
   "view": {
     "onhand": "En stock",
-    "movements": "Mouvements"
+    "movements": "Mouvements",
+    "locations": "Emplacements de stock",
+    "bom": "Nomenclature"
   },
   "labels": {
     "item": "Article",
