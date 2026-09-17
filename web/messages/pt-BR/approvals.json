@@ -38,7 +38,8 @@
     "sales_order": "pedido de venda",
     "quote": "orçamento",
     "field_ticket": "boletim de campo",
-    "close_run": "fechamento de período"
+    "close_run": "fechamento de período",
+    "budget_scenario": "orçamento"
   },
   "decide": {
     "rejectionReason": "Motivo da rejeição:",

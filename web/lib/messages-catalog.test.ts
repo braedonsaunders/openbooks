@@ -3324,3 +3324,21 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
     assert.deepEqual(I6_armsDrift, [], `${I6_locale} payroll translations drop ICU plural/select arms`)
   }
 })
+
+test('budget approval rows carry a translated kind label in every locale', () => {
+  // The approvals inbox renders pending budgets with a kinds label
+  // (F-t13-005); without one the row falls back to the raw
+  // 'budget_scenario' code, the same defect class as the close publish
+  // list. French keeps 'budget' — the French word, like the documented
+  // 'Scripts' identical-term exemption.
+  const key = 'approvals.kinds.budget_scenario'
+  const source = flattenCatalog('en')
+  assert.ok(source.get(key)?.trim(), `English source is missing ${key}`)
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const value = flattenCatalog(locale).get(key)
+    assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+    if (locale !== 'fr') {
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+})

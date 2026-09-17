@@ -5,6 +5,7 @@ import {
   decideDocumentApproval,
   DocumentApprovalError,
   worklistApprovals,
+  type WorklistBudget,
   type WorklistDocument,
   type WorklistPayRun,
 } from "@openbooks/engine/src/approval-worklist.ts";
@@ -27,6 +28,7 @@ import { executeIdempotent } from "./idempotency";
 export type ApprovalWorklistItem =
   | ({ kind: "flow_gate" } & WorklistGate)
   | ({ kind: "document" } & WorklistDocument)
+  | ({ kind: "budget" } & WorklistBudget)
   | ({ kind: "pay_run" } & WorklistPayRun);
 
 type PayDirection = "outbound" | "inbound";
@@ -41,10 +43,10 @@ function payApproveDirectionsForAuthz(authz: Authz): PayDirection[] {
 /**
  * One worklist for every thing awaiting the caller's approval: pending Flows
  * gates (assigned, role-held, or delegated), document-status approvals with
- * no pending gate, and pending payment runs. Gate rows keep their exact
- * shape; document and pay-run rows carry a kind discriminator and their own
- * decide handle. get_vitals counts this same array, so the two can never
- * disagree.
+ * no pending gate, pending budget scenarios, and pending payment runs. Gate
+ * rows keep their exact shape; document, budget, and pay-run rows carry a
+ * kind discriminator and their own decide handle. get_vitals counts this
+ * same array, so the two can never disagree.
  */
 export async function listApprovalWorklist(context: ApplicationContext): Promise<ApprovalWorklistItem[]> {
   return approvalWorklistForAuthz(context.authz);
@@ -52,26 +54,30 @@ export async function listApprovalWorklist(context: ApplicationContext): Promise
 
 /**
  * The unified worklist for a bare Authz (no transport context): pending Flows
- * gates, gateless document-status approvals, and pending payment runs. The
- * read path only ever touches authz, so surfaces that hold no
- * ApplicationContext (dashboard metrics, cron summaries) share this exact
- * reader instead of re-querying one leg of the union. Callers that cannot
- * approve anything must apply the same doorway as get_vitals (flows.approve,
- * ap.approve, or ar.approve) and treat the result as empty — the reader
- * itself throws for a caller with no approve path, mirroring the worklist.
+ * gates, gateless document-status approvals, pending budget scenarios, and
+ * pending payment runs. The read path only ever touches authz, so surfaces
+ * that hold no ApplicationContext (dashboard metrics, cron summaries) share
+ * this exact reader instead of re-querying one leg of the union. Callers
+ * that cannot approve anything must apply the same doorway as get_vitals
+ * (flows.approve, ap.approve, ar.approve, or budgets.approve) and treat the
+ * result as empty — the reader itself throws for a caller with no approve
+ * path, mirroring the worklist.
  */
 export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWorklistItem[]> {
   const orgId = authz.user.orgId;
   const flowsOn = await isFeatureEnabled(orgId, "flows");
   const mayFlows = flowsOn && can(authz, "flows.approve");
   const payDirections = payApproveDirectionsForAuthz(authz);
-  if (!mayFlows && payDirections.length === 0) {
+  const budgetsOn = await isFeatureEnabled(orgId, "budgets");
+  const mayBudgets = budgetsOn && can(authz, "budgets.approve");
+  if (!mayFlows && payDirections.length === 0 && !mayBudgets) {
     if (!flowsOn) return [];
     throw forbidden("flows.approve");
   }
   const items = await worklistApprovals(orgId, authz.user.id, {
     roles: authz.user.roles.map((role) => role.key),
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    includeBudgets: mayBudgets,
     includePayRuns: payDirections.length > 0,
   });
   const out: ApprovalWorklistItem[] = [];
@@ -94,8 +100,10 @@ export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWo
       if (mayFlows) out.push({ ...item.gate, kind: "flow_gate" });
     } else if (item.kind === "document") {
       if (mayFlows) out.push({ ...item.document, kind: "document" });
-    } else if (payAllowed.has(item.id)) {
-      out.push({ ...item.payRun, kind: "pay_run" });
+    } else if (item.kind === "budget") {
+      if (mayBudgets) out.push({ ...item.budget, kind: "budget" });
+    } else if (item.kind === "pay_run") {
+      if (payAllowed.has(item.id)) out.push({ ...item.payRun, kind: "pay_run" });
     }
   }
   return out;

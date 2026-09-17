@@ -197,6 +197,16 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
           createdAt: unionRequestedAt(item),
         }
       }
+      if (item.kind === 'budget') {
+        return {
+          id: item.id,
+          targetKind: 'budget_scenario',
+          targetId: item.id,
+          amount: item.total,
+          title: item.name,
+          createdAt: unionRequestedAt(item),
+        }
+      }
       return {
         id: item.id,
         targetKind: item.document?.kind ?? item.subjectKind,

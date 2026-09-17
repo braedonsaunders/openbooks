@@ -73,6 +73,62 @@ async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{
   return { docId: doc, number };
 }
 
+/** A budget submitted through the direct maker/checker path (no flow run). */
+async function postedPendingBudget(org: ScratchOrg, submittedBy: string): Promise<{ budgetId: string; name: string }> {
+  const budget = randomUUID();
+  const name = `WIDGET-BUDGET-${budget.slice(0, 8)}`;
+  await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
+    values(${budget},${org.orgId},${org.bookId},2026,${name},'budget','draft',${submittedBy},${submittedBy})`);
+  await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
+    values(${org.orgId},${budget},${org.accounts.revenue},${org.periodId},'-50000.0000',${submittedBy},${submittedBy})`);
+  await db.execute(sql`update budget_scenarios set status='pending_approval',revision=revision+1,
+    submitted_at=now(),submitted_by=${submittedBy},updated_at=now(),updated_by=${submittedBy}
+    where id=${budget} and org_id=${org.orgId}`);
+  return { budgetId: budget, name };
+}
+
+function budgetAuthzFor(orgId: string, userId: string): Authz {
+  return {
+    user: {
+      id: userId, email: `${userId}@test`, name: "Widget Budget Approver", orgId,
+      roles: [{ key: "approver", name: "approver" }],
+      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
+      homeUserId: userId, homeOrgId: orgId,
+    },
+    permissions: new Set([
+      "dashboard.read", "gl.read", "ar.read", "ap.read",
+      "flows.approve", "ap.approve", "ar.approve", "budgets.approve",
+    ]),
+    allowedSubsidiaryIds: null,
+  };
+}
+
+test("dashboard approval widgets list pending budgets with their checker target", { skip: !DB }, async () => {
+  // F-t13-005: the tile counts the unified worklist (budgets included), so
+  // the widget rows must map budget items to a linkable target too — not
+  // the gate-shaped fallthrough.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const submitter = await withBypass(() => createScratchUser(org.orgId, "Widget Budget Submitter", "accountant"));
+    const approver = await withBypass(() => createScratchUser(org.orgId, "Widget Budget Approver", "approver"));
+    await withBypass(() =>
+      db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`),
+    );
+    const pending = await withBypass(() => postedPendingBudget(org, submitter as unknown as string));
+    const metrics = await withOrgContext(org.orgId, () =>
+      loadDashboardMetrics(budgetAuthzFor(org.orgId, approver as unknown as string)),
+    );
+    assert.equal(metrics.pendingApprovals, 1, "tile counts the pending budget");
+    const row = metrics.pendingApprovalList.find((r) => r.title === pending.name);
+    assert.ok(row, "pending list maps the budget row");
+    assert.equal(row!.targetKind, "budget_scenario");
+    assert.equal(row!.targetId, pending.budgetId);
+    assert.equal(row!.amount, "-50000.0000");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("dashboard approval widgets list the unified worklist, not gates-only", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
