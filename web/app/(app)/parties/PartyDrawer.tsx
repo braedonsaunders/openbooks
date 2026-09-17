@@ -40,6 +40,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
+import { SendButton } from '../../../components/send-button'
 import { EmployeeWageRates } from './EmployeeWageRates'
 import { EmployeeEntitlementBalances } from './EmployeeEntitlementBalances'
 import { PayrollProfileTab } from '../payroll/_ui/PayrollProfileTab'
@@ -798,7 +799,7 @@ export function PartyDrawer({
           </Select>
         </div>
       ) : undefined}
-      actions={canManage || canCustomize ? (
+      actions={canManage || canCustomize || payload.customer || payload.vendor ? (
         <>
           {canManage ? isActive ? (
             <Button disabled={busy} onClick={() => setActiveState(false)}>{t('deactivate')}</Button>
@@ -807,6 +808,20 @@ export function PartyDrawer({
           ) : null}
           {canCustomize && recordType ? (
             <Button asChild><Link href={`/admin/customization?recordType=${recordType}&tab=forms`}>{t('manageForms')}</Link></Button>
+          ) : null}
+          {mode !== 'edit' && (payload.customer || payload.vendor) ? (
+            <>
+              <Button asChild variant="outline">
+                <Link href={`/reports/statements/${payload.party.id}?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}>{t('drawer.viewStatement')}</Link>
+              </Button>
+              {canManage ? (
+                <SendButton
+                  recordType="party_statement"
+                  recordId={payload.party.id}
+                  baseUrl={`/api/parties/${payload.party.id}/statement/send?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}
+                />
+              ) : null}
+            </>
           ) : null}
         </>
       ) : undefined}

@@ -24,6 +24,7 @@
     "unsavedChanges": "未保存の変更…",
     "autosaveFailed": "自動保存に失敗しました",
     "updateFailed": "更新に失敗しました",
+    "viewStatement": "取引明細を表示",
     "activated": "取引先を有効化しました",
     "deactivated": "取引先を無効化しました",
     "tabs": {

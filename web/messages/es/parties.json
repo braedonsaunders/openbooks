@@ -24,6 +24,7 @@
     "unsavedChanges": "Cambios sin guardar…",
     "autosaveFailed": "Falló el guardado automático",
     "updateFailed": "Error al actualizar",
+    "viewStatement": "Ver extracto",
     "activated": "Tercero activado",
     "deactivated": "Tercero desactivado",
     "tabs": {
