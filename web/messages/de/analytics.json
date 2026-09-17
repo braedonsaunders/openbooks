@@ -372,13 +372,470 @@
     "labels": {
       "unknownCustomer": "Unbekannt",
       "untitledProject": "Projekt ohne Titel"
-    }
+    },
+    "chart": {
+      "projectedClv": "Prognostizierter CLV"
+    },
+    "clvHow": {
+      "annualBold": "Jahreswert",
+      "annualTail": " = Ø-Rechnung × (Rechnungen ÷ aktive Jahre, mindestens 3 Monate). ",
+      "clvBold": "Prognostizierter CLV",
+      "clvTail": " = Jahreswert × 3 Jahre × Bindung.\n",
+      "retentionBold": "Bindungsfaktor",
+      "retentionHead": " = 0,95·e",
+      "retentionSup": "−Tage seit zuletzt ÷ 120",
+      "retentionTail": " , begrenzt auf 10–95 %. ",
+      "tiersNote": "Stufen nach prognostiziertem CLV: Top 10 % Platin, nächste 20 % Gold, nächste 30 % Silber, Rest 40 % Bronze."
+    },
+    "config": {
+      "fields": {
+        "churnCritical": {
+          "help": "Ein zusammengesetzter Abwanderungswert ab dieser Schwelle gilt als kritisches Risiko",
+          "label": "Abwanderung — kritisch (Wert)"
+        },
+        "churnHigh": {
+          "help": "Ein zusammengesetzter Abwanderungswert ab dieser Schwelle gilt als hohes Risiko",
+          "label": "Abwanderung — hoch (Wert)"
+        },
+        "churnMedium": {
+          "help": "Ein zusammengesetzter Abwanderungswert ab dieser Schwelle gilt als mittleres Risiko",
+          "label": "Abwanderung — mittel (Wert)"
+        },
+        "clvYears": {
+          "help": "Jahre künftigen Werts in der Lebenszeitwert-Prognose",
+          "label": "CLV-Horizont (Jahre)"
+        },
+        "hhiCritical": {
+          "help": "Ein Herfindahl-Index ab dieser Schwelle meldet kritische Konzentration",
+          "label": "Konzentration kritisch (HHI)"
+        },
+        "hhiWarning": {
+          "help": "Ein Herfindahl-Index ab dieser Schwelle meldet eine Konzentrationswarnung",
+          "label": "Konzentrationswarnung (HHI)"
+        }
+      }
+    },
+    "csv": {
+      "churn": "Abwanderung",
+      "grade": "Note",
+      "payment": "Zahlung",
+      "projectedClv": "Prognostizierter CLV",
+      "recommendation": "Empfehlung",
+      "segment": "Segment"
+    },
+    "customersCount": "{count} Kunden",
+    "daysAgo": "vor {days} Tagen",
+    "drill": {
+      "invoicesRevenue": "{invoices} Rechnungen · {revenue}"
+    },
+    "empty": {
+      "noAtRisk": "Keine gefährdeten Kunden — Bindung wirkt gesund.",
+      "noFriction": "Keine Gutschriften-Friktion in diesem Zeitraum.",
+      "noOverdue": "Niemand hinter dem üblichen Bestellzyklus zurück.",
+      "noProjectProfitability": "Keine projektbezogene Rentabilität in diesem Zeitraum.",
+      "noSignals": "Keine nennenswerten Signale in diesem Zeitraum."
+    },
+    "fakeChampionTitle": "Hoher Umsatz, niedrige Marge — Preise prüfen",
+    "fakeChampionTitleShort": "Hoher Umsatz, niedrige Marge",
+    "groupBy": {
+      "churn": "Nach Abwanderungsrisiko",
+      "grade": "Nach Gesundheitsnote",
+      "none": "Keine Gruppierung",
+      "segment": "Nach Segment",
+      "tier": "Nach CLV-Stufe"
+    },
+    "groupSummary": "{count} Kunden · {revenue}",
+    "jobsCount": "{count} Aufträge",
+    "kpi": {
+      "atRisk": "Gefährdet",
+      "atRiskRevenue": "Gefährdeter Umsatz",
+      "avgHealth": "Ø Gesundheit",
+      "avgMargin": "Ø Marge",
+      "avgMonthly": "Ø Monat",
+      "champions": "Top-Kunden",
+      "critical": "Kritisch",
+      "excellent": "Exzellent",
+      "grossProfit": "Rohertrag",
+      "highFriction": "Hohe Friktion",
+      "medianMonthly": "Median Monat",
+      "newCustomers": "Neukunden",
+      "overdueOrders": "Überfällige Aufträge",
+      "periodRevenue": "Umsatz Zeitraum",
+      "profitLeaks": "Margenlecks",
+      "projectedClv": "Prognostizierter CLV",
+      "recencyRisk": "Aktualitätsrisiko",
+      "retentionRate": "Bindungsrate",
+      "totalCosts": "Gesamtkosten",
+      "totalCustomers": "Kunden gesamt",
+      "totalProjectedClv": "Prognostizierter CLV gesamt",
+      "totalRevenue": "Umsatz gesamt",
+      "warning": "Warnung",
+      "yoyGrowth": "Wachstum ggü. Vorjahr"
+    },
+    "lastActive": "Zuletzt: {days}",
+    "margin": {
+      "excellent": "Exzellent",
+      "fair": "Befriedigend",
+      "good": "Gut",
+      "loss": "Verlust",
+      "low": "Niedrig",
+      "profit": "Gewinn"
+    },
+    "metrics": {
+      "avgDso": "Ø DSO",
+      "avgValue": "Ø Wert",
+      "monthlyGrowth": "Monatswachstum",
+      "paymentRate": "Zahlungsquote",
+      "retention": "Bindung",
+      "top10Share": "Top-10-%-Anteil"
+    },
+    "metricsSub": {
+      "avgMoM": "Ø MoM (reife Monate)",
+      "daysToPay": "Tage bis Zahlung",
+      "ofRevenue": "des Umsatzes",
+      "paidInFull": "vollständig bezahlte Rechnungen",
+      "perCustomer": "pro Kunde",
+      "retentionProb": "Ø Bindungswahrscheinlichkeit"
+    },
+    "overdueBanner": {
+      "count": "{count} überfällige Rechnungen",
+      "rest": " in diesem Zeitraum — Inkassorisiko kann Wachstum verdecken. Prüfen Sie die Registerkarte Abwanderungsrisiko."
+    },
+    "pager": {
+      "next": "Weiter",
+      "nounCustomers": "Kunden",
+      "prev": "Zurück",
+      "showing": "{from}–{to} von {total}"
+    },
+    "panels": {
+      "atRiskCustomers": "Gefährdete Kunden ({count})",
+      "atRiskHint": "Abwanderungswert: Aktualität 0–40 (>120 T/>60 T/>30 T) + Frequenzrückgang 0–30 (2×/1,5× eigener Schnitt) + geringe Bindung 0–30 (≤1/≤3 Aufträge)",
+      "clvRanking": "Lebenszeitwert-Ranking",
+      "cohortHint": "Nach Jahr des Erstauftrags · aktiv = Bestellung in den letzten 6 Monaten",
+      "cohortRetention": "Kohortenbindung",
+      "customerHealth": "Kundengesundheit ({count})",
+      "customerHealthHint": "Gewichtet 25 % Aktualität · 25 % Häufigkeit · 30 % Volumen · 20 % Zahlung, abzüglich Friktionsabschlag",
+      "customerProfitability": "Kundenrentabilität",
+      "customersBySegment": "Kunden nach Segment ({count})",
+      "dataSources": "Datenquellen & Herleitungen",
+      "frictionHint": "Gutschriften ×2 Punkte (keine Retourengenehmigungen in diesem Hauptbuch, Retouren daher immer 0)",
+      "frictionSignals": "Friktionssignale",
+      "howClvProjected": "Wie der CLV prognostiziert wird",
+      "insights": "Intelligente Einblicke",
+      "keyMetrics": "Kernkennzahlen",
+      "monthlyDetails": "Monatsdetails",
+      "monthlyDetailsHint": "MoM-Wachstum gedeckelt +200/−80 %; „—“ markiert Hochlauf aus unreifem Monat",
+      "monthlyRevenueTrend": "Monatsumsatz-Trend",
+      "overdueHint": "Tage über den eigenen Ø-Bestellzyklus jedes Kunden hinaus",
+      "overdueOrders": "Überfällige Aufträge",
+      "profitabilityHint": "Klicken Sie auf einen Kunden für Aufträge · ⚠️ markiert Margenlecks (> {threshold} Umsatz, <15 % Marge)",
+      "revenueByTier": "Umsatz nach CLV-Stufe",
+      "rfmHint": "R/F/M-Werte: 5 bestens, 1 schwächste — Aktualität aus festen Tagesschwellen, Häufigkeit/Volumen aus 33./66. Perzentil",
+      "rfmSegments": "RFM-Segmente",
+      "scoringModel": "Bewertungsmodell",
+      "scoringModelHint": "Wie die Gesamtwerte gebildet werden",
+      "segmentCustomers": "{segment} ({count})",
+      "segmentMix": "Segmentmix",
+      "segmentPerformance": "Segmentleistung",
+      "tierDistribution": "CLV-Stufenverteilung",
+      "topByRevenue": "Top-Kunden nach Umsatz"
+    },
+    "profitTier": {
+      "high": "Hoch",
+      "loss": "Verlust",
+      "low": "Niedrig",
+      "marginal": "Marginal",
+      "medium": "Mittel"
+    },
+    "rec": {
+      "maintain": "Pflegen",
+      "nurture": "Betreuen",
+      "onboard": "Onboarden",
+      "reactivate": "Reaktivieren",
+      "reprice": "Neu bepreisen",
+      "resolve-issues": "Probleme lösen",
+      "review": "Prüfen",
+      "win-back": "Zurückgewinnen"
+    },
+    "risk": {
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "low": "Niedrig",
+      "medium": "Mittel"
+    },
+    "scoring": {
+      "clvRetention": {
+        "label": "CLV-Bindung",
+        "value": "Bindung 0,95·e^(−Tage/120), begrenzt auf 10–95 %"
+      },
+      "clvTiers": {
+        "label": "CLV-Stufen",
+        "value": "Top 10 % Platin · nächste 20 % Gold · nächste 30 % Silber · Rest Bronze"
+      },
+      "frictionPenalty": {
+        "label": "Friktionsabschlag",
+        "value": "Kritisch −25 · Hoch −15 · Mittel −8"
+      },
+      "healthGrades": {
+        "label": "Gesundheitsnoten",
+        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F darunter"
+      },
+      "healthWeights": {
+        "label": "Gesundheitsgewichte",
+        "value": "Aktualität 25 % · Häufigkeit 25 % · Volumen 30 % · Zahlung 20 %"
+      },
+      "paymentScore": {
+        "label": "Zahlungswert",
+        "value": "100 − 40/20/10 bei DSO >60/>30/>15 T − min(40, Überfällige×10)"
+      },
+      "rfmFrequency": {
+        "label": "RFM-Häufigkeit / -Volumen",
+        "value": "Schnitte am 33. & 66. Perzentil → 1 / 3 / 5"
+      },
+      "rfmRecency": {
+        "label": "RFM-Aktualitätsschwellen",
+        "value": "≤30 T → 5 · ≤90 T → 3 · ≤180 T → 2 · sonst 1"
+      }
+    },
+    "segment": {
+      "at-risk": "Gefährdet",
+      "champions": "Top-Kunden",
+      "hibernating": "Ruhend",
+      "lost": "Verloren",
+      "loyal": "Stammkunden",
+      "new": "Neu",
+      "potential": "Potenzial",
+      "regular": "Regulär"
+    },
+    "segmentDesc": {
+      "at-risk": "Geringe Aktualität und Häufigkeit (R≤2 F≤2)",
+      "champions": "Aktuell, häufig, hohes Volumen (R≥4 F≥4 M≥4)",
+      "hibernating": "Wertvoll, aber inaktiv (R≤2 F≥3 M≥3)",
+      "lost": "Inaktiv, geringes Volumen (R≤2 M≤2)",
+      "loyal": "Konstant hohe Volumen (R≥3 F≥3 M≥4)",
+      "new": "Neue Erstkäufer (R≥4 F≤2)",
+      "potential": "Aktuell mit solidem Volumen (R≥3 M≥3)",
+      "regular": "Mittlere Bindung"
+    },
+    "sources": {
+      "cohortsBold": "Kohorten:",
+      "cohortsTail": " Lebenszeit-Rechnungshistorie nach Jahr des Erstauftrags gruppiert; aktiv = Bestellung in den letzten 6 Monaten.",
+      "frictionBold": "Friktion:",
+      "frictionTail": " nur Gutschriften — dieses Hauptbuch kennt keine Retourengenehmigungen, die Retourenkomponente ist daher immer 0.",
+      "intelligenceBold": "Intelligenzwert:",
+      "intelligenceTail": " 30 % Top-Kunden-Anteil (20 % der Kunden = max.) + 30 % Ø Bindungswahrscheinlichkeit + 20 % Konzentrationsgesundheit + 20 % Zahlungsquote — Wert {score} ({grade}).",
+      "newCustomersBold": "Neukunden:",
+      "newCustomersTail": " keine frühere Rechnung und kein Kundenauftrag, lebenslang, vor dem Monat der Erstaktivität.",
+      "paymentBold": "Zahlungsverhalten:",
+      "paymentTail": " bezahlt = Rechnung vollständig ausgeglichen; Tage bis Zahlung = Datum des letzten Ausgleichs − Rechnungsdatum; überfällig = nach Fälligkeit und nicht vollständig ausgeglichen.",
+      "profitabilityBold": "Rentabilität:",
+      "profitabilityTail": " projektmarkierte Hauptbuchzeilen, Auftrag → Kunde aggregiert; Kunden ohne projektmarkierte Aktivität zeigen keine Marge (nie geschätzt).",
+      "recencyBold": "Aktualität:",
+      "recencyTail": " gemessen bis heute (bzw. bis Periodenende bei Historie), nie bis zu einem künftigen Geschäftsjahresende.",
+      "revenueBold": "Umsatzbasis:",
+      "revenueTail": " gebuchte Kundenrechnungs-Beträge."
+    },
+    "sub": {
+      "activeLast6mo": "aktiv in den letzten 6 Monaten",
+      "avgPerCustomer": "Ø {amount} / Kunde",
+      "clvBase": "Historische CLV-Basis",
+      "creditHeavy": "kreditlastige Konten",
+      "customersCount": "{count} Kunden",
+      "firstOrderInPeriod": "Erstauftrag im Zeitraum",
+      "highCriticalAccounts": "hohe + kritische Konten",
+      "highCriticalChurn": "hohe + kritische Abwanderung",
+      "highRevenueLowMargin": "hoher Umsatz, <15 % Marge",
+      "jobsCount": "{count} Aufträge",
+      "last3moVsLy": "letzte 3 Mon. vs Vorjahreszeitraum",
+      "marginPct": "{pct} % Marge",
+      "newInPeriod": "{count} neu im Zeitraum",
+      "pastUsualCycle": "hinter üblichem Zyklus zurück",
+      "revenue": "Umsatz",
+      "rfmChampions": "RFM-Top-Segment",
+      "score40to59": "Wert 40–59",
+      "score80Plus": "Wert ≥ 80",
+      "scoreBelow40": "Wert < 40",
+      "threeYearProjection": "3-Jahres-Prognose",
+      "trend": "Trend: {trend}",
+      "weightedRfm": "gewichtet R/F/M/Zahlung"
+    },
+    "table": {
+      "active": "Aktiv",
+      "annualValue": "Jahreswert",
+      "avgCycle": "Ø Zyklus",
+      "avgLifetimeRev": "Ø Lebenszeitumsatz",
+      "avgPerCustomer": "Ø / Kunde",
+      "churn": "Abwanderung",
+      "cohort": "Kohorte",
+      "costs": "Kosten",
+      "credits": "Gutschriften",
+      "creditValue": "Gutschriftswert",
+      "customer": "Kunde",
+      "customerJob": "Kunde / Auftrag",
+      "customers": "Kunden",
+      "daysInactive": "Tage inaktiv",
+      "f": "F",
+      "health": "Gesundheit",
+      "invoices": "Rechnungen",
+      "issueRate": "Vorfallquote",
+      "level": "Stufe",
+      "m": "M",
+      "margin": "Marge",
+      "mom": "MoM",
+      "month": "Monat",
+      "new": "Neu",
+      "overdue": "Überfällig",
+      "payment": "Zahlung",
+      "profit": "Gewinn",
+      "projectedClv": "Progn. CLV",
+      "r": "R",
+      "recency": "Aktualität",
+      "recommendation": "Empfehlung",
+      "retention": "Bindung",
+      "retentionProb": "Bind.-Wahrsch.",
+      "revenue": "Umsatz",
+      "revShare": "Umsatzanteil",
+      "risk": "Risiko",
+      "riskFactors": "Risikofaktoren",
+      "score": "Wert",
+      "segment": "Segment",
+      "tier": "Stufe",
+      "txns": "Buch.",
+      "urgency": "Dringlichkeit"
+    },
+    "tabs": {
+      "churn": "Abwanderungsrisiko",
+      "configuration": "Konfiguration",
+      "growth": "Wachstum",
+      "health": "Gesundheitswerte",
+      "lifetime": "Lebenszeitwert",
+      "overview": "Überblick",
+      "profitability": "Rentabilität",
+      "segmentation": "Segmentierung"
+    },
+    "tier": {
+      "bronze": "Bronze",
+      "gold": "Gold",
+      "platinum": "Platin",
+      "silver": "Silber"
+    },
+    "txnsCount": "{count} Buch."
   },
   "vendor": {
     "title": "Lieferantenleistung",
     "backToHub": "Analytik",
     "labels": {
       "unknownVendor": "Unbekannt"
+    },
+    "chart": {
+      "spend": "Ausgaben",
+      "tooltipOnTime": "Pünktlich: {pct} %",
+      "tooltipSpend": "Ausgaben: {amount}",
+      "xAxis": "Ausgaben (log) →",
+      "yAxis": "% pünktlich"
+    },
+    "csv": {
+      "onTimePct": "% pünktlich",
+      "sharePct": "Anteil %"
+    },
+    "days": "{days} T",
+    "drill": {
+      "billsSpend": "{bills} Rechnungen · {spend} Ausgaben"
+    },
+    "empty": {
+      "noLatePaid": "Keine verspätet bezahlten Ausgaben."
+    },
+    "gauge": {
+      "balanced": "Ausgewogen",
+      "concentrated": "Konzentriert",
+      "diversified": "Diversifiziert"
+    },
+    "info": {
+      "body": "OTIF (pünktliche Volllieferung), Liefertreue, Einkaufspreisabweichungen und Maverick-Ausgaben (ohne Bestellung) erfordern eine Verknüpfung Bestellung → Wareneingang → Rechnungszeile, die diese Daten nicht tragen (keine Dokumentverknüpfungen, keine Positionen auf Rechnungen). Zahlungsverhalten, Konzentration und Beziehungs-Scorecards werden aus vollständigen Daten berechnet.",
+      "title": "In diesem Hauptbuch nicht messbar:"
+    },
+    "kpi": {
+      "activeVendors": "Aktive Lieferanten",
+      "avgBill": "Ø Rechnung",
+      "avgDaysToPay": "Ø Tage bis Zahlung",
+      "hhi": "Konzentration (HHI)",
+      "latePaidSpend": "Verspätet bezahlte Ausgaben",
+      "onTimeRate": "Pünktlichkeitsquote",
+      "top5Share": "Top-5-Anteil",
+      "topVendor": "Größter Lieferant",
+      "totalSpend": "Ausgaben gesamt",
+      "vendorsPaid": "Bezahlte Lieferanten"
+    },
+    "panels": {
+      "allVendors": "Alle Lieferanten ({count})",
+      "leverageHint": "Ausgaben (Einfluss) × Zahlungszuverlässigkeit (Leistung) — Blasengröße = Ausgaben",
+      "leverageMatrix": "Hebelmatrix",
+      "mostLatePaid": "Meist verspätet bezahlte Lieferanten",
+      "paymentBehaviour": "Zahlungsverhalten je Lieferant",
+      "scorecard": "Lieferanten-Scorecard",
+      "scorecardHint": "Beziehungswert — Ausgabenbedeutung, Bindung & Stabilität",
+      "spendByTier": "Ausgaben nach Stufe",
+      "spendTrend12mo": "Ausgabentrend (12 Mon.)",
+      "topBySpend": "Top-Lieferanten nach Ausgaben"
+    },
+    "quadrant": {
+      "commodity": {
+        "desc": "Hohe Ausgaben, angespannt — neu verhandeln oder zweigleisig beschaffen",
+        "label": "Standard"
+      },
+      "niche": {
+        "desc": "Geringe Ausgaben, zuverlässig — pflegen",
+        "label": "Nische"
+      },
+      "strategic": {
+        "desc": "Hohe Ausgaben, zuverlässig — partnerschaftlich sichern",
+        "label": "Strategisch"
+      },
+      "transactional": {
+        "desc": "Geringe Ausgaben, geringe Bindung — automatisieren / bündeln",
+        "label": "Transaktional"
+      }
+    },
+    "sub": {
+      "billsCount": "{count} Rechnungen",
+      "diversified": "diversifiziert",
+      "fromBillToPayment": "von Rechnung bis Zahlung",
+      "highlyConcentrated": "stark konzentriert",
+      "inPeriod": "im Zeitraum",
+      "moderate": "moderat",
+      "onTimeBills": "fristgerecht bezahlte Rechnungen",
+      "paidAfterDue": "nach Fälligkeit bezahlt",
+      "perBill": "pro Rechnung",
+      "top5Concentration": "Ausgabenkonzentration",
+      "withPaymentHistory": "mit Zahlungshistorie",
+      "yoy": "ggü. Vorjahr {pct}"
+    },
+    "table": {
+      "avgDays": "Ø Tage",
+      "bills": "Rechnungen",
+      "grade": "Note",
+      "lateSpend": "Verspätete Ausgaben",
+      "onTime": "Pünktlich",
+      "paid": "Bezahlt",
+      "score": "Wert",
+      "share": "Anteil",
+      "spend": "Ausgaben",
+      "tier": "Stufe",
+      "vendor": "Lieferant",
+      "yoy": "ggü. VJ"
+    },
+    "tabs": {
+      "matrix": "Hebelmatrix",
+      "overview": "Überblick",
+      "payment": "Zahlungsverhalten",
+      "scorecard": "Scorecards",
+      "vendors": "Lieferanten"
+    },
+    "tier": {
+      "core": "Kern",
+      "strategic": "Strategisch",
+      "tactical": "Taktisch",
+      "tail": "Long Tail"
     }
   },
   "cashflow": {
@@ -860,7 +1317,301 @@
     "labels": {
       "noTitle": "Ohne Titel",
       "unknownName": "Unbekannt"
-    }
+    },
+    "allDepartments": "Alle Abteilungen",
+    "anomalyNote": "Die Anomalieerkennung schließt Mitarbeiter aus Abteilungen ohne Abrechnungserwartung aus.",
+    "chart": {
+      "billable": "Abrechenbar",
+      "forecast": "Prognose",
+      "historical": "Historie",
+      "nonBillable": "Nicht abrechenbar",
+      "target": "Ziel"
+    },
+    "config": {
+      "fields": {
+        "costSpike": {
+          "help": "Warnen, wenn nicht abrechenbare Kosten stärker als hier steigen ggü. Vorzeitraum",
+          "label": "Kostenspitzen-Alarm ($)"
+        },
+        "minHours": {
+          "help": "Mitarbeiter darunter bleiben aus Anomalie-/Peer-Analyse ausgeschlossen",
+          "label": "Mindeststunden"
+        },
+        "targetBillable": {
+          "help": "Unternehmensweite Auslastungs-Richtmarke",
+          "label": "Abrechenbar-Ziel %"
+        }
+      },
+      "historyNote": "Gleitende {months}-Monats-Zeiträume für Trend & Prognose",
+      "historyPeriods": "Historienzeiträume",
+      "priorRange": "Vorzeitraum",
+      "priorRangeNote": "Gleiche Dauer unmittelbar vor dem gewählten Zeitraum"
+    },
+    "empCount": "{count} MA",
+    "empty": {
+      "allWithinTarget": "Alle Kennzahlen im Ziel.",
+      "noDriftingTitles": "Keine driftenden Bezeichnungen",
+      "noImprovements": "Keine Verbesserungschancen erkannt",
+      "noIssues": "Keine Probleme erkannt",
+      "noPeerTitles": "Keine Bezeichnung mit 2+ Mitarbeitern zum Vergleich",
+      "noSuddenDrops": "Keine plötzlichen Einbrüche erkannt"
+    },
+    "entries": {
+      "billableOf": "{pct} abrechenbar",
+      "count": "{count}{suffix} Buchungen",
+      "employee": "Mitarbeiter",
+      "hrs": "{hours} Std.",
+      "item": "Artikel",
+      "peers": "vs {count} {title}-Kollegen",
+      "pills": {
+        "byCustomer": "Nach Kunde",
+        "byEmployee": "Nach Mitarbeiter",
+        "byItem": "Nach Leistungsartikel",
+        "entries": "Buchungen"
+      },
+      "serviceItem": "Leistungsartikel",
+      "thisVsPeer": "Dieser Mitarbeiter {emp} · Kollegen-Ø {peer}",
+      "title": "Zeitbuchungen"
+    },
+    "error": {
+      "loadFailed": "Buchungen konnten nicht geladen werden."
+    },
+    "forecast": {
+      "atRisk": "Gefährdet",
+      "current": "Aktuell",
+      "methodology": " Prognosen nutzen lineare Regression über Historienzeiträume. Höhere abrechenbare % korrelieren naturgemäß mit niedrigeren nicht abrechenbaren Kosten, da dieselben Stunden von nicht abrechenbarer in abrechenbare Arbeit wechseln.",
+      "methodologyBold": "Methodik:",
+      "onTrack": "Auf Kurs",
+      "projected": "Prognostiziert"
+    },
+    "gauge": {
+      "atRisk": "GEFÄHRDET",
+      "belowTarget": "UNTER ZIEL",
+      "nearTarget": "NAHE AM ZIEL",
+      "onTarget": "IM ZIEL",
+      "targetPct": "Ziel {target} %"
+    },
+    "heatmap": "Heatmap",
+    "hide": "Ausblenden",
+    "hotspot": {
+      "highestCostItem": "Teuerster Artikel",
+      "lowestBilledEmp": "Schwächster abrechnender MA",
+      "mostExpensiveDept": "Teuerste Abteilung",
+      "others": "+ {count} weitere{count, plural, one {} other {}}"
+    },
+    "itemsWithActivity": "{count} Artikel mit Aktivität · Zeile für Buchungen anklicken",
+    "kpi": {
+      "aboveTarget": "Über Ziel",
+      "avgBillablePct": "Ø abrechenbar %",
+      "avgHours": "Ø Stunden",
+      "avgHoursItem": "Ø Stunden/Artikel",
+      "avgSpread": "Ø Spreizung",
+      "avgTeamSize": "Ø Teamgröße",
+      "belowTarget": "Unter Ziel",
+      "bestTitle": "Beste Bezeichnung",
+      "billableHours": "Abrechenbare Stunden",
+      "capacityHeadroom": "Kapazitätsreserve",
+      "confidence": "Konfidenz",
+      "costPerDay": "Kosten pro Tag",
+      "efficiencyScore": "Effizienzwert",
+      "employees": "Mitarbeiter",
+      "highestCost": "Höchste Kosten",
+      "jobTitles": "Stellenbezeichnungen",
+      "jobTitlesAnalyzed": "Bezeichnungen analysiert",
+      "needsAttention": "Handlungsbedarf",
+      "nonBillableCost": "Nicht abrechenbare Kosten",
+      "opportunities": "Chancen",
+      "overtimeNoValue": "Überstunden ohne Wert",
+      "potentialSavings": "Einsparpotenzial",
+      "projectedBillablePct": "Abrechenbar % prognostiziert",
+      "projectedNonBillCost": "Nicht abrechenb. Kosten progn.",
+      "serviceItems": "Leistungsartikel",
+      "suddenDrops": "Plötzliche Einbrüche",
+      "target": "Ziel",
+      "targetStatus": "Zielstatus",
+      "titleDrift": "Bezeichnungsdrift",
+      "titlesWithOutliers": "Bezeichnungen mit Ausreißern",
+      "topPerformer": "Top-Mitarbeiter",
+      "totalHours": "Stunden gesamt",
+      "totalIssues": "Probleme gesamt"
+    },
+    "loading": "Wird geladen…",
+    "lowHoursCount": "{count} Mitarbeiter mit <{minHours} Stunden",
+    "metric": {
+      "billableHours": "Abrechenbare Stunden",
+      "costPerDay": "Kosten pro Tag",
+      "nonBillableCost": "Nicht abrechenbare Kosten",
+      "nonBillableHours": "Nicht abrechenbare Stunden",
+      "percentBilled": "Abrechenbarer Anteil",
+      "totalHours": "Stunden gesamt"
+    },
+    "no": "Nein",
+    "noBillExpectation": "Keine Abrechnungserwartung",
+    "noBillExpShort": "keine Abrechn.-Erw.",
+    "noBillableNote": "Abteilungen ohne abrechenbare Stunden bleiben aus Unternehmens-% und Hotspots ausgeschlossen (Overhead-Funktionen tragen keine Abrechnungserwartung).",
+    "none": "Keine",
+    "noTitle": "Ohne Bezeichnung",
+    "outlook": {
+      "challenging": "Anspruchsvoll",
+      "favorable": "Günstig",
+      "neutral": "Neutral"
+    },
+    "panels": {
+      "alerts": "Auslastungsalarme",
+      "costHotspots": "Kosten-Hotspots",
+      "dataSources": "Datenquellen & Herleitungen",
+      "efficiencySummary": "Effizienzübersicht",
+      "forecastTrend": "Abrechenbar-%-Trend mit Prognose",
+      "hiringIntelligence": "Einstellungsintelligenz",
+      "hoursDistribution": "Stundenverteilung",
+      "improvementHint": "Geschätzte Ersparnis durch fünf Punkte bessere Auslastung",
+      "improvementOpportunities": "Verbesserungschancen",
+      "modelAssumptions": "Modell & Annahmen",
+      "noBillableExpectation": "Keine Abrechnungserwartung",
+      "overtimeHint": "20 %+ mehr Stunden als Ø, abrechenbar 20 Punkte unter Ziel",
+      "peerComparison": "Kollegenvergleich nach Bezeichnung",
+      "peerHint": "Vergleichen Sie Mitarbeiter mit ähnlicher Arbeit",
+      "reallocationIdeas": "Umverteilungsideen",
+      "suddenDrop": "Plötzlicher Einbruch",
+      "suddenDropHint": "Abrechenbar % >15 Punkte ggü. Vorjahr gefallen",
+      "titleDriftHint": "Rollen, in denen ALLE Mitarbeiter nachlassen",
+      "topDepartments": "Top-Abteilungen",
+      "topDepartmentsHint": "Nach nicht abrechenbaren Kosten",
+      "treemap": "Auslastungs-Treemap",
+      "treemapHint": "Größe = Stunden · Farbe = abrechenbar % · klicken zum Vertiefen"
+    },
+    "peers": {
+      "outliersBold": "Ausreißer",
+      "outliersNote": " sind Mitarbeiter, deren abrechenbare % mehr als 1,5 Standardabweichungen vom Schnitt ihrer Bezeichnung abweichen. Hohe Spreizung oder Ausreißer deuten auf Schulungslücken, Lastungleichgewichte oder Rollenfehlbesetzung hin."
+    },
+    "ppAvg": "Ø {avg} Punkte",
+    "prior": "Vorher: {pct}",
+    "searchEmployees": "Mitarbeiter suchen…",
+    "searchItems": "Artikel suchen…",
+    "show": "Anzeigen",
+    "sources": {
+      "billableBold": "Abrechenbar",
+      "billableItem": " — das Abrechenbar-Kennzeichen der Buchung (jede abrechenbare Buchung trägt Projekt → Kunde).",
+      "dominantClass": "dominante Lohnart",
+      "intro": "Alles wird live berechnet aus ",
+      "introTail": ":",
+      "jobTitleBold": "Stellenbezeichnung",
+      "jobTitleItem": " (der Leistungsartikel, auf den die Person die meisten Stunden bucht, z. B. „MECH:Foreman“).",
+      "jobTitleMid": " — Mitarbeiter tragen kein Bezeichnungsfeld, die Bezeichnung einer Person ist daher ihre ",
+      "noBillItem": " — Abteilungen ohne abrechenbare Stunden (aktuell + vorher) werden automatisch markiert und aus dem Unternehmens-% ausgeschlossen, z. B. Overhead.",
+      "nonBillCostBold": "Nicht abrechenbare Kosten",
+      "nonBillCostItem": " — Σ Stunden × eigener Kostensatz der Buchung für nicht abrechenbare Zeit.",
+      "timeEntries": "Zeitbuchungen"
+    },
+    "sub": {
+      "aboveNear": "{above} darüber, {near} nahe",
+      "acrossItems": "alle Artikel",
+      "belowTargetCount": "{count} unter Ziel",
+      "billableThreshold": "Abrechenbar-Schwelle",
+      "dataPoints": "{count} Datenpunkte",
+      "daysInRange": "{days} Tage im Zeitraum",
+      "detectedAnomalies": "erkannte Anomalien",
+      "drop15pp": "Mitarbeiter mit >15-Punkte-Rückgang",
+      "employeesPerTitle": "Mitarbeiter pro Bezeichnung",
+      "hiresAtEfficiency": "Einstellungen bei aktueller Effizienz",
+      "highHoursLowBillable": "viele Stunden, wenig abrechenbar",
+      "hoursWeighted": "stundengewichtet",
+      "ifAllImplemented": "falls alles umgesetzt",
+      "improvementScenarios": "Verbesserungsszenarien",
+      "maxMinusMin": "Max − Min in Bezeichnung",
+      "outOf100": "von 100",
+      "perEmployee": "pro Mitarbeiter",
+      "performanceVariance": "Leistungsstreuung",
+      "perServiceItem": "pro Leistungsartikel",
+      "qualified": "{count} qualifiziert (≥{minHours} Std.)",
+      "recordedTime": "erfasste Zeit",
+      "revenueGenerating": "umsatzbringend",
+      "rolesTrendingDown": "Rollen im Rückgang",
+      "targetPct": "Ziel: {target} %",
+      "totalForRange": "gesamt im Zeitraum",
+      "trajectory": "Verlauf {arrow} {amount}",
+      "trendArrow": "Trend {arrow} {trend} Punkte",
+      "uniqueRoles": "eigene Rollen (Lohnart)",
+      "with2Plus": "mit 2+ Mitarbeitern",
+      "withActivity": "mit Aktivität"
+    },
+    "subTabs": {
+      "anomalies": "Anomalien",
+      "forecasting": "Prognose",
+      "peers": "Kollegenanalyse",
+      "treemap": "Treemap",
+      "whatif": "Was-wäre-wenn"
+    },
+    "table": {
+      "avgPct": "Ø %",
+      "billable": "Abrechenbar",
+      "billablePct": "Abrechenbar %",
+      "change": "Änderung",
+      "cost": "Kosten",
+      "currentRange": "Aktueller Zeitraum",
+      "customer": "Kunde",
+      "date": "Datum",
+      "department": "Abteilung",
+      "employees": "Mitarbeiter",
+      "hours": "Stunden",
+      "jobTitle": "Stellenbezeichnung",
+      "max": "Maximum",
+      "metric": "Kennzahl",
+      "min": "Minimum",
+      "nonBill": "Nicht abrechenbar",
+      "nonBillCost": "Nicht abrechenb. Kosten",
+      "outliers": "Ausreißer",
+      "pctBilled": "Abrechenbar %",
+      "pctPrior": "% vorher",
+      "priorRange": "Vorzeitraum",
+      "share": "Anteil",
+      "spread": "Spreizung",
+      "totalHrs": "Stunden gesamt"
+    },
+    "tableLabel": "Tabelle",
+    "tabs": {
+      "config": "Konfiguration",
+      "departments": "Abteilungen",
+      "employees": "Mitarbeiter",
+      "intelligence": "Intelligenz",
+      "items": "Artikel",
+      "overview": "Überblick",
+      "titles": "Bezeichnungen"
+    },
+    "titles": {
+      "drawerDesc": "{count} Mitarbeiter · {billable} abrechenbar · {cost} nicht abrechenbare Kosten"
+    },
+    "treemap": {
+      "breadcrumb": "Brotkrumen zum Aufsteigen",
+      "clickDrill": "Klicken zum Vertiefen",
+      "colourBillable": "Farbe = abrechenbar %",
+      "sizeHours": "Größe = gearbeitete Stunden"
+    },
+    "unit": {
+      "billable": "abrechenbar",
+      "hrs": "Std."
+    },
+    "whatif": {
+      "avgCostEmployee": "Ø Kosten/Mitarbeiter",
+      "avgHoursEmployee": "Ø Stunden/Mitarbeiter",
+      "bestTitle": "Beste Bezeichnung",
+      "billablePctLabel": "abrechenbar %",
+      "breakEvenRate": "Gewinnschwelle",
+      "costPerNonBillHour": "Kosten pro nicht abrechenb. Std.",
+      "highBillableRoles": "stark abrechenbare Rollen",
+      "improve": "„{title}“ um 5 % verbessern",
+      "improveDetail": "{count} Mitarbeiter derzeit bei Ø {pct} %",
+      "na": "k. A.",
+      "needsFocus": "Fokus nötig",
+      "nonBillableLabel": "nicht abrechenbar",
+      "recExceptional": "Neueinstellungen brauchen außergewöhnliche abrechenbare Sätze, um wirtschaftlich zu sein. Für Spitzenlast Subunternehmer erwägen.",
+      "recFocus": "Einstellungen auf {title} fokussieren. Aktuelle Top-Leister liegen im Schnitt bei {avgPct} %.",
+      "recSupports": "Aktuelle Auslastung trägt Neueinstellungen. Rollen priorisieren, die Teamstärken ergänzen.",
+      "save": "{amount} sparen",
+      "teamAvgBillable": "Aktueller Team-Ø abrechenbar",
+      "totalEmployees": "Mitarbeiter gesamt"
+    },
+    "yes": "Ja"
   },
   "spendVelocity": {
     "title": "Ausgabendynamik",
@@ -917,6 +1668,280 @@
       "seasonalHigh": "Höhere Ausgaben fallen typischerweise in {months}",
       "seasonalLow": "Niedrigere Ausgaben fallen typischerweise in {months}",
       "shadowItReason": "Spesenabrechnungszeilen enthalten weder Händler noch Lieferant — nur das Aufwandskonto und eine Freitextbeschreibung — daher lässt sich die virale Softwareverbreitung unter Mitarbeitern nicht nachverfolgen."
+    },
+    "banner": {
+      "count": "{total} Warnungen gesamt",
+      "rest": " über 8 Detektoren — Karte zum Filtern anklicken"
+    },
+    "chart": {
+      "priorYear": "Vorjahr",
+      "spend": "Ausgaben"
+    },
+    "chips": {
+      "all": "Alle",
+      "decreases": "↓ Rückgänge",
+      "highVel": "🔥 Hohe Dyn.",
+      "increases": "↑ Anstiege",
+      "new": "+ Neu"
+    },
+    "clearFilter": "Filter löschen · {key}",
+    "config": {
+      "anomalyThreshold": {
+        "label": "Anomalieschwelle",
+        "note": "Z-Wert für statistische Ausreißer (kritisch bei 3σ)"
+      },
+      "boilingFrog": {
+        "label": "Kochender Frosch",
+        "note": "Mindestmonate kleiner (<10 %) monotoner Anstiege"
+      },
+      "fields": {
+        "anomalySigma": {
+          "help": "Monate jenseits so vieler Standardabweichungen gelten als Anomalien",
+          "label": "Anomalie-σ"
+        },
+        "boilingFrogMonths": {
+          "help": "Mindestmonate anhaltender kleiner Anstiege",
+          "label": "Frosch-Monate"
+        },
+        "fragmentationAvgSize": {
+          "help": "Obergrenze der Ø-Transaktionsgröße für den Fragmentierungsdetektor",
+          "label": "Ø-Größe Fragmentierung"
+        },
+        "fragmentationTxns": {
+          "help": "Monatliche Transaktionszahl darüber (unter der Größenobergrenze) meldet Fragmentierung",
+          "label": "Fragmentierungs-Trans./Mon."
+        },
+        "highVelocity": {
+          "help": "Monatliche CAGR darüber gilt als beschleunigend/hoch",
+          "label": "Hohe Dynamik (%/Mon.)"
+        },
+        "mediumVelocity": {
+          "help": "Monatliche CAGR darüber gilt als ansteigend",
+          "label": "Mittlere Dynamik (%/Mon.)"
+        },
+        "zombieMonths": {
+          "help": "Monatlich identische Lieferantensummen über mindestens so viele Monate",
+          "label": "Zombie-Monate"
+        }
+      },
+      "fragmentation": {
+        "label": "Fragmentierung",
+        "note": "Transaktionen pro Monat / Ø Transaktionsgröße"
+      },
+      "velocityEngine": {
+        "label": "Dynamik-Engine",
+        "note": "(Ende/Start)^(1/Zeiträume) − 1 mit {minBase} Mindestbasis",
+        "value": "Monatliche CAGR"
+      },
+      "velocityThresholds": {
+        "label": "Dynamikschwellen",
+        "note": "Schnitte monatlicher CAGR ansteigend / hoch"
+      },
+      "zombieWindow": {
+        "label": "Zombie-Fenster",
+        "note": "Identische wiederkehrende Lieferantensummen (<1 % Abweichung)"
+      }
+    },
+    "csv": {
+      "changePct": "Änderung %",
+      "current": "Aktuell",
+      "prior": "Vorher",
+      "projected": "Prognostiziert",
+      "twoBack": "-2",
+      "velocityPctMo": "Dynamik %/Mon."
+    },
+    "details": {
+      "anomaly": "{sigma}σ vom Mittel in {month}",
+      "cliff": "Lücke {gap} %, Verhältnis {ratio}×",
+      "cliffItem": "Bestell- vs. Auftragsdynamik",
+      "concentration": "{share} % der Ausgaben, {trend}",
+      "fragmentation": "{txns} Trans./Mon., Ø {avg}",
+      "frog": "+{rate} %/Mon. über {months} Monate",
+      "seasonal": "{deviation} % vs Ø-Monat",
+      "zombie": "{amount}/Mon. unverändert über {months} Monate"
+    },
+    "detectors": {
+      "anomaly": {
+        "desc": "Statistische Ausreißer (>2,5σ)",
+        "label": "Anomalien",
+        "sub": "kritisch"
+      },
+      "cliff": {
+        "desc": "Dynamiklücke Bestellungen vs Aufträge",
+        "label": "Klippe",
+        "sub": "Bestelldynamik"
+      },
+      "concentration": {
+        "desc": "Übermäßige Kategorieabhängigkeit",
+        "label": "Konzentration",
+        "sub": "Top-5-Anteil"
+      },
+      "fragmentation": {
+        "desc": "Viele kleine Einkäufe",
+        "label": "Fragmentierung",
+        "sub": "fragmentierte Ausgaben"
+      },
+      "frog": {
+        "desc": "Schleichende Kostensteigerung",
+        "label": "Kochender Frosch",
+        "sub": "Jahreswirkung"
+      },
+      "seasonal": {
+        "desc": "Musterausreißende Ausgaben",
+        "label": "Saison",
+        "sub": "musterausreißende Monate"
+      },
+      "shadow": {
+        "desc": "Virale Softwareeinführung",
+        "label": "Schatten-IT",
+        "sub": "nicht verfügbar"
+      },
+      "zombie": {
+        "desc": "Unveränderte wiederkehrende Kosten",
+        "label": "Zombies",
+        "sub": "Jahreskosten"
+      }
+    },
+    "deviationNote": "Monatliche Abweichung vom Schnitt",
+    "empty": {
+      "forDetector": " für diesen Detektor",
+      "noAlerts": "Keine Warnungen erkannt",
+      "noAnomalies": "Keine Anomalien erkannt",
+      "noSeasonal": "Keine nennenswerte Saisonalität erkannt"
+    },
+    "health": {
+      "atRisk": "GEFÄHRDET",
+      "caption": "Ausgabengesundheit",
+      "elevated": "ERHÖHT",
+      "healthy": "GESUND",
+      "watch": "BEOBACHTEN"
+    },
+    "kpi": {
+      "alerts": "Warnungen",
+      "avgVelocity": "Ø Dynamik",
+      "savingsPotential": "Einsparpotenzial",
+      "totalSpend": "Ausgaben gesamt"
+    },
+    "newBadge": "NEU",
+    "panels": {
+      "accountVelocity": "Kontendynamik Aufwand",
+      "alertDetails": "Warndetails",
+      "dataSources": "Datenquellen",
+      "deepAnalysis": "Konten-Tiefenanalyse",
+      "deepAnalysisHint": "{count} Konten · Zeile für Transaktionen anklicken",
+      "detectorSummary": "Detektorübersicht",
+      "highestVelocity": "Konten mit höchster Dynamik",
+      "insights": "Einblicke",
+      "modelThresholds": "Modell & Schwellen",
+      "monthlySpendVelocity": "Monatliche Ausgabendynamik",
+      "monthlySpendVelocityHint": "Aktueller Monat vs Vorjahresmonat",
+      "monthlySummary": "Monatsübersicht",
+      "monthlyTrend": "Monatstrend",
+      "seasonalPatterns": "Saisonmuster",
+      "top10BySpend": "Top 10 nach Ausgaben",
+      "vendorDrillDown": "Lieferanten-Drilldown",
+      "velocityVsAccel": "Dynamik vs Beschleunigung",
+      "velocityVsAccelHint": "Dynamik = Monatsänderung Ausgaben · Beschleunigung = Dynamikänderung · Größe = Ausgaben"
+    },
+    "period": {
+      "basedOnTrend": "trendbasiert",
+      "current": "Aktueller Zeitraum",
+      "prior": "Vorzeitraum",
+      "projectedNext": "Nächster prognostiziert",
+      "twoBack": "2 Zeiträume zurück"
+    },
+    "row": {
+      "txns": "{txns} Buch.",
+      "txnsMonths": "{txns} Buch. · {months} Monate"
+    },
+    "scatter": {
+      "tooltipAccel": "Beschl.: {pct} %",
+      "tooltipSpend": "Ausgaben: {amount}",
+      "tooltipVelocity": "Dynamik: {pct} %",
+      "xAxis": "Dynamik %",
+      "yAxis": "Beschl."
+    },
+    "searchPlaceholder": "Konten suchen…",
+    "severity": {
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "low": "Niedrig",
+      "medium": "Mittel"
+    },
+    "shadowIt": {
+      "body": " ist in openbooks nicht verfügbar: {reason}",
+      "title": "Schatten-IT"
+    },
+    "sort": {
+      "accel": "Sort.: Beschl.",
+      "changePct": "Sort.: Änderung %",
+      "spend": "Sort.: Ausgaben",
+      "velocity": "Sort.: Dynamik"
+    },
+    "sources": {
+      "intro": "Ausgaben = Aufwands-/COGS-Buchungszeilen aus den vier Ausgabendokumentarten:",
+      "li1Bold1": "Lieferantenrechnungen, Reisekostenabrechnungen, Schecks",
+      "li1Bold2": "Lieferantengutschriften",
+      "li1Mid": " erhöhen die Ausgaben; ",
+      "li1Tail": " mindern sie.",
+      "li2Bold": "Verpflichtungsklippe",
+      "li2Tail": " vergleicht monatliche Bestell- vs. Auftragsdynamik.",
+      "li3Bold": "Umsatznormierung",
+      "li3Tail": " nutzt Hauptbucherlöse für die OpEx-Quote ({ratio} %).",
+      "li4Bold": "Schatten-IT",
+      "li4Tail": " — nicht verfügbar: {reason}",
+      "outro": "Drilldowns laden beim Anklicken die volle Aktivität des Kontos oder Lieferanten im Zeitraum (durchsuchbar, mit Monatstrend und Aufschlüsselung); jede Zeile verlinkt den echten Datensatz im Stammmodul."
+    },
+    "sub": {
+      "acceleratingCount": "{count} beschleunigend",
+      "accountsCount": "{count} Konten",
+      "anomaliesCount": "{count} Anomalien",
+      "creepAndZombies": "aus Schleichung + Zombies",
+      "noIssues": "keine Befunde"
+    },
+    "table": {
+      "accel": "Beschl.",
+      "account": "Konto",
+      "billsExp": "Rechn./Aufw.",
+      "change": "Änderung",
+      "current": "Aktuell",
+      "detector": "Detektor",
+      "details": "Details",
+      "impact": "Wirkung",
+      "item": "Position",
+      "month": "Monat",
+      "prior": "Vorher",
+      "priorYear": "Vorjahr",
+      "projected": "Prognostiziert",
+      "severity": "Schwere",
+      "sparkline": "Sparkline",
+      "spend": "Ausgaben",
+      "totalSpend": "Ausgaben gesamt",
+      "trend": "Trend",
+      "txns": "Buch.",
+      "vendor": "Lieferant",
+      "vendors": "Lieferanten",
+      "velocity": "Dynamik",
+      "yoyChange": "Änderung ggü. VJ"
+    },
+    "tabs": {
+      "accounts": "Konten",
+      "config": "Konfiguration",
+      "detectors": "Detektoren",
+      "overview": "Überblick",
+      "trends": "Trends",
+      "velocity": "Dynamik"
+    },
+    "trend": {
+      "accelerating": "Beschleunigend",
+      "declining": "Sinkend",
+      "high": "Hoch",
+      "new": "Neu",
+      "rising": "Steigend",
+      "stable": "Stabil"
+    },
+    "unit": {
+      "months": "Monate"
     }
   },
   "sentinel": {
@@ -928,11 +1953,43 @@
     "table": {
       "currency": "Währung",
       "members": "Belege",
-      "span": "Spanne"
+      "span": "Spanne",
+      "action": "Aktion",
+      "amount": "Betrag",
+      "change": "Änderung",
+      "confidence": "Konfidenz",
+      "count": "Anzahl",
+      "date": "Datum",
+      "daysApart": "Tage Abstand",
+      "deviation": "Abweichung",
+      "digit": "Ziffer",
+      "digits": "Ziffern",
+      "doc1": "Dok 1",
+      "doc2": "Dok 2",
+      "document": "Dokument",
+      "employee": "Mitarbeiter",
+      "flag": "Befund",
+      "flaggedAmount": "Markierter Betrag",
+      "flagTypes": "Befundarten",
+      "flags": "Befunde",
+      "match": "Treffer",
+      "party": "Partner",
+      "partyAvg": "Partner-Ø",
+      "reason": "Grund",
+      "risk": "Risiko",
+      "riskScore": "Risikowert",
+      "secondLargest": "2.-größter",
+      "table": "Tabelle",
+      "vendor": "Lieferant",
+      "when": "Wann",
+      "z": "Z"
     },
     "duplicates": {
       "sharedReference": "gemeinsame Referenz {reference}",
-      "spanDays": "{days} T."
+      "spanDays": "{days} T.",
+      "ruleNote": "gleicher Lieferant + Art + Währung + Betrag + Referenz, ≥{min}",
+      "ruleValue": "≤{days} Tage",
+      "sameMemo": "gleicher Buchungstext"
     },
     "benford": {
       "conforming": "Konform",
@@ -983,7 +2040,221 @@
         "area": "Benford-Abweichung",
         "message": "Erste-Ziffer-Verteilung weicht erheblich ab"
       }
-    }
+    },
+    "analysis": {
+      "calendar": "Kalender",
+      "rsfFull": "Relativer Größenfaktor",
+      "rsfNote": " = Betrag ÷ zweitgrößte historische Transaktion des Lieferanten in derselben Währung (36-Monats-Basis, in einem Fensterfunktions-Durchlauf berechnet). RSF ≥ 10 bedeutet eine für diesen Lieferanten völlig unmaßstäbliche Transaktion — ein klassisches Fehler-/Betrugssignal.",
+      "zscoreNote": " misst, wie viele Standardabweichungen eine Transaktion vom eigenen Mittel dieses Lieferanten in derselben Währung entfernt liegt (lieferanten- und währungsweise Basen über 36 Monate, ein Aggregatdurchlauf). |z| ≥ 3 markiert unternehmensspezifische Ausreißer, die globale Schwellen übersehen.",
+      "zscoreWord": "Z-Wert"
+    },
+    "auditNote": "Nativer Prüfpfad. Die meisten Datensätze dieses Hauptbuchs wurden massenmigriert, die Änderungshistorie beginnt daher beim Go-live — der Pfad wächst mit der Arbeit der Anwender in openbooks.",
+    "banner": {
+      "ledger": "vollständiges Hauptbuch",
+      "pre": "Analysiert über Ihr ",
+      "stats": "{docs} Dokumente · {amount} · {days} Tage · in {seconds} s — ohne Deckeln und Datumsgrenzen."
+    },
+    "chart": {
+      "expected": "Erwartet",
+      "expectedBenford": "Erwartet (Benford)",
+      "observed": "Beobachtet"
+    },
+    "config": {
+      "benfordConformity": "Benford-Konformität",
+      "benfordNote": "1D-Bänder 0,006/0,012/0,015 · 2D-Bänder 0,0012/0,0022/0,0033",
+      "duplicatesNote": "Gleicher Lieferant, Art, Währung, Betrag und Referenz im Fenster; Gutschriften ausgenommen; ein Befund pro Gruppe",
+      "fields": {
+        "duplicateDays": {
+          "help": "Paare aus gleichem Lieferanten, Art und Betrag in so vielen Tagen werden markiert",
+          "label": "Duplikatfenster (Tage)"
+        },
+        "duplicateMinAmount": {
+          "help": "Paare unter diesem Betrag werden ignoriert",
+          "label": "Duplikatminimum ($)"
+        },
+        "sequentialMinCount": {
+          "help": "Lückenlose Rechnungsnummernläufe brauchen mindestens so viele Dokumente",
+          "label": "Sequenzlauf-Minimum"
+        },
+        "sequentialMinDays": {
+          "help": "Läufe über weniger Tage gelten als Stapelerfassung, nicht als Befund",
+          "label": "Sequenzspanne (Tage)"
+        }
+      },
+      "rsfNote": "Betrag ÷ Zweitgrößtem des Lieferanten über 36-Monats-Basis ({floor} Basisuntergrenze)",
+      "sequentialNote": "Lückenlose Lieferanten-Referenznummern; Spannen ab 30 Tagen gelten als hochriskant",
+      "sequentialRuns": "Sequenzläufe",
+      "trapNote": "Glatte Dollarendungen (.00 oder .99 Cent) knapp unter runden Grenzen",
+      "weekendNote": "Belegdatum der Buchung (migrierte Daten tragen Importstempel, die Systemerstellungszeit ist hier daher nicht aussagekräftig)",
+      "zscoreNote": "Mittel-/σ-Basis je Lieferant, ≥5 Transaktionen und σ > {sigma}"
+    },
+    "coverage": {
+      "benfordBold": "Benford",
+      "benfordItem": " — markiert Beträge, deren Anfangsziffern natürlichen Ausgabenmustern nicht folgen.",
+      "duplicatesItem": " — gruppiert Transaktionen nach Lieferant, Art, Währung, Betrag und Referenz, um wiederholte Zahlungen zu fangen, ein Befund pro Gruppe.",
+      "intro": "Jede Prüfung läuft über Ihr ",
+      "introTail": " — keine 30-Tage-Fenster, keine Lieferantenabkürzungen, keine Stichproben. Nichts wird übersprungen:",
+      "ledger": "vollständiges Hauptbuch",
+      "outro": "Dieser Zeitraum: {docs} Dokumente ({amount}) über {days} Tage, analysiert in {seconds} s. Detailtabellen zeigen die Top-Treffer je Prüfung; Zählungen und Verteilungen decken immer alles ab.",
+      "rszBold": "Relative Größe & Z-Wert",
+      "rszItem": " — vergleicht jede Transaktion mit der eigenen Historie des Lieferanten, um Ausreißer zu heben.",
+      "sequentialItem": " — fängt verdächtig lückenlose Folgen von Lieferanten-Referenznummern."
+    },
+    "csv": {
+      "kind": "Art"
+    },
+    "detectors": {
+      "auditEvents": "Prüfereignisse",
+      "duplicates": "Duplikate",
+      "ghostVendors": "Geisterlieferanten"
+    },
+    "drill": {
+      "documentsTotal": "{count} Dokumente · {total}",
+      "firstTwoDigits": "Erste zwei Ziffern",
+      "leadingDigit": "Anfangsziffer",
+      "noDocuments": "Kein Dokument beginnt mit {digit}.",
+      "top": "Top {count}"
+    },
+    "empty": {
+      "noAuditEvents": "Keine hochriskanten Prüfereignisse in diesem Zeitraum",
+      "noElevatedRisk": "Keine erhöhten Risikobereiche",
+      "noGhostMatches": "Keine Lieferanten–Mitarbeiter-Namens- oder Adresstreffer gefunden",
+      "noSequential": "Keine lückenlosen Sequenzläufe erkannt",
+      "nothingFlagged": "Nichts markiert"
+    },
+    "error": {
+      "loadFailed": "Transaktionen konnten nicht geladen werden."
+    },
+    "flag": {
+      "duplicate": "Duplikat",
+      "rsf": "RSF",
+      "sequential": "Sequenziell",
+      "trap": "99er-Falle",
+      "weekend": "Wochenende",
+      "zscore": "Z-Wert"
+    },
+    "ghost": {
+      "note": " sind von Mitarbeitern kontrollierte Empfängerfirmen. Zweistufiger Abgleich über das gesamte Partnerregister: Mitarbeiternamen gegen Lieferantennamen sowie normalisierte Straßenadressen (Zeile 1 + PLZ), die sich ein bezahlter Lieferant und ein Mitarbeiter teilen. Namenstreffer zählt 75, gemeinsame Adresse 90, beides 95.",
+      "title": "Geisterlieferanten"
+    },
+    "kpi": {
+      "amountsAnalyzed": "Beträge analysiert",
+      "anomalousPairs": "Anomale Paare",
+      "approvalLimitRisk": "Genehmigungsgrenzen-Risiko",
+      "auditEvents": "Prüfereignisse",
+      "benford": "Benford",
+      "conformity": "Konformität",
+      "deletions": "Löschungen",
+      "deviatingDigits": "Abweichende Ziffern",
+      "digit1Share": "Ziffer-1-Anteil",
+      "duplicatePairs": "Duplikatgruppen",
+      "endsIn": "Endet auf {ending}",
+      "flagged": "Markiert",
+      "rule": "Regel",
+      "saturday": "Samstag",
+      "sensitiveChanges": "Sensible Änderungen",
+      "shellSignals": "Mantelsignale",
+      "signal": "Signal",
+      "sunday": "Sonntag",
+      "totalValue": "Gesamtwert",
+      "trapAmounts": "Fallenbeträge",
+      "valueAtRisk": "Gefährdeter Wert",
+      "weekendDocuments": "Wochenenddokumente"
+    },
+    "kind": {
+      "check": "Scheck",
+      "customer_credit": "Kundengutschrift",
+      "expense_report": "Ausgabe",
+      "journal": "Journal",
+      "vendor_bill": "Rechnung",
+      "vendor_credit": "Gutschrift",
+      "vendor_payment": "Zahlung"
+    },
+    "loading": "Wird geladen…",
+    "no": "Nein",
+    "panels": {
+      "allFlaggedDocs": "Alle markierten Dokumente (Top {top} von {total})",
+      "anomalousPairs": "Anomale Ziffernpaare",
+      "benfordFirstDigit": "Benford-Gesetz — Anfangsziffer",
+      "benfordHint": "{amounts} Beträge · MAD {mad} · {conformity}",
+      "completeCoverage": "Vollständige Abdeckung",
+      "detectorSummary": "Detektorübersicht",
+      "detectorThresholds": "Detektorschwellen",
+      "digitDetail": "Zifferndetail",
+      "digitDetailHint": "Ziffer anklicken für die Transaktionen dahinter",
+      "duplicatesHint": "Ein Befund pro Treffergruppe — jedes Mitglied öffnet im Stammmodul",
+      "ghostMatches": "Geistertreffer ({count})",
+      "ghostVendors": "Geisterlieferanten",
+      "highestRiskFlags": "Höchstrisiko-Befunde",
+      "highestRiskHint": "Alle Detektoren · Dokument zum Öffnen anklicken",
+      "highRiskAudit": "Hochriskante Prüfereignisse",
+      "observedVsExpected": "Beobachtete vs erwartete Verteilung",
+      "potentialDuplicates": "Mögliche Duplikatgruppen",
+      "rsfAnomalies": "RSF-Anomalien ({count})",
+      "sequentialRuns": "Sequentielle Rechnungsläufe",
+      "spendCalendar": "Ausgabenkalender",
+      "spendCalendarHint": "Tägliche Ausgabenintensität — Wochenendspitzen und ungewöhnliche Häufungen stechen hervor",
+      "thresholdTrapDocs": "Schwellenfallen-Dokumente",
+      "topRiskAreas": "Top-Risikobereiche",
+      "twoDigitDistribution": "Verteilung erste zwei Ziffern (10–99)",
+      "vendorRiskHint": "Partner nach Befundschwere über alle Detektoren gereiht · Zeile für Transaktionen des Partners anklicken",
+      "vendorRiskRollup": "Lieferantenrisiko-Rollup",
+      "weekendDated": "Wochenenddatierte Dokumente (Top 200 nach Betrag)",
+      "zscoreAnomalies": "Z-Wert-Anomalien ({count})"
+    },
+    "risk": {
+      "caption": "Integritätsrisiko",
+      "elevated": "ERHÖHT",
+      "high": "HOHES RISIKO",
+      "low": "GERINGES RISIKO",
+      "moderate": "MODERAT"
+    },
+    "sequential": {
+      "indicatorNote1": " Wenn die Rechnungsnummern eines Lieferanten an Sie über Wochen oder Monate perfekt sequenziell sind, sind Sie wahrscheinlich sein ",
+      "indicatorNote2": " Kunde. Seriöse Lieferanten haben Nummern­lücken durch Abrechnung anderer. Erkannt durch Scannen aller Lieferanten-Referenznummern je Währung auf lückenlose Läufe.",
+      "indicatorTitle": "Briefkastenfirmen-Indikator:",
+      "more": "+{count} weitere",
+      "only": "einziger",
+      "runTotal": " — gesamt {total} ({first} → {last})"
+    },
+    "sub": {
+      "allMatchingPairs": "ein Befund pro Gruppe",
+      "atRisk": "{amount} gefährdet",
+      "bankingContactAddress": "Bank / Kontakt / Adresse",
+      "documents": "Dokumente",
+      "ending99": "endet auf 99 / 999 / 9999",
+      "everyDocument": "jedes Dokument, ohne Deckel",
+      "expected301": "erwartet 30,1 %",
+      "ghostsSequential": "{ghosts} Geister · {sequential} sequenziell",
+      "higherRiskWeighting": "höhere Risikogewichtung",
+      "inPeriod": "im Zeitraum",
+      "limitGaming": "mögliches Grenzumgehen",
+      "offExpected25": ">25 % neben Erwartung",
+      "offExpected50": ">50 % neben Erwartung, n≥5",
+      "recordsRemoved": "entfernte Datensätze",
+      "seeThresholdTrap": "siehe Schwellenfalle",
+      "sumPairAmounts": "Mehrfachexemplare zu Dokumentsätzen",
+      "twoD": "2D: {value}",
+      "twoDigitPairs": "Paare erster zwei Ziffern"
+    },
+    "tabs": {
+      "analysis": "Analyse",
+      "audit": "Prüfpfad",
+      "benford": "Benford",
+      "config": "Konfiguration",
+      "detection": "Erkennung",
+      "overview": "Überblick",
+      "vendors": "Lieferanten"
+    },
+    "trapNote": "Beträge knapp unter runden Schwellen (endend auf 99, 999 oder 9999) deuten auf Einkäufe hin, die unter einer Genehmigungsgrenze bleiben sollen. Wiederkehrende Fallen desselben Anforderers oder Lieferanten verdienen Prüfung. Fallen lesen immer den Dokumentbetrag: 99 USD markieren als 99er-Falle, selbst wenn der umgerechnete Wert keiner Schwelle nahekommt.",
+    "vendors": {
+      "drillSub": "{flags} Befunde · {amount} markiert"
+    },
+    "weekend": {
+      "signalNote": "Belegdatum Sa./So.",
+      "signalValue": "Belegdatum"
+    },
+    "yes": "Ja"
   },
   "charts": {
     "history": "Verlauf",
@@ -1019,5 +2290,218 @@
       "dec": "Dez"
     },
     "monthYear": "{month} ''{yy}"
+  },
+  "cashWeek": {
+    "actionBar": {
+      "bills": "Rechnungen",
+      "buildCollectionRun": "Inkassolauf zusammenstellen",
+      "buildPayRun": "Zahlungslauf zusammenstellen",
+      "invoices": "Rechnungen",
+      "summary": "{count} {kind} · {total}"
+    },
+    "breakdown": {
+      "deferredBacklog": "Zurückgestellt (Rückstand)",
+      "endingCash": "Endbestand",
+      "inflowAr": "Zuflüsse (AR)",
+      "inflowOther": "Zuflüsse (sonstige)",
+      "netChange": "Nettoänderung",
+      "outCategory": "Abflüsse: {name}",
+      "outflowAp": "Abflüsse (AP)",
+      "safeApCapacity": "Sichere AP-Kapazität",
+      "startingCash": "Anfangsbestand"
+    },
+    "category": {
+      "export": "Exportieren",
+      "exportCsvTitle": "CSV exportieren",
+      "method": "Methode",
+      "sourceItems": "Quellpositionen",
+      "thisWeek": "Diese Woche",
+      "totalForecast": "Prognose gesamt"
+    },
+    "coverageRatio": "Deckungsquote",
+    "csvHeaders": {
+      "amount": "Betrag",
+      "date": "Datum",
+      "entityDescription": "Partner/Beschreibung",
+      "type": "Art"
+    },
+    "drawerDescription": "Netto {net} · Ende {ending}",
+    "empty": {
+      "inflows": "Zuflüsse",
+      "noMatches": "Keine Treffer für Ihre Suche.",
+      "noSourceItems": "Keine Quellpositionen hinter dieser Schätzung.",
+      "noneThisWeek": "Keine {side} diese Woche prognostiziert.",
+      "outflows": "Abflüsse"
+    },
+    "meta": {
+      "accountsIncluded": "Konten",
+      "adjustmentPct": "Anpassung %",
+      "amount": "Betrag",
+      "avgAmount": "Ø Betrag",
+      "avgPayment": "Ø Zahlung",
+      "bankAccounts": "Bankkonten",
+      "currentBalance": "Kartensaldo",
+      "currentWeekApplied": "Diese Woche angewandt",
+      "dailyBurnRate": "Tagesverbrauch",
+      "daysSinceLastPayment": "Tage seit Zahlung",
+      "detectedPaymentDay": "Zahlt am Tag",
+      "finalAverage": "Wochen-Ø",
+      "finalWeekly": "Wochenschätzung",
+      "frequency": "Häufigkeit",
+      "historyWeeks": "Historienwochen",
+      "interval": "Intervall (Tage)",
+      "medianPayment": "Mediane Zahlung",
+      "monthlyMedian": "Monatsmedian",
+      "monthlySpendRate": "Monatsausgaben",
+      "monthsAnalyzed": "Monate analysiert",
+      "nextPaymentDate": "Nächste Zahlung",
+      "paymentTrend": "Trend",
+      "projectedGrowth": "Prognostiziertes Wachstum",
+      "rawAverage": "Roh-Ø",
+      "samples": "Stichproben",
+      "sourceTotal": "Quellsumme",
+      "vendor": "Lieferant",
+      "vendors": "Lieferanten",
+      "weeksUsed": "Verwendete Wochen",
+      "memoKeywords": "Buchungstextfilter"
+    },
+    "methods": {
+      "average": "Durchschnitt",
+      "dueDate": "Fälligkeit",
+      "history": "Historie",
+      "pushed": "Geschoben"
+    },
+    "netChange": "Nettoänderung",
+    "pagination": {
+      "showing": "{from}–{to} von {total}"
+    },
+    "paymentHistoryTitle": "Zahlungshistorie & Zuverlässigkeit",
+    "search": {
+      "customers": "Kunden",
+      "sourceItems": "Quellpositionen suchen…",
+      "transactions": "{party} oder Dokumentnr. suchen…",
+      "vendors": "Lieferanten"
+    },
+    "table": {
+      "amount": "Betrag",
+      "customer": "Kunde",
+      "date": "Datum",
+      "entityDescription": "Partner / Beschreibung",
+      "id": "ID",
+      "method": "Methode",
+      "predicted": "Prognostiziert",
+      "status": "Status",
+      "type": "Art",
+      "vendor": "Lieferant"
+    },
+    "tabs": {
+      "apOutflows": "AP-Abflüsse",
+      "arInflows": "AR-Zuflüsse"
+    }
+  },
+  "categoryManager": {
+    "days": {
+      "distributed": "Verteilt",
+      "friday": "Freitag",
+      "monday": "Montag",
+      "saturday": "Samstag",
+      "sunday": "Sonntag",
+      "thursday": "Donnerstag",
+      "tuesday": "Dienstag",
+      "wednesday": "Mittwoch"
+    },
+    "editTitle": "Bearbeiten",
+    "empty": "Noch keine Kategorien — AR/AP-Prognosen sind die einzigen Flüsse der Vorschau.",
+    "form": {
+      "addCategory": "Kategorie hinzufügen",
+      "adjustmentPct": "Anpassung %",
+      "amount": "Betrag",
+      "bankAccounts": "Bankkonten",
+      "calcMethod": "Berechnungsmethode",
+      "cancel": "Abbrechen",
+      "cardAccounts": "Kreditkartenkonten",
+      "checksPayments": "Schecks & Zahlungen",
+      "expectedDay": "Erwarteter Tag",
+      "expectedWeek": "Erwartete Woche",
+      "formula": "Formel",
+      "frequency": "Häufigkeit",
+      "frequencyBiweekly": "14-tägig",
+      "frequencyMonthly": "Monatlich",
+      "frequencyWeekly": "Wöchentlich",
+      "glAccounts": "Hauptbuchkonten",
+      "historyMonths": "Historienmonate",
+      "historyWeeks": "Historienwochen",
+      "journals": "Journale",
+      "memoKeywords": "Buchungstext-Stichwörter",
+      "memoKeywordsHelp": "Komma getrennte Stichwörter zum Filtern von Transaktionen (leer = alle)",
+      "memoKeywordsPlaceholder": "Lohn, Miete, Strom…",
+      "name": "Name",
+      "namePlaceholder": "Kategoriename",
+      "saveCategory": "Kategorie speichern",
+      "saving": "Wird gespeichert…",
+      "searchAccounts": "Konten suchen…",
+      "searchBankAccounts": "Bankkonten suchen…",
+      "searchCardAccounts": "Kartenkonten suchen…",
+      "searchVendors": "Lieferanten suchen…",
+      "threshold": "Schwelle wesentliche Zahlung ($)",
+      "thresholdHelp": "0 = auto (50 % der medianen Zahlung)",
+      "transfers": "Umbuchungen",
+      "type": "Art",
+      "typeInflow": "Zufluss (Erlös/Einzug)",
+      "typeOutflow": "Abfluss (Aufwand/Zahlung)",
+      "useNetAmount": "Nettobetrag verwenden (+/− beachten)",
+      "vendors": "Lieferanten"
+    },
+    "formulaHelp": "Variablen: {vars} · Funktionen: {funcs}",
+    "methods": {
+      "bank_register_history": {
+        "description": "Prognostiziert aus tatsächlichen Bankbewegungen",
+        "label": "Bankumsatz-Historie"
+      },
+      "credit_card_cycle": {
+        "description": "Verfolgt Kreditkartenschuld + prognostiziertes Wachstum bis Zahltermin",
+        "label": "Kreditkartenzyklus"
+      },
+      "formula_expression": {
+        "description": "Eigene Formel in Excel-ähnlicher Syntax mit Prognosevariablen",
+        "label": "Formelausdruck"
+      },
+      "gl_history_average": {
+        "description": "Analysiert Hauptbuchbuchungen über einen Zeitraum für Wochenschnitte",
+        "label": "Hauptbuch-Historien-Ø"
+      },
+      "manual_recurring": {
+        "description": "Fester Betrag in definierter Häufigkeit (wöchentlich, 14-tägig, monatlich)",
+        "label": "Manuell wiederkehrend"
+      },
+      "vendor_payment_history": {
+        "description": "Bündelt historische Lieferantenzahlungen zur Ausgabenprognose",
+        "label": "Lieferantenzahlungs-Historie"
+      },
+      "vendor_recurring_average": {
+        "description": "Erkennt Zahlungsrhythmus und berechnet Laufrate aus Lieferantenhistorie",
+        "label": "Lieferant wiederkehrend (auto)"
+      }
+    },
+    "newCategory": "Neue Kategorie",
+    "panelHint": "Nicht-AR/AP-Cashflows — die sieben Berechnungsmethoden der Engine",
+    "panelTitle": "Prognosekategorien",
+    "picker": {
+      "noMatches": "Keine Treffer.",
+      "selectedCount": "{count, plural, one {# ausgewählt} other {# ausgewählte}}"
+    },
+    "remove": "Entfernen",
+    "toasts": {
+      "forbidden": "Zum Speichern ist die Setup-Berechtigung erforderlich.",
+      "saveFailed": "Speichern fehlgeschlagen ({status}).",
+      "savedRecomputing": "Gespeichert — Neuberechnung…"
+    },
+    "weeks": {
+      "1stWeek": "1. Woche",
+      "2ndWeek": "2. Woche",
+      "3rdWeek": "3. Woche",
+      "4thWeek": "4. Woche",
+      "distributed": "Verteilt"
+    }
   }
 }
