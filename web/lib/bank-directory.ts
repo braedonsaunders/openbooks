@@ -110,7 +110,3 @@ export const PROVIDER_CREDENTIALS: Record<string, { key: string; label: string; 
   ],
   truelayer: [{ key: "accessToken", label: "Access token", secret: true }],
 };
-
-export function bankById(id: string): BankDirectoryEntry | undefined {
-  return BANK_DIRECTORY.find((b) => b.id === id);
-}

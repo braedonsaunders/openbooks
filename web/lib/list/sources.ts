@@ -81,9 +81,6 @@ export interface RelatedPartyTarget {
   role: 'customer' | 'vendor' | 'employee'
 }
 
-/** The `documents d left join parties p` base every source builds on. */
-export const DOCUMENT_BASE_JOIN = sql`left join parties p on p.id = d.party_id and p.org_id = d.org_id`
-
 /** party_id → vendor/customer/employee drawer href. */
 const partyLink = (role: RelatedPartyTarget['role']) => (row: Record<string, unknown>): RelatedPartyTarget | null =>
   row.party_id ? { kind: 'party', id: String(row.party_id), role } : null

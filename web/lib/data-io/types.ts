@@ -73,14 +73,6 @@ export interface ResourceDescriptor {
 
 export type ResourceGroup = 'Setup' | 'Master data' | 'Property management' | 'Records' | 'Transactions'
 
-export const RESOURCE_GROUP_ORDER: ResourceGroup[] = [
-  'Setup',
-  'Master data',
-  'Property management',
-  'Records',
-  'Transactions',
-]
-
 export type ImportMode = 'insert' | 'upsert'
 
 export type CellValue = string | number | boolean | null

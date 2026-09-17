@@ -70,12 +70,6 @@ export async function abortActiveRun(store: OwnedRunStore, conversationId: strin
   }
 }
 
-export function abortOwnedRunsWhere(predicate: (runId: string) => boolean): void {
-  for (const [runId, controller] of liveControllers) {
-    if (predicate(runId)) controller.abort();
-  }
-}
-
 /** Snapshot writes at most this often; tool boundaries always flush. */
 export const OWNED_RUN_PROGRESS_INTERVAL_MS = 2_000;
 

@@ -3,7 +3,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   comparableSlots,
-  priorRegisters,
   savePriorStub,
   recordUnmappedColumns,
   upsertPriorRegister,
@@ -446,9 +445,4 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       return outcome
     },
   }
-}
-
-/** Registers currently loaded, for surfaces that offer them as a comparison side. */
-export async function loadedPriorRegisters(orgId: string) {
-  return priorRegisters(orgId)
 }

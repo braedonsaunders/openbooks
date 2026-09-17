@@ -5,7 +5,6 @@ import { sql, type SQL } from "drizzle-orm";
 import { isUuid } from "../list-params";
 import type {
   ListViewConfig,
-  ListColumnPlacement,
   FilterClause,
 } from "@openbooks/customization";
 import { listColumnMeta, isCustomFieldKey, customFieldDefKey } from "@openbooks/customization";
@@ -80,8 +79,6 @@ export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   status: sql`d.status`,
 }
 
-const BUILT_IN_EXPR = DOCUMENT_BUILT_IN_EXPR
-
 const SHOW_IN_LIST_BY_KEY = (defs: CustomFieldDef[]) =>
   new Map(defs.filter((d) => d.config.showInList).map((d) => [d.key, d]))
 
@@ -150,15 +147,6 @@ export function columnDescriptors(
   return out
 }
 
-/** Build the ordered, visible column descriptors for the AP table. */
-export function vendorBillColumnDescriptors(
-  view: ListViewConfig,
-  showInListDefs: CustomFieldDef[],
-  labels: Record<string, string>,
-): ListColDesc[] {
-  return columnDescriptors("vendor_bill", view, showInListDefs, BUILT_IN_EXPR, labels)
-}
-
 /* ------------------------------------------------------------------ */
 /* Payments (vendor_payment / customer_payment)                        */
 /* ------------------------------------------------------------------ */
@@ -213,16 +201,6 @@ export const PAYMENT_SORTS: Record<string, SQL> = {
   date: sql`d.document_date`,
   total: PAYMENT_AMOUNT_EXPR,
   status: sql`d.status`,
-}
-
-/** Build the ordered, visible column descriptors for the payments table. */
-export function paymentColumnDescriptors(
-  recordType: "vendor_payment" | "customer_payment",
-  view: ListViewConfig,
-  showInListDefs: CustomFieldDef[],
-  labels: Record<string, string>,
-): ListColDesc[] {
-  return columnDescriptors(recordType, view, showInListDefs, PAYMENT_BUILT_IN_EXPR, labels)
 }
 
 /** Allowed ad-hoc URL filters (the quick toolbar filters). */
@@ -446,24 +424,4 @@ export function payRunWhere(
     );
   }
   return sql.join(parts, sql` `);
-}
-
-/** Back-compat wrapper for the AP list. */
-export function vendorBillWhere(
-  view: ListViewConfig,
-  adhoc: AdhocFilters,
-  kinds: readonly string[] = ["vendor_bill"],
-  orgId?: string,
-): SQL {
-  return documentWhere(kinds, view, adhoc, orgId ?? "")
-}
-
-/** Back-compat wrapper for the payments/receipts list (single kind). */
-export function paymentWhere(
-  view: ListViewConfig,
-  adhoc: AdhocFilters,
-  kind: string,
-  orgId: string,
-): SQL {
-  return documentWhere([kind], view, adhoc, orgId)
 }

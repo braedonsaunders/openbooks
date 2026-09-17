@@ -492,13 +492,6 @@ export async function loadPageSpecDraft(
   return checked.spec
 }
 
-/** Drop a draft once its author has published or walked away. */
-export async function clearPageSpecDraft(orgId: string, userId: string, route: string): Promise<void> {
-  await db.execute(sql`
-    delete from page_spec_drafts
-     where org_id = ${orgId} and user_id = ${userId} and route = ${route}`)
-}
-
 /**
  * Turn an override off; the page falls back to the installed module's spec
  * where there is one, else its built-in spec.

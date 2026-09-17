@@ -764,15 +764,6 @@ export const INDUSTRIES: IndustryDef[] = [
 
 export const INDUSTRY_BY_KEY = new Map(INDUSTRIES.map((i) => [i.key, i]))
 
-export const INDUSTRY_CATEGORIES = [
-  'general',
-  'services',
-  'trade',
-  'commerce',
-  'property',
-  'public',
-] as const
-
 /**
  * Whether the org can switch its industry — blocked once postings exist, the
  * same integrity-probe pattern as the multiSubsidiary disable check. Company

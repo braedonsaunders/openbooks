@@ -34,11 +34,6 @@ export const AGENT_READ_PERMS: Record<ContinuousCloseAgentKey, readonly string[]
   cash: ["banking.read", "gl.read", "close.read"],
 };
 
-/** The read grants that make one agent pack's findings visible. */
-export function agentReadPerms(agentKey: ContinuousCloseAgentKey): readonly string[] {
-  return AGENT_READ_PERMS[agentKey];
-}
-
 export function canReadContinuousCloseAgent(authz: Authz, agentKey: string): boolean {
   if (!can(authz, "assistant.use")) return false;
   if (!(CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(agentKey)) return false;

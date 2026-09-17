@@ -7,8 +7,6 @@
  * the contract is unit-testable.
  */
 
-export type ModelsErrorCode = 'missingKey' | 'empty' | 'unauthorized' | 'failed';
-
 export function classifyModelsError(error: unknown): { code: 'unauthorized' | 'failed'; status: number | null } {
   const message = error instanceof Error ? error.message : String(error ?? '');
   const status = /^\s*(\d{3})\b/.exec(message)?.[1];
