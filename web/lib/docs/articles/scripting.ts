@@ -29,7 +29,9 @@ export const scriptingEngine: DocArticle = {
 attach server-side automation to the platform. Scripts run in an isolated
 WebAssembly JavaScript sandbox with no filesystem, network, or database
 connection. Data access is available only through the governed **ob** host API. Authoring
-requires the **Manage scripts** permission.
+requires the **Manage scripts** permission and the **Scripts** feature switch
+(**Administration → Features**); with the switch off, the route explains
+itself instead of loading.
 
 ## Script kinds
 

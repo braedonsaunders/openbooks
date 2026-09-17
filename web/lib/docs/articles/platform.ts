@@ -136,7 +136,9 @@ export const restApi: DocArticle = {
 **Settings → Extend → API Keys** (route **/admin/api-keys**, permission **Manage
 API keys**) issues the credentials that let external systems integrate with your
 organization over the REST API. **API Docs** (route **/api-docs**) documents the
-endpoints and includes an interactive console.
+endpoints and includes an interactive console. Both pages need the **REST API**
+feature switch (**Administration → Features**) in addition to the permission;
+with the switch off, the routes explain themselves instead of loading.
 
 ## Create and scope a key
 
