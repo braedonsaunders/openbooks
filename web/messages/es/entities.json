@@ -44,6 +44,21 @@
         "actionFailed": "La acción falló"
       }
     },
+    "list": {
+      "emptyTitle": "Aún no hay inmuebles",
+      "emptyDetail": "Cree el primer inmueble, conecte sus dimensiones contables y luego agregue unidades arrendables.",
+      "notMapped": "Sin asignar",
+      "columns": {
+        "property": "Inmueble",
+        "code": "Código",
+        "subsidiary": "Entidad",
+        "location": "Ubicación",
+        "propertyType": "Tipo",
+        "occupancy": "Ocupación",
+        "currency": "Moneda",
+        "status": "Estado"
+      }
+    },
     "propertyDrawer": {
       "description": "Vincule el inmueble operativo con su persona jurídica, su dirección y sus cuentas contables.",
       "code": "Código",

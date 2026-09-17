@@ -98,6 +98,21 @@
         "actionFailed": "Action failed"
       }
     },
+    "list": {
+      "emptyTitle": "No properties yet",
+      "emptyDetail": "Create the first property, connect its accounting dimensions, then add rentable units.",
+      "notMapped": "Not mapped",
+      "columns": {
+        "property": "Property",
+        "code": "Code",
+        "subsidiary": "Entity",
+        "location": "Location",
+        "propertyType": "Type",
+        "occupancy": "Occupancy",
+        "currency": "Currency",
+        "status": "Status"
+      }
+    },
     "leaseSections": {
       "charges": {
         "table": {

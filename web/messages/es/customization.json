@@ -65,7 +65,11 @@
       "defaultBankAccount": "Cuenta bancaria predeterminada",
       "occupancy": "Ocupación"
     },
-    "status": { "sold": "Vendida" },
+    "status": {
+      "sold": "Vendida",
+      "active": "Activa",
+      "inactive": "Inactiva"
+    },
     "types": {
       "residential": "Residencial",
       "commercial": "Comercial",

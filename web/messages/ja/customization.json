@@ -61,7 +61,11 @@
       "defaultBankAccount": "既定の銀行口座",
       "occupancy": "稼働率"
     },
-    "status": { "sold": "売却済み" },
+    "status": {
+      "sold": "売却済み",
+      "active": "稼働中",
+      "inactive": "停止中"
+    },
     "types": {
       "residential": "住宅",
       "commercial": "商業",

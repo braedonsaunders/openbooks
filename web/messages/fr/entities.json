@@ -44,6 +44,19 @@
         "actionFailed": "L'action a échoué"
       }
     },
+    "list": {
+      "emptyTitle": "Aucun immeuble pour le moment",
+      "emptyDetail": "Créez le premier immeuble, reliez ses dimensions comptables, puis ajoutez des unités louables.",
+      "notMapped": "Non associé",
+      "columns": {
+        "property": "Immeuble",
+        "subsidiary": "Entité",
+        "location": "Emplacement",
+        "occupancy": "Occupation",
+        "currency": "Devise",
+        "status": "Statut"
+      }
+    },
     "propertyDrawer": {
       "description": "Associez l’immeuble à sa personne morale, à son adresse et à ses comptes comptables.",
       "code": "Code du bien",

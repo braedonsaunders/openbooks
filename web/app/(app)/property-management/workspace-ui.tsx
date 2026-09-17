@@ -53,7 +53,7 @@ export function Metric({
   );
 }
 
-export function Status({ value }: { value: string }) {
+export function Status({ value, label }: { value: string; label?: string }) {
   const variant = ["active", "occupied", "invoiced", "finalized"].includes(
     value,
   )
@@ -61,7 +61,7 @@ export function Status({ value }: { value: string }) {
     : ["notice", "open", "scheduled"].includes(value)
       ? "warning"
       : "secondary";
-  return <Badge variant={(variant)}>{value.replaceAll("_", " ")}</Badge>;
+  return <Badge variant={(variant)}>{label ?? value.replaceAll("_", " ")}</Badge>;
 }
 export function Empty({ title, detail }: { title: string; detail: string }) {
   return (

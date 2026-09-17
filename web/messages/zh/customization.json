@@ -61,7 +61,11 @@
       "defaultBankAccount": "默认银行账户",
       "occupancy": "入住率"
     },
-    "status": { "sold": "已售" },
+    "status": {
+      "sold": "已售",
+      "active": "在管",
+      "inactive": "停用"
+    },
     "types": {
       "residential": "住宅",
       "commercial": "商业",

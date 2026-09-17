@@ -453,6 +453,51 @@ test('property-management workspace chrome ships in every locale', () => {
   }
 })
 
+test('property buildings list copy ships localized in every locale', () => {
+  // F-t09-017: the buildings table headers and type/status cells rendered
+  // hardcoded English under fr — the list namespace was absent outside en.
+  // Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const manifest = readFallbackManifest()
+  const prefix = 'entities.propertyManagement.list.'
+  const sourceKeys = [...source.keys()].filter((key) => key.startsWith(prefix)).sort()
+  assert.ok(sourceKeys.length > 0, 'no buildings list source keys')
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    // Cognates spelled as in English are omitted into the declared fallback
+    // manifest and render from English at runtime — never copied as fake
+    // translations.
+    const declared = new Set(manifest.fallbacks[locale] ?? [])
+    for (const key of sourceKeys) {
+      if (declared.has(key)) continue
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
+test('property status labels ship localized in every locale', () => {
+  // F-t09-017: the status badge read raw English (active) — the status
+  // vocabulary gains active/inactive beside sold, localized everywhere.
+  const source = flattenCatalog('en')
+  const keys = ['customization.property.status.active', 'customization.property.status.inactive']
+  // French Active/Inactive are spelled as in English: presence is required,
+  // divergence is not.
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      if (locale !== 'fr') {
+        assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+      }
+    }
+  }
+})
+
 test('setup save-failure copy ships localized in every locale', () => {
   // F-t09-016: the overlap conflict and the save-timeout guidance render from
   // these keys — absent outside en they fall back to English inside otherwise
@@ -542,7 +587,7 @@ test('the generated fallback manifest exactly identifies untranslated property-m
 
   assert.equal(manifest.sourceLocale, 'en')
   assert.deepEqual(Object.keys(manifest.fallbacks).sort(), translatedLocales)
-  assert.equal(propertyKeys.length, 224, 'the property-management source inventory changed')
+  assert.equal(propertyKeys.length, 235, 'the property-management source inventory changed')
   assert.deepEqual(manifest, generateFallbackManifest(), 'fallback manifest must be regenerated')
 
   for (const locale of translatedLocales) {
@@ -669,9 +714,21 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     for (const key of declaredFallbacks) {
       assert.ok(source.has(key), `${row.locale} fallback key is absent from English source: ${key}`)
     }
+    // Per-locale pins: cognates spelled as in English (de/fr Code, de/pt-BR
+    // Status, fr Type) are omitted into declared fallbacks instead of copied
+    // as fake translations, so locales with more cognates report more
+    // fallbacks (F-t09-017).
+    const expectedPmFallbacks: Record<string, number> = {
+      de: 166,
+      es: 164,
+      fr: 166,
+      ja: 164,
+      'pt-BR': 165,
+      zh: 164,
+    }
     assert.equal(
       declaredFallbacks.filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX)).length,
-      164,
+      expectedPmFallbacks[row.locale],
       `${row.locale} must report all property-management values as untranslated fallbacks`,
     )
     t.diagnostic(

@@ -61,7 +61,11 @@
       "defaultBankAccount": "Standardbankkonto",
       "occupancy": "Belegung"
     },
-    "status": { "sold": "Verkauft" },
+    "status": {
+      "sold": "Verkauft",
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
+    },
     "types": {
       "residential": "Wohnen",
       "commercial": "Gewerbe",

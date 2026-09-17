@@ -44,6 +44,19 @@
         "actionFailed": "Aktion fehlgeschlagen"
       }
     },
+    "list": {
+      "emptyTitle": "Noch keine Immobilien",
+      "emptyDetail": "Legen Sie die erste Immobilie an, verknüpfen Sie ihre Kontierungsdimensionen und fügen Sie dann vermietbare Einheiten hinzu.",
+      "notMapped": "Nicht zugeordnet",
+      "columns": {
+        "property": "Immobilie",
+        "subsidiary": "Einheit",
+        "location": "Standort",
+        "propertyType": "Typ",
+        "occupancy": "Belegung",
+        "currency": "Währung"
+      }
+    },
     "propertyDrawer": {
       "description": "Verknüpfen Sie die Immobilie mit Rechtsträger, Adresse und Buchungskonten.",
       "code": "Objektcode",
