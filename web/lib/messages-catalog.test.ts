@@ -1120,13 +1120,14 @@ test('banking feed operational panel copy is present in every locale and transla
   }
 })
 
-test('depreciation next-due copy ships localized in every locale', () => {
+test('depreciation next-due and equipment activation copy ships localized in every locale', () => {
   // F-t07-005: the zero-post run explanation names its as-of date, next
-  // asset/period, amount, and period end. Every leaf must exist, be
-  // localized, and keep its interpolation placeholders.
-  // (F-t07-006 extends this test with the activation key in its own commit.)
+  // asset/period, amount, and period end. F-t07-006: the refused activation
+  // names the missing charge item. Every leaf must exist, be localized, and
+  // keep its interpolation placeholders.
   const placeholders: Record<string, string[]> = {
     'assets.run.nextDue': ['{date}', '{asset}', '{period}', '{amount}', '{endsOn}'],
+    'assets.equipment.chargeItemRequired': [],
   }
   const source = flattenCatalog('en')
   for (const key of Object.keys(placeholders)) {

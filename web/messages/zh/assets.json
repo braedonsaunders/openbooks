@@ -158,6 +158,7 @@
     "createFailed": "无法创建设备",
     "saved": "设备已保存",
     "saveFailed": "无法保存设备",
+    "chargeItemRequired": "启用前需要收费物料",
     "deleteTitle": "删除此设备单元？",
     "deleteMessage": "这将永久删除设备单元草稿。",
     "deleteFailed": "无法删除设备",

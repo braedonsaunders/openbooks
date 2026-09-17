@@ -158,6 +158,7 @@
     "createFailed": "設備を作成できませんでした",
     "saved": "設備を保存しました",
     "saveFailed": "設備を保存できませんでした",
+    "chargeItemRequired": "有効化する前に課金品目が必要です",
     "deleteTitle": "この設備ユニットを削除しますか？",
     "deleteMessage": "下書きの設備ユニットを完全に削除します。",
     "deleteFailed": "設備を削除できませんでした",

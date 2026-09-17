@@ -21,6 +21,11 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   const t = useTranslations('assets.equipment'); const common = useTranslations('common'); const router = useRouter()
   const e = payload.unit; const m = payload.metrics
   const [mode, setMode] = useState<'view'|'edit'>('view'); const [actionsOpen, setActionsOpen] = useState(false); const [busy, setBusy] = useState(false)
+  // A refused save pins its reason on the record until the next save — a
+  // toast alone let the activation-time charge-item refusal read as a
+  // reason-less failure (F-t07-006). The typed code also flags its field.
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveErrorCode, setSaveErrorCode] = useState<string | null>(null)
   const [name, setName] = useState(e.name === 'New equipment unit' ? '' : e.name); const [unitNumber, setUnitNumber] = useState(e.unit_number)
   const [description, setDescription] = useState(e.description ?? ''); const [status, setStatus] = useState(e.status)
   const [subsidiaryId, setSubsidiaryId] = useState(e.subsidiary_id); const [chargeItemId, setChargeItemId] = useState(e.charge_item_id ?? '')
@@ -34,8 +39,18 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
     serialNumber: serialNumber || null, capacityQuantity: capacityQuantity || null, capacityUnit: capacityUnit || null }),
     [name, unitNumber, description, status, subsidiaryId, chargeItemId, fixedAssetId, rateBookId, projectsEnabled, purchasePrice, acquiredOn, inServiceOn, serialNumber, capacityQuantity, capacityUnit])
   async function save(extra: Record<string, unknown> = {}) {
-    setBusy(true); const res = await fetch(`/api/equipment/${e.id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({...form, ...extra}) })
-    if (!res.ok) toast.error(t('saveFailed')); else {
+    setBusy(true); setSaveError(null); setSaveErrorCode(null)
+    const res = await fetch(`/api/equipment/${e.id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({...form, ...extra}) })
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+      const code = typeof data.error === 'string' ? data.error : ''
+      // The API already names the blocker (e.g. charge_item_required at
+      // activation): surface its reason, not the generic failure (F-t07-006).
+      const detail = code === 'charge_item_required' ? t('chargeItemRequired') : t('saveFailed')
+      setSaveError(detail)
+      if (code === 'charge_item_required') setSaveErrorCode(code)
+      toast.error(detail)
+    } else {
       if (typeof extra.status === 'string') setStatus(extra.status)
       toast.success(t('saved')); setActionsOpen(false); setMode('view'); router.refresh()
     } setBusy(false)
@@ -66,12 +81,17 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
     headerActions={mode === 'edit' ? <><Button size="sm" variant="outline" disabled={busy} onClick={() => setMode('view')}>{common('actions.cancel')}</Button><Button size="sm" disabled={busy} onClick={() => save()}>{common('actions.save')}</Button></> : canManage ? <><Button size="sm" variant="outline" onClick={() => setMode('edit')}>{common('actions.edit')}</Button><Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1" trigger={<Button size="sm" variant="outline" onClick={() => setActionsOpen(!actionsOpen)}>{common('labels.actions')}<ChevronDown size={14}/></Button>}><div className="grid gap-1">{status !== 'active' ? <Button variant="ghost" className="justify-start" onClick={() => save({status:'active'})}>{t('activate')}</Button> : <Button variant="ghost" className="justify-start" onClick={() => save({status:'inactive'})}>{t('deactivate')}</Button>} {fixedAssetsEnabled && !e.fixed_asset_id ? <Button variant="ghost" className="justify-start" disabled={busy} onClick={capitalize}>{t('capitalize')}</Button> : null} {status === 'draft' ? <Button variant="ghost" className="justify-start text-red-600" onClick={remove}>{common('actions.delete')}</Button> : null}</div></Popover></> : undefined}>
     <div className="space-y-6">
+      {saveError ? (
+        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {saveError}
+        </p>
+      ) : null}
       <KpiStrip items={[{label:t('metrics.purchasePrice'),value:money(e.purchase_price)},{label:t('metrics.recovery'),value:money(m.recovery)},{label:t('metrics.billedRevenue'),value:money(m.billed_revenue)},{label:t('metrics.roi'),value:`${roi.toFixed(1)}%`},{label:t('metrics.utilization'),value:`${utilization.toFixed(1)}%`}]} />
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {input(common('labels.name'), name, setName)}{input(t('number'), unitNumber, setUnitNumber)}{input(t('serial'), serialNumber, setSerialNumber)}
         <div className="space-y-1.5"><Label>{common('labels.status')}</Label>{editable ? <Select value={status} onChange={(x)=>setStatus(x.target.value)}>{['draft','active','inactive','retired'].map(s=><option key={s} value={s}>{t(`statuses.${s}`)}</option>)}</Select> : <p className="text-sm">{t(`statuses.${status}`)}</p>}</div>
         {subsidiaries.length > 0 ? <div className="space-y-1.5"><Label>{t('subsidiary')}</Label>{editable ? <SearchSelect value={subsidiaryId} onChange={setSubsidiaryId} options={opts(subsidiaries)} sheetTitle={t('subsidiary')} ariaLabel={t('subsidiary')}/> : <p className="text-sm">{subsidiaries.find(x=>x.id===subsidiaryId)?.name ?? '—'}</p>}</div> : null}
-        <div className="space-y-1.5"><Label>{t('chargeItem')}</Label>{editable ? <SearchSelect value={chargeItemId} onChange={setChargeItemId} options={opts(items)} clearable sheetTitle={t('chargeItem')} ariaLabel={t('chargeItem')}/> : <p className="text-sm">{e.charge_item_name ?? '—'}</p>}</div>
+        <div className={saveErrorCode === 'charge_item_required' ? 'space-y-1.5 rounded-lg border border-red-300 bg-red-50 p-2 dark:border-red-800 dark:bg-red-950/40' : 'space-y-1.5'}><Label>{t('chargeItem')}</Label>{editable ? <SearchSelect value={chargeItemId} onChange={setChargeItemId} options={opts(items)} clearable sheetTitle={t('chargeItem')} ariaLabel={t('chargeItem')}/> : <p className="text-sm">{e.charge_item_name ?? '—'}</p>}</div>
         {fixedAssetsEnabled ? <div className="space-y-1.5"><Label>{t('fixedAsset')}</Label>{editable ? <SearchSelect value={fixedAssetId} onChange={setFixedAssetId} options={opts(assets)} clearable sheetTitle={t('fixedAsset')} ariaLabel={t('fixedAsset')}/> : <p className="text-sm">{e.fixed_asset_number ?? '—'}</p>}</div> : null}
         {projectsEnabled ? (
           <div className="space-y-1.5"><Label>{t('rateBook')}</Label>{editable ? <SearchSelect value={rateBookId} onChange={setRateBookId} options={opts(books)} clearable sheetTitle={t('rateBook')} ariaLabel={t('rateBook')}/> : <p className="text-sm">{e.rate_book_name ?? t('defaultRateBook')}</p>}</div>
