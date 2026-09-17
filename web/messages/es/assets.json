@@ -158,6 +158,7 @@
     "createFailed": "No se pudo crear el equipo",
     "saved": "Equipo guardado",
     "saveFailed": "No se pudo guardar el equipo",
+    "chargeItemRequired": "Se requiere un artículo de cargo antes de la activación",
     "deleteTitle": "¿Eliminar esta unidad de equipo?",
     "deleteMessage": "Esto elimina permanentemente la unidad de equipo en borrador.",
     "deleteFailed": "No se pudo eliminar el equipo",

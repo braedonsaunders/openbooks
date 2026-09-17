@@ -177,6 +177,7 @@
     "createFailed": "Não foi possível criar o equipamento",
     "saved": "Equipamento salvo",
     "saveFailed": "Não foi possível salvar o equipamento",
+    "chargeItemRequired": "Um item de cobrança é necessário antes da ativação",
     "deleteTitle": "Excluir esta unidade de equipamento?",
     "deleteMessage": "Isso exclui permanentemente a unidade de equipamento em rascunho.",
     "deleteFailed": "Não foi possível excluir o equipamento",

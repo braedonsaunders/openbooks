@@ -158,6 +158,7 @@
     "createFailed": "Impossible de créer l’équipement",
     "saved": "Équipement enregistré",
     "saveFailed": "Impossible d’enregistrer l’équipement",
+    "chargeItemRequired": "Un article de facturation est requis avant l’activation",
     "deleteTitle": "Supprimer cette unité d’équipement?",
     "deleteMessage": "Cette action supprime définitivement l’unité d’équipement brouillon.",
     "deleteFailed": "Impossible de supprimer l’équipement",

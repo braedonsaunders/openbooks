@@ -158,6 +158,7 @@
     "createFailed": "Gerät konnte nicht erstellt werden",
     "saved": "Gerät gespeichert",
     "saveFailed": "Gerät konnte nicht gespeichert werden",
+    "chargeItemRequired": "Vor der Aktivierung ist ein Verrechnungsartikel erforderlich",
     "deleteTitle": "Dieses Gerät löschen?",
     "deleteMessage": "Der Geräteentwurf wird dauerhaft gelöscht.",
     "deleteFailed": "Gerät konnte nicht gelöscht werden",
