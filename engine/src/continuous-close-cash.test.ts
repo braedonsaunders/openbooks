@@ -50,7 +50,11 @@ test("cash alerts reuse the cockpit's liquidity primitives, not copies", () => {
   // same control account, translated at the closing spot like the cockpit.
   assert.match(source, /x\.applied_on <= \$\{asOf\}/);
   assert.match(source, /jl\.is_open_item/);
-  assert.match(source, /d\.kind in \('vendor_bill', 'expense_report',/);
+  // The open-item population is the shared const, never a re-listed literal:
+  // expense_report membership is decided once in open-item-kinds.ts.
+  assert.match(source, /\.\.\/open-item-kinds\.ts/);
+  assert.match(source, /AP_OPEN_ITEM_KINDS/);
+  assert.match(source, /AR_OPEN_ITEM_KINDS/);
   // Settlement stats come from the maintained rollup (sufficient statistics
   // per party-day), weighted globally, 45-day default without history.
   assert.match(source, /from party_payment_stats/);
