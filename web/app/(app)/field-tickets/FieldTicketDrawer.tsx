@@ -599,8 +599,64 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     }
   }
 
+  const [discardError, setDiscardError] = useState<string | null>(null)
+  const [discarding, setDiscarding] = useState(false)
+  const discardedRef = useRef(false)
+
+  /**
+   * Discard the draft shell (F-t04-005). The server is the authority on
+   * "untouched": anything with content, signatures, links, or status
+   * refuses with the blocker named. A raced 404 means someone else already
+   * discarded it — that is the requested end state too.
+   */
+  async function discardDraft(explicit: boolean): Promise<boolean> {
+    if (discardedRef.current) return true
+    setDiscarding(true)
+    if (explicit) setDiscardError(null)
+    try {
+      const response = await fetch(`/api/field-tickets/${ticket.id}`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ expectedRevision: persistedDocumentRevision(latestRevisionRef.current) }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) {
+        if (response.status === 404) {
+          discardedRef.current = true
+          return true
+        }
+        if (explicit) {
+          const message = payload.error ?? t('editor.discardFailed')
+          setDiscardError(message)
+          toast.error(message)
+        }
+        return false
+      }
+      discardedRef.current = true
+      if (explicit) toast.success(t('editor.discarded'))
+      return true
+    } catch {
+      if (explicit) {
+        const message = t('editor.discardFailed')
+        setDiscardError(message)
+        toast.error(message)
+      }
+      return false
+    } finally {
+      setDiscarding(false)
+    }
+  }
+
+  function confirmDiscard() {
+    if (!window.confirm(t('editor.discardConfirm'))) return
+    void discardDraft(true).then((ok) => {
+      if (ok) router.push('/field-tickets')
+    })
+  }
+
   function cancelEdit() {
     const savedProjectId = ticket.projectId
+    setDiscardError(null)
     applyPayload(ticket)
     setLineItem('')
     setLineQty('1')
@@ -792,6 +848,15 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   return (
     <TransactionDrawer
       closeHref="/field-tickets"
+      beforeClose={async () => {
+        // A pristine draft is the New-ticket shell: discard it instead of
+        // orphaning a row. The server refuses anything with content, so a
+        // raced or filled draft simply stays — closing still proceeds.
+        if (!headerDirty && !gridDirty && ticket.status === 'draft' && props.canManage) {
+          await discardDraft(false)
+        }
+        return true
+      }}
       recordId={ticket.id}
       canEditAttachments={props.canManage}
       title={
@@ -901,6 +966,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 {actionLayout.filter((action) => action.visible && action.key !== 'edit').map((action) => (
                   <Fragment key={action.key}>{renderFormAction(action.key)}</Fragment>
                 ))}
+                {ticket.status === 'draft' && props.canManage ? (
+                  <Button variant="ghost" disabled={busy || discarding} onClick={confirmDiscard}>
+                    <Trash2 size={14} /> {t('editor.discard')}
+                  </Button>
+                ) : null}
               </>
             )
           )}
@@ -926,6 +996,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       }
     >
       <div className="space-y-6 p-1">
+        {discardError ? (
+          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {discardError}
+          </p>
+        ) : null}
         {activeSection === 'details' ? <>
         {ticket.fieldTicket.rejectionReason && ticket.status === 'draft' && (
           <div className="rounded-md bg-rose-50 p-2.5 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">

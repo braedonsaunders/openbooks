@@ -11,6 +11,7 @@ import {
 } from '../../../../lib/documents'
 import {
   addTicketLine,
+  discardEmptyTicketDraft,
   FieldTicketError,
   FieldTicketNotFoundError,
   loadFieldTicket,
@@ -247,6 +248,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(await loadFieldTicket(orgId, id, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds ?? null,
     }))
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/**
+ * Discard an untouched draft (F-t04-005). New ticket persists an empty
+ * server-side draft on click; this is its way back out. Anything with
+ * content, signatures, links, or status refuses with the blocker named.
+ */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('time.manage')
+  if (gate instanceof NextResponse) return gate
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = await guardTicketScope(gate, id)
+  if (denied) return denied
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const expectedRevision = requireRevision(parsedBody.data.expectedRevision)
+  if (expectedRevision instanceof NextResponse) return expectedRevision
+  try {
+    await discardEmptyTicketDraft(gate.user.orgId, gate.user.id, id, expectedRevision, gate.allowedSubsidiaryIds ?? null)
+    return NextResponse.json({ id })
   } catch (e) {
     return fail(e)
   }
