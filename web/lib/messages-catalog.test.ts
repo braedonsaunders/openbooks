@@ -3815,3 +3815,106 @@ test('I9 banking rules/feeds and ap cockpit copy ships translated in every local
     assert.deepEqual(I9_armsDrift, [], `${I9_locale} banking/ap translations drop ICU plural/select arms`)
   }
 })
+
+// F-i15-001: compliance.* and fieldTickets.* existed only in en/fr/es —
+// de, ja, zh and pt-BR had no catalog files at all (424 keys per locale:
+// 286 compliance + 138 fieldTickets) and their index.ts never loaded the
+// namespaces, so every compliance/field-ticket screen rendered English.
+// Every leaf must exist, keep its {placeholders}, and differ from English
+// except for reviewed cognates/codes pinned to the exact term.
+const I15_COMPLIANCE_FIELDTICKETS_IDENTICAL_BY_FACT = new Set([
+  'de:compliance.filingChannel.iris|IRS IRIS',
+  'de:compliance.filingChannel.fire|IRS FIRE',
+  'de:compliance.taxClassification.llc|LLC',
+  'de:compliance.tinType.ein|EIN',
+  'de:compliance.tinType.ssn|SSN',
+  'de:compliance.tinType.itin|ITIN',
+  'de:compliance.tinType.atin|ATIN',
+  'de:compliance.vendors.columns.status|Status',
+  'de:compliance.vendors.filters.state|Status',
+  'de:compliance.exceptions.window|{from} → {to}',
+  'de:compliance.lienWaivers.columns.status|Status',
+  'de:compliance.lienWaivers.filters.status|Status',
+  'de:compliance.informationReturns.columns.status|Status',
+  'de:compliance.informationReturns.columns.tin|TIN',
+  'ja:compliance.filingChannel.iris|IRS IRIS',
+  'ja:compliance.filingChannel.fire|IRS FIRE',
+  'ja:compliance.taxClassification.llc|LLC',
+  'ja:compliance.tinType.ein|EIN',
+  'ja:compliance.tinType.ssn|SSN',
+  'ja:compliance.tinType.itin|ITIN',
+  'ja:compliance.tinType.atin|ATIN',
+  'ja:compliance.exceptions.window|{from} → {to}',
+  'ja:compliance.informationReturns.columns.tin|TIN',
+  'zh:compliance.filingChannel.iris|IRS IRIS',
+  'zh:compliance.filingChannel.fire|IRS FIRE',
+  'zh:compliance.taxClassification.llc|LLC',
+  'zh:compliance.tinType.ein|EIN',
+  'zh:compliance.tinType.ssn|SSN',
+  'zh:compliance.tinType.itin|ITIN',
+  'zh:compliance.tinType.atin|ATIN',
+  'zh:compliance.exceptions.window|{from} → {to}',
+  'zh:compliance.informationReturns.columns.tin|TIN',
+  'pt-BR:compliance.filingChannel.iris|IRS IRIS',
+  'pt-BR:compliance.filingChannel.fire|IRS FIRE',
+  'pt-BR:compliance.taxClassification.llc|LLC',
+  'pt-BR:compliance.tinType.ein|EIN',
+  'pt-BR:compliance.tinType.ssn|SSN',
+  'pt-BR:compliance.tinType.itin|ITIN',
+  'pt-BR:compliance.tinType.atin|ATIN',
+  'pt-BR:compliance.vendors.columns.status|Status',
+  'pt-BR:compliance.vendors.filters.state|Status',
+  'pt-BR:compliance.exceptions.window|{from} → {to}',
+  'pt-BR:compliance.lienWaivers.columns.status|Status',
+  'pt-BR:compliance.lienWaivers.filters.status|Status',
+  'pt-BR:compliance.informationReturns.columns.status|Status',
+  'pt-BR:compliance.informationReturns.columns.tin|TIN',
+  'de:fieldTickets.list.status|Status',
+  'de:fieldTickets.editor.tasks.code|Code',
+  'de:fieldTickets.editor.pdf|PDF',
+  'ja:fieldTickets.editor.pdf|PDF',
+  'zh:fieldTickets.editor.pdf|PDF',
+  'pt-BR:fieldTickets.list.status|Status',
+  'pt-BR:fieldTickets.editor.crew.rowTotal|Total',
+  'pt-BR:fieldTickets.editor.lines.item|Item',
+  'pt-BR:fieldTickets.editor.pdf|PDF',
+])
+
+test('I15 compliance and fieldTickets copy ships translated in de, ja, zh and pt-BR', () => {
+  const I15_source = flattenCatalog('en')
+  const I15_prefixes = ['compliance.', 'fieldTickets.']
+  const I15_wanted = [...I15_source.keys()].filter((I15_key) =>
+    I15_prefixes.some((I15_prefix) => I15_key.startsWith(I15_prefix)),
+  )
+  assert.equal(I15_wanted.length, 424, 'compliance+fieldTickets source inventory changed; translate the new keys in de/ja/zh/pt-BR and re-pin')
+  const I15_tokens = (I15_value: string): Set<string> =>
+    new Set(I15_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I15_arms = (I15_value: string): string[] => I15_value.match(/, +(plural|select)/g) ?? []
+  for (const I15_locale of ['de', 'ja', 'zh', 'pt-BR']) {
+    const I15_catalog = flattenCatalog(I15_locale)
+    for (const I15_key of I15_wanted) {
+      const I15_value = I15_catalog.get(I15_key)
+      assert.ok(I15_value && I15_value.trim(), `${I15_locale} is missing ${I15_key}`)
+      const I15_identical = [...I15_COMPLIANCE_FIELDTICKETS_IDENTICAL_BY_FACT].find((I15_entry) =>
+        I15_entry.startsWith(`${I15_locale}:${I15_key}|`),
+      )
+      if (I15_identical) {
+        assert.equal(I15_value, I15_identical.split('|')[1], `${I15_locale}:${I15_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I15_value, I15_source.get(I15_key), `${I15_locale} must not copy English ${I15_key}`)
+      }
+    }
+    const I15_drift = I15_wanted.filter((I15_key) => {
+      const I15_expected = I15_tokens(I15_source.get(I15_key) ?? '')
+      const I15_actual = I15_tokens(I15_catalog.get(I15_key) ?? '')
+      return I15_expected.size !== I15_actual.size || [...I15_expected].some((I15_token) => !I15_actual.has(I15_token))
+    })
+    assert.deepEqual(I15_drift, [], `${I15_locale} compliance/fieldTickets translations drop or rename ICU placeholders`)
+    const I15_armsDrift = I15_wanted.filter((I15_key) => {
+      const I15_expected = I15_arms(I15_source.get(I15_key) ?? '').join(',')
+      const I15_actual = I15_arms(I15_catalog.get(I15_key) ?? '').join(',')
+      return I15_expected !== I15_actual
+    })
+    assert.deepEqual(I15_armsDrift, [], `${I15_locale} compliance/fieldTickets translations drop ICU plural/select arms`)
+  }
+})
