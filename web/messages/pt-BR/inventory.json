@@ -10,7 +10,9 @@
   },
   "view": {
     "onhand": "Disponível",
-    "movements": "Movimentações"
+    "movements": "Movimentações",
+    "locations": "Locais de estoque",
+    "bom": "Lista de materiais"
   },
   "labels": {
     "item": "Item",

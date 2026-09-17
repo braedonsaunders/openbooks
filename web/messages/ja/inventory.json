@@ -10,7 +10,9 @@
   },
   "view": {
     "onhand": "手持在庫",
-    "movements": "変動"
+    "movements": "変動",
+    "locations": "保管場所",
+    "bom": "部品表"
   },
   "labels": {
     "item": "品目",
