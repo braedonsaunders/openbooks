@@ -16,7 +16,7 @@ import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { profitAndLossView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
@@ -53,7 +53,13 @@ export interface PnlData {
   wide: boolean
   truncated: boolean
   truncatedLabel: string
-  view: StatementView
+  /** Set when underived consolidated rates block the statement (F-t06-025):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
+  /** Null exactly when ratesBlocked is set; never rendered then. */
+  view: StatementView | null
   scale: string
   currency: string | undefined
   drill: {
@@ -90,9 +96,12 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
 
   const orgId = await resolveOrgId()
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const [view, opts, org] = await Promise.all([
-    profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let view: StatementView | null = null
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,
       basis: q.basis,
@@ -100,7 +109,21 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
       subsidiary: subView.subsidiary,
       showZero: q.showZero,
       bookId: selectedBook?.id,
-    }),
+    })
+  } catch (e) {
+    // Underived consolidated rates must not throw out of SSR (F-t06-025):
+    // the page renders a typed banner with a derive link instead of any
+    // numbers. Anything else is a real defect and still throws.
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: t('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: t('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const [opts, org] = await Promise.all([
     dimensionOptions(),
     orgInfo(),
   ])
@@ -110,29 +133,31 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
 
   return {
     title,
-    description: `${selectedBook ? `${selectedBook.name} · ` : ''}${subView.label ? `${subView.label} · ` : ''}${period.label}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`,
+    description: `${selectedBook ? `${selectedBook.name} · ` : ''}${subView?.label ? `${subView.label} · ` : ''}${period.label}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`,
     backHref: '/reports',
     backLabel: t('hub.title'),
     hubLabel: t('hub.title'),
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     note: scale.note || '',
-    wide: view.columns.length > 4,
-    truncated: view.truncated,
+    wide: view ? view.columns.length > 4 : false,
+    truncated: view?.truncated ?? false,
     truncatedLabel: t('filterBar.truncated'),
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
     view,
     scale: q.scale,
-    currency: subView.currency ?? org?.base_currency,
+    currency: subView?.currency ?? org?.base_currency,
     drill: {
       // The drill drawer must read the cell's exact entity set (a consolidated
       // subtree, not just the picker node) — the route re-validates every id.
-      dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
+      dims: { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids },
       basis: q.basis,
       subsidiaryId: q.subsidiaryId,
       bookId: selectedBook.id,
     },
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     primaryFilter:
       books.length > 1
         ? {
@@ -200,12 +225,25 @@ export function pnlSpec(data: PnlData): PageSpec {
       textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         note: f('note'),
         wide: f('wide'),
+        when: f('ratesReady'),
         blocks: [
           widgetBlock('statement-matrix', {
             view: data.view,

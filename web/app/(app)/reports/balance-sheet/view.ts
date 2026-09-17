@@ -16,7 +16,7 @@ import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
 import { decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -53,6 +53,12 @@ export interface BalanceSheetData {
   periodPhrase: string
   note: string
   wide: boolean
+  /** Set when underived consolidated rates block the statement (F-t06-025):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
+  /** Null exactly when ratesBlocked is set; never rendered then. */
   view: unknown
   scale: unknown
   currency: string | undefined
@@ -84,9 +90,15 @@ export async function loadBalanceSheet(
     totalOf: secTotal,
   }
 
-  const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-  const [view, opts, org] = await Promise.all([
-    balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
+  // Underived consolidated rates must not throw out of SSR (F-t06-025):
+  // the page renders a typed banner with a derive link instead of any
+  // numbers. Anything else is a real defect and still throws.
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let view: Awaited<ReturnType<typeof balanceSheetView>> | null = null
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,
       basis: q.basis,
@@ -94,26 +106,37 @@ export async function loadBalanceSheet(
       subsidiary: subView.subsidiary,
       showZero: q.showZero,
       bookId: selectedBook.id,
-    }),
+    })
+  } catch (e) {
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: t('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: t('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const [opts, org] = await Promise.all([
     dimensionOptions(),
     orgInfo(),
   ])
 
-  const valueOf = (label: string) => view.lines.find((l) => l.label === label)?.values?.[0] ?? '0.0000'
+  const valueOf = (label: string) => view?.lines.find((l) => l.label === label)?.values?.[0] ?? '0.0000'
   const totalAssets = valueOf(labels.totalAssets)
   const totalLiabilities = valueOf(labels.totalLiabilities)
   const totalEquity = valueOf(labels.totalEquity)
   const difference = decimalAdd(totalAssets, decimalNeg(decimalAdd(totalLiabilities, totalEquity)))
-  const balanced = decimalCmp(difference, '-0.0100') > 0 && decimalCmp(difference, '0.0100') < 0
+  const balanced = view !== null && decimalCmp(difference, '-0.0100') > 0 && decimalCmp(difference, '0.0100') < 0
 
 
   return {
     title: t('balanceSheet.title'),
-    description: `${selectedBook.name} · ${subView.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`,
+    description: `${selectedBook.name} · ${subView?.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`,
     backHref: '/reports',
     backLabel: t('hub.title'),
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
     primaryFilter:
       books.length > 1
         ? {
@@ -134,14 +157,16 @@ export async function loadBalanceSheet(
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('balanceSheet.asOf', { date: period.to })}`,
     note: scaleFactor(q.scale).note || '',
-    wide: view.columns.length > 4,
+    wide: view ? view.columns.length > 4 : false,
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
     view,
     scale: q.scale,
-    currency: subView.currency ?? org?.base_currency,
+    currency: subView?.currency ?? org?.base_currency,
     drill: {
       // The drill drawer must read the cell's exact entity set (a consolidated
       // subtree, not just the picker node) — the route re-validates every id.
-      dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
+      dims: { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids },
       basis: q.basis,
       subsidiaryId: q.subsidiaryId,
       bookId: selectedBook.id,
@@ -192,19 +217,36 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           ],
         },
       ),
-      widgetBlock('balance-check', {
-        equation: data.equationLabel,
-        balanced: data.balanced,
-        label: data.balanceLabel,
-      }),
+      {
+        ...widgetBlock('balance-check', {
+          equation: data.equationLabel,
+          balanced: data.balanced,
+          label: data.balanceLabel,
+        }),
+        // No equation to check while rates block the statement (F-t06-025).
+        when: f('ratesReady'),
+      },
     ],
     body: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
       paper({
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         note: f('note'),
         wide: f('wide'),
+        when: f('ratesReady'),
         blocks: [
           widgetBlock('statement-matrix', {
             view: data.view,

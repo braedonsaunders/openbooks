@@ -8,7 +8,7 @@ import { dimensionOptions, trialBalance } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { reportSubsidiaryView } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { orgBranding } from '../../../../lib/report-pdf'
 import { decimalAdd, decimalNeg, decimalSum } from '../../../../lib/statement-format'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -39,6 +39,11 @@ export interface TrialBalanceData {
   company: string
   currency: string | undefined
   emptyLabel: string
+  /** Set when underived consolidated rates block the statement (F-t06-025):
+   * the page renders a typed banner with a derive link instead of numbers. */
+  ratesBlocked: RatesBlockedNotice | null
+  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  ratesReady: boolean
   paper: unknown
 }
 
@@ -52,9 +57,27 @@ export async function loadTrialBalance(
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const date = period.to
-  const subView = await reportSubsidiaryView(q.subsidiaryId, date)
-  const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
-  const [rows, opts, org, branding] = await Promise.all([trialBalance(date, dims, undefined, selectedBook.id), dimensionOptions(), orgInfo(), orgBranding()])
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
+  let rows: Awaited<ReturnType<typeof trialBalance>> = []
+  let ratesBlocked: RatesBlockedNotice | null = null
+  try {
+    subView = await reportSubsidiaryView(q.subsidiaryId, date)
+    rows = await trialBalance(date, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
+  } catch (e) {
+    // Underived consolidated rates must not throw out of SSR (F-t06-025):
+    // the page renders a typed banner with a derive link instead of any
+    // numbers. Anything else is a real defect and still throws.
+    if (!(e instanceof MissingRatesError)) throw e
+    ratesBlocked = {
+      code: 'rates-not-derived',
+      title: t('statement.ratesBlockedTitle'),
+      description: (e as Error).message,
+      deriveLabel: t('statement.ratesBlockedAction'),
+      deriveHref: '/close',
+    }
+  }
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
+  const [opts, org, branding] = await Promise.all([dimensionOptions(), orgInfo(), orgBranding()])
   const totalDebits = decimalSum(rows.map((r) => r.debits))
   const totalCredits = decimalSum(rows.map((r) => r.credits))
 
@@ -93,7 +116,9 @@ export async function loadTrialBalance(
     backHref: '/reports',
     backLabel: t('hub.title'),
     dimensions: opts,
-    subsidiaries: subView.picker,
+    subsidiaries: subView?.picker ?? [],
+    ratesBlocked,
+    ratesReady: ratesBlocked === null,
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId,
     scheduleParams: scheduleParamsFrom(sp),
@@ -152,12 +177,27 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
       ),
     ],
     body: [
-      widgetBlock('paper-view', {
-        company: data.company,
-        currency: data.currency,
-        emptyLabel: data.emptyLabel,
-        data: data.paper,
-      }),
+      {
+        ...widgetBlock('empty-state', {
+          title: data.ratesBlocked?.title ?? '',
+          description: data.ratesBlocked?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.ratesBlocked?.deriveHref ?? '/close',
+            label: data.ratesBlocked?.deriveLabel ?? '',
+          },
+        }),
+        when: f('ratesBlocked'),
+      },
+      {
+        ...widgetBlock('paper-view', {
+          company: data.company,
+          currency: data.currency,
+          emptyLabel: data.emptyLabel,
+          data: data.paper,
+        }),
+        when: f('ratesReady'),
+      },
     ],
   })
 }

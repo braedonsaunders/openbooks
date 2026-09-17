@@ -54,7 +54,9 @@
     "other": "Otros",
     "otherTotal": "Total Otros",
     "accumulatedEarnings": "Utilidades acumuladas (calculadas)",
-    "translationAdjustment": "Ajuste de conversión acumulado"
+    "translationAdjustment": "Ajuste de conversión acumulado",
+    "ratesBlockedTitle": "Tipos consolidados aún no calculados",
+    "ratesBlockedAction": "Calcular los tipos en el cierre"
   },
   "saveView": {
     "namePrompt": "Nombre para esta vista:",
