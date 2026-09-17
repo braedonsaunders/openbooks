@@ -43,6 +43,11 @@ export function InventoryActionDrawer({
   const [basis, setBasis] = useState<string>('value')
   const [memo, setMemo] = useState('')
   const [busy, setBusy] = useState(false)
+  // A refused Post pins its reason on the record until the next submit — a
+  // toast alone let 422s for a missing period and insufficient stock read as
+  // silence (F-t07-001). Insufficient stock is a real inventory refusal and
+  // must stay visible with the typed values intact.
+  const [postError, setPostError] = useState<string | null>(null)
 
   const itemOptions = items.map((i) => ({ value: i.id, label: `${i.code ? `${i.code} · ` : ''}${i.name ?? ''}`.trim() }))
   const locOptions = stockLocations.map((l) => ({ value: l.id, label: l.code ?? '' }))
@@ -61,6 +66,7 @@ export function InventoryActionDrawer({
       return
     }
     setBusy(true)
+    setPostError(null)
     const res = await fetch('/api/inventory/actions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -77,9 +83,12 @@ export function InventoryActionDrawer({
         idempotencyKey: crypto.randomUUID(),
       }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      toast.error(data.error ?? t('drawer.failed'))
+      const detail =
+        typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('drawer.failed')
+      setPostError(detail)
+      toast.error(detail)
       setBusy(false)
       return
     }
@@ -102,6 +111,11 @@ export function InventoryActionDrawer({
       }
     >
       <div className="space-y-5 p-1">
+        {postError ? (
+          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {t('drawer.failed')}{postError === t('drawer.failed') ? null : `: ${postError}`}
+          </p>
+        ) : null}
         <div className={field}>
           <Label>{t('drawer.action')}</Label>
           <Select value={action} onChange={(e) => setAction(e.target.value as Action)}>
