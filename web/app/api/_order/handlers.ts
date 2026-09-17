@@ -25,7 +25,7 @@ import {
   DocumentVoidError,
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -679,15 +679,9 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
     if (cfg.kind !== 'sales_order' && cfg.kind !== 'purchase_order') {
       return NextResponse.json({ error: 'warehouse assignment applies to sales and purchase orders only' }, { status: 422 })
     }
-    const parsedBody = await parseJsonBody(req, jsonObject)
+    const parsedBody = await parseJsonBody(req, assignWarehouseBody)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as { lineId?: unknown; stockLocationId?: unknown; expectedUpdatedAt?: unknown }
-    if (typeof body.lineId !== 'string' || !isUuid(body.lineId)) {
-      return NextResponse.json({ error: 'Order line id must be a UUID' }, { status: 422 })
-    }
-    if (typeof body.stockLocationId !== 'string' || !isUuid(body.stockLocationId)) {
-      return NextResponse.json({ error: 'Warehouse must be a UUID' }, { status: 422 })
-    }
+    const body = parsedBody.data
 
     // Scope check: the order must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope. The engine re-locks the
@@ -712,7 +706,7 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
         kind: cfg.kind,
         lineId: body.lineId,
         stockLocationId: body.stockLocationId,
-        expectedUpdatedAt: typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : '',
+        expectedUpdatedAt: body.expectedUpdatedAt ?? '',
       })
       const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
       return NextResponse.json(order)
