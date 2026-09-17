@@ -1,5 +1,27 @@
 {
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "L'action a échoué",
+      "camPoolCreated": "Groupe de charges créé",
+      "camPoolReopened": "Groupe de charges rouvert pour correction",
+      "camPoolUpdated": "Groupe de charges mis à jour",
+      "chargeAdded": "Charge ajoutée",
+      "couldNotLoad": "Impossible de charger les immeubles",
+      "depositPosted": "Dépôt de garantie enregistré",
+      "depositReversed": "Dépôt de garantie contrepassé",
+      "escalationApplied": "Indexation appliquée",
+      "escalationScheduled": "Indexation planifiée",
+      "lateFeesAssessed": "Frais de retard du portefeuille appliqués",
+      "leaseCreated": "Bail créé",
+      "leaseUpdated": "Bail mis à jour",
+      "propertyCreated": "Immeuble créé",
+      "propertyDeleted": "Immeuble supprimé",
+      "propertyUpdated": "Immeuble mis à jour",
+      "rentBilled": "Loyers du portefeuille facturés",
+      "unitAdded": "Logement ajouté",
+      "unitDeleted": "Logement supprimé",
+      "unitUpdated": "Logement mis à jour"
+    },
     "workspace": {
       "title": "Gestion immobilière",
       "description": "Gérez les immeubles, les baux, les loyers, les régularisations de charges et les dépôts de garantie.",
@@ -55,6 +77,193 @@
         "occupancy": "Occupation",
         "currency": "Devise",
         "status": "Statut"
+      }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "frequency": "Fréquence",
+          "effective": "En vigueur",
+          "amount": "Montant",
+          "open": "Ouvert"
+        },
+        "addTitle": "Ajouter une charge récurrente",
+        "labels": {
+          "amount": "Montant",
+          "frequency": "Fréquence",
+          "effectiveFrom": "En vigueur à partir du",
+          "effectiveTo": "En vigueur jusqu'au",
+          "incomeAccount": "Compte de produits"
+        },
+        "types": {
+          "cam": "Charges communes",
+          "storage": "Stockage",
+          "utility": "Fluides",
+          "other": "Autre"
+        },
+        "frequencies": {
+          "monthly": "Mensuelle",
+          "quarterly": "Trimestrielle",
+          "annually": "Annuelle",
+          "one_time": "Ponctuelle"
+        },
+        "propertyDefault": "Défaut de l'immeuble",
+        "addCharge": "Ajouter une charge"
+      },
+      "escalations": {
+        "table": {
+          "effective": "En vigueur",
+          "method": "Méthode",
+          "value": "Valeur",
+          "result": "Résultat",
+          "status": "Statut"
+        },
+        "apply": "Appliquer",
+        "emptyTitle": "Aucune indexation de loyer",
+        "emptyDetail": "Planifiez des révisions contractuelles en pourcentage, en montant fixe ou avec un loyer de remplacement.",
+        "scheduleTitle": "Planifier une indexation",
+        "labels": {
+          "effectiveOn": "En vigueur le",
+          "method": "Méthode",
+          "value": "Valeur"
+        },
+        "methods": {
+          "percent": "Augmentation en pourcentage",
+          "fixed": "Augmentation fixe",
+          "new_amount": "Nouveau montant mensuel"
+        },
+        "schedule": "Planifier"
+      },
+      "deposits": {
+        "required": "Obligatoire",
+        "held": "Détenu",
+        "notice": "Les écritures de dépôt sont comptabilisées immédiatement et ne peuvent être ni modifiées ni supprimées. Contrepassez une écriture incorrecte, puis comptabilisez son remplacement corrigé ci-dessous.",
+        "emptyTitle": "Aucun mouvement de dépôt",
+        "emptyDetail": "Enregistrez l'encaissement pour constater la dette des dépôts des locataires.",
+        "reverseTitle": "Contrepasser l'écriture de dépôt",
+        "reverseLabels": {
+          "reversalDate": "Date de contrepassation",
+          "reason": "Motif"
+        },
+        "cancel": "Annuler",
+        "postReversal": "Comptabiliser la contrepassation",
+        "recordTitle": "Enregistrer une écriture de dépôt",
+        "labels": {
+          "amount": "Montant",
+          "bankAccount": "Compte bancaire",
+          "tenantInvoice": "Facture du locataire",
+          "offsetAccount": "Compte de contrepartie",
+          "memo": "Mémo"
+        },
+        "kinds": {
+          "received": "Reçu",
+          "interest": "Intérêts crédités",
+          "applied": "Imputer sur la facture du locataire",
+          "refunded": "Remboursé",
+          "adjustment_increase": "Ajustement à la hausse",
+          "adjustment_decrease": "Ajustement à la baisse"
+        },
+        "propertyDefault": "Défaut de l'immeuble",
+        "selectPostedInvoice": "Sélectionner une facture comptabilisée",
+        "selectAccount": "Sélectionner un compte",
+        "postTransaction": "Comptabiliser l'opération"
+      },
+      "toasts": {
+        "chargeAdded": "Charge du bail ajoutée",
+        "escalationApplied": "Indexation du loyer appliquée",
+        "escalationScheduled": "Indexation planifiée",
+        "depositReversed": "Opération de dépôt contrepassée",
+        "depositPosted": "Opération de dépôt comptabilisée"
+      }
+    },
+    "detail": {
+      "selectEmpty": "Non associé",
+      "fields": {
+        "name": "Nom",
+        "code": "Code du bien",
+        "propertyType": "Type de bien",
+        "status": "Statut",
+        "subsidiary": "Filiale",
+        "location": "Emplacement",
+        "fixedAsset": "Immobilisation",
+        "currency": "Devise",
+        "street": "Rue",
+        "city": "Ville",
+        "region": "Province / État",
+        "postalCode": "Code postal",
+        "rentIncomeAccount": "Compte de produits locatifs",
+        "camIncomeAccount": "Compte de produits de charges communes",
+        "depositLiabilityAccount": "Compte de dette de garantie",
+        "defaultBankAccount": "Compte bancaire par défaut"
+      },
+      "selectSubsidiary": "Sélectionner la filiale",
+      "tabsLabelMap": {
+        "overview": "Aperçu",
+        "units": "Logements",
+        "leases": "Baux",
+        "rent": "Loyers",
+        "deposits": "Dépôts",
+        "cam": "Charges communes"
+      },
+      "tabsAria": "Détails de l'immeuble",
+      "noLocation": "Aucun emplacement",
+      "cancel": "Annuler",
+      "saving": "Enregistrement…",
+      "save": "Enregistrer",
+      "edit": "Modifier",
+      "customForm": "Formulaire personnalisé",
+      "customizeForm": "Personnaliser le formulaire",
+      "deactivate": "Désactiver l'immeuble",
+      "reactivate": "Réactiver l'immeuble",
+      "deleteConfirm": "Supprimer {name} ? Seuls les immeubles inutilisés peuvent être définitivement supprimés.",
+      "deleteProperty": "Supprimer l'immeuble",
+      "units": {
+        "title": "Logements louables",
+        "description": "Occupation, surface louable et capacité de location par logement.",
+        "addUnit": "Ajouter un logement",
+        "table": {
+          "unit": "Logement",
+          "rentableArea": "Surface louable",
+          "bedrooms": "Chambres",
+          "status": "Statut"
+        },
+        "emptyTitle": "Aucun logement pour le moment",
+        "emptyDetail": "Ajoutez le premier logement louable depuis cette fiche d'immeuble."
+      },
+      "leases": {
+        "title": "Baux de l'immeuble",
+        "description": "Baux des locataires en cours et historiques pour cet immeuble.",
+        "newLease": "Nouveau bail",
+        "table": {
+          "lease": "Bail",
+          "unit": "Logement",
+          "tenant": "Locataire",
+          "term": "Durée",
+          "status": "Statut"
+        },
+        "wholeProperty": "Tout l'immeuble",
+        "openTerm": "Ouvert",
+        "emptyTitle": "Aucun bail pour le moment",
+        "emptyDetail": "Créez un bail depuis l'onglet Baux de l'espace de travail."
+      },
+      "rent": {
+        "title": "Échéancier des loyers",
+        "description": "Loyers planifiés et facturés pour les baux de cet immeuble.",
+        "assessLateFees": "Appliquer les frais de retard",
+        "billDueRent": "Facturer les loyers dus"
+      },
+      "depositsTab": {
+        "title": "Dépôts de garantie",
+        "description": "Mouvements des dépôts des locataires pour cet immeuble, en ajout uniquement."
+      },
+      "cam": {
+        "title": "Rapprochements des charges",
+        "description": "Groupes de charges d'exploitation, répartitions et régularisations des locataires pour cet immeuble.",
+        "newPool": "Nouveau groupe de charges"
+      },
+      "toasts": {
+        "lateFeesAssessed": "Frais de retard de l'immeuble appliqués",
+        "rentBilled": "Loyers de l'immeuble facturés"
       }
     },
     "propertyDrawer": {
