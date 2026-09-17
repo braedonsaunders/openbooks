@@ -1917,6 +1917,7 @@ function BankAccountsPanel({
           <ApprovalHistory
             subjectKind="party_bank_account"
             subjectId={String(historyAccount.id)}
+            showEmptyState
           />
         ) : null}
       </Drawer>

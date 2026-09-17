@@ -664,7 +664,7 @@ export function ExpenseDrawer({
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
-          content: <ApprovalHistory subjectKind="expense_report" subjectId={String(doc.id)} />,
+          content: <ApprovalHistory subjectKind="expense_report" subjectId={String(doc.id)} showEmptyState />,
         },
       ]}
       footer={
