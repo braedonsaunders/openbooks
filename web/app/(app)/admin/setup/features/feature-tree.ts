@@ -18,6 +18,36 @@ export interface FeatureTreeRow {
 
 export type FeatureSwitchState = Record<string, boolean>
 
+/**
+ * Refusal-body → user message for a failed toggle PUT. Pure (the catalog
+ * lookup is injected) so the mapping is unit-testable: every typed refusal
+ * the route can send resolves to its localized message, and anything else —
+ * unknown codes, malformed or empty bodies — falls back to the generic
+ * blocked message instead of a raw code or silence (F-t01-015).
+ */
+export function featureToggleRefusalMessage(
+  payload: unknown,
+  t: (key: string, params?: Record<string, string>) => string,
+): string {
+  const body = (payload ?? {}) as {
+    error?: unknown
+    requiredKeys?: unknown
+    dependentKeys?: unknown
+  }
+  const titles = (keys: unknown): string =>
+    (Array.isArray(keys) ? keys : [])
+      .filter((key): key is string => typeof key === 'string')
+      .map((key) => t(`features.${key}.title`))
+      .join(', ')
+  if (body.error === 'feature-dependency') {
+    return t('setup.features.errors.dependency', { features: titles(body.requiredKeys) })
+  }
+  if (body.error === 'feature-dependents-enabled') {
+    return t('setup.features.errors.dependents', { features: titles(body.dependentKeys) })
+  }
+  return t('setup.features.errors.blocked')
+}
+
 export interface FeatureTreeNode {
   row: FeatureTreeRow
   /** Effective on/off: the switch AND every requirement (parent + requiresAll). */

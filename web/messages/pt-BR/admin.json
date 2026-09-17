@@ -2159,7 +2159,12 @@
     },
     "features": {
       "runWizard": "Executar o assistente de configuração",
-      "navTitle": "Funcionalidades"
+      "navTitle": "Funcionalidades",
+      "errors": {
+        "blocked": "Este recurso não pode ser desativado — seus dados sustentam o razão.",
+        "dependency": "Ative primeiro o recurso necessário: {features}.",
+        "dependents": "Desative primeiro o recurso dependente: {features}."
+      }
     },
     "invoicing": {
       "navTitle": "Faturamento"
@@ -2435,6 +2440,54 @@
     "onlinePayments": {
       "title": "Pagamentos online",
       "description": "Links de pagamento hospedados nas faturas (Stripe / Adyen / débito GoCardless), regras de tarifa e webhooks que baixam recebimentos automaticamente."
+    },
+    "advancedClose": {
+      "title": "Governança avançada de fechamento"
+    },
+    "advancedSubscriptions": {
+      "title": "Ciclo de vida avançado de assinaturas"
+    },
+    "allocations": {
+      "title": "Rateios"
+    },
+    "allocationsAtEntry": {
+      "title": "Rateios no lançamento"
+    },
+    "allocationsAtPosting": {
+      "title": "Rateios na contabilização"
+    },
+    "apiAccess": {
+      "title": "API REST"
+    },
+    "mcpAccess": {
+      "title": "Acesso MCP"
+    },
+    "multiCurrency": {
+      "title": "Multimoeda"
+    },
+    "multiSubsidiary": {
+      "title": "Multifiliais"
+    },
+    "payroll": {
+      "title": "Folha de pagamento"
+    },
+    "projectScheduling": {
+      "title": "Cronograma de projetos"
+    },
+    "propertyManagement": {
+      "title": "Gestão imobiliária"
+    },
+    "queryConsole": {
+      "title": "Console de consultas"
+    },
+    "scripts": {
+      "title": "Scripts"
+    },
+    "subcontracts": {
+      "title": "Subcontratos e faturamento de progresso"
+    },
+    "wipBilling": {
+      "title": "Trabalhos em curso e pré-faturamento"
     }
   }
 }

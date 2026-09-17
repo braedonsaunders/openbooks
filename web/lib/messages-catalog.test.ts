@@ -719,6 +719,58 @@ test('admin user invite copy is present in every locale and translated', () => {
   }
 })
 
+test('feature refusal copy ships translated in every locale', () => {
+  // A refused toggle (F-t01-015) toasts through these keys with the feature
+  // titles named inside the message; an absent key falls back to English
+  // inside otherwise translated switchboards.
+  const keys = [
+    'admin.setup.features.errors.blocked',
+    'admin.setup.features.errors.dependency',
+    'admin.setup.features.errors.dependents',
+    'admin.features.advancedClose.title',
+    'admin.features.advancedSubscriptions.title',
+    'admin.features.allocations.title',
+    'admin.features.allocationsAtEntry.title',
+    'admin.features.allocationsAtPosting.title',
+    'admin.features.apiAccess.title',
+    'admin.features.mcpAccess.title',
+    'admin.features.multiCurrency.title',
+    'admin.features.multiSubsidiary.title',
+    'admin.features.payroll.title',
+    'admin.features.projectScheduling.title',
+    'admin.features.propertyManagement.title',
+    'admin.features.queryConsole.title',
+    'admin.features.scripts.title',
+    'admin.features.subcontracts.title',
+    'admin.features.wipBilling.title',
+  ] as const
+  // REST API is kept verbatim in ja/zh product copy and Scripts is the same
+  // word in fr/es/pt-BR — genuine conventions, like the documented de/pt-BR
+  // 'Status' identical-term exemption.
+  const identicalExemptions = new Set([
+    'ja:admin.features.apiAccess.title',
+    'zh:admin.features.apiAccess.title',
+    'fr:admin.features.scripts.title',
+    'es:admin.features.scripts.title',
+    'pt-BR:admin.features.scripts.title',
+  ])
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      if (!identicalExemptions.has(`${locale}:${key}`)) {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+  }
+})
+
 test('project billing (applications) copy is present in every locale and translated', () => {
   // The project Billing tabs (F-t03-012) render these keys; a missing key
   // falls back to English on screen.

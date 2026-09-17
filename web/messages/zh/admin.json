@@ -2159,7 +2159,12 @@
     },
     "features": {
       "runWizard": "运行设置向导",
-      "navTitle": "功能"
+      "navTitle": "功能",
+      "errors": {
+        "blocked": "此功能无法关闭 — 其数据是总账的结构性支撑。",
+        "dependency": "请先启用所需功能：{features}。",
+        "dependents": "请先关闭从属功能：{features}。"
+      }
     },
     "invoicing": {
       "navTitle": "开票"
@@ -2435,6 +2440,54 @@
     "onlinePayments": {
       "title": "在线支付",
       "description": "发票上的托管支付链接（Stripe / Adyen / GoCardless 银行扣款）、附加费规则以及自动核销收款的 Webhook。"
+    },
+    "advancedClose": {
+      "title": "高级结账治理"
+    },
+    "advancedSubscriptions": {
+      "title": "高级订阅生命周期"
+    },
+    "allocations": {
+      "title": "分摊"
+    },
+    "allocationsAtEntry": {
+      "title": "录入时分摊"
+    },
+    "allocationsAtPosting": {
+      "title": "过账时分摊"
+    },
+    "apiAccess": {
+      "title": "REST API"
+    },
+    "mcpAccess": {
+      "title": "MCP 访问"
+    },
+    "multiCurrency": {
+      "title": "多币种"
+    },
+    "multiSubsidiary": {
+      "title": "多子公司"
+    },
+    "payroll": {
+      "title": "工资核算"
+    },
+    "projectScheduling": {
+      "title": "项目排期"
+    },
+    "propertyManagement": {
+      "title": "物业管理"
+    },
+    "queryConsole": {
+      "title": "查询控制台"
+    },
+    "scripts": {
+      "title": "脚本"
+    },
+    "subcontracts": {
+      "title": "分包合同与进度开票"
+    },
+    "wipBilling": {
+      "title": "在制品与预开票"
     }
   }
 }

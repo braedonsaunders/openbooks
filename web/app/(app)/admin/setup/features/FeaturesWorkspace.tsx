@@ -35,7 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { buildFeatureTree, type FeatureTreeNode } from './feature-tree'
+import { buildFeatureTree, featureToggleRefusalMessage, type FeatureTreeNode } from './feature-tree'
 
 type Feature = {
   key: string
@@ -157,18 +157,7 @@ export function FeaturesWorkspace({
       })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
-        const code = payload?.error
-        if (code === 'feature-dependency') {
-          const names = (payload.requiredKeys ?? []).map((required: string) => t(`features.${required}.title`)).join(', ')
-          throw new Error(t('setup.features.errors.dependency', { features: names }))
-        }
-        if (code === 'feature-dependents-enabled') {
-          const names = (payload.dependentKeys ?? []).map((dependent: string) => t(`features.${dependent}.title`)).join(', ')
-          throw new Error(t('setup.features.errors.dependents', { features: names }))
-        }
-        throw new Error(
-          code === 'feature-blocked' ? t('setup.features.errors.blocked') : (code ?? t('setup.features.errors.blocked')),
-        )
+        throw new Error(featureToggleRefusalMessage(payload, (key, params) => t(key, params)))
       }
       toast.success(t(next ? 'setup.features.enabled' : 'setup.features.disabled', { name: t(`features.${key}.title`) }))
       router.refresh()

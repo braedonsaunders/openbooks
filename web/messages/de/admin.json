@@ -2159,7 +2159,12 @@
     },
     "features": {
       "runWizard": "Einrichtungsassistenten starten",
-      "navTitle": "Funktionen"
+      "navTitle": "Funktionen",
+      "errors": {
+        "blocked": "Diese Funktion lässt sich nicht deaktivieren — ihre Daten sind tragend für das Hauptbuch.",
+        "dependency": "Aktivieren Sie zuerst die erforderliche Funktion: {features}.",
+        "dependents": "Deaktivieren Sie zuerst die abhängige Funktion: {features}."
+      }
     },
     "invoicing": {
       "navTitle": "Rechnungsstellung"
@@ -2435,6 +2440,54 @@
     "onlinePayments": {
       "title": "Online-Zahlungen",
       "description": "Gehostete Zahlungslinks auf Rechnungen (Stripe / Adyen / GoCardless-Lastschrift), Entgeltregeln und Webhooks, die Zahlungseingänge automatisch zuordnen."
+    },
+    "advancedClose": {
+      "title": "Erweiterte Abschlusssteuerung"
+    },
+    "advancedSubscriptions": {
+      "title": "Erweiterter Abonnement-Lebenszyklus"
+    },
+    "allocations": {
+      "title": "Umlagen"
+    },
+    "allocationsAtEntry": {
+      "title": "Umlagen bei Erfassung"
+    },
+    "allocationsAtPosting": {
+      "title": "Umlagen bei Buchung"
+    },
+    "apiAccess": {
+      "title": "REST-API"
+    },
+    "mcpAccess": {
+      "title": "MCP-Zugriff"
+    },
+    "multiCurrency": {
+      "title": "Mehrwährung"
+    },
+    "multiSubsidiary": {
+      "title": "Mehrere Gesellschaften"
+    },
+    "payroll": {
+      "title": "Lohnabrechnung"
+    },
+    "projectScheduling": {
+      "title": "Projektterminplanung"
+    },
+    "propertyManagement": {
+      "title": "Immobilienverwaltung"
+    },
+    "queryConsole": {
+      "title": "Abfragekonsole"
+    },
+    "scripts": {
+      "title": "Skripte"
+    },
+    "subcontracts": {
+      "title": "Nachunternehmer und Abschlagsrechnung"
+    },
+    "wipBilling": {
+      "title": "Unfertige Leistungen und Vorauszahlungen"
     }
   }
 }
