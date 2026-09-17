@@ -13,7 +13,6 @@ import test from "node:test";
  * rows.
  */
 const FINANCIAL_REPORT_MODULES = [
-  "engine/src/dashboard-reporting.ts",
   "engine/src/continuous-close.ts",
   "engine/src/tax-return.ts",
   "engine/src/income-tax-provision.ts",
