@@ -74,6 +74,10 @@
     "lien-waivers": "Lien Waivers",
     "information-returns": "Information Returns"
   },
+  "modulesShort": {
+    "ap": "Payables",
+    "ar": "Receivables"
+  },
   "groups": {
     "my-work": "My Work",
     "customers": "Customers",

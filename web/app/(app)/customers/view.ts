@@ -175,6 +175,13 @@ export async function loadCustomers(
           return ''
         }
       },
+      (key) => {
+        try {
+          return tNav.has(key)
+        } catch {
+          return false
+        }
+      },
     ),
   ])
 

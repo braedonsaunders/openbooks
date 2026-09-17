@@ -190,6 +190,13 @@ export async function loadBanking(
           return ''
         }
       },
+      (key) => {
+        try {
+          return tNav.has(key)
+        } catch {
+          return false
+        }
+      },
     ),
   ])
 

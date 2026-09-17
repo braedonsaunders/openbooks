@@ -169,6 +169,13 @@ export async function loadPurchasing(
           return ''
         }
       },
+      (key) => {
+        try {
+          return tNav.has(key)
+        } catch {
+          return false
+        }
+      },
     ),
   ])
 
