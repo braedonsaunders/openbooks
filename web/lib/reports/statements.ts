@@ -24,6 +24,13 @@ export interface StatementRow {
   isSummary: boolean;
 }
 
+/**
+ * The revenue account universe: the income-account postings the P&L reads.
+ * Customer Intelligence headline revenue reads this same universe per customer
+ * (see customer-data) — import this rather than re-listing the types, so the
+ * two surfaces cannot drift into two definitions of revenue (fleet8 P3).
+ */
+export const REVENUE_TYPES = ["income", "income_other"];
 export const CREDIT_NORMAL = new Set([
   "income", "income_other",
   "liability_payable", "liability_card", "liability_current_other", "liability_long_term",
@@ -175,7 +182,7 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
   // rolled-balance presentation.
   const total = (types: string[]) =>
     decimalSum(items.filter((r) => types.includes(r.type)).map((r) => r.balance));
-  const revenue = total(["income", "income_other"]);
+  const revenue = total(REVENUE_TYPES);
   const cogs = total(["cogs"]);
   const expenses = total(["expense", "expense_other", "expense_deferred"]);
   const grossProfit = decimalSubtract(revenue, cogs);
