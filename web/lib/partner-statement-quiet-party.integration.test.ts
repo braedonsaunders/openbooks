@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const { partnerStatement } = await import('./reports/registers')
@@ -36,9 +36,12 @@ test('partner statement keeps the balance for a party with no window activity', 
       await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
       await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
     })
-    const st = await partnerStatement(scratch.customerId, scratch.orgId, {
+    // The statement reader issues bare queries with explicit org predicates,
+    // which pooled RLS denies outside an explicit scope (unscoped it reads
+    // zero rows and the balance asserts below read '0.0000'/undefined).
+    const st = await withOrgContext(scratch.orgId, () => partnerStatement(scratch.customerId, scratch.orgId, {
       from: '2026-08-01', to: '2026-08-31', side: 'ar',
-    })
+    }))
     assert.equal(st.opening, '100.0000')
     assert.equal(st.closing, '100.0000')
     assert.deepEqual(st.lines, [])
