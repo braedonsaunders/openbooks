@@ -21,9 +21,13 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * kernel that stopped enforcing balance, by inserting an unbalanced posted
  * entry with enforcement triggers skipped for a single dedicated session
  * (`session_replication_role = 'replica'` touches nothing global: every other
- * session keeps full enforcement, and the role resets in a finally). Both
- * checks must fail with the exact drift while every unrelated check stays
- * green; the fixture org (imbalance included) is dropped afterwards.
+ * session keeps full enforcement, and the role resets in a finally). The
+ * balance mirrors must fail with the exact drift, AND so must every
+ * dimensional check the drift genuinely violates — the book total (+1 on the
+ * single book), the txn-currency total (+1, single currency), and the month
+ * aggregate (replica also skips aggregate maintenance, the missed-rebuild
+ * geometry) — while every unrelated check stays green; the fixture org
+ * (imbalance included) is dropped afterwards.
  */
 
 function check(cp: Awaited<ReturnType<typeof runScenario>>, name: string) {
@@ -79,11 +83,22 @@ test("global-balance and per-entry-balance fail on an unbalanced posted entry", 
     const pe = check(cp, "per-entry-balance");
     assert.equal(pe.ok, false, `per-entry balance MUST fail: ${pe.detail}`);
     assert.match(pe.detail, /^1 posted entries do not balance/, "detail must name the single broken entry");
+    const pb = check(cp, "per-book-balance");
+    assert.equal(pb.ok, false, `per-book balance MUST fail: ${pb.detail}`);
+    assert.match(pb.detail, /worst \|Σ\| = 1\.0000 on PRI/, "detail must state the exact +1.00 book drift");
+    const tx = check(cp, "per-entry-txn-balance");
+    assert.equal(tx.ok, false, `txn balance MUST fail: ${tx.detail}`);
+    assert.match(tx.detail, /1 posted entries do not balance in txn currency/);
+    const ma = check(cp, "gl-month-activity-tieout");
+    assert.equal(ma.ok, false, `month aggregate MUST fail: ${ma.detail}`);
+    assert.match(ma.detail, /1 drifted from a direct sum/, "replica skips maintenance: the missed-rebuild geometry");
     assert.equal(cp.pass, false, "a drifted fixture cannot be golden");
     for (const other of cp.checks.filter(
-      (c) => c.name !== "global-balance" && c.name !== "per-entry-balance",
+      (c) => c.name !== "global-balance" && c.name !== "per-entry-balance" &&
+        c.name !== "per-book-balance" && c.name !== "per-entry-txn-balance" &&
+        c.name !== "gl-month-activity-tieout",
     )) {
-      assert.equal(other.ok, true, `${other.name} must stay green here — only the balance mirrors fire`);
+      assert.equal(other.ok, true, `${other.name} must stay green here — only the balance/aggregate dimensions fire`);
     }
     // The drift is really stored (not a query artifact): direct recomputation agrees.
     const direct = await db.execute<{ s: string }>(sql`
