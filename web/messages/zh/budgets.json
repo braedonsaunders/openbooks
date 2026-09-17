@@ -114,6 +114,7 @@
     "submitted": "已提交审批。",
     "approved": "预算已批准。",
     "rejected": "预算已退回草稿。",
+    "budgetRequiresLines": "在提交审批之前，请至少添加一个非零预算行。",
     "actionFailed": "预算操作失败。",
     "revisionConflict": "此预算已在别处更改。请重新加载以继续。"
   },

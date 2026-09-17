@@ -114,6 +114,7 @@
     "submitted": "Enviado para aprobación.",
     "approved": "Presupuesto aprobado.",
     "rejected": "Presupuesto devuelto a borrador.",
+    "budgetRequiresLines": "Agregue al menos una línea presupuestaria distinta de cero antes de enviar para su aprobación.",
     "actionFailed": "La acción del presupuesto falló.",
     "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar."
   },

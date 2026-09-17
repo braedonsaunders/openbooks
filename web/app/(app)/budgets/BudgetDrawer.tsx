@@ -283,6 +283,10 @@ export function BudgetDrawer({
     initial.accounts.forEach((account) => initial.periods.forEach((period) => queueCell({ accountId: account.id, periodId: period.id, amount: '0.0000' })))
   }
 
+  // A refusal the operator can trigger (empty submit) pins on the record
+  // until the next action — a 4-second toast alone reads as nothing
+  // happening once it dismisses (F-t13-006).
+  const [actionError, setActionError] = useState<string | null>(null)
   async function action(actionName: string, extra: Record<string, unknown> = {}) {
     if (actionName === 'archive' && !window.confirm(t('confirm.archive'))) return
     if (actionName === 'copy_prior_actuals' && !window.confirm(t('confirm.copyPriorActuals'))) return
@@ -291,6 +295,7 @@ export function BudgetDrawer({
     if (actionName === 'approve' && !window.confirm(t('confirm.approve'))) return
     if (actionName === 'reject' && !window.confirm(t('confirm.reject'))) return
     setBusy(true)
+    setActionError(null)
     try {
       if (!(await flushCells()) || !(await saveMetadataNow())) return
       const data = await execute<{ id?: string; status?: BudgetStatus; revision: number }>(`/api/budgets/${scenario.id}/actions`, 'POST', {
@@ -315,9 +320,13 @@ export function BudgetDrawer({
       }
       toast.success(t(`feedback.${feedback[actionName]}`))
       router.refresh()
-    } catch {
-      setSaveState('error')
-      toast.error(t('feedback.actionFailed'))
+    } catch (error) {
+      if (error instanceof Error && error.message === 'budget_requires_lines') {
+        setActionError(t('feedback.budgetRequiresLines'))
+      } else {
+        setSaveState('error')
+        toast.error(t('feedback.actionFailed'))
+      }
     } finally {
       setBusy(false)
     }
@@ -367,6 +376,7 @@ export function BudgetDrawer({
   >
     <div className="space-y-4">
       {!editable ? <Alert variant="info" className="flex items-center gap-2"><LockKeyhole size={16} /><span>{t('workspace.locked')}</span></Alert> : null}
+      {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
       <Card>
         <CardContent className="grid gap-4 pt-6 md:grid-cols-2 xl:grid-cols-5">
           <div className="space-y-1.5"><Label htmlFor={editable ? 'scenario-name' : undefined}>{t('workspace.name')}</Label>{editable ? <Input id="scenario-name" value={name} onChange={(event) => setName(event.target.value)} /> : <ReadOnlyValue value={name} />}</div>

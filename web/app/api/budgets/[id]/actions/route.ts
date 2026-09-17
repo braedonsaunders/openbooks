@@ -66,6 +66,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // the flows adapter's change_status semantics.
       if (action === 'submit') {
         if (scenario.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_submitted', 409)
+        // The scenario-guard trigger refuses line-less submits with a raw
+        // Postgres raise (a 500 with no code). Refuse first with the typed
+        // message the drawer pins, using the trigger's exact predicate so
+        // the two can never disagree (F-t13-006).
+        const linePresent = (await tx.execute(sql`
+          select 1 from budget_lines
+           where org_id = ${user.orgId} and scenario_id = ${id} and amount <> 0 limit 1
+        `))
+        if (!linePresent.rows[0]) throw new BudgetMutationError('budget_requires_lines', 422)
         const nextRevision = expectedRevision + 1
         await tx.execute(sql`
           update budget_scenarios set
@@ -293,6 +302,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    // A line deleted between the pre-check and the status flip still trips
+    // the scenario-guard trigger: translate its raise to the same typed
+    // refusal instead of a 500.
+    if (error instanceof Error && error.message.includes('at least one non-zero line')) {
+      return NextResponse.json({ error: 'budget_requires_lines' }, { status: 422 })
+    }
     throw error
   }
 }

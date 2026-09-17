@@ -132,3 +132,31 @@ test('budget approval lifecycle: submit, approve, reject', { skip: !process.env.
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * F-t13-006: submitting a draft with no lines must be refused with a typed
+ * message, not a silent 500 from the scenario-guard trigger. The drawer
+ * keys its pinned refusal off this code.
+ */
+test('submitting a line-less draft is refused with budget_requires_lines', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Budget manager', 'budget_manager'))
+    const scenarioId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`)
+      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage"]'::jsonb where org_id = ${org.orgId} and key = 'budget_manager'`)
+      await db.execute(sql`
+        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
+        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Empty submit probe', 'budget', 'draft', ${manager}, ${manager})`)
+    })
+    state.user = asUser(manager, org.orgId, 'manager')
+    const refused = await withOrgContext(org.orgId, () =>
+      POST(request(scenarioId, { action: 'submit', expectedRevision: 1 }), params(scenarioId)))
+    assert.equal(refused.status, 422, `expected a typed refusal, got ${refused.status}`)
+    assert.deepEqual(await refused.json(), { error: 'budget_requires_lines' })
+    assert.equal((await scenarioState(org.orgId, scenarioId)).status, 'draft')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

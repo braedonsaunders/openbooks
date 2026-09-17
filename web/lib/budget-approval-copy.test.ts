@@ -13,7 +13,7 @@ const LOCALES = ['en', 'es', 'fr', 'de', 'ja', 'pt-BR', 'zh'] as const
 const KEYS: Record<string, string[]> = {
   actions: ['submit', 'approve', 'reject'],
   confirm: ['submit', 'approve', 'reject'],
-  feedback: ['submitted', 'approved', 'rejected'],
+  feedback: ['submitted', 'approved', 'rejected', 'budgetRequiresLines'],
 }
 
 test('budget approval buttons, confirms and feedback exist in every locale', () => {

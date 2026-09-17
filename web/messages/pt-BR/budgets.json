@@ -114,6 +114,7 @@
     "submitted": "Enviado para aprovação.",
     "approved": "Orçamento aprovado.",
     "rejected": "Orçamento devolvido para rascunho.",
+    "budgetRequiresLines": "Adicione pelo menos uma linha orçamentária diferente de zero antes de enviar para aprovação.",
     "actionFailed": "A ação do orçamento falhou.",
     "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar."
   },

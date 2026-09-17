@@ -114,6 +114,7 @@
     "submitted": "Sent for approval.",
     "approved": "Budget approved.",
     "rejected": "Budget returned to draft.",
+    "budgetRequiresLines": "Add at least one non-zero budget line before submitting for approval.",
     "actionFailed": "The budget action failed.",
     "revisionConflict": "This budget changed elsewhere. Reload to continue."
   },
