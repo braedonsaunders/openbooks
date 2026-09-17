@@ -476,8 +476,12 @@ export async function POST(req: Request) {
         const lines = [];
         if (Array.isArray(body.lines)) {
           for (const line of body.lines as Array<Record<string, unknown>>) {
-            const thisPeriod = canonicalDecimal(line.thisPeriodCompleted ?? "0", 4);
-            const stored = canonicalDecimal(line.materialsStored ?? "0", 4);
+            // Draw-entry inputs arrive as strings; an untouched cell submits
+            // "" (and untouched rows are omitted), so a blank draw reads as
+            // zero instead of failing the decimal parse.
+            const blankToZero = (v: unknown) => (typeof v === "string" && v.trim() === "" ? "0" : (v ?? "0"));
+            const thisPeriod = canonicalDecimal(blankToZero(line.thisPeriodCompleted), 4);
+            const stored = canonicalDecimal(blankToZero(line.materialsStored), 4);
             if (thisPeriod === null || stored === null) {
               throw new ConstructionBillingError("Draw amounts must be numbers with no more than four decimal places");
             }
