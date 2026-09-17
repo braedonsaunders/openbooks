@@ -22,11 +22,11 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../../../../lib/reports'
+import { agingByParty, agingCurrenciesInScope, agingDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
+import { parseReportQuery, resolveAgingCurrencyParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { reportTotalRowClass } from '../ReportTable'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
@@ -84,6 +84,12 @@ export interface AgingDetailRow {
   ageDays: string
   bucketLabel: string
   open: string
+  /** The document's own currency code — always shown, whatever basis converts. */
+  currency: string
+  /** The open in the document's own currency (unconverted). Summary rows
+   * cannot carry this: one party may owe in several currencies, so the
+   * txn leg lives at document grain only. */
+  txnOpen: string
   txn: { kind: 'transaction'; entryId: string; docKind: string | null; docId: string | null }
 }
 
@@ -104,6 +110,16 @@ export interface AgingData {
   labelBucket: string
   labelTotal: string
   labelTotals: string
+  labelDocCurrency: string
+  labelTxnOpen: string
+  /** Reporting-currency selector options: base first, then in-scope txn codes. */
+  currencyOptions: { value: string; label: string }[]
+  currencyValue: string
+  currencyBasisValue: 'base' | 'transaction'
+  labelCurrency: string
+  labelConvertFrom: string
+  labelBase: string
+  labelTransaction: string
   bucketLabels: Record<(typeof BUCKETS)[number], string>
   dashPlaceholder: string
   /** Set when underived consolidated rates block the report (F-t06-027):
@@ -167,15 +183,60 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     // documents alongside attributed ones; restricted views stay fail-closed.
     includeNullSubsidiary: subView?.subsidiary?.includeNullSubsidiary === true,
   }
-  const [summary, detailResult, opts, org] = subView
+  // Currency basis is opt-in and URL-driven (never component state) so the
+  // screen, its export, and its drill-downs all read the same selection.
+  // Never the shared filter bar's `basis`: that word means accrual/cash.
+  // The currency scope resolves before the readers: the validated target is
+  // an input to both rebuilds, not a display concern applied after them.
+  const [scope, opts, org] = subView
     ? await Promise.all([
-        agingByParty(side, asOf, dims),
-        detail ? agingDetail(side, asOf, dims) : null,
+        agingCurrenciesInScope(side, asOf, dims),
         dimensionOptions(),
         orgInfo(),
       ])
-    : [null, null, await dimensionOptions(), await orgInfo()]
-  const m = (v: string | number) => formatMoney(v, { currency: org?.base_currency })
+    : [null, await dimensionOptions(), await orgInfo()] as const
+  // One shared resolver with the export (report-filters): the screen and the
+  // CSV can never disagree on what a URL means. A hand-edited currency
+  // outside the in-scope list falls back to base (ruling 1).
+  const { basis: currencyBasis, currency: target } = scope
+    ? resolveAgingCurrencyParams(sp, scope)
+    : { basis: 'base' as AgingCurrencyBasis, currency: '' }
+  let summary: Awaited<ReturnType<typeof agingByParty>> | null = null
+  let detailResult: Awaited<ReturnType<typeof agingDetail>> | null = null
+  if (subView && scope) {
+    const runOpts = { basis: currencyBasis, reportingCurrency: target }
+    try {
+      ;[summary, detailResult] = await Promise.all([
+        agingByParty(side, asOf, dims, undefined, runOpts),
+        detail ? agingDetail(side, asOf, dims, undefined, runOpts) : null,
+      ])
+    } catch (e) {
+      // Same banner contract as underived consolidated rates (F-t06-027): a
+      // txn-basis report whose spots are underived renders the derive link,
+      // never numbers, and never a throw out of SSR.
+      if (!(e instanceof AgingRatesUnavailableError)) throw e
+      ratesBlocked = {
+        code: 'rates-not-derived',
+        title: tr('statement.ratesBlockedTitle'),
+        description: (e as Error).message,
+        deriveLabel: tr('statement.ratesBlockedAction'),
+        deriveHref: '/close',
+      }
+      summary = null
+      detailResult = null
+    }
+  }
+  const m = (v: string | number) => formatMoney(v, { currency: target || org?.base_currency })
+  // The txn leg formats in the DOCUMENT's currency. Registry codes are ISO
+  // by construction, but a hand-entered code must never crash the render —
+  // fall back to the raw amount with its code.
+  const mt = (v: string | number, ccy: string) => {
+    try {
+      return formatMoney(v, { currency: ccy })
+    } catch {
+      return `${v} ${ccy}`
+    }
+  }
   const noParty = t('noParty')
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
@@ -197,6 +258,9 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     side,
     asOf,
     dims,
+    // The drawer must reproduce the screen's selection, not the defaults.
+    currencyBasis,
+    currency: target || undefined,
     ...(partyId ? { partyId } : {}),
     ...(bucket ? { bucket } : {}),
   })
@@ -213,12 +277,17 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     drill: bucketDrill(`${name} · ${bucketLabels[b]}`, partyId ?? undefined, b),
   })
 
+  // Every open-balance surface states BOTH facts: the denomination (and, on
+  // the txn basis, which leg converted) and whether the figure is live or
+  // as-of. The aging rebuild is always as-of; the list cache is live — the
+  // two disagree on FX documents, and the label is what makes that legitimate.
+  const basisPhrase = currencyBasis === 'transaction' ? t('fromTransaction') : t('fromBase')
   return {
     title: `${side === 'ap' ? t('payablesTitle') : t('receivablesTitle')} · ${detail ? t('detail') : t('summary')}`,
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: t('asOf', { date: asOf }),
+    periodPhrase: `${t('asOf', { date: asOf })} · ${basisPhrase} · ${t('inCurrency', { currency: target || org?.base_currency || '' })}`,
     isDetail: Boolean(detailResult),
     isSummary: !detailResult,
     hasSummaryRows: (summary?.rows.length ?? 0) > 0,
@@ -232,6 +301,15 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     labelBucket: t('columns.bucket'),
     labelTotal: t('columns.total'),
     labelTotals: tr('trialBalance.totals'),
+    labelDocCurrency: t('columns.currency'),
+    labelTxnOpen: t('columns.txnOpen'),
+    currencyOptions: (scope?.currencies ?? []).map((c) => ({ value: c, label: c })),
+    currencyValue: target,
+    currencyBasisValue: currencyBasis,
+    labelCurrency: t('currency'),
+    labelConvertFrom: t('convertFrom'),
+    labelBase: t('baseOption'),
+    labelTransaction: t('transactionOption'),
     bucketLabels,
     dashPlaceholder: '—',
     summaryRows: (summary?.rows ?? []).map((r, i) => {
@@ -261,6 +339,8 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
       ageDays: String(r.ageDays),
       bucketLabel: bucketLabels[r.bucket],
       open: m(r.open),
+      currency: r.docCurrency,
+      txnOpen: mt(r.txnOpen, r.docCurrency),
       txn: { kind: 'transaction', entryId: r.docId, docKind: r.docKind, docId: r.docId },
     })),
     totals: {
@@ -363,6 +443,15 @@ export function agingSpec(data: AgingData): PageSpec {
           defaultPeriod: 'today',
           periodPresets: f('periodPresets'),
           actions: [
+            widget('currency-basis', {
+              currencies: data.currencyOptions,
+              currency: data.currencyValue,
+              currencyBasis: data.currencyBasisValue,
+              currencyLabel: data.labelCurrency,
+              basisLabel: data.labelConvertFrom,
+              baseLabel: data.labelBase,
+              transactionLabel: data.labelTransaction,
+            }, f('ratesReady')),
             widget('schedule-report', {
               definitionId: data.scheduleDefId ?? '',
               statementParams: data.scheduleParams,
@@ -399,7 +488,7 @@ export function agingSpec(data: AgingData): PageSpec {
               variant: 'report',
               rows: f('detailRows'),
               rowKey: item('key'),
-              emptyRow: { text: f('emptyLabel'), colSpan: 6, className: EMPTY_ROW_CLASS },
+              emptyRow: { text: f('emptyLabel'), colSpan: 8, className: EMPTY_ROW_CLASS },
               columns: [
                 column(rootF('labelParty'), partyCell()),
                 column(rootF('labelEntry'), txn(item('txn'), text(item('reference'))), {
@@ -414,6 +503,13 @@ export function agingSpec(data: AgingData): PageSpec {
                 column(rootF('labelTotal'), txn(item('txn'), money(item('open'))), {
                   align: 'right',
                   className: 'font-medium tabular-nums',
+                }),
+                column(rootF('labelDocCurrency'), text(item('currency')), {
+                  className: 'font-mono text-xs',
+                }),
+                column(rootF('labelTxnOpen'), txn(item('txn'), money(item('txnOpen'))), {
+                  align: 'right',
+                  className: 'tabular-nums',
                 }),
               ],
             }),

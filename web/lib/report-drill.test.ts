@@ -78,3 +78,37 @@ test('order drill routes conversion, backlog, and voided scopes through the righ
     'conversion-rate drills must include linked orders only without changing open or voided scopes',
   )
 })
+
+test('aging drill targets round-trip their currency selection', () => {
+  const target: ReportDrillTarget = {
+    kind: 'aging',
+    label: 'Acme · 1–30',
+    side: 'ar',
+    asOf: '2026-07-31',
+    currencyBasis: 'transaction',
+    currency: 'EUR',
+  }
+  const parsed = parseReportDrillTarget(encodeReportDrillTarget(target))
+  assert.equal(parsed?.kind, 'aging')
+  if (parsed?.kind !== 'aging') assert.fail('expected aging target')
+  assert.equal(parsed.currencyBasis, 'transaction')
+  assert.equal(parsed.currency, 'EUR')
+})
+
+test('aging drill parsing clamps currency fields instead of trusting the URL', () => {
+  const bad = parseReportDrillTarget(JSON.stringify({
+    kind: 'aging', label: 'x', side: 'ar', asOf: '2026-07-31',
+    currencyBasis: 'cash', currency: 'eur',
+  }))
+  assert.equal(bad?.kind, 'aging')
+  if (bad?.kind !== 'aging') assert.fail('expected aging target')
+  assert.equal(bad.currencyBasis, undefined)
+  assert.equal(bad.currency, undefined)
+  const injection = parseReportDrillTarget(JSON.stringify({
+    kind: 'aging', label: 'x', side: 'ar', asOf: '2026-07-31',
+    currency: "EUR' or true --",
+  }))
+  assert.equal(injection?.kind, 'aging')
+  if (injection?.kind !== 'aging') assert.fail('expected aging target')
+  assert.equal(injection.currency, undefined)
+})

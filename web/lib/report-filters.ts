@@ -15,6 +15,7 @@ import type {
   StatementMode,
 } from './statement-matrix'
 import type { ReportDrillTarget } from './report-drill'
+import type { AgingCurrencyBasis } from './reports/aging'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
 export type ProjectReportScope = 'active' | 'all'
@@ -61,6 +62,9 @@ export const REPORT_PARAM_KEYS = {
   sub: 'sub',
   zero: 'zero',
   scale: 'scale',
+  /** Aging reporting currency; the shared `basis` key means accrual/cash. */
+  currency: 'currency',
+  currencyBasis: 'currencyBasis',
 } as const
 
 type ParamSource = URLSearchParams | Record<string, string | undefined>
@@ -96,6 +100,36 @@ function segmentFilters(sp: ParamSource): Record<string, string> {
 }
 
 /** Parse a filter query from search params, applying safe defaults. */
+export interface AgingCurrencyScope {
+  baseCurrency: string
+  currencies: string[]
+}
+
+export interface AgingCurrencySelection {
+  basis: AgingCurrencyBasis
+  currency: string
+}
+
+/**
+ * One resolver for the aging reporting currency and convert-from basis, used
+ * by the screen AND the export so the two can never disagree on what a URL
+ * means. The basis is opt-in (anything but `transaction` reads base — the
+ * numbers finance already reconciled), and a currency outside the report's
+ * own in-scope list falls back to base rather than producing a report in a
+ * currency no document uses.
+ */
+export function resolveAgingCurrencyParams(
+  sp: ParamSource,
+  scope: AgingCurrencyScope,
+): AgingCurrencySelection {
+  const basis = read(sp, REPORT_PARAM_KEYS.currencyBasis)
+  const requested = read(sp, REPORT_PARAM_KEYS.currency)
+  return {
+    basis: basis === 'transaction' ? 'transaction' : 'base',
+    currency: requested && scope.currencies.includes(requested) ? requested : scope.baseCurrency,
+  }
+}
+
 export function parseReportQuery(sp: ParamSource): ReportQuery {
   const periodRaw = read(sp, REPORT_PARAM_KEYS.period)
   return {
