@@ -3,16 +3,34 @@
   "title": "Kontinuierlicher Abschluss",
   "description": "Überwacht kontinuierlich die Abschlussbereitschaft und deckt belegbasierte Buchhaltungs- und Finanzausnahmen zur Prüfung auf.",
   "search": "Feststellungen durchsuchen…",
-  "tabs": { "ariaLabel": "Abschnitte des kontinuierlichen Abschlusses", "findings": "Feststellungen", "reports": "Berichte" },
+  "tabs": {
+    "ariaLabel": "Abschnitte des kontinuierlichen Abschlusses",
+    "findings": "Feststellungen",
+    "reports": "Berichte"
+  },
   "agents": {
     "accounting": "Buchhaltung",
-    "finance": "Finanzen"
+    "finance": "Finanzen",
+    "forensics": "Forensik",
+    "collections": "Inkasso",
+    "payables": "Kreditorenbuchhaltung",
+    "reconciliation": "Bankabstimmung",
+    "hygiene": "Datenhygiene",
+    "tax": "Steuer",
+    "payroll": "Lohnabrechnung",
+    "projects": "Projekte",
+    "cash": "Liquidität"
   },
   "metrics": {
     "active": "Aktiv",
     "critical": "Kritisch",
     "accounting": "Buchhaltungsfeststellungen",
-    "finance": "Finanzfeststellungen"
+    "finance": "Finanzfeststellungen",
+    "collections": "Inkassofeststellungen",
+    "payables": "Kreditorenfeststellungen",
+    "reconciliation": "Bankabstimmungsfeststellungen",
+    "hygiene": "Datenhygienefeststellungen",
+    "forensics": "Forensikfeststellungen"
   },
   "filters": {
     "agent": "Agent",
@@ -49,6 +67,78 @@
       "title": "Veraltete Buchhaltungsdokumente",
       "description": "Buchhaltungsdokumente im Entwurf oder in Bearbeitung sind über das konfigurierte Alter hinaus unerledigt geblieben."
     },
+    "forensic_weekend_postings": {
+      "title": "Wochenendbuchung",
+      "description": "Ein Ausgabenbeleg wurde an einem Wochenende gebucht."
+    },
+    "forensic_round_dollar": {
+      "title": "Glatte Beträge",
+      "description": "Ein Ausgabenbeleg lautet auf einen glatten Tausenderbetrag."
+    },
+    "forensic_threshold_trap": {
+      "title": "Knapp-unter-Limit-Betrag",
+      "description": "Ein Ausgabenbeleg liegt knapp unter einer runden Genehmigungsgrenze."
+    },
+    "forensic_duplicate_bills": {
+      "title": "Möglicher doppelter Beleg",
+      "description": "Zwei Eingangsrechnungen teilen sich Lieferant, Art und Betrag innerhalb weniger Tage."
+    },
+    "tax_missing_codes": {
+      "title": "Dokumente ohne Steuercodes",
+      "description": "Gebuchte Dokumente haben unversteuerte Zeilen, die in der Erklärung fehlen."
+    },
+    "tax_missing_registration": {
+      "title": "Fehlende Steuerregistrierung",
+      "description": "Ein Erklärungsformular hat keine hinterlegte Registrierungsnummer."
+    },
+    "tax_return_blocked": {
+      "title": "Blockierte Steuererklärung",
+      "description": "Eine konfigurierte Erklärung kann nicht berechnet werden."
+    },
+    "tax_unlocked_period": {
+      "title": "Entsperrte Steuerperiode",
+      "description": "Die letzte abgeschlossene Periode hat keine geschlossene Steuersperre."
+    },
+    "payroll_remittance_due": {
+      "title": "Fällige Abführung",
+      "description": "Abzuführende Einbehalte sind fällig und werden von keinem Beleg gedeckt."
+    },
+    "payroll_unknown_accounts": {
+      "title": "Unbekanntes Lohnkonto",
+      "description": "Ein festgeschriebener Lauf hat Buchungsreste, die weder ein Erklärungs- noch ein Verbindlichkeitskonto übernehmen kann."
+    },
+    "payroll_missing_elections": {
+      "title": "Fehlende gesetzliche Wahlen",
+      "description": "Mitarbeiter haben keine Wahlen hinterlegt."
+    },
+    "payroll_yearend_gaps": {
+      "title": "Jahresendlücke",
+      "description": "Ein erforderlicher Lohnzettel fehlt."
+    },
+    "project_negative_margin": {
+      "title": "Negative Projektmarge",
+      "description": "Ein Projekt arbeitet mit Verlust."
+    },
+    "project_budget_overrun": {
+      "title": "Projektbudgetüberschreitung",
+      "description": "Kosten zuzüglich offener Verpflichtungen haben das genehmigte Budget überschritten."
+    },
+    "project_stale_unbilled": {
+      "title": "Veraltete nicht abgerechnete Arbeit",
+      "description": "Abrechenbare Arbeit ist über den Abrechnungsstichtag hinaus immer noch nicht abgerechnet."
+    },
+    "cash_low_balance": {
+      "title": "Niedriger Liquiditätssaldo",
+      "description": "Das Bankguthaben liegt unter der Untergrenze."
+    },
+    "cash_bill_crunch": {
+      "title": "Fälligkeitsengpass",
+      "description": "Bald fällige Belege übersteigen die verfügbaren Mittel."
+    },
+    "cash_forecast_shortfall": {
+      "title": "Prognoselücke",
+      "description": "Die Liquiditätsprognose rutscht unter null."
+    },
     "missing_approved_budget": {
       "title": "Kein genehmigtes Budget",
       "description": "Die Finanzüberwachung kann keine Ist-Werte vergleichen, da kein genehmigtes Budget verfügbar ist."
@@ -64,6 +154,70 @@
     "gross_margin_decline": {
       "title": "Rückgang der Bruttomarge",
       "description": "Die Bruttomarge ist gegenüber der vorherigen abgeschlossenen Periode über den konfigurierten Schwellenwert hinaus gesunken."
+    },
+    "overdue_customer_balance": {
+      "title": "Überfälliger Kunde",
+      "description": "Ein Kunde hat Rückstände über der konfigurierten Schwelle und kommt auf die priorisierte Anrufliste."
+    },
+    "broken_payment_promise": {
+      "title": "Gebrochenes Zahlungsversprechen",
+      "description": "Eine Rechnung hat ihr erwartetes Zahldatum ohne Zahlung überschritten."
+    },
+    "credit_hold_candidate": {
+      "title": "Kreditsperrkandidat",
+      "description": "Gealterte Rückstände rechtfertigen Vorauszahlung für neue Aufträge."
+    },
+    "duplicate_bills": {
+      "title": "Doppelte Belege",
+      "description": "Zwei Belege teilen sich Lieferant, Art und Betrag innerhalb des Doppelerkennungsfensters."
+    },
+    "bills_due_before_payrun": {
+      "title": "Belege vor Lohnlauf fällig",
+      "description": "Offene Belege werden innerhalb des Lohnlauf-Horizonts fällig."
+    },
+    "early_pay_discount_opportunity": {
+      "title": "Frühzahlungsrabatt",
+      "description": "Offene Belege liegen innerhalb eines aktiven Rabattfensters."
+    },
+    "bills_missing_approval": {
+      "title": "Belege ohne Genehmigung",
+      "description": "Belege bleiben über das Veraltungsfenster hinaus im Entwurf oder in der Genehmigung hängen."
+    },
+    "bank_line_match_candidate": {
+      "title": "Kandidat für Zeilenabgleich",
+      "description": "Eine nicht zugeordnete Auszugszeile hat eine sichere Übereinstimmung mit einer Hauptbuchzeile."
+    },
+    "stale_reconciliation": {
+      "title": "Veraltete Abstimmung",
+      "description": "Eine laufende Sitzung blieb über das Veraltungsfenster hinaus unberührt."
+    },
+    "never_reconciled_account": {
+      "title": "Nie abgestimmtes Konto",
+      "description": "Ein abstimmbares Konto zeigt Bewegungen, hatte aber nie eine Sitzung."
+    },
+    "control_account_type_mismatch": {
+      "title": "Kontrollkonto-Typkonflikt",
+      "description": "Ein Konto führt offene Posten oder einen Namen, die seinem Typ widersprechen."
+    },
+    "duplicate_party_identity": {
+      "title": "Doppelter Geschäftspartner",
+      "description": "Zwei Geschäftspartner teilen sich einen normalisierten Namen oder eine Steueridentität."
+    },
+    "item_missing_tax_code": {
+      "title": "Artikel ohne Steuercode",
+      "description": "Ein aktiver Artikel hat keinen Steuercode zugeordnet."
+    },
+    "project_missing_cost_budget": {
+      "title": "Projekt ohne Kostenbudget",
+      "description": "Ein aktives Projekt hat keine Budgetzeilen."
+    },
+    "budget_scenario_without_lines": {
+      "title": "Budgetszenario ohne Zeilen",
+      "description": "Ein genehmigtes oder eingereichtes Szenario enthält keine Zeilen."
+    },
+    "unmapped_payroll_component": {
+      "title": "Nicht zugeordneter Lohnbestandteil",
+      "description": "Einem Lohnbestandteil fehlen Buchungskonten oder der Abführungsempfänger."
     }
   },
   "summary": {
@@ -131,7 +285,35 @@
     "document": "Buchhaltungsdokument",
     "reconciliation": "Abstimmung",
     "budget_variance": "Budgetabweichung",
-    "period_comparison": "Periodenvergleich"
+    "period_comparison": "Periodenvergleich",
+    "account_mismatch": "Kontenabweichungsdetails",
+    "accounting_period": "Buchungsperiode",
+    "broken_promise": "Gebrochenes Zahlungsversprechen",
+    "cash_balance": "Liquiditätssaldo",
+    "cash_crunch": "Liquiditätsengpass",
+    "cash_forecast": "Liquiditätsprognose",
+    "credit_hold_case": "Kreditsperrfall",
+    "discount_bill": "Beleg mit Frühzahlungsrabatt",
+    "duplicate_bill_pair": "Doppelter Beleg",
+    "duplicate_party": "Doppelter Geschäftspartner",
+    "employee": "Mitarbeiter",
+    "empty_scenario": "Leeres Budgetszenario",
+    "match_candidate": "Abstimmungskandidat",
+    "overdue_invoice": "Überfällige Rechnung",
+    "pay_run": "Lohnlauf",
+    "payment_behaviour": "Zahlungsverhalten",
+    "payrun_bill": "Lohnlauf-Beleg",
+    "project_budget": "Projektbudget",
+    "project_margin": "Projektmarge",
+    "project_unbilled": "Nicht abgerechnete Projektarbeit",
+    "remittance_group": "Abführungsgruppe",
+    "stalled_bill": "Liegengebliebener Beleg",
+    "tax_return": "Steuererklärung",
+    "tax_return_form": "Steuerformular",
+    "unbudgeted_project": "Projekt ohne Budget",
+    "unmapped_component": "Nicht zugeordneter Lohnbestandteil",
+    "unreconciled_activity": "Nicht abgestimmte Bewegungen",
+    "untaxed_item": "Artikel ohne Steuercode"
   },
   "actions": {
     "settings": "Agenteneinstellungen",
