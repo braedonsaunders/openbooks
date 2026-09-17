@@ -146,6 +146,8 @@
     "reorderPoint": "Reorder point",
     "preferredStockLevel": "Preferred stock level",
     "selectAccount": "Select an account",
+  "separationConflict": "Must be different from the inventory asset account",
+  "separationBlocked": "Fix the highlighted accounts before saving — offset accounts must differ from the inventory asset account.",
     "allowNegativeInventory": "Allow negative inventory",
     "negativeCostBasis": "Provisional cost basis",
     "provisionalUnitCost": "Configured provisional unit cost",
