@@ -56,12 +56,24 @@ function numericValue(value: Exclude<MoneyValue, null | undefined>): IntlMathema
   return Object.is(value, -0) ? 0 : value
 }
 
+/**
+ * ICU emits U+202F (narrow no-break space) as the grouping separator for fr
+ * and a few other locales, but Chromium renders it zero-width in a system-ui
+ * stack (F-x6-001 item 5: fr amounts read ungrouped while the DOM stays
+ * correct). Normalize to the universally rendered U+00A0 — still
+ * non-breaking, and the pre-CLDR-38 fr convention.
+ */
+function visibleSpaces(formatted: string): string {
+  return formatted.replace(/\u202f/g, '\u00a0')
+}
+
+
 function decimalFallback(
   value: IntlMathematicalValue,
   locale: string,
   options: MoneyOptions,
 ): string {
-  return new Intl.NumberFormat(locale, {
+  return visibleSpaces(new Intl.NumberFormat(locale, {
     style: 'decimal',
     notation: options.notation,
     compactDisplay: options.compactDisplay,
@@ -69,7 +81,7 @@ function decimalFallback(
     maximumFractionDigits: options.maximumFractionDigits,
     signDisplay: options.signDisplay,
     useGrouping: options.useGrouping,
-  }).format(value as never)
+  }).format(value as never))
 }
 
 /** Locale-aware decimal presentation that preserves exact numeric strings. */
@@ -78,7 +90,7 @@ export function formatDecimal(locale: string, value: MoneyValue, options: Decima
   const number = numericValue(value)
   if (number === null) return String(value)
   const resolvedLocale = Intl.getCanonicalLocales(locale)[0] ?? 'en'
-  return new Intl.NumberFormat(resolvedLocale, {
+  return visibleSpaces(new Intl.NumberFormat(resolvedLocale, {
     style: 'decimal',
     notation: options.notation,
     compactDisplay: options.compactDisplay,
@@ -86,7 +98,7 @@ export function formatDecimal(locale: string, value: MoneyValue, options: Decima
     maximumFractionDigits: options.maximumFractionDigits,
     signDisplay: options.signDisplay,
     useGrouping: options.useGrouping,
-  }).format(number as never)
+  }).format(number as never))
 }
 
 export function createMoneyFormatter(locale: string, defaultCurrency: string): MoneyFormatter {
@@ -100,7 +112,7 @@ export function createMoneyFormatter(locale: string, defaultCurrency: string): M
 
     const currency = normalizedCurrency(options.currency ?? resolvedDefaultCurrency)
     try {
-      return new Intl.NumberFormat(resolvedLocale, {
+      return visibleSpaces(new Intl.NumberFormat(resolvedLocale, {
         style: 'currency',
         currency,
         currencyDisplay: options.currencyDisplay ?? 'symbol',
@@ -111,7 +123,7 @@ export function createMoneyFormatter(locale: string, defaultCurrency: string): M
         maximumFractionDigits: options.maximumFractionDigits,
         signDisplay: options.signDisplay,
         useGrouping: options.useGrouping,
-      }).format(number as never)
+      }).format(number as never))
     } catch {
       // Unknown/private currency codes remain identifiable instead of silently
       // becoming dollars. This also keeps partially migrated source data usable.
