@@ -346,6 +346,8 @@
     "toAccount": "转入账户",
     "fromAccount": "转出账户",
     "depositTo": "存入",
+    "noBankAccounts": "暂无银行账户。",
+    "noBankAccountsCta": "前往银行模块添加",
     "transferAmount": "金额",
     "accountColumn": "科目",
     "accountPlaceholder": "科目…",

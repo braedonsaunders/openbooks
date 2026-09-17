@@ -2216,7 +2216,21 @@ export function DocumentDrawer({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
               <FieldLabel fieldName={config.kind === 'deposit' ? t('drawer.depositTo') : t('drawer.fromAccount')}>{config.kind === 'deposit' ? t('drawer.depositTo') : t('drawer.fromAccount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
-              {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={(customValues.controlAccountId as string) ?? ''} onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>}
+              {editable ? (
+                // Zero bank accounts is valid data (a fresh org), not a broken
+                // source: name it with a way forward instead of a dead
+                // 'No matches' picker with no search.
+                (bankAccounts ?? accounts).length > 0 ? (
+                  <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={(customValues.controlAccountId as string) ?? ''} onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} />
+                ) : (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {t('drawer.noBankAccounts')}{' '}
+                    <Link href="/banking" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                      {t('drawer.noBankAccountsCta')}
+                    </Link>
+                  </p>
+                )
+              ) : <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>}
             </div>
           </div>
         ) : null}

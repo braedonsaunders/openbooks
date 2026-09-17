@@ -536,3 +536,14 @@ test('the check form exposes an optional payee and the funding bank without mand
   assert.match(DRAWER_SOURCE, /\{config\.fundingSource === 'bank' \? \(/)
   assert.ok(!DRAWER_SOURCE.includes("{config.kind === 'deposit' ? ("))
 })
+
+test('the funding-bank picker names the empty-data state with a Banking link', () => {
+  // F-t05-008 follow-up: SIM Northstar has zero bank accounts, so the
+  // From-account picker opened with only a disabled 'No matches' and no
+  // search — indistinguishable from a broken source. An empty bank list
+  // must render an explicit empty state pointing at Banking instead.
+  assert.match(DRAWER_SOURCE, /\(bankAccounts \?\? accounts\)\.length > 0 \? \(/)
+  assert.match(DRAWER_SOURCE, /drawer\.noBankAccounts/)
+  assert.match(DRAWER_SOURCE, /drawer\.noBankAccountsCta/)
+  assert.match(DRAWER_SOURCE, /<Link href="\/banking"/)
+})
