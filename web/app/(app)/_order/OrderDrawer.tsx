@@ -165,6 +165,10 @@ function targetHref(kind: string, id: string): string {
       return `/purchase-orders?order=${id}&mode=edit`
     case 'quote':
       return `/estimates?estimate=${id}&mode=edit`
+    case 'sales_fulfillment':
+      // Shipments are immutable evidence on the order they fulfil; the
+      // inventory ledger is where their movements are inspected (docHref).
+      return '/inventory'
     default:
       return '/'
   }

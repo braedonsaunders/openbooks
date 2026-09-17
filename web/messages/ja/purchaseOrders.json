@@ -13,7 +13,9 @@
     "kinds": {
       "salesOrder": "受注",
       "invoice": "請求書",
-      "bill": "仕入請求書"
+      "bill": "仕入請求書",
+      "receipt": "入荷通知書",
+      "shipment": "出荷"
     },
     "docKind": "{kind, select, quote {見積} sales_order {受注} purchase_order {発注書} customer_invoice {請求書} vendor_bill {仕入請求書} purchase_receipt {入荷通知書} sales_fulfillment {出荷} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {仕入先} other {得意先}}",

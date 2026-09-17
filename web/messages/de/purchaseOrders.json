@@ -13,7 +13,9 @@
     "kinds": {
       "salesOrder": "Kundenauftrag",
       "invoice": "Rechnung",
-      "bill": "Eingangsrechnung"
+      "bill": "Eingangsrechnung",
+      "receipt": "Wareneingang",
+      "shipment": "Versand"
     },
     "docKind": "{kind, select, quote {Angebot} sales_order {Kundenauftrag} purchase_order {Bestellung} customer_invoice {Ausgangsrechnung} vendor_bill {Eingangsrechnung} purchase_receipt {Wareneingang} sales_fulfillment {Versand} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Lieferant} other {Kunde}}",

@@ -13,7 +13,9 @@
     "kinds": {
       "salesOrder": "Commande client",
       "invoice": "Facture",
-      "bill": "Facture fournisseur"
+      "bill": "Facture fournisseur",
+      "receipt": "Réception de marchandises",
+      "shipment": "Expédition"
     },
     "docKind": "{kind, select, quote {Soumission} sales_order {Commande client} purchase_order {Bon de commande} customer_invoice {Facture} vendor_bill {Facture fournisseur} purchase_receipt {Réception de marchandises} sales_fulfillment {Expédition} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Fournisseur} other {Client}}",
