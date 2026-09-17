@@ -130,6 +130,35 @@ export async function assertPeriodModulesOpen(
   }
 }
 
+/**
+ * Non-throwing companion to assertPeriodModulesOpen for engines whose
+ * discovery is advisory: the depreciation and recognition runners skip a
+ * closed period instead of failing it. Same gate, same exemption policy — a
+ * `false` here means the throwing gate would refuse, including for
+ * source-owned imported locks unless the caller explicitly opts into
+ * `allowImportedLocks` (only historical replay does).
+ */
+export async function arePeriodModulesOpen(
+  executor: SqlExecutor,
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds: string[];
+    modules: CloseModule[];
+    /** Historical source replay may cross source-owned locks, never user locks. */
+    allowImportedLocks?: boolean;
+  },
+): Promise<boolean> {
+  try {
+    await assertPeriodModulesOpen(executor, args);
+    return true;
+  } catch (error) {
+    if (error instanceof CloseError) return false;
+    throw error;
+  }
+}
+
 type CalendarRow = {
   id: string;
   cadence:
