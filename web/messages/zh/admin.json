@@ -521,7 +521,10 @@
       "scopesHeading": "权限作用域",
       "scopesHint": "选择此密钥授予的权限——至少需要选择一项。密钥仅授予此处所选的权限，绝不会继承所有者的完整权限集。",
       "scopesCount": "{count, plural, one {已选 # 项权限} other {已选 # 项权限}}",
-      "scopesRequired": "请至少选择一个权限作用域。"
+      "scopesRequired": "请至少选择一个权限作用域。",
+      "rateLimitLabel": "每分钟请求数",
+      "rateLimitPlaceholder": "无限制",
+      "rateLimitHint": "此密钥每分钟可发出的最大请求数。留空表示无限制。"
     }
   },
   "settings": {
@@ -2145,13 +2148,207 @@
       "navTitle": "支付服务商"
     },
     "agents": {
-      "overview": {
-        "scanAlreadyRunning": "扫描已在运行。"
-      },
       "nav": {
         "overview": "概览",
         "library": "库",
         "activity": "活动"
+      },
+      "overview": {
+        "title": "代理",
+        "description": "监视账簿并提出可复核的后续步骤的后台代理。它们绝不会自行过账或编辑记录。",
+        "configure": "配置",
+        "runNow": "立即运行",
+        "enabled": "开",
+        "disabled": "关",
+        "controlsEnabled": "{total} 项检查中已开 {count} 项",
+        "manualOnly": "仅手动运行",
+        "cadences": {
+          "daily": "每天",
+          "weekly": "每周"
+        },
+        "materialitySummary": "重要性 {amount}",
+        "lastRun": "上次运行 {date} · {status}",
+        "runStatus": {
+          "completed": "已完成",
+          "failed": "失败",
+          "skipped": "已跳过",
+          "running": "运行中"
+        },
+        "neverRun": "从未运行",
+        "nextRun": "下次 {date}",
+        "openFindings": "{count, plural, one {# 项待处理发现} other {# 项待处理发现}}",
+        "reviewWork": "复核工作",
+        "featureOff": "结账监控模块已关闭，因此无法启用或运行包。",
+        "enableModule": "在“功能”中打开",
+        "featureOffError": "请先打开结账监控模块，再启用包。",
+        "toggleFailed": "无法保存包设置。",
+        "scanComplete": "{count, plural, one {发现 # 项} other {发现 # 项}}",
+        "scanFailed": "扫描启动失败。",
+        "scanAlreadyRunning": "扫描已在运行。",
+        "guideLink": "设置指南",
+        "columns": {
+          "pack": "包",
+          "status": "状态",
+          "schedule": "计划",
+          "lastRun": "上次运行",
+          "findings": "发现",
+          "actions": "操作"
+        },
+        "kpis": {
+          "enabled": "已开包数",
+          "enabledValue": "{count} / {total}",
+          "openFindings": "待处理发现",
+          "runs7d": "运行 · 7 天",
+          "failed7d": "失败 · 7 天"
+        }
+      },
+      "library": {
+        "title": "库",
+        "description": "注册表提供的所有包——读取内容、提议内容和需求。安装即使用默认检查启用包。",
+        "install": "安装",
+        "installed": "已安装",
+        "configure": "配置",
+        "readsLabel": "读取",
+        "proposesLabel": "提议",
+        "needsLabel": "需求",
+        "checksTitle": "检查 ({count})",
+        "checksNote": "默认开启 {total} 项中的 {count} 项",
+        "moduleRequires": "需要 {feature} 模块",
+        "registryNote": "包 {key} · {count} 项检查 · 在代理注册表中声明",
+        "installFailed": "无法安装包。",
+        "installedToast": "已使用默认检查安装 {name}。"
+      },
+      "policy": {
+        "backLabel": "全部代理",
+        "notificationsTitle": "发现通知",
+        "notificationsDescription": "此包的发现发送给谁、如何发送。路由保存在策略中——发现始终显示在“活动”下。",
+        "modes": {
+          "findings_only": {
+            "title": "仅发现",
+            "description": "无通知——在“活动”下复核发现。"
+          },
+          "digest": {
+            "title": "每日摘要",
+            "description": "每天一份新发现摘要。"
+          },
+          "immediate": {
+            "title": "即时",
+            "description": "每条新发现一条通知。"
+          }
+        },
+        "rolesLabel": "角色",
+        "usersLabel": "人员",
+        "noTargets": "无",
+        "usersTruncatedNote": "仅显示前 200 人。",
+        "deliveryNote": "邮件发送尚未接通——此处仅保存谁应收到什么。发现暂且始终显示在“活动”下。",
+        "rolesPlaceholder": "添加角色…",
+        "usersPlaceholder": "添加人员…"
+      },
+      "activity": {
+        "title": "活动",
+        "description": "所有包的每次代理扫描——状态、耗时、发现和错误。可在此重新运行任何包。",
+        "allPacks": "全部包",
+        "allStatuses": "全部状态",
+        "sinceColumn": "时间范围",
+        "sinceAll": "全部时间",
+        "since": {
+          "day": "过去 24 小时",
+          "week": "过去 7 天"
+        },
+        "packColumn": "包",
+        "triggerColumn": "触发方式",
+        "triggers": {
+          "manual": "手动",
+          "scheduler": "计划"
+        },
+        "statusColumn": "状态",
+        "startedColumn": "开始时间",
+        "durationColumn": "耗时",
+        "detectedColumn": "发现数",
+        "resolvedColumn": "已解决",
+        "actionsColumn": "操作",
+        "rerun": "重新运行",
+        "viewFindings": "发现",
+        "empty": "暂无运行。",
+        "emptyHint": "从概览运行一个包，即可在此看到它的首次扫描。",
+        "truncatedNote": "共 {total} 次运行，仅显示最新 {shown} 次。",
+        "totalNote": "{count, plural, one {# 次运行} other {# 次运行}}",
+        "showMore": "显示更多",
+        "loadFailed": "无法加载运行记录。"
+      },
+      "packs": {
+        "accounting": {
+          "title": "会计控制",
+          "description": "未核对的银行活动、不平的对账和阻碍结账的陈旧草稿。",
+          "reads": "银行对账单与对账、未结会计单据。",
+          "proposes": "待清除事项的复核清单——绝不过账或编辑记录。"
+        },
+        "finance": {
+          "title": "财务控制",
+          "description": "缺失的已批预算、不利差异和期间业绩下滑。",
+          "reads": "已批预算方案、实际数和期间收入。",
+          "proposes": "指明具体账户的差异提示——仅复核，不记账。"
+        },
+        "collections": {
+          "title": "催收",
+          "description": "结合付款行为的逾期客户余额、失信承诺和信用冻结候选。",
+          "reads": "未结应收、承诺和付款历史。",
+          "proposes": "催款草稿和优先外呼清单，供复核。"
+        },
+        "payables": {
+          "title": "应付",
+          "description": "重复账单、下次付款周期前到期的账单、早付折扣和缺失的审批。",
+          "reads": "供应商账单、审批和付款日历。",
+          "proposes": "以复核卡形式呈现付款周期——绝不自动付款。"
+        },
+        "reconciliation": {
+          "title": "银行对账",
+          "description": "有高可信匹配候选的未核对银行行、陈旧对账和从未对过账的账户。",
+          "reads": "银行对账单行与对账状态。",
+          "proposes": "逐条确认的匹配命令。"
+        },
+        "hygiene": {
+          "title": "数据卫生",
+          "description": "控制账户不符、重复往来单位，以及缺少所需编码、预算或映射的记录。",
+          "reads": "会计科目、往来单位、物料、项目、预算和薪资组件。",
+          "proposes": "补救措施为某项设置时的设置修复卡。"
+        },
+        "forensics": {
+          "title": "取证",
+          "description": "周末过账、整数金额、略低于限额的金额和重复账单。",
+          "reads": "支出单据和哨兵仪表板。",
+          "proposes": "每条发现附带哨兵复核链接——仅复核，不记账。"
+        },
+        "tax": {
+          "title": "税务",
+          "description": "缺失的税码、未注册的报表、无法计算的申报和未锁定的申报期间。",
+          "reads": "已过账单据、申报表、登记和期间锁定。",
+          "proposes": "每条发现附带申报复核链接——仅复核，不记账。"
+        },
+        "payroll": {
+          "title": "薪资",
+          "description": "应缴款、未知账户、缺失选项和年末缺口。",
+          "reads": "已提交的薪资计算、缴款组、雇员档案和法定税率。",
+          "proposes": "缴款与雇员复核链接——仅复核，不记账。"
+        },
+        "projects": {
+          "title": "项目",
+          "description": "负毛利、预算超支和陈旧未开票工作。",
+          "reads": "已过账项目成本与收入、已批预算、未结承诺和未开票工作。",
+          "proposes": "项目复核链接——仅复核，不记账。"
+        },
+        "cash": {
+          "title": "资金",
+          "description": "低余额、账单挤兑和预测缺口。",
+          "reads": "银行余额、未结应收应付和资金预测。",
+          "proposes": "银行复核链接——仅复核，不记账。"
+        }
+      },
+      "runStatuses": {
+        "completed": "已完成",
+        "failed": "失败",
+        "skipped": "已跳过",
+        "running": "运行中"
       }
     },
     "readiness": {

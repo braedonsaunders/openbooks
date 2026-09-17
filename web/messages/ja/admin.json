@@ -521,7 +521,10 @@
       "scopesHeading": "権限スコープ",
       "scopesHint": "このキーが付与する権限を選択します。少なくとも1つ選択する必要があります。キーが付与するのはここで選択した権限のみで、所有者の全権限が継承されることはありません。",
       "scopesCount": "{count, plural, one {# 件の権限を選択中} other {# 件の権限を選択中}}",
-      "scopesRequired": "少なくとも1つの権限スコープを選択してください。"
+      "scopesRequired": "少なくとも1つの権限スコープを選択してください。",
+      "rateLimitLabel": "1分あたりのリクエスト数",
+      "rateLimitPlaceholder": "無制限",
+      "rateLimitHint": "このキーが1分間に実行できる最大リクエスト数。制限なしの場合は空白のままにします。"
     }
   },
   "settings": {
@@ -2148,13 +2151,207 @@
       "navTitle": "決済プロバイダー"
     },
     "agents": {
-      "overview": {
-        "scanAlreadyRunning": "スキャンは既に実行中です。"
-      },
       "nav": {
         "overview": "概要",
         "library": "ライブラリ",
         "activity": "アクティビティ"
+      },
+      "overview": {
+        "title": "エージェント",
+        "description": "帳簿を監視し、レビュー可能な次の手順を提案するバックグラウンドエージェント。記録を独自に投稿・編集することはありません。",
+        "configure": "設定",
+        "runNow": "今すぐ実行",
+        "enabled": "オン",
+        "disabled": "オフ",
+        "controlsEnabled": "{total} 件中 {count} 件のチェックがオン",
+        "manualOnly": "手動実行のみ",
+        "cadences": {
+          "daily": "毎日",
+          "weekly": "毎週"
+        },
+        "materialitySummary": "重要性 {amount}",
+        "lastRun": "前回実行 {date} · {status}",
+        "runStatus": {
+          "completed": "完了",
+          "failed": "失敗",
+          "skipped": "スキップ",
+          "running": "実行中"
+        },
+        "neverRun": "未実行",
+        "nextRun": "次回 {date}",
+        "openFindings": "{count, plural, one {# 件の未対応項目} other {# 件の未対応項目}}",
+        "reviewWork": "作業をレビュー",
+        "featureOff": "決算モニターモジュールがオフのため、パックを有効化・実行できません。",
+        "enableModule": "機能でオンにする",
+        "featureOffError": "パックを有効化する前に決算モニターモジュールをオンにしてください。",
+        "toggleFailed": "パック設定を保存できませんでした。",
+        "scanComplete": "{count, plural, one {# 件の検出} other {# 件の検出}}",
+        "scanFailed": "スキャンを開始できませんでした。",
+        "scanAlreadyRunning": "スキャンは既に実行中です。",
+        "guideLink": "セットアップガイド",
+        "columns": {
+          "pack": "パック",
+          "status": "ステータス",
+          "schedule": "スケジュール",
+          "lastRun": "前回実行",
+          "findings": "検出",
+          "actions": "操作"
+        },
+        "kpis": {
+          "enabled": "オンのパック",
+          "enabledValue": "{count} / {total}",
+          "openFindings": "未対応の検出",
+          "runs7d": "実行 · 7日間",
+          "failed7d": "失敗 · 7日間"
+        }
+      },
+      "library": {
+        "title": "ライブラリ",
+        "description": "レジストリが提供する全パック — 読み取り対象、提案内容、要件。インストールするとデフォルトチェックでパックが有効になります。",
+        "install": "インストール",
+        "installed": "インストール済み",
+        "configure": "設定",
+        "readsLabel": "読み取り",
+        "proposesLabel": "提案",
+        "needsLabel": "要件",
+        "checksTitle": "チェック ({count})",
+        "checksNote": "デフォルトで {total} 件中 {count} 件がオン",
+        "moduleRequires": "{feature} モジュールが必要です",
+        "registryNote": "パック {key} · {count} 件のチェック · エージェントレジストリで宣言",
+        "installFailed": "パックをインストールできませんでした。",
+        "installedToast": "{name} をデフォルトチェックでインストールしました。"
+      },
+      "policy": {
+        "backLabel": "すべてのエージェント",
+        "notificationsTitle": "検出の通知",
+        "notificationsDescription": "このパックの検出を誰がどのように受け取るか。ルーティングはポリシーに保存され、検出は常にアクティビティに表示されます。",
+        "modes": {
+          "findings_only": {
+            "title": "検出のみ",
+            "description": "通知なし — 検出はアクティビティでレビュー。"
+          },
+          "digest": {
+            "title": "デイリーダイジェスト",
+            "description": "1日1回、新しい検出の概要。"
+          },
+          "immediate": {
+            "title": "即時",
+            "description": "新しい検出ごとに通知。"
+          }
+        },
+        "rolesLabel": "ロール",
+        "usersLabel": "ユーザー",
+        "noTargets": "なし",
+        "usersTruncatedNote": "最初の200ユーザーを表示しています。",
+        "deliveryNote": "メール配信は未配線のため、ここでは誰が何を受け取るかを保存します。検出は当面アクティビティに表示されます。",
+        "rolesPlaceholder": "ロールを追加…",
+        "usersPlaceholder": "ユーザーを追加…"
+      },
+      "activity": {
+        "title": "アクティビティ",
+        "description": "全パックのエージェントスキャン — ステータス、所要時間、検出、エラー。任意のパックをここから再実行できます。",
+        "allPacks": "すべてのパック",
+        "allStatuses": "すべてのステータス",
+        "sinceColumn": "期間",
+        "sinceAll": "全期間",
+        "since": {
+          "day": "過去24時間",
+          "week": "過去7日間"
+        },
+        "packColumn": "パック",
+        "triggerColumn": "トリガー",
+        "triggers": {
+          "manual": "手動",
+          "scheduler": "スケジュール"
+        },
+        "statusColumn": "ステータス",
+        "startedColumn": "開始",
+        "durationColumn": "所要時間",
+        "detectedColumn": "検出数",
+        "resolvedColumn": "解決数",
+        "actionsColumn": "操作",
+        "rerun": "再実行",
+        "viewFindings": "検出",
+        "empty": "実行はまだありません。",
+        "emptyHint": "概要からパックを実行すると、最初のスキャンがここに表示されます。",
+        "truncatedNote": "{total} 件の実行のうち最新 {shown} 件を表示しています。",
+        "totalNote": "{count, plural, one {# 件の実行} other {# 件の実行}}",
+        "showMore": "さらに表示",
+        "loadFailed": "実行を読み込めませんでした。"
+      },
+      "packs": {
+        "accounting": {
+          "title": "会計コントロール",
+          "description": "未照合の銀行取引、不均衡な照合、決算を妨げる古い下書き。",
+          "reads": "銀行明細と照合、未処理の会計証憑。",
+          "proposes": "解消すべき条件のレビューリスト — 記録の投稿・編集は行いません。"
+        },
+        "finance": {
+          "title": "財務コントロール",
+          "description": "承認済み予算の欠落、不利な差異、期間業績の低下。",
+          "reads": "承認済み予算シナリオ、実績、期間収益。",
+          "proposes": "対象勘定を明示した差異指摘 — レビューのみ、記帳なし。"
+        },
+        "collections": {
+          "title": "債権回収",
+          "description": "支払い行動を伴う延滞売掛金、破られた支払い約束、与信保留の候補。",
+          "reads": "未回収の売掛金、約束、支払い履歴。",
+          "proposes": "督促文案と優先架電リストをレビュー用に。"
+        },
+        "payables": {
+          "title": "買掛金",
+          "description": "重複請求書、次回支払サイクル前の請求書、早期支払割引、承認漏れ。",
+          "reads": "仕入先請求書、承認、支払カレンダー。",
+          "proposes": "支払サイクルをレビューカードとして — 自動支払いは行いません。"
+        },
+        "reconciliation": {
+          "title": "銀行照合",
+          "description": "確度の高い照合候補のある未照合明細、古い照合、未照合の口座。",
+          "reads": "銀行明細行と照合ステータス。",
+          "proposes": "1件ずつ確定する照合コマンド。"
+        },
+        "hygiene": {
+          "title": "データハイジーン",
+          "description": "統制勘定の不一致、重複取引先、コード・予算・紐付けの欠けた記録。",
+          "reads": "勘定科目、取引先、品目、プロジェクト、予算、給与コンポーネント。",
+          "proposes": "対策が設定である場合のセットアップ修正カード。"
+        },
+        "forensics": {
+          "title": "フォレンジクス",
+          "description": "週末の投稿、きりの良い金額、限度額直下の金額、重複請求書。",
+          "reads": "支出証憑とセンチネルダッシュボード。",
+          "proposes": "各検出にセンチネルレビューリンク — レビューのみ、記帳なし。"
+        },
+        "tax": {
+          "title": "税務",
+          "description": "税コードの欠落、未登録の帳票、計算不能な申告、ロック解除された申告期間。",
+          "reads": "投稿済み証憑、申告帳票、登録、期間ロック。",
+          "proposes": "各検出に申告レビューリンク — レビューのみ、記帳なし。"
+        },
+        "payroll": {
+          "title": "給与",
+          "description": "納付期限、不明な勘定、未選択項目、年末の漏れ。",
+          "reads": "確定済み給与計算、納付グループ、従業員プロファイル、法定料率。",
+          "proposes": "納付・従業員のレビューリンク — レビューのみ、記帳なし。"
+        },
+        "projects": {
+          "title": "プロジェクト",
+          "description": "マイナス粗利、予算超過、古い未請求作業。",
+          "reads": "投稿済みプロジェクト原価・収益、承認済み予算、未処理コミットメント、未請求作業。",
+          "proposes": "プロジェクトレビューリンク — レビューのみ、記帳なし。"
+        },
+        "cash": {
+          "title": "資金",
+          "description": "低い残高、支払集中、予測の不足。",
+          "reads": "銀行残高、未回収・未払い、資金予測。",
+          "proposes": "銀行レビューリンク — レビューのみ、記帳なし。"
+        }
+      },
+      "runStatuses": {
+        "completed": "完了",
+        "failed": "失敗",
+        "skipped": "スキップ",
+        "running": "実行中"
       }
     },
     "readiness": {

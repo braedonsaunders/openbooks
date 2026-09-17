@@ -2117,8 +2117,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       badgeLabel={str(props, 'badgeLabel') ?? ''}
       badgeReady={props.badgeReady === true}
       progressLabel={str(props, 'progressLabel') ?? ''}
-      progressCount={Number(props.progressCount ?? 0)}
-      progressTotal={Number(props.progressTotal ?? 0)}
+      progressOf={str(props, 'progressOf') ?? ''}
       progressPercent={Number(props.progressPercent ?? 0)}
       progressMin={Number(props.progressMin ?? 0)}
       progressMax={Number(props.progressMax ?? 0)}

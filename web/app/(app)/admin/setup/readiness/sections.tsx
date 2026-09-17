@@ -52,8 +52,7 @@ export function SetupReadinessHero({
   badgeLabel,
   badgeReady,
   progressLabel,
-  progressCount,
-  progressTotal,
+  progressOf,
   progressPercent,
   progressMin,
   progressMax,
@@ -65,8 +64,7 @@ export function SetupReadinessHero({
   badgeLabel: string
   badgeReady: boolean
   progressLabel: string
-  progressCount: number
-  progressTotal: number
+  progressOf: string
   progressPercent: number
   progressMin: number
   progressMax: number
@@ -94,7 +92,7 @@ export function SetupReadinessHero({
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="font-medium text-slate-700 dark:text-slate-200">{progressLabel}</span>
             <span className="tabular-nums text-slate-500 dark:text-slate-400">
-              {progressCount} of {progressTotal} areas prepared
+              {progressOf}
             </span>
           </div>
           <div

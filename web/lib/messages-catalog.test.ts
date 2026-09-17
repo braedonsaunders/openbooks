@@ -840,6 +840,148 @@ test('property creation drawer copy ships translated in every locale', () => {
   }
 })
 
+test('api keys copy ships translated in every locale', () => {
+  // The api-keys page (F-t01-018) rendered fully English under lang=es: the
+  // whole block was absent there, plus three rate-limit keys everywhere
+  // except en, plus fr copying the table scopesCount. fr statusActive reads
+  // 'active' in both languages — correct French feminine for "clé",
+  // documented like the Status exemption.
+  const esKeys = [
+    'admin.apiKeys.title',
+    'admin.apiKeys.description',
+    'admin.apiKeys.searchPlaceholder',
+    'admin.apiKeys.empty',
+    'admin.apiKeys.table.name',
+    'admin.apiKeys.table.key',
+    'admin.apiKeys.table.owner',
+    'admin.apiKeys.table.scopes',
+    'admin.apiKeys.table.scopesCount',
+    'admin.apiKeys.table.fullScope',
+    'admin.apiKeys.table.lastUsed',
+    'admin.apiKeys.table.status',
+    'admin.apiKeys.statusActive',
+    'admin.apiKeys.statusRevoked',
+    'admin.apiKeys.drawer.newKey',
+    'admin.apiKeys.drawer.newTitle',
+    'admin.apiKeys.drawer.description',
+    'admin.apiKeys.drawer.nameRequired',
+    'admin.apiKeys.drawer.namePlaceholder',
+    'admin.apiKeys.drawer.descriptionPlaceholder',
+    'admin.apiKeys.drawer.saveFailed',
+    'admin.apiKeys.drawer.created',
+    'admin.apiKeys.drawer.updated',
+    'admin.apiKeys.drawer.revoke',
+    'admin.apiKeys.drawer.revokeConfirm',
+    'admin.apiKeys.drawer.revokeFailed',
+    'admin.apiKeys.drawer.revoked',
+    'admin.apiKeys.drawer.revokedNotice',
+    'admin.apiKeys.drawer.keyCreated',
+    'admin.apiKeys.drawer.keyCreatedHint',
+    'admin.apiKeys.drawer.copy',
+    'admin.apiKeys.drawer.copied',
+    'admin.apiKeys.drawer.createKey',
+    'admin.apiKeys.drawer.saveChanges',
+    'admin.apiKeys.drawer.scopesHeading',
+    'admin.apiKeys.drawer.scopesHint',
+    'admin.apiKeys.drawer.scopesCount',
+    'admin.apiKeys.drawer.scopesRequired',
+  ] as const
+  const rateLimitKeys = [
+    'admin.apiKeys.drawer.rateLimitLabel',
+    'admin.apiKeys.drawer.rateLimitPlaceholder',
+    'admin.apiKeys.drawer.rateLimitHint',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of [...esKeys, ...rateLimitKeys]) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const esCatalog = flattenCatalog('es')
+  for (const key of [...esKeys, ...rateLimitKeys]) {
+    const value = esCatalog.get(key)
+    assert.ok(value && value.trim(), `es is missing ${key}`)
+    assert.notEqual(value, source.get(key), `es must not copy English ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en' && candidate !== 'es').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of rateLimitKeys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+  const frTableScopesCount = flattenCatalog('fr').get('admin.apiKeys.table.scopesCount')
+  assert.ok(frTableScopesCount && frTableScopesCount.includes('autorisation'), 'fr must translate the api-keys scopesCount')
+})
+
+test('setup wizard copy ships translated in fr and es', () => {
+  // The setup wizard (F-t01-014) rendered fully English under lang=fr+es:
+  // the whole setup.wizard block (176 keys) existed only in en. fr
+  // payroll.packs.canada.title reads 'Canada' in both languages — the
+  // country name is spelled identically, documented like Status.
+  const source = flattenCatalog('en')
+  const english = new Map([...source].filter(([key]) => key.startsWith('admin.setup.wizard.')))
+  assert.ok(english.size > 150, `expected the en wizard block, got ${english.size} keys`)
+  const identicalExemptions = new Set(['fr:admin.setup.wizard.payroll.packs.canada.title'])
+  for (const locale of ['fr', 'es']) {
+    const catalog = flattenCatalog(locale)
+    for (const [key, sourceValue] of english) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      if (!identicalExemptions.has(`${locale}:${key}`)) {
+        assert.notEqual(value, sourceValue, `${locale} must not copy English ${key}`)
+      }
+    }
+  }
+})
+
+test('go-live guide copy ships translated in fr and es', () => {
+  // The readiness go-live guide (F-t01-017) hardcoded its whole body
+  // (~55 strings) in the loader, so fr+es rendered English. The loader now
+  // resolves every string through admin.setup.guide — this pins the block
+  // present and genuinely translated in both locales.
+  const source = flattenCatalog('en')
+  const english = new Map([...source].filter(([key]) => key.startsWith('admin.setup.guide.')))
+  assert.ok(english.size > 40, `expected the en guide block, got ${english.size} keys`)
+  for (const locale of ['fr', 'es']) {
+    const catalog = flattenCatalog(locale)
+    for (const [key, sourceValue] of english) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, sourceValue, `${locale} must not copy English ${key}`)
+    }
+  }
+})
+
+test('setup agents copy ships translated in de, ja, pt-BR and zh', () => {
+  // The agents surface (F-t01-014 backfill) had only its nav plus one string
+  // outside en/fr/es — the other four locales fell back to English. Genuine
+  // loanwords stay identical and are documented: de Pack/Status, pt-BR
+  // Status/Manual. ja/zh share no spellings with English at all.
+  const source = flattenCatalog('en')
+  const english = new Map([...source].filter(([key]) => key.startsWith('admin.setup.agents.')))
+  assert.ok(english.size > 140, `expected the en agents block, got ${english.size} keys`)
+  const identicalExemptions = new Set([
+    'de:admin.setup.agents.overview.columns.pack',
+    'de:admin.setup.agents.overview.columns.status',
+    'de:admin.setup.agents.activity.packColumn',
+    'de:admin.setup.agents.activity.statusColumn',
+    'pt-BR:admin.setup.agents.overview.columns.status',
+    'pt-BR:admin.setup.agents.activity.triggers.manual',
+    'pt-BR:admin.setup.agents.activity.statusColumn',
+  ])
+  for (const locale of ['de', 'ja', 'pt-BR', 'zh']) {
+    const catalog = flattenCatalog(locale)
+    for (const [key, sourceValue] of english) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      if (!identicalExemptions.has(`${locale}:${key}`)) {
+        assert.notEqual(value, sourceValue, `${locale} must not copy English ${key}`)
+      }
+    }
+  }
+})
+
 test('project billing (applications) copy is present in every locale and translated', () => {
   // The project Billing tabs (F-t03-012) render these keys; a missing key
   // falls back to English on screen.
