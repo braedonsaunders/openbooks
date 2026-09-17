@@ -372,13 +372,470 @@
     "labels": {
       "unknownCustomer": "未知",
       "untitledProject": "未命名项目"
-    }
+    },
+    "chart": {
+      "projectedClv": "预测CLV"
+    },
+    "clvHow": {
+      "annualBold": "年价值",
+      "annualTail": " ＝ 平均发票 ×（发票数 ÷ 活跃年数，下限3个月）。 ",
+      "clvBold": "预测CLV",
+      "clvTail": " ＝ 年价值 × 3年 × 留存率。\n",
+      "retentionBold": "留存系数",
+      "retentionHead": " ＝ 0.95·e",
+      "retentionSup": "−距上次交易天数 ÷ 120",
+      "retentionTail": "，限制在10–95%。 ",
+      "tiersNote": "层级按预测CLV排名：前10%为铂金，接着20%为黄金，再接着30%为白银，后40%为青铜。"
+    },
+    "config": {
+      "fields": {
+        "churnCritical": {
+          "help": "综合流失评分达到该值即视为严重风险",
+          "label": "流失——严重（评分）"
+        },
+        "churnHigh": {
+          "help": "综合流失评分达到该值即视为高风险",
+          "label": "流失——高（评分）"
+        },
+        "churnMedium": {
+          "help": "综合流失评分达到该值即视为中风险",
+          "label": "流失——中（评分）"
+        },
+        "clvYears": {
+          "help": "生命周期价值预测包含的未来价值年数",
+          "label": "CLV预测期（年）"
+        },
+        "hhiCritical": {
+          "help": "赫芬达尔指数达到该值即标记为严重集中",
+          "label": "集中度严重（HHI）"
+        },
+        "hhiWarning": {
+          "help": "赫芬达尔指数达到该值即标记为集中预警",
+          "label": "集中度预警（HHI）"
+        }
+      }
+    },
+    "csv": {
+      "churn": "流失",
+      "grade": "评级",
+      "payment": "回款",
+      "projectedClv": "预测CLV",
+      "recommendation": "建议措施",
+      "segment": "细分"
+    },
+    "customersCount": "{count}个客户",
+    "daysAgo": "{days}天前",
+    "drill": {
+      "invoicesRevenue": "{invoices}张发票 · {revenue}"
+    },
+    "empty": {
+      "noAtRisk": "没有高风险客户——留存状况健康。",
+      "noFriction": "本期没有贷项摩擦。",
+      "noOverdue": "没有客户超出常规订购周期。",
+      "noProjectProfitability": "本期没有带项目标记的盈利数据。",
+      "noSignals": "本期没有值得关注的信号。"
+    },
+    "fakeChampionTitle": "营收高但利润率低——请复核定价",
+    "fakeChampionTitleShort": "高营收、低利润",
+    "groupBy": {
+      "churn": "按流失风险",
+      "grade": "按健康评级",
+      "none": "不分组",
+      "segment": "按细分",
+      "tier": "按CLV层级"
+    },
+    "groupSummary": "{count}个客户 · {revenue}",
+    "jobsCount": "{count}个任务",
+    "kpi": {
+      "atRisk": "高风险",
+      "atRiskRevenue": "风险营收",
+      "avgHealth": "平均健康度",
+      "avgMargin": "平均利润率",
+      "avgMonthly": "月均",
+      "champions": "冠军",
+      "critical": "严重",
+      "excellent": "优秀",
+      "grossProfit": "毛利",
+      "highFriction": "高摩擦",
+      "medianMonthly": "月度中位数",
+      "newCustomers": "新客户",
+      "overdueOrders": "逾期订单",
+      "periodRevenue": "本期营收",
+      "profitLeaks": "利润流失",
+      "projectedClv": "预测CLV",
+      "recencyRisk": "近期风险",
+      "retentionRate": "留存率",
+      "totalCosts": "总成本",
+      "totalCustomers": "客户总数",
+      "totalProjectedClv": "预测CLV合计",
+      "totalRevenue": "营收合计",
+      "warning": "预警",
+      "yoyGrowth": "同比增长"
+    },
+    "lastActive": "上次：{days}",
+    "margin": {
+      "excellent": "优秀",
+      "fair": "一般",
+      "good": "良好",
+      "loss": "亏损",
+      "low": "偏低",
+      "profit": "盈利"
+    },
+    "metrics": {
+      "avgDso": "平均DSO",
+      "avgValue": "平均金额",
+      "monthlyGrowth": "月增长率",
+      "paymentRate": "回款率",
+      "retention": "留存率",
+      "top10Share": "前10%占比"
+    },
+    "metricsSub": {
+      "avgMoM": "平均环比（成熟月份）",
+      "daysToPay": "回款天数",
+      "ofRevenue": "占营收比",
+      "paidInFull": "已全额支付的发票",
+      "perCustomer": "单客户",
+      "retentionProb": "平均留存概率"
+    },
+    "overdueBanner": {
+      "count": "{count}张逾期发票",
+      "rest": " 在本期出现——催收风险可能掩盖增长。请查看流失风险选项卡。"
+    },
+    "pager": {
+      "next": "下一页",
+      "nounCustomers": "客户",
+      "prev": "上一页",
+      "showing": "第{from}–{to}条，共{total}条"
+    },
+    "panels": {
+      "atRiskCustomers": "高风险客户（{count}）",
+      "atRiskHint": "流失评分：近期性0–40（超120天/超60天/超30天）+频率下滑0–30（自身均值的2倍/1.5倍）+低互动0–30（≤1/≤3单）",
+      "clvRanking": "生命周期价值排名",
+      "cohortHint": "按首次下单年份 · 活跃=近6个月内下过单",
+      "cohortRetention": "同期群留存",
+      "customerHealth": "客户健康度（{count}）",
+      "customerHealthHint": "加权：近期性25% · 频率25% · 金额30% · 回款20%，再扣减摩擦罚分",
+      "customerProfitability": "客户盈利能力",
+      "customersBySegment": "按细分划分客户（{count}）",
+      "dataSources": "数据来源与推导",
+      "frictionHint": "贷项×2分（本账簿没有退货授权单据，因此退货项恒为0）",
+      "frictionSignals": "摩擦信号",
+      "howClvProjected": "CLV预测方法",
+      "insights": "智能洞察",
+      "keyMetrics": "关键指标",
+      "monthlyDetails": "月度明细",
+      "monthlyDetailsHint": "环比封顶+200/−80%；“—”表示从不成熟月份起步",
+      "monthlyRevenueTrend": "月度营收趋势",
+      "overdueHint": "超出各客户自身平均订购周期的天数",
+      "overdueOrders": "逾期订单",
+      "profitabilityHint": "点击客户可展开任务 · ⚠️表示利润流失（营收>{threshold}，利润率<15%）",
+      "revenueByTier": "按CLV层级划分营收",
+      "rfmHint": "R/F/M评分：5最优，1最差——近期性采用固定天数阈值，频率/金额采用33/66分位数",
+      "rfmSegments": "RFM细分",
+      "scoringModel": "评分模型",
+      "scoringModelHint": "综合评分的构建方式",
+      "segmentCustomers": "{segment}（{count}）",
+      "segmentMix": "细分组分",
+      "segmentPerformance": "细分表现",
+      "tierDistribution": "CLV层级分布",
+      "topByRevenue": "按营收排名的客户"
+    },
+    "profitTier": {
+      "high": "高",
+      "loss": "亏损",
+      "low": "低",
+      "marginal": "边缘",
+      "medium": "中"
+    },
+    "rec": {
+      "maintain": "保持",
+      "nurture": "培育",
+      "onboard": "上手引导",
+      "reactivate": "重新激活",
+      "reprice": "重定价",
+      "resolve-issues": "解决问题",
+      "review": "复核",
+      "win-back": "挽回"
+    },
+    "risk": {
+      "critical": "严重",
+      "high": "高",
+      "low": "低",
+      "medium": "中"
+    },
+    "scoring": {
+      "clvRetention": {
+        "label": "CLV留存",
+        "value": "留存率 0.95·e^(−天数/120)，限制在10–95%"
+      },
+      "clvTiers": {
+        "label": "CLV层级",
+        "value": "前10% 铂金 · 接着20% 黄金 · 接着30% 白银 · 其余 青铜"
+      },
+      "frictionPenalty": {
+        "label": "摩擦罚分",
+        "value": "严重 −25 · 高 −15 · 中 −8"
+      },
+      "healthGrades": {
+        "label": "健康评级",
+        "value": "A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F为50以下"
+      },
+      "healthWeights": {
+        "label": "健康度权重",
+        "value": "近期性25% · 频率25% · 金额30% · 回款20%"
+      },
+      "paymentScore": {
+        "label": "回款评分",
+        "value": "100 − DSO超60天/30天/15天分别扣40/20/10 − min(40, 逾期×10)"
+      },
+      "rfmFrequency": {
+        "label": "RFM频率/金额",
+        "value": "33/66分位数切分 → 1 / 3 / 5"
+      },
+      "rfmRecency": {
+        "label": "RFM近期性阈值",
+        "value": "≤30天 → 5 · ≤90天 → 3 · ≤180天 → 2 · 其余1"
+      }
+    },
+    "segment": {
+      "at-risk": "高风险",
+      "champions": "冠军",
+      "hibernating": "休眠",
+      "lost": "流失",
+      "loyal": "忠诚",
+      "new": "新客户",
+      "potential": "潜力",
+      "regular": "常规"
+    },
+    "segmentDesc": {
+      "at-risk": "近期性和频率偏低（R≤2 F≤2）",
+      "champions": "近期、高频、高消费（R≥4 F≥4 M≥4）",
+      "hibernating": "有价值但不活跃（R≤2 F≥3 M≥3）",
+      "lost": "不活跃、低价值（R≤2 M≤2）",
+      "loyal": "持续高消费（R≥3 F≥3 M≥4）",
+      "new": "近期首次购买（R≥4 F≤2）",
+      "potential": "近期且价值稳定（R≥3 M≥3）",
+      "regular": "中等互动"
+    },
+    "sources": {
+      "cohortsBold": "同期群：",
+      "cohortsTail": " 按首次下单年份分组的终身发票历史；活跃=近6个月内下过单。",
+      "frictionBold": "摩擦：",
+      "frictionTail": " 仅贷项——本账簿没有退货授权单据，因此退货项恒为0。",
+      "intelligenceBold": "智能评分：",
+      "intelligenceTail": " 冠军占比30%（客户的20%即满分）+平均留存概率30%+集中健康度20%+回款率20%——得分{score}（{grade}）。",
+      "newCustomersBold": "新客户：",
+      "newCustomersTail": " 首次交易当月之前终身无发票和销售订单。",
+      "paymentBold": "回款行为：",
+      "paymentTail": " 已付=发票已全额核销；回款天数=最终核销日期−发票日期；逾期=已过到期日且未全额核销。",
+      "profitabilityBold": "盈利能力：",
+      "profitabilityTail": " 带项目标记的总账分录按任务→客户汇总；无项目标记活动的客户不显示利润率（从不估算）。",
+      "recencyBold": "近期性：",
+      "recencyTail": " 以当日（查看历史时以期末）为准，从不用未来的财年末。",
+      "revenueBold": "营收口径：",
+      "revenueTail": " 已过账客户发票的单据合计。"
+    },
+    "sub": {
+      "activeLast6mo": "近6个月活跃",
+      "avgPerCustomer": "平均{amount}/客户",
+      "clvBase": "历史CLV基准",
+      "creditHeavy": "贷项较多的账户",
+      "customersCount": "{count}个客户",
+      "firstOrderInPeriod": "期内首次下单",
+      "highCriticalAccounts": "高中严重账户",
+      "highCriticalChurn": "高中严重流失",
+      "highRevenueLowMargin": "高营收、利润率<15%",
+      "jobsCount": "{count}个任务",
+      "last3moVsLy": "近3个月（去年同期比）",
+      "marginPct": "利润率{pct}%",
+      "newInPeriod": "期内新增{count}个",
+      "pastUsualCycle": "超出常规周期",
+      "revenue": "营收",
+      "rfmChampions": "RFM冠军客群",
+      "score40to59": "评分40–59",
+      "score80Plus": "评分≥80",
+      "scoreBelow40": "评分<40",
+      "threeYearProjection": "3年预测",
+      "trend": "趋势：{trend}",
+      "weightedRfm": "加权R/F/M/回款"
+    },
+    "table": {
+      "active": "活跃",
+      "annualValue": "年价值",
+      "avgCycle": "平均周期",
+      "avgLifetimeRev": "平均终身营收",
+      "avgPerCustomer": "单客户平均",
+      "churn": "流失",
+      "cohort": "同期群",
+      "costs": "成本",
+      "creditValue": "贷项金额",
+      "credits": "贷项",
+      "customer": "客户",
+      "customerJob": "客户 / 任务",
+      "customers": "客户",
+      "daysInactive": "无交易天数",
+      "f": "F",
+      "health": "健康度",
+      "invoices": "发票",
+      "issueRate": "问题率",
+      "level": "级别",
+      "m": "M",
+      "margin": "利润率",
+      "mom": "环比",
+      "month": "月份",
+      "new": "新增",
+      "overdue": "逾期",
+      "payment": "回款",
+      "profit": "利润",
+      "projectedClv": "预测CLV",
+      "r": "R",
+      "recency": "近期性",
+      "recommendation": "建议措施",
+      "retention": "留存率",
+      "retentionProb": "留存概率",
+      "revShare": "营收占比",
+      "revenue": "营收",
+      "risk": "风险",
+      "riskFactors": "风险因素",
+      "score": "评分",
+      "segment": "细分",
+      "tier": "层级",
+      "txns": "交易",
+      "urgency": "紧急度"
+    },
+    "tabs": {
+      "churn": "流失风险",
+      "configuration": "配置",
+      "growth": "增长",
+      "health": "健康评分",
+      "lifetime": "生命周期价值",
+      "overview": "概览",
+      "profitability": "盈利能力",
+      "segmentation": "客户分层"
+    },
+    "tier": {
+      "bronze": "青铜",
+      "gold": "黄金",
+      "platinum": "铂金",
+      "silver": "白银"
+    },
+    "txnsCount": "{count}笔交易"
   },
   "vendor": {
     "title": "供应商绩效",
     "backToHub": "分析",
     "labels": {
       "unknownVendor": "未知"
+    },
+    "chart": {
+      "spend": "支出",
+      "tooltipOnTime": "按时：{pct}%",
+      "tooltipSpend": "支出：{amount}",
+      "xAxis": "支出（对数）→",
+      "yAxis": "按时率"
+    },
+    "csv": {
+      "onTimePct": "按时率",
+      "sharePct": "占比"
+    },
+    "days": "{days}天",
+    "drill": {
+      "billsSpend": "{bills}张账单 · 支出{spend}"
+    },
+    "empty": {
+      "noLatePaid": "没有逾期支付的支出。"
+    },
+    "gauge": {
+      "balanced": "均衡",
+      "concentrated": "集中",
+      "diversified": "分散"
+    },
+    "info": {
+      "body": "OTIF（按时足量交付）、交期可靠性、采购价格差异及偏离采购（无订单）支出都需要采购订单→收货→账单行级联动，而当前数据不具备该链路（无单据关联，账单无行级明细）。付款行为、集中度与关系记分卡基于完整数据计算。",
+      "title": "本账簿无法衡量的指标："
+    },
+    "kpi": {
+      "activeVendors": "活跃供应商",
+      "avgBill": "平均账单",
+      "avgDaysToPay": "平均付款天数",
+      "hhi": "集中度（HHI）",
+      "latePaidSpend": "逾期支付额",
+      "onTimeRate": "按时付款率",
+      "top5Share": "前五大占比",
+      "topVendor": "最大供应商",
+      "totalSpend": "支出合计",
+      "vendorsPaid": "已付款供应商"
+    },
+    "panels": {
+      "allVendors": "全部供应商（{count}）",
+      "leverageHint": "支出（影响力）×付款可靠性（表现）——气泡大小=支出",
+      "leverageMatrix": "杠杆矩阵",
+      "mostLatePaid": "逾期付款最多的供应商",
+      "paymentBehaviour": "供应商付款行为",
+      "scorecard": "供应商记分卡",
+      "scorecardHint": "关系价值——支出重要性、合作紧密度与稳定性",
+      "spendByTier": "按层级划分支出",
+      "spendTrend12mo": "支出趋势（12个月）",
+      "topBySpend": "按支出排名的供应商"
+    },
+    "quadrant": {
+      "commodity": {
+        "desc": "支出大但关系紧张——重新谈判或引入双货源",
+        "label": "常规品"
+      },
+      "niche": {
+        "desc": "支出小但可靠——重点维护",
+        "label": "利基"
+      },
+      "strategic": {
+        "desc": "支出大且可靠——战略合作并保护",
+        "label": "战略"
+      },
+      "transactional": {
+        "desc": "支出小且合作少——自动化/整合",
+        "label": "交易型"
+      }
+    },
+    "sub": {
+      "billsCount": "{count}张账单",
+      "diversified": "分散",
+      "fromBillToPayment": "从账单到付款",
+      "highlyConcentrated": "高度集中",
+      "inPeriod": "本期内",
+      "moderate": "适中",
+      "onTimeBills": "到期前支付的账单",
+      "paidAfterDue": "逾期后支付",
+      "perBill": "单张",
+      "top5Concentration": "支出集中度",
+      "withPaymentHistory": "有付款历史",
+      "yoy": "同比 {pct}"
+    },
+    "table": {
+      "avgDays": "平均天数",
+      "bills": "账单",
+      "grade": "评级",
+      "lateSpend": "逾期支出",
+      "onTime": "按时",
+      "paid": "已付",
+      "score": "评分",
+      "share": "占比",
+      "spend": "支出",
+      "tier": "层级",
+      "vendor": "供应商",
+      "yoy": "同比"
+    },
+    "tabs": {
+      "matrix": "杠杆矩阵",
+      "overview": "概述",
+      "payment": "付款行为",
+      "scorecard": "记分卡",
+      "vendors": "供应商"
+    },
+    "tier": {
+      "core": "核心",
+      "strategic": "战略",
+      "tactical": "战术",
+      "tail": "长尾"
     }
   },
   "cashflow": {
@@ -860,7 +1317,301 @@
     "labels": {
       "noTitle": "无标题",
       "unknownName": "未知"
-    }
+    },
+    "allDepartments": "全部部门",
+    "anomalyNote": "异常检测不含无计费预期的部门员工。",
+    "chart": {
+      "billable": "可计费",
+      "forecast": "预测",
+      "historical": "历史",
+      "nonBillable": "不可计费",
+      "target": "目标"
+    },
+    "config": {
+      "fields": {
+        "costSpike": {
+          "help": "不可计费成本较上一区间上涨超过该金额时预警",
+          "label": "成本激增预警（$）"
+        },
+        "minHours": {
+          "help": "低于该工时的员工不纳入异常/同级分析",
+          "label": "最低工时"
+        },
+        "targetBillable": {
+          "help": "全公司利用率基准",
+          "label": "目标可计费率"
+        }
+      },
+      "historyNote": "过去{months}个月的滚动区间，用于趋势与预测",
+      "historyPeriods": "历史区间",
+      "priorRange": "上一区间",
+      "priorRangeNote": "所选区间紧邻的前一段同等时长区间"
+    },
+    "empCount": "{count}人",
+    "empty": {
+      "allWithinTarget": "全部指标均达标。",
+      "noDriftingTitles": "没有下滑的职位",
+      "noImprovements": "未发现改进机会",
+      "noIssues": "未发现问题",
+      "noPeerTitles": "没有可比较的职位（2人以上）",
+      "noSuddenDrops": "未发现骤降"
+    },
+    "entries": {
+      "billableOf": "可计费{pct}",
+      "count": "{count}{suffix}条工时记录",
+      "employee": "员工",
+      "hrs": "{hours}小时",
+      "item": "项目",
+      "peers": "对比{title}同级（{count}人）",
+      "pills": {
+        "byCustomer": "按客户",
+        "byEmployee": "按员工",
+        "byItem": "按服务项目",
+        "entries": "明细"
+      },
+      "serviceItem": "服务项目",
+      "thisVsPeer": "本员工{emp} · 同级均值{peer}",
+      "title": "工时记录"
+    },
+    "error": {
+      "loadFailed": "无法加载记录。"
+    },
+    "forecast": {
+      "atRisk": "高风险",
+      "current": "当前",
+      "methodology": " 预测采用对历史区间的线性回归。可计费率越高，同一工时从不可计费转为可计费，不可计费成本自然越低。",
+      "methodologyBold": "方法：",
+      "onTrack": "正常",
+      "projected": "预测"
+    },
+    "gauge": {
+      "atRisk": "高风险",
+      "belowTarget": "未达目标",
+      "nearTarget": "接近目标",
+      "onTarget": "达标",
+      "targetPct": "目标 {target}%"
+    },
+    "heatmap": "热力图",
+    "hide": "隐藏",
+    "hotspot": {
+      "highestCostItem": "成本最高的项目",
+      "lowestBilledEmp": "计费最低的员工",
+      "mostExpensiveDept": "成本最高的部门",
+      "others": "+ 其余{count}项{count, plural, one {} other {}}"
+    },
+    "itemsWithActivity": "{count}个有活动的项目 · 点击行查看记录",
+    "kpi": {
+      "aboveTarget": "超目标",
+      "avgBillablePct": "平均可计费率",
+      "avgHours": "平均工时",
+      "avgHoursItem": "平均工时/项目",
+      "avgSpread": "平均离散度",
+      "avgTeamSize": "平均团队人数",
+      "belowTarget": "未达目标",
+      "bestTitle": "最佳职位",
+      "billableHours": "可计费工时",
+      "capacityHeadroom": "闲置产能",
+      "confidence": "置信度",
+      "costPerDay": "日均成本",
+      "efficiencyScore": "效率评分",
+      "employees": "员工",
+      "highestCost": "最高成本",
+      "jobTitles": "职位",
+      "jobTitlesAnalyzed": "已分析职位",
+      "needsAttention": "待处理",
+      "nonBillableCost": "不可计费成本",
+      "opportunities": "改进机会",
+      "overtimeNoValue": "无效加班",
+      "potentialSavings": "可节约金额",
+      "projectedBillablePct": "预测可计费率",
+      "projectedNonBillCost": "预测不可计费成本",
+      "serviceItems": "服务项目",
+      "suddenDrops": "骤降",
+      "target": "目标",
+      "targetStatus": "目标达成情况",
+      "titleDrift": "职位偏移",
+      "titlesWithOutliers": "存在异常值的职位",
+      "topPerformer": "最佳员工",
+      "totalHours": "总工时",
+      "totalIssues": "问题总数"
+    },
+    "loading": "加载中…",
+    "lowHoursCount": "{count}名员工不足{minHours}小时",
+    "metric": {
+      "billableHours": "可计费工时",
+      "costPerDay": "日均成本",
+      "nonBillableCost": "不可计费成本",
+      "nonBillableHours": "不可计费工时",
+      "percentBilled": "可计费率",
+      "totalHours": "总工时"
+    },
+    "no": "否",
+    "noBillExpShort": "无计费预期",
+    "noBillExpectation": "无计费预期",
+    "noBillableNote": "零可计费工时的部门不计入全公司可计费率和热点（职能部门无计费预期）。",
+    "noTitle": "无职位",
+    "none": "无",
+    "outlook": {
+      "challenging": "严峻",
+      "favorable": "乐观",
+      "neutral": "中性"
+    },
+    "panels": {
+      "alerts": "利用率预警",
+      "costHotspots": "成本热点",
+      "dataSources": "数据来源与推导",
+      "efficiencySummary": "效率汇总",
+      "forecastTrend": "可计费率趋势与预测",
+      "hiringIntelligence": "招聘智能",
+      "hoursDistribution": "工时分布",
+      "improvementHint": "利用率提升5个百分点的预计节约",
+      "improvementOpportunities": "改进机会",
+      "modelAssumptions": "模型与假设",
+      "noBillableExpectation": "无计费预期",
+      "overtimeHint": "工时超均值20%以上，可计费率低于目标20个百分点",
+      "peerComparison": "按职位同级比较",
+      "peerHint": "比较从事类似工作的员工",
+      "reallocationIdeas": "重新分配建议",
+      "suddenDrop": "骤降",
+      "suddenDropHint": "可计费率较上一区间下降超15个百分点",
+      "titleDriftHint": "所有员工都呈下滑趋势的角色",
+      "topDepartments": "头部部门",
+      "topDepartmentsHint": "按不可计费成本",
+      "treemap": "利用率树图",
+      "treemapHint": "大小=工时 · 颜色=可计费率 · 点击下钻"
+    },
+    "peers": {
+      "outliersBold": "异常值",
+      "outliersNote": " 是指可计费率偏离本职位均值1.5个标准差以上的员工。离散度大或存在异常值可能意味着培训缺口、工作量不均或角色错配。"
+    },
+    "ppAvg": "平均{avg}个百分点",
+    "prior": "上一区间：{pct}",
+    "searchEmployees": "搜索员工…",
+    "searchItems": "搜索项目…",
+    "show": "显示",
+    "sources": {
+      "billableBold": "可计费",
+      "billableItem": " ——记录的可计费标记（每条可计费记录都带有项目→客户）。",
+      "dominantClass": "主要工种",
+      "intro": "全部根据 ",
+      "introTail": "实时计算：",
+      "jobTitleBold": "职位",
+      "jobTitleItem": " （其记录工时最多的服务项目，例如“MECH:Foreman”）。",
+      "jobTitleMid": " ——员工没有职位字段，因此个人的职位即其 ",
+      "noBillItem": " ——零可计费工时的部门（当期+上一区间）会被自动标记并不计入全公司比率，例如间接部门。",
+      "nonBillCostBold": "不可计费成本",
+      "nonBillCostItem": " ——Σ 工时 × 该条记录自身的成本费率（不可计费部分）。",
+      "timeEntries": "工时记录"
+    },
+    "sub": {
+      "aboveNear": "{above}个超出，{near}个接近",
+      "acrossItems": "跨项目",
+      "belowTargetCount": "{count}个未达标",
+      "billableThreshold": "可计费阈值",
+      "dataPoints": "{count}个数据点",
+      "daysInRange": "区间内{days}天",
+      "detectedAnomalies": "已检出的异常",
+      "drop15pp": "下降超15个百分点的员工",
+      "employeesPerTitle": "单职位员工数",
+      "highHoursLowBillable": "工时长、可计费低",
+      "hiresAtEfficiency": "按当前效率招聘",
+      "hoursWeighted": "按工时加权",
+      "ifAllImplemented": "全部落地时",
+      "improvementScenarios": "改进方案",
+      "maxMinusMin": "职位内最大−最小",
+      "outOf100": "满分100",
+      "perEmployee": "人均",
+      "perServiceItem": "单服务项目",
+      "performanceVariance": "业绩离散度",
+      "qualified": "{count}个达标（≥{minHours}小时）",
+      "recordedTime": "已记录工时",
+      "revenueGenerating": "创收",
+      "rolesTrendingDown": "呈下滑趋势的角色",
+      "targetPct": "目标：{target}%",
+      "totalForRange": "区间合计",
+      "trajectory": "{arrow} {amount}走势",
+      "trendArrow": "{arrow} {trend}个百分点趋势",
+      "uniqueRoles": "不同角色（工种）",
+      "with2Plus": "2人以上",
+      "withActivity": "有活动"
+    },
+    "subTabs": {
+      "anomalies": "异常",
+      "forecasting": "预测",
+      "peers": "同级分析",
+      "treemap": "树图",
+      "whatif": "模拟"
+    },
+    "table": {
+      "avgPct": "平均比率",
+      "billable": "可计费",
+      "billablePct": "可计费率",
+      "change": "变动",
+      "cost": "成本",
+      "currentRange": "当期区间",
+      "customer": "客户",
+      "date": "日期",
+      "department": "部门",
+      "employees": "员工",
+      "hours": "工时",
+      "jobTitle": "职位",
+      "max": "最大",
+      "metric": "指标",
+      "min": "最小",
+      "nonBill": "不可计费",
+      "nonBillCost": "不可计费成本",
+      "outliers": "异常值",
+      "pctBilled": "可计费率",
+      "pctPrior": "上一区间比率",
+      "priorRange": "上一区间",
+      "share": "占比",
+      "spread": "离散度",
+      "totalHrs": "总工时"
+    },
+    "tableLabel": "表格",
+    "tabs": {
+      "config": "配置",
+      "departments": "部门",
+      "employees": "员工",
+      "intelligence": "智能",
+      "items": "项目",
+      "overview": "概览",
+      "titles": "职位"
+    },
+    "titles": {
+      "drawerDesc": "{count}名员工 · 可计费{billable} · 不可计费成本{cost}"
+    },
+    "treemap": {
+      "breadcrumb": "面包屑导航返回上层",
+      "clickDrill": "点击下钻",
+      "colourBillable": "颜色=可计费率",
+      "sizeHours": "大小=工作小时"
+    },
+    "unit": {
+      "billable": "可计费",
+      "hrs": "小时"
+    },
+    "whatif": {
+      "avgCostEmployee": "人均成本",
+      "avgHoursEmployee": "人均工时",
+      "bestTitle": "最佳职位",
+      "billablePctLabel": "可计费率",
+      "breakEvenRate": "盈亏平衡费率",
+      "costPerNonBillHour": "不可计费小时成本",
+      "highBillableRoles": "高可计费角色",
+      "improve": "将“{title}”提升5%",
+      "improveDetail": "{count}名员工当前均值{pct}%",
+      "na": "N/A",
+      "needsFocus": "待加强",
+      "nonBillableLabel": "不可计费",
+      "recExceptional": "新员工需达到极高的可计费率才具成本效益。高峰期建议考虑外包。",
+      "recFocus": "聚焦招聘{title}。当前最佳员工均值{avgPct}%。",
+      "recSupports": "当前利用率足以支持新增招聘。优先补充与现有团队优势互补的角色。",
+      "save": "节约{amount}",
+      "teamAvgBillable": "团队当前平均可计费率",
+      "totalEmployees": "员工总数"
+    },
+    "yes": "是"
   },
   "spendVelocity": {
     "title": "支出速率",
@@ -917,6 +1668,280 @@
       "seasonalHigh": "支出通常在{months}偏高",
       "seasonalLow": "支出通常在{months}偏低",
       "shadowItReason": "费用报销行没有商户/供应商信息——只有费用科目和自由文本说明——因此无法追踪员工之间病毒式传播的软件采用情况。"
+    },
+    "banner": {
+      "count": "共{total}条预警",
+      "rest": "（覆盖8个检测器）——点击卡片筛选"
+    },
+    "chart": {
+      "priorYear": "去年同期",
+      "spend": "支出"
+    },
+    "chips": {
+      "all": "全部",
+      "decreases": "↓ 减少",
+      "highVel": "🔥 高速率",
+      "increases": "↑ 增加",
+      "new": "+ 新增"
+    },
+    "clearFilter": "清除筛选 · {key}",
+    "config": {
+      "anomalyThreshold": {
+        "label": "异常阈值",
+        "note": "统计异常的Z分数（3σ即严重）"
+      },
+      "boilingFrog": {
+        "label": "煮青蛙",
+        "note": "小幅（<10%）单调上涨的最少月数"
+      },
+      "fields": {
+        "anomalySigma": {
+          "help": "偏离该标准差倍数的月份标记为异常",
+          "label": "异常σ"
+        },
+        "boilingFrogMonths": {
+          "help": "持续小幅上涨的最少月数",
+          "label": "煮青蛙月数"
+        },
+        "fragmentationAvgSize": {
+          "help": "碎片化检测的平均交易金额上限",
+          "label": "碎片化平均金额"
+        },
+        "fragmentationTxns": {
+          "help": "低于金额上限且月交易数超该值即标记碎片化",
+          "label": "碎片化交易数/月"
+        },
+        "highVelocity": {
+          "help": "月度CAGR超该值即为加速/高速",
+          "label": "高速率（%/月）"
+        },
+        "mediumVelocity": {
+          "help": "月度CAGR超该值即为上升",
+          "label": "中速率（%/月）"
+        },
+        "zombieMonths": {
+          "help": "供应商月度合计连续相同至少该月数",
+          "label": "僵尸月数"
+        }
+      },
+      "fragmentation": {
+        "label": "碎片化",
+        "note": "月交易数 / 平均交易金额"
+      },
+      "velocityEngine": {
+        "label": "速率引擎",
+        "note": "（期末/期初）^(1/期数) − 1，最低基数{minBase}",
+        "value": "月度CAGR"
+      },
+      "velocityThresholds": {
+        "label": "速率阈值",
+        "note": "上升/高速的月度CAGR分界"
+      },
+      "zombieWindow": {
+        "label": "僵尸窗口",
+        "note": "相同的周期性供应商合计（偏差<1%）"
+      }
+    },
+    "csv": {
+      "changePct": "变动%",
+      "current": "当期",
+      "prior": "上期",
+      "projected": "预测",
+      "twoBack": "前两期",
+      "velocityPctMo": "速率%/月"
+    },
+    "details": {
+      "anomaly": "{month}偏离均值{sigma}σ",
+      "cliff": "差距{gap}%，比率{ratio}倍",
+      "cliffItem": "采购与销售速率",
+      "concentration": "占支出的{share}%，{trend}",
+      "fragmentation": "{txns}笔/月，均值{avg}",
+      "frog": "{months}个月+{rate}%/月",
+      "seasonal": "较平均月{deviation}%",
+      "zombie": "{months}个月{amount}/月不变"
+    },
+    "detectors": {
+      "anomaly": {
+        "desc": "统计异常（>2.5σ）",
+        "label": "异常",
+        "sub": "严重"
+      },
+      "cliff": {
+        "desc": "采购与销售速率差",
+        "label": "承诺断崖",
+        "sub": "采购速率"
+      },
+      "concentration": {
+        "desc": "过度依赖单一类别",
+        "label": "集中",
+        "sub": "前五大占比"
+      },
+      "fragmentation": {
+        "desc": "大量小额采购",
+        "label": "碎片化",
+        "sub": "碎片化支出"
+      },
+      "frog": {
+        "desc": "静默成本攀升",
+        "label": "煮青蛙",
+        "sub": "年度影响"
+      },
+      "seasonal": {
+        "desc": "偏离规律的支出",
+        "label": "季节性",
+        "sub": "偏离月份"
+      },
+      "shadow": {
+        "desc": "软件的病毒式采用",
+        "label": "影子IT",
+        "sub": "暂无"
+      },
+      "zombie": {
+        "desc": "一成不变的周期费用",
+        "label": "僵尸",
+        "sub": "年度成本"
+      }
+    },
+    "deviationNote": "较均值的月度偏离",
+    "empty": {
+      "forDetector": "（当前检测器）",
+      "noAlerts": "未检测到预警",
+      "noAnomalies": "未检测到异常",
+      "noSeasonal": "未检测到显著季节模式"
+    },
+    "health": {
+      "atRisk": "高风险",
+      "caption": "支出健康度",
+      "elevated": "偏高",
+      "healthy": "健康",
+      "watch": "观察"
+    },
+    "kpi": {
+      "alerts": "预警",
+      "avgVelocity": "平均速率",
+      "savingsPotential": "可节约金额",
+      "totalSpend": "支出合计"
+    },
+    "newBadge": "新增",
+    "panels": {
+      "accountVelocity": "费用科目速率",
+      "alertDetails": "预警明细",
+      "dataSources": "数据来源",
+      "deepAnalysis": "科目深度分析",
+      "deepAnalysisHint": "{count}个科目 · 点击行查看交易",
+      "detectorSummary": "检测器汇总",
+      "highestVelocity": "速率最高的科目",
+      "insights": "洞察",
+      "modelThresholds": "模型与阈值",
+      "monthlySpendVelocity": "月度支出速率",
+      "monthlySpendVelocityHint": "当月与去年同月对比",
+      "monthlySummary": "月度汇总",
+      "monthlyTrend": "月度趋势",
+      "seasonalPatterns": "季节模式",
+      "top10BySpend": "支出前十",
+      "velocityVsAccel": "速率与加速度",
+      "velocityVsAccelHint": "速率=月度支出变化 · 加速度=速率变化 · 大小=支出",
+      "vendorDrillDown": "供应商下钻"
+    },
+    "period": {
+      "basedOnTrend": "按趋势",
+      "current": "当期",
+      "prior": "上期",
+      "projectedNext": "下期预测",
+      "twoBack": "前两期"
+    },
+    "row": {
+      "txns": "{txns}笔",
+      "txnsMonths": "{txns}笔 · {months}个月"
+    },
+    "scatter": {
+      "tooltipAccel": "加速度：{pct}%",
+      "tooltipSpend": "支出：{amount}",
+      "tooltipVelocity": "速率：{pct}%",
+      "xAxis": "速率%",
+      "yAxis": "加速度"
+    },
+    "searchPlaceholder": "搜索科目…",
+    "severity": {
+      "critical": "严重",
+      "high": "高",
+      "low": "低",
+      "medium": "中"
+    },
+    "shadowIt": {
+      "body": " 在openbooks中不可用：{reason}",
+      "title": "影子IT"
+    },
+    "sort": {
+      "accel": "排序：加速度",
+      "changePct": "排序：变动%",
+      "spend": "排序：支出",
+      "velocity": "排序：速率"
+    },
+    "sources": {
+      "intro": "支出 ＝ 来自四种支出单据类型的费用/销售成本日记账分录：",
+      "li1Bold1": "供应商账单、费用报销单、支票",
+      "li1Bold2": "供应商贷记单",
+      "li1Mid": " 计入支出；",
+      "li1Tail": " 与之相抵。",
+      "li2Bold": "承诺断崖",
+      "li2Tail": " 比较采购订单与销售订单的月度速率。",
+      "li3Bold": "营收归一化",
+      "li3Tail": " 采用总账营收计算运营费用率（{ratio}%）。",
+      "li4Bold": "影子IT",
+      "li4Tail": " ——不可用：{reason}",
+      "outro": "点击下钻将获取该科目或供应商本期的全部活动（可搜索，含月度趋势与明细）；每行均链接到其所属模块的真实记录。"
+    },
+    "sub": {
+      "acceleratingCount": "{count}个加速中",
+      "accountsCount": "{count}个科目",
+      "anomaliesCount": "{count}个异常",
+      "creepAndZombies": "来自缓慢攀升与僵尸费用",
+      "noIssues": "未发现问题"
+    },
+    "table": {
+      "accel": "加速度",
+      "account": "科目",
+      "billsExp": "账单/费用",
+      "change": "变动",
+      "current": "当期",
+      "details": "明细",
+      "detector": "检测器",
+      "impact": "影响",
+      "item": "项目",
+      "month": "月份",
+      "prior": "上期",
+      "priorYear": "去年同期",
+      "projected": "预测",
+      "severity": "严重程度",
+      "sparkline": "迷你图",
+      "spend": "支出",
+      "totalSpend": "支出合计",
+      "trend": "趋势",
+      "txns": "交易",
+      "velocity": "速率",
+      "vendor": "供应商",
+      "vendors": "供应商",
+      "yoyChange": "同比变动"
+    },
+    "tabs": {
+      "accounts": "科目",
+      "config": "配置",
+      "detectors": "检测器",
+      "overview": "概览",
+      "trends": "趋势",
+      "velocity": "速率"
+    },
+    "trend": {
+      "accelerating": "加速中",
+      "declining": "下降中",
+      "high": "高",
+      "new": "新增",
+      "rising": "上升中",
+      "stable": "平稳"
+    },
+    "unit": {
+      "months": "个月"
     }
   },
   "sentinel": {
@@ -928,11 +1953,43 @@
     "table": {
       "currency": "货币",
       "members": "单据",
-      "span": "跨度"
+      "span": "跨度",
+      "action": "操作",
+      "amount": "金额",
+      "change": "变动",
+      "confidence": "置信度",
+      "count": "数量",
+      "date": "日期",
+      "daysApart": "相隔天数",
+      "deviation": "偏离",
+      "digit": "数字",
+      "digits": "数字",
+      "doc1": "单据1",
+      "doc2": "单据2",
+      "document": "单据",
+      "employee": "员工",
+      "flag": "标记",
+      "flagTypes": "标记类型",
+      "flaggedAmount": "标记金额",
+      "flags": "标记",
+      "match": "吻合",
+      "party": "往来方",
+      "partyAvg": "往来方均值",
+      "reason": "原因",
+      "risk": "风险",
+      "riskScore": "风险评分",
+      "secondLargest": "第二大金额",
+      "table": "表格",
+      "vendor": "供应商",
+      "when": "时间",
+      "z": "Z"
     },
     "duplicates": {
       "sharedReference": "共享参考 {reference}",
-      "spanDays": "{days}天"
+      "spanDays": "{days}天",
+      "ruleNote": "同一供应商+类型+币种+金额+参考号，≥{min}",
+      "ruleValue": "≤{days}天",
+      "sameMemo": "相同备注"
     },
     "benford": {
       "conforming": "符合",
@@ -983,7 +2040,221 @@
         "area": "本福德偏离",
         "message": "首位数字分布显著偏离"
       }
-    }
+    },
+    "analysis": {
+      "calendar": "日历",
+      "rsfFull": "相对规模系数",
+      "rsfNote": " ＝ 金额 ÷ 同一币种下该供应商历史第二大交易（36个月基准，一次窗口函数计算）。RSF ≥ 10意味着该笔交易远超该供应商的正常规模——典型的差错/舞弊信号。",
+      "zscoreNote": " 表示一笔交易偏离该供应商自身均值（同一币种）多少个标准差（分供应商、分币种36个月基准，一次聚合计算）。|z| ≥ 3可发现全局阈值遗漏的供应商特异异常。",
+      "zscoreWord": "Z分数"
+    },
+    "auditNote": "原生审计日志。本账簿多数记录为批量迁移，因此变更历史自上线日起——随着用户在openbooks中的操作，轨迹持续累积。",
+    "banner": {
+      "ledger": "完整账簿",
+      "pre": "针对您的 ",
+      "stats": "{docs}份单据 · {amount} · {days}天 · {seconds}秒——无上限、无日期范围限制。"
+    },
+    "chart": {
+      "expected": "预期",
+      "expectedBenford": "预期（本福德）",
+      "observed": "实际"
+    },
+    "config": {
+      "benfordConformity": "本福德符合度",
+      "benfordNote": "1D区间 0.006/0.012/0.015 · 2D区间 0.0012/0.0022/0.0033",
+      "duplicatesNote": "窗口期内同一供应商、类型、币种、金额与参考号；贷项除外；每组一条",
+      "fields": {
+        "duplicateDays": {
+          "help": "该天数内同一供应商、类型与金额即标记为一组",
+          "label": "重复窗口（天）"
+        },
+        "duplicateMinAmount": {
+          "help": "低于该金额的不予考虑",
+          "label": "重复下限（$）"
+        },
+        "sequentialMinCount": {
+          "help": "无断号发票序列至少需要该数量单据",
+          "label": "连续序列下限"
+        },
+        "sequentialMinDays": {
+          "help": "跨度更短的序列视为批量录入而非标记",
+          "label": "连续跨度（天）"
+        }
+      },
+      "rsfNote": "金额 ÷ 供应商历史第二大金额（36个月基准，下限{floor}）",
+      "sequentialNote": "无断号的供应商参考号；跨度30天以上列为高风险",
+      "sequentialRuns": "连续序列",
+      "trapNote": "略低于整数关口的整数尾数（.00或.99美分）",
+      "weekendNote": "会计单据日期（迁移数据带有导入时间戳，因此系统创建时间在此无意义）",
+      "zscoreNote": "分供应商均值/σ基准，≥5笔交易且σ > {sigma}"
+    },
+    "coverage": {
+      "benfordBold": "本福德",
+      "benfordItem": " ——标记首位数字不符合自然支出规律的金额。",
+      "duplicatesItem": " ——按供应商、类型、币种、金额与参考号分组交易，捕捉重复付款，每组一条。",
+      "intro": "每次检查均覆盖您的 ",
+      "introTail": " 全账簿——无30天窗口、无供应商捷径、无抽样。一笔不漏：",
+      "ledger": "完整账簿",
+      "outro": "本期：{docs}份单据（{amount}），跨越{days}天，{seconds}秒完成分析。明细表展示每项检查最匹配的结果；计数与分布始终覆盖全部。",
+      "rszBold": "相对规模与Z分数",
+      "rszItem": " ——将每笔交易与其供应商历史比较，发现异常。",
+      "sequentialItem": " ——捕捉供应商参考号可疑的无断号连续序列。"
+    },
+    "csv": {
+      "kind": "类型"
+    },
+    "detectors": {
+      "auditEvents": "审计事件",
+      "duplicates": "重复",
+      "ghostVendors": "幽灵供应商"
+    },
+    "drill": {
+      "documentsTotal": "{count}份单据 · {total}",
+      "firstTwoDigits": "前两位数字",
+      "leadingDigit": "首位数字",
+      "noDocuments": "没有以{digit}开头的单据。",
+      "top": "前{count}"
+    },
+    "empty": {
+      "noAuditEvents": "本期没有高风险审计事件",
+      "noElevatedRisk": "没有风险升高领域",
+      "noGhostMatches": "未发现供应商—员工姓名或地址吻合",
+      "noSequential": "未检测到无断号连续序列",
+      "nothingFlagged": "无标记"
+    },
+    "error": {
+      "loadFailed": "无法加载交易。"
+    },
+    "flag": {
+      "duplicate": "重复",
+      "rsf": "RSF",
+      "sequential": "连续",
+      "trap": "99陷阱",
+      "weekend": "周末",
+      "zscore": "Z分数"
+    },
+    "ghost": {
+      "note": " 是受员工控制的收款公司。覆盖全部往来主体注册表的两阶段匹配：员工姓名对供应商名称，以及付款供应商与员工共用的标准化街道地址（地址行1+邮政编码）。姓名吻合75分，共用地址90分，两者皆中95分。",
+      "title": "幽灵供应商"
+    },
+    "kind": {
+      "check": "支票",
+      "customer_credit": "客户贷记单",
+      "expense_report": "费用",
+      "journal": "日记账",
+      "vendor_bill": "账单",
+      "vendor_credit": "供应商贷记单",
+      "vendor_payment": "付款"
+    },
+    "kpi": {
+      "amountsAnalyzed": "已分析金额",
+      "anomalousPairs": "异常对",
+      "approvalLimitRisk": "审批限额风险",
+      "auditEvents": "审计事件",
+      "benford": "本福德",
+      "conformity": "符合度",
+      "deletions": "删除",
+      "deviatingDigits": "偏离数字",
+      "digit1Share": "数字1占比",
+      "duplicatePairs": "重复组",
+      "endsIn": "以{ending}结尾",
+      "flagged": "已标记",
+      "rule": "规则",
+      "saturday": "星期六",
+      "sensitiveChanges": "敏感变更",
+      "shellSignals": "空壳信号",
+      "signal": "信号",
+      "sunday": "星期日",
+      "totalValue": "总金额",
+      "trapAmounts": "陷阱金额",
+      "valueAtRisk": "风险金额",
+      "weekendDocuments": "周末单据"
+    },
+    "loading": "加载中…",
+    "no": "否",
+    "panels": {
+      "allFlaggedDocs": "已标记单据（{total}份中前{top}份）",
+      "anomalousPairs": "异常数字对",
+      "benfordFirstDigit": "本福德定律——首位数字",
+      "benfordHint": "{amounts}笔金额 · MAD {mad} · {conformity}",
+      "completeCoverage": "全面覆盖",
+      "detectorSummary": "检测器汇总",
+      "detectorThresholds": "检测器阈值",
+      "digitDetail": "数字明细",
+      "digitDetailHint": "点击数字查看背后交易",
+      "duplicatesHint": "每组一条——成员在其所属模块中打开",
+      "ghostMatches": "幽灵供应商吻合（{count}）",
+      "ghostVendors": "幽灵供应商",
+      "highRiskAudit": "高风险审计事件",
+      "highestRiskFlags": "最高风险标记",
+      "highestRiskHint": "覆盖全部检测器 · 点击单据打开",
+      "observedVsExpected": "实际与预期分布",
+      "potentialDuplicates": "疑似重复组",
+      "rsfAnomalies": "RSF异常（{count}）",
+      "sequentialRuns": "连续发票序列",
+      "spendCalendar": "支出日历",
+      "spendCalendarHint": "每日支出强度——周末激增与异常聚集一目了然",
+      "thresholdTrapDocs": "阈值陷阱单据",
+      "topRiskAreas": "主要风险领域",
+      "twoDigitDistribution": "前两位分布（10–99）",
+      "vendorRiskHint": "按全部检测器的标记严重程度给往来方排名 · 点击行查看该往来方的交易",
+      "vendorRiskRollup": "供应商风险汇总",
+      "weekendDated": "周末日期单据（按金额前200份）",
+      "zscoreAnomalies": "Z分数异常（{count}）"
+    },
+    "risk": {
+      "caption": "完整性风险",
+      "elevated": "升高",
+      "high": "高风险",
+      "low": "低风险",
+      "moderate": "中等"
+    },
+    "sequential": {
+      "indicatorNote1": " 如果某供应商开给您的发票号在数周或数月内完全连续，您很可能是其 ",
+      "indicatorNote2": " 独家客户。正规供应商因给其他方开票而存在断号。检测方法：按币种扫描每家供应商的参考号，寻找无断号序列。",
+      "indicatorTitle": "空壳公司信号：",
+      "more": "另{count}份",
+      "only": "唯一",
+      "runTotal": " ——合计{total}（{first} → {last}）"
+    },
+    "sub": {
+      "allMatchingPairs": "每组一条",
+      "atRisk": "{amount}面临风险",
+      "bankingContactAddress": "银行/联系/地址",
+      "documents": "单据",
+      "ending99": "以99/999/9999结尾",
+      "everyDocument": "全部单据，无上限",
+      "expected301": "预期30.1%",
+      "ghostsSequential": "{ghosts}个幽灵 · {sequential}个连续",
+      "higherRiskWeighting": "更高风险权重",
+      "inPeriod": "本期内",
+      "limitGaming": "可能博弈限额",
+      "offExpected25": "偏离预期>25%",
+      "offExpected50": "偏离预期>50%，n≥5",
+      "recordsRemoved": "已删除记录",
+      "seeThresholdTrap": "见阈值陷阱",
+      "sumPairAmounts": "按单据费率的超额部分",
+      "twoD": "2D：{value}",
+      "twoDigitPairs": "前两位数字对"
+    },
+    "tabs": {
+      "analysis": "分析",
+      "audit": "审计轨迹",
+      "benford": "本福德",
+      "config": "配置",
+      "detection": "检测",
+      "overview": "概览",
+      "vendors": "供应商"
+    },
+    "trapNote": "以99、999或9999结尾、略低于整数关口的金额，可能表明为规避审批限额而刻意安排的采购。同一申请人或供应商反复出现陷阱金额应予复核。陷阱一律按单据金额判定：一份99美元单据即使折算后远低于阈值，仍判定为99陷阱。",
+    "vendors": {
+      "drillSub": "{flags}个标记 · 标记金额{amount}"
+    },
+    "weekend": {
+      "signalNote": "周六/周日的会计日期",
+      "signalValue": "单据日期"
+    },
+    "yes": "是"
   },
   "charts": {
     "history": "历史",
@@ -1019,5 +2290,218 @@
       "dec": "12月"
     },
     "monthYear": "{yy}年{month}"
+  },
+  "cashWeek": {
+    "actionBar": {
+      "bills": "账单",
+      "buildCollectionRun": "创建收款批次",
+      "buildPayRun": "创建付款批次",
+      "invoices": "发票",
+      "summary": "{count}个{kind} · {total}"
+    },
+    "breakdown": {
+      "deferredBacklog": "递延（积压）",
+      "endingCash": "期末现金",
+      "inflowAr": "流入（应收）",
+      "inflowOther": "流入（其他）",
+      "netChange": "净变动",
+      "outCategory": "流出：{name}",
+      "outflowAp": "流出（应付）",
+      "safeApCapacity": "安全应付额度",
+      "startingCash": "期初现金"
+    },
+    "category": {
+      "export": "导出",
+      "exportCsvTitle": "导出CSV",
+      "method": "方法",
+      "sourceItems": "来源明细",
+      "thisWeek": "本周",
+      "totalForecast": "预测合计"
+    },
+    "coverageRatio": "覆盖率",
+    "csvHeaders": {
+      "amount": "金额",
+      "date": "日期",
+      "entityDescription": "主体/说明",
+      "type": "类型"
+    },
+    "drawerDescription": "净变动 {net} · 期末 {ending}",
+    "empty": {
+      "inflows": "流入",
+      "noMatches": "没有符合搜索的明细。",
+      "noSourceItems": "该估算没有来源明细。",
+      "noneThisWeek": "本周没有预测{side}。",
+      "outflows": "流出"
+    },
+    "meta": {
+      "accountsIncluded": "账户",
+      "adjustmentPct": "调整%",
+      "amount": "金额",
+      "avgAmount": "平均金额",
+      "avgPayment": "平均付款",
+      "bankAccounts": "银行账户",
+      "currentBalance": "卡余额",
+      "currentWeekApplied": "本周已应用",
+      "dailyBurnRate": "日均消耗",
+      "daysSinceLastPayment": "距上次付款天数",
+      "detectedPaymentDay": "付款日",
+      "finalAverage": "周平均",
+      "finalWeekly": "周估算",
+      "frequency": "频率",
+      "historyWeeks": "历史周数",
+      "interval": "间隔（天）",
+      "medianPayment": "付款中位数",
+      "memoKeywords": "备注筛选",
+      "monthlyMedian": "月中位数",
+      "monthlySpendRate": "月支出",
+      "monthsAnalyzed": "已分析月数",
+      "nextPaymentDate": "下次付款",
+      "paymentTrend": "趋势",
+      "projectedGrowth": "预计增长",
+      "rawAverage": "原始平均",
+      "samples": "样本数",
+      "sourceTotal": "来源合计",
+      "vendor": "供应商",
+      "vendors": "供应商",
+      "weeksUsed": "已用周数"
+    },
+    "methods": {
+      "average": "平均",
+      "dueDate": "到期日",
+      "history": "历史",
+      "pushed": "顺延"
+    },
+    "netChange": "净变动",
+    "pagination": {
+      "showing": "第{from}–{to}条，共{total}条"
+    },
+    "paymentHistoryTitle": "付款历史与可靠性",
+    "search": {
+      "customers": "客户",
+      "sourceItems": "搜索来源明细…",
+      "transactions": "搜索{party}或单据号…",
+      "vendors": "供应商"
+    },
+    "table": {
+      "amount": "金额",
+      "customer": "客户",
+      "date": "日期",
+      "entityDescription": "主体 / 说明",
+      "id": "ID",
+      "method": "方法",
+      "predicted": "预测值",
+      "status": "状态",
+      "type": "类型",
+      "vendor": "供应商"
+    },
+    "tabs": {
+      "apOutflows": "应付流出",
+      "arInflows": "应收流入"
+    }
+  },
+  "categoryManager": {
+    "days": {
+      "distributed": "分摊",
+      "friday": "星期五",
+      "monday": "星期一",
+      "saturday": "星期六",
+      "sunday": "星期日",
+      "thursday": "星期四",
+      "tuesday": "星期二",
+      "wednesday": "星期三"
+    },
+    "editTitle": "编辑",
+    "empty": "暂无分类——预测中仅包含应收/应付预测流量。",
+    "form": {
+      "addCategory": "添加分类",
+      "adjustmentPct": "调整%",
+      "amount": "金额",
+      "bankAccounts": "银行账户",
+      "calcMethod": "计算方法",
+      "cancel": "取消",
+      "cardAccounts": "信用卡账户",
+      "checksPayments": "支票与付款",
+      "expectedDay": "预计日期",
+      "expectedWeek": "预计周次",
+      "formula": "公式",
+      "frequency": "频率",
+      "frequencyBiweekly": "每两周",
+      "frequencyMonthly": "每月",
+      "frequencyWeekly": "每周",
+      "glAccounts": "总账科目",
+      "historyMonths": "历史月数",
+      "historyWeeks": "历史周数",
+      "journals": "日记账",
+      "memoKeywords": "备注关键词",
+      "memoKeywordsHelp": "用于筛选交易的关键词（逗号分隔，留空=全部）",
+      "memoKeywordsPlaceholder": "payroll, lease, hydro…",
+      "name": "名称",
+      "namePlaceholder": "分类名称",
+      "saveCategory": "保存分类",
+      "saving": "保存中…",
+      "searchAccounts": "搜索科目…",
+      "searchBankAccounts": "搜索银行账户…",
+      "searchCardAccounts": "搜索信用卡账户…",
+      "searchVendors": "搜索供应商…",
+      "threshold": "大额付款阈值（$）",
+      "thresholdHelp": "0=自动检测（付款中位数的50%）",
+      "transfers": "转账",
+      "type": "类型",
+      "typeInflow": "流入（营收/回款）",
+      "typeOutflow": "流出（费用/付款）",
+      "useNetAmount": "使用净额（考虑+/−）",
+      "vendors": "供应商"
+    },
+    "formulaHelp": "变量：{vars} · 函数：{funcs}",
+    "methods": {
+      "bank_register_history": {
+        "description": "根据银行账户实际资金变动预测",
+        "label": "银行流水历史"
+      },
+      "credit_card_cycle": {
+        "description": "跟踪信用卡负债及至还款日的预计增长",
+        "label": "信用卡周期"
+      },
+      "formula_expression": {
+        "description": "使用类Excel语法的自定义公式",
+        "label": "公式"
+      },
+      "gl_history_average": {
+        "description": "分析指定期间内的总账过账，计算周平均",
+        "label": "总账历史平均"
+      },
+      "manual_recurring": {
+        "description": "按指定频率（每周、每两周、每月）的固定金额",
+        "label": "手动周期"
+      },
+      "vendor_payment_history": {
+        "description": "汇总历史供应商付款，预测未来支出",
+        "label": "供应商付款历史"
+      },
+      "vendor_recurring_average": {
+        "description": "自动识别付款频率，根据供应商历史计算月均水平",
+        "label": "供应商周期（自动）"
+      }
+    },
+    "newCategory": "新建分类",
+    "panelHint": "非应收/应付现金流——引擎的七种计算方法",
+    "panelTitle": "预测分类",
+    "picker": {
+      "noMatches": "无匹配。",
+      "selectedCount": "{count, plural, one {已选# 项} other {已选# 项}}"
+    },
+    "remove": "删除",
+    "toasts": {
+      "forbidden": "保存需要设置权限。",
+      "saveFailed": "保存失败（{status}）。",
+      "savedRecomputing": "已保存——重新计算中…"
+    },
+    "weeks": {
+      "1stWeek": "第1周",
+      "2ndWeek": "第2周",
+      "3rdWeek": "第3周",
+      "4thWeek": "第4周",
+      "distributed": "分摊"
+    }
   }
 }
