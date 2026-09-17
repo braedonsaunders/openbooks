@@ -503,7 +503,9 @@ function RateDrawer({
                   htmlFor="rate-region"
                   help={label('rates.regionHelp', 'The region the rate applies in. A rate entered for one region is never applied to another.')}
                 >
-                  {pack?.regionLabel ?? label('rates.columns.region', 'Region')}
+                  {pack?.regionLabel
+                    ? pack.regionLabel.slice(0, 1).toUpperCase() + pack.regionLabel.slice(1)
+                    : label('rates.columns.region', 'Region')}
                 </Label>
                 <Select
                   id="rate-region"
