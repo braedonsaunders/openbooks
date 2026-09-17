@@ -129,6 +129,7 @@
       "emptyGroup": "Aucun champ dans ce groupe.",
       "fields": "Champs",
       "visible": "Visible",
+      "hidden": "Masqué",
       "required": "Obligatoire",
       "locked": "Verrouillé",
       "label": "Libellé",

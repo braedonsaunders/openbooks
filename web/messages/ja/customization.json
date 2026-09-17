@@ -124,6 +124,7 @@
       "emptyGroup": "このグループにはまだフィールドがありません。",
       "fields": "フィールド",
       "visible": "表示",
+      "hidden": "非表示",
       "required": "必須",
       "locked": "ロック",
       "label": "ラベル",
