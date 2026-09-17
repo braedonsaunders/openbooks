@@ -8,8 +8,8 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–14: setup, banking, assistant, payroll, CRM, and
-allocations UX on top of alpha.11.
+Fleet-6 batches 9–17: setup, banking, assistant, payroll, CRM, reports,
+and allocations UX on top of alpha.11.
 
 ### Setup and shell
 
@@ -35,6 +35,14 @@ allocations UX on top of alpha.11.
   the bottom with jump-to-latest.
 - Period-sweep preview runs inline on the rule Test tab; empty
   dimension options guide the user and bad values speak user language.
+- Deleted assistant threads stay deleted across chat switches; local
+  blue/green rebuilds can override `NEXT_DIST_DIR`.
+- Posted pay-run journal entries are visible on the journal; FX test
+  warns when no currencies exist; an already-running agent scan explains
+  the 409.
+- Schedule editor mutations surface the server error; a blocked account
+  save stays on a form-level alert; standalone checks require payee and
+  funding bank.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 

@@ -66,7 +66,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const CAD_ONLY = [{ code: "CAD", name: "Canadian Dollar" }];
 
 async function mountEmptyForm(t: TestContext) {
-  globalThis.__fxTestRouter = { push(url: string) {}, refresh() {} };
+  globalThis.__fxTestRouter = { push() {}, refresh() {} };
   globalThis.__fxTestToasts = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -124,7 +124,7 @@ test("a transport failure on test still releases the button with an error", asyn
     if ((init?.method ?? "GET").toUpperCase() === "POST") throw new Error("down");
     return Response.json({ id: "cfg-1" });
   }) as typeof fetch;
-  globalThis.__fxTestRouter = { push(url: string) {}, refresh() {} };
+  globalThis.__fxTestRouter = { push() {}, refresh() {} };
   globalThis.__fxTestToasts = [];
   t.after(() => {
     globalThis.fetch = prior;

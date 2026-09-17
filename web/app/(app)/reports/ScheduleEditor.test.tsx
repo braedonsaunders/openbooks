@@ -94,7 +94,7 @@ function row() {
 }
 
 async function mountEditor() {
-  globalThis.__schedTestRouter = { push(url: string) {}, refresh() {} };
+  globalThis.__schedTestRouter = { push() {}, refresh() {} };
   globalThis.__schedTestToasts = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -130,7 +130,7 @@ async function clickDelete(host: HTMLElement) {
 }
 
 test("empty schedule list renders the hint", async (t) => {
-  globalThis.__schedTestRouter = { push(url: string) {}, refresh() {} };
+  globalThis.__schedTestRouter = { push() {}, refresh() {} };
   globalThis.__schedTestToasts = [];
   const host = document.createElement("div");
   document.body.appendChild(host);

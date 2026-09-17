@@ -65,7 +65,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 test("a 409 claimed_elsewhere run explains that a scan is already running", async (t) => {
   const refreshes: string[] = [];
   globalThis.__agentsTestRouter = {
-    push(url: string) {},
+    push() {},
     refresh() {
       refreshes.push("refresh");
     },
@@ -113,7 +113,7 @@ test("a 409 claimed_elsewhere run explains that a scan is already running", asyn
 });
 
 test("a completed run still toasts its finding count", async (t) => {
-  globalThis.__agentsTestRouter = { push(url: string) {}, refresh() {} };
+  globalThis.__agentsTestRouter = { push() {}, refresh() {} };
   globalThis.__agentsTestToasts = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async () =>
