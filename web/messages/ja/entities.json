@@ -44,6 +44,21 @@
         "actionFailed": "操作に失敗しました"
       }
     },
+    "list": {
+      "emptyTitle": "物件がまだありません",
+      "emptyDetail": "最初の物件を作成し、会計ディメンションを関連付けてから、賃貸可能なユニットを追加してください。",
+      "notMapped": "未関連付け",
+      "columns": {
+        "property": "物件",
+        "code": "コード",
+        "subsidiary": "エンティティ",
+        "location": "所在地",
+        "propertyType": "種別",
+        "occupancy": "入居状況",
+        "currency": "通貨",
+        "status": "ステータス"
+      }
+    },
     "propertyDrawer": {
       "description": "物件を法人、住所、転記勘定に結び付けます。",
       "code": "コード",

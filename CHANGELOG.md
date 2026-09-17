@@ -130,7 +130,7 @@ agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
   tab inputs.
 - Exact journal-entry numbers resolve outside list origin/link scope;
   recurring cadence options translate in fr/es; setup wizard, go-live
-  guide, and api-keys copy backfill.
+  guide, api-keys, and the property buildings table copy backfill.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 

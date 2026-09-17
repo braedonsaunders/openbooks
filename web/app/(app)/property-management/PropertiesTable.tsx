@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import type { ListViewConfig } from "@openbooks/customization";
 import {
@@ -15,12 +16,26 @@ import type { PropertyRow, PropertyWorkspace } from "./types";
 
 type ListColumn = ListViewConfig["columns"][number];
 
+/** List column key to its translated header (F-t09-017). */
+const COLUMN_LABEL_KEYS: Record<string, string> = {
+  name: "list.columns.property",
+  code: "list.columns.code",
+  subsidiary: "list.columns.subsidiary",
+  location: "list.columns.location",
+  property_type: "list.columns.propertyType",
+  occupancy: "list.columns.occupancy",
+  currency: "list.columns.currency",
+  status: "list.columns.status",
+};
+
 export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: PropertyWorkspace; view: ListViewConfig; fieldDefs: CustomFieldDefClient[]; onOpen: (id: string) => void }) {
+  const t = useTranslations("entities.propertyManagement");
+  const tc = useTranslations("customization");
   if (!data.properties.length)
     return (
       <Empty
-        title="No properties yet"
-        detail="Create the first property, connect its accounting dimensions, then add rentable units."
+        title={t("list.emptyTitle")}
+        detail={t("list.emptyDetail")}
       />
     );
   const defs = new Map<string, CustomFieldDefClient>(
@@ -28,22 +43,25 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
   );
   const columns = view.columns.filter((column) => column.visible);
   const showsCodeColumn = columns.some((column) => column.key === "code");
-  const labels: Record<string, string> = {
-    name: "Property",
-    code: "Code",
-    subsidiary: "Entity",
-    location: "Location",
-    property_type: "Type",
-    occupancy: "Occupancy",
-    currency: "Currency",
-    status: "Status",
+  const label = (column: ListColumn) => {
+    const override = column.labelOverride?.trim()
+    if (override) return override
+    if (column.key.startsWith("cf_")) {
+      return defs.get(column.key.slice(3))?.label ?? column.key
+    }
+    const key = COLUMN_LABEL_KEYS[column.key]
+    return (key ? t(key) : undefined) ?? column.key
   };
-  const label = (column: ListColumn) =>
-    column.labelOverride?.trim() ||
-    (column.key.startsWith("cf_")
-      ? defs.get(column.key.slice(3))?.label
-      : labels[column.key]) ||
-    column.key;
+  // Enum cells resolve through the catalog with a raw fallback, so a future
+  // enum value still renders instead of throwing on a missing key.
+  const typeLabel = (value: string) => {
+    const key = `property.types.${value}`;
+    return tc.has(key) ? tc(key) : value.replaceAll("_", " ");
+  };
+  const statusLabel = (value: string) => {
+    const key = `property.status.${value}`;
+    return tc.has(key) ? tc(key) : undefined;
+  };
   const cell = (property: PropertyRow, key: string) => {
     if (key.startsWith("cf_")) {
       const value = property.custom?.[key.slice(3)];
@@ -67,13 +85,9 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
     if (key === "code")
       return <span className="font-mono text-sm">{property.code}</span>;
     if (key === "subsidiary") return property.subsidiaryName;
-    if (key === "location") return property.locationName || "Not mapped";
+    if (key === "location") return property.locationName || t("list.notMapped");
     if (key === "property_type")
-      return (
-        <span className="capitalize">
-          {property.propertyType.replaceAll("_", " ")}
-        </span>
-      );
+      return <span>{typeLabel(property.propertyType)}</span>;
     if (key === "occupancy")
       return (
         <span className="tabular-nums">
@@ -82,7 +96,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
       );
     if (key === "currency")
       return <span className="font-mono text-xs">{property.currency}</span>;
-    if (key === "status") return <Status value={property.status} />;
+    if (key === "status") return <Status value={property.status} label={statusLabel(property.status)} />;
     return "—";
   };
   return (

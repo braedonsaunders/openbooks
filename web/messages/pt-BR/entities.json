@@ -44,6 +44,20 @@
         "actionFailed": "A ação falhou"
       }
     },
+    "list": {
+      "emptyTitle": "Ainda não há imóveis",
+      "emptyDetail": "Crie o primeiro imóvel, conecte suas dimensões contábeis e adicione unidades alugáveis.",
+      "notMapped": "Não associado",
+      "columns": {
+        "property": "Imóvel",
+        "code": "Código",
+        "subsidiary": "Entidade",
+        "location": "Localização",
+        "propertyType": "Tipo",
+        "occupancy": "Ocupação",
+        "currency": "Moeda"
+      }
+    },
     "propertyDrawer": {
       "description": "Vincule o imóvel operacional à sua pessoa jurídica, endereço e contas contábeis.",
       "code": "Código",

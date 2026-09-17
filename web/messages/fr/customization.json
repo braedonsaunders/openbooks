@@ -65,7 +65,11 @@
       "defaultBankAccount": "Compte bancaire par défaut",
       "occupancy": "Occupation"
     },
-    "status": { "sold": "Vendue" },
+    "status": {
+      "sold": "Vendue",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
     "types": {
       "residential": "Résidentielle",
       "commercial": "Commerciale",

@@ -44,6 +44,21 @@
         "actionFailed": "操作失败"
       }
     },
+    "list": {
+      "emptyTitle": "暂无房产",
+      "emptyDetail": "创建首个房产，关联其核算维度，然后添加可出租单元。",
+      "notMapped": "未关联",
+      "columns": {
+        "property": "房产",
+        "code": "编码",
+        "subsidiary": "实体",
+        "location": "位置",
+        "propertyType": "类型",
+        "occupancy": "入住率",
+        "currency": "货币",
+        "status": "状态"
+      }
+    },
     "propertyDrawer": {
       "description": "将运营物业关联到法人、地址和记账科目。",
       "code": "编码",
