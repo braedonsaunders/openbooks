@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../lib/authz";
+import { describeDbError, pgErrorCode } from "../../../lib/setup/coerce";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
 import { prettifyTemplateHtml } from "../../../lib/pdf-templates/prettify";
@@ -107,9 +108,11 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ id: row.id, name: row.name });
   } catch (e) {
-    const msg = (e as Error).message ?? "insert failed";
-    if (msg.includes("unique"))
+    // Drizzle wraps driver failures (message "Failed query: <sql>", driver
+    // error in `cause`), so match the SQLSTATE — the wrapper message never
+    // contains "unique", and must never reach the client (F-t13-001).
+    if (pgErrorCode(e) === "23505")
       return NextResponse.json({ error: "A template with that name already exists" }, { status: 409 });
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: describeDbError(e) }, { status: 500 });
   }
 }
