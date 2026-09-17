@@ -184,6 +184,7 @@
       "saved": "View saved",
       "saveFailed": "Could not save the view",
       "delete": "Delete view",
+      "deleteConfirm": "Delete this view? Lists using it fall back to the default view. This cannot be undone.",
       "deleted": "View deleted",
       "columnsSection": "Columns",
       "filtersSection": "Filters",
