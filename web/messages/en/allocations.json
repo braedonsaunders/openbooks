@@ -381,6 +381,7 @@
     "note": "Note",
     "addValue": "Add value",
     "noValues": "No values for this driver yet.",
+    "noDimensionValues": "No active {dimension} values yet — create one before adding driver values.",
     "endValue": "End-date",
     "deleteValueConfirm": "Delete this value?",
     "preview": "Preview vector",

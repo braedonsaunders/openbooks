@@ -69,3 +69,17 @@ test('drivers tab uses shared chrome and namespaced action labels', () => {
   assert.match(tabSource, /<ShowInactivePill checked=\{showInactive\}/)
   assert.ok(!tabSource.includes('<Check checked={showInactive}'), 'no bare show-inactive checkbox')
 })
+
+test('empty dimension options explain instead of offering a doomed textbox (F-t06-016)', () => {
+  // With no active dimension values the picker branch rendered a bare
+  // textbox whose free text could never validate (400 "dimensionValueId
+  // must be a uuid"). The empty branch must guide the user to create the
+  // dimension value first — never an input that only produces jargon.
+  const fallbackStart = tabSource.indexOf('valueDimOptions.length > 0 ?')
+  assert.ok(fallbackStart >= 0, 'picker/empty branch must exist')
+  const fieldEnd = tabSource.indexOf('</Field>', fallbackStart)
+  assert.ok(fieldEnd > fallbackStart, 'branch stays inside its Field')
+  const branch = tabSource.slice(fallbackStart, fieldEnd)
+  assert.ok(!branch.includes('<Input'), 'empty branch renders no textbox')
+  assert.match(branch, /noDimensionValues/, 'empty branch renders the guidance copy')
+})

@@ -387,12 +387,9 @@ function ManualValuesSection({
                 ariaLabel={t('dimensionValue')}
               />
             ) : (
-              <Input
-                value={valueDraft.dimensionValueId}
-                placeholder={t('dimensionValue')}
-                aria-label={t('dimensionValue')}
-                onChange={(e) => setValueDraft((d) => ({ ...d, dimensionValueId: e.target.value }))}
-              />
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t('noDimensionValues', { dimension: dimensionLabel(t, driver.dimension) })}
+              </p>
             )}
           </Field>
         </div>
