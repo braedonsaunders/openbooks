@@ -232,6 +232,52 @@
         "cheque": "Cheques ({count, plural, one {# empleado} other {# empleados}})"
       }
     },
+    "bankFile": {
+      "title": "Depósito directo",
+      "hint": "El archivo ordena al banco acreditar a cada empleado con EFT. Una vez generado queda congelado, con hash y numerado; cada descarga queda registrada.",
+      "profile": "Perfil bancario originante",
+      "notConfigured": "no configurado",
+      "generate": "Generar archivo",
+      "regenerate": "Generar reemplazo",
+      "generated": "Archivo de depósito directo generado",
+      "regenerateTitle": "¿Reemplazar el archivo de depósito directo existente?",
+      "regenerateLabel": "¿Por qué se necesita un reemplazo? El archivo existente queda registrado y marcado como reemplazado. Si ya se envió al banco, no envíe ambos.",
+      "regeneratePlaceholder": "p. ej., el banco rechazó la primera transmisión",
+      "regenerateConfirm": "Generar reemplazo",
+      "multipleLive": "Este ciclo de pago tiene más de un archivo sin reemplazar. Envíe exactamente UN archivo al banco: liberar ambos paga a cada empleado dos veces.",
+      "noProfile": "No hay ningún perfil bancario originante configurado para la nómina. Agregue uno en Setup → Payment operations: el id. de originador, el enrutamiento y la identificación de la empresa los asigna su banco y nunca se dan por supuestos.",
+      "onFile": "Incluido en el archivo (EFT)",
+      "onPaper": "Pagado con cheque en su lugar",
+      "controlTotal": "Suma de verificación",
+      "employees": "{n} empleados",
+      "credits": "{n} créditos",
+      "excludedTitle": "Fuera del archivo — concílielos con la fecha de pago",
+      "file": "Archivo",
+      "amount": "Suma de verificación",
+      "status": "Estado",
+      "released": "Enviado",
+      "download": "Descargar",
+      "neverReleased": "Nunca descargado",
+      "copyHash": "Copiar hash",
+      "hashCopied": "Hash copiado",
+      "auditTitle": "Actividad: quién generó y quién descargó",
+      "state": {
+        "generated": "Generado",
+        "released": "Enviado al banco",
+        "superseded": "Reemplazado"
+      },
+      "event": {
+        "generate": "Generado",
+        "release": "Descargado",
+        "supersede": "Reemplazado"
+      },
+      "exclusion": {
+        "profile": "Pagado con cheque (excepción de nómina)",
+        "party": "Pagado con cheque (preferencia del empleado)",
+        "default": "Sin datos bancarios registrados — pagado con cheque",
+        "eftFallback": "Configurado como EFT pero sin datos bancarios aprobados — pagado con cheque"
+      }
+    },
     "steps": {
       "finish": "Contabilizar y terminar",
       "gl": "Vista previa contable y confirmación",

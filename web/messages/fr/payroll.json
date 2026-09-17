@@ -232,6 +232,52 @@
         "cheque": "Chèques ({count, plural, one {# employé} other {# employés}})"
       }
     },
+    "bankFile": {
+      "title": "Dépôt direct",
+      "hint": "Le fichier ordonne à la banque de créditer chaque employé payé par TEF. Une fois généré, il est figé, haché et numéroté ; chaque téléchargement est enregistré.",
+      "profile": "Profil bancaire émetteur",
+      "notConfigured": "non configuré",
+      "generate": "Générer le fichier",
+      "regenerate": "Générer un remplacement",
+      "generated": "Fichier de dépôt direct généré",
+      "regenerateTitle": "Remplacer le fichier de dépôt direct existant ?",
+      "regenerateLabel": "Pourquoi un remplacement est-il nécessaire ? Le fichier existant est conservé et marqué comme remplacé. S'il a déjà été transmis à la banque, n'envoyez pas les deux.",
+      "regeneratePlaceholder": "p. ex. la banque a rejeté la première transmission",
+      "regenerateConfirm": "Générer un remplacement",
+      "multipleLive": "Ce cycle de paie a plus d'un fichier non remplacé. N'envoyez qu'UN seul fichier à la banque — en libérer deux paie chaque employé deux fois.",
+      "noProfile": "Aucun profil bancaire d'origine n'est configuré pour la paie. Ajoutez-en un dans Setup → Payment operations : l'identifiant d'émetteur, l'acheminement et l'identification de l'entreprise sont attribués par votre banque et ne sont jamais définis par défaut.",
+      "onFile": "Sur le fichier (EFT)",
+      "onPaper": "Payé par chèque à la place",
+      "controlTotal": "Somme de contrôle",
+      "employees": "{n} employés",
+      "credits": "{n} crédits",
+      "excludedTitle": "Hors fichier — rapprochez-les de la paie",
+      "file": "Fichier",
+      "amount": "Somme de contrôle",
+      "status": "Statut",
+      "released": "Transmis",
+      "download": "Télécharger",
+      "neverReleased": "Jamais téléchargé",
+      "copyHash": "Copier le hachage",
+      "hashCopied": "Hachage copié",
+      "auditTitle": "Activité — qui a généré et qui a téléchargé",
+      "state": {
+        "generated": "Généré",
+        "released": "Transmis à la banque",
+        "superseded": "Remplacé"
+      },
+      "event": {
+        "generate": "Généré",
+        "release": "Téléchargé",
+        "supersede": "Remplacé"
+      },
+      "exclusion": {
+        "profile": "Payé par chèque (dérogation de la paie)",
+        "party": "Payé par chèque (préférence de l'employé)",
+        "default": "Aucune coordonnée bancaire au dossier — payé par chèque",
+        "eftFallback": "Paiement électronique sélectionné mais sans coordonnées bancaires approuvées — payé par chèque"
+      }
+    },
     "steps": {
       "finish": "Reporter et terminer",
       "gl": "Aperçu GL et comptabilisation",

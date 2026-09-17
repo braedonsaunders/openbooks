@@ -232,6 +232,52 @@
         "cheque": "小切手 ({count, plural, one {#名} other {#名}})"
       }
     },
+    "bankFile": {
+      "title": "直接入金",
+      "hint": "このファイルは銀行に対し、各EFT従業員へ入金するよう指示します。生成後は凍結・ハッシュ化・番号付けされ、ダウンロードはすべて記録されます。",
+      "profile": "振出銀行プロファイル",
+      "notConfigured": "未設定",
+      "generate": "ファイルを生成",
+      "regenerate": "置換を生成",
+      "generated": "直接入金ファイルを生成しました",
+      "regenerateTitle": "既存の直接入金ファイルを置き換えますか？",
+      "regenerateLabel": "なぜ置換が必要ですか？既存のファイルは記録に残り、置換済みとしてマークされます。すでに銀行へ送信済みの場合は、両方を送らないでください。",
+      "regeneratePlaceholder": "例: 銀行が最初の送信を拒否",
+      "regenerateConfirm": "置換を生成",
+      "multipleLive": "この給与計算には置換されていないファイルが複数あります。銀行へ送るのは必ず1つのファイルにしてください — 両方をリリースすると全員に二重払いとなります。",
+      "noProfile": "給与用の振出銀行プロファイルが設定されていません。セットアップ → 支払と銀行取引で追加してください。オリジネーターID、ルーティング、会社識別情報は銀行が発行するもので、既定値が使われることはありません。",
+      "onFile": "ファイル内 (EFT)",
+      "onPaper": "代わりに小切手で支払い",
+      "controlTotal": "管理合計",
+      "employees": "{n}名",
+      "credits": "{n}件の入金",
+      "excludedTitle": "ファイル外 — 給与支払日と照合してください",
+      "file": "ファイル",
+      "amount": "管理合計",
+      "status": "ステータス",
+      "released": "送付済み",
+      "download": "ダウンロード",
+      "neverReleased": "未ダウンロード",
+      "copyHash": "sha256をコピー",
+      "hashCopied": "sha256をコピーしました",
+      "auditTitle": "アクティビティ — 生成者とダウンロード者",
+      "state": {
+        "generated": "生成済み",
+        "released": "銀行へ送付済み",
+        "superseded": "置換済み"
+      },
+      "event": {
+        "generate": "生成済み",
+        "release": "ダウンロード済み",
+        "supersede": "置換済み"
+      },
+      "exclusion": {
+        "profile": "小切手で支払い（給与の上書き設定）",
+        "party": "小切手で支払い（従業員の希望）",
+        "default": "銀行口座未登録 — 小切手で支払い",
+        "eftFallback": "EFTに設定されていますが承認済み口座がありません — 小切手で支払い"
+      }
+    },
     "steps": {
       "finish": "転記して完了",
       "gl": "総勘定プレビューと確定",

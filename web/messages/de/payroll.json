@@ -232,6 +232,52 @@
         "cheque": "Schecks ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
       }
     },
+    "bankFile": {
+      "title": "Direktüberweisung",
+      "hint": "Die Datei weist die Bank an, jedem EFT-Mitarbeiter gutzuschreiben. Nach der Erstellung ist sie eingefroren, gehasht und nummeriert; jeder Download wird protokolliert.",
+      "profile": "Bankprofil des Auftraggebers",
+      "notConfigured": "nicht konfiguriert",
+      "generate": "Datei erstellen",
+      "regenerate": "Ersatz erstellen",
+      "generated": "Direktüberweisungsdatei erstellt",
+      "regenerateTitle": "Die vorhandene Direktüberweisungsdatei ersetzen?",
+      "regenerateLabel": "Warum ist ein Ersatz nötig? Die vorhandene Datei bleibt gespeichert und wird als ersetzt markiert. Falls sie bereits an die Bank gegangen ist, senden Sie nicht beide.",
+      "regeneratePlaceholder": "z. B. die Bank hat die erste Übertragung abgelehnt",
+      "regenerateConfirm": "Ersatz erstellen",
+      "multipleLive": "Dieser Gehaltslauf hat mehr als eine nicht ersetzte Datei. Senden Sie genau EINE Datei an die Bank — beide freizugeben zahlt jeden Mitarbeiter doppelt.",
+      "noProfile": "Für die Gehaltsabrechnung ist kein Bankprofil des Auftraggebers eingerichtet. Legen Sie eines unter Setup → Payment operations an: Originator-ID, Routing und Firmenkennung vergibt Ihre Bank und werden niemals angenommen.",
+      "onFile": "In der Datei (EFT)",
+      "onPaper": "Stattdessen per Scheck bezahlt",
+      "controlTotal": "Kontrollsumme",
+      "employees": "{n} Mitarbeiter",
+      "credits": "{n} Gutschriften",
+      "excludedTitle": "Nicht in der Datei — stimmen Sie diese mit dem Zahltag ab",
+      "file": "Datei",
+      "amount": "Kontrollsumme",
+      "status": "Stand",
+      "released": "Übertragen",
+      "download": "Herunterladen",
+      "neverReleased": "Nie heruntergeladen",
+      "copyHash": "Hash kopieren",
+      "hashCopied": "Hash kopiert",
+      "auditTitle": "Aktivität — wer erstellt und wer heruntergeladen hat",
+      "state": {
+        "generated": "Erstellt",
+        "released": "An die Bank übertragen",
+        "superseded": "Ersetzt"
+      },
+      "event": {
+        "generate": "Erstellt",
+        "release": "Heruntergeladen",
+        "supersede": "Ersetzt"
+      },
+      "exclusion": {
+        "profile": "Per Scheck bezahlt (manuelle Überschreibung)",
+        "party": "Per Scheck bezahlt (Mitarbeiterwunsch)",
+        "default": "Keine Bankverbindung hinterlegt — per Scheck bezahlt",
+        "eftFallback": "EFT eingestellt, aber keine bestätigte Bankverbindung — per Scheck bezahlt"
+      }
+    },
     "steps": {
       "finish": "Buchen & abschließen",
       "gl": "Hauptbuch-Vorschau & Festschreibung",
