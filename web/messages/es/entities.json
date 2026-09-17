@@ -1,5 +1,27 @@
 {
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "La acción falló",
+      "camPoolCreated": "Grupo de gastos comunes creado",
+      "camPoolReopened": "Grupo de gastos comunes reabierto para corrección",
+      "camPoolUpdated": "Grupo de gastos comunes actualizado",
+      "chargeAdded": "Cargo agregado",
+      "couldNotLoad": "No se pudieron cargar las propiedades",
+      "depositPosted": "Depósito de garantía registrado",
+      "depositReversed": "Depósito de garantía revertido",
+      "escalationApplied": "Actualización aplicada",
+      "escalationScheduled": "Actualización programada",
+      "lateFeesAssessed": "Recargos por mora de la cartera aplicados",
+      "leaseCreated": "Arrendamiento creado",
+      "leaseUpdated": "Arrendamiento actualizado",
+      "propertyCreated": "Propiedad creada",
+      "propertyDeleted": "Propiedad eliminada",
+      "propertyUpdated": "Propiedad actualizada",
+      "rentBilled": "Rentas de la cartera facturadas",
+      "unitAdded": "Unidad agregada",
+      "unitDeleted": "Unidad eliminada",
+      "unitUpdated": "Unidad actualizada"
+    },
     "workspace": {
       "title": "Gestión de propiedades",
       "description": "Administre propiedades, arrendamientos, rentas, conciliaciones de gastos comunes y depósitos de garantía.",
@@ -57,6 +79,200 @@
         "occupancy": "Ocupación",
         "currency": "Moneda",
         "status": "Estado"
+      }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "charge": "Cargo",
+          "frequency": "Frecuencia",
+          "effective": "Vigencia",
+          "amount": "Importe",
+          "open": "Abierto"
+        },
+        "addTitle": "Agregar cargo recurrente",
+        "labels": {
+          "type": "Tipo",
+          "description": "Descripción",
+          "amount": "Importe",
+          "frequency": "Frecuencia",
+          "effectiveFrom": "Vigente desde",
+          "effectiveTo": "Vigente hasta",
+          "incomeAccount": "Cuenta de ingresos"
+        },
+        "types": {
+          "cam": "Gastos comunes",
+          "parking": "Estacionamiento",
+          "storage": "Almacenamiento",
+          "utility": "Servicios públicos",
+          "other": "Otro"
+        },
+        "frequencies": {
+          "monthly": "Mensual",
+          "quarterly": "Trimestral",
+          "annually": "Anual",
+          "one_time": "Una vez"
+        },
+        "propertyDefault": "Predeterminado del inmueble",
+        "addCharge": "Agregar cargo"
+      },
+      "escalations": {
+        "table": {
+          "effective": "Vigencia",
+          "method": "Método",
+          "value": "Valor",
+          "result": "Resultado",
+          "status": "Estado"
+        },
+        "apply": "Aplicar",
+        "emptyTitle": "Sin actualizaciones de renta",
+        "emptyDetail": "Programa cambios contractuales porcentuales, de monto fijo o de renta de reemplazo.",
+        "scheduleTitle": "Programar actualización",
+        "labels": {
+          "effectiveOn": "Fecha de vigencia",
+          "method": "Método",
+          "value": "Valor"
+        },
+        "methods": {
+          "percent": "Incremento porcentual",
+          "fixed": "Incremento fijo",
+          "new_amount": "Nuevo monto mensual"
+        },
+        "schedule": "Programar"
+      },
+      "deposits": {
+        "required": "Obligatorio",
+        "held": "Retenido",
+        "notice": "Las transacciones de depósito se contabilizan de inmediato y no se pueden editar ni eliminar. Revierta una transacción incorrecta y luego contabilice su reemplazo corregido a continuación.",
+        "emptyTitle": "Sin movimientos de depósito",
+        "emptyDetail": "Registre la recepción para establecer el pasivo por depósitos de inquilinos.",
+        "reverseTitle": "Revertir transacción de depósito",
+        "reverseLabels": {
+          "reversalDate": "Fecha de reversión",
+          "reason": "Motivo"
+        },
+        "cancel": "Cancelar",
+        "postReversal": "Contabilizar la reversión",
+        "recordTitle": "Registrar transacción de depósito",
+        "labels": {
+          "transaction": "Transacción",
+          "date": "Fecha",
+          "amount": "Importe",
+          "bankAccount": "Cuenta bancaria",
+          "tenantInvoice": "Factura del inquilino",
+          "offsetAccount": "Cuenta de contrapartida"
+        },
+        "kinds": {
+          "received": "Recibido",
+          "interest": "Intereses acreditados",
+          "applied": "Aplicar a la factura del inquilino",
+          "refunded": "Reembolsado",
+          "adjustment_increase": "Ajuste al alza",
+          "adjustment_decrease": "Ajuste a la baja"
+        },
+        "propertyDefault": "Predeterminado del inmueble",
+        "selectPostedInvoice": "Seleccionar factura contabilizada",
+        "selectAccount": "Seleccionar cuenta",
+        "postTransaction": "Contabilizar la transacción"
+      },
+      "toasts": {
+        "chargeAdded": "Cargo de arrendamiento agregado",
+        "escalationApplied": "Actualización de renta aplicada",
+        "escalationScheduled": "Actualización programada",
+        "depositReversed": "Transacción de depósito revertida",
+        "depositPosted": "Transacción de depósito contabilizada"
+      }
+    },
+    "detail": {
+      "selectEmpty": "Sin asignar",
+      "fields": {
+        "name": "Nombre",
+        "code": "Código",
+        "propertyType": "Tipo de inmueble",
+        "status": "Estado",
+        "subsidiary": "Subsidiaria",
+        "location": "Ubicación",
+        "fixedAsset": "Activo fijo",
+        "currency": "Moneda",
+        "street": "Calle",
+        "city": "Ciudad",
+        "region": "Provincia / estado",
+        "postalCode": "Código postal",
+        "rentIncomeAccount": "Cuenta de ingresos por alquiler",
+        "camIncomeAccount": "Cuenta de ingresos por gastos comunes",
+        "depositLiabilityAccount": "Cuenta de pasivo por fianzas",
+        "defaultBankAccount": "Cuenta bancaria predeterminada"
+      },
+      "selectSubsidiary": "Seleccionar subsidiaria",
+      "tabsLabelMap": {
+        "overview": "Resumen",
+        "units": "Unidades",
+        "leases": "Arrendamientos",
+        "rent": "Rentas",
+        "deposits": "Depósitos",
+        "cam": "Gastos comunes"
+      },
+      "tabsAria": "Detalles del inmueble",
+      "noLocation": "Sin ubicación",
+      "cancel": "Cancelar",
+      "saving": "Guardando…",
+      "save": "Guardar",
+      "edit": "Editar",
+      "actions": "Acciones",
+      "customForm": "Formulario personalizado",
+      "customizeForm": "Personalizar formulario",
+      "deactivate": "Desactivar el inmueble",
+      "reactivate": "Reactivar el inmueble",
+      "deleteConfirm": "¿Eliminar {name}? Solo se pueden eliminar permanentemente los inmuebles sin uso.",
+      "deleteProperty": "Eliminar el inmueble",
+      "units": {
+        "title": "Unidades arrendables",
+        "description": "Ocupación, superficie arrendable y capacidad de arrendamiento por unidad.",
+        "addUnit": "Agregar unidad",
+        "table": {
+          "unit": "Unidad",
+          "type": "Tipo",
+          "rentableArea": "Superficie arrendable",
+          "bedrooms": "Habitaciones",
+          "status": "Estado"
+        },
+        "emptyTitle": "Aún no hay unidades",
+        "emptyDetail": "Agregue la primera unidad arrendable desde este registro de inmueble."
+      },
+      "leases": {
+        "title": "Arrendamientos del inmueble",
+        "description": "Contratos de inquilinos vigentes e históricos de este inmueble.",
+        "newLease": "Nuevo arrendamiento",
+        "table": {
+          "lease": "Arrendamiento",
+          "unit": "Unidad",
+          "tenant": "Inquilino",
+          "term": "Plazo",
+          "status": "Estado"
+        },
+        "wholeProperty": "Inmueble completo",
+        "openTerm": "Abierto",
+        "emptyTitle": "Aún no hay arrendamientos",
+        "emptyDetail": "Cree un arrendamiento desde la pestaña Arrendamientos del espacio de trabajo."
+      },
+      "rent": {
+        "title": "Calendario de rentas",
+        "description": "Rentas programadas y facturadas de los arrendamientos de este inmueble.",
+        "assessLateFees": "Aplicar recargos por mora",
+        "billDueRent": "Facturar rentas vencidas"
+      },
+      "depositsTab": {
+        "title": "Depósitos de garantía",
+        "description": "Actividad de depósitos de inquilinos de este inmueble, solo de adición."
+      },
+      "cam": {
+        "title": "Conciliaciones de gastos comunes",
+        "description": "Grupos de gastos operativos, distribuciones y ajustes de inquilinos de este inmueble.",
+        "newPool": "Nuevo grupo de gastos comunes"
+      },
+      "toasts": {
+        "lateFeesAssessed": "Recargos por mora del inmueble aplicados",
+        "rentBilled": "Rentas del inmueble facturadas"
       }
     },
     "propertyDrawer": {
