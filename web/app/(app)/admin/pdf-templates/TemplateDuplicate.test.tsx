@@ -122,6 +122,86 @@ test("F-x6-003: starter Duplicate opens the name prompt", async () => {
   }
 });
 
+// F-t13-001: the offered duplicate default must not collide — the org may
+// already hold a template with the starter's name (unique index org + type +
+// name), and saving a colliding default died on a storage 500. The prompt
+// must pre-fill the first free name instead.
+test("F-t13-001: starter Duplicate pre-fills a non-colliding name", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages,
+        timeZone: "UTC",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(PromptRoot, {}),
+          React.createElement(TemplatesList, {
+            templates: [
+              {
+                id: "00000000-0000-4000-8000-000000000099",
+                name: "Customer invoice starter",
+                description: null,
+                recordType: "customer_invoice",
+                paperSize: "letter",
+                orientation: "portrait",
+                isActive: true,
+                isDefault: false,
+              },
+            ],
+            starters: [
+              {
+                recordType: "customer_invoice",
+                label: "Customer invoice",
+                sourceHtml: "<p>hi</p>",
+                headerHtml: "",
+                footerHtml: "",
+                isEffectiveDefault: true,
+              },
+            ],
+            recordTypes: [{ key: "customer_invoice", label: "Customer invoice" }],
+          }),
+        ),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    // The shared prompt module outlives each tree: an earlier test may have
+    // left a request unsettled, and this tree's PromptRoot renders it on
+    // mount. Dismiss it so the Duplicate click below starts clean.
+    await act(async () => {
+      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+        (b) => b.textContent?.trim() === "Cancel",
+      );
+      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const buttons = [...host.querySelectorAll("button")].filter((b) =>
+      b.textContent?.trim().startsWith("Duplicate"),
+    );
+    assert.ok(buttons.length > 0, "row Duplicate button must render");
+    await act(async () => {
+      buttons[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
+    assert.ok(input, "name prompt dialog must open from the list row");
+    assert.equal(input.value, "Customer invoice starter 2");
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
 // Same contract through the real list row (PagedTable cell): the starter
 // row's Duplicate must reach the same prompt.
 test("F-x6-003: starter row Duplicate opens the name prompt in the list", async () => {

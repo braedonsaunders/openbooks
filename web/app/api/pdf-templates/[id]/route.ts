@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../../lib/authz";
+import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../../lib/documents";
 import { isUuid } from "../../../../lib/list-params";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
@@ -115,10 +116,11 @@ export async function PATCH(req: Request, { params }: Params) {
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const msg = (e as Error).message ?? "update failed";
-    if (msg.includes("unique"))
+    // Same Drizzle-wrapper caveat as the collection POST (F-t13-001): match
+    // the SQLSTATE, never the wrapper message.
+    if (pgErrorCode(e) === "23505")
       return NextResponse.json({ error: "A template with that name already exists" }, { status: 409 });
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: describeDbError(e) }, { status: 500 });
   }
 }
 

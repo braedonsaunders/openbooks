@@ -7,6 +7,20 @@ import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { promptDialog } from '../../../../lib/prompt'
 
+/**
+ * First non-colliding name: the base when free, else "base 2", "base 3", …
+ * Digits only — no translatable words, so no catalog keys are needed. The
+ * pdf_templates unique index is (org_id, record_type, name): callers pass the
+ * taken names for the new template's own record type (F-t13-001 — the offered
+ * default must not collide, or every duplicate-save dies on a 409).
+ */
+export function uniqueTemplateName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base} ${n}`)) n++;
+  return `${base} ${n}`;
+}
+
 /** Prompt for a name, create the template (starter design), open the editor. */
 export function NewTemplateButton({
   recordType,
@@ -59,7 +73,14 @@ export function NewTemplateButton({
 }
 
 /** Copy an existing template (name prompt) and open the copy. */
-export function DuplicateTemplateButton({ templateId }: { templateId: string }) {
+export function DuplicateTemplateButton({
+  templateId,
+  takenNames,
+}: {
+  templateId: string;
+  /** Names already used by this record type — the offered default skips them. */
+  takenNames?: Set<string>;
+}) {
   const t = useTranslations('pdfTemplates')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -74,7 +95,10 @@ export function DuplicateTemplateButton({ templateId }: { templateId: string }) 
         return
       }
       const src = data.row
-      const name = await promptDialog({ title: t('list.duplicate'), initialValue: `${src.name} (copy)` })
+      const name = await promptDialog({
+        title: t('list.duplicate'),
+        initialValue: uniqueTemplateName(`${src.name} (copy)`, takenNames ?? new Set([src.name])),
+      })
       if (!name?.trim()) return
       const created = await fetch('/api/pdf-templates', {
         method: 'POST',

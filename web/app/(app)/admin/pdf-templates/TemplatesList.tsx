@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Drawer, Select } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
-import { DuplicateTemplateButton, NewTemplateButton } from './TemplateActions'
+import { DuplicateTemplateButton, NewTemplateButton, uniqueTemplateName } from './TemplateActions'
 
 const PAPER_LABEL: Record<string, string> = { letter: 'Letter', a4: 'A4', legal: 'Legal' }
 
@@ -60,6 +60,21 @@ export function TemplatesList({
     () => new Map(recordTypes.map((rt) => [rt.key, rt.label])),
     [recordTypes],
   )
+
+  // Taken names per record type (the unique index is org + type + name), so
+  // the offered duplicate default never collides (F-t13-001).
+  const takenByType = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const tp of templates) {
+      let set = map.get(tp.recordType)
+      if (!set) {
+        set = new Set<string>()
+        map.set(tp.recordType, set)
+      }
+      set.add(tp.name)
+    }
+    return map
+  }, [templates])
 
   const rows = useMemo<Row[]>(() => {
     const starterRows = starters
@@ -186,9 +201,19 @@ export function TemplatesList({
       align: 'right',
       cell: (row) =>
         row.kind === 'starter' ? (
-          <NewTemplateButton recordType={row.starter.recordType} asDuplicateOfStarter defaultName={t('list.starterNamed', { type: row.starter.label })} />
+          <NewTemplateButton
+            recordType={row.starter.recordType}
+            asDuplicateOfStarter
+            defaultName={uniqueTemplateName(
+              t('list.starterNamed', { type: row.starter.label }),
+              takenByType.get(row.starter.recordType) ?? new Set(),
+            )}
+          />
         ) : (
-          <DuplicateTemplateButton templateId={row.template.id} />
+          <DuplicateTemplateButton
+            templateId={row.template.id}
+            takenNames={takenByType.get(row.template.recordType)}
+          />
         ),
     },
   ]
@@ -220,7 +245,10 @@ export function TemplatesList({
             {typeFilter ? (
               <NewTemplateButton
                 recordType={typeFilter}
-                defaultName={t('list.starterNamed', { type: labelByType.get(typeFilter) ?? '' })}
+                defaultName={uniqueTemplateName(
+                  t('list.starterNamed', { type: labelByType.get(typeFilter) ?? '' }),
+                  takenByType.get(typeFilter) ?? new Set(),
+                )}
               />
             ) : null}
           </div>
