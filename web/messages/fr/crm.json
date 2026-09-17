@@ -113,7 +113,15 @@
     "createEstimate": "Créer un devis",
     "estimateCreated": "Devis créé",
     "estimateFailed": "Le devis n’a pas pu être créé.",
-    "estimateNeedsAccount": "Sélectionnez un compte avant de créer un devis"
+    "estimateNeedsAccount": "Sélectionnez un compte avant de créer un devis",
+    "statuses": {
+      "qualification": "Qualification",
+      "discovery": "Découverte",
+      "proposal": "Proposition",
+      "negotiation": "Négociation",
+      "closedWon": "Gagnée",
+      "closedLost": "Perdue"
+    }
   },
   "forecastCategories": {
     "omitted": "Exclue",

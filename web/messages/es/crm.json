@@ -117,7 +117,15 @@
     "createEstimate": "Crear presupuesto",
     "estimateCreated": "Presupuesto creado",
     "estimateFailed": "No se pudo crear el presupuesto.",
-    "estimateNeedsAccount": "Seleccione una cuenta antes de crear una estimación"
+    "estimateNeedsAccount": "Seleccione una cuenta antes de crear una estimación",
+    "statuses": {
+      "qualification": "Calificación",
+      "discovery": "Descubrimiento",
+      "proposal": "Propuesta",
+      "negotiation": "Negociación",
+      "closedWon": "Ganada",
+      "closedLost": "Perdida"
+    }
   },
   "forecastCategories": {
     "omitted": "Omitida",

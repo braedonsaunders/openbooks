@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
 
 type Option = { id: string; name: string }
 type ContactOption = Option & { party_id: string }
@@ -37,14 +38,14 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
   // would 422 with no recovery path in this drawer.
   const estimateBlockedReason = !form.partyId ? t('opportunities.estimateNeedsAccount') : null
   const accountContacts=contacts.filter((c)=>!form.partyId||c.party_id===form.partyId)
-  return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{row.opportunity_number} · {form.title||t('opportunities.newFallback')}<Badge>{row.status_name}</Badge></span>} headerActions={canManage?<><Button variant="outline" onClick={estimate} disabled={busy||!form.partyId} title={estimateBlockedReason??undefined}>{t('opportunities.createEstimate')}</Button><Button onClick={save} disabled={busy}>{busy?tc('actions.saving'):tc('actions.save')}</Button></>:undefined}>
+  return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{row.opportunity_number} · {form.title||t('opportunities.newFallback')}<Badge>{displayOpportunityStatusName(row.status_name,(key)=>t(`opportunities.statuses.${key}`))}</Badge></span>} headerActions={canManage?<><Button variant="outline" onClick={estimate} disabled={busy||!form.partyId} title={estimateBlockedReason??undefined}>{t('opportunities.createEstimate')}</Button><Button onClick={save} disabled={busy}>{busy?tc('actions.saving'):tc('actions.save')}</Button></>:undefined}>
     <div className="grid gap-4 sm:grid-cols-3">
       <div className="sm:col-span-2"><Field label={t('fields.title')}><Input value={form.title} onChange={e=>set('title',e.target.value)} disabled={!canManage}/></Field></div>
       <Field label={t('fields.account')}><Select value={form.partyId} onChange={e=>{set('partyId',e.target.value);set('primaryContactId','')}} disabled={!canManage}><option value="">{tc('labels.none')}</option>{accounts.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.primaryContact')}><Select value={form.primaryContactId} onChange={e=>set('primaryContactId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{accountContacts.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.owner')}><Select value={form.ownerUserId} onChange={e=>set('ownerUserId',e.target.value)} disabled={!canManage}><option value="">{t('fields.unassigned')}</option>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.salesTeam')}><Select value={form.salesTeamId} onChange={e=>set('salesTeamId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{teams.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
-      <Field label={t('fields.status')}><Select value={form.statusId} onChange={e=>{set('statusId',e.target.value);setLossReasonError(false)}} disabled={!canManage}>{statuses.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
+      <Field label={t('fields.status')}><Select value={form.statusId} onChange={e=>{set('statusId',e.target.value);setLossReasonError(false)}} disabled={!canManage}>{statuses.map(o=><option key={o.id} value={o.id}>{displayOpportunityStatusName(o.name,(key)=>t(`opportunities.statuses.${key}`))}</option>)}</Select></Field>
       <Field label={t('fields.probability')}><Input type="number" min="0" max="100" value={form.probability} onChange={e=>set('probability',e.target.value)} disabled={!canManage}/></Field>
       <Field label={t('fields.forecastCategory')}><Select value={form.forecastCategory} onChange={e=>set('forecastCategory',e.target.value)} disabled={!canManage}>{['omitted','worst_case','most_likely','upside'].map(v=><option key={v} value={v}>{t(`forecastCategories.${v}`)}</option>)}</Select></Field>
       <Field label={t('fields.expectedClose')}><Input type="date" value={form.expectedCloseDate} onChange={e=>set('expectedCloseDate',e.target.value)} disabled={!canManage}/></Field>
