@@ -180,6 +180,58 @@
       "actionFailed": "L’action a échoué",
       "couldNotCreate": "Création impossible"
     },
+    "subscriptions": {
+      "mrr": "Revenus récurrents mensuels",
+      "summary": "{active} actifs · {plans, plural, one {# forfait} other {# forfaits}}",
+      "plansTitle": "Forfaits",
+      "plansTable": {
+        "plan": "Forfait",
+        "price": "Prix",
+        "billing": "Facturation"
+      },
+      "archived": "(archivé)",
+      "every": "tous les {count}{unit}",
+      "delete": "Supprimer",
+      "noPlans": "Aucun forfait pour l’instant.",
+      "planNamePlaceholder": "Nom du forfait",
+      "pricePlaceholder": "Prix",
+      "everyNPlaceholder": "tous les N",
+      "defaultIncomeAccount": "Compte de produits par défaut",
+      "addPlan": "Ajouter un forfait",
+      "subsTitle": "Abonnements",
+      "subsTable": {
+        "customer": "Client",
+        "plan": "Forfait",
+        "qty": "Qté",
+        "mrr": "RRM",
+        "nextBill": "Prochaine facture",
+        "status": "Statut"
+      },
+      "noSubs": "Aucun abonnement pour l’instant.",
+      "customerPlaceholder": "Client…",
+      "planPlaceholder": "Forfait…",
+      "qtyPlaceholder": "Qté",
+      "priceOverridePlaceholder": "Prix forcé (facultatif)",
+      "firstFullBill": "Première facture complète",
+      "prorateFirstPeriod": "Proratiser la première période",
+      "autoPostInvoices": "Comptabiliser automatiquement les factures",
+      "addSubscription": "Ajouter un abonnement",
+      "prorateHint": "Indiquez une première date de facturation après le début et cochez « prorata » pour ne facturer que la première période partielle maintenant.",
+      "apply": "Appliquer",
+      "billNow": "Facturer maintenant",
+      "changeQty": "Modifier la qté",
+      "pause": "Suspendre",
+      "resume": "Reprendre",
+      "cancelSub": "Annuler",
+      "cancelConfirmTitle": "Annuler l’abonnement ?",
+      "cancelConfirmBody": "L’annulation met fin à la facturation récurrente de cet abonnement. Cette action est irréversible.",
+      "toasts": {
+        "prorated": "Prorata {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "Quantité mise à jour (aucun prorata dû)",
+        "billed": "Facturé {documentNumber}",
+        "firstInvoiceProrated": "Première facture au prorata {documentNumber} de {amount}"
+      }
+    },
     "recurring": {
       "newSchedule": "Nouvelle planification récurrente",
       "templateDocLabel": "Document modèle nº",
@@ -209,6 +261,32 @@
       "actionFailed": "L’action sur la planification récurrente n’a pas pu aboutir.",
       "generatedDocumentsDeleteConflict": "Cette planification récurrente ne peut pas être supprimée car elle a déjà généré des documents. Leur historique source doit être préservé.",
       "noneYet": "Aucune planification récurrente pour l’instant."
+    },
+    "dunning": {
+      "blankStageName": "Premier rappel",
+      "newPolicy": "Nouvelle politique de relance",
+      "policyNameLabel": "Nom de la politique",
+      "policyNamePlaceholder": "Relances standard net 30",
+      "gracePeriodLabel": "Délai de grâce (jours de retard)",
+      "reminderLadder": "Échelle de rappels",
+      "addStage": "+ Ajouter une étape",
+      "newStageName": "Rappel {n}",
+      "stageLabels": {
+        "name": "Nom",
+        "daysPastDue": "Jours de retard",
+        "sequence": "Ordre"
+      },
+      "subjectLabel": "Objet",
+      "bodyLabel": "Corps",
+      "removeStage": "Retirer l’étape",
+      "tokensHint": "Jetons :",
+      "createPolicy": "Créer la politique",
+      "policySummary": "{count, plural, one {# étape} other {# étapes}} · grâce {grace} j",
+      "off": "Désactivé",
+      "delete": "Supprimer",
+      "stageDay": "· Jour {day} : {name}",
+      "noneYet": "Aucune politique de relance pour l’instant.",
+      "activeBadge": "Actif"
     }
   }
 }
