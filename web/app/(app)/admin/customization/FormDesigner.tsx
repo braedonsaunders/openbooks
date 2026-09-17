@@ -381,12 +381,20 @@ export function FormDesigner({
   async function save() {
     setBusy(true)
     const body = { recordType, name, layout, isDefault, isActive }
-    const res = await fetch('/api/customization/form-layouts', {
-      method: creating ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(creating ? body : { id: def!.id, ...body }),
-    })
-    const data = await res.json()
+    // Edits address the member route: PATCH exists only on
+    // /form-layouts/[id] (the collection serves GET+POST, so a PATCH there
+    // 405s). F-t10-001.
+    const res = await fetch(
+      creating ? '/api/customization/form-layouts' : `/api/customization/form-layouts/${def!.id}`,
+      {
+        method: creating ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    )
+    // A non-JSON error body (e.g. a status with no payload) must surface as
+    // the save error, never throw past the busy reset and stick on Saving.
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       toast.error(data.error ?? t('designer.forms.saveFailed'))
       setBusy(false)
