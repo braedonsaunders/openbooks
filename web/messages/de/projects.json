@@ -36,6 +36,7 @@
     "unbilledDetail": "{entries} Zeiterfassungen · {hours} Std. · {lines} Kostenzeilen",
     "requestCreated": "Abrechnungsanforderung erstellt",
     "requestFailed": "Abrechnungsanforderung konnte nicht erstellt werden",
+    "applicationsPermissionRequired": "Für die Abschlagsrechnungen dieses Projekts ist ein Zugang zur Debitorenbuchhaltung erforderlich.",
     "invoiceCreated": "Ausgangsrechnung {number} erstellt",
     "invoiceFailed": "Ausgangsrechnung konnte nicht erstellt werden",
     "invoiceType": "Rechnungsphase",
@@ -253,7 +254,10 @@
     "billedYes": "Berechnet",
     "created": "Belastung gebucht",
     "failed": "Belastung konnte nicht gebucht werden",
-    "pickItem": "Wählen Sie zuerst einen Artikel"
+    "pickItem": "Wählen Sie zuerst einen Artikel",
+    "operator": "Bediener",
+    "selectOperator": "Bediener auswählen…",
+    "operatorNeedsEquipment": "Nur Gerätezeilen"
   },
   "recognition": {
     "title": "Umsatzrealisierung",
@@ -285,7 +289,6 @@
     "margin_pct": "Marge",
     "revenue_posted": "Gebuchter Umsatz",
     "labor_cost": "Lohnkosten",
-    "overhead": "Gemeinkostenzuschlag",
     "billable_value": "Abrechenbarer Wert",
     "unbilled_billable": "Abrechenbar, nicht berechnet",
     "hints": {
@@ -297,7 +300,8 @@
       "gross_profit": "Ergebnis auf Basis gebuchter Kosten — ohne Kostenschätzungen.",
       "overhead": "In den gesamten Auftragskosten enthalten und daher bereits vom Bruttogewinn abgezogen.",
       "overhead_informational": "Nicht in den gesamten Auftragskosten enthalten und nicht vom Bruttogewinn abgezogen."
-    }
+    },
+    "overhead": "Gemeinkostenzuschlag"
   },
   "invoicingPref": {
     "heading": "Abrechnungseinstellungen",
@@ -311,9 +315,176 @@
     "customerHint": "Überschreiben Sie den Projekttyp für diesen Kunden.",
     "projectHint": "Überschreiben Sie den Typ/Kunden für dieses Projekt."
   },
+  "schedule": {
+    "status": {
+      "not_started": "Nicht begonnen",
+      "in_progress": "In Arbeit",
+      "complete": "Abgeschlossen",
+      "on_hold": "Zurückgestellt"
+    },
+    "view": {
+      "gantt": "Gantt",
+      "list": "Liste",
+      "board": "Board"
+    },
+    "empty": {
+      "title": "Noch keine geplanten Arbeiten",
+      "description": "Fügen Sie die erste Aktivität hinzu, um den Terminplan dieses Projekts aufzubauen.",
+      "action": "Aktivität hinzufügen"
+    },
+    "leveling": {
+      "heading": "Ressourcenglättung",
+      "description": "Verzögern Sie Aktivitäten, damit keine Kolonne, Maschine oder kein Nachunternehmer über die Tageskapazität hinaus gebucht wird. Prüfen Sie die vorgeschlagenen Verschiebungen vor der Anwendung."
+    }
+  },
   "invoicing": {
     "rateCardLapse": "Wenn die Preisliste abgelaufen ist",
     "block": "Fakturierung sperren",
     "carry_forward": "Mit letzter Preisliste abrechnen"
+  },
+  "wipBilling": {
+    "wipHealthAria": "WIP-Zustand",
+    "tiles": {
+      "availableWip": "Verfügbares WIP",
+      "availableWipSub": "Abrechenbar und nicht gesperrt",
+      "over90": "Über 90 Tage",
+      "over90Sub": "{amount} bei 61–90 Tagen",
+      "realization": "Realisierung",
+      "realizationSub": "{amount} berechnet",
+      "leakage": "Schwund",
+      "leakageSub": "{amount} seit über 90 Tagen gesperrt"
+    },
+    "list": {
+      "title": "Vorabrechnungsarbeitsblätter",
+      "description": "Abrechenbare Projektarbeit, Abrechnungsanpassungen und Genehmigungsstatus prüfen.",
+      "newPrebill": "Neue Vorabrechnung"
+    },
+    "empty": {
+      "noProjectsTitle": "Legen Sie zuerst ein Projekt an",
+      "noPrebillsTitle": "Noch keine Vorabrechnungsarbeitsblätter",
+      "noProjectsDescription": "Die WIP-Prüfung beginnt mit einem aktiven Projekt mit abrechenbarer Zeit oder abrechenbaren Kosten.",
+      "noPrebillsDescription": "Legen Sie ein Arbeitsblatt an, um abrechenbare, noch nicht berechnete Projektarbeit bis zu einem Stichtag festzuschreiben.",
+      "createPrebill": "Vorabrechnung erstellen",
+      "goToProjects": "Zu den Projekten"
+    },
+    "table": {
+      "worksheet": "Arbeitsblatt",
+      "project": "Projekt",
+      "status": "Status",
+      "proposed": "Vorgeschlagen",
+      "through": "Bis {periodEnd}",
+      "noCustomer": "Kein Kunde"
+    },
+    "createDrawer": {
+      "title": "Neues Vorabrechnungsarbeitsblatt",
+      "description": "Abrechenbare, noch nicht berechnete Arbeit bis zu einem Stichtag festschreiben.",
+      "cancel": "Abbrechen",
+      "creating": "Wird erstellt…",
+      "submit": "Vorabrechnung erstellen",
+      "projectLabel": "Projekt",
+      "projectHelp": "Es werden nur aktive Projektarten mit Standard-Zeit-&-Material- oder Selbstkosten-Quellabrechnung gelistet.",
+      "configureProjectTypes": "Projektarten konfigurieren",
+      "startLabel": "Beginn (optional)",
+      "cutoffLabel": "Stichtag",
+      "notesLabel": "Prüfnotizen",
+      "notesPlaceholder": "Umfang, Abrechnungshinweise oder Prüferkontext"
+    },
+    "detail": {
+      "description": "{projectName} · bis {periodEnd}",
+      "sendForReview": "Zur Prüfung senden",
+      "return": "Zurückgeben",
+      "approve": "Genehmigen",
+      "converting": "Wird umgewandelt…",
+      "createInvoice": "Ausgangsrechnung erstellen",
+      "void": "Stornieren",
+      "openInvoice": "{invoiceNumber} öffnen"
+    },
+    "workflow": {
+      "returnTitle": "Arbeitsblatt in Entwurf zurückgeben",
+      "voidTitle": "Arbeitsblatt stornieren",
+      "returnDescription": "Erläutern Sie, was der Ersteller korrigieren muss. Dies wird Teil des Prüfpfads.",
+      "voidDescription": "Erläutern Sie, warum dieses Arbeitsblatt nicht weitergeführt werden darf. Das Quell-WIP bleibt für ein künftiges Arbeitsblatt verfügbar.",
+      "reasonLabel": "Grund",
+      "saving": "Wird gespeichert…",
+      "returnSubmit": "In Entwurf zurückgeben",
+      "voidSubmit": "Arbeitsblatt stornieren",
+      "cancel": "Abbrechen"
+    },
+    "metrics": {
+      "original": "Ursprünglich",
+      "proposed": "Vorgeschlagen",
+      "adjustment": "Anpassung",
+      "cost": "Kosten"
+    },
+    "lockedAlert": "Dieser Genehmigungs-Schnappschuss ist gesperrt. Wandeln Sie ihn wie genehmigt um, oder stornieren Sie ihn und legen Sie ein neues Arbeitsblatt an.",
+    "linesTable": {
+      "source": "Quelle",
+      "date": "Datum",
+      "description": "Beschreibung",
+      "cost": "Kosten",
+      "original": "Ursprünglich",
+      "proposedSupport": "Vorgeschlagen / Nachweis"
+    },
+    "trail": {
+      "title": "Prüfpfad",
+      "system": "System"
+    },
+    "toasts": {
+      "created": "{worksheetNumber} mit {sourceCount} Quellzeilen erstellt",
+      "sentForReview": "Zur Prüfung gesendet",
+      "approved": "Vorabrechnung genehmigt",
+      "returnedToDraft": "In Entwurf zurückgegeben",
+      "voided": "Vorabrechnung storniert",
+      "converted": "{documentNumber} als Rechnungsentwurf erstellt"
+    },
+    "lineToasts": {
+      "saved": "Abrechnungsbetrag gespeichert",
+      "holdApplied": "Abrechnungssperre angewendet",
+      "holdReleased": "Abrechnungssperre aufgehoben"
+    },
+    "line": {
+      "held": "Zurückgehalten",
+      "time": "Zeit",
+      "cost": "Kosten",
+      "amountAria": "Vorgeschlagener Abrechnungsbetrag",
+      "reasonAria": "Grund der Anpassung",
+      "evidencePlaceholder": "Nachweisverweise, durch Kommas getrennt",
+      "saving": "Wird gespeichert…",
+      "save": "Speichern",
+      "hold": "Zurückhalten",
+      "holdReason": "Grund der Sperre",
+      "evidenceReferences": "Nachweisverweise",
+      "applyHold": "Sperre anwenden",
+      "releaseHold": "Sperre aufheben",
+      "releaseReason": "Grund der Freigabe",
+      "release": "Freigeben"
+    }
+  },
+  "duplicates": {
+    "title": "Doppelte Projekte",
+    "description": "Projekte mit gleichem Quellenverweis, gleichem Namen und Kunden oder gleicher Auftragsnummer. Wählen Sie je Gruppe den Überlebenden, prüfen Sie die Auswirkung und führen Sie dann zusammen.",
+    "loading": "Doppelte werden geladen…",
+    "empty": "Keine doppelten Projekte gefunden.",
+    "kind": {
+      "source_ref": "Gleicher Quellenverweis ({key})",
+      "name_customer": "Gleicher Name und Kunde ({key})",
+      "job_number": "Gleiche Auftragsnummer ({key})"
+    },
+    "chooseSurvivor": "Wählen Sie das überlebende Projekt. Alle Verweise der anderen werden in einer Transaktion dorthin verschoben.",
+    "survivor": "Überlebender",
+    "code": "Code",
+    "name": "Name",
+    "status": "Status",
+    "action": "Aktion",
+    "preview": "Vorschau",
+    "merge": "Zusammenführen ({count, plural, one {# Verweis} other {# Verweise}})",
+    "alreadyMerged": "Bereits zusammengeführt.",
+    "moveCount": "{count, plural, one {# Verweis wird verschoben} other {# Verweise werden verschoben}}.",
+    "kept": "Behalten",
+    "impactNote": "Zusammenführungen werden abgelehnt, wenn Zeilen auf nicht entworfenen Belegen, Nachtragsnummern oder Budgetzellen kollidieren. Das zusammengeführte Projekt wird mit einem Verweis auf seinen Nachfolger deaktiviert.",
+    "loadFailed": "Doppelte konnten nicht geladen werden.",
+    "previewFailed": "Vorschau der Zusammenführung konnte nicht erstellt werden.",
+    "mergeFailed": "Projekte konnten nicht zusammengeführt werden.",
+    "merged": "Projekte zusammengeführt."
   }
 }
