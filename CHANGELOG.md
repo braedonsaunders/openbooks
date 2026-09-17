@@ -89,6 +89,15 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
 - True-cost explains an empty Assign picker when no burden categories
   exist.
 
+### Pay runs, journals, and French catalogs
+
+- Pay-run posting failures persist per instruction and render in the
+  activity feed.
+- Closed-period Post refusals pin on the record. Journals warn when
+  control legs post with no party.
+- Banking and close catalogs are translated in French.
+- Lien-waiver project-required refusals pin on the record.
+
 ## [0.1.0-alpha.14] - 2026-09-17
 
 Fleet-7 batches 1–2 on top of alpha.13. Requires migration 0170.

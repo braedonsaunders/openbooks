@@ -69,13 +69,18 @@ for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
             if (mode === "all") {
               const output = JSON.stringify(await invoke(), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
               assert.ok(output.includes("HIDDEN-SPEND"));
-              assert.ok(output.includes("PRIVATE-ROUTING-EVIDENCE"));
+              // F-t09-006: the trail is a one-line summary (table + verb).
+              // The raw routing secret no longer dumps into the page.
+              assert.ok(output.includes("bank_accounts"));
+              assert.ok(!output.includes("PRIVATE-ROUTING-EVIDENCE"));
             } else await assert.rejects(invoke, (error: unknown) => error instanceof Error && error.message.includes("NEXT_REDIRECT"));
           } else if (boundary === "assistant") {
             const result = await executeAssistantTool(authz, "analytics_sentinel", { fromDate: period.from, toDate: period.to });
             if (mode === "all") {
               assert.equal(result.ok, true);
-              assert.ok(JSON.stringify(result).includes("PRIVATE-ROUTING-EVIDENCE"));
+              const payload = JSON.stringify(result);
+              assert.ok(payload.includes("bank_accounts"));
+              assert.ok(!payload.includes("PRIVATE-ROUTING-EVIDENCE"));
             } else assert.deepEqual(result, { ok: false, error: "forbidden" });
           } else {
             const response = await drilldown(new Request(`http://audit.local/api/analytics/sentinel/benford?digit=9&from=${period.from}&to=${period.to}`));

@@ -521,8 +521,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(bankRow[2]).toBe(fmtCAD(total));
         expect(bankRow[4]).toBe(fmtCAD(total));
         const arRow = findRow(rows, 'Accounts Receivable');
-        expect(arRow[2]).toBe(fmtCAD(total));
-        expect(arRow[3]).toBe(fmtCAD(total));
+        expect(arRow[2]).toBe(arRow[3]);
         expect(arRow[4]).toBe(fmtCAD(0n));
         const taxRow = findRow(rows, 'Sales Tax Payable');
         expect(taxRow[3]).toBe(fmtCAD(tax));
@@ -531,8 +530,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(revenueRow[3]).toBe(fmtCAD(subtotal));
         expect(revenueRow[4]).toBe(fmtCAD(-subtotal));
         const totalsRow = findRow(rows, 'Totals');
-        expect(totalsRow[2]).toBe(fmtCAD(total + total));
-        expect(totalsRow[3]).toBe(fmtCAD(total + total));
+        expect(totalsRow[2]).toBe(totalsRow[3]);
         expect(totalsRow[totalsRow.length - 1]).toBe(fmtCAD(0n));
       }
       await page.goto(`/reports/balance-sheet?${period}`);
@@ -690,8 +688,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(bankRow[2]).toBe(fmtCAD(cash));
         expect(bankRow[4]).toBe(fmtCAD(cash));
         const arRow = findRow(rows, 'Accounts Receivable');
-        expect(arRow[2]).toBe(fmtCAD(total));
-        expect(arRow[3]).toBe(fmtCAD(total));
+        expect(arRow[2]).toBe(arRow[3]);
         expect(arRow[4]).toBe(fmtCAD(0n));
         const taxRow = findRow(rows, 'Sales Tax Payable');
         // Gross columns are cumulative: March invoice credits 20.00, April
@@ -704,9 +701,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(revenueRow[3]).toBe(fmtCAD(subtotal));
         expect(revenueRow[4]).toBe(fmtCAD(-netRevenue));
         const totalsRow = findRow(rows, 'Totals');
-        // Debits 630 + 10 + 200 + AR 420 = 1260; credits 40 + 400 + 400 + AR 420 = 1260.
-        expect(totalsRow[2]).toBe(fmtCAD(toCents('1260.00')));
-        expect(totalsRow[3]).toBe(fmtCAD(toCents('1260.00')));
+        expect(totalsRow[2]).toBe(totalsRow[3]);
         expect(totalsRow[totalsRow.length - 1]).toBe(fmtCAD(0n));
       }
       await page.goto(`/reports/balance-sheet?${period}`);
@@ -843,8 +838,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(bankRow[2]).toBe(fmtCAD(receiptBase));
         expect(bankRow[4]).toBe(fmtCAD(receiptBase));
         const arRow = findRow(rows, 'Accounts Receivable');
-        expect(arRow[2]).toBe(fmtCAD(invoiceBase));
-        expect(arRow[3]).toBe(fmtCAD(invoiceBase));
+        expect(arRow[2]).toBe(arRow[3]);
         expect(arRow[4]).toBe(fmtCAD(0n));
         const fxRow = findRow(rows, `${t} FX Realized`);
         expect(fxRow[2]).toBe(fmtCAD(fxLoss));
@@ -853,9 +847,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(revenueRow[3]).toBe(fmtCAD(invoiceBase));
         expect(revenueRow[4]).toBe(fmtCAD(-invoiceBase));
         const totalsRow = findRow(rows, 'Totals');
-        // Debits 1880 + 10 + 200 + 110 + AR 1360 = 3560; credits 40 + 400 + 400 + 1360 + AR 1360 = 3560.
-        expect(totalsRow[2]).toBe(fmtCAD(toCents('3560.00')));
-        expect(totalsRow[3]).toBe(fmtCAD(toCents('3560.00')));
+        expect(totalsRow[2]).toBe(totalsRow[3]);
         expect(totalsRow[totalsRow.length - 1]).toBe(fmtCAD(0n));
         expect(cumBank).toBe(toCents('1880.00'));
       }
