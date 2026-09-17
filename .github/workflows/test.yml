@@ -541,7 +541,7 @@ jobs:
           PGDATABASE: postgres
         run: |
           psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_tmpl TEMPLATE openbooks_e2e"
-          for suite in close payroll procure qtc dash bank subrev; do
+          for suite in close payroll procure qtc dash bank subrev fxtax; do
             psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_${suite} TEMPLATE openbooks_e2e_tmpl"
           done
 
@@ -597,6 +597,13 @@ jobs:
           E2E_PRODUCTION: "1"
           E2E_IGNORE_HTTPS_ERRORS: "1"
         run: npx playwright test --project workflows --workers=1 e2e/workflows/dashboard.spec.ts
+
+      - name: Playwright workflow suite (fx-and-tax)
+        env:
+          OPENBOOKS_DB_URL: postgres://openbooks_app:${{ env.OPENBOOKS_DB_PASSWORD }}@localhost:5433/openbooks_e2e_fxtax
+          E2E_PRODUCTION: "1"
+          E2E_IGNORE_HTTPS_ERRORS: "1"
+        run: npx playwright test --project workflows --workers=1 e2e/workflows/fx-and-tax.spec.ts
 
       - name: Playwright workflow suite (subscription-to-revenue)
         env:
