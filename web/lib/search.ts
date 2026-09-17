@@ -359,18 +359,22 @@ type SearchJournalEntryRow = {
   entry_number: string
   memo: string | null
   status: string
+  created_at: string
 }
 
 /**
  * Journal entries carry their own numbers (JE-…) in journal_entries, and
  * GL-native entries (closing, allocation, …) have no source document at
- * all — the documents legs can never surface them, so an exact JE number
- * searched total zero. Scope mirrors the journal list: journal/pay_run
- * backed entries plus GL-native origins (entries posted from other
- * subledgers stay discoverable through their document). Hits link through
- * the entry compatibility redirect (/journal/[id]), which lands
- * document-backed entries in their drawer and native ones in the ledger
- * flyout.
+ * all — the documents legs can never surface them. Fuzzy matching stays
+ * scoped exactly like the journal list (journal/pay_run backed entries
+ * plus GL-native origins; entries posted from other subledgers stay
+ * discoverable through their document). But an exact entry number always
+ * resolves its entry — a dashboard-visible JE number must never search
+ * total zero — so equality bypasses the origin/link scope the way the
+ * documents exactLeg does. The org + subsidiary doorway still applies.
+ * Hits link through the entry compatibility redirect (/journal/[id]),
+ * which lands document-backed entries in their drawer and native ones in
+ * the ledger flyout.
  */
 async function searchJournalEntries(
   orgId: string,
@@ -379,17 +383,27 @@ async function searchJournalEntries(
   scope: ReadonlySet<string> | null,
 ): Promise<SearchHit[]> {
   const subsidiaryFilter = subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)
+  // UNION forbids expression ORDER BY, so the merged legs sit in a
+  // subquery and the exact-first ordering applies outside it.
   const r = (await db.execute<SearchJournalEntryRow>(sql`
-    select e.id, e.entry_number, e.memo, e.status
-      from journal_entries e
-     where e.org_id = ${orgId} ${subsidiaryFilter}
-       and (e.entry_number % ${q} or e.entry_number ilike ${like} or e.memo ilike ${like})
-       and (exists (select 1 from documents d
-                     where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
-            or (not exists (select 1 from documents d
-                             where d.posted_entry_id = e.id and d.org_id = e.org_id)
-                and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})))
-     order by (e.entry_number = ${q}) desc, similarity(e.entry_number, ${q}) desc, e.created_at desc
+    select u.id, u.entry_number, u.memo, u.status, u.created_at from (
+      select e.id, e.entry_number, e.memo, e.status, e.created_at
+        from journal_entries e
+       where e.org_id = ${orgId} ${subsidiaryFilter}
+         and (e.entry_number % ${q} or e.entry_number ilike ${like} or e.memo ilike ${like})
+         and (exists (select 1 from documents d
+                       where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
+              or (not exists (select 1 from documents d
+                               where d.posted_entry_id = e.id and d.org_id = e.org_id)
+                  and e.origin in (${sql.join(JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`), sql`, `)})))
+      union
+      (select e.id, e.entry_number, e.memo, e.status, e.created_at
+         from journal_entries e
+        where e.org_id = ${orgId} ${subsidiaryFilter}
+          and e.entry_number = ${q}
+        limit 5)
+    ) u
+     order by (u.entry_number = ${q}) desc, similarity(u.entry_number, ${q}) desc, u.created_at desc
      limit ${PER_GROUP}`))
   return r.rows.map((row): SearchHit => ({
     id: row.id,
