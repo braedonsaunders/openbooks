@@ -2856,3 +2856,268 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
     assert.deepEqual(armDrift, [], `${locale} analytics translations drop ICU plural/select arms`)
   }
 })
+
+test('admin copy ships translated in de and ja (i2)', () => {
+  // i2 owns web/messages/{de,ja}/admin.json: the admin namespace must be
+  // fully present and non-English in both locales, with ICU placeholder
+  // parity. ADMIN_I2_COGNATES exempts deliberate keeps: statutory codes
+  // (VAT/GST/HST/PST/QST, 1099-NEC/MISC, T4A, NEC/MISC/T4A boxes,
+  // RPP/RRSP/U1/F2/RP/EIN/SUI, TD1/W-4, CPP/EI/WSIB/EHT/FICA/FUTA/SUTA,
+  // ASC 740, IAS 12, IFRS, US GAAP, FIFO, ADS/GDS, NACHA, SEPA,
+  // Positive Pay, SHA-256), brand names (Bank of Canada, ECB,
+  // Open Exchange Rates), product terms spelled as in English (API,
+  // SFTP, CRM, Apps, Flows, SaaS, WIP, Status, Code, Import & Export,
+  // County, Live, Standard, Live/Standard overhead methods), example
+  // placeholders (Acme names, ap_clerk, po_number, sample e-mails,
+  // the Saunders example company, boxing_day/heritage_day keys, cron
+  // syntax) and code-heavy labels whose only English-looking words are
+  // shared identifiers. Anything pasted back in English outside this
+  // list fails.
+  const ADMIN_I2_COGNATES = new Set([
+    'de:admin.ai.agents.parameterLabel',
+    'de:admin.ai.agents.units.percent',
+    'de:admin.apiKeys.table.name',
+    'de:admin.apiKeys.table.status',
+    'de:admin.backupsManager.alerts.workerOfflineTitle',
+    'de:admin.backupsManager.table.manifest',
+    'de:admin.backupsManager.table.sha256',
+    'de:admin.backupsManager.table.status',
+    'de:admin.buildHub.groups.api',
+    'de:admin.customFields.drawer.keyPlaceholder',
+    'de:admin.customFields.drawer.max',
+    'de:admin.customFields.drawer.min',
+    'de:admin.customFields.drawer.optionalSuffix',
+    'de:admin.customFields.drawer.roleController',
+    'de:admin.customFields.table.status',
+    'de:admin.customFields.types.text.label',
+    'de:admin.extensions.columns.name',
+    'de:admin.extensions.columns.status',
+    'de:admin.extensions.columns.version',
+    'de:admin.extensions.status',
+    'de:admin.extensions.title',
+    'de:admin.features.apps.title',
+    'de:admin.features.banking.title',
+    'de:admin.features.budgets.title',
+    'de:admin.features.crm.title',
+    'de:admin.flows.gate.mode',
+    'de:admin.flows.new.name',
+    'de:admin.flows.runs.table.status',
+    'de:admin.flows.table.flow',
+    'de:admin.flows.table.status',
+    'de:admin.flows.targets.emailPlaceholder',
+    'de:admin.flows.title',
+    'de:admin.hub.cards.apps.title',
+    'de:admin.hub.cards.flows.title',
+    'de:admin.hub.cards.navigation.title',
+    'de:admin.navigation.pinMobile',
+    'de:admin.navigation.title',
+    'de:admin.pageLayouts.blocks.text',
+    'de:admin.pageLayouts.columns.route',
+    'de:admin.pageLayouts.columns.status',
+    'de:admin.pageLayouts.status.filter',
+    'de:admin.permissions.groups.apps',
+    'de:admin.permissions.groups.compliance',
+    'de:admin.permissions.groups.data',
+    'de:admin.permissions.groups.flows',
+    'de:admin.permissions.groups.insights',
+    'de:admin.roles.drawer.keyPlaceholder',
+    'de:admin.scripts.drawer.cronHint',
+    'de:admin.scripts.drawer.runStatus.ok',
+    'de:admin.scripts.drawer.trigger',
+    'de:admin.scripts.table.status',
+    'de:admin.scripts.table.trigger',
+    'de:admin.scripts.tabs.code',
+    'de:admin.scripts.triggerFilter',
+    'de:admin.settings.documentKinds.journal',
+    'de:admin.settings.fiscal.frameworkAsc740',
+    'de:admin.settings.fiscal.frameworkIas12',
+    'de:admin.settings.fiscal.range',
+    'de:admin.settings.fiscal.reportingFrameworkIfrs',
+    'de:admin.settings.months.april',
+    'de:admin.settings.months.august',
+    'de:admin.settings.months.november',
+    'de:admin.settings.months.september',
+    'de:admin.settings.organization.countryHint',
+    'de:admin.settings.organization.displayNamePlaceholder',
+    'de:admin.settings.organization.legalNamePlaceholder',
+    'de:admin.setup.agents.activity.packColumn',
+    'de:admin.setup.agents.activity.statusColumn',
+    'de:admin.setup.agents.overview.columns.pack',
+    'de:admin.setup.agents.overview.columns.status',
+    'de:admin.setup.drawer.tabs.details',
+    'de:admin.setup.entities.overhead-model.application.status',
+    'de:admin.setup.entities.overhead-model.lifecycle.modes.live',
+    'de:admin.setup.entities.sftp.title',
+    'de:admin.setup.fieldHelp.expiryWarningDaysHint',
+    'de:admin.setup.fieldHelp.graceDaysHint',
+    'de:admin.setup.fields.basis',
+    'de:admin.setup.fields.code',
+    'de:admin.setup.fields.dimension',
+    'de:admin.setup.fields.extensionKey',
+    'de:admin.setup.fields.maxBalance',
+    'de:admin.setup.fields.name',
+    'de:admin.setup.fields.planId',
+    'de:admin.setup.fields.regime',
+    'de:admin.setup.fields.region',
+    'de:admin.setup.fields.segmentId',
+    'de:admin.setup.fxProvider.providers.bank_of_canada',
+    'de:admin.setup.fxProvider.providers.open_exchange_rates',
+    'de:admin.setup.groups.compliance',
+    'de:admin.setup.laborCosting.billing.adjustmentCode',
+    'de:admin.setup.laborCosting.billing.adjustmentName',
+    'de:admin.setup.laborCosting.billing.categories.minimum',
+    'de:admin.setup.laborCosting.billing.status',
+    'de:admin.setup.laborCosting.components.name',
+    'de:admin.setup.laborCosting.rates.basis',
+    'de:admin.setup.laborCosting.rates.status',
+    'de:admin.setup.laborCosting.wizard.ratePlaceholder',
+    'de:admin.setup.options.costingMethod.fifo',
+    'de:admin.setup.options.governmentFormat.api',
+    'de:admin.setup.options.holidayJurisdiction.caAb',
+    'de:admin.setup.options.holidayJurisdiction.caBc',
+    'de:admin.setup.options.holidayJurisdiction.caOn',
+    'de:admin.setup.options.holidayJurisdiction.caSk',
+    'de:admin.setup.options.informationReturnForm.misc',
+    'de:admin.setup.options.informationReturnForm.nec',
+    'de:admin.setup.options.informationReturnForm.t4a',
+    'de:admin.setup.options.jurisdictionLevel.county',
+    'de:admin.setup.options.macrsSystem.ads',
+    'de:admin.setup.options.macrsSystem.gds',
+    'de:admin.setup.options.overheadMethod.live',
+    'de:admin.setup.options.overheadMethod.standard',
+    'de:admin.setup.options.payTaxTreatment.pensionF',
+    'de:admin.setup.options.stockLocationKind.transit',
+    'de:admin.setup.options.stockLocationKind.zone',
+    'de:admin.setup.options.taxType.gst',
+    'de:admin.setup.options.taxType.hst',
+    'de:admin.setup.options.taxType.pst',
+    'de:admin.setup.options.taxType.qst',
+    'de:admin.setup.paymentOperations.columns.code',
+    'de:admin.setup.paymentOperations.columns.format',
+    'de:admin.setup.paymentOperations.columns.name',
+    'de:admin.setup.paymentOperations.columns.status',
+    'de:admin.setup.paymentOperations.fields.code',
+    'de:admin.setup.paymentOperations.fields.name',
+    'de:admin.setup.paymentOperations.fields.sftpServer',
+    'de:admin.setup.paymentOperations.fields.status',
+    'de:admin.setup.paymentOperations.rails.positive_pay',
+    'de:admin.setup.paymentOperations.schemes.nacha',
+    'de:admin.setup.paymentOperations.schemes.sepa_b2b',
+    'de:admin.setup.paymentOperations.schemes.sepa_core',
+    'de:admin.setup.paymentOperations.secretFields.transit',
+    'de:admin.setup.paymentProviders.ruleName',
+    'de:admin.setup.taxLibrary.status',
+    'de:admin.setup.wizard.company.legalName',
+    'de:admin.setup.wizard.company.namePlaceholder',
+    'de:admin.setup.wizard.industries.it_software_saas.title',
+    'de:admin.setup.wizard.launch.taxQuestion',
+    'de:admin.users.statusFilter',
+    'ja:admin.ai.agents.units.percent',
+    'ja:admin.backupsManager.table.sha256',
+    'ja:admin.buildHub.groups.api',
+    'ja:admin.customFields.drawer.keyPlaceholder',
+    'ja:admin.features.apiAccess.title',
+    'ja:admin.features.crm.title',
+    'ja:admin.flows.targets.emailPlaceholder',
+    'ja:admin.hub.cards.ai.title',
+    'ja:admin.roles.drawer.keyPlaceholder',
+    'ja:admin.settings.fiscal.range',
+    'ja:admin.settings.fiscal.reportingFrameworkIfrs',
+    'ja:admin.settings.fiscal.reportingFrameworkUsGaap',
+    'ja:admin.settings.organization.displayNamePlaceholder',
+    'ja:admin.settings.organization.legalNamePlaceholder',
+    'ja:admin.setup.entities.sftp.title',
+    'ja:admin.setup.fieldHelp.expiryWarningDaysHint',
+    'ja:admin.setup.fieldHelp.graceDaysHint',
+    'ja:admin.setup.fxProvider.providers.bank_of_canada',
+    'ja:admin.setup.fxProvider.providers.ecb',
+    'ja:admin.setup.fxProvider.providers.open_exchange_rates',
+    'ja:admin.setup.laborCosting.wizard.ratePlaceholder',
+    'ja:admin.setup.options.costingMethod.fifo',
+    'ja:admin.setup.options.informationReturnForm.misc',
+    'ja:admin.setup.options.informationReturnForm.nec',
+    'ja:admin.setup.options.informationReturnForm.t4a',
+    'ja:admin.setup.options.macrsSystem.ads',
+    'ja:admin.setup.options.macrsSystem.gds',
+    'ja:admin.setup.options.taxType.gst',
+    'ja:admin.setup.options.taxType.hst',
+    'ja:admin.setup.options.taxType.pst',
+    'ja:admin.setup.options.taxType.qst',
+    'ja:admin.setup.paymentOperations.rails.positive_pay',
+    'ja:admin.setup.paymentOperations.schemes.nacha',
+    'ja:admin.setup.paymentOperations.schemes.sepa_b2b',
+    'ja:admin.setup.paymentOperations.schemes.sepa_core',
+    'ja:admin.setup.paymentProviders.webhookUrl',
+    'ja:admin.setup.wizard.company.namePlaceholder',
+  ])
+  const ADMIN_I2_SOURCE_COUNT = 3354
+  const ADMIN_I2_SOURCE_HASH = '11e6f5fe69a76d99b78eba4189031b3b357143bb96a2ef2bc11e463ce6be40c1'
+  const source = flattenCatalog('en')
+  const sourceKeys = [...source.keys()]
+    .filter((key) => key === 'admin' || key.startsWith('admin.'))
+    .sort()
+  assert.equal(
+    sourceKeys.length,
+    ADMIN_I2_SOURCE_COUNT,
+    'admin English source inventory changed; translate the new keys in de/ja and re-pin',
+  )
+  assert.equal(
+    sha256(sourceKeys.join('\n')),
+    ADMIN_I2_SOURCE_HASH,
+    'admin English source inventory changed; translate the new keys in de/ja and re-pin',
+  )
+  for (const locale of ['de', 'ja'] as const) {
+    const catalog = flattenCatalog(locale)
+    const missing = sourceKeys.filter((key) => !catalog.has(key))
+    const copiedEnglish = sourceKeys.filter(
+      (key) => catalog.get(key) === source.get(key) && !ADMIN_I2_COGNATES.has(`${locale}:${key}`),
+    )
+    const prose = (value: string): string => value.replace(/\{[^}]*\}/g, ' ')
+    const staleEnglish = sourceKeys.filter((key) => {
+      const sourceValue = source.get(key)
+      const localizedValue = catalog.get(key)
+      return (
+        sourceValue !== undefined &&
+        localizedValue !== undefined &&
+        isAsciiEnglishCopy(prose(sourceValue), prose(localizedValue)) &&
+        !ADMIN_I2_COGNATES.has(`${locale}:${key}`)
+      )
+    })
+    const placeholderDrift = sourceKeys.filter((key) => {
+      // Like the payroll-chrome pin, but a `{Word}` opened right after an
+      // arm selector (`=0 {Einrichten}`, `one {Ereignisdetails}`) is the
+      // arm's prose, not a placeholder — counting it would force every
+      // locale to echo English word breaks.
+      const tokens = (value: string): Set<string> => {
+        const found = new Set<string>()
+        const pattern = /\{([a-zA-Z_][a-zA-Z0-9_]*)(?=[,}])/g
+        let match: RegExpExecArray | null
+        while ((match = pattern.exec(value)) !== null) {
+          const before = value.slice(0, match.index)
+          if (/(?:^|[\s{])(?:=\d+|one|other|few|many|zero|male|female)\s$/.test(before)) continue
+          found.add(match[0])
+        }
+        return found
+      }
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(missing, [], `${locale} is missing admin translations`)
+    assert.deepEqual(
+      copiedEnglish,
+      [],
+      `${locale} contains source-English admin copy that would be counted as translated`,
+    )
+    assert.deepEqual(
+      staleEnglish,
+      [],
+      `${locale} contains stale ASCII-only English admin prose`,
+    )
+    assert.deepEqual(
+      placeholderDrift,
+      [],
+      `${locale} admin translations drop or rename ICU placeholders`,
+    )
+  }
+})
