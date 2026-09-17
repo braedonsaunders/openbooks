@@ -6,6 +6,7 @@ import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from
 import { lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 import { businessToday, isIsoCalendarDate } from "./business-date.ts";
 import { add, mul, neg, sum, isZero } from "./money.ts";
+import { assertPeriodModulesOpen, CloseError } from "./close.ts";
 
 /**
  * Project GL recognition — the accounting-correct layer on top of the billing
@@ -164,11 +165,8 @@ export async function postProjectGlEntryWithinTransaction(
     throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
   }
   const currency = opts.currency ?? functionalCurrency;
-  const per = (await tx.execute<{ id: string; is_closed: boolean }>(sql`
-    select period.id,
-           period_module_is_closed(
-             ${orgId}, period.id, ${bookId}, ${subId}, 'gl'
-           ) as is_closed
+  const per = (await tx.execute<{ id: string }>(sql`
+    select period.id
       from accounting_periods period
      where period.org_id = ${orgId} and period.is_adjustment = false
        and period.starts_on <= ${postingDate}
@@ -176,8 +174,23 @@ export async function postProjectGlEntryWithinTransaction(
      limit 1`));
   const periodId = per.rows[0]?.id;
   if (!periodId) throw new Error(`no accounting period covers ${postingDate}`);
-  if (per.rows[0]!.is_closed) {
-    throw new Error(`the GL period covering ${postingDate} is closed`);
+  // One period gate: the shared GL check replaces the raw
+  // period_module_is_closed predicate. Project journals are new activity,
+  // not historical replay, so source-owned imported locks refuse exactly
+  // like user locks.
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId,
+      periodId,
+      bookId,
+      subsidiaryIds: [subId],
+      modules: ["gl"],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) {
+      throw new Error(`the GL period covering ${postingDate} is closed`);
+    }
+    throw error;
   }
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
   await tx.execute(sql`select id from accounts where org_id=${orgId}
@@ -304,7 +317,15 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (!isIsoCalendarDate(reversalDate)) {
     throw new Error("reversalDate must be a valid YYYY-MM-DD date");
   }
-  const head = (await tx.execute(sql`
+  const head = (await tx.execute<{
+    entry_number: string;
+    book_id: string;
+    subsidiary_id: string;
+    period_id: string;
+    posting_date: string;
+    origin: string;
+    status: string;
+  }>(sql`
     select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
       from journal_entries
      where id = ${entryId} and org_id = ${orgId}
@@ -326,12 +347,8 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (h.status !== "posted") {
     throw new Error(`project GL entry ${entryId} is ${h.status} and cannot be reversed`);
   }
-  const period = (await tx.execute<{ id: string; is_closed: boolean }>(sql`
-    select accounting_period.id,
-           period_module_is_closed(
-             ${orgId}, accounting_period.id, ${h.book_id},
-             ${h.subsidiary_id}, 'gl'
-           ) as is_closed
+  const period = (await tx.execute<{ id: string }>(sql`
+    select accounting_period.id
       from accounting_periods accounting_period
      where accounting_period.org_id = ${orgId}
        and not accounting_period.is_adjustment
@@ -342,8 +359,23 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (!period.rows[0]) {
     throw new Error(`no accounting period covers ${reversalDate}`);
   }
-  if (period.rows[0].is_closed) {
-    throw new Error(`the GL period covering ${reversalDate} is closed`);
+  // One period gate: the shared GL check replaces the raw
+  // period_module_is_closed predicate. A reversal is new activity, not
+  // historical replay, so source-owned imported locks refuse exactly like
+  // user locks.
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId,
+      periodId: period.rows[0].id,
+      bookId: h.book_id,
+      subsidiaryIds: [h.subsidiary_id],
+      modules: ["gl"],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) {
+      throw new Error(`the GL period covering ${reversalDate} is closed`);
+    }
+    throw error;
   }
   const lines = await tx.select().from(schema.journalLines)
     .where(and(eq(schema.journalLines.entryId, entryId), eq(schema.journalLines.orgId, orgId)))
