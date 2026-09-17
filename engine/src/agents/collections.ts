@@ -8,6 +8,19 @@ import {
 } from "../continuous-close-config.ts";
 import { absoluteUnits, moneyAbs, type WorkItemSeverity } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
+import { MODULE_BY_KEY } from "../modules/nav-registry.ts";
+
+/**
+ * Evidence "open source" target, resolved through the nav registry — never a
+ * hand-built path. A hand-built "/ar/cockpit" shipped here and 404d every
+ * finding's source link (F-t11-012); the AR cockpit route is the registry's
+ * `ar` entry. Resolving (not copying) keeps the link honest if the route
+ * ever moves: a dropped key yields no link rather than a dead one, and the
+ * drawer already hides non-string hrefs.
+ */
+function arCockpitHref(): string | undefined {
+  return MODULE_BY_KEY.get("ar")?.href;
+}
 
 /**
  * Collections pack — overdue balances by customer with payment behaviour,
@@ -357,7 +370,7 @@ export async function collectionsFindings(
                 oldestDue: customer.oldestDue,
                 count: customer.overdueCount,
               }),
-              href: "/ar/cockpit",
+              href: arCockpitHref(),
             },
             evidence: [
               ...partyInvoices.map((invoice) => ({
@@ -417,7 +430,7 @@ export async function collectionsFindings(
               latePayments: customer.latePayments,
               worstLateDays: customer.worstLateDays,
               review: "Place on credit hold and require prepayment on new orders until the arrears clear.",
-              href: "/ar/cockpit",
+              href: arCockpitHref(),
             },
             evidence: [
               {
@@ -474,7 +487,7 @@ export async function collectionsFindings(
           partyName: docs[0]!.partyName,
           brokenCount: docs.length,
           oldestExpectedPayDate: oldest,
-          href: "/ar/cockpit",
+          href: arCockpitHref(),
         },
         evidence: docs.slice(0, 10).map((doc) => ({
           kind: "broken_promise",
