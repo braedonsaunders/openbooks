@@ -1028,19 +1028,31 @@ export function PublishStage(
             <CardDescription>{t("publish.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {(props.run.package_reports ?? []).map((report: string) => (
-              <Link
-                key={report}
-                href={((reportHref[report] ?? "/reports"))}
-                className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
-              >
-                <span className="flex items-center gap-2">
-                  <FileCheck2 size={15} className="text-teal-600" />
-                  {t((`reports.${report}`))}
-                </span>
-                <ExternalLink size={13} />
-              </Link>
-            ))}
+            {(props.run.package_reports ?? []).map((report: unknown) => {
+              // Reporting packages persist reports as { slug } objects, not
+              // bare strings: resolve the slug before keying the i18n lookup
+              // or href, or the row renders a raw `close.reports.[object
+              // Object]` key (F-t01-001).
+              const slug = typeof report === "string"
+                ? report
+                : (report as { slug?: unknown } | null)?.slug;
+              const code = typeof slug === "string" && slug ? slug : "";
+              return (
+                <Link
+                  key={code || JSON.stringify(report)}
+                  href={((reportHref[code] ?? "/reports"))}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileCheck2 size={15} className="text-teal-600" />
+                    {code && t.has(`reports.${code}`)
+                      ? t((`reports.${code}`))
+                      : code}
+                  </span>
+                  <ExternalLink size={13} />
+                </Link>
+              );
+            })}
           </CardContent>
         </Card>
         {props.advancedClose && props.run.status !== "published" ? (
