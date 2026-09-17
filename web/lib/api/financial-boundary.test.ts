@@ -53,6 +53,7 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/file-cabinet/files/route.ts": "multipart file upload",
   "web/app/api/file-cabinet/folders/[id]/restore/route.ts": "bodyless restore action; folder id is a path parameter",
   "web/app/api/flows/email-action/route.ts": "form-encoded action carrying a signed approval token",
+  "web/app/api/flows/runs/[id]/retry/route.ts": "bodyless lifecycle action; run id is a path parameter",
   "web/app/api/insights/cards/draft/route.ts": "bodyless draft factory",
   "web/app/api/insights/dashboards/draft/route.ts": "bodyless draft factory",
   "web/app/api/items/draft/route.ts": "bodyless draft factory",
