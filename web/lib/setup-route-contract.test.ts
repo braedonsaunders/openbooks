@@ -325,7 +325,10 @@ test("segment value PATCH preflights cycles and preserves the audited valid path
       { params: Promise.resolve({ entity: "segment-values" }) },
     );
     assert.equal(rejected.status, 400);
-    assert.deepEqual(await rejected.json(), { error: "A segment value cannot be parented beneath itself" });
+    assert.deepEqual(await rejected.json(), {
+      error: "A segment value cannot be parented beneath itself",
+      code: "invalid",
+    });
     assert.equal(await segmentAuditCount(f.orgId), beforeAudits, "cycle preflight writes no audit or row");
 
     const accepted = await PATCH(
