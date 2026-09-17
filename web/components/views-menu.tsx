@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { ChevronDown, Check } from 'lucide-react'
 import { Button, Popover, cn } from '@openbooks/ui'
 import { buildHref, pickString } from '../lib/list-params'
+import { menuArrowKeys } from './menu-a11y'
 import type { ListViewRow } from '../lib/customization/resolve'
 
 /**
@@ -74,7 +75,7 @@ export function ViewsMenu({
         </Button>
       }
     >
-      <div className="py-1 text-sm">
+      <div className="py-1 text-sm" role="menu" aria-label={t('label')} onKeyDown={menuArrowKeys}>
         {available.length === 0 ? (
           <div className="px-3 py-2 text-slate-500">{t('none')}</div>
         ) : (
@@ -82,6 +83,7 @@ export function ViewsMenu({
             <Link
               key={v.id}
               href={buildHref(basePath, { view: v.id, q })}
+              role="menuitem"
               onClick={() => setOpen(false)}
               className={cn(
                 'flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60',
@@ -102,6 +104,7 @@ export function ViewsMenu({
         <div className="mt-1 border-t border-slate-100 pt-1 dark:border-slate-800">
           <button
             type="button"
+            role="menuitem"
             disabled={busy || !currentId}
             onClick={() => setDefault(currentId)}
             className="w-full px-3 py-1.5 text-left text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800/60"
@@ -110,6 +113,7 @@ export function ViewsMenu({
           </button>
           <button
             type="button"
+            role="menuitem"
             disabled={busy}
             onClick={() => setDefault(null)}
             className="w-full px-3 py-1.5 text-left text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800/60"
@@ -118,6 +122,7 @@ export function ViewsMenu({
           </button>
           <Link
             href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&view=new&scope=${manageScope}`}
+            role="menuitem"
             onClick={() => setOpen(false)}
             className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
           >
@@ -125,6 +130,7 @@ export function ViewsMenu({
           </Link>
           <Link
             href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&scope=${manageScope}`}
+            role="menuitem"
             onClick={() => setOpen(false)}
             className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
           >
