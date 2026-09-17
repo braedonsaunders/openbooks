@@ -125,6 +125,37 @@ test("FX settlement applies the transaction leg, not the base carrying amount", 
   }
 });
 
+test("a foreign-currency credit consumed as a source applies its own transaction amount", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Balance Reader", "admin");
+    const inv = await postDoc(org, actor, { kind: "customer_invoice", currency: "CAD", fxRate: "1", total: "100", dueDate: "2026-07-10" });
+    const credit = await postDoc(org, actor, { kind: "customer_credit", currency: "USD", fxRate: "1.35", total: "60", dueDate: "2026-07-10" });
+    // USD 20 of the credit settles CAD 25 of the invoice @ 1.25. The credit
+    // is consumed in ITS OWN transaction currency (20 USD): reading the
+    // base carrying leg (27) against the USD total repeats the
+    // neither-currency bug on the from-leg. Seeds mirror the trigger caps:
+    // 20 <= |60| source txn, 27 <= |81| source base, 25 <= |100| target both.
+    await db.execute(sql`insert into applications
+      (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
+       source_transaction_currency, target_transaction_amount, target_transaction_currency,
+       settlement_rate, settlement_rate_source, settlement_rate_reference, created_by, updated_by)
+      values (${org.orgId}, ${credit.line}, ${inv.line}, '25', '2026-07-12', '27', '20', 'USD', '25', 'CAD',
+        '1.25', 'manual', 'FX-CREDIT-CONSUME-TEST', ${actor}, ${actor})`);
+
+    const creditReader = await readApplied(credit.id);
+    assert.equal(creditReader.applied, 20);
+    assert.equal(creditReader.appliedBase, 27);
+    assert.equal(await cachedBalance(credit.id), "40.0000");
+
+    const invReader = await readApplied(inv.id);
+    assert.equal(invReader.applied, 25);
+    assert.equal(await cachedBalance(inv.id), "75.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a credit consumed as a settlement source reads as consumed, not open", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
