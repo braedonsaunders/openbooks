@@ -3,7 +3,7 @@ import { subsidiaryVisibleFilter } from '@/lib/subsidiaries'
 import { paymentRunScopeSql, paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -80,6 +80,7 @@ export async function RunsSection({
   const today = await businessToday(orgId)
   const t = await getTranslations('payments')
   const tCommon = await getTranslations('common')
+  const locale = await getLocale()
   const building = pickString(sp.newRun) === '1'
   const collections = direction === 'inbound'
   const runStatusLabel = (status: string) => {
@@ -355,14 +356,14 @@ export async function RunsSection({
                         {r.run_number}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">{dateTime(r.created_at)}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-300">{dateTime(r.created_at, locale)}</TableCell>
                     <TableCell>{`${r.bank_number ?? ''} ${r.bank_name ?? ''}`.trim() || '—'}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{t(`runs.method.${String(r.method)}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">{r.scheduled_for ?? '—'}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.instruction_count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(r.total, { currency: r.currency ?? undefined })}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(r.total, { currency: r.currency ?? undefined, useGrouping: 'always' })}</TableCell>
                     <TableCell>
                       <Badge variant={RUN_VARIANT[r.status] ?? 'secondary'}>
                         {runStatusLabel(String(r.status))}
