@@ -803,7 +803,7 @@ export function OrderDrawer({
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
-          content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} />,
+          content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />,
         },
       ]}
       footer={
