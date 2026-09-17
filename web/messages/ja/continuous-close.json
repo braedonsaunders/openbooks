@@ -3,16 +3,34 @@
   "title": "継続的決算",
   "description": "決算の準備状況を継続的に監視し、証拠に基づく会計・財務の例外をレビュー用に提示します。",
   "search": "検出結果を検索…",
-  "tabs": { "ariaLabel": "継続的決算のセクション", "findings": "検出結果", "reports": "レポート" },
+  "tabs": {
+    "ariaLabel": "継続的決算のセクション",
+    "findings": "検出結果",
+    "reports": "レポート"
+  },
   "agents": {
     "accounting": "会計",
-    "finance": "財務"
+    "finance": "財務",
+    "forensics": "フォレンジック",
+    "collections": "回収",
+    "payables": "買掛金",
+    "reconciliation": "銀行照合",
+    "hygiene": "データハイジーン",
+    "tax": "税務",
+    "payroll": "給与",
+    "projects": "プロジェクト",
+    "cash": "資金"
   },
   "metrics": {
     "active": "アクティブ",
     "critical": "重大",
     "accounting": "会計の検出結果",
-    "finance": "財務の検出結果"
+    "finance": "財務の検出結果",
+    "collections": "回収の検出結果",
+    "payables": "買掛金の検出結果",
+    "reconciliation": "銀行照合の検出結果",
+    "hygiene": "データハイジーンの検出結果",
+    "forensics": "フォレンジックの検出結果"
   },
   "filters": {
     "agent": "エージェント",
@@ -49,6 +67,78 @@
       "title": "滞留している会計ドキュメント",
       "description": "下書きまたは承認待ちの会計ドキュメントが、設定された経過期間を超えて未完了のままです。"
     },
+    "forensic_weekend_postings": {
+      "title": "週末の支出記帳",
+      "description": "支出ドキュメントが週末に記帳されました。"
+    },
+    "forensic_round_dollar": {
+      "title": "キリのよい金額の支出",
+      "description": "支出ドキュメントがちょうどの千単位で計上されています。"
+    },
+    "forensic_threshold_trap": {
+      "title": "上限ぎりぎりの金額",
+      "description": "支出ドキュメントがキリのよい承認上限のすぐ下にあります。"
+    },
+    "forensic_duplicate_bills": {
+      "title": "重複の可能性がある請求書",
+      "description": "2件の仕入請求書が仕入先・種別・金額を数日以内に共有しています。"
+    },
+    "tax_missing_codes": {
+      "title": "税コードのないドキュメント",
+      "description": "記帳済みドキュメントに課税されていない明細があり、申告に反映されません。"
+    },
+    "tax_missing_registration": {
+      "title": "税登録の欠落",
+      "description": "申告書式に登録番号が登録されていません。"
+    },
+    "tax_return_blocked": {
+      "title": "ブロックされた税務申告",
+      "description": "設定された申告を計算できません。"
+    },
+    "tax_unlocked_period": {
+      "title": "ロックされていない税期間",
+      "description": "直近の完了期間に締められた税ロックがありません。"
+    },
+    "payroll_remittance_due": {
+      "title": "納付期限の到来",
+      "description": "源泉徴収分の納付期限が到来していますが、対応する支払請求がありません。"
+    },
+    "payroll_unknown_accounts": {
+      "title": "不明な給与勘定",
+      "description": "確定済みの実行に、申告用・負債用のいずれの勘定でも引き受けられない明細があります。"
+    },
+    "payroll_missing_elections": {
+      "title": "法定選択の欠落",
+      "description": "従業員の選択届出が登録されていません。"
+    },
+    "payroll_yearend_gaps": {
+      "title": "年末の申告漏れ",
+      "description": "必要な支払調書が不足しています。"
+    },
+    "project_negative_margin": {
+      "title": "プロジェクトの赤字",
+      "description": "あるプロジェクトが赤字で運営されています。"
+    },
+    "project_budget_overrun": {
+      "title": "プロジェクト予算の超過",
+      "description": "原価とコミットメントの合計が承認済み予算を超えました。"
+    },
+    "project_stale_unbilled": {
+      "title": "滞留している未請求作業",
+      "description": "請求可能な作業が締めを過ぎても未請求のままです。"
+    },
+    "cash_low_balance": {
+      "title": "資金残高の低下",
+      "description": "銀行の資金が下限を下回っています。"
+    },
+    "cash_bill_crunch": {
+      "title": "支払逼迫",
+      "description": "間近に期限を迎える請求が手元資金を上回っています。"
+    },
+    "cash_forecast_shortfall": {
+      "title": "予測の資金不足",
+      "description": "資金繰り予測がマイナスに転じています。"
+    },
     "missing_approved_budget": {
       "title": "承認済み予算なし",
       "description": "承認済みの予算が利用できないため、財務監視は実績を比較できません。"
@@ -64,6 +154,70 @@
     "gross_margin_decline": {
       "title": "売上総利益率の低下",
       "description": "売上総利益率が前の完了期間から設定されたしきい値を超えて低下しました。"
+    },
+    "overdue_customer_balance": {
+      "title": "延滞している得意先",
+      "description": "得意先が設定された下限を超える延滞残高を抱え、優先架電リストに加わりました。"
+    },
+    "broken_payment_promise": {
+      "title": "破られた支払約束",
+      "description": "請求書が支払予定日を過ぎても支払われていません。"
+    },
+    "credit_hold_candidate": {
+      "title": "与信保留の候補",
+      "description": "長期の延滞残高があるため、新規受注は前払いが必要です。"
+    },
+    "duplicate_bills": {
+      "title": "重複する請求書",
+      "description": "2件の請求書が仕入先・種別・金額を重複判定の期間内に共有しています。"
+    },
+    "bills_due_before_payrun": {
+      "title": "給与計算前の支払期限",
+      "description": "未払いの請求書が給与計算の対象期間内に期限を迎えます。"
+    },
+    "early_pay_discount_opportunity": {
+      "title": "早期支払割引",
+      "description": "未払いの請求書が有効な割引期間内にあります。"
+    },
+    "bills_missing_approval": {
+      "title": "承認のない請求書",
+      "description": "請求書が滞留期間を超えて下書きまたは承認待ちのままです。"
+    },
+    "bank_line_match_candidate": {
+      "title": "銀行明細の照合候補",
+      "description": "未照合の明細行に確度の高い仕訳明細の一致があります。"
+    },
+    "stale_reconciliation": {
+      "title": "滞留している消込",
+      "description": "進行中の消込セッションが滞留期間を超えて放置されています。"
+    },
+    "never_reconciled_account": {
+      "title": "一度も消込されていない勘定",
+      "description": "消込可能な勘定に取引があるのに、消込セッションが一度もありません。"
+    },
+    "control_account_type_mismatch": {
+      "title": "統制勘定のタイプ不一致",
+      "description": "勘定にオープンアイテムがあるか、タイプと矛盾する名称になっています。"
+    },
+    "duplicate_party_identity": {
+      "title": "重複する取引先",
+      "description": "2件の取引先が正規化された名称または税務IDを共有しています。"
+    },
+    "item_missing_tax_code": {
+      "title": "税コードのない品目",
+      "description": "有効な品目に税コードが割り当てられていません。"
+    },
+    "project_missing_cost_budget": {
+      "title": "原価予算のないプロジェクト",
+      "description": "有効なプロジェクトに予算明細がありません。"
+    },
+    "budget_scenario_without_lines": {
+      "title": "明細のない予算シナリオ",
+      "description": "承認済みまたは提出済みのシナリオに明細がありません。"
+    },
+    "unmapped_payroll_component": {
+      "title": "未割当の給与項目",
+      "description": "給与項目に記帳勘定または納付先がありません。"
     }
   },
   "summary": {
@@ -131,7 +285,35 @@
     "document": "会計ドキュメント",
     "reconciliation": "消込",
     "budget_variance": "予算差異",
-    "period_comparison": "期間比較"
+    "period_comparison": "期間比較",
+    "account_mismatch": "勘定不一致の詳細",
+    "accounting_period": "会計期間",
+    "broken_promise": "破られた支払約束",
+    "cash_balance": "資金残高",
+    "cash_crunch": "資金逼迫",
+    "cash_forecast": "資金繰り予測",
+    "credit_hold_case": "与信保留案件",
+    "discount_bill": "割引対象の請求書",
+    "duplicate_bill_pair": "重複請求書ペア",
+    "duplicate_party": "重複する取引先",
+    "employee": "従業員",
+    "empty_scenario": "空の予算シナリオ",
+    "match_candidate": "照合候補",
+    "overdue_invoice": "延滞請求書",
+    "pay_run": "給与計算",
+    "payment_behaviour": "入金行動",
+    "payrun_bill": "給与計算前の請求書",
+    "project_budget": "プロジェクト予算",
+    "project_margin": "プロジェクト利益",
+    "project_unbilled": "未請求のプロジェクト作業",
+    "remittance_group": "納付グループ",
+    "stalled_bill": "滞留している請求書",
+    "tax_return": "申告書",
+    "tax_return_form": "申告書式",
+    "unbudgeted_project": "予算のないプロジェクト",
+    "unmapped_component": "未割当の給与項目",
+    "unreconciled_activity": "未消込の取引",
+    "untaxed_item": "税コードのない品目"
   },
   "actions": {
     "settings": "エージェント設定",
