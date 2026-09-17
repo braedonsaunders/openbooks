@@ -68,8 +68,14 @@
     "configure": "管理センター → AI で設定してください。",
     "search": "ファイル、仕入先、請求書番号を検索…",
     "status": {
-      "queued": "キュー待ち", "extracting": "抽出中", "needs_review": "確認が必要", "ready": "準備完了",
-      "duplicate": "重複の可能性", "failed": "失敗", "materialized": "下書きを作成しました", "rejected": "却下済み"
+      "queued": "キュー待ち",
+      "extracting": "抽出中",
+      "needs_review": "確認が必要",
+      "ready": "準備完了",
+      "duplicate": "重複の可能性",
+      "failed": "失敗",
+      "materialized": "下書きを作成しました",
+      "rejected": "却下済み"
     },
     "emptyTitle": "取込されたドキュメントはありません",
     "emptyDescription": "PDF、JPEG、PNG、または TIFF の仕入先ドキュメントをアップロードして開始してください。",
@@ -88,7 +94,15 @@
     "openDraft": "AP下書きを開く",
     "bill": "仕入請求書",
     "credit": "仕入先クレジット",
-    "columns": { "document": "ドキュメント", "vendor": "仕入先", "invoice": "請求書番号", "date": "請求日", "total": "合計", "status": "ステータス", "received": "受領日" },
+    "columns": {
+      "document": "ドキュメント",
+      "vendor": "仕入先",
+      "invoice": "請求書番号",
+      "date": "請求日",
+      "total": "合計",
+      "status": "ステータス",
+      "received": "受領日"
+    },
     "saving": "修正を保存中…",
     "unsaved": "未保存の修正",
     "saved": "すべての修正が保存されました",
@@ -100,14 +114,30 @@
     "confidencePercent": "{percent}%",
     "highlightEvidence": "元ドキュメントでこの証跡をハイライト表示",
     "fields": {
-      "kind": "ドキュメントタイプ", "vendor": "仕入先", "vendorPlaceholder": "仕入先を選択…",
-      "invoiceNumber": "請求書番号", "invoiceDate": "請求日", "dueDate": "支払期日", "currency": "通貨",
-      "purchaseOrder": "発注書", "purchaseOrderPlaceholder": "発注書を選択…", "memo": "メモ",
-      "subtotal": "小計", "taxTotal": "税", "total": "合計"
+      "kind": "ドキュメントタイプ",
+      "vendor": "仕入先",
+      "vendorPlaceholder": "仕入先を選択…",
+      "invoiceNumber": "請求書番号",
+      "invoiceDate": "請求日",
+      "dueDate": "支払期日",
+      "currency": "通貨",
+      "purchaseOrder": "発注書",
+      "purchaseOrderPlaceholder": "発注書を選択…",
+      "memo": "メモ",
+      "subtotal": "小計",
+      "taxTotal": "税",
+      "total": "合計"
     },
     "lines": {
-      "title": "抽出された明細", "add": "明細を追加", "description": "摘要", "account": "勘定",
-      "accountPlaceholder": "勘定を選択…", "quantity": "数量", "unitPrice": "単価", "amount": "金額", "tax": "税",
+      "title": "抽出された明細",
+      "add": "明細を追加",
+      "description": "摘要",
+      "account": "勘定",
+      "accountPlaceholder": "勘定を選択…",
+      "quantity": "数量",
+      "unitPrice": "単価",
+      "amount": "金額",
+      "tax": "税",
       "remove": "明細 {line} を削除"
     },
     "issues": {
@@ -139,5 +169,56 @@
     "createDraftFailed": "下書きを作成できませんでした",
     "deleted": "ドキュメントを削除しました",
     "deleteFailed": "削除に失敗しました"
+  },
+  "cockpit": {
+    "title": "買掛金",
+    "description": "買掛金の管理センター — 未払残高、延滞分、今週の支払予定を確認できます。",
+    "tabs": {
+      "overview": "概要",
+      "bills": "仕入請求書"
+    },
+    "current": "正常",
+    "vendor": "仕入先",
+    "overdueCol": "延滞",
+    "openCol": "未払",
+    "noPayables": "未払いの買掛金はありません。すべて精算済みです。",
+    "stats": {
+      "openPayables": "未払買掛金",
+      "overdue": "延滞",
+      "overdueSub": "{count} 件 · 未払いの {pct}",
+      "dueThisWeek": "今週期限",
+      "next30": "今後30日",
+      "dpo": "買掛金支払日数(DPO)",
+      "dpoSub": "平均支払日数",
+      "days": "{n}日"
+    },
+    "panels": {
+      "payRun": "支払バッチプランナー",
+      "payRunHint": "今週期限の仕入請求書(予測) — 選択して支払バッチを作成",
+      "payRunHintScheduled": "週次上限の範囲内で推奨 — 期限の古い順",
+      "aging": "買掛金エイジング",
+      "schedule": "支払予定表",
+      "scheduleHint": "{weeks}週間の支払予測",
+      "byVendor": "仕入先別買掛金"
+    },
+    "payRun": {
+      "noCap": "今週期限",
+      "weeklyCap": "週次上限",
+      "safeCapacity": "安全余力",
+      "startingCash": "手元現金 {amount}",
+      "overCap": "上限超過",
+      "deferred": "{amount} は翌週以降に繰延",
+      "selected": "{count} 件選択中",
+      "build": "支払バッチを作成",
+      "empty": "今週期限の請求書(予測)はありません。"
+    },
+    "deferralNote": "{amount} の買掛金は、現在の買掛金上限設定では期間内に支払えません — 未処理分が最終週を超えて溢れます。キャッシュフロー予測の設定で上限を調整してください。",
+    "forecastLink": {
+      "pre": "今後の週をシミュレーションしますか?",
+      "link": "キャッシュフロー予測を開く"
+    },
+    "configure": "設定",
+    "configTitle": "買掛金の支払選択ルール",
+    "configDescription": "今週の支払バッチの選定方法 — 週次上限、安全余力、および推奨の背景にあるスケジュールモデル。"
   }
 }
