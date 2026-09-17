@@ -6,6 +6,18 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.13] - 2026-09-17
+
+Fleet-6 closeout on top of alpha.12. No new migration.
+
+### i18n, shell, and allocations
+
+- `ar.collections` and `agents` catalogs backfill de, ja, zh, and pt-BR
+  (F-x6-002).
+- The platform workspace switcher lives in the account menu.
+- Allocation-rule wizard destination menus stay above the modal and
+  match on any dimension, with codes in the option labels.
+
 ## [0.1.0-alpha.12] - 2026-09-16
 
 Fleet-6 batches 9–44: setup, banking, assistant, payroll, CRM, reports,
