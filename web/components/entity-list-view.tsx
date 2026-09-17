@@ -204,11 +204,19 @@ export async function EntityListView({
     `)),
     source.statusCounts === false
       ? Promise.resolve({ rows: [] })
-      : (db.execute(sql`
-          select ${statusExpr} as status, count(*) as n from ${tableSql}
-            ${countJoins}
-           where ${countWhere}
-           group by ${statusExpr}`)),
+      // A CRM-off customer list has one constant status bucket ('customer'):
+      // grouping by a constant is a Postgres 42601, so count it ungrouped
+      // instead of skipping the facet (F-t11-001).
+      : recordType === 'customer' && !crmOn
+        ? (db.execute(sql`
+            select ${statusExpr} as status, count(*) as n from ${tableSql}
+              ${countJoins}
+             where ${countWhere}`))
+        : (db.execute(sql`
+            select ${statusExpr} as status, count(*) as n from ${tableSql}
+              ${countJoins}
+             where ${countWhere}
+             group by ${statusExpr}`)),
     db.execute(sql`
       select count(*) as n from ${tableSql}
         ${countJoins}
