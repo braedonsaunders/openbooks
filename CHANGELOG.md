@@ -8,8 +8,8 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–17: setup, banking, assistant, payroll, CRM, reports,
-and allocations UX on top of alpha.11.
+Fleet-6 batches 9–20: setup, banking, assistant, payroll, CRM, reports,
+dashboard, documents, and allocations UX on top of alpha.11.
 
 ### Setup and shell
 
@@ -43,6 +43,11 @@ and allocations UX on top of alpha.11.
 - Schedule editor mutations surface the server error; a blocked account
   save stays on a form-level alert; standalone checks require payee and
   funding bank.
+- AR/AP dashboard tiles use the shared open-item reader; remittance
+  pickers list org-wide vendors; lease add-charge is satisfiable;
+  ownership create refuses a full-method write with a typed error.
+- Data-io re-imports exported party kinds; PDF responses keep a strict
+  CSP; pack-driven stubs re-resolve the open stub against live rows.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 
