@@ -79,6 +79,10 @@ test('the full audit accepts every tracked connector test file, including its ve
   assert.deepEqual(auditPublicSnapshot([...CONNECTOR_TEST_FILES, ...CONNECTOR_IMPLEMENTATION_FILES]), [])
 })
 
+test('catalog cognate pins may quote connector-namespace keys', () => {
+  assert.equal(isConnectorPath('web/lib/messages-catalog.test.ts'), true)
+})
+
 test('review-tenant fixtures may seed functional connector-branch rows', () => {
   // scripts/review-tenant-fixtures.sql seeds connections/sync_runs rows keyed
   // on the stable source keys the /sync UI and engine branch on (the same

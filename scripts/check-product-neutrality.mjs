@@ -121,6 +121,9 @@ const connectorPaths = [
   /^web\/lib\/docs\/articles\/migrate-with-a-connector\.ts$/,
   /^web\/lib\/docs\/index\.ts$/,
   /^web\/messages\/[^/]+\/sync\.json$/,
+  // Catalog cognate pins quote connector-namespace keys (sync.netsuite.*)
+  // the locale files themselves already hold in scope.
+  /^web\/lib\/messages-catalog\.test\.ts$/,
 ];
 
 export function isConnectorPath(filePath) {
