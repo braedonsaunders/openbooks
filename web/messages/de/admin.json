@@ -1805,6 +1805,7 @@
       "archiveOnly": "Buchungsbücher werden für die Hauptbuchhistorie aufbewahrt und können nur archiviert werden.",
       "invalidUrl": "Geben Sie eine gültige http://- oder https://-URL für die behördliche Meldung ein.",
       "invalidDepreciationFormula": "Geben Sie eine gültige Abschreibungsformel mit den dokumentierten Variablen und Operatoren ein.",
+      "invalidRecoverablePercent": "Geben Sie für Erstattungsfähig % eine Zahl zwischen 0 und 100 ein.",
       "overlap": "Ein aktiver Satz gilt für diese Jurisdiktion in diesem Zeitraum bereits.",
       "saveTimedOut": "Das Speichern hat zu lange gedauert. Prüfen Sie die Tabelle vor einem erneuten Versuch — der Datensatz existiert möglicherweise bereits."
     },

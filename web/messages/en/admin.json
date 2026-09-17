@@ -1533,6 +1533,7 @@
       "archiveOnly": "Accounting books are retained for ledger history and can only be archived.",
       "invalidUrl": "Enter a valid http:// or https:// government filing URL.",
       "invalidDepreciationFormula": "Enter a valid depreciation formula using the documented variables and operators.",
+      "invalidRecoverablePercent": "Recoverable % must be a number from 0 to 100.",
       "overlap": "An active rate already covers this jurisdiction for this period.",
       "saveTimedOut": "The save timed out. Check the table before retrying — the record may already exist."
     },

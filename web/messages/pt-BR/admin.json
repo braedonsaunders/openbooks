@@ -1533,6 +1533,7 @@
       "archiveOnly": "Os livros contábeis são mantidos para o histórico do razão e só podem ser arquivados.",
       "invalidUrl": "Informe uma URL de apuração governamental http:// ou https:// válida.",
       "invalidDepreciationFormula": "Informe uma fórmula de depreciação válida com as variáveis e os operadores documentados.",
+      "invalidRecoverablePercent": "Informe um número entre 0 e 100 para o % recuperável.",
       "overlap": "Uma alíquota ativa já cobre esta jurisdição para este período.",
       "saveTimedOut": "O salvamento expirou. Verifique a tabela antes de tentar de novo — o registro pode já existir."
     },

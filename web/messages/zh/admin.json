@@ -1533,6 +1533,7 @@
       "archiveOnly": "会计账簿为保留总账历史而留存，只能归档。",
       "invalidUrl": "请输入有效的 http:// 或 https:// 政府申报 URL。",
       "invalidDepreciationFormula": "请使用文档中的变量和运算符输入有效的折旧公式。",
+      "invalidRecoverablePercent": "请为可抵扣 %输入0到100之间的数字。",
       "overlap": "此期间该司法管辖区已存在有效税率。",
       "saveTimedOut": "保存超时。重试前请先检查表格，该记录可能已存在。"
     },

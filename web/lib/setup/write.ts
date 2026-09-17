@@ -193,7 +193,7 @@ function writableSetupEntity(
 }
 
 /** Domain checks that cannot be expressed by the generic field coercer. */
-async function validateEntityIntegrity(
+export async function validateEntityIntegrity(
   entity: SetupEntity,
   body: Record<string, unknown>,
   orgId: string,
@@ -298,15 +298,26 @@ async function validateEntityIntegrity(
     if (rowId && !current) return 'not found'
     const value = (camel: string, snake: string, fallback: unknown) =>
       body[camel] !== undefined ? body[camel] : current?.[snake] ?? fallback
-    const calculationType = String(value('calculationType', 'calculation_type', 'standard'))
-    const appliesTo = String(value('appliesTo', 'applies_to', 'both'))
+    // A blank is not a choice: the drawer sends '' for untouched inputs and
+    // the coerce layer drops those blanks onto the default (F-t06-022), so
+    // the integrity read must fall back the same way instead of refusing a
+    // raw blank (F-t10-001: '' reached toUnits as a refusal key).
+    const present = (camel: string, snake: string, fallback: unknown) => {
+      const submitted = body[camel]
+      if (submitted === undefined || submitted === null || String(submitted).trim() === '') {
+        return current?.[snake] ?? fallback
+      }
+      return submitted
+    }
+    const calculationType = String(present('calculationType', 'calculation_type', 'standard'))
+    const appliesTo = String(present('appliesTo', 'applies_to', 'both'))
     const inclusive = coerceBoolean(value('priceIncludesTax', 'price_includes_tax', false))
-    const roundingScale = Number(value('roundingScale', 'rounding_scale', 2))
+    const roundingScale = Number(present('roundingScale', 'rounding_scale', 2))
     if (!['standard', 'withholding', 'reverse_charge'].includes(calculationType)) return 'invalid-tax-calculation-type'
     if (inclusive && calculationType !== 'standard') return 'inclusive-standard-only'
     if (!Number.isInteger(roundingScale) || roundingScale < 0 || roundingScale > 4) return 'invalid-tax-rounding-scale'
     try {
-      const recovery = toUnits(String(value('recoverablePercent', 'recoverable_percent', '100')))
+      const recovery = toUnits(String(present('recoverablePercent', 'recoverable_percent', '100')))
       if (recovery < 0n || recovery > toUnits('100')) return 'invalid-recoverable-percent'
     } catch {
       return 'invalid-recoverable-percent'
