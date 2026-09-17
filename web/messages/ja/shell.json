@@ -16,6 +16,10 @@
     },
     "organizations": "組織",
     "superAdmin": "スーパー管理者",
+    "platform": "プラットフォーム",
+    "organizationWorkspace": "組織ワークスペース",
+    "organizationWorkspaceDescription": "現在の組織のモジュール",
+    "platformDescription": "導入全体の運用ツール",
     "security": "サインインのセキュリティ"
   },
   "language": {

@@ -15,7 +15,6 @@ import { TopNav } from './top-nav'
 import { GlobalSearch } from './global-search'
 import { TopbarSearchToggle } from './topbar-search-toggle'
 import { AccountMenu } from './account-menu'
-import { OpenBooksPlatformMenu } from './platform-menu'
 import { NotificationsBell } from './notifications-bell'
 import type { WorkspaceEnvironments } from '../lib/environments'
 import { MobileNavProvider } from './mobile-nav'
@@ -92,7 +91,6 @@ export function AppShell({
             <div className="flex shrink-0 items-center gap-1">
               {docsItem ? <HeaderNavLink item={docsItem} /> : null}
               {appItem ? <AppLauncherLink item={appItem} /> : null}
-              {environments.isSuperAdmin ? <OpenBooksPlatformMenu /> : null}
               <GlobalCreateMenu permissions={createPermissions} />
               <NotificationsBell />
               <AccountMenu

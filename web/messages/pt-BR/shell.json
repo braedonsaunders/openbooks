@@ -16,6 +16,10 @@
     },
     "organizations": "Organizações",
     "superAdmin": "Superadministrador",
+    "platform": "Plataforma",
+    "organizationWorkspace": "Espaço da organização",
+    "organizationWorkspaceDescription": "Módulos da organização atual",
+    "platformDescription": "Ferramentas de operador de toda a instalação",
     "security": "Segurança de login"
   },
   "language": {

@@ -16,6 +16,10 @@
     },
     "organizations": "Organisationen",
     "superAdmin": "Super-Admin",
+    "platform": "Plattform",
+    "organizationWorkspace": "Organisations-Arbeitsbereich",
+    "organizationWorkspaceDescription": "Module der aktuellen Organisation",
+    "platformDescription": "Installationsweite Operator-Werkzeuge",
     "security": "Anmeldesicherheit"
   },
   "language": {
