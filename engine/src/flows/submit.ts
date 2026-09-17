@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../document-mutation-refs.ts";
-import { assertExpenseEmployee } from "../expense-validation.ts";
+import { assertExpenseEmployee, assertExpenseSettlement } from "../expense-validation.ts";
 import { runRecordFlows } from "./run.ts";
 
 /**
@@ -133,6 +133,7 @@ async function submitForApprovalLocked(
       .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)));
     if (!effective) throw new Error("target document not found");
     await assertExpenseEmployee(db, effective);
+    await assertExpenseSettlement(db, effective);
   }
 
   // -- flows: on_submit --------------------------------------------------

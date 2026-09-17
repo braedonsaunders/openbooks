@@ -63,6 +63,136 @@ test("expense reports age only genuine AP control balances", () => {
   assert.equal(apProjection.at(-1)!.isOpenItem, true);
 });
 
+test("expense settlement splits a report across three counterparties", () => {
+  const doc = {
+    id: "expense-report",
+    kind: "expense_report",
+    partyId: "employee",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    paymentCardId: "card",
+    custom: {},
+  } as unknown as PostingDocument;
+  const line = (n: number, settlementType: string, amount: string) =>
+    ({
+      id: `line-${n}`,
+      lineNumber: n,
+      accountId: "travel",
+      amount,
+      taxAmount: "0",
+      settlementType,
+    }) as unknown as PostingDocumentLine;
+  const deps = {
+    control: { ap: "ap", ar: "ar", bank: "bank", employeePayable: "emp-pay", employeeReceivable: "emp-recv" },
+    cardLiabilityAccountId: "card-clearing",
+    openItemAccountIds: new Set(["ar", "ap", "emp-pay", "emp-recv"]),
+  };
+  const legs = RULES.expense_report!(
+    doc,
+    [line(1, "out_of_pocket", "100.0000"), line(2, "company_paid", "200.0000"), line(3, "personal", "50.0000")],
+    deps,
+  );
+  const at = (accountId: string) => legs.filter((l) => l.accountId === accountId);
+  assert.deepEqual(at("travel").map((l) => l.amount).sort(), ["100.0000", "200.0000"]);
+  assert.deepEqual(at("emp-recv").map((l) => [l.amount, l.partyId, l.isOpenItem]), [["50.0000", "employee", true]]);
+  assert.deepEqual(at("emp-pay").map((l) => [l.amount, l.partyId, l.isOpenItem]), [["-100.0000", "employee", true]]);
+  // The card-clearing leg never carries the employee party and is never an
+  // open item: that one invariant keeps company-paid and personal amounts out
+  // of every is_open_item reader (tile, aging, run selection) at once.
+  assert.deepEqual(
+    at("card-clearing").map((l) => [l.amount, l.partyId, l.paymentCardId, l.isOpenItem]),
+    [["-250.0000", undefined, "card", false]],
+  );
+});
+
+test("expense settlement fails closed on unknown kinds, missing card, and nonstandard personal tax", () => {
+  const doc = {
+    id: "expense-report",
+    kind: "expense_report",
+    partyId: "employee",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    paymentCardId: "card",
+    custom: {},
+  } as unknown as PostingDocument;
+  const deps = {
+    control: { ap: "ap", ar: "ar", bank: "bank", employeePayable: "emp-pay", employeeReceivable: "emp-recv" },
+    cardLiabilityAccountId: "card-clearing",
+    openItemAccountIds: new Set(["ar", "ap", "emp-pay", "emp-recv"]),
+  };
+  const line = (settlementType: unknown) =>
+    ({ id: "line", lineNumber: 1, accountId: "travel", amount: "10.0000", taxAmount: "0", settlementType }) as unknown as PostingDocumentLine;
+  // A future settlement kind must be taught to the kernel deliberately, never
+  // defaulted into the wrong counterparty.
+  assert.throws(() => RULES.expense_report!(doc, [line("cryptocurrency")], deps), /unknown settlement type/);
+  // Card-funded lines with no resolvable card liability have no lawful credit.
+  assert.throws(
+    () => RULES.expense_report!(doc, [line("company_paid")], { control: deps.control, openItemAccountIds: deps.openItemAccountIds }),
+    /require a payment card/,
+  );
+  // Personal lines with no configured receivable have no lawful debit.
+  assert.throws(
+    () => RULES.expense_report!(doc, [line("personal")], {
+      control: { ap: "ap", ar: "ar", bank: "bank" },
+      cardLiabilityAccountId: "card-clearing",
+      openItemAccountIds: deps.openItemAccountIds,
+    }),
+    /employee-receivable/,
+  );
+  // A personal line posts gross to the receivable with no recoverable-tax leg:
+  // net 10.00 plus the full 10.00 input component (6.00 recoverable) debits
+  // 20.00, and no tax-control leg is emitted — a non-business charge
+  // generates no input tax credit.
+  const gross = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "travel",
+    amount: "10.0000",
+    taxAmount: "10.0000",
+    settlementType: "personal",
+  } as unknown as PostingDocumentLine;
+  const grossLegs = RULES.expense_report!(doc, [gross], {
+    ...deps,
+    taxComponentsByLine: new Map([
+      ["line", [{ taxCodeId: "std", sequence: 1, taxAmount: "10.0000", recoverableAmount: "6.0000", nonrecoverableAmount: "4.0000", calculationType: "standard", collectedAccountId: null, paidAccountId: "tax-in", withholdingAccountId: null }]],
+    ]),
+  });
+  assert.deepEqual(
+    grossLegs.map((l) => [l.accountId, l.amount]),
+    [["emp-recv", "20.0000"], ["card-clearing", "-20.0000"]],
+  );
+  // Withholding on a personal line fails closed rather than posting a tax leg
+  // the receivable must never carry. (Standard 10.00 minus withholding 2.00
+  // settles the component evidence to the stored 8.00, so the refusal comes
+  // from the personal-line gate, not the evidence check.)
+  const withheld = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "travel",
+    amount: "10.0000",
+    taxAmount: "8.0000",
+    settlementType: "personal",
+  } as unknown as PostingDocumentLine;
+  assert.throws(
+    () =>
+      RULES.expense_report!(doc, [withheld], {
+        ...deps,
+        taxComponentsByLine: new Map([
+          [
+            "line",
+            [
+              { taxCodeId: "std", sequence: 1, taxAmount: "10.0000", recoverableAmount: "6.0000", nonrecoverableAmount: "4.0000", calculationType: "standard", collectedAccountId: null, paidAccountId: null, withholdingAccountId: null },
+              { taxCodeId: "wht", sequence: 2, taxAmount: "2.0000", recoverableAmount: "0", nonrecoverableAmount: "0", calculationType: "withholding", collectedAccountId: null, paidAccountId: null, withholdingAccountId: "wht-pay" },
+            ],
+          ],
+        ]),
+      }),
+    /cannot carry withholding tax/,
+  );
+});
+
 test("checks written against a party-bearing AP control leg settle open items", () => {
   // Paying vendor bills by check debits the AP control account. That leg must
   // be an open item so it can serve as an application source (from_line) —
