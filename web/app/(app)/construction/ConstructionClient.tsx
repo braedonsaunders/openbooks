@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export interface ApplicationIncomeAccount {
   id: string;
@@ -139,7 +140,12 @@ export function ApplicationsBillingWorkspace({
       await load();
       return body;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("errors.action"));
+      // A billing refusal pins here (role=alert) until the next action — the
+      // workspace-top text alone never survived attention (F-t04-002: the
+      // retainage-control 422 read as a silent no-op at the row).
+      const message = cause instanceof Error ? cause.message : t("errors.action");
+      setError(message);
+      toast.error(message);
       return null;
     } finally {
       setBusy(false);
@@ -160,7 +166,7 @@ export function ApplicationsBillingWorkspace({
         <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{t("description")}</p>
       </div>
 
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+      {error ? <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
       {msg ? <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p> : null}
       {loading && !data ? <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">{t("loading")}</p> : null}
 

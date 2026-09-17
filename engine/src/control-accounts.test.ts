@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  assertValidControlAccountMappings,
+  type ControlAccountRecord,
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
 } from "./control-accounts.ts";
@@ -66,5 +68,38 @@ test(
     } finally {
       await dropScratchOrg(org.orgId);
     }
+  },
+);
+
+test(
+  "retainage receivable control mapping only accepts receivable-type accounts (F-t04-002)",
+  () => {
+    const receivable: ControlAccountRecord = {
+      id: "11111111-1111-4111-8111-111111111111",
+      type: "asset_receivable",
+      isActive: true,
+      isSummary: false,
+    };
+    assertValidControlAccountMappings(
+      { retainageReceivable: receivable.id },
+      [receivable],
+    );
+    const payable: ControlAccountRecord = {
+      ...receivable,
+      id: "22222222-2222-4222-8222-222222222222",
+      type: "liability_payable",
+    };
+    assert.throws(
+      () =>
+        assertValidControlAccountMappings(
+          { retainageReceivable: payable.id },
+          [payable],
+        ),
+      (error: unknown) =>
+        error instanceof ControlAccountsIncompleteError &&
+        /retainageReceivable control account type liability_payable is incompatible/.test(
+          error.message,
+        ),
+    );
   },
 );

@@ -680,6 +680,10 @@
           "label": "Realized FX gain/loss",
           "hint": "Where settlement-rate differences from foreign-currency payment applications are booked"
         },
+        "retainageReceivable": {
+          "label": "Retainage receivable",
+          "hint": "Customer progress-billing retainage held until release"
+        },
         "retainagePayable": {
           "label": "Retainage payable",
           "hint": "Vendor progress-billing retainage held until an approved release"

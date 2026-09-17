@@ -715,6 +715,10 @@
           "label": "Wertberichtigung",
           "hint": "Gegenkonto zu aktiven latenten Steuern"
         },
+        "retainageReceivable": {
+          "hint": "Einbehalt aus Kunden-Abschlagsrechnungen bis zur Freigabe",
+          "label": "Einbehaltforderungen"
+        },
         "retainagePayable": {
           "hint": "Einbehalt aus Lieferanten-Abschlagsrechnungen bis zu einer genehmigten Freigabe",
           "label": "Einbehaltverbindlichkeiten"

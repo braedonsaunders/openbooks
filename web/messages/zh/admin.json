@@ -680,6 +680,10 @@
           "label": "已实现汇兑损益",
           "hint": "用于记录外币付款核销时的结算汇率差额"
         },
+        "retainageReceivable": {
+          "label": "应收保留款",
+          "hint": "客户进度开票的保留款，释放前持有"
+        },
         "retainagePayable": {
           "label": "应付保留款",
           "hint": "供应商进度开票的保留款，须经批准释放后方可支付"

@@ -70,6 +70,8 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             employeePayable: control.employeePayable ?? '',
             fxUnrealizedGainLoss: control.fxUnrealizedGainLoss ?? '',
             fxRealizedGainLoss: control.fxRealizedGainLoss ?? '',
+            retainageReceivable: control.retainageReceivable ?? '',
+            retainagePayable: control.retainagePayable ?? '',
             laborWip: control.laborWip ?? '',
             laborClearing: control.laborClearing ?? '',
             unbilledReceivable: control.unbilledReceivable ?? '',

@@ -715,6 +715,10 @@
           "label": "Provision pour dépréciation",
           "hint": "Contrepartie de l'impôt différé actif"
         },
+        "retainageReceivable": {
+          "hint": "Retenue de garantie sur la facturation d’avancement des clients, conservée jusqu’à la mainlevée",
+          "label": "Retenue de garantie à recevoir"
+        },
         "retainagePayable": {
           "hint": "Retenue de garantie sur la facturation d’avancement des fournisseurs, conservée jusqu’à une mainlevée approuvée",
           "label": "Retenue de garantie à payer"

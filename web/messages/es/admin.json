@@ -715,6 +715,10 @@
           "label": "Provisión de valoración",
           "hint": "Contra activo por impuesto diferido"
         },
+        "retainageReceivable": {
+          "hint": "Retención en garantía de la facturación de avance de clientes, conservada hasta su liberación",
+          "label": "Retención en garantía por cobrar"
+        },
         "retainagePayable": {
           "hint": "Retención en garantía de la facturación de avance de proveedores, conservada hasta una liberación aprobada",
           "label": "Retención en garantía por pagar"
