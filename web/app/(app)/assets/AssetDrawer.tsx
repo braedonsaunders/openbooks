@@ -290,7 +290,7 @@ export function AssetDrawer({
       // A closed-period skip posts 0 with the reason in `problems` — surface
       // it like the page-level button does. A transport or parse failure must
       // also toast: try/finally alone closes the menu with zero feedback.
-      let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string }
+      let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
       try {
         const res = await fetch('/api/assets/run-depreciation', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId: a.id, bookId }),
@@ -308,6 +308,16 @@ export function AssetDrawer({
       const skipped = data.skipped ?? 0
       if (posted > 0) {
         toast.success(t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') }))
+      } else if (skipped === 0 && data.nextDue) {
+        // A mid-period run posts nothing while a planned line waits in the
+        // open period: name the as-of date and the next due line (F-t07-005).
+        toast.message(t('run.nextDue', {
+          date: data.asOfDate ?? '',
+          asset: data.nextDue.assetNumber,
+          period: data.nextDue.period,
+          amount: money(data.nextDue.amount ?? '0'),
+          endsOn: data.nextDue.endsOn,
+        }))
       } else {
         toast.message(t('run.nothingDue') + (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''))
       }

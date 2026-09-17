@@ -221,6 +221,7 @@
     "postBook": "Post {book}",
     "posted": "Posted {count} entries totalling {amount}",
     "nothingDue": "Nothing due to depreciate",
+    "nextDue": "Nothing to post as of {date}. Next: {asset} {period} ({amount}) ends {endsOn}.",
     "someSkipped": "{count} skipped"
   }
 }

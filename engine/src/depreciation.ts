@@ -998,12 +998,23 @@ export async function recordDepreciationInput(
 // runDepreciation — post due periods through the kernel
 // ---------------------------------------------------------------------------
 
+export interface NextDueDepreciation {
+  assetNumber: string;
+  period: string;
+  endsOn: string;
+  amount: string;
+}
+
 export interface RunDepreciationResult {
   posted: number;
   skipped: number;
   totalAmount: string;
   entries: { assetNumber: string; period: string; amount: string; entryId: string }[];
   problems: string[];
+  /** The as-of date the run evaluated (defaults to the org business day). */
+  asOfDate: string;
+  /** Earliest unposted line in scope when nothing posted, else null. */
+  nextDue: NextDueDepreciation | null;
 }
 
 /** Keep the lifecycle state aligned with the current primary-book carrying value. */
@@ -1067,7 +1078,9 @@ export async function reconcileAssetDepreciationStatusWithRunner(
  * `asOfDate`. Each line becomes one balanced journal entry (DR expense / CR
  * accumulated) posted through the kernel draft→lines→posted, origin =
  * 'depreciation'. A closed GL period is skipped (not an error). Idempotent:
- * a line with a journal_entry_id is never reconsidered.
+ * a line with a journal_entry_id is never reconsidered. When nothing posts,
+ * the result names the as-of date and the next due line, so a mid-period run
+ * explains itself instead of answering all-zero.
  */
 export async function runDepreciation(
   orgId: string,
@@ -1083,6 +1096,8 @@ export async function runDepreciation(
     totalAmount: "0",
     entries: [],
     problems: [],
+    asOfDate,
+    nextDue: null,
   };
 
   // Schedules project only months whose accounting periods exist; later
@@ -1398,6 +1413,45 @@ export async function runDepreciation(
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       result.problems.push(`${row.asset_number} ${row.period_name}: ${msg.slice(0, 120)}`);
+    }
+  }
+
+  // A run that posts nothing must still say what it ran for and what is
+  // next: a mid-period run otherwise answers all-zero counters with an empty
+  // problems list while a planned line waits in the open period (F-t07-005).
+  // Same scope as the due list above, minus the ended-period filter.
+  if (result.posted === 0) {
+    const next = (await db.execute<{
+      asset_number: string;
+      period_name: string;
+      ends_on: string;
+      amount: string;
+    }>(sql`
+      select a.asset_number, p.name as period_name, p.ends_on::text as ends_on,
+             l.planned_amount::text as amount
+        from depreciation_schedule_lines l
+        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+        join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+        join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
+        join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+        join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+        join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+       where l.org_id = ${orgId}
+         and l.posted_amount is null
+         and a.status not in ('disposed', 'written_off')
+         ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
+         ${assetId ? sql`and a.id = ${assetId}` : sql``}
+         ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
+       order by p.ends_on, a.asset_number, l.sequence
+       limit 1`));
+    const upcoming = next.rows[0];
+    if (upcoming) {
+      result.nextDue = {
+        assetNumber: upcoming.asset_number,
+        period: upcoming.period_name,
+        endsOn: upcoming.ends_on,
+        amount: upcoming.amount,
+      };
     }
   }
 

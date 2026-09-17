@@ -196,6 +196,7 @@
     "postBook": "过账 {book}",
     "posted": "已过账 {count} 笔分录，合计 {amount}",
     "nothingDue": "无应提折旧",
+    "nextDue": "截至 {date} 无可过账项。下一笔:{asset} {period}({amount})，结束于 {endsOn}。",
     "someSkipped": "已跳过 {count} 项"
   }
 }

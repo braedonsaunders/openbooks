@@ -30,7 +30,7 @@ export function RunDepreciationButton({
     setBusy(true)
     // A transport or parse failure must toast like any other failure — an
     // uncaught rejection leaves the button spinning with zero feedback.
-    let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string }
+    let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
     try {
       const res = await fetch('/api/assets/run-depreciation', {
         method: 'POST',
@@ -55,6 +55,16 @@ export function RunDepreciationButton({
         t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') }) +
           (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''),
       )
+    } else if (skipped === 0 && data.nextDue) {
+      // A mid-period run posts nothing while a planned line waits in the open
+      // period: name the as-of date and the next due line (F-t07-005).
+      toast.message(t('run.nextDue', {
+        date: data.asOfDate ?? '',
+        asset: data.nextDue.assetNumber,
+        period: data.nextDue.period,
+        amount: money(data.nextDue.amount ?? '0'),
+        endsOn: data.nextDue.endsOn,
+      }))
     } else {
       toast.message(t('run.nothingDue') + (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''))
     }
