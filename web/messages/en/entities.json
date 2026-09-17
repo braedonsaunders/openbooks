@@ -32,6 +32,28 @@
     }
   },
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "Action failed",
+      "camPoolCreated": "CAM pool created",
+      "camPoolReopened": "CAM pool reopened for correction",
+      "camPoolUpdated": "CAM pool updated",
+      "chargeAdded": "Charge added",
+      "couldNotLoad": "Could not load properties",
+      "depositPosted": "Security deposit recorded",
+      "depositReversed": "Security deposit reversed",
+      "escalationApplied": "Escalation applied",
+      "escalationScheduled": "Escalation scheduled",
+      "lateFeesAssessed": "Portfolio late fees assessed",
+      "leaseCreated": "Lease created",
+      "leaseUpdated": "Lease updated",
+      "propertyCreated": "Property created",
+      "propertyDeleted": "Property deleted",
+      "propertyUpdated": "Property updated",
+      "rentBilled": "Portfolio rent billed",
+      "unitAdded": "Unit added",
+      "unitDeleted": "Unit deleted",
+      "unitUpdated": "Unit updated"
+    },
     "workspace": {
       "healthAria": "Property health",
       "tabs": {

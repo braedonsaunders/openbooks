@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   PropertyManagementError,
+  emptyRefToNull,
   addLeaseCharge,
   addLeaseEscalation,
   createCamPool,
@@ -24,6 +25,14 @@ import {
 } from "./property-management.ts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
+
+test("blank optional refs coerce to null instead of failing uuid validation", () => {
+  assert.equal(emptyRefToNull(""), null);
+  assert.equal(emptyRefToNull("   "), null);
+  assert.equal(emptyRefToNull(null), null);
+  assert.equal(emptyRefToNull(undefined), null);
+  assert.equal(emptyRefToNull("3fa85f64-5717-4562-b3fc-2c963f66afa6"), "3fa85f64-5717-4562-b3fc-2c963f66afa6");
+});
 
 test("lease proration uses exact inclusive calendar days", () => {
   assert.equal(prorateLeaseCharge("3100", "2026-01-01", "2026-01-31", "2026-01-16", "2026-01-31"), "1600.0000");
