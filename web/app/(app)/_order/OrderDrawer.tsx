@@ -778,7 +778,8 @@ export function OrderDrawer({
               ? convertTargets.map((target) => (
                   <Button
                     key={target.kind}
-                    disabled={busy}
+                    disabled={busy || converted.full}
+                    title={converted.full ? t('fullyConverted') : undefined}
                     onClick={() => convert(target.kind, t(target.labelKey))}
                   >
                     {t('convertTo', { target: t(target.labelKey) })}
