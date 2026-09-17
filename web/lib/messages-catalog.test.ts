@@ -771,6 +771,30 @@ test('feature refusal copy ships translated in every locale', () => {
   }
 })
 
+test('recent journal widget copy ships translated in every locale', () => {
+  // The dashboard recent-entries rows (F-t01-009) rendered the raw "posted"
+  // badge and the English "N lines" count; both now resolve through these
+  // dashboard.widgets keys.
+  const keys = [
+    'dashboard.widgets.recentEntryStatusPosted',
+    'dashboard.widgets.recentEntryStatusReversed',
+    'dashboard.widgets.recentEntryLines',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+})
+
 test('project billing (applications) copy is present in every locale and translated', () => {
   // The project Billing tabs (F-t03-012) render these keys; a missing key
   // falls back to English on screen.
