@@ -16,6 +16,7 @@
   "send": "Send",
   "stop": "Stop",
   "responding": "Assistant is responding",
+  "jumpToLatest": "Jump to latest",
   "loadEarlier": "Load earlier messages",
   "loadingEarlier": "Loading earlier messages…",
   "loadEarlierFailed": "Earlier messages could not be loaded.",

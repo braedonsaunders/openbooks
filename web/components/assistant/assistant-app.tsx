@@ -15,6 +15,7 @@ import {
   type UIMessageChunk,
 } from 'ai'
 import {
+  ArrowDown,
   Loader2,
   Menu,
   MoreHorizontal,
@@ -40,6 +41,7 @@ import {
   anchorScrollTop,
   countAssistantTurns,
   formatMessageTimestamp,
+  isViewportAtBottom,
   MESSAGE_PAGE_SIZE,
   reconcileThreadAfterStop,
   TITLE_REFRESH_DELAY_MS,
@@ -195,7 +197,6 @@ export function AssistantApp({
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
-  const bottomRef = useRef<HTMLDivElement>(null)
   const autoSentPrompt = useRef<string | null>(null)
   // Assistant turns this mounted panel has already shown. Raised on every
   // normally completed turn so the stop-reconcile below can tell a persisted
@@ -228,8 +229,42 @@ export function AssistantApp({
     scrollTop: number
   } | null>(null)
 
+  // Stick-to-bottom: auto-scroll follows streamed chunks only while the
+  // reader is already at the bottom. Any upward scroll detaches so history
+  // stays readable; jumping back re-attaches. The ref mirrors the state for
+  // stream loops and callbacks that cannot wait for a render. Assignment is
+  // direct on the viewport (never scrollIntoView) so no ancestor jumps.
+  const [stuckToBottom, setStuckToBottom] = useState(true)
+  const stuckRef = useRef(true)
+  useEffect(() => {
+    stuckRef.current = stuckToBottom
+  }, [stuckToBottom])
+
+  const onViewportScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget
+    const atBottom = isViewportAtBottom(el.scrollTop, el.clientHeight, el.scrollHeight)
+    stuckRef.current = atBottom
+    setStuckToBottom(atBottom)
+  }, [])
+
   const scrollToBottom = useCallback(() => {
-    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }))
+    if (!stuckRef.current) return
+    const viewport = viewportRef.current
+    if (!viewport) return
+    window.requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight
+    })
+  }, [])
+
+  const jumpToLatest = useCallback(() => {
+    stuckRef.current = true
+    setStuckToBottom(true)
+    // Paint may still be pending (fresh turn, adopted transcript), so the
+    // snap runs on the next frame, after the new rows exist.
+    window.requestAnimationFrame(() => {
+      const viewport = viewportRef.current
+      if (viewport) viewport.scrollTop = viewport.scrollHeight
+    })
   }, [])
 
   const refreshConversations = useCallback(async () => {
@@ -327,6 +362,9 @@ export function AssistantApp({
     setCurrentId(activeId)
     const base = initialMessages.map(toChatMessage)
     setMessages(base)
+    // A newly opened thread starts stuck to the bottom (latest visible);
+    // any upward scroll detaches from there.
+    jumpToLatest()
     completedTurnsRef.current = countAssistantTurns(base)
     firstTurnRef.current = base.length === 0
     if (!activeId) return
@@ -339,6 +377,9 @@ export function AssistantApp({
         const server = body.messages.map(toChatMessage)
         if (cancelled || prevActiveIdRef.current !== activeId) return
         setMessages(server)
+        // The adopted transcript replaces the base: re-attach and snap so
+        // a long history still opens on the latest turn.
+        jumpToLatest()
         completedTurnsRef.current = countAssistantTurns(server)
         firstTurnRef.current = server.length === 0
         // The fresh transcript carries every settled turn: drop redundant
@@ -352,7 +393,7 @@ export function AssistantApp({
     return () => {
       cancelled = true
     }
-  }, [activeId, initialMessages, pendingKey])
+  }, [activeId, initialMessages, jumpToLatest, pendingKey])
 
   // Follow a server-running turn this view did not start (page reload, a turn
   // started in another tab): poll its event log until terminal, then adopt
@@ -422,7 +463,8 @@ export function AssistantApp({
         userText: text,
       })
       attachLoop(key)
-      scrollToBottom()
+      // Sending re-attaches: the new turn starts at the bottom by choice.
+      jumpToLatest()
       let turnKey = key
       let resolvedConversationId = conversationId
       let lastParts: unknown[] = []
@@ -567,7 +609,7 @@ export function AssistantApp({
         }
       }
     },
-    [aiEnabled, currentId, findingId, probeHasOlder, refreshConversations, scrollToBottom, t],
+    [aiEnabled, currentId, findingId, jumpToLatest, probeHasOlder, refreshConversations, scrollToBottom, t],
   )
 
   // Auto-send a prompt passed via ?q= (from the ⌘K launcher) once per distinct
@@ -784,7 +826,7 @@ export function AssistantApp({
           </div>
         </header>
 
-        <div ref={viewportRef} className="app-scroll min-h-0 flex-1 overflow-y-auto">
+        <div ref={viewportRef} onScroll={onViewportScroll} className="app-scroll min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-4 py-6">
             {hasOlder && messages.length > 0 ? (
               <div className="mb-4 flex justify-center">
@@ -830,7 +872,19 @@ export function AssistantApp({
                 </div>
               ) : null
             })()}
-            <div ref={bottomRef} />
+            {!stuckToBottom && visibleMessages.length > 0 ? (
+              <div className="sticky bottom-4 flex justify-center">
+                <button
+                  type="button"
+                  onClick={jumpToLatest}
+                  aria-label={t('jumpToLatest')}
+                  className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-600 shadow-md transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/95 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                  {t('jumpToLatest')}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 
