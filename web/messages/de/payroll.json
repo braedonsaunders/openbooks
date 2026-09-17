@@ -218,6 +218,20 @@
       "stubsEmailedPartial": "{sent} versendet; übersprungen (keine E-Mail oder fehlgeschlagen): {skipped}",
       "printCheques": "{count, plural, one {# Scheck} other {# Schecks}} drucken"
     },
+    "funding": {
+      "title": "Finanzierung",
+      "netPay": "Erforderliche Liquidität",
+      "liabilities": "Erfasste Verbindlichkeiten",
+      "totalCost": "Gesamtkosten für den Arbeitgeber",
+      "accounts": "Bankkonten",
+      "leadTime": "{days, plural, =0 {Zahltag ist heute} one {# Werktag bis zum Zahltag} other {# Werktage bis zum Zahltag}} · {date}",
+      "payDatePast": "Zahltag {date} ist verstrichen",
+      "short": "Kein Bankkonto deckt die erforderlichen {amount}.",
+      "rail": {
+        "eft": "Direktüberweisung ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})",
+        "cheque": "Schecks ({count, plural, one {# Mitarbeiter} other {# Mitarbeiter}})"
+      }
+    },
     "steps": {
       "finish": "Buchen & abschließen",
       "gl": "Hauptbuch-Vorschau & Festschreibung",

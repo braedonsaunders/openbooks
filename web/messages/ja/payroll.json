@@ -218,6 +218,20 @@
       "stubsEmailedPartial": "{sent}件送信済み。スキップ（メールアドレスなし／失敗）:{skipped}",
       "printCheques": "{count}枚の小切手を印刷"
     },
+    "funding": {
+      "title": "資金調達",
+      "netPay": "必要な資金",
+      "liabilities": "計上済み負債",
+      "totalCost": "雇用主の総コスト",
+      "accounts": "銀行口座",
+      "leadTime": "{days, plural, =0 {支払日は今日です} one {支払日まであと#営業日} other {支払日まであと#営業日}} · {date}",
+      "payDatePast": "支払日{date}は過ぎています",
+      "short": "必要な{amount}を満たす銀行口座がありません。",
+      "rail": {
+        "eft": "直接入金 ({count, plural, one {#名} other {#名}})",
+        "cheque": "小切手 ({count, plural, one {#名} other {#名}})"
+      }
+    },
     "steps": {
       "finish": "転記して完了",
       "gl": "総勘定プレビューと確定",

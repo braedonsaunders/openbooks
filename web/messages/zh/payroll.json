@@ -218,6 +218,20 @@
       "stubsEmailedPartial": "已发送 {sent}；已跳过（无邮箱或失败）：{skipped}",
       "printCheques": "打印 {count} 张支票"
     },
+    "funding": {
+      "title": "资金",
+      "netPay": "所需现金",
+      "liabilities": "已确认负债",
+      "totalCost": "雇主总成本",
+      "accounts": "银行账户",
+      "leadTime": "{days, plural, =0 {发薪日为今天} one {距发薪日还有#个工作日} other {距发薪日还有#个工作日}} · {date}",
+      "payDatePast": "发薪日{date}已过",
+      "short": "没有银行账户可以覆盖所需的{amount}。",
+      "rail": {
+        "eft": "直接存款 ({count, plural, one {#名员工} other {#名员工}})",
+        "cheque": "支票 ({count, plural, one {#名员工} other {#名员工}})"
+      }
+    },
     "steps": {
       "finish": "过账并完成",
       "gl": "总账预览与确认",

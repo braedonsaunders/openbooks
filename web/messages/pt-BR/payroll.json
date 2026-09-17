@@ -218,6 +218,20 @@
       "stubsEmailedPartial": "{sent} enviados; ignorados (sem e-mail ou falha): {skipped}",
       "printCheques": "Imprimir {count, plural, one {# cheque salarial} other {# cheques salariais}}"
     },
+    "funding": {
+      "title": "Financiamento",
+      "netPay": "Caixa necessário",
+      "liabilities": "Passivos registrados",
+      "totalCost": "Custo total do empregador",
+      "accounts": "Contas bancárias",
+      "leadTime": "{days, plural, =0 {A data de pagamento é hoje} one {# dia útil até a data de pagamento} other {# dias úteis até a data de pagamento}} · {date}",
+      "payDatePast": "A data de pagamento {date} já passou",
+      "short": "Nenhuma conta bancária cobre os {amount} necessários.",
+      "rail": {
+        "eft": "Depósito direto ({count, plural, one {# funcionário} other {# funcionários}})",
+        "cheque": "Cheques ({count, plural, one {# funcionário} other {# funcionários}})"
+      }
+    },
     "steps": {
       "finish": "Lançar e concluir",
       "gl": "Prévia contábil e lançamento",
