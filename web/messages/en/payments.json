@@ -89,7 +89,12 @@
       "autosaveFailed": "Autosave failed",
       "postFailed": "Posting failed",
       "posted": "{side, select, ap {Payment posted and applied} other {Customer payment posted and applied}}"
-    }
+    },
+    "deleteConfirmTitle": "Delete this payment?",
+    "deleteConfirmBody": "This permanently deletes the draft payment. This cannot be undone.",
+    "deleteConfirmAction": "Delete",
+    "deleted": "Payment deleted",
+    "deleteFailed": "Delete failed"
   },
   "eft": {
     "notConfiguredTitle": "EFT origination is not configured",

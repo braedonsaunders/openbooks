@@ -89,7 +89,12 @@
       "autosaveFailed": "El guardado automático falló",
       "postFailed": "La contabilización falló",
       "posted": "{side, select, ap {Pago contabilizado y aplicado} other {Pago de cliente contabilizado y aplicado}}"
-    }
+    },
+    "deleteConfirmTitle": "¿Eliminar este pago?",
+    "deleteConfirmBody": "Esto elimina permanentemente el pago en borrador. Esta acción no se puede deshacer.",
+    "deleteConfirmAction": "Eliminar",
+    "deleted": "Pago eliminado",
+    "deleteFailed": "No se pudo eliminar el pago"
   },
   "eft": {
     "notConfiguredTitle": "La emisión EFT no está configurada",
