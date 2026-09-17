@@ -2149,6 +2149,7 @@
       }
     },
     "fields": {
+      "accountId": "Compte",
       "classAttribute": "Asset class attribute",
       "countryCode": "Country",
       "calculationModel": "Calculation model",

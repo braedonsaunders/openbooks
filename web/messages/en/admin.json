@@ -2345,6 +2345,7 @@
       }
     },
     "fields": {
+      "accountId": "Account",
       "code": "Code",
       "name": "Name",
       "appliesTo": "Applies to",
