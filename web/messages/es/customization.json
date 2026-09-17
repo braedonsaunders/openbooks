@@ -66,16 +66,16 @@
       "occupancy": "Ocupación"
     },
     "status": {
-      "sold": "Vendida",
-      "active": "Activa",
-      "inactive": "Inactiva"
+      "sold": "Vendido",
+      "active": "Activo",
+      "inactive": "Inactivo"
     },
     "types": {
       "residential": "Residencial",
       "commercial": "Comercial",
       "mixed_use": "Uso mixto",
       "industrial": "Industrial",
-      "other": "Otra"
+      "other": "Otro"
     }
   },
   "views": {
