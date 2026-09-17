@@ -17,6 +17,9 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
   const [message, setMessage] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Persistent failure text inside the composer: the error toast
+  // auto-dismisses, and a missed toast reads as a silent send (F-t02-004).
+  const [error, setError] = useState<string | null>(null)
 
   // Endpoints that speak the record-pdf send contract (GET { to }, POST
   // { to, message }) can reuse this composer, e.g. party statements.
@@ -44,6 +47,7 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
       return
     }
     setBusy(true)
+    setError(null)
     try {
       const res = await fetch(base, {
         method: 'POST',
@@ -56,7 +60,9 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
       setOpen(false)
       setMessage('')
     } catch (e) {
-      toast.error(e instanceof Error && e.message ? e.message : t('send.failed'))
+      const failure = e instanceof Error && e.message ? e.message : t('send.failed')
+      setError(failure)
+      toast.error(failure)
     } finally {
       setBusy(false)
     }
@@ -95,6 +101,11 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
             className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
           />
         </div>
+        {error ? (
+          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        ) : null}
         <Button className="w-full" onClick={send} disabled={busy}>
           <Send size={14} className="mr-1.5" />
           {busy ? t('send.sending') : t('send.action')}
