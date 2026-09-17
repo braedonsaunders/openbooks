@@ -1219,6 +1219,7 @@
     "empty": "この期間にプロジェクト活動はありません。",
     "searchPlaceholder": "顧客またはジョブを検索…",
     "noCustomer": "顧客未割り当て",
+    "unassignedProject": "未割り当て",
     "expandCustomer": "{customer}を展開",
     "collapseCustomer": "{customer}を折りたたむ",
     "projectScope": "プロジェクト",

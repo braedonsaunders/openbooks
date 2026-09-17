@@ -330,13 +330,13 @@ export function balanceSheetExportData(
 export function projectProfitabilityExportData(
   result: {
     rows: {
-      projectName: string; customerName: string | null
+      projectId: string; projectName: string; customerName: string | null
       revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number
     }[]
     customers: {
-      customerName: string | null
+      customerId: string | null; customerName: string | null
       rows: {
-        projectName: string
+        projectId: string; projectName: string
         revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number
       }[]
       totals: { revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number }
@@ -361,14 +361,17 @@ export function projectProfitabilityExportData(
     t('projectProfitability.columns.margin'),
     t('projectProfitability.columns.hours'),
   ]
+  // The Unassigned tie-out bucket keeps its translated label in exports (the
+  // data row carries the English fallback; the view layer localizes it).
+  const unassignedLabel = t('projectProfitability.unassignedProject')
   const data = result.customers.flatMap((customer) => [
     [
-      customer.customerName ?? t('projectProfitability.noCustomer'),
+      isUnassignedProjectGroup(customer) ? unassignedLabel : (customer.customerName ?? t('projectProfitability.noCustomer')),
       customer.totals.revenue, customer.totals.cogs, customer.totals.grossProfit,
       customer.totals.expenses, customer.totals.net, pct(customer.totals.margin), customer.totals.hours,
     ],
     ...customer.rows.map((row) => [
-      `  ${row.projectName}`,
+      `  ${row.projectId === UNASSIGNED_PROJECT_ID ? unassignedLabel : row.projectName}`,
       row.revenue, row.cogs, row.grossProfit, row.expenses, row.net, pct(row.margin), row.hours,
     ]),
   ] as (string | number)[][])
@@ -733,6 +736,7 @@ import type {
   RegisterResult,
   PartnerStatementResult,
 } from './reports'
+import { UNASSIGNED_PROJECT_ID, isUnassignedProjectGroup } from './reports/projects'
 
 export function journalExportData(j: JournalReportResult, title: string, t: Translator): ExportData {
   const columns = [

@@ -12,6 +12,15 @@ import { type DimFilter, dimWhere } from "./filters";
 // Project profitability — per-project revenue, cost and margin (job costing)
 // ---------------------------------------------------------------------------
 
+/**
+ * Sentinel project id for the Unassigned row (F-t07-004): P&L lines with no
+ * project assignment have no project to join to, so they aggregate under this
+ * id. It is not a uuid and never matches a real project — callers must render
+ * it as plain text (no P&L project link, no drill-through: neither surface
+ * can express a project-is-null scope).
+ */
+export const UNASSIGNED_PROJECT_ID = 'unassigned'
+
 export interface ProjectProfitRow {
   projectId: string
   projectName: string
@@ -65,13 +74,18 @@ function projectProfitTotals(rows: ProjectProfitRow[]): ProjectProfitTotals {
 /** Customer subtotal hierarchy shared by the in-app report and every export. */
 export function groupProjectProfitabilityRows(rows: ProjectProfitRow[]): ProjectProfitCustomerGroup[] {
   const grouped = new Map<string, ProjectProfitRow[]>()
+  const unassigned: ProjectProfitRow[] = []
   for (const row of rows) {
+    if (row.projectId === UNASSIGNED_PROJECT_ID) {
+      unassigned.push(row)
+      continue
+    }
     const key = row.customerId ?? '__unassigned__'
     const group = grouped.get(key)
     if (group) group.push(row)
     else grouped.set(key, [row])
   }
-  return [...grouped.values()]
+  const groups = [...grouped.values()]
     .map((customerRows) => ({
       customerId: customerRows[0]?.customerId ?? null,
       customerName: customerRows[0]?.customerName ?? null,
@@ -79,6 +93,22 @@ export function groupProjectProfitabilityRows(rows: ProjectProfitRow[]): Project
       totals: projectProfitTotals(customerRows),
     }))
     .sort((a, b) => decimalCmp(b.totals.net, a.totals.net) || (a.customerName ?? '').localeCompare(b.customerName ?? ''))
+  // The Unassigned tie-out bucket trails every customer group, mirroring the
+  // P&L breakout's trailing Unassigned column.
+  if (unassigned.length > 0) {
+    groups.push({
+      customerId: null,
+      customerName: null,
+      rows: unassigned,
+      totals: projectProfitTotals(unassigned),
+    })
+  }
+  return groups
+}
+
+/** True when a customer group is the Unassigned tie-out bucket. */
+export function isUnassignedProjectGroup(group: { customerId: string | null; rows: { projectId: string }[] }): boolean {
+  return group.customerId === null && group.rows.some((row) => row.projectId === UNASSIGNED_PROJECT_ID)
 }
 
 /**
@@ -130,27 +160,64 @@ export async function projectProfitability(
        where org_id = ${orgId} and project_id is not null and status = 'approved'
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
+    ),
+    -- F-t07-004: P&L lines with no project assignment are invisible to the
+    -- per-project aggregate above, so report totals silently under-read the
+    -- P&L. Aggregate them under the Unassigned sentinel row instead. A
+    -- project-dim filter empties this leg on its own (null never equals the
+    -- filter); customer/search scoping is applied in JS below because those
+    -- filters only touch the projects side.
+    un as (
+      select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
+             coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
+             coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+          and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+       where l.project_id is null
+         and l.org_id = ${orgId}
+         and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+         and ${dimWhere(opts.dims)}
     )
-    select ${reportDb.censusColumn}, p.id, p.name, p.customer_id, cu.display_name as customer, p.status,
-           coalesce(pt.key, 'time_and_materials') as project_type,
-           coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
-           coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
-      from projects p
-      left join pl on pl.project_id = p.id
-      left join hrs on hrs.project_id = p.id
-      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
-      left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
-     where p.org_id = ${orgId}
-       ${opts.dims?.subsidiaryIds
-         ? opts.dims.subsidiaryIds.length > 0 && opts.dims.includeNullSubsidiary === true
-           ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[]))`
-           : sql`and p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[])`
-         : sql``}
-       and (pl.project_id is not null or hrs.project_id is not null)
-       ${opts.projectScope === 'all' ? sql`` : sql`and p.is_active`}
-       ${opts.customerId ? sql`and p.customer_id = ${opts.customerId}` : sql``}
-       ${opts.search?.trim() ? sql`and (p.name ilike ${`%${opts.search.trim()}%`} or cu.display_name ilike ${`%${opts.search.trim()}%`})` : sql``}
-     order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name
+    select s.__functional_currency_count, s.id, s.name, s.customer_id, s.customer, s.status,
+           s.project_type, s.revenue, s.cogs, s.expenses, s.hours
+      from (
+        select ${reportDb.censusColumn}, p.id::text as id, p.name, p.customer_id, cu.display_name as customer, p.status,
+               coalesce(pt.key, 'time_and_materials') as project_type,
+               coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
+               coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
+          from projects p
+          left join pl on pl.project_id = p.id
+          left join hrs on hrs.project_id = p.id
+          left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+          left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
+         where p.org_id = ${orgId}
+           ${opts.dims?.subsidiaryIds
+             ? opts.dims.subsidiaryIds.length > 0 && opts.dims.includeNullSubsidiary === true
+               ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[]))`
+               : sql`and p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[])`
+             : sql``}
+           and (pl.project_id is not null or hrs.project_id is not null)
+           ${opts.projectScope === 'all' ? sql`` : sql`and p.is_active`}
+           ${opts.customerId ? sql`and p.customer_id = ${opts.customerId}` : sql``}
+           ${opts.search?.trim() ? sql`and (p.name ilike ${`%${opts.search.trim()}%`} or cu.display_name ilike ${`%${opts.search.trim()}%`})` : sql``}
+        union all
+        -- The Unassigned tie-out row: untagged P&L activity in the same book,
+        -- period and dim scope. Customer/search scoping selects projects, so
+        -- the row is suppressed under those filters (it belongs to no customer
+        -- and matches no search text); a project-dim filter already emptied
+        -- the leg. Emitted only when nonzero, like the P&L breakout's
+        -- trailing Unassigned column.
+        select ${reportDb.censusColumn}, ${UNASSIGNED_PROJECT_ID} as id, 'Unassigned' as name,
+               null::uuid as customer_id, null::text as customer, null::text as status, null::text as project_type,
+               un.revenue, un.cogs, un.expenses, 0 as hours
+          from un
+         where (un.revenue <> 0 or un.cogs <> 0 or un.expenses <> 0)
+           ${opts.customerId ?? opts.search?.trim() ? sql`and false` : sql``}
+      ) s
+     order by (s.revenue - s.cogs - s.expenses) desc, s.name
   `))
   const rows: ProjectProfitRow[] = r.rows.map((x) => {
     const revenue = x.revenue

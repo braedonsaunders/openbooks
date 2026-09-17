@@ -1235,6 +1235,7 @@
     "empty": "No project activity in this period.",
     "searchPlaceholder": "Search customers or jobs…",
     "noCustomer": "Unassigned customer",
+    "unassignedProject": "Unassigned",
     "expandCustomer": "Expand {customer}",
     "collapseCustomer": "Collapse {customer}",
     "projectScope": "Projects",

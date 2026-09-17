@@ -45,7 +45,8 @@ export type ProjectProfitabilityGroup = {
   projects: {
     id: string
     name: string
-    pnlHref: string
+    /** Null for the Unassigned tie-out row: a project-is-null scope has no P&L link. */
+    pnlHref: string | null
     values: Values
     drills: Drills
   }[]
@@ -152,9 +153,13 @@ export function ProjectProfitabilityTable({
                   {!isCollapsed && group.projects.map((project) => (
                     <TableRow key={project.id}>
                       <TableCell className="pl-7">
-                        <Link href={project.pnlHref} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                          {project.name}
-                        </Link>
+                        {project.pnlHref ? (
+                          <Link href={project.pnlHref} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                            {project.name}
+                          </Link>
+                        ) : (
+                          project.name
+                        )}
                       </TableCell>
                       <ValueCells values={project.values} drills={project.drills} currency={currency} />
                     </TableRow>

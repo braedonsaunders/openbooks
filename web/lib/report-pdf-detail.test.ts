@@ -32,8 +32,8 @@ test('project profitability export agrees with the table on decimalRatio margins
     to: '2026-01-31',
     rows: [],
     customers: [{
-      customerName: 'Exact Customer',
-      rows: [{ projectName: 'Exact Job', revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 }],
+      customerId: 'customer-1', customerName: 'Exact Customer',
+      rows: [{ projectId: 'project-1', projectName: 'Exact Job', revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 }],
       totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 },
     }],
     totals: { revenue: '100.0000', cogs: '50.0000', grossProfit: '50.0000', expenses: '25.0000', net: '25.0000', margin, hours: 1 },
@@ -42,6 +42,25 @@ test('project profitability export agrees with the table on decimalRatio margins
   assert.equal(data.groups[0]?.rows[0]?.[6], '25.0%')
   assert.equal(data.groups[0]?.rows[1]?.[6], '25.0%')
   assert.equal(data.groups[0]?.rows[2]?.[6], '25.0%')
+})
+
+test('project profitability export labels the Unassigned tie-out bucket', () => {
+  // F-t07-004: the data row carries the English fallback; the export must
+  // print the translated bucket label, not the raw fallback or noCustomer.
+  const data = projectProfitabilityExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    rows: [],
+    customers: [{
+      customerId: null, customerName: null,
+      rows: [{ projectId: 'unassigned', projectName: 'Unassigned', revenue: '500.0000', cogs: '0.0000', grossProfit: '500.0000', expenses: '300.0000', net: '200.0000', margin: null, hours: 0 }],
+      totals: { revenue: '500.0000', cogs: '0.0000', grossProfit: '500.0000', expenses: '300.0000', net: '200.0000', margin: null, hours: 0 },
+    }],
+    totals: { revenue: '500.0000', cogs: '0.0000', grossProfit: '500.0000', expenses: '300.0000', net: '200.0000', margin: null, hours: 0 },
+  }, t)
+
+  assert.equal(data.groups[0]?.rows[0]?.[0], 'projectProfitability.unassignedProject')
+  assert.equal(data.groups[0]?.rows[1]?.[0], '  projectProfitability.unassignedProject')
 })
 
 test('general-ledger export mirrors the paper view with one section per account', () => {

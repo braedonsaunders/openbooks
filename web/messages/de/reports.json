@@ -1219,6 +1219,7 @@
     "empty": "Keine Projektbewegungen in dieser Periode.",
     "searchPlaceholder": "Kunden oder Aufträge suchen…",
     "noCustomer": "Nicht zugeordneter Kunde",
+    "unassignedProject": "Nicht zugeordnet",
     "expandCustomer": "{customer} aufklappen",
     "collapseCustomer": "{customer} zuklappen",
     "projectScope": "Projekte",
