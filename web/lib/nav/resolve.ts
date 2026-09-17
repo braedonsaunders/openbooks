@@ -33,11 +33,42 @@ import {
  * saved label that still equals the registry default is treated as default
  * (org configs snapshot English defaults at save time).
  */
+/**
+ * Short mobile-tab label for a module: the catalog short (nav.modulesShort)
+ * when the item uses its catalog label, else the full label — tenant
+ * renames keep theirs verbatim. A missing short falls back to the full
+ * label, so locales and modules without one render exactly as before.
+ *
+ * next-intl answers a missing key with the key path itself (truthy), so a
+ * bare `||` fallback would print raw paths. The optional `has` existence
+ * check (threaded from the caller's translator) skips the lookup silently;
+ * without it, key echoes and throws still fall back, but next-intl logs
+ * the miss in development.
+ */
+export function resolveModuleShortLabel(
+  t: (key: string) => string,
+  moduleKey: string,
+  fullLabel: string,
+  useCatalogLabel: boolean,
+  has?: (key: string) => boolean,
+): string {
+  if (!useCatalogLabel) return fullLabel
+  const sub = `modulesShort.${moduleKey}`
+  try {
+    if (has && !has(sub)) return fullLabel
+    const out = t(sub)
+    return out === '' || out === sub || out.endsWith(`.${sub}`) ? fullLabel : out
+  } catch {
+    return fullLabel
+  }
+}
+
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
   roleKeys: readonly string[],
   t: (key: string) => string,
+  has?: (key: string) => boolean,
 ): Promise<SidebarNavGroup[]> {
   const [r, appResult, featureState, extensionContributions] = await Promise.all([
     db.execute<{ config: OrgNavConfig }>(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`),
@@ -74,9 +105,14 @@ export async function resolveNav(
         if (mod.key === ADMIN_MODULE_KEY) {
           if (!ADMIN_HUB_PERMISSIONS.some((p) => can(p))) continue
         } else if (!can(mod.requiredPermission)) continue
+        // A saved label that still equals the registry default counts as the
+        // catalog label (org configs snapshot English defaults at save time).
+        const useCatalogLabel = !(item.label && item.label !== mod.label)
+        const fullLabel = item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`) || mod.label
         items.push({
           href: mod.href,
-          label: item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`) || mod.label,
+          label: fullLabel,
+          shortLabel: resolveModuleShortLabel(t, mod.key, fullLabel, useCatalogLabel, has),
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
           mobile: item.mobile,

@@ -68,6 +68,10 @@
     "lien-waivers": "Renuncias de gravamen",
     "information-returns": "Declaraciones informativas"
   },
+  "modulesShort": {
+    "ap": "Por pagar",
+    "ar": "Por cobrar"
+  },
   "groups": {
     "my-work": "Mi trabajo",
     "customers": "Clientes",

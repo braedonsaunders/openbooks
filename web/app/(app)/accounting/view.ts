@@ -107,6 +107,13 @@ export async function loadAccounting(
           return ''
         }
       },
+      (key) => {
+        try {
+          return tNav.has(key)
+        } catch {
+          return false
+        }
+      },
     ),
   ])
 

@@ -139,6 +139,12 @@ export type SidebarNavItem = {
   subgroupIconKey?: string
   /** Tenant-selected shortcut in the four-item mobile tab bar. */
   mobile?: boolean
+  /**
+   * Short label for the mobile tab bar, where the full module label collides
+   * when truncated (es "Cuentas por cobrar/pagar" both became "Cuentas
+   * por…"). Unset items fall back to label.
+   */
+  shortLabel?: string
 }
 
 export type SidebarNavGroup = {

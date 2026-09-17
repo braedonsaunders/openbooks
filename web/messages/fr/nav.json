@@ -68,6 +68,10 @@
     "lien-waivers": "Renonciations au privilège",
     "information-returns": "Déclarations de renseignements"
   },
+  "modulesShort": {
+    "ap": "Fournisseurs",
+    "ar": "Créances"
+  },
   "groups": {
     "my-work": "Mon travail",
     "customers": "Clients",

@@ -56,6 +56,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         return ''
       }
     },
+    // Existence check for optional catalog branches (nav.modulesShort):
+    // silent, so absent shorts never log a development MISSING_MESSAGE.
+    (key) => {
+      try {
+        return tNav.has(key)
+      } catch {
+        return false
+      }
+    },
   )
 
   return (

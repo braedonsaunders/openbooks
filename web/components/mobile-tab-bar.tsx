@@ -50,7 +50,7 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
         return (
           <Link key={t.href} href={t.href as never} className={tabClass(active)}>
             <NavIcon iconKey={t.iconKey} size={20} />
-            <span className="w-full truncate text-center">{t.label}</span>
+            <span className="w-full truncate text-center">{t.shortLabel ?? t.label}</span>
           </Link>
         )
       })}
