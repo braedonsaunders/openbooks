@@ -218,6 +218,20 @@
       "stubsEmailedPartial": "{sent} enviados; omitidos (sin correo o fallidos): {skipped}",
       "printCheques": "Imprimir {count, plural, one {# cheque de nómina} other {# cheques de nómina}}"
     },
+    "funding": {
+      "title": "Financiación",
+      "netPay": "Efectivo necesario",
+      "liabilities": "Pasivos registrados",
+      "totalCost": "Costo total del empleador",
+      "accounts": "Cuentas bancarias",
+      "leadTime": "{days, plural, =0 {La fecha de pago es hoy} one {# día hábil hasta la fecha de pago} other {# días hábiles hasta la fecha de pago}} · {date}",
+      "payDatePast": "La fecha de pago {date} ya pasó",
+      "short": "Ninguna cuenta bancaria cubre los {amount} requeridos.",
+      "rail": {
+        "eft": "Depósito directo ({count, plural, one {# empleado} other {# empleados}})",
+        "cheque": "Cheques ({count, plural, one {# empleado} other {# empleados}})"
+      }
+    },
     "steps": {
       "finish": "Contabilizar y terminar",
       "gl": "Vista previa contable y confirmación",

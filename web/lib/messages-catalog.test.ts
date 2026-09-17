@@ -565,6 +565,7 @@ const PAYROLL_CHROME_PREFIXES = [
   'payroll.runType.',
   'payroll.wizard.steps.',
   'payroll.wizard.finish.',
+  'payroll.wizard.funding.',
 ]
 const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.checklist.incomplete': 'a26f9a130a9d9f7445eaeb613c98b8ff6bfcc0777aa2e4cf5375ae5b4e3befe8',
@@ -727,6 +728,16 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.wizard.finish.stubsEmailed': '5b2a5bfd6f75f006f75ea60ed1383039305bb39d2500ff3cc2c1341da1eaf119',
   'payroll.wizard.finish.stubsEmailedPartial': '2f410529f888c9fe8118aec68e4d9beea335c4bc7e046200f75d674287d48722',
   'payroll.wizard.finish.viewJournal': '7ff4eb73bf39c8207d4079b1b87005f9050d9939724a5c6c2e06c21538affae7',
+  'payroll.wizard.funding.title': 'e93df741ad323efdfca3f9a08236d6aa90476b2f3ca01c9b67f062209d4fa660',
+  'payroll.wizard.funding.netPay': 'da60b5fc91d89cc3c2bbdd2ea8adf912781d19e6e3969d00c9c55d4e107cb36b',
+  'payroll.wizard.funding.liabilities': '636f78c0714e493d8a8f2a7fc5b598b2461f76318e5a3e9c03a34a32a31c5274',
+  'payroll.wizard.funding.totalCost': '066aedbf07eec473efa7756465ce026d99fdbfc46ad51ebf67fc81e1676e304f',
+  'payroll.wizard.funding.accounts': '65e0d0595002737069516d02961539a2d51ac2718679c4d6699fca0632311c83',
+  'payroll.wizard.funding.leadTime': '659176799708b5eb36130e1ad7c2c0ed6bb75e5f215518b8abf5de5070bf573d',
+  'payroll.wizard.funding.payDatePast': 'f34e19c60d68104d4b8c7e9a977e22ef581aab1f246855c60e940cfadfd64878',
+  'payroll.wizard.funding.short': 'e436c5d797c8e65d27710ad8affd5ad9d6eeff705464ba38e2cf84f68a3902fb',
+  'payroll.wizard.funding.rail.eft': '12047ef3ed991997a5eb05dde15e1d5a6e44b929c5da9081b951062b4ed98d7a',
+  'payroll.wizard.funding.rail.cheque': '9ba2b092901e9f54e7d95b84c0025d5f1650a3ce61be808b08b6812701bd6f37',
   'payroll.wizard.finish.viewPayment': 'f829438b329075582d78a5a4b31511d5cfe7fe7a208d43b731d8113d097652a6',
   'payroll.wizard.steps.finish': '98452ce4ea5d1d3a1e0a8106c62814e8c7aa0e357e3f4d76cc24a7048d8b6811',
   'payroll.wizard.steps.gl': '3a57c2d7783758c2061576c47b4b83ec7c63c73448c1ae777859065615e3c1e0',
@@ -799,8 +810,15 @@ test('payroll navigation chrome is translated in every locale', () => {
       return sourceValue !== undefined && localizedValue !== undefined && isAsciiEnglishCopy(prose(sourceValue), prose(localizedValue))
     })
     const placeholderDrift = sourceKeys.filter((key) => {
-      const expected = new Set((source.get(key) ?? '').match(/\{[a-zA-Z_][a-zA-Z0-9_]*/g) ?? [])
-      const actual = new Set((catalog.get(key) ?? '').match(/\{[a-zA-Z_][a-zA-Z0-9_]*/g) ?? [])
+      // A `{name` match is only a placeholder when the name is followed by a
+      // comma (plural/select argument) or a closing brace (simple argument).
+      // ICU literal branches such as `=0 {Pay date is today}` or
+      // `one {# employé}` are prose, not placeholders — counting `{Pay` or
+      // `{#` as tokens would force every locale to echo English words.
+      const tokens = (value: string): Set<string> =>
+        new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+      const expected = tokens(source.get(key) ?? '')
+      const actual = tokens(catalog.get(key) ?? '')
       return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
     })
     assert.deepEqual(missing, [], `${locale} is missing payroll chrome translations`)
