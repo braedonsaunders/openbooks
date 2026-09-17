@@ -140,7 +140,8 @@
     "description": "Offene und abgezeichnete Abstimmungen über alle Konten hinweg.",
     "search": "Nach Datum oder Konto suchen…",
     "emptyTitle": "Noch keine Abstimmungen",
-    "emptyDescription": "Starten Sie eine Abstimmung von einem Bank- oder Kartenkonto aus, um sie hier zu sehen."
+    "emptyDescription": "Starten Sie eine Abstimmung von einem Bank- oder Kartenkonto aus, um sie hier zu sehen.",
+    "chooseAccount": "Wählen Sie ein Konto"
   },
   "rules": {
     "title": "Abstimmungsregeln",
@@ -193,7 +194,103 @@
       "amountRange": "{min}–{max}",
       "exclude": "Ausschließen",
       "categorize": "Kategorisieren → {account}",
-      "anyLine": "Beliebige Zeile"
+      "anyLine": "Beliebige Zeile",
+      "categorizeSplit": "Kategorisieren → {account} +{count} weitere",
+      "and": "und",
+      "or": "oder"
+    },
+    "runSuggested": "{suggested, plural, one {# Zeile zur Prüfung vorgeschlagen} other {# Zeilen zur Prüfung vorgeschlagen}}",
+    "modeSuggest": "Vorschlagen",
+    "modeAuto": "Auto-Buchung",
+    "assignPayee": "Zahlungsempfänger zuweisen",
+    "payeePlaceholder": "Geschäftspartner suchen",
+    "noPayee": "Kein Zahlungsempfänger",
+    "memoLabel": "Memo",
+    "memoPlaceholder": "Standard: Beschreibung der Bankzeile",
+    "suggestHint": "Passende Zeilen erhalten einen bestätigungsbereiten Vorschlag in Bankdaten abgleichen — bis zu Ihrer Bestätigung wird nichts gebucht.",
+    "autoHint": "Passende Zeilen werden beim Regellauf automatisch gebucht und zugeordnet.",
+    "fields": {
+      "description": "Beschreibung",
+      "payee": "Zahlungsempfänger",
+      "anyText": "Beliebiges Textfeld",
+      "reference": "Referenz",
+      "amount": "Betrag",
+      "flow": "Richtung",
+      "date": "Datum"
+    },
+    "ops": {
+      "contains": "enthält",
+      "notContains": "enthält nicht",
+      "equals": "ist genau",
+      "startsWith": "beginnt mit",
+      "endsWith": "endet mit",
+      "isBlank": "ist leer",
+      "eq": "=",
+      "ne": "≠",
+      "gt": "größer als",
+      "gte": "mindestens",
+      "lt": "kleiner als",
+      "lte": "höchstens",
+      "between": "zwischen",
+      "is": "ist",
+      "on": "am",
+      "before": "vor",
+      "after": "nach",
+      "withinDays": "innerhalb der letzten N Tage"
+    },
+    "cb": {
+      "match": "Übereinstimmung",
+      "allOf": "alle folgenden Bedingungen",
+      "anyOf": "mindestens eine der folgenden Bedingungen",
+      "addCondition": "Bedingung hinzufügen",
+      "addGroup": "Gruppe hinzufügen",
+      "noConditions": "Keine Bedingungen — trifft auf jede Zeile zu.",
+      "remove": "Bedingung entfernen",
+      "valuePlaceholder": "Wert",
+      "and": "und",
+      "to": "bis"
+    },
+    "scope": {
+      "label": "Gilt für",
+      "allHint": "Läuft auf jedem abstimmbaren Konto.",
+      "someHint": "Läuft auf {count, plural, one {# Konto} other {# Konten}}.",
+      "useAll": "Alle Konten verwenden",
+      "limit": "Auf bestimmte Konten beschränken",
+      "search": "Konten filtern…",
+      "selected": "{count} ausgewählt",
+      "noneFound": "Keine passenden Konten.",
+      "emptyWarn": "Wählen Sie mindestens ein Konto oder wechseln Sie zurück zu allen."
+    },
+    "split": {
+      "remainder": "Rest",
+      "percent": "Prozent",
+      "fixed": "Fest",
+      "addLine": "Zeile hinzufügen",
+      "removeLine": "Zeile entfernen",
+      "accountPlaceholder": "Konto auswählen",
+      "descriptionPlaceholder": "Zeilenmemo",
+      "portion": "Anteil"
+    },
+    "coding": {
+      "department": "Abteilung",
+      "location": "Standort",
+      "class": "Klasse",
+      "tax": "Steuercode"
+    },
+    "preview": {
+      "title": "Live-Vorschau",
+      "pickAccount": "Konto",
+      "pickAccountHint": "Wählen Sie ein Konto, um Treffer vorab zu prüfen.",
+      "needCondition": "Fügen Sie eine Bedingung hinzu, um zu sehen, welche Bankzeilen zutreffen.",
+      "loading": "Prüfe aktuelle Zeilen…",
+      "error": "Vorschau nicht verfügbar",
+      "matched": "{count, plural, one {eine Zeile würde zutreffen} other {# Zeilen würden zutreffen}}",
+      "conflicts": "{count, plural, one {# Konflikt} other {# Konflikte}}",
+      "noConflicts": "keine Konflikte",
+      "none": "Noch keine Treffer in den letzten 90 Tagen.",
+      "stolen": "Regel mit höherer Priorität gewinnt",
+      "split": "Aufteilungsvorschau",
+      "healthHint": "Live über die importierten Zeilen der letzten 90 Tage."
     }
   },
   "match": {
@@ -233,7 +330,10 @@
     "excludedHint": "Zeilen, die Sie beiseitegelegt haben — sie werden bei der Abstimmung übersprungen.",
     "searchExcluded": "Ausgeschlossene Zeilen suchen…",
     "noExcluded": "Keine ausgeschlossenen Zeilen.",
-    "restore": "Wiederherstellen"
+    "restore": "Wiederherstellen",
+    "createRule": "Regel aus dieser Zeile erstellen",
+    "postAndMatch": "Buchen und zuordnen",
+    "suggestedBy": "Vorschlag: {rule}"
   },
   "transactionsSearch": "Kartenbelastungen, Schecks, Überträge suchen…",
   "transactionsEmptyTitle": "Noch keine Banktransaktionen",
@@ -372,7 +472,10 @@
     "formSetPreferred": "Als bevorzugt festlegen",
     "formSetPreferredDone": "Bevorzugtes Formular gespeichert",
     "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
-    "formPreferredFailed": "Das bevorzugte Formular konnte nicht gespeichert werden"
+    "formPreferredFailed": "Das bevorzugte Formular konnte nicht gespeichert werden",
+    "cardAccountHelp": "Keine Karten hinterlegt — wählen Sie das abstimmbare Kartenkonto, gegen das gebucht wird.",
+    "noCardAccounts": "Noch keine abstimmbaren Kartenkonten.",
+    "noCardAccountsCta": "Im Kontenplan hinzufügen"
   },
   "reconcile": {
     "title": "Abstimmen bis {date}",
@@ -511,7 +614,12 @@
     },
     "authorizedKeys": "Autorisierte SSH-Schlüssel (optional)",
     "authorizedKeysPlaceholder": "ssh-ed25519 AAAA... bank@host",
-    "authorizedKeysHint": "Ein öffentlicher OpenSSH-Schlüssel pro Zeile. Clients mit passendem privaten Schlüssel können sich ohne Passwort anmelden."
+    "authorizedKeysHint": "Ein öffentlicher OpenSSH-Schlüssel pro Zeile. Clients mit passendem privaten Schlüssel können sich ohne Passwort anmelden.",
+    "tabs": {
+      "endpoint": "Verbindung & Login",
+      "servers": "Partner-Logins",
+      "schedules": "Importpläne"
+    }
   },
   "cash": {
     "title": "Liquidität",
@@ -588,13 +696,13 @@
   },
   "bankFeeds": {
     "title": "Bank Feeds",
-    "description": "Connect bank accounts for automated statement import — live aggregator feeds or the built-in SFTP endpoint.",
+    "description": "Verbinden Sie Bankkonten für den automatisierten Auszugsimport — Live-Aggregator-Feeds oder den integrierten SFTP-Endpunkt.",
     "navTitle": "Bank Feeds",
     "tabs": {
-      "connections": "Connections",
-      "sftp-endpoint": "SFTP endpoint",
-      "sftp-servers": "Partner logins",
-      "sftp-schedules": "Import schedules"
+      "connections": "Verbindungen",
+      "sftp-endpoint": "SFTP-Endpunkt",
+      "sftp-servers": "Partner-Logins",
+      "sftp-schedules": "Importpläne"
     },
     "operational": {
       "title": "Bankfeed-Verbindungen",
@@ -607,7 +715,131 @@
     "client": {
       "configure": {
         "noEligibleAccounts": "Noch keine abstimmbaren Bankkonten zum Verbinden. Markieren Sie Ihre Bank- und Kartenkonten im Kontenplan als abstimmbar und wählen Sie dann hier eines aus.",
-        "noEligibleAccountsLink": "Kontenplan öffnen"
+        "noEligibleAccountsLink": "Kontenplan öffnen",
+        "back": "← Zurück",
+        "newConnection": "Neue Verbindung",
+        "kindLive": "Live-Feed",
+        "kindFileDrop": "Dateiablage",
+        "kindManual": "Manuell",
+        "providerQuestion": "Welcher Open-Banking-Anbieter?",
+        "providerGocardless": "GoCardless — kostenlos, Europa",
+        "providerPlaid": "Plaid — USA / Kanada / UK",
+        "providerTruelayer": "TrueLayer — UK / EU",
+        "explainerAutoFeed": "Automatischer Feed via {provider}",
+        "explainerSftp": "SFTP-Dateiablage",
+        "explainerManual": "Manueller Upload",
+        "stepAccount": "1 · Welches Konto",
+        "connectionName": "Verbindungsname",
+        "connectionNamePlaceholder": "z. B. Geschäftskonto — täglich",
+        "bankGlAccount": "Bank- / Hauptbuchkonto",
+        "credentialsStep": "2 · {provider}-Zugangsdaten",
+        "providerAccountId": "Kontokennung beim Anbieter",
+        "providerAccountIdPlaceholder": "die Kennung des Kontos beim Anbieter",
+        "importHowOften": "Wie oft importieren?",
+        "cadenceDaily": "Automatisch, täglich",
+        "cadenceHourly": "Automatisch, stündlich",
+        "cadenceManual": "Nur wenn ich auf Synchronisieren klicke",
+        "sftpStepTitle": "2 · SFTP-Login erstellen",
+        "sftpStepHelp": "Wir erstellen einen dedizierten Login und leiten seinen <inbound>/inbound</inbound>-Ordner auf das obige Konto. Sie erhalten Host, Benutzernamen und ein Einmalpasswort für Ihre Bank. Weitere Ordner verwalten Sie anschließend unter der Verbindung.",
+        "createSftpLogin": "SFTP-Login erstellen",
+        "addConnection": "Verbindung hinzufügen",
+        "cancel": "Abbrechen"
+      },
+      "title": "Bank Feeds",
+      "description": "Verbinden Sie jedes Bankkonto für den automatisierten Auszugsimport — Live-Feeds, SFTP-Dateiablagen oder manueller Upload. Alles läuft über dieselbe Abstimmungspipeline.",
+      "addConnection": "+ Verbindung hinzufügen",
+      "empty": {
+        "none": "Noch keine Bankverbindungen.",
+        "connectFirst": "Verbinden Sie Ihre erste Bank"
+      },
+      "connection": {
+        "paused": "pausiert",
+        "synced": "synchronisiert {date}",
+        "attempted": "versucht {date}",
+        "test": "Testen",
+        "sync": "Synchronisieren",
+        "pause": "Pausieren",
+        "resume": "Fortsetzen",
+        "remove": "Entfernen",
+        "removeConfirm": "Diese Verbindung entfernen? Geplante Importe stoppen und die Einrichtung kann nicht rückgängig gemacht werden."
+      },
+      "feedMessages": {
+        "verified": "Verbindung verifiziert.",
+        "testFailed": "Test fehlgeschlagen: {detail}",
+        "unknownError": "unbekannter Fehler",
+        "syncFailed": "Synchronisierung fehlgeschlagen: {error}",
+        "imported": "{imported} neue importiert, {duplicates} Duplikate."
+      },
+      "sftpCard": {
+        "badge": "SFTP-Dateiablage",
+        "login": "Login",
+        "routesTo": "leitet an {count, plural, one {# Konto} other {# Konten}}",
+        "routing": "Routing",
+        "done": "Fertig",
+        "remove": "Entfernen",
+        "routingTitle": "Import-Routing — welcher Ordner speist welches Konto",
+        "noRouting": "Noch kein Routing — unten hinzufügen.",
+        "folderPlaceholder": "Ordner",
+        "addRoute": "Route hinzufügen"
+      },
+      "sftpEndpoint": {
+        "title": "SFTP-Empfangsendpunkt",
+        "description": "Lassen Sie die Dateilieferung Ihrer Bank hierher zeigen. Jede SFTP-Verbindung oben ist ein Login auf diesem Endpunkt.",
+        "host": "Host",
+        "port": "Port",
+        "status": "Status",
+        "hostKey": "Hostschlüssel",
+        "enabled": "aktiviert",
+        "disabled": "deaktiviert"
+      },
+      "chooseBank": {
+        "title": "Wählen Sie Ihre Bank",
+        "cancel": "Abbrechen",
+        "searchPlaceholder": "Banken suchen…",
+        "allCountries": "Alle Länder",
+        "notListed": "Nicht dabei? Wählen Sie, wie Auszüge ankommen",
+        "otherBank": "Andere Bank (Live-Feed)",
+        "otherBankHint": "Plaid / GoCardless / TrueLayer",
+        "sftpDrop": "SFTP-Dateiablage",
+        "sftpDropHint": "Bank liefert Auszugsdateien",
+        "manualUpload": "Manueller Upload",
+        "manualUploadHint": "OFX / CSV von Hand hochladen"
+      },
+      "errors": {
+        "couldNotCreateSftp": "SFTP-Login konnte nicht erstellt werden",
+        "couldNotCreateConnection": "Verbindung konnte nicht erstellt werden",
+        "failed": "Fehlgeschlagen"
+      },
+      "sftpSecret": {
+        "title": "SFTP-Login erstellt",
+        "description": "Geben Sie diese an Ihre Bank weiter. Das Passwort wird nur einmal angezeigt — kopieren Sie es jetzt.",
+        "hostLabel": "Host:",
+        "portLabel": "Port:",
+        "usernameLabel": "Benutzername:",
+        "passwordLabel": "Passwort:",
+        "done": "Fertig",
+        "createdToast": "SFTP-Verbindung erstellt.",
+        "addedToast": "{name} hinzugefügt."
+      },
+      "method": {
+        "plaid": {
+          "blurb": "openbooks ruft neue Transaktionen automatisch über Plaid ab, einen Open-Banking-Aggregator. Sie verbinden einmal mit Ihren Plaid-API-Schlüsseln; es gibt keine Dateien zu verwalten.",
+          "docsLabel": "Schlüssel im Plaid-Dashboard abrufen"
+        },
+        "gocardless": {
+          "blurb": "openbooks ruft Transaktionen über GoCardless Bank Account Data (ehemals Nordigen) ab — einen kostenlosen europäischen Open-Banking-Feed. Erstellen Sie in deren Dashboard eine Secret ID und einen Secret Key.",
+          "docsLabel": "Zugangsdaten von GoCardless abrufen"
+        },
+        "truelayer": {
+          "blurb": "openbooks ruft Transaktionen über TrueLayer ab, einen britisch-europäischen Open-Banking-Anbieter. Fügen Sie ein Zugriffstoken aus Ihrer TrueLayer-Konsole ein.",
+          "docsLabel": "TrueLayer-Konsole öffnen"
+        },
+        "sftp": {
+          "blurb": "Ihre Bank liefert Auszugsdateien (OFX/CSV/CAMT/BAI2/MT940) per SFTP an openbooks. Wir erstellen einen dedizierten Login für diese Bank; Sie übergeben Host, Benutzernamen und Passwort an Ihre Bank, und eingehende Dateien werden automatisch importiert."
+        },
+        "manual": {
+          "blurb": "Keine Automatisierung — Sie laden Auszugsdateien von der Kontoseite in Bank von Hand hoch, sobald Sie sie haben. Gut für Konten, die Ihre Bank nicht beliefern kann."
+        }
       }
     }
   },
@@ -651,5 +883,12 @@
     "colNet": "Netto",
     "reverse": "Stornieren",
     "empty": "Noch keine Abrechnungen importiert."
+  },
+  "docStatus": {
+    "draft": "Entwurf",
+    "pending_approval": "Zur Genehmigung",
+    "approved": "Genehmigt",
+    "posted": "Gebucht",
+    "voided": "Storniert"
   }
 }
