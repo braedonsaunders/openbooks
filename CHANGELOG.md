@@ -8,7 +8,7 @@ changes; each release documents required operator action.
 
 ## [0.1.0-alpha.12] - 2026-09-16
 
-Fleet-6 batches 9–39: setup, banking, assistant, payroll, CRM, reports,
+Fleet-6 batches 9–41: setup, banking, assistant, payroll, CRM, reports,
 dashboard, documents, allocations, construction/AR, rates, assets,
 payroll, i18n, drawers/search/mobile, expenses, compliance, invites,
 agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
@@ -110,6 +110,16 @@ agents/AI, and a11y UX on top of alpha.11. Requires migration 0169.
 - Failed flow runs can be retried; mark-as-filed refusals are typed in
   the filing drawer; delete-payment confirm resolves through the drawer
   scope.
+
+### Invites, i18n, and cockpit (batches 40–41)
+
+- CSRF treats localhost / 127.0.0.1 / [::1] as one origin so invite
+  activation works across the fleet's loopback pair.
+- Feature-toggle 409s map to localized copy; recent-entry status and
+  line counts translate; opportunity status cells and filters use the
+  drawer catalog; mobile tabs prefer short AR/AP labels.
+- Stat tiles wrap instead of truncating; a retried flow parks the
+  subject in pending_approval so the engine-enforced release can land.
 
 ## [0.1.0-alpha.11] - 2026-09-16
 
