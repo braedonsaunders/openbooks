@@ -119,3 +119,17 @@ test('empty subsidiary scope returns no Accounting home metrics', async () => {
   assert.deepEqual(home.badges, { accounts: 0, budgets: 0, assets: 0 })
   assert.ok(state.calls.every((query) => query.includes('and false')))
 })
+
+test('draft journals count draft journal documents, not journal entries (F-t06-014)', async () => {
+  // Manual-journal drafts are documents (not entries yet) — the /journal
+  // list reads documents, so the hub tile must too. Counting
+  // journal_entries with status draft always reads 0 for manual drafts.
+  reset()
+  await accountingHome('org-1', null)
+  const all = state.calls.join('\n')
+  assert.match(all, /from documents[\s\S]*kind = 'journal'[\s\S]*status = 'draft'/)
+  assert.ok(
+    !all.includes("from journal_entries je where je.org_id") || !/je\.status = 'draft'/.test(all),
+    'no journal_entries draft-status count may feed the tile',
+  )
+})

@@ -131,8 +131,10 @@ export async function accountingHome(
   }
   const ago7 = addCalendarDays(await businessToday(orgId), -7)
   // Ledger hygiene counts read the primary posting book, like bank
-  // reconciliation and the banking cockpit — a secondary book's drafts and
-  // postings must not inflate the primary ledger's tiles.
+  // reconciliation and the banking cockpit — a secondary book's postings
+  // must not inflate the primary ledger's tiles. Drafts are documents, not
+  // entries yet (the /journal list reads documents too), so the draft tile
+  // counts draft journal documents with no book scope.
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
@@ -153,8 +155,8 @@ export async function accountingHome(
     `),
     db.execute(sql`
       select
-        (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft'
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as draft_journals,
+        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'journal' and d.status = 'draft'
+          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}) as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
           and je.posting_date >= ${ago7}
           ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as posted_7d,

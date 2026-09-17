@@ -19,10 +19,12 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { accountingHome } = await import('./accounting.ts')
 
 /**
- * Accounting cockpit book scope: journal tiles count entries in every book,
- * so a secondary book's drafts and postings inflate the primary ledger's
- * hygiene counts. Like the banking cockpit, these tiles read the primary
- * posting book.
+ * Accounting cockpit book scope: the posted tile counts entries in every
+ * book, so a secondary book's postings inflate the primary ledger's hygiene
+ * counts. Like the banking cockpit, the posted tile reads the primary
+ * posting book. The draft tile instead ties to the /journal list: manual
+ * drafts are documents (not entries yet, with no book), so it counts draft
+ * journal documents.
  */
 test('accounting journal tiles read the primary book only', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const scratch = await withBypass(() => createScratchOrg())
@@ -49,10 +51,21 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
         insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
         values (${secondary}, ${scratch.orgId}, 'TAX', 'Tax', false, true, true)
       `)
+      // Manual drafts are documents (F-t06-014): seed two, one per book label —
+      // documents carry no book, so both count, exactly like the /journal
+      // draft list.
       let n = 0
+      for (const label of ['primary-draft', 'secondary-draft']) {
+        n += 1
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, document_number, document_date, status, subsidiary_id, currency, total, created_by, updated_by)
+          values
+            (${randomUUID()}, ${scratch.orgId}, 'journal',
+             ${`ACCT-DRAFT-${n}`}, ${today}, 'draft', ${scratch.subsidiaryId}, 'CAD', '0.0000', ${actorId}, ${actorId})
+        `)
+      }
       for (const [bookId, status, label] of [
-        [scratch.bookId, 'draft', 'primary-draft'],
-        [secondary, 'draft', 'secondary-draft'],
         [scratch.bookId, 'posted', 'primary-posted'],
         [secondary, 'posted', 'secondary-posted'],
       ] as const) {
@@ -85,7 +98,7 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
     })
 
     const home = await withBypass(() => accountingHome(scratch.orgId, null))
-    assert.equal(home.draftJournals, 1, 'draft tile excludes the secondary-book draft')
+    assert.equal(home.draftJournals, 2, 'draft tile counts draft journal documents like the /journal list')
     assert.equal(home.postedJournals7d, 1, 'posted tile excludes the secondary-book posting')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
