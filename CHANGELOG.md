@@ -108,8 +108,11 @@ Fleet-7 defect wave on top of alpha.14. No new migration.
   under the scratch org. That was test drift, not money: they had been
   asserting against zero rows because an imported web reader denied
   unscoped queries. Assertions are unchanged.
-- MFA and password-reset suites now seed and read under the scratch
-  org for the same resolver reason. Assertions are unchanged.
+- Fifteen drifted integration suites now seed and read under the
+  scratch org — MFA and reset, documents, orders, payroll, report
+  drill and currency basis, account register, currency chain, partner
+  statements, and draft columns. That was the same resolver drift, not
+  product arithmetic. Assertions are unchanged.
 - Lien-waiver project-required refusals pin on the record.
 - The setup rail stacks below phone width. Readiness points at the
   chart of accounts. A blank tax-code percent falls through with a
