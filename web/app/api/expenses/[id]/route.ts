@@ -6,6 +6,7 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
 import {
   DocumentEditError,
   documentRevisionCounterSql,
@@ -19,10 +20,22 @@ type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export const runtime = 'nodejs'
 
+/**
+ * A path segment that is not a uuid (e.g. /api/expenses/reports, which is
+ * not a route) must resolve through the typed not-found contract. Without
+ * this the id binds straight into a uuid comparison and PostgreSQL throws
+ * 22P02, surfacing as an empty-body 500 (F-t04-015).
+ */
+function malformedId(id: string): NextResponse | null {
+  return isUuid(id) ? null : NextResponse.json({ error: 'not found' }, { status: 404 })
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('expenses.read', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  const malformed = malformedId(id)
+  if (malformed) return malformed
   const report = await loadExpenseReport(id, gate.user.orgId)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // Authorize the subsidiary from the same snapshot as the returned content.
@@ -45,6 +58,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
+  const malformedPatch = malformedId(id)
+  if (malformedPatch) return malformedPatch
 
   const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
     sql`select status, document_date, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
@@ -169,6 +184,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await guardFeaturePermission('expenses.create', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  const malformedDelete = malformedId(id)
+  if (malformedDelete) return malformedDelete
   const owned = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
   ))
