@@ -537,6 +537,20 @@ test('the check form exposes an optional payee and the funding bank without mand
   assert.ok(!DRAWER_SOURCE.includes("{config.kind === 'deposit' ? ("))
 })
 
+test('the card picker falls back to the card-liability account when no instruments exist', () => {
+  // F-t05-020: the card picker lists payment_cards instruments, but no UI
+  // creates one — with zero instruments the picker is unfillable. When no
+  // instruments exist the drawer must offer the reconcilable card-liability
+  // accounts (the controlAccountId override the engine cardRule reads
+  // first), with an explicit empty state naming what qualifies when those
+  // are absent too.
+  assert.match(DRAWER_SOURCE, /cardAccounts/)
+  assert.match(DRAWER_SOURCE, /controlAccountId/)
+  assert.match(DRAWER_SOURCE, /drawer\.cardAccountHelp/)
+  assert.match(DRAWER_SOURCE, /drawer\.noCardAccounts/)
+  assert.match(DRAWER_SOURCE, /<Link href="\/accounts"/)
+})
+
 test('the funding-bank picker names the empty-data state with a Banking link', () => {
   // F-t05-008 follow-up: SIM Northstar has zero bank accounts, so the
   // From-account picker opened with only a disabled 'No matches' and no
