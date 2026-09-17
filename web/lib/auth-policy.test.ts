@@ -77,6 +77,68 @@ test("browser mutations reject a cross-origin Origin header", () => {
   assert.equal(hasExpectedOrigin(sameOrigin, { OPENBOOKS_APP_URL: "https://different.example" }), false);
 });
 
+test("loopback literals share one origin for browser mutations", () => {
+  // Fleet reality behind the F-t01-013 activation block: the invite link
+  // names localhost while the browser session runs on 127.0.0.1 (same
+  // machine, same port). Loopback literals are equivalent; everything else
+  // stays exact.
+  const put = (url: string, origin: string) =>
+    new Request(url, { method: "PUT", headers: { Origin: origin } });
+  assert.equal(
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780")),
+    true,
+  );
+  assert.equal(
+    hasExpectedOrigin(put("http://127.0.0.1:4780/api/password-reset", "http://localhost:4780")),
+    true,
+  );
+  assert.equal(
+    hasExpectedOrigin(
+      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"),
+      { OPENBOOKS_APP_URL: "http://localhost:4780" },
+    ),
+    true,
+  );
+  assert.equal(
+    hasExpectedOrigin(
+      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"),
+      { OPENBOOKS_APP_URL: "http://127.0.0.1:4780" },
+    ),
+    true,
+  );
+  // Scheme, port, and real hosts stay exact — no loosening beyond loopback.
+  // (Only the Origin header and the configured origin compare; the request
+  // URL's own scheme never enters either side of the check.)
+  assert.equal(
+    hasExpectedOrigin(
+      put("http://localhost:4780/api/password-reset", "https://127.0.0.1:4780"),
+      { OPENBOOKS_APP_URL: "http://localhost:4780" },
+    ),
+    false,
+  );
+  assert.equal(
+    hasExpectedOrigin(
+      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:9999"),
+      { OPENBOOKS_APP_URL: "http://localhost:4780" },
+    ),
+    false,
+  );
+  assert.equal(
+    hasExpectedOrigin(
+      put("http://localhost:4780/api/password-reset", "http://attacker.test"),
+      { OPENBOOKS_APP_URL: "http://localhost:4780" },
+    ),
+    false,
+  );
+  assert.equal(
+    hasExpectedOrigin(
+      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"),
+      { OPENBOOKS_APP_URL: "http://127.0.0.2:4780" },
+    ),
+    false,
+  );
+});
+
 test("invalid-login responses do not reveal whether an account is locked", () => {
   assert.deepEqual(
     publicLoginFailure({ kind: "invalid", retryAfter: 0 }),

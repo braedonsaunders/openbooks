@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { isSameLoopbackOrigin } from "./csrf";
 
 export const LOGIN_WINDOW_S = 15 * 60;
 export const EMAIL_ATTEMPT_LIMIT = 10;
@@ -91,7 +92,13 @@ export function authRequestContext(
   };
 }
 
-/** Reject browser cross-origin mutations while retaining non-browser API clients. */
+/**
+ * Reject browser cross-origin mutations while retaining non-browser API
+ * clients. Loopback literals (`localhost` / `127.0.0.1` / `[::1]`) name one
+ * machine: the fleet hits activation links and sessions across both spellings
+ * on one port, so they compare equal here — scheme, port, and every real
+ * host stay exact (see `isSameLoopbackOrigin`).
+ */
 export function hasExpectedOrigin(
   request: Pick<Request, "headers" | "url">,
   environment: Record<string, string | undefined> = process.env,
@@ -102,7 +109,7 @@ export function hasExpectedOrigin(
     const configured = environment.OPENBOOKS_APP_URL
       ? new URL(environment.OPENBOOKS_APP_URL).origin
       : new URL(request.url).origin;
-    return new URL(supplied).origin === configured;
+    return isSameLoopbackOrigin(new URL(supplied).origin, configured);
   } catch {
     return false;
   }

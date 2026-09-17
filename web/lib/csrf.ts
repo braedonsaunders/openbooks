@@ -37,6 +37,36 @@ function httpOrigin(value: string): string | null {
   }
 }
 
+/**
+ * Loopback literals that name this machine (`localhost`, `127.0.0.1`,
+ * `[::1]`). Invite links, harness base URLs, and browser address bars mix
+ * them freely on one machine; origins must treat them as the same host.
+ */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Exact-origin comparison with loopback equivalence: scheme and port stay
+ * exact, and only loopback literals interchange — a real host, a spoofed
+ * suffix, or a different loopback-family member (e.g. 127.0.0.2) still
+ * rejects. Shared by the edge gate below and the route-level
+ * `hasExpectedOrigin` in `auth-policy.ts`. Web-standard APIs only: safe for
+ * the Edge runtime.
+ */
+export function isSameLoopbackOrigin(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const left = new URL(a);
+    const right = new URL(b);
+    if (left.protocol !== right.protocol || left.port !== right.port) return false;
+    const leftHost = left.hostname.toLowerCase();
+    const rightHost = right.hostname.toLowerCase();
+    if (leftHost === rightHost) return true;
+    return LOOPBACK_HOSTS.has(leftHost) && LOOPBACK_HOSTS.has(rightHost);
+  } catch {
+    return false;
+  }
+}
+
 function suppliedOrigin(value: string): string | null {
   try {
     const url = new URL(value);
@@ -126,8 +156,14 @@ export function hasTrustedOrigin(
   const expected = trustedRequestOrigin(req.headers, environment, req.url);
   if (!expected) return false;
   const origin = req.headers.get("origin");
-  if (origin !== null) return suppliedOrigin(origin) === expected;
+  if (origin !== null) {
+    const supplied = suppliedOrigin(origin);
+    return supplied !== null && isSameLoopbackOrigin(supplied, expected);
+  }
   const referer = req.headers.get("referer");
-  if (referer !== null) return httpOrigin(referer) === expected;
+  if (referer !== null) {
+    const refererOrigin = httpOrigin(referer);
+    return refererOrigin !== null && isSameLoopbackOrigin(refererOrigin, expected);
+  }
   return false;
 }
