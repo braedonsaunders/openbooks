@@ -34,7 +34,10 @@ test(`${route} drawer discards the reviewed draft with a JSON revision token`, a
     await page.getByRole('dialog').filter({ hasText: 'This permanently deletes the draft' }).getByRole('button', { name: 'Delete', exact: true }).click()
     const response = await deleted
     expect(response.status(), await response.text()).toBe(200)
-    expect(response.request().postDataJSON().expectedUpdatedAt).toMatch(/\.\d{6}Z$/)
+    // Documents compare on revision_seq (migration 0167). The drawer must
+    // send that counter as expectedUpdatedAt; a leftover timestamp assertion
+    // would treat a correct "0" token as a product defect.
+    expect(response.request().postDataJSON().expectedUpdatedAt).toMatch(/^\d{1,20}$/)
     id = undefined
     await expect(page).toHaveURL(new URL(route, baseURL).href)
   } finally {
