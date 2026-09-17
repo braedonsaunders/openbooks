@@ -1719,6 +1719,7 @@
       }
     },
     "fields": {
+      "accountId": "勘定科目",
       "classAttribute": "Asset class attribute",
       "countryCode": "Country",
       "calculationModel": "Calculation model",
