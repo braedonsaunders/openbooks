@@ -54,7 +54,9 @@
     "other": "Outros",
     "otherTotal": "Total de Outros",
     "accumulatedEarnings": "Lucros acumulados (calculado)",
-    "translationAdjustment": "Ajuste acumulado de conversão"
+    "translationAdjustment": "Ajuste acumulado de conversão",
+    "ratesBlockedTitle": "Taxas de câmbio consolidadas ainda não foram derivadas",
+    "ratesBlockedAction": "Derivar as taxas no fechamento do período"
   },
   "saveView": {
     "namePrompt": "Nomeie esta visualização:",
