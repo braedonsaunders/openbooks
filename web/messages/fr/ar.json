@@ -168,5 +168,47 @@
       "void": "annulé",
       "expired": "expiré"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "Factures récurrentes",
+      "subscriptions": "Abonnements",
+      "advanced": "Cycle de vie avancé",
+      "dunning": "Relances"
+    },
+    "errors": {
+      "actionFailed": "L’action a échoué",
+      "couldNotCreate": "Création impossible"
+    },
+    "recurring": {
+      "newSchedule": "Nouvelle planification récurrente",
+      "templateDocLabel": "Document modèle nº",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "Cadence",
+      "cronLabel": "Cron",
+      "firstRunLabel": "Première exécution",
+      "autoPostCheckbox": "Comptabiliser automatiquement les documents générés",
+      "createSchedule": "Créer la planification",
+      "table": {
+        "template": "Modèle",
+        "customer": "Client",
+        "cadence": "Cadence",
+        "nextRun": "Prochaine exécution",
+        "runs": "Exécutions",
+        "autoPost": "Compta. auto",
+        "status": "Statut"
+      },
+      "yes": "Oui",
+      "no": "Non",
+      "active": "Actif",
+      "paused": "En pause",
+      "runNow": "Exécuter maintenant",
+      "pause": "Suspendre",
+      "resume": "Reprendre",
+      "delete": "Supprimer",
+      "actionFailed": "L’action sur la planification récurrente n’a pas pu aboutir.",
+      "generatedDocumentsDeleteConflict": "Cette planification récurrente ne peut pas être supprimée car elle a déjà généré des documents. Leur historique source doit être préservé.",
+      "noneYet": "Aucune planification récurrente pour l’instant."
+    }
   }
 }
