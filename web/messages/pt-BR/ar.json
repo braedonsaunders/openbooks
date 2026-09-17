@@ -148,6 +148,13 @@
       "documentation": "Ler o guia de contas a receber"
     }
   },
+  "appliedPayments": {
+    "title": "Pagamentos aplicados",
+    "document": "Documento",
+    "date": "Data",
+    "amount": "Valor",
+    "appliedOn": "Aplicado em"
+  },
   "paymentLinks": {
     "title": "Links de pagamento online",
     "create": "Criar link",

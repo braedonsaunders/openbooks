@@ -22,6 +22,7 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiari
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import type { DocumentDrawer } from '../../../../components/document-drawer'
+import type { AppliedPayment } from '../../../../components/applied-payments-panel'
 
 /**
  * Customer invoices + credits, split into a loader and a spec.
@@ -73,6 +74,8 @@ export interface ArInvoicesDrawer {
   recordType: string
   canCustomize: boolean
   paymentLinks: { documentId: string; canManage: boolean } | null
+  allocationsEntryEnabled: boolean
+  appliedPayments: { payments: AppliedPayment[]; currency: string } | null
 }
 
 export interface ArInvoicesData {
@@ -171,12 +174,37 @@ export async function loadArInvoices(
       : null,
   ])
 
+  // Active open-item applications into this document's lines (receipts,
+  // credits), so a paid invoice names what paid it instead of showing only
+  // a zero balance.
+  const appliedRows = drawerOpen && openDoc
+    ? (await db.execute<{
+        id: string; number: string; kind: string; date: string | null; amount: string; appliedOn: string | null
+      }>(sql`
+        select ap.id::text as id, d.document_number as number, d.kind as kind,
+               d.document_date::text as date, ap.amount::text as amount,
+               ap.applied_on::text as "appliedOn"
+          from applications ap
+          join journal_lines target on target.id = ap.from_line_id and target.org_id = ap.org_id
+          join journal_entries target_entry on target_entry.id = target.entry_id and target_entry.org_id = target.org_id
+          join journal_lines source on source.id = ap.to_line_id and source.org_id = ap.org_id
+          join journal_entries source_entry on source_entry.id = source.entry_id and source_entry.org_id = source.org_id
+          join documents d on d.id = source_entry.source_document_id and d.org_id = source_entry.org_id
+         where ap.org_id = ${authz.user.orgId} and target_entry.source_document_id = ${openDoc.doc.id}
+           and ap.unapplied_at is null
+         order by ap.applied_on desc, ap.created_at desc
+      `)).rows
+    : []
   const drawer =
     openDoc && pickers && resolvedForm && openKind
       ? {
           basePath: '/ar/invoices',
           remountKey: String(openDoc.doc.id),
           payload: openDoc,
+          allocationsEntryEnabled: featureEnabled(featureState, 'allocationsAtEntry'),
+          appliedPayments: appliedRows.length > 0
+            ? { payments: appliedRows as AppliedPayment[], currency: String(openDoc.doc.currency) }
+            : null,
           config: DOC_KINDS[openKind]!,
           initialMode: (pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           parties: pickers[0],

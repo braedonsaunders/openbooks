@@ -148,6 +148,13 @@
       "documentation": "Leer la guía de cuentas por cobrar"
     }
   },
+  "appliedPayments": {
+    "title": "Pagos aplicados",
+    "document": "Documento",
+    "date": "Fecha",
+    "amount": "Importe",
+    "appliedOn": "Aplicado el"
+  },
   "paymentLinks": {
     "title": "Enlaces de pago en línea",
     "create": "Crear enlace",

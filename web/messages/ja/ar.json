@@ -148,6 +148,13 @@
       "documentation": "売掛金ガイドを読む"
     }
   },
+  "appliedPayments": {
+    "title": "適用済みの入金",
+    "document": "ドキュメント",
+    "date": "日付",
+    "amount": "金額",
+    "appliedOn": "適用日"
+  },
   "paymentLinks": {
     "title": "オンライン決済リンク",
     "create": "リンクを作成",

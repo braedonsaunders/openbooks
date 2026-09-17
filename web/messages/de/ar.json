@@ -148,6 +148,13 @@
       "documentation": "Leitfaden zur Debitorenbuchhaltung lesen"
     }
   },
+  "appliedPayments": {
+    "title": "Angewandte Zahlungen",
+    "document": "Beleg",
+    "date": "Datum",
+    "amount": "Betrag",
+    "appliedOn": "Angewandt am"
+  },
   "paymentLinks": {
     "title": "Online-Zahlungslinks",
     "create": "Link erstellen",
