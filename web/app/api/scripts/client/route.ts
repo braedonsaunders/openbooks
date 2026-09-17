@@ -16,7 +16,10 @@ export async function GET(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!(await isFeatureEnabled(authz.user.orgId, 'scripts'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // Feature-off is a normal empty state, not "not found": the client
+    // loader calls this endpoint on every save, and browsers log failed
+    // fetches to the console however they are handled (F-t05-007).
+    return NextResponse.json({ scripts: [] })
   }
 
   const url = new URL(req.url)
