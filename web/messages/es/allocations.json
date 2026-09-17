@@ -47,6 +47,7 @@
     "list": {
       "heading": "Reglas de distribución",
       "new": "Nueva regla",
+      "emptyTitle": "Aún no hay reglas de distribución",
       "empty": "Aún no hay reglas de distribución. Cree la primera para empezar a distribuir costos.",
       "columns": {
         "name": "Nombre",
@@ -60,7 +61,9 @@
       "noVersion": "Sin versión publicada",
       "inactive": "Inactiva",
       "active": "Activa",
-      "searchPlaceholder": "Buscar reglas…"
+      "searchPlaceholder": "Buscar reglas…",
+      "emptyDescription": "Cree la primera regla para empezar a distribuir costos.",
+      "blurb": "Reglas versionadas que actúan al registrar, al contabilizar o como reparto del periodo. Una regla nueva abre una configuración guiada."
     },
     "modes": {
       "entry": "Al registrar",
@@ -114,6 +117,8 @@
       },
       "applicabilityHeading": "Qué líneas considera la regla",
       "documentKinds": "Clases de documento (vacío significa todas)",
+      "documentKindAdd": "Agregar",
+      "noOptions": "Nada aquí todavía.",
       "accountScope": "Alcance de cuentas",
       "accountScopes": {
         "any": "Cualquier cuenta",
@@ -179,6 +184,7 @@
       "lineDescriptionTemplate": "Plantilla de descripción de línea",
       "approvalFlow": "Flujo de aprobación",
       "approvalFlowHint": "UUID de flujo opcional, exigido antes de contabilizar una ejecución.",
+      "approvalFlowNone": "Sin flujo de aprobación",
       "driverAsOfs": {
         "period": "Periodo",
         "document_date": "Fecha del documento",
@@ -283,6 +289,7 @@
       "basisNote": "Las porciones se resuelven al ejecutar desde el vector de la clave.",
       "periodHeading": "Vista previa de un reparto del periodo",
       "period": "Periodo",
+      "book": "Libro",
       "openRuns": "Abrir en Ejecuciones",
       "noVersion": "Esta regla aún no tiene versión que probar.",
       "version": "Versión",
@@ -316,12 +323,15 @@
     "key": "Clave",
     "keyHint": "Alias en minúsculas, único por organización",
     "name": "Nombre",
+    "fieldDescription": "Descripción",
     "dimension": "Dimensión",
     "sourceKind": "Fuente",
     "unit": "Unidad",
     "active": "Activa",
+    "inactive": "Inactiva",
     "showInactive": "Mostrar inactivas",
     "empty": "Aún no hay claves.",
+    "emptyTitle": "Aún no hay claves",
     "deleteConfirm": "¿Eliminar la clave {name}? Sus valores manuales se van con ella.",
     "sourceKinds": {
       "statistical_journal": "Diario estadístico",
@@ -372,6 +382,7 @@
     "note": "Nota",
     "addValue": "Añadir valor",
     "noValues": "Aún no hay valores para esta clave.",
+    "noDimensionValues": "Aún no hay valores activos de {dimension} — cree uno antes de agregar valores de clave.",
     "endValue": "Poner fin",
     "deleteValueConfirm": "¿Eliminar este valor?",
     "preview": "Vista previa del vector",
@@ -385,7 +396,10 @@
     "loadFailed": "No se pudieron cargar las claves.",
     "saveFailed": "No se pudo guardar la clave.",
     "deleteFailed": "No se pudo eliminar la clave.",
-    "previewFailed": "No se pudo previsualizar el vector."
+    "previewFailed": "No se pudo previsualizar el vector.",
+    "manualCreateHint": "Guarde primero la clave — sus valores con vigencia serán editables aquí justo después.",
+    "valuesAfterSave": "Clave guardada. Agregue sus valores con vigencia abajo.",
+    "emptyDescription": "Cree la primera clave para empezar a prorratear costos."
   },
   "runs": {
     "title": "Ejecuciones",
@@ -395,6 +409,7 @@
     "filterStatus": "Estado",
     "all": "Todos",
     "empty": "Aún no hay ejecuciones. Previsualice una regla para calcular una.",
+    "emptyTitle": "Aún no hay ejecuciones",
     "columns": {
       "rule": "Regla",
       "period": "Periodo",
@@ -419,6 +434,7 @@
     },
     "previewRun": "Previsualizar ejecución",
     "runDetail": "Detalle de la ejecución",
+    "summary": "Resumen",
     "sources": "Fuentes",
     "driverVector": "Vector de la clave",
     "targets": "Destinos",
@@ -450,7 +466,125 @@
     "journalEntry": "Asiento",
     "reversalEntry": "Asiento de reversión",
     "loadFailed": "No se pudieron cargar las ejecuciones.",
-    "detailFailed": "No se pudo cargar la ejecución."
+    "detailFailed": "No se pudo cargar la ejecución.",
+    "pendingApprovalNotice": "Esta ejecución está esperando aprobación y no puede contabilizarse desde aquí.",
+    "viewApproval": "Abrir la aprobación",
+    "emptyDescription": "Previsualice una regla para calcular una."
+  },
+  "wizard": {
+    "untitled": "Distribución sin título",
+    "loadFailed": "No se pudieron cargar los departamentos y las claves para la guía de configuración.",
+    "createFailed": "No se pudo crear la regla de distribución.",
+    "publishFailed": "La regla se guardó como borrador — publíquela cuando termine la definición.",
+    "created": "Regla de distribución guardada como borrador. Publíquela desde Versiones cuando esté lista.",
+    "published": "La regla de distribución está publicada y vigente.",
+    "creating": "Creando…",
+    "finish": "Crear regla",
+    "skipGuide": "Omitir la guía — abrir una regla en blanco",
+    "publishNow": "Publicar ahora para que la regla pueda actuar",
+    "publishNowHint": "Un borrador nunca coincide con una línea ni con una ejecución del periodo. Déjelo activo salvo que quiera revisar primero la definición.",
+    "advancedAfter": "Tras crearla, la regla conserva todos los campos avanzados — libros, segmentos personalizados, contrapartidas y prueba.",
+    "when": {
+      "title": "¿Cuándo debe actuar?",
+      "description": "Mismo modelo de regla, tres momentos. Elija el que corresponda a cuándo debe ocurrir la división.",
+      "advanced": "Avanzado",
+      "entry": {
+        "title": "Al registrar una línea",
+        "description": "Guardar una línea coincidente de factura, gasto o diario la reemplaza con las líneas hijas divididas.",
+        "example": "Una factura de gastos generales de 1 000,00 pasa a ser cuatro líneas de departamento en proporción 1 : 2 : 3 : 4."
+      },
+      "period": {
+        "title": "Al cierre del mes",
+        "description": "Un reparto del periodo lee un fondo, lo prorratea y contabiliza su propio diario de distribución.",
+        "example": "El gasto de TI sin asignar se reclasifica a cada departamento por dotación tras el cierre."
+      },
+      "post": {
+        "title": "Al contabilizar el documento",
+        "description": "Líneas extra del diario caen en el mismo asiento, marcadas con esta regla como aportante.",
+        "example": "Úselo cuando el documento fuente deba quedar intacto y la distribución sea solo contable."
+      }
+    },
+    "source": {
+      "title": "¿Qué líneas debe captar?",
+      "description": "Nombre la regla, luego filtre por tipo de transacción y dimensiones coincidentes. Tipos vacíos significan todos.",
+      "kinds": "Tipos de transacción",
+      "kindsHint": "Son clases de documento. Déjelos todos apagados para coincidir con todos los tipos.",
+      "anyKind": "Nada seleccionado significa todo tipo de transacción.",
+      "filters": "Dimensiones de origen",
+      "filtersHint": "Combinados con Y con los tipos de transacción. Deje una dimensión en Cualquiera para ignorarla. Los repartos del periodo suelen recoger el fondo sin asignar.",
+      "filtersAny": "Cada dimensión empieza en Cualquiera. Cambie a Estas solo en los clasificadores que deban restringir la coincidencia.",
+      "modeAny": "Cualquiera",
+      "modeUntagged": "Sin asignar",
+      "modeSpecific": "Estas",
+      "pickValue": "Agregar un valor…",
+      "noValues": "Aún no hay valores activos para esta dimensión."
+    },
+    "split": {
+      "title": "¿Cómo debe dividirse el monto?",
+      "description": "Una proporción fija es una división nombrada (1, 2, 3, 4). Una clave es una medida reutilizable que adjunta aquí — las claves no son reglas.",
+      "ratio": {
+        "title": "Proporción fija",
+        "description": "Pesos relativos como 1 : 2 : 3 : 4. Se guardan como porcentajes que siempre suman 100.",
+        "example": "1 + 2 + 3 + 4 = 10 partes, así que las porciones son 10 %, 20 %, 30 % y 40 %."
+      },
+      "percent": {
+        "title": "Porcentaje fijo",
+        "description": "Escriba usted los porcentajes. Deben sumar 100."
+      },
+      "driver": {
+        "title": "Clave existente",
+        "description": "Dotación, horas, tabla manual o informe guardado. Cree la clave en la pestaña Claves y elíjala aquí."
+      },
+      "driverEmpty": "Aún no hay claves. Una proporción fija no necesita una. Cree una clave solo cuando los pesos deban cambiar cada periodo.",
+      "driverHint": "La clave mide una dimensión. Los destinos dinámicos siguen esa dimensión al ejecutar."
+    },
+    "targets": {
+      "title": "¿Adónde va el dinero?",
+      "description": "Elija la dimensión destino y dé a cada valor una porción. Una cuenta vacía conserva la cuenta de origen.",
+      "dimension": "Dividir entre",
+      "value": "Destino",
+      "weight": "Proporción",
+      "percent": "Porcentaje",
+      "pickValue": "Elegir un valor…",
+      "add": "Agregar destino",
+      "noValues": "Aún no hay valores activos para esa dimensión.",
+      "needOne": "Elija al menos dos destinos con porción positiva.",
+      "example": "Una línea de 1 000,00 pasaría a ser {amounts}.",
+      "driverDynamic": "{driver} se dividirá entre cada {dimension} con peso.",
+      "driverDynamicHint": "No hace falta listar destinos — el vector de la clave es el conjunto objetivo."
+    },
+    "policy": {
+      "title": "¿Qué deben hacer los libros?",
+      "description": "Si la división es automática, y si el costo se mueve o solo se agrega atribución dimensional.",
+      "applyAutomatic": "Automático",
+      "applyAutomaticHint": "Las líneas coincidentes se dividen al guardar.",
+      "applySuggest": "Sugerir",
+      "applySuggestHint": "La cuadrícula de líneas muestra un chip; la división se aplica al hacer clic.",
+      "applyManual": "Manual",
+      "applyManualHint": "La división solo aparece en el selector de distribución de la línea.",
+      "impactReclass": "Mover el costo",
+      "impactReclassHint": "Acredite la coordenada de origen y debite cada destino. El total del balance se mantiene.",
+      "impactNetZero": "Atribuir sin mover el resultado",
+      "impactNetZeroHint": "Par compensado: la ganancia de la empresa no cambia; las dimensiones, sí.",
+      "periodActivityHint": "Distribuya el movimiento contabilizado de este periodo, sin las líneas propias de esta regla.",
+      "periodBalanceHint": "Distribuya el saldo de fin de periodo del fondo de origen.",
+      "runManualHint": "Previsualiza y contabiliza desde la pestaña Ejecuciones.",
+      "runAutoPreviewHint": "Tras el cierre, calcule una vista previa automáticamente. Igual la contabiliza usted."
+    },
+    "review": {
+      "title": "¿Crear esta regla?",
+      "description": "Esto escribe la misma regla versionada que edita el panel. Puede cambiar todo después.",
+      "when": "Actúa {mode}",
+      "sourceAnyKind": "Coincide con todo tipo de transacción",
+      "sourceKinds": "Coincide con {kinds}",
+      "sourceAnyDims": "Sin filtro extra de dimensión de origen",
+      "sourceUntagged": "Solo {dimension} sin asignar",
+      "sourceValues": "{dimension}: {values}",
+      "splitRatio": "División {weights} → {percents}",
+      "splitPercent": "División {percents}",
+      "splitDriver": "División por clave {driver}",
+      "targets": "Hacia {dimension}: {names}"
+    }
   },
   "lineage": {
     "title": "Origen del reparto",
