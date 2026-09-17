@@ -1682,12 +1682,12 @@
     },
     "assetDepreciationSetup": {
       "navTitle": "Buch-Abschreibung",
-      "title": "Book Depreciation",
+      "title": "Buch-Abschreibung",
       "description": "Wiederverwendbare Abschreibungsmethoden konfigurieren sowie Methode, Nutzungsdauer und Konvention, die jedes Rechnungslegungsbuch auf eine Anlagegüterklasse anwendet.",
-      "tabsAria": "Book depreciation setup sections",
+      "tabsAria": "Abschnitte der Buch-Abschreibungseinrichtung",
       "tabs": {
-        "methods": "Methods",
-        "books": "Book policies"
+        "methods": "Methoden",
+        "books": "Buchrichtlinien"
       }
     },
     "taxDepreciationSetup": {
@@ -2438,24 +2438,24 @@
     },
     "fields": {
       "accountId": "Konto",
-      "classAttribute": "Asset class attribute",
-      "countryCode": "Country",
-      "calculationModel": "Calculation model",
+      "classAttribute": "Attribut der Anlagegüterklasse",
+      "countryCode": "Land",
+      "calculationModel": "Berechnungsmodell",
       "regime": "Regime",
-      "classCode": "Class code",
+      "classCode": "Klassencode",
       "rate": "Kurs",
       "method": "Methode",
-      "firstYearFraction": "First-year fraction",
-      "allowRecapture": "Allow recapture",
-      "allowTerminalLoss": "Allow terminal loss",
-      "costCap": "Cost cap",
-      "depreciationSystem": "Depreciation system",
-      "macrsMethod": "MACRS method",
-      "recoveryPeriodYears": "Recovery period (years)",
-      "taxAttributes": "Tax attributes (JSON)",
-      "enhancedMultiplier": "Enhanced multiplier",
-      "acquiredFrom": "Acquired from",
-      "acquiredTo": "Acquired to",
+      "firstYearFraction": "Erstjahresanteil",
+      "allowRecapture": "Rückforderung zulassen",
+      "allowTerminalLoss": "Schlussverlust zulassen",
+      "costCap": "Kostenobergrenze",
+      "depreciationSystem": "Abschreibungssystem",
+      "macrsMethod": "MACRS-Methode",
+      "recoveryPeriodYears": "Abschreibungszeitraum (Jahre)",
+      "taxAttributes": "Steuerattribute (JSON)",
+      "enhancedMultiplier": "Erhöhter Multiplikator",
+      "acquiredFrom": "Erworben von",
+      "acquiredTo": "Erworben bis",
       "code": "Code",
       "name": "Name",
       "appliesTo": "Gilt für",
@@ -2754,26 +2754,26 @@
         "other": "Sonstige"
       },
       "taxDepreciationModel": {
-        "pool": "Class pool",
-        "macrs": "Per-asset MACRS"
+        "pool": "Klassenpool",
+        "macrs": "MACRS je Anlagegut"
       },
       "macrsSystem": {
         "gds": "GDS",
         "ads": "ADS"
       },
       "macrsMethod": {
-        "200db": "200% declining balance",
-        "150db": "150% declining balance",
-        "straightLine": "Straight line"
+        "200db": "200 % degressiv",
+        "150db": "150 % degressiv",
+        "straightLine": "Linear"
       },
       "taxDepreciationConvention": {
-        "halfYear": "Half-year",
-        "midQuarter": "Mid-quarter",
-        "midMonth": "Mid-month"
+        "halfYear": "Halbjahr",
+        "midQuarter": "Quartalsmitte",
+        "midMonth": "Monatsmitte"
       },
       "poolMethod": {
-        "declining": "Declining balance",
-        "straightLine": "Straight line"
+        "declining": "Degressiv",
+        "straightLine": "Linear"
       },
       "appliesTo": {
         "sales": "Verkäufe",
@@ -4104,11 +4104,11 @@
   },
   "features": {
     "bankFeeds": {
-      "title": "Bank Feeds",
+      "title": "Bankfeeds",
       "description": "Automatisierte Bankanbindung – SFTP-Dateiablagen und Live-Feeds von Plaid, GoCardless und TrueLayer."
     },
     "subscriptionBilling": {
-      "title": "Subscription Billing",
+      "title": "Abonnementabrechnung",
       "description": "Pläne und Abonnements, die wiederkehrende Rechnungen automatisch erzeugen (SaaS / Retainer)."
     },
     "onlinePayments": {
