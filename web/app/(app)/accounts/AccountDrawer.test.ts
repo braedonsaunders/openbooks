@@ -8,6 +8,7 @@ import test from 'node:test'
 // the UI, and the failure mapped to generic save_failed at best.
 const drawerSource = readFileSync(new URL('./AccountDrawer.tsx', import.meta.url), 'utf8')
 const viewSource = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
+const uiDrawerSource = readFileSync(new URL('../../../../packages/ui/src/drawer.tsx', import.meta.url), 'utf8')
 const enAccounts = JSON.parse(
   readFileSync(new URL('../../../messages/en/accounts.json', import.meta.url), 'utf8'),
 ) as { drawer: { errors: Record<string, string> } }
@@ -46,6 +47,34 @@ test('save refuses reconcilable-without-currency before the round trip', () => {
     drawerSource,
     /form\.reconcilable && !form\.currencyRestriction/,
     'client guard must stop a save the server would 422',
+  )
+})
+
+// F-t06-002: closing the drawer left a stale account= param in the URL —
+// UrlDrawer deferred the close navigation to onExitComplete, so the address
+// bar lagged the dismissed state by the exit animation (and a synchronous
+// read always saw the stale param). The drawer opts into instant URL sync;
+// the loader's closeHref already strips account=/accountNew=/drawerReturn=.
+test('closing the drawer syncs the URL instantly instead of after the exit animation', () => {
+  assert.match(
+    drawerSource,
+    /syncUrlOnClose/,
+    'the account drawer must opt into instant close-URL sync so the address bar matches the dismissed state',
+  )
+  assert.match(
+    viewSource,
+    /account: undefined/,
+    'the loader closeHref must strip the account selector so closing cannot reopen on reload',
+  )
+  assert.match(
+    uiDrawerSource,
+    /syncUrlOnClose/,
+    'UrlDrawer must implement the instant-sync opt-in',
+  )
+  assert.match(
+    uiDrawerSource,
+    /history\.replaceState/,
+    'instant sync must rewrite the address bar at close time, ahead of the deferred router navigation',
   )
 })
 

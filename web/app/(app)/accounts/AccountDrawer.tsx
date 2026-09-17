@@ -207,6 +207,7 @@ export function AccountDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
+      syncUrlOnClose
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
