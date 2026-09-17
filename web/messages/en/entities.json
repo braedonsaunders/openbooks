@@ -55,6 +55,8 @@
       "unitUpdated": "Unit updated"
     },
     "workspace": {
+      "title": "Property Management",
+      "description": "Operate properties, leases, rent, CAM reconciliations, and tenant security deposits.",
       "healthAria": "Property health",
       "tabs": {
         "properties": "Properties",

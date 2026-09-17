@@ -1,4 +1,50 @@
 {
+  "propertyManagement": {
+    "workspace": {
+      "title": "物业管理",
+      "description": "管理物业、租赁、租金、公共区域费用对账和租户押金。",
+      "healthAria": "组合健康状况",
+      "tabs": {
+        "properties": "物业",
+        "rentRoll": "租金台账",
+        "cam": "公共区域费用",
+        "depositReconciliation": "押金对账"
+      },
+      "metrics": {
+        "occupiedUnits": "已占用单元",
+        "activeLeasesHint": "{count}个有效租约",
+        "monthlyBaseRent": "月基本租金",
+        "currentChargesHint": "当前有效费用",
+        "rentPastDue": "逾期已开票租金",
+        "agingHint": "账单计划账龄",
+        "depositsHeld": "持有押金",
+        "depositLiabilityHint": "租户押金负债"
+      },
+      "sectionsAria": "物业管理版块",
+      "newProperty": "新建物业",
+      "newCamPool": "新建公区费用池",
+      "assessLateFees": "计收滞纳金",
+      "billDueRent": "开具到期租金账单",
+      "loading": "正在加载物业组合…",
+      "toasts": {
+        "lateFeesAssessed": "已计收组合滞纳金",
+        "rentBilled": "已开具组合租金账单",
+        "propertyCreated": "物业已创建",
+        "propertyUpdated": "物业已更新",
+        "propertyDeleted": "物业已删除",
+        "unitAdded": "单元已添加",
+        "unitUpdated": "单元已更新",
+        "unitDeleted": "单元已删除",
+        "leaseCreated": "租约已创建",
+        "leaseUpdated": "租约已更新",
+        "camPoolCreated": "公区费用池已创建",
+        "camPoolUpdated": "公区费用池已更新",
+        "camPoolReopened": "公区费用池已重新开放以更正",
+        "couldNotLoad": "无法加载物业",
+        "actionFailed": "操作失败"
+      }
+    }
+  },
   "roles": {
     "customers": {
       "title": "客户",

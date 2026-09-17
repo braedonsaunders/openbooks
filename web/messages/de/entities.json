@@ -1,4 +1,50 @@
 {
+  "propertyManagement": {
+    "workspace": {
+      "title": "Immobilienverwaltung",
+      "description": "Verwalten Sie Immobilien, Mietverträge, Mieten, Nebenkostenabrechnungen und Mietkautionen.",
+      "healthAria": "Portfoliozustand",
+      "tabs": {
+        "properties": "Immobilien",
+        "rentRoll": "Mietaufstellung",
+        "cam": "Nebenkosten",
+        "depositReconciliation": "Kautionsabstimmung"
+      },
+      "metrics": {
+        "occupiedUnits": "Belegte Einheiten",
+        "activeLeasesHint": "{count} aktive Mietverträge",
+        "monthlyBaseRent": "Monatliche Grundmiete",
+        "currentChargesHint": "Aktuelle laufende Umlagen",
+        "rentPastDue": "Überfällige abgerechnete Mieten",
+        "agingHint": "Alterung der Abrechnungspläne",
+        "depositsHeld": "Einbehaltene Kautionen",
+        "depositLiabilityHint": "Verbindlichkeit aus Mieterkautionen"
+      },
+      "sectionsAria": "Bereiche der Immobilienverwaltung",
+      "newProperty": "Neue Immobilie",
+      "newCamPool": "Neue Nebenkostengruppe",
+      "assessLateFees": "Verzugsgebühren erheben",
+      "billDueRent": "Fällige Mieten abrechnen",
+      "loading": "Immobilienportfolio wird geladen…",
+      "toasts": {
+        "lateFeesAssessed": "Verzugsgebühren des Portfolios erhoben",
+        "rentBilled": "Mieten des Portfolios abgerechnet",
+        "propertyCreated": "Immobilie erstellt",
+        "propertyUpdated": "Immobilie aktualisiert",
+        "propertyDeleted": "Immobilie gelöscht",
+        "unitAdded": "Einheit hinzugefügt",
+        "unitUpdated": "Einheit aktualisiert",
+        "unitDeleted": "Einheit gelöscht",
+        "leaseCreated": "Mietvertrag erstellt",
+        "leaseUpdated": "Mietvertrag aktualisiert",
+        "camPoolCreated": "Nebenkostengruppe erstellt",
+        "camPoolUpdated": "Nebenkostengruppe aktualisiert",
+        "camPoolReopened": "Nebenkostengruppe zur Korrektur wiedereröffnet",
+        "couldNotLoad": "Immobilien konnten nicht geladen werden",
+        "actionFailed": "Aktion fehlgeschlagen"
+      }
+    }
+  },
   "roles": {
     "customers": {
       "title": "Kunden",

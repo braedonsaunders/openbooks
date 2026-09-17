@@ -1,4 +1,50 @@
 {
+  "propertyManagement": {
+    "workspace": {
+      "title": "Gestión de propiedades",
+      "description": "Administre propiedades, arrendamientos, rentas, conciliaciones de gastos comunes y depósitos de garantía.",
+      "healthAria": "Salud de la cartera",
+      "tabs": {
+        "properties": "Propiedades",
+        "rentRoll": "Rol de rentas",
+        "cam": "Gastos comunes",
+        "depositReconciliation": "Conciliación de depósitos"
+      },
+      "metrics": {
+        "occupiedUnits": "Unidades ocupadas",
+        "activeLeasesHint": "{count} arrendamientos activos",
+        "monthlyBaseRent": "Renta base mensual",
+        "currentChargesHint": "Cargos activos vigentes",
+        "rentPastDue": "Rentas facturadas vencidas",
+        "agingHint": "Antigüedad del calendario de facturación",
+        "depositsHeld": "Depósitos de garantía retenidos",
+        "depositLiabilityHint": "Pasivo por depósitos de inquilinos"
+      },
+      "sectionsAria": "Secciones de gestión de propiedades",
+      "newProperty": "Nueva propiedad",
+      "newCamPool": "Nuevo grupo de gastos comunes",
+      "assessLateFees": "Aplicar recargos por mora",
+      "billDueRent": "Facturar rentas vencidas",
+      "loading": "Cargando la cartera de propiedades…",
+      "toasts": {
+        "lateFeesAssessed": "Recargos por mora de la cartera aplicados",
+        "rentBilled": "Rentas de la cartera facturadas",
+        "propertyCreated": "Propiedad creada",
+        "propertyUpdated": "Propiedad actualizada",
+        "propertyDeleted": "Propiedad eliminada",
+        "unitAdded": "Unidad agregada",
+        "unitUpdated": "Unidad actualizada",
+        "unitDeleted": "Unidad eliminada",
+        "leaseCreated": "Arrendamiento creado",
+        "leaseUpdated": "Arrendamiento actualizado",
+        "camPoolCreated": "Grupo de gastos comunes creado",
+        "camPoolUpdated": "Grupo de gastos comunes actualizado",
+        "camPoolReopened": "Grupo de gastos comunes reabierto para corrección",
+        "couldNotLoad": "No se pudieron cargar las propiedades",
+        "actionFailed": "La acción falló"
+      }
+    }
+  },
   "roles": {
     "customers": {
       "title": "Clientes",
