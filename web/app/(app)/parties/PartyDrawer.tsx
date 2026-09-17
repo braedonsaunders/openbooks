@@ -212,6 +212,18 @@ const serializeContacts = (rows: ContactRow[]) => rows.map(({ id: _id, ...contac
 // Payroll profile editing lives here, on the native employee entity.
 export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages' | 'payroll'
 
+/**
+ * Records a visited drawer tab for keep-alive panels (F-t08-003): the
+ * employee compensation tabs hold unsaved edits in local component state,
+ * so once visited they stay mounted (hidden) instead of unmounting on
+ * every tab switch and silently discarding those edits. Returns the input
+ * set untouched when the tab is already kept.
+ */
+export function rememberDrawerTab(kept: ReadonlySet<PartyTab>, key: PartyTab): ReadonlySet<PartyTab> {
+  if (kept.has(key)) return kept
+  return new Set(kept).add(key)
+}
+
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
 
@@ -303,7 +315,19 @@ export function PartyDrawer({
       ? 'overview'
       : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
-  useEffect(() => setTab(allowedInitialTab), [allowedInitialTab])
+  // Tabs visited this drawer session. The employee compensation panels stay
+  // mounted once visited (see the keep-alive blocks below) so tab switches
+  // never discard their local edits. The drawer remounts per party
+  // (key={party.id}), so nothing leaks across parties.
+  const [keptTabs, setKeptTabs] = useState<ReadonlySet<PartyTab>>(() => new Set<PartyTab>([allowedInitialTab]))
+  const showTab = (key: PartyTab) => {
+    setTab(key)
+    setKeptTabs((prev) => rememberDrawerTab(prev, key))
+  }
+  useEffect(() => {
+    setTab(allowedInitialTab)
+    setKeptTabs((prev) => rememberDrawerTab(prev, allowedInitialTab))
+  }, [allowedInitialTab])
   const p = payload.party
   const effectiveLayout = layout ?? (recordType ? defaultFormLayout(recordType) : null)
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
@@ -819,7 +843,7 @@ export function PartyDrawer({
             type="button"
             role="tab"
             aria-selected={tab === item.key}
-            onClick={() => setTab(item.key)}
+            onClick={() => showTab(item.key)}
             className={cn(
               'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
               tab === item.key
@@ -1377,18 +1401,6 @@ export function PartyDrawer({
           <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
         ) : null}
 
-        {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
-        {tab === 'payroll' && role === 'employee' && canManagePayroll ? (
-          <div className="space-y-6">
-            <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
-            {/* Pay banks (banked time, vacation, benefit recoup) belong beside
-                the payroll profile — one home for this person's compensation. */}
-            <EmployeeEntitlementBalances partyId={String(p.id)} />
-            {/* Direct deposit: the same approval-gated bank accounts the AP
-                side uses — the pay-run bank file only pays approved accounts. */}
-            <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
-          </div>
-        ) : null}
       </div>
 
       <Drawer
@@ -1473,6 +1485,27 @@ export function PartyDrawer({
         ) : null}
       </Drawer>
       </TabContent>
+      {/* Employee compensation tabs stay mounted once visited (hidden, outside
+          the remounting TabContent) so switching tabs never discards their
+          local edits — the payroll profile editor and wage-rate form hold
+          unsaved state locally (F-t08-003). Mounting stays lazy: an unvisited
+          tab issues no requests until first opened. */}
+      {role === 'employee' && canManageWages && keptTabs.has('wages') ? (
+        <div hidden={tab !== 'wages'} className="space-y-7 p-1">
+          <EmployeeWageRates partyId={String(p.id)} />
+        </div>
+      ) : null}
+      {role === 'employee' && canManagePayroll && keptTabs.has('payroll') ? (
+        <div hidden={tab !== 'payroll'} className="space-y-6 p-1">
+          <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
+          {/* Pay banks (banked time, vacation, benefit recoup) belong beside
+              the payroll profile — one home for this person's compensation. */}
+          <EmployeeEntitlementBalances partyId={String(p.id)} />
+          {/* Direct deposit: the same approval-gated bank accounts the AP
+              side uses — the pay-run bank file only pays approved accounts. */}
+          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
+        </div>
+      ) : null}
     </TransactionDrawer>
   )
 }
