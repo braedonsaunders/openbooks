@@ -11,11 +11,27 @@ import { englishHealthStrings, type HealthStrings } from "./health-strings";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
 import { OPERATING_EXPENSE_TYPES, operatingExpenseRatio } from "./operating-expenses";
+import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 import { getMoneyFormatter } from '../money-server'
 
 /** The canonical operating-expense type list as a SQL `IN` fragment (F-t09-001: one definition). */
 const OPEX_TYPES_SQL = sql.join(
   OPERATING_EXPENSE_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+);
+
+/**
+ * The formal P&L universe (and its cost side) as SQL `IN` fragments. These
+ * are the single shared definition in lib/account-types — every breakdown
+ * that claims to slice the P&L filters on these, so a slice always sums to
+ * the headline. Never hand-write a type list for the P&L universe here.
+ */
+const PNL_TYPES_SQL = sql.join(
+  PNL_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+);
+const PNL_COST_TYPES_SQL = sql.join(
+  PNL_COST_TYPES.map((t) => sql`${t}`),
   sql`, `,
 );
 
@@ -208,8 +224,6 @@ function translateAmount(
   return Number(amount) === 0 ? "0" : mulDecimal(amount, rateAt(func, date));
 }
 
-const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"] as const;
-
 function priorYear(iso: string): string {
   return addMonthsIso(iso, -12);
 }
@@ -262,7 +276,7 @@ async function monthlySeries(
       sum(case when a.type = 'expense_other' then m.amt else 0 end) as other_exp
     from movement m
     join accounts a on a.id = m.account_id and a.org_id = ${orgId}
-    where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+    where a.type in (${PNL_TYPES_SQL})
     group by 1, 2
   `)));
   const monthRows = r.rows as unknown as HealthMonthSqlRow[];
@@ -360,11 +374,11 @@ async function segmentsBy(
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-      and a.type in ('income','income_other','cogs','expense','expense_deferred')
+      and a.type in (${PNL_TYPES_SQL})
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by 1, 2, 3
     having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
-        or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
+        or abs(sum(case when a.type in (${PNL_COST_TYPES_SQL}) and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
   `)));
   const segLegs = r.rows as unknown as HealthSegmentSqlRow[];
   // Current-window legs translate at their latest current date, prior legs
@@ -444,7 +458,7 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-      and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+      and a.type in (${PNL_TYPES_SQL})
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name, a.type, sub.base_currency
   `)));
@@ -817,7 +831,7 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
-        and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+        and acc.type in (${PNL_TYPES_SQL})
         and l.posting_date >= ${from} and l.posting_date <= ${to}
       group by 1, 2
     )
@@ -826,7 +840,7 @@ async function budgetVariance(orgId: string, from: string, to: string, allowed: 
     from accounts acc
     left join b on b.account_id = acc.id
     left join a on a.account_id = acc.id
-    where acc.org_id = ${orgId} and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+    where acc.org_id = ${orgId} and acc.type in (${PNL_TYPES_SQL})
       and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0)
   `)));
   const bvaRows = r.rows as unknown as (BudgetAccountSqlRow & {

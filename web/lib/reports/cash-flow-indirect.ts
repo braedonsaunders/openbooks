@@ -6,7 +6,7 @@ import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
-import { PNL_TYPES } from "./statements";
+import { PNL_TYPES } from "../account-types";
 
 // ---------------------------------------------------------------------------
 // Indirect-method cash flow (full GAAP presentation)

@@ -12,6 +12,7 @@ import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 
 /**
  * Customer Intelligence — the data behind /analytics/customer-intelligence.
@@ -56,6 +57,20 @@ const RECENCY_WARNING = 90;
 const RECENCY_CRITICAL = 180;
 const CHURN_HIGH_DAYS = 120;
 const CHURN_MEDIUM_DAYS = 60;
+
+/**
+ * The formal P&L universe (and its cost side) as SQL `IN` fragments — the
+ * single shared definition in lib/account-types, so the project slice sums
+ * to the headline P&L. Never hand-write a type list for these here.
+ */
+const PNL_TYPES_SQL = sql.join(
+  PNL_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+);
+const PNL_COST_TYPES_SQL = sql.join(
+  PNL_COST_TYPES.map((t) => sql`${t}`),
+  sql`, `,
+);
 
 export type Tier = "platinum" | "gold" | "silver" | "bronze";
 export type Segment = "champions" | "loyal" | "potential" | "new" | "regular" | "hibernating" | "at-risk" | "lost";
@@ -360,7 +375,7 @@ export async function customerProfitability(
       sub.base_currency as func,
       max(e.posting_date)::text as late,
       -sum(case when a.type in ('income','income_other') then l.amount else 0 end) as revenue,
-      sum(case when a.type in ('cogs','expense','expense_deferred') then l.amount else 0 end) as costs,
+      sum(case when a.type in (${PNL_COST_TYPES_SQL}) then l.amount else 0 end) as costs,
       count(distinct e.id) as txns
     from ew e
     join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
@@ -368,7 +383,7 @@ export async function customerProfitability(
     join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
     join parties cp on cp.id = pr.customer_id and cp.org_id = pr.org_id
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-    where a.type in ('income','income_other','cogs','expense','expense_deferred')
+    where a.type in (${PNL_TYPES_SQL})
       and l.project_id is not null and pr.customer_id is not null
       ${orgFilter}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
