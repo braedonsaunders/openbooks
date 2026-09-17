@@ -197,3 +197,54 @@ test("steppedWeights refuses tiers that cannot cover the total", () => {
   );
   assert.throws(() => steppedWeights("100.0000", [{ upTo: "abc", targetKey: "a" }]), AllocationApportionError);
 });
+
+test("fractional weights keep ten-decimal precision and reported shares cross-foot", () => {
+  // A 0.5 : 1.5 split is exactly 25 / 75. Dropping the slice start or the
+  // share scaling collapses the fractional weight to zero and the split
+  // follows it.
+  const r = apportion("100.0000", [wt("a", "0.5"), wt("b", "1.5")], "largest_share");
+  assert.equal(r.targets[0]!.amount, "25.0000");
+  assert.equal(r.targets[1]!.amount, "75.0000");
+  assert.equal(r.targets[0]!.share, "0.2500000000");
+  assert.equal(r.targets[1]!.share, "0.7500000000");
+  assert.equal(r.weightTotal, "2");
+  // Ten-decimal weights are representable: the precision guard only refuses
+  // beyond ten places, and the weight total formats sub-unit sums exactly.
+  const fine = apportion("10.0000", [wt("a", "0.1234567890"), wt("b", "0.8765432110")], "first_target");
+  assert.equal(fine.weightTotal, "1");
+  assert.equal(sum(fine.targets.map((t) => t.amount)), "10.0000");
+  assert.equal(apportion("10.0000", [wt("a", "0.5")], "first_target").weightTotal, "0.5");
+  // Sub-ten-digit fractions exercise the zero padding, not just the strip.
+  assert.equal(
+    apportion("10.0000", [wt("a", "0.0000000005")], "first_target").weightTotal,
+    "0.0000000005",
+  );
+});
+
+test("a negative weight is refused as negative, even one unit below zero", () => {
+  assert.throws(() => apportion("10.0000", [wt("a", "-1")], "largest_share"), /negative/);
+  assert.throws(() => apportion("10.0000", [wt("a", "-0.0000000001")], "largest_share"), /negative/);
+});
+
+test("a bare decimal point is refused as malformed, never silently zero", () => {
+  // The empty-fraction refusal only fires when the whole part is missing too:
+  // "5." parses as five, but "." must not slip through as a zero weight.
+  assert.throws(() => apportion("10.0000", [wt("a", ".")], "largest_share"), /not a decimal/);
+  const dotted = apportion("10.0000", [wt("a", "5."), wt("b", "5")], "first_target");
+  assert.equal(sum(dotted.targets.map((t) => t.amount)), "10.0000");
+});
+
+test("a dust fixed percent inside (0, 100] is accepted and resolves the remainder", () => {
+  const weights = fixedPercentWeights([target(1, "0.0001", false, "t1"), target(2, null, true, "t2")]);
+  assert.equal(weights[0]!.weight, "0.0001");
+  assert.equal(weights[1]!.weight, "99.9999");
+});
+
+test("stepped tiers refuse an empty grid, honor sub-unit totals, and refuse negative bounds", () => {
+  assert.throws(() => steppedWeights("0.0000", []), /at least one tier/);
+  const neg = steppedWeights("-0.0001", [{ upTo: "1.0000", targetKey: "t1" }]);
+  assert.deepEqual(neg.map((x) => x.weight), ["0.0001"]);
+  assert.throws(() => steppedWeights("10.0000", [{ upTo: "-0.0001", targetKey: "t1" }]), /negative/);
+  // A zero bound is not negative — it fails the ascent check instead.
+  assert.throws(() => steppedWeights("10.0000", [{ upTo: "0.0000", targetKey: "t1" }]), /ascend/);
+});
