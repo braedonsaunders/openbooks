@@ -221,13 +221,20 @@ export async function EntityListView({
       select count(*) as n from ${tableSql}
         ${countJoins}
        where ${where}`) as any,
+    // Static registry options come first; a loader appends tenant-defined
+    // values (custom project types) that no static set can name. No filter
+    // mixes both today except billing/project_type, so merging is a no-op
+    // everywhere else (F-t11-003).
     Promise.all(source.quickFilters.map(async (quick) => {
-      if (quick.loadOptions) return quick.loadOptions(orgId, allowedSubs)
       const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
-      return (filterMeta?.options ?? []).map((option) => ({
+      const statics = (filterMeta?.options ?? []).map((option) => ({
         value: option.value,
         label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
       }))
+      if (!quick.loadOptions) return statics
+      const seen = new Set(statics.map((option) => option.value))
+      const loaded = await quick.loadOptions(orgId, allowedSubs)
+      return [...statics, ...loaded.filter((option) => !seen.has(option.value))]
     })),
   ])
   const rows = rowsRes.rows as any[]
@@ -241,11 +248,18 @@ export async function EntityListView({
 
   // Enum value → display label, resolved from any list filter that carries an
   // option set (status, project_type…). Lets both the chips and the table
-  // cells show localized labels instead of raw codes.
+  // cells show localized labels instead of raw codes. Tenant-loaded options
+  // (custom project-type names) fill the gaps the static set cannot name.
   const optionLabel = (colKey: string, value: string): string => {
     const f = meta.listFilters.find((flt) => flt.key === colKey)
     const opt = f?.options?.find((o) => o.value === value)
-    return opt ? (opt.labelKey ? label(opt.labelKey) : opt.value) : value.replace(/_/g, ' ')
+    if (opt) return opt.labelKey ? label(opt.labelKey) : opt.value
+    const loaded = source.quickFilters
+      .map((quick, index) => ({ quick, options: loadedQuickOptions[index] ?? [] }))
+      .find(({ quick }) => quick.filterKey === colKey)
+      ?.options.find((o) => o.value === value)
+    if (loaded) return loaded.label
+    return value.replace(/_/g, ' ')
   }
 
   const statusCountByValue = new Map(statusCounts.rows.map((r) => [String(r.status), Number(r.n)]))
