@@ -8,7 +8,8 @@
     "library": "Biblioteca de Apps",
     "documentation": "Documentação",
     "open": "Abrir app",
-    "openAria": "Abrir {name}"
+    "openAria": "Abrir {name}",
+    "manage": "Gerenciar apps"
   },
   "empty": {
     "title": "Nenhum app instalado",
@@ -20,6 +21,10 @@
     "description": "Tente outro nome, chave ou descrição."
   },
   "library": {
+    "draftReady": "{name} está pronto para revisão.",
+    "preparing": "Preparando…",
+    "reviewUpdate": "Revisar atualização",
+    "reviewInstall": "Revisar app",
     "title": "Biblioteca de Apps",
     "description": "Descubra e instale extensões para sua organização.",
     "searchPlaceholder": "Pesquisar na Biblioteca de Apps…",
@@ -37,7 +42,8 @@
     "noResults": {
       "title": "Nenhum app encontrado",
       "description": "Tente outro nome, chave ou descrição."
-    }
+    },
+    "approvalPending": "{name} aguarda aprovação assinada."
   },
   "frame": {
     "loading": "Carregando…",
@@ -49,7 +55,10 @@
     "description": "Crie e instale pacotes de apps com uma interface isolada e um backend controlado, separados por app.",
     "searchPlaceholder": "Pesquisar apps…",
     "status": "Status",
-    "statuses": { "installed": "Instalado", "disabled": "Desativado" },
+    "statuses": {
+      "installed": "Instalado",
+      "disabled": "Desativado"
+    },
     "columns": {
       "name": "Nome",
       "key": "Chave",
@@ -60,5 +69,379 @@
       "updated": "Atualizado"
     },
     "empty": "Ainda não há apps. Crie um app inicial pronto para abrir ou importe um pacote .zip."
+  },
+  "drawer": {
+    "toolbar": {
+      "newApp": "Novo app",
+      "newAppPromptTitle": "Novo app",
+      "newAppPromptLabel": "Nome do app",
+      "newAppPromptPlaceholder": "Expense Insights",
+      "importZip": "Importar .zip"
+    },
+    "toasts": {
+      "createdApp": "“{name}” foi criado",
+      "importedApp": "“{key}” foi importado",
+      "settingsSaved": "Configurações do app salvas",
+      "appDisabled": "App desativado",
+      "appEnabled": "App ativado",
+      "published": "Publicado no marketplace",
+      "uninstalled": "Desinstalado",
+      "fileSaved": "{path} salvo",
+      "fileCreated": "{path} criado",
+      "fileUploaded": "{path} enviado",
+      "deleted": "Excluído"
+    },
+    "errors": {
+      "saveFailed": "Falha ao salvar",
+      "updateFailed": "Falha ao atualizar",
+      "publishFailed": "Falha ao publicar",
+      "uninstallFailed": "Falha ao desinstalar",
+      "createFailed": "Falha ao criar",
+      "uploadFailed": "Falha ao enviar",
+      "deleteFailed": "Falha ao excluir"
+    },
+    "confirm": {
+      "uninstallTitle": "Desinstalar “{name}”?",
+      "uninstallMessage": "Desinstalar este app? Registros e campos provisionados são mantidos. Código e evidência de execução são arquivados na trilha de auditoria; pacotes com histórico de contribuições à plataforma são desativados para que suas referências permaneçam intactas.",
+      "deleteFileMessage": "Excluir {path}?"
+    },
+    "prompt": {
+      "newFileTitle": "Novo arquivo",
+      "pathLabel": "Caminho"
+    },
+    "tabs": {
+      "overview": "Visão geral",
+      "files": "Arquivos",
+      "runs": "Execuções"
+    },
+    "actions": {
+      "open": "Abrir",
+      "saving": "Salvando…",
+      "saveSettings": "Salvar configurações",
+      "saveFile": "Salvar arquivo",
+      "saved": "Salvo",
+      "republish": "Republicar no marketplace",
+      "publish": "Publicar no marketplace",
+      "disable": "Desativar",
+      "enable": "Ativar",
+      "uninstall": "Desinstalar",
+      "addEndpoint": "Adicionar endpoint",
+      "manageNavigation": "Gerenciar atalhos de navegação",
+      "newFileTitleAttr": "Novo arquivo",
+      "uploadFileTitleAttr": "Enviar arquivo",
+      "deleteFileTitleAttr": "Excluir arquivo"
+    },
+    "labels": {
+      "name": "Nome",
+      "status": "Status",
+      "description": "Descrição",
+      "capabilities": "Capacidades",
+      "navigation": "Navegação",
+      "endpoints": "Endpoints do backend"
+    },
+    "onMarketplace": "no marketplace",
+    "capabilitiesHelp": "Todo o resto é negado por padrão; as chamadas de backend e de ponte do app são verificadas contra essas concessões (sempre com interseção com as próprias permissões do usuário chamador).",
+    "navigationHelp": "Este app permanece instalado independentemente de seus atalhos de menu. Adicione, remova, renomeie ou mova um atalho nas configurações de navegação.",
+    "endpointsHelp": "A interface os chama com <call>openbooks.callBackend(name, payload)</call>; cada um executa o <handler>handler(request)</handler> do seu arquivo no sandbox.",
+    "noEndpoints": "Sem endpoints — este app é só interface.",
+    "endpointNamePlaceholder": "name",
+    "capabilities": {
+      "allowFallback": "Permitir {permission}",
+      "copy": {
+        "records": {
+          "read": {
+            "label": "Ver registros personalizados",
+            "help": "Ver tipos de registros personalizados publicados"
+          },
+          "create": {
+            "label": "Gerenciar registros personalizados",
+            "help": "Criar, atualizar e excluir registros personalizados"
+          }
+        },
+        "gl": {
+          "read": {
+            "label": "Ver o Razão Geral",
+            "help": "Ver contas e lançamentos registrados"
+          },
+          "post": {
+            "label": "Criar e lançar lançamentos",
+            "help": "Criar lançamentos equilibrados e governados"
+          }
+        },
+        "ap": {
+          "read": {
+            "label": "Ver contas a pagar",
+            "help": "Ver faturas de fornecedor"
+          },
+          "create": {
+            "label": "Gerenciar faturas de fornecedor",
+            "help": "Criar, atualizar, enviar e excluir faturas"
+          },
+          "post": {
+            "label": "Lançar faturas de fornecedor",
+            "help": "Lançar faturas de fornecedor governadas no razão"
+          },
+          "pay": {
+            "label": "Ver pagamentos",
+            "help": "Ver documentos de pagamento"
+          }
+        },
+        "ar": {
+          "read": {
+            "label": "Ver contas a receber",
+            "help": "Ver faturas de cliente"
+          },
+          "create": {
+            "label": "Gerenciar faturas de cliente",
+            "help": "Criar, atualizar, enviar e excluir faturas"
+          },
+          "post": {
+            "label": "Lançar faturas de cliente",
+            "help": "Lançar faturas de cliente governadas no razão"
+          }
+        },
+        "parties": {
+          "read": {
+            "label": "Ver partes",
+            "help": "Ver clientes, fornecedores e funcionários"
+          },
+          "manage": {
+            "label": "Gerenciar partes",
+            "help": "Criar, atualizar e excluir partes"
+          }
+        },
+        "items": {
+          "read": {
+            "label": "Ver itens e serviços",
+            "help": "Ver o catálogo de itens"
+          },
+          "manage": {
+            "label": "Gerenciar itens e serviços",
+            "help": "Criar, atualizar e excluir itens do catálogo"
+          }
+        },
+        "projects": {
+          "read": {
+            "label": "Ver projetos",
+            "help": "Ver projetos e trabalhos"
+          },
+          "manage": {
+            "label": "Gerenciar projetos",
+            "help": "Criar, atualizar e excluir projetos"
+          }
+        },
+        "assets": {
+          "read": {
+            "label": "Ver ativos imobilizados",
+            "help": "Ver ativos imobilizados"
+          },
+          "manage": {
+            "label": "Gerenciar ativos imobilizados",
+            "help": "Criar, atualizar e excluir ativos imobilizados"
+          }
+        }
+      }
+    },
+    "files": {
+      "selectToEdit": "Selecione um arquivo para editar.",
+      "loading": "Carregando…",
+      "binaryInfo": "Arquivo binário · {contentType} · {size} bytes"
+    },
+    "runs": {
+      "empty": "Sem execuções ainda — o backend nunca foi chamado.",
+      "units": "{units} unidades"
+    }
+  },
+  "editor": {
+    "tabsLabel": "Editor do pacote",
+    "overview": "Configuração",
+    "sections": {
+      "general": "Geral",
+      "screens": "Telas",
+      "data": "Dados e contribuições",
+      "actions": "Ações",
+      "access": "Acesso"
+    },
+    "files": "Arquivos",
+    "download": "Exportar pacote",
+    "draftHelp": "Edite um pacote não publicado. Salvar prepara um rascunho para validação, visualização e ativação; não altera o app em execução.",
+    "name": "Nome do app",
+    "key": "Chave do app",
+    "version": "Versão",
+    "icon": "Chave de ícone",
+    "description": "Descrição",
+    "renderer": "Interface",
+    "native": "Telas nativas OpenBooks (ViewSpec)",
+    "sandbox": "HTML, CSS e JavaScript",
+    "entry": "Arquivo de entrada da interface",
+    "navLabel": "Rótulo do lançador",
+    "navIcon": "Ícone do lançador",
+    "endpoints": "Ações do backend",
+    "endpointsHelp": "Cada ação executa seu manipulador JavaScript no runtime governado do app. Edite sua implementação em Arquivos.",
+    "endpointName": "Nome da ação",
+    "endpointFile": "Arquivo JavaScript",
+    "method": "Método HTTP",
+    "removeEndpoint": "Remover ação",
+    "addEndpoint": "Adicionar ação",
+    "permissions": "Capacidades solicitadas",
+    "permissionsHelp": "Declare as capacidades que este pacote requer. Chamadas também permanecem limitadas pelas permissões do usuário atual.",
+    "grants": "Capacidades concedidas",
+    "grantsHelp": "Escolha quais capacidades solicitadas esta versão poderá realmente usar. Novas concessões são verificadas contra sua autoridade durante a ativação.",
+    "definitions": "Telas nativas e fontes",
+    "definitionsHelp": "Edite definições de telas nativas e todas as fontes do pacote em Arquivos. Registros e campos personalizados são provisionados pelo sistema de objetos OpenBooks existente quando a versão revisada é ativada.",
+    "editDefinitions": "Abrir definição de interface",
+    "newFile": "Novo arquivo",
+    "path": "Caminho relativo ao pacote",
+    "renameFile": "Renomear ou mover o arquivo",
+    "deleteFile": "Excluir arquivo",
+    "deleteConfirm": "Remover {path} deste rascunho? Versões ativas não mudam.",
+    "invalidPath": "Use um caminho relativo único, com nome de arquivo, sem referências ao diretório pai.",
+    "uploadFiles": "Enviar arquivos",
+    "fileTooLarge": "Cada arquivo deve ter menos de 2 MB.",
+    "replaceConfirm": "Substituir estes arquivos do rascunho: {paths}?",
+    "searchFiles": "Localizar arquivo…",
+    "binaryHelp": "Recurso binário. Baixe este arquivo para inspecioná-lo ou envie um substituto para sua pasta.",
+    "invalidManifest": "O manifesto é inválido. Abra Arquivos para corrigi-lo.",
+    "reason": "Motivo desta versão",
+    "reasonPlaceholder": "Descreva o que mudou e por quê.",
+    "saveDraft": "Salvar rascunho para revisão",
+    "saving": "Preparando rascunho…",
+    "unsaved": "Alterações do pacote não salvas",
+    "notLive": "Alterações só valem após a ativação.",
+    "failed": "Não foi possível salvar o pacote.",
+    "pendingDefinition": "Aplique ou cancele o editor de definição aberto antes de trocar de aba ou salvar o pacote.",
+    "uploadFolder": "Enviar pasta",
+    "downloadFile": "Baixar arquivo"
+  },
+  "create": {
+    "title": "Novo app",
+    "ownPackage": "Comece com seu próprio pacote",
+    "help": "Crie telas nativas ou trabalhe diretamente com HTML, CSS, JavaScript e outros recursos. Você também pode importar um pacote existente e editá-lo antes da ativação.",
+    "native": "App nativo",
+    "files": "App HTML / CSS / JS",
+    "import": "Importar pacote",
+    "importing": "Importando…",
+    "tooLarge": "Escolha um pacote ZIP ou JSON menor que 10 MB.",
+    "importReason": "Importar o pacote do app para revisão",
+    "failed": "Não foi possível importar o pacote.",
+    "discardEdits": "Descartar as alterações não salvas do pacote?"
+  },
+  "definitions": {
+    "title": "Registros, campos e contribuições à plataforma",
+    "help": "Gerencie as definições incluídas neste app. Cada definição usa os serviços existentes da plataforma e é validada com o pacote antes da ativação. Remover uma definição não exclui registros históricos.",
+    "edit": "Editar definição",
+    "remove": "Remover definição",
+    "removeConfirm": "Remover esta contribuição do rascunho? A revisão mostrará a alteração antes da ativação.",
+    "type": "Tipo de definição",
+    "key": "Nova chave de definição",
+    "add": "Adicionar definição",
+    "apply": "Aplicar ao rascunho",
+    "cancel": "Cancelar",
+    "record_type": "Tipo de registro personalizado",
+    "custom_field": "Campo personalizado",
+    "page": "Personalização de página",
+    "nav": "Item de navegação",
+    "setting": "Configuração do app",
+    "permission": "Permissão de papel",
+    "invalidKey": "Use uma chave minúscula começando por letra, com letras, números e hifens.",
+    "duplicate": "Esse arquivo de definição já existe.",
+    "invalid": "A definição é inválida.",
+    "route": "Página registrada a personalizar",
+    "chooseRoute": "Escolha uma página registrada",
+    "pageHelp": "Contribuições de página personalizam páginas registradas existentes. Adicione as telas independentes do app no arquivo de interface nativa."
+  },
+  "management": {
+    "workspace": "Espaço de trabalho do app",
+    "overview": "Visão geral",
+    "package": "Pacote",
+    "versions": "Versões",
+    "runs": "Execuções",
+    "audit": "Histórico de auditoria",
+    "storage": "Armazenamento do app",
+    "installed": "Ativado",
+    "disabled": "Desativado",
+    "open": "Abrir app",
+    "editPackage": "Editar pacote",
+    "download": "Exportar ZIP",
+    "assistant": "Revisar com o assistente",
+    "contents": "Conteúdo do pacote",
+    "summary": "{files} arquivos · {actions} ações do backend · {definitions} contribuições à plataforma",
+    "permissions": "Capacidades efetivas",
+    "permissionsHelp": "Essas concessões valem para a versão em execução. Edite o pacote para preparar uma alteração de permissão revisada.",
+    "noPermissions": "Nenhuma capacidade de plataforma concedida.",
+    "configuration": "Configuração da organização",
+    "navigation": "Configurações de navegação",
+    "settings": "Configurações do app",
+    "roles": "Papéis e permissões",
+    "lifecycle": "Disponibilidade e distribuição",
+    "lifecycleHelp": "Ative ou desative este app para sua organização. Publicar compartilha uma cópia do seu pacote ativo na Biblioteca de Apps.",
+    "publish": "Publicar na Biblioteca de Apps",
+    "updateListing": "Atualizar anúncio",
+    "unpublish": "Despublicar anúncio",
+    "disable": "Desativar app",
+    "enable": "Ativar app",
+    "uninstall": "Desinstalar app",
+    "publishConfirm": "Publicar o pacote ativo, incluindo seus arquivos-fonte, na Biblioteca de Apps para outras organizações? Revise se há informações privadas nos arquivos antes de compartilhar.",
+    "unpublishConfirm": "Remover este anúncio da Biblioteca de Apps? Instalações existentes mantêm suas cópias.",
+    "disableConfirm": "Desativar este app e suas páginas e navegação contribuídas? Registros existentes e histórico de auditoria são mantidos.",
+    "enableConfirm": "Ativar este app e suas contribuições aprovadas para sua organização?",
+    "uninstallConfirm": "Desinstalar este app? Registros e campos provisionados são mantidos. Código e evidência de execução são arquivados na trilha de auditoria; pacotes com histórico de contribuições à plataforma são desativados para que suas referências permaneçam intactas.",
+    "discardEdits": "Descartar as alterações não salvas do pacote?",
+    "failed": "Não foi possível concluir a operação.",
+    "loading": "Carregando…",
+    "refresh": "Atualizar",
+    "versionsHelp": "Inspecione e exporte qualquer versão instalada. Revisar uma versão anterior cria um rascunho novo sobre a versão ativa atual.",
+    "runsHelp": "Histórico de execução do backend, incluindo erros, logs, uso de recursos, duração e autor.",
+    "auditHelp": "Alterações de configuração e ciclo de vida registradas, com autor e evidência de antes / depois.",
+    "storageHelp": "Inspecione o estado próprio do app. Altere dados de negócio pelas ações governadas do app, que preservam suas regras de validação e auditoria.",
+    "when": "Data e hora",
+    "version": "Versão",
+    "key": "Chave de armazenamento",
+    "activity": "Atividade",
+    "status": "Status",
+    "actions": "Ações",
+    "active": "Ativo",
+    "details": "Ver detalhes",
+    "reviseVersion": "Preparar revisão",
+    "empty": "Sem entradas ainda.",
+    "previous": "Anterior",
+    "next": "Próxima",
+    "page": "Página {page}",
+    "fields": {
+      "id": "Registro (id)",
+      "at": "Data e hora",
+      "actor_id": "Ator (id)",
+      "version_id": "Versão (id)",
+      "version": "Versão",
+      "status": "Status",
+      "endpoint": "Ação",
+      "units": "Unidades consumidas",
+      "duration_ms": "Duração (ms)",
+      "logs": "Logs de execução",
+      "error_message": "Erro",
+      "changes": "Evidência de antes / depois",
+      "action": "Operação",
+      "namespace": "Namespace",
+      "key": "Chave",
+      "value": "Valor armazenado"
+    }
+  },
+  "screens": {
+    "title": "Telas nativas do app",
+    "help": "Gerencie páginas, espaços de trabalho de registros e formulários de ação. Definições de tela usam os esquemas nativos ViewSpec e de formulário; telas de registro e de ação conectam-se a tipos de registro governados e ações do backend.",
+    "page": "Página",
+    "records": "Espaço de trabalho de registros",
+    "action": "Formulário de ação",
+    "type": "Tipo de tela",
+    "key": "Nova chave de tela",
+    "add": "Adicionar tela",
+    "edit": "Editar tela",
+    "remove": "Remover tela",
+    "removeConfirm": "Remover esta tela do rascunho?",
+    "apply": "Aplicar ao rascunho",
+    "cancel": "Cancelar",
+    "invalid": "A definição de tela nativa precisa de correção.",
+    "invalidKey": "Use uma chave minúscula começando por letra, com letras, números e hifens.",
+    "openSource": "Abrir fonte da tela"
   }
 }
