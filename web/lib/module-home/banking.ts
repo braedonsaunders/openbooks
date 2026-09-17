@@ -158,6 +158,7 @@ export async function bankingHome(
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}
             and d.document_date >= ${ago7}
+            and d.status = 'posted' and d.voided_at is null
             ${docScope}) as txns_7d
     `),
   ]))

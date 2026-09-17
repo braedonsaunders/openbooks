@@ -97,12 +97,32 @@ test('restricted transaction badge excludes subsidiary-less documents', { skip: 
         values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Txn branch', 'CAD', 'CA')
       `)
       for (const [subsidiary, number] of [[branchId, 'TXN-BRANCH'], [null, 'TXN-NOSUB']] as const) {
+        // The 7-day badge counts posted documents only (F-t05-009), so the
+        // scope fixture posts each document through a balanced entry.
+        const docId = randomUUID()
+        const entryId = randomUUID()
+        const entrySub = subsidiary ?? scratch.subsidiaryId
         await db.execute(sql`
           insert into documents
             (id, org_id, kind, document_number, subsidiary_id, document_date, currency, status)
           values
-            (${randomUUID()}, ${scratch.orgId}, 'deposit', ${number}, ${subsidiary}, ${today}, 'CAD', 'draft')
+            (${docId}, ${scratch.orgId}, 'deposit', ${number}, ${subsidiary}, ${today}, 'CAD', 'draft')
         `)
+        await db.execute(sql`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
+          values
+            (${entryId}, ${scratch.orgId}, ${scratch.bookId}, ${entrySub}, ${number}, ${today}, ${scratch.periodId}, 'draft', 'manual', ${docId})
+        `)
+        await db.execute(sql`
+          insert into journal_lines
+            (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values
+            (${randomUUID()}, ${scratch.orgId}, ${entryId}, 1, ${scratch.accounts.bank}, ${entrySub}, '10.0000', 'CAD', '10.0000', 1),
+            (${randomUUID()}, ${scratch.orgId}, ${entryId}, 2, ${scratch.accounts.adjustment}, ${entrySub}, '-10.0000', 'CAD', '-10.0000', 1)
+        `)
+        await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
+        await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${scratch.periodId} where id=${docId}`)
       }
     })
 
