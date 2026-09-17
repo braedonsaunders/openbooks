@@ -1,197 +1,271 @@
 {
-  "openingBalances": {
-    "fields": {
-      "cpp2BonusYtd": "Cotisations CPP2 sur primes",
-      "qcCsbYtd": "Cotisations QPP additionnelles sur primes",
-      "ficaWithheldYtd": "Impôt FICA retenu",
-      "qpipEmployerYtd": "Cotisations QPIP de l'employeur",
-      "wcbAssessableYtd": "Gains assurables WCB"
-    }
-  },
-  "checklist": {
-    "incomplete": "{count, plural, one {# compte de contrôle de paie est} other {# comptes de contrôle de paie sont}} non configurés :",
-    "openSettings": "Ouvrir le paramétrage de la paie"
-  },
-  "columns": {
-    "employees": "Employés",
-    "gross": "Brut",
-    "net": "Net",
-    "number": "Numéro",
-    "payDate": "Date de paie",
-    "period": "Période",
-    "schedule": "Calendrier",
-    "status": "Statut"
-  },
+  "title": "Paie",
   "description": "Cycles de paie, dossiers de paie des employés et retenues obligatoires.",
-  "empty": {
-    "profiles": "Aucun dossier de paie d'employé pour l'instant. Ajoutez-en un pour inclure un employé dans les paies.",
-    "runs": "Aucune paie pour l'instant. Créez-en une à partir d'un calendrier de paie pour commencer."
+  "tabs": {
+    "runs": "Paies",
+    "employees": "Employés ({count})"
   },
   "home": {
-    "actions": {
-      "remittances": "Versements",
-      "resume": "Reprendre la paie",
-      "reviewPost": "Vérifier et reporter",
-      "startRun": "Lancer la paie",
-      "viewRuns": "Paies",
-      "yearEnd": "Fin d'année"
-    },
-    "current": {
-      "noSchedules": "Aucun calendrier de paie actif. Créez un calendrier pour commencer à traiter la paie.",
-      "title": "Période de paie en cours"
-    },
-    "directory": {
-      "employees": "Employés",
-      "employeesHint": "dossiers de paie actifs",
-      "openingBalances": "Soldes d'ouverture",
-      "parallelRun": "Paie parallèle",
-      "retro": "Rappel de paie",
-      "runs": "Paies",
-      "runsHint": "en cours · {total} au total",
-      "setup": "Paramétrage de la paie",
-      "setupHint": "comptes de contrôle manquants",
-      "title": "Explorer la paie"
-    },
-    "exceptions": {
-      "allClear": "Tous les employés sont prêts pour la paie.",
-      "missingProfile": "{name} n'a pas de dossier de paie",
-      "missingWage": "{name} n'a pas de taux de salaire en vigueur aujourd'hui",
-      "moreMissingProfiles": "{count, plural, one {# autre employé} other {# autres employés}} sans dossier de paie",
-      "moreMissingWages": "{count, plural, one {# autre employé} other {# autres employés}} sans taux de salaire",
-      "title": "À surveiller"
-    },
-    "frequency": {
-      "biweekly": "Aux deux semaines",
-      "monthly": "Mensuelle",
-      "semi_monthly": "Bimensuelle",
-      "weekly": "Hebdomadaire"
-    },
-    "previous": {
-      "none": "Aucune paie terminée pour l'instant.",
-      "title": "Période de paie précédente"
-    },
     "tabs": {
       "overview": "Paie",
-      "remittances": "Versements",
       "runs": "Paies",
+      "remittances": "Versements",
       "separations": "Départs",
+      "yearEnd": "Fin d'année"
+    },
+    "actions": {
+      "viewRuns": "Paies",
+      "startRun": "Lancer la paie",
+      "resume": "Reprendre la paie",
+      "reviewPost": "Vérifier et reporter",
+      "remittances": "Versements",
       "yearEnd": "Fin d'année"
     },
     "vitals": {
       "employees": "À la paie",
       "employeesSub": "dossiers de paie actifs",
-      "nextPayDate": "Prochaine date de paie",
-      "noSchedule": "aucun calendrier actif",
-      "periodsOf": "{ran} sur {total}",
       "periodsRan": "Périodes de paie {year}",
+      "periodsOf": "{ran} sur {total}",
       "periodsRanSub": "comptabilisées cette année d'imposition",
-      "ytdEmployerCost": "+{amount} à la charge de l'employeur",
       "ytdGross": "Brut cumulé",
+      "ytdEmployerCost": "+{amount} à la charge de l'employeur",
       "ytdNet": "Net cumulé",
-      "ytdNetSub": "des paies comptabilisées"
+      "ytdNetSub": "des paies comptabilisées",
+      "nextPayDate": "Prochaine date de paie",
+      "noSchedule": "aucun calendrier actif"
+    },
+    "current": {
+      "title": "Période de paie en cours",
+      "noSchedules": "Aucun calendrier de paie actif. Créez un calendrier pour commencer à traiter la paie."
+    },
+    "frequency": {
+      "weekly": "Hebdomadaire",
+      "biweekly": "Aux deux semaines",
+      "semi_monthly": "Bimensuelle",
+      "monthly": "Mensuelle"
+    },
+    "previous": {
+      "title": "Période de paie précédente",
+      "none": "Aucune paie terminée pour l'instant."
+    },
+    "exceptions": {
+      "title": "À surveiller",
+      "allClear": "Tous les employés sont prêts pour la paie.",
+      "missingProfile": "{name} n'a pas de dossier de paie",
+      "moreMissingProfiles": "{count, plural, one {# autre employé} other {# autres employés}} sans dossier de paie",
+      "missingWage": "{name} n'a pas de taux de salaire en vigueur aujourd'hui",
+      "moreMissingWages": "{count, plural, one {# autre employé} other {# autres employés}} sans taux de salaire"
+    },
+    "directory": {
+      "title": "Explorer la paie",
+      "runs": "Paies",
+      "runsHint": "en cours · {total} au total",
+      "employees": "Employés",
+      "employeesHint": "dossiers de paie actifs",
+      "setup": "Paramétrage de la paie",
+      "setupHint": "comptes de contrôle manquants",
+      "openingBalances": "Soldes d'ouverture",
+      "parallelRun": "Paie parallèle",
+      "retro": "Rappel de paie"
     }
   },
   "list": {
+    "title": "Paies",
     "description": "Toutes les paies. Recherchez et filtrez par étape ou calendrier, puis ouvrez une paie pour la traiter.",
     "open": "Ouvrir la paie",
-    "stageFilter": "Étape",
-    "title": "Paies"
+    "stageFilter": "Étape"
   },
-  "newRun": {
-    "create": "Nouvelle paie",
-    "description": "Confirmez la période couverte par cette paie. La prochaine période du calendrier est présélectionnée; modifiez les dates pour une paie hors cycle ou de rattrapage.",
-    "employees": "Employés payés",
-    "employeesHint": "Une paie de fin d'emploi paie et solde chaque banque accumulée; elle ne concerne donc que les employés nommés ici.",
-    "invalidWindow": "La fin de période doit être égale ou postérieure au début, et la date de paie égale ou postérieure à la fin de période.",
-    "noSchedules": "Aucun calendrier de paie actif",
-    "noTerminated": "Aucun employé de ce calendrier n'a de date de fin d'emploi au dossier. Saisissez-la d'abord sur l'employé — un chèque final ne peut être calculé sans elle.",
-    "notBegun": "Cette période commence le {date} et n'a pas commencé. Choisissez une période en cours ou terminée.",
-    "payDateHint": "La date à laquelle les employés sont payés. Les taux obligatoires sont déterminés à partir de cette date.",
-    "periodEnd": "Fin de période",
-    "periodStart": "Début de période",
-    "runType": "Type de paie",
-    "runTypeHint": {
-      "bonus": "Paie hors cycle pour primes et commissions. Ni salaire, ni temps, ni retenues récurrentes; les gains sont imposés selon la méthode des primes.",
-      "regular": "La paie ordinaire du calendrier : salaires, temps approuvé, éléments et retenues récurrents.",
-      "termination": "Solde de tout compte des employés partants. Comprend le paiement du solde de vacances accumulé."
-    },
-    "schedule": "Calendrier de paie"
-  },
-  "register": {
-    "cppFica": "RPC / FICA",
-    "otherDeductions": "Autres retenues",
-    "print": "Imprimer",
-    "title": "Registre de paie",
-    "totals": "Totaux ({count, plural, one {# employé} other {# employés}})"
-  },
-  "remittances": {
-    "apLink": "ouvrir les factures fournisseurs",
-    "apNote": "Les factures de versement sont des factures fournisseurs ordinaires :",
-    "apply": "Appliquer",
-    "assignVendor": "Attribuez un fournisseur sur les composantes",
-    "back": "Paie",
-    "billCreated": "Brouillon de facture {number} créé. Vérifiez-le et affichez-le dans les comptes fournisseurs.",
-    "context": "Masse salariale brute {gross} · {employees, plural, one {# employé} other {# employés}} sur la période",
-    "createAnother": "Créer une autre facture",
-    "createBill": "Créer la facture de versement",
-    "description": "Retenues accumulées et cotisations patronales par destinataire pour une période. Créer une facture débite les comptes de passif et confie le paiement aux comptes fournisseurs.",
-    "dueOn": "Échéance le {dueDate} · {authority}",
-    "employer": "Employeur",
-    "empty": "Aucune paie comptabilisée avec des montants à verser sur cette période.",
-    "from": "Du",
-    "noAccount": "Aucun compte de passif",
-    "title": "Versements de paie",
-    "to": "Au",
-    "total": "Total à verser",
-    "unassigned": "Aucun fournisseur de versement attribué",
-    "withheld": "Retenues"
-  },
-  "run": {
-    "approvalNotRequired": "Aucune politique d'approbation ne s'applique aux paies",
-    "approvalPending": "En attente d'approbation ({count} en suspens) — la comptabilisation et l'affichage sont bloqués",
-    "approvalSubmitted": "Envoyée à l'approbation avec le dossier de preuves",
-    "calculate": "Calculer",
-    "calculateDone": "Paie calculée.",
-    "commit": "Comptabiliser",
-    "commitDone": "Paie comptabilisée.",
-    "employerCost": "Coût employeur",
-    "empty": "Aucun bulletin. Calculez la paie pour les générer.",
-    "lineKind": {
-      "deduction": "Retenue",
-      "earning": "Gain",
-      "employer_contribution": "Employeur"
-    },
-    "post": "Reporter",
-    "postDone": "Paie reportée.",
-    "printSet": "Jeu d'impression (impression seulement)",
-    "stub": {
-      "employee": "Employé",
-      "lines": "Lignes de paie",
-      "tax": "Impôt",
-      "trace": "trace {engine}"
-    },
-    "stubsPrintOnly": "{count} employés sont en impression seulement et n'ont pas été avisés par courriel",
-    "submitApproval": "Soumettre à l'approbation",
-    "title": "Paie"
-  },
-  "runType": {
-    "bonus": "Prime hors cycle",
-    "regular": "Ordinaire",
-    "termination": "Solde de tout compte"
-  },
-  "status": {
-    "calculated": "Calculée",
-    "committed": "Comptabilisée",
-    "draft": "Brouillon",
-    "posted": "Reportée",
-    "void": "Annulée"
-  },
-  "tabs": {
-    "employees": "Employés ({count})",
-    "runs": "Paies"
-  },
-  "title": "Paie",
   "wizard": {
+    "stepsAria": "Étapes de la paie",
+    "steps": {
+      "period": "Portée",
+      "readiness": "Préparation",
+      "review": "Vérifier les bulletins",
+      "gl": "Aperçu GL et comptabilisation",
+      "finish": "Reporter et terminer"
+    },
+    "voided": "Cette paie est annulée et en lecture seule.",
+    "stale": {
+      "title": "Les intrants ont changé depuis le calcul de cette paie ({reasons}). Recalculez avant de comptabiliser.",
+      "reason": {
+        "adjustments": "ajustements",
+        "time": "heures approuvées",
+        "wages": "taux de salaire",
+        "roster": "dossiers des employés",
+        "missing": "la paie elle-même",
+        "components": "composantes de paie des employés",
+        "componentDefinitions": "paramétrage des composantes de paie",
+        "derivedRules": "règles de gains dérivés",
+        "entitlements": "banques de paie",
+        "workerComp": "taux d’indemnisation des accidents du travail",
+        "timeTypes": "paramétrage des types d’heures",
+        "settings": "paramètres de paie",
+        "ytd": "les cumuls annuels d’une autre paie",
+        "openingBalances": "soldes d’ouverture (reports)"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# élément bloque cette paie} other {# éléments bloquent cette paie}}",
+      "blockedHint": "Réglez chaque élément avant de calculer. Chacun mène à l’endroit où il se corrige.",
+      "readyTitle": "Prêt à calculer · {count, plural, one {# employé} other {# employés}}",
+      "readyHint": "Le paramétrage, le contrôle de la période et les dossiers des employés sont complets.",
+      "warningsHint": "{count, plural, one {# élément demande} other {# éléments demandent}} une vérification. Confirmez pour continuer.",
+      "blockersTitle": "Blocages",
+      "warningsTitle": "À vérifier avant de continuer",
+      "acknowledge": "J’ai vérifié ces éléments et je veux continuer",
+      "allClear": "Aucun blocage ni avertissement. Cette paie est prête à calculer.",
+      "fix": "Régler",
+      "andMore": "+{count} autres",
+      "dryRun": "Calcul d’essai",
+      "dryRunTitle": "Résultats du calcul d’essai",
+      "dryRunHint": "Rien n’a été enregistré. Lancez Calculer pour construire les bulletins pour vrai.",
+      "codes": {
+        "retro": {
+          "sourceVoided": "Une période source que cette paie règle a été annulée ({detail}).",
+          "crossTaxYear": "Une période source tombe hors de l’année légale {detail} — produisez plutôt une déclaration modifiée.",
+          "stale": "Les intrants d’une période source ont changé après la quantification de cette paie. Recréez la paie de rappel.",
+          "doubleSettled": "Une autre paie de rappel ouverte règle déjà la même période pour cet employé.",
+          "componentRetired": "Une composante de paie que cette paie verse a été retirée.",
+          "zeroDelta": "Cette paie ne verse rien pour l’employé; l’écart de la période est nul."
+        },
+        "setup": {
+          "pack": "Aucun pack de paie national n’est installé.",
+          "wageExpense": "Aucun compte de charges salariales n’est configuré.",
+          "netPay": "Aucun compte de paie nette à payer n’est configuré.",
+          "laborClearing": "Les salaires se reportent à la compensation de la main-d’œuvre, mais aucun compte de compensation n’est configuré.",
+          "slot": "Compte légal non mappé : {detail}",
+          "schedule": "Aucun calendrier de paie actif n’existe.",
+          "remittanceVendor": "Fournisseur de versement légal non défini : {detail}",
+          "paymentRail": "Aucun profil d’émetteur TEF configuré, et le secours par chèque est désactivé — il n’y a aucun moyen de payer qui que ce soit.",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
+        },
+        "period": {
+          "missing": "Aucune période comptable ne couvre le jour de paie {detail}.",
+          "closed": "La période comptable {detail} est fermée aux reports GL."
+        },
+        "scope": {
+          "empty": "Aucun employé n’est inclus dans cette paie."
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun taux de salaire en vigueur pour cette période.",
+          "zeroHours": "{count, plural, one {# employé horaire n’a} other {# employés horaires n’ont}} aucune heure approuvée dans cette période.",
+          "paidInPeriod": "{count, plural, one {# employé a} other {# employés ont}} déjà été payés pour une période qui chevauche.",
+          "terminated": "{count, plural, one {# employé a} other {# employés ont}} terminé leur emploi au plus tard à la fin de la période.",
+          "noBankDetails": "{count, plural, one {# employé est} other {# employés sont}} à payer par dépôt direct mais sans coordonnées bancaires approuvées, donc ils seront payés par chèque sur cette paie.",
+          "noSin": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun NAS/SSN au dossier pour la déclaration de fin d’année.",
+          "eftNoBankDetails": "{count, plural, one {# employé est} other {# employés sont}} à payer par dépôt direct sans coordonnées bancaires approuvées, et le secours par chèque est désactivé, donc il n’y a aucun moyen de les payer.",
+          "noOpeningBalance": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun solde d’ouverture {detail} de votre ancien système de paie, donc leurs plafonds légaux annuels repartiront de zéro sur cette paie.",
+          "noOpeningComponentYtd": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun cumul annuel d’ouverture pour {detail}, qui a un plafond annuel — le plafond repart de zéro sur cette paie, donc ils peuvent cotiser un deuxième plafond annuel complet.",
+          "noOpeningEntitlement": "{count, plural, one {# employé reporte} other {# employés reportent}} un solde de votre ancien système de paie mais aucun solde d’ouverture pour {detail}. C’est la première paie qui le fait bouger, donc leur banque part de zéro."
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "L’indemnité de jour férié ne peut pas être calculée : {detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# employé a} other {# employés ont}} une juridiction du travail que cette paie ne peut pas honorer : {detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
+        }
+      }
+    },
+    "funding": {
+      "title": "Financement",
+      "netPay": "Trésorerie à financer",
+      "liabilities": "Passifs comptabilisés",
+      "totalCost": "Coût total pour l'employeur",
+      "accounts": "Comptes bancaires",
+      "leadTime": "{days, plural, =0 {La paie, c'est aujourd'hui} one {# jour ouvré avant la paie} other {# jours ouvrés avant la paie}} · {date}",
+      "payDatePast": "La date de paie {date} est passée",
+      "short": "Aucun compte bancaire ne couvre les {amount} requis.",
+      "rail": {
+        "eft": "Dépôt direct ({count, plural, one {# employé} other {# employés}})",
+        "cheque": "Chèques ({count, plural, one {# employé} other {# employés}})"
+      }
+    },
+    "period": {
+      "taxYear": "Année d’imposition",
+      "employeesTitle": "Employés inclus ({count})",
+      "hint": "Tous ceux qui ont un dossier de paie actif sur ce calendrier.",
+      "calculatedNote": "Les heures et le brut viennent des bulletins calculés.",
+      "approvedHours": "Heures approuvées",
+      "recalculate": "Recalculer",
+      "empty": "Aucun employé n’a encore de dossier de paie actif sur ce calendrier.",
+      "wageMissing": "Aucun taux de salaire",
+      "zeroHours": "Aucune heure",
+      "ready": "Prêt",
+      "scopeSaved": "Périmètre de paie enregistré : {count, plural, one {# employé} other {# employés}}.",
+      "allBases": "Toutes les bases de paie",
+      "onlyWithHours": "Avec heures seulement",
+      "hideIneligible": "Masquer les inadmissibles",
+      "department": "Département",
+      "selectAll": "Sélectionner tous les employés affichés",
+      "selectEmployee": "Sélectionner {name}",
+      "selectedCount": "{selected} employés sélectionnés sur {total}",
+      "selectedHours": "{hours} heures",
+      "selectedBlocked": "{count, plural, one {# employé sélectionné n’a aucun taux de salaire} other {# employés sélectionnés n’ont aucun taux de salaire}}",
+      "applyScope": "Appliquer la sélection",
+      "noneMatch": "Aucun employé ne correspond à ces filtres.",
+      "noWage": "Aucun taux de salaire",
+      "paidInPeriod": "Déjà payé",
+      "terminated": "Fin d’emploi",
+      "excluded": "Exclu",
+      "included": "Inclus",
+      "runType": "Type de paie",
+      "continue": "Continuer vers la préparation",
+      "dimension": {
+        "all": "Tous",
+        "department": "Département",
+        "trade": "Métier",
+        "job_title": "Titre d’emploi",
+        "subsidiary": "Entité",
+        "payment_method": "Payé par"
+      }
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# exception de calcul} other {# exceptions de calcul}}",
+      "varianceFlag": "{count, plural, one {# bulletin a} other {# bulletins ont}} varié de plus de ±{percent} % en paie nette par rapport au bulletin précédent. Vérifiez avant de comptabiliser.",
+      "varianceColumn": "Δ net",
+      "newEmployee": "premier bulletin",
+      "needsCalculation": "Calculez la paie pour générer les bulletins. Les montants restent modifiables jusqu’à la comptabilisation de la paie.",
+      "drawerDescription": "Lignes de paie et trace du calcul légal pour ce bulletin.",
+      "drawerVariance": "La paie nette a bougé de {percent} % par rapport au bulletin précédent de cet employé.",
+      "downloadPdf": "Télécharger le PDF",
+      "close": "Fermer",
+      "registerTitle": "Aperçu du registre",
+      "selectAll": "Sélectionner tous les bulletins",
+      "selectedCount": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+      "bulkEdit": "Modifier la sélection",
+      "bulkDescription": "Appliquer un montant de composante à {count, plural, one {# employé} other {# employés}} dans cette paie.",
+      "bulkApply": "Appliquer à {count, plural, one {# employé} other {# employés}}",
+      "changedColumn": "Modifié",
+      "noChange": "aucun changement",
+      "changedTitle": "Changements depuis le {date}",
+      "noChangeDetail": "Rien n’a changé par rapport au bulletin précédent.",
+      "changedTotals": "Net {net} · heures {hours} par rapport au bulletin précédent.",
+      "changeKind": {
+        "added": "Nouveau",
+        "removed": "Retiré",
+        "changed": "Modifié"
+      },
+      "protectionShortfallTitle": "{count, plural, one {# bulletin n’a pas pu prendre une retenue protégée en entier} other {# bulletins n’ont pas pu prendre une retenue protégée en entier}}",
+      "protectionShortfallHint": "Les gains protégés ont plafonné ces retenues. Le solde impayé reste dû — avisez le créancier ou reportez-le à la prochaine paie."
+    },
+    "gl": {
+      "needsCalculation": "Calculez la paie pour prévisualiser son impact GL.",
+      "setupIncomplete": "Le paramétrage de la paie est incomplet",
+      "openSetup": "Ouvrir Comptes et reports",
+      "retry": "Réessayer",
+      "loading": "Construction de l’aperçu GL…",
+      "hint": "L’écriture de journal que la comptabilisation écrira. Débits d’abord, puis crédits. Rien n’est reporté à cette étape.",
+      "account": "Compte",
+      "description": "Description",
+      "debits": "Débit",
+      "credits": "Crédit",
+      "balanced": "Équilibré",
+      "staleBlocked": "Recalculez la paie avant de comptabiliser.",
+      "commitHint": "La comptabilisation fige les bulletins et écrit ces lignes dans le document de paie. La paie reste vérifiable jusqu’à son report."
+    },
     "finish": {
       "notCommitted": "Validez le cycle à l'étape du grand livre avant la comptabilisation.",
       "postTitle": "Prêt à comptabiliser",
@@ -218,19 +292,22 @@
       "stubsEmailedPartial": "{sent} envoyés ; ignorés (sans courriel ou échec) : {skipped}",
       "printCheques": "Imprimer {count, plural, one {# chèque} other {# chèques}}"
     },
-    "funding": {
-      "title": "Financement",
-      "netPay": "Trésorerie à financer",
-      "liabilities": "Passifs comptabilisés",
-      "totalCost": "Coût total pour l'employeur",
-      "accounts": "Comptes bancaires",
-      "leadTime": "{days, plural, =0 {La paie, c'est aujourd'hui} one {# jour ouvré avant la paie} other {# jours ouvrés avant la paie}} · {date}",
-      "payDatePast": "La date de paie {date} est passée",
-      "short": "Aucun compte bancaire ne couvre les {amount} requis.",
-      "rail": {
-        "eft": "Dépôt direct ({count, plural, one {# employé} other {# employés}})",
-        "cheque": "Chèques ({count, plural, one {# employé} other {# employés}})"
-      }
+    "adjust": {
+      "title": "Ajustements",
+      "applied": "Ajustement appliqué. Bulletins recalculés.",
+      "excludedLabel": "Exclus de cette paie :",
+      "include": "Inclure",
+      "exclude": "Exclure de cette paie",
+      "component": "Composante",
+      "amount": "Montant",
+      "note": "Motif / note (facultatif)",
+      "replace": "Remplacer les lignes calculées",
+      "replaceHelp": "Remplacer les lignes calculées de cette composante au lieu de s’y ajouter",
+      "add": "Ajouter un ajustement",
+      "remove": "Retirer",
+      "replaces": "remplace le calcul",
+      "earnings": "Gains",
+      "deductions": "Retenues"
     },
     "bankFile": {
       "title": "Dépôt direct",
@@ -277,24 +354,1001 @@
         "default": "Aucune coordonnée bancaire au dossier — payé par chèque",
         "eftFallback": "Paiement électronique sélectionné mais sans coordonnées bancaires approuvées — payé par chèque"
       }
-    },
-    "steps": {
-      "finish": "Reporter et terminer",
-      "gl": "Aperçu GL et comptabilisation",
-      "period": "Portée",
-      "readiness": "Préparation",
-      "review": "Vérifier les bulletins"
     }
   },
+  "links": {
+    "paySchedules": "Calendriers de paie",
+    "payComponents": "Composantes de paie"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# compte de contrôle de paie est} other {# comptes de contrôle de paie sont}} non configurés :",
+    "openSettings": "Ouvrir le paramétrage de la paie"
+  },
+  "runType": {
+    "regular": "Ordinaire",
+    "bonus": "Prime hors cycle",
+    "termination": "Solde de tout compte"
+  },
+  "newRun": {
+    "runType": "Type de paie",
+    "runTypeHint": {
+      "regular": "La paie ordinaire du calendrier : salaires, temps approuvé, éléments et retenues récurrents.",
+      "bonus": "Paie hors cycle pour primes et commissions. Ni salaire, ni temps, ni retenues récurrentes; les gains sont imposés selon la méthode des primes.",
+      "termination": "Solde de tout compte des employés partants. Comprend le paiement du solde de vacances accumulé."
+    },
+    "employees": "Employés payés",
+    "employeesHint": "Une paie de fin d'emploi paie et solde chaque banque accumulée; elle ne concerne donc que les employés nommés ici.",
+    "noTerminated": "Aucun employé de ce calendrier n'a de date de fin d'emploi au dossier. Saisissez-la d'abord sur l'employé — un chèque final ne peut être calculé sans elle.",
+    "schedule": "Calendrier de paie",
+    "noSchedules": "Aucun calendrier de paie actif",
+    "create": "Nouvelle paie",
+    "description": "Confirmez la période couverte par cette paie. La prochaine période du calendrier est présélectionnée; modifiez les dates pour une paie hors cycle ou de rattrapage.",
+    "periodStart": "Début de période",
+    "periodEnd": "Fin de période",
+    "payDateHint": "La date à laquelle les employés sont payés. Les taux obligatoires sont déterminés à partir de cette date.",
+    "invalidWindow": "La fin de période doit être égale ou postérieure au début, et la date de paie égale ou postérieure à la fin de période.",
+    "notBegun": "Cette période commence le {date} et n'a pas commencé. Choisissez une période en cours ou terminée."
+  },
+  "columns": {
+    "number": "Numéro",
+    "schedule": "Calendrier",
+    "period": "Période",
+    "payDate": "Date de paie",
+    "status": "Statut",
+    "gross": "Brut",
+    "net": "Net",
+    "employees": "Employés"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "calculated": "Calculée",
+    "committed": "Comptabilisée",
+    "posted": "Reportée",
+    "void": "Annulée"
+  },
+  "empty": {
+    "runs": "Aucune paie pour l'instant. Créez-en une à partir d'un calendrier de paie pour commencer.",
+    "profiles": "Aucun dossier de paie d'employé pour l'instant. Ajoutez-en un pour inclure un employé dans les paies."
+  },
+  "run": {
+    "title": "Paie",
+    "employerCost": "Coût employeur",
+    "calculate": "Calculer",
+    "commit": "Comptabiliser",
+    "post": "Reporter",
+    "calculateDone": "Paie calculée.",
+    "commitDone": "Paie comptabilisée.",
+    "postDone": "Paie reportée.",
+    "empty": "Aucun bulletin. Calculez la paie pour les générer.",
+    "lineKind": {
+      "earning": "Gain",
+      "deduction": "Retenue",
+      "employer_contribution": "Employeur"
+    },
+    "stub": {
+      "employee": "Employé",
+      "tax": "Impôt",
+      "lines": "Lignes de paie",
+      "trace": "trace {engine}"
+    },
+    "submitApproval": "Soumettre à l'approbation",
+    "approvalSubmitted": "Envoyée à l'approbation avec le dossier de preuves",
+    "approvalNotRequired": "Aucune politique d'approbation ne s'applique aux paies",
+    "approvalPending": "En attente d'approbation ({count} en suspens) — la comptabilisation et l'affichage sont bloqués",
+    "printSet": "Jeu d'impression (impression seulement)",
+    "stubsPrintOnly": "{count} employés sont en impression seulement et n'ont pas été avisés par courriel"
+  },
+  "profiles": {
+    "addEmployee": "Employé sans dossier",
+    "new": "Ajouter un dossier",
+    "saved": "Dossier enregistré.",
+    "editorDescription": "Faits TD1, calendrier, exemptions et politique de vacances pour cet employé.",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "columns": {
+      "employee": "Employé",
+      "schedule": "Calendrier",
+      "province": "Province",
+      "basis": "Base de paie",
+      "claims": "Demandes (féd / prov)",
+      "vacation": "Vacances",
+      "status": "Statut"
+    },
+    "basis": {
+      "hourly": "Horaire",
+      "salary": "Salaire"
+    },
+    "vacation": {
+      "accrue": "Accumuler",
+      "pay_each_period": "Payer chaque période"
+    },
+    "fields": {
+      "schedule": "Calendrier de paie",
+      "province": "Province d’emploi",
+      "labourJurisdiction": "Juridiction du travail",
+      "payBasis": "Base de paie",
+      "additionalTax": "Impôt supplémentaire par période",
+      "federalClaimCode": "Code de demande fédéral",
+      "federalClaimAmount": "Montant de demande fédéral",
+      "provincialClaimCode": "Code de demande provincial",
+      "provincialClaimAmount": "Montant de demande provincial",
+      "claimAmountHint": "Remplace le code de demande",
+      "vacationPercent": "Pourcentage de vacances",
+      "vacationMethod": "Méthode de vacances",
+      "cppExempt": "Exempté RPC",
+      "eiExempt": "Exempté AE",
+      "taxExempt": "Exempté d’impôt sur le revenu",
+      "isActive": "Actif",
+      "country": "Pays",
+      "state": "État d’emploi",
+      "filingStatus": "État civil (W-4 étape 1c)",
+      "dependentCredits": "Personnes à charge et autres crédits, annuels (W-4 étape 3)",
+      "otherIncomeAnnual": "Autres revenus, annuels (W-4 étape 4a)",
+      "deductionsAnnual": "Déductions, annuelles (W-4 étape 4b)",
+      "multipleJobs": "Emplois multiples / conjoint travaille (W-4 étape 2, case à cocher)",
+      "w4Pre2020": "Le W-4 au dossier date de 2019 ou avant",
+      "w4Allowances": "Exemptions de retenue (W-4 d’avant 2020)",
+      "ficaExempt": "Exempté FICA",
+      "futaExempt": "Exempté FUTA/SUI",
+      "fitExempt": "Exempté d’impôt fédéral sur le revenu (W-4 « Exempt »)",
+      "sin": "NAS / SSN",
+      "sinPlaceholder": "9 chiffres. Conservé scellé et jamais réaffiché.",
+      "filingAccount": "Compte de déclaration",
+      "stubDelivery": "Envoi des bulletins",
+      "paymentMethod": "Payé par"
+    },
+    "country": {
+      "CA": "Canada",
+      "US": "États-Unis"
+    },
+    "filingStatus": {
+      "single": "Célibataire ou marié, déclaration séparée",
+      "married_joint": "Marié, déclaration conjointe",
+      "head_household": "Chef de famille"
+    },
+    "loading": "Chargement du dossier de paie…",
+    "loadFailed": "Impossible de charger le dossier de paie.",
+    "noSchedules": "Créez un calendrier de paie avant de configurer les dossiers de paie.",
+    "openSchedules": "Ouvrir les calendriers de paie",
+    "filingAccountDefault": "Compte par défaut",
+    "stubDelivery": {
+      "email": "Courriel",
+      "print": "Impression",
+      "both": "Courriel et impression"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "De la province d’emploi",
+      "help": "La juridiction du travail dont les normes d’emploi régissent cet emploi — son calendrier de jours fériés et sa formule d’indemnité de jour férié. Laissez « de la province d’emploi », ce qui convient à presque tous les emplois; ne le changez que lorsqu’une autre juridiction du travail réglemente l’employeur officiel, comme un employeur sous réglementation fédérale. Cela ne change pas les retenues, qui suivent toujours la province d’emploi."
+    },
+    "paymentMethod": {
+      "eft": "Dépôt direct",
+      "cheque": "Chèque",
+      "help": "Comment cet employé est payé. Laissez le défaut du tiers sauf si cette personne est payée différemment des autres — un chèque pour quelqu’un sans coordonnées bancaires au dossier, par exemple. La paie répartit le jour de paie entre les deux rails et finance chacun séparément.",
+      "inherit": "Utiliser le défaut du tiers"
+    }
+  },
+  "setupWizard": {
+    "cta": {
+      "title": "Paramétrer la paie",
+      "description": "Un premier passage guidé : packs de pays, comptes de contrôle, un calendrier de paie, fournisseurs de versement et rails de paiement — les mêmes contrôles qu’une paie vérifie avant de calculer.",
+      "start": "Paramétrer la paie",
+      "relaunch": "Assistant de paramétrage",
+      "missing": "{count, plural, one {# élément requis} other {# éléments requis}} encore à configurer."
+    },
+    "back": "Retour",
+    "next": "Suivant",
+    "close": "Fermer",
+    "finish": "Terminer le paramétrage",
+    "packs": {
+      "title": "Installez vos packs de pays",
+      "description": "Un pack est le moteur légal d’une juridiction : son calcul des retenues, ses composantes de paie, ses jours fériés et ses déclarations.",
+      "note": "Installer un pack ensemence ses composantes de paie légales et active le moteur de retenues de cette juridiction. Les composantes existantes ne sont jamais écrasées, et un pack peut être ajouté plus tard en relançant cet assistant."
+    },
+    "accounts": {
+      "title": "Comptes de contrôle",
+      "description": "Où se reportent les salaires et le paie nette, et le compte de passif derrière chaque retenue légale prévue par les packs installés.",
+      "wageExpenseHelp": "Le compte de charges où les salaires bruts sont débités quand une paie est comptabilisée.",
+      "netPayHelp": "Le compte de passif où la paie nette est créditée jusqu’à ce que les fonds du jour de paie quittent la banque.",
+      "slotHelp": "Le compte de passif où cette retenue légale s’accumule jusqu’à son versement."
+    },
+    "schedule": {
+      "title": "Calendrier de paie",
+      "description": "Le calendrier de paie : à quelle fréquence les gens sont payés et quelles fins de période ancrent le cycle.",
+      "addAnother": "Créer un autre calendrier",
+      "created": "Calendrier de paie « {name} » créé.",
+      "name": "Nom",
+      "nameHelp": "Comment ce calendrier apparaît sur les paies et les dossiers des employés — p. ex. « Aux deux semaines — tout le personnel ».",
+      "namePlaceholder": "Aux deux semaines — tout le personnel",
+      "frequency": "Fréquence",
+      "frequencyHelp": "À quelle fréquence ce calendrier paie. Les périodes par année suivent la table légale de la fréquence.",
+      "periods": "Périodes par année",
+      "periodsHelp": "Le nombre légal de périodes avec lequel le moteur de retenues annualise — 52 hebdomadaires, 26 bimensuelles, 24 semi-mensuelles, 12 mensuelles.",
+      "anchor": "Fin de période d’ancrage",
+      "anchorHelp": "N’importe quelle vraie date de fin de période sur ce calendrier; toutes les autres périodes sont projetées vers l’avant et vers l’arrière à partir d’elle.",
+      "noPermission": "La création des calendriers de paie exige la permission Paramétrage. Demandez à un administrateur d’en ajouter un sous l’onglet Calendriers de paie, puis continuez."
+    },
+    "vendors": {
+      "title": "Fournisseurs de versement",
+      "description": "Le fournisseur à qui chaque autorité légale est versée, tel que prévu par les packs installés.",
+      "help": "Les montants retenus s’accumulent contre ce fournisseur pour qu’un versement soulève un payable normal à l’autorité.",
+      "note": "Les fournisseurs sont des fiches fournisseurs ordinaires — créez d’abord l’autorité sous Entités → Fournisseurs si elle n’existe pas encore, puis choisissez-la ici."
+    },
+    "rails": {
+      "title": "Rails de paiement",
+      "description": "Comment la paie nette quitte la banque le jour de paie : fichiers de dépôt direct, et ce qui arrive quand un employé destiné au TEF n’a pas de coordonnées bancaires.",
+      "eftTitle": "Profils d’émetteur TEF",
+      "eftNone": "Aucun profil d’émetteur compatible avec la paie n’existe encore. Les fichiers de dépôt direct en exigent un; d’ici là, les employés sont payés par chèque.",
+      "needsConfig": "coordonnées d’émetteur manquantes",
+      "manageProfiles": "Gérer les profils d’émetteur dans les Opérations de paiement"
+    },
+    "review": {
+      "title": "Vérifier et terminer",
+      "description": "À quoi ressemble la paie de cette organisation maintenant, et ce sur quoi une paie bloquerait encore.",
+      "packsLabel": "Packs de pays",
+      "scheduleLabel": "Calendriers de paie",
+      "remainingTitle": "Reste à régler",
+      "allClear": "Tout le paramétrage requis est en place. Une paie peut calculer.",
+      "seedNote": "Terminer relance l’ensemencement des composantes légales pour chaque pack installé — idempotent, et les composantes existantes ne sont jamais écrasées."
+    },
+    "applying": {
+      "title": "Finalisation du paramétrage de la paie…",
+      "description": "Ensemencement des composantes légales."
+    },
+    "done": {
+      "title": "La paie est prête",
+      "description": "Ajoutez les employés et leurs dossiers de paie, puis lancez la première paie."
+    }
+  },
+  "settingsPage": {
+    "title": "Paie",
+    "description": "Installez les packs de paie nationaux, câblez les comptes de report, et gérez les calendriers de paie, les composantes et les conventions collectives.",
+    "saved": "Enregistré.",
+    "save": "Enregistrer",
+    "accounts": {
+      "title": "Comptes de contrôle",
+      "description": "Où se reportent les salaires, les charges patronales et la paie nette. Les comptes de retenues légales se configurent par pack national installé ci-dessous."
+    },
+    "posting": {
+      "title": "Reports",
+      "description": "Comment les salaires pilotés par les heures touchent le registre, et à qui les retenues légales sont versées."
+    },
+    "wagesTo": {
+      "expense": "Charges salariales (avec répartitions par projet)",
+      "laborClearing": "Compensation de la main-d’œuvre (neutralise le coût standard)",
+      "help": "La compensation de la main-d’œuvre neutralise le coût standard reporté à l’approbation des heures; elle exige le compte de contrôle de compensation de la main-d’œuvre du module de valorisation de la main-d’œuvre."
+    },
+    "fields": {
+      "wageExpenseAccountId": "Charges salariales",
+      "burdenExpenseAccountId": "Charges patronales",
+      "netPayAccountId": "Paie nette à payer",
+      "cppPayableAccountId": "RPC à payer",
+      "eiPayableAccountId": "AE à payer",
+      "taxPayableAccountId": "Impôt sur le revenu à payer",
+      "vacationPayableAccountId": "Vacances à payer",
+      "wagesTo": "Les salaires se reportent à",
+      "craRemittancePartyId": "Fournisseur de versement ARC",
+      "rqRemittancePartyId": "Fournisseur de versement Revenu Québec",
+      "rqRemittancePartyIdHelp": "Fournisseur facturé pour les retenues à la source du Québec versées sur le formulaire TPZ-1015.R — le QPP, le QPP2 et le QPIP d’un employé du QC passent ici, jamais au fournisseur ARC."
+    },
+    "tabsAria": "Sections du paramétrage de la paie",
+    "groups": {
+      "foundations": "Fondations",
+      "earnings": "Paie et gains",
+      "entitlements": "Banques et droits",
+      "payday": "Jour de paie"
+    },
+    "payday": {
+      "eftTitle": "TEF et fichiers bancaires",
+      "eftDescription": "Les fichiers de dépôt direct sont tirés d’un profil d’émetteur compatible avec la paie. Les profils se gèrent dans les Opérations de paiement; ce panneau rapporte leur état.",
+      "eftNone": "Aucun profil d’émetteur compatible avec la paie n’existe encore. Tant qu’aucun n’est configuré, les employés en dépôt direct dépendent du secours par chèque.",
+      "eftManage": "Gérer les profils d’émetteur dans les Opérations de paiement",
+      "eftNeedsConfig": "coordonnées d’émetteur manquantes"
+    },
+    "tabs": {
+      "packs": "Packs nationaux",
+      "accounts": "Comptes et reports",
+      "schedules": "Calendriers de paie",
+      "components": "Composantes",
+      "union": "Syndicat",
+      "filing": "Comptes de déclaration",
+      "entitlements": "Régimes de droits",
+      "limits": "Plafonds des banques",
+      "service": "Calendriers de service",
+      "derived": "Gains dérivés",
+      "derivedPreview": "Aperçu des règles",
+      "holidays": "Jours fériés",
+      "holidayCalendar": "Calendrier des fériés",
+      "payday": "Jour de paie",
+      "rates": "Taux légaux",
+      "workSchedules": "Horaires de travail"
+    },
+    "packs": {
+      "installed": "Installé",
+      "install": "Installer le pack",
+      "reinstall": "Relancer l’ensemencement des composantes",
+      "installSuccess": "Pack national installé.",
+      "componentCount": "{count, plural, one {# composante légale installée} other {# composantes légales installées}}",
+      "hint": "Installer un pack ensemence les composantes de paie légales et active le moteur de retenues de cette juridiction. Les composantes existantes ne sont jamais écrasées.",
+      "canada": {
+        "title": "Canada",
+        "description": "Retenues légales pour les paies canadiennes, les versements et la fin d’année.",
+        "edition": "{edition, selectordinal, one {#er} two {#e} few {#e} other {#e}} édition (en vigueur {effective})",
+        "engine": "Moteur légal ARC T4127 —",
+        "coverage": "Toutes les provinces et territoires. Québec : QPP, QPIP et retenues d’impôt sur le revenu fédéral et provincial inclus; l’impôt provincial est administré par Revenu Québec.",
+        "components": "Composantes de paie légales : paie de base, heures supplémentaires, primes, vacances, impôt sur le revenu, RPC, AE, QPIP.",
+        "verified": "Vérifié au cent près contre le PDOC de l’ARC."
+      },
+      "us": {
+        "title": "États-Unis",
+        "description": "Retenues légales fédérales pour les paies américaines : impôt sur le revenu, Sécurité sociale, Medicare et chômage.",
+        "engine": "Moteur IRS Pub 15-T par méthode du pourcentage (2026) avec W-4 étapes 2 à 4 et exemptions d’avant 2020.",
+        "coverage": "49 États pris en charge : 40 moteurs fiscaux plus les neuf États sans impôt (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC et NM sont refusés en attendant les fichiers de référence officiels.",
+        "components": "Composantes de paie légales : impôt fédéral sur le revenu, Sécurité sociale, Medicare (incluant le Medicare supplémentaire), FUTA et SUI.",
+        "config": "Les taux et assiettes SUI sont tarifés par employeur selon son expérience. Saisissez les vôtres sous Comptes et reports."
+      },
+      "uninstall": "Désinstaller",
+      "uninstallTitle": "Désinstaller le pack national",
+      "uninstallConfirm": "Retirer les composantes légales de ce pack et éteindre son moteur de retenues? La désinstallation est bloquée tant que des employés ou des dossiers de paie dépendent encore du pack.",
+      "uninstallSuccess": "Pack national désinstallé.",
+      "taxYears": "Tables légales chargées pour",
+      "taxYearDraft": "{year} · ébauché, non transcrit",
+      "taxYearNone": "aucune table légale chargée"
+    },
+    "packAccounts": {
+      "none": "Aucun pack de paie national n’est encore installé, donc il n’y a aucun compte de retenues légales à configurer.",
+      "installLink": "Installer un pack national",
+      "CA": {
+        "title": "Canada — comptes légaux ARC",
+        "description": "Comptes de passif pour les montants que le pack ARC retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "income_tax": "Impôt sur le revenu à payer",
+          "qc_income_tax": "Impôt sur le revenu du Québec à payer (Revenu Québec)",
+          "cpp": "RPC à payer (inclut le RPC2)",
+          "ei": "AE à payer",
+          "qpip": "QPIP à payer (Québec)",
+          "vacation": "Vacances à payer",
+          "wcb": "Indemnisation des accidents du travail à payer (CAT/CSST)",
+          "eht": "Impôt-santé des employeurs à payer"
+        }
+      },
+      "US": {
+        "title": "États-Unis — comptes légaux fédéraux",
+        "description": "Comptes de passif pour les montants que le pack américain retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
+        "slots": {
+          "fit": "Impôt fédéral sur le revenu à payer",
+          "fica": "FICA à payer (Sécurité sociale + Medicare)",
+          "futa": "FUTA à payer",
+          "suta": "Chômage d’État à payer",
+          "state_income_tax": "Impôt d’État sur le revenu à payer",
+          "local_income_tax": "Impôt local sur le revenu à payer"
+        }
+      },
+      "ratesLink": "Les taux que vous fournissez — chômage, taxes santé — sont sous l’onglet Taux légaux."
+    },
+    "usConfig": {
+      "title": "Taux de chômage",
+      "description": "Le FUTA et le chômage d’État sont payés par l’employeur. Les taux SUI sont tarifés par employeur selon son expérience, donc ils se saisissent ici, jamais supposés.",
+      "futaRate": "Taux FUTA effectif",
+      "futaRateHelp": "En décimal : 0,006 est le 0,6 % standard après le plein crédit d’État. Augmentez-le pour les États en réduction de crédit.",
+      "suiTitle": "Assurance-chômage d’État (SUI)",
+      "suiHelp": "Une ligne par État où vous employez : votre taux attribué en décimal (0,027 = 2,7 %) et l’assiette salariale imposable de l’État.",
+      "suiState": "État",
+      "suiRate": "Taux",
+      "suiWageBase": "Assiette salariale",
+      "addState": "Ajouter un État",
+      "removeState": "Retirer"
+    },
+    "caConfig": {
+      "title": "Taxes patronales sur la masse salariale",
+      "description": "Taxes patronales sur la masse salariale que le pack CA accumule à chaque paie : primes d’indemnisation des accidents du travail et impôt-santé des employeurs de l’Ontario.",
+      "ehtEnabled": "Accumuler l’impôt-santé des employeurs (ISE) de l’Ontario",
+      "ehtRate": "Taux ISE (%)",
+      "ehtRateHelp": "En pourcentage : 1,95 est le taux ontarien maximal. Votre taux dépend de la masse salariale ontarienne totale.",
+      "ehtExemption": "Exemption annuelle",
+      "ehtExemptionHelp": "Rémunération ontarienne exemptée chaque année (1 000 000 $ pour la plupart des employeurs privés admissibles; les employeurs associés partagent une seule exemption).",
+      "wcbNote": "Les taux d’indemnisation des accidents du travail (CAT/CSST) et le maximum annuel assurable se fixent par classe de taux sur les groupes d’indemnisation, sous le paramétrage du Personnel."
+    },
+    "stubPassword": {
+      "title": "Mot de passe des bulletins courrielés",
+      "description": "Chiffrez les bulletins envoyés par courriel et dérivez le mot de passe de chaque employé d’une règle que vous publiez à votre personnel.",
+      "enabled": "Chiffrer les bulletins envoyés par courriel",
+      "unavailable": "Le chiffrement PDF est indisponible sur ce serveur — l’outil qpdf n’est pas installé.",
+      "expression": "Règle de mot de passe",
+      "expressionHelp": "Jetons : {surname}, {givenName}, {employeeNumber} (ajoutez :3 pour les trois premiers caractères) et {dob} avec un format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Ajoutez |upper ou |lower pour changer la casse. Exemple : {surname:3|upper}{dob:MMDDYYYY}."
+    },
+    "derivedPreview": {
+      "title": "Prévisualiser une règle de gains dérivés",
+      "description": "Voyez quels employés et quels jours une règle toucherait, et ce qu’elle paierait, avant de l’activer.",
+      "rule": "Règle",
+      "selectRule": "Choisir une règle…",
+      "from": "Début de période",
+      "to": "Fin de période",
+      "noRules": "Aucune règle de gains dérivés n’est encore configurée.",
+      "pickRule": "Choisissez une règle pour prévisualiser la période.",
+      "enabled": "Activée",
+      "disabled": "Pas encore activée",
+      "employeesPaid": "Employés payés",
+      "employee": "Employé",
+      "jobTitle": "Titre d’emploi",
+      "day": "Jour",
+      "project": "Chantier",
+      "quantity": "Unités",
+      "amount": "Montant",
+      "total": "Total",
+      "empty": "Cette règle ne paie rien sur la période choisie.",
+      "grossEstimated": "Cette règle paie un pourcentage du brut. L’aperçu estime le brut à partir des heures approuvées et du salaire en vigueur; le calcul propre de la paie fait foi.",
+      "excludedTitle": "Exclus par titre d’emploi",
+      "excludedDescription": "Ces employés sont exclus par la liste d’exclusion de la règle — la radiation que personne n’a plus à se rappeler.",
+      "coverageTitle": "Cette règle ne peut pas encore régler le mois",
+      "coverageBody": "Des frais d’équipement du mois réglé n’enregistrent pas quel opérateur a conduit l’unité, donc la prime ne peut pas dire à qui elle est due. Elle refuse plutôt que de payer sur les frais attribués par hasard, ce qui sous-paierait. Enregistrez l’opérateur sur ces frais, ou resserrez cette règle pour les en exclure.",
+      "coverageUnattributed": "frais sans opérateur"
+    },
+    "paymentMethods": {
+      "title": "Comment les salaires sont payés",
+      "description": "Un employé sans coordonnées bancaires approuvées est payé par chèque. Ceci décide ce qui arrive quand quelqu’un destiné au dépôt direct n’en a pas.",
+      "fallback": "Payer par chèque quand les coordonnées de dépôt direct manquent",
+      "fallbackOn": "La paie continue et l’employé est inclus dans le lot de chèques, avec un avertissement à l’étape de préparation.",
+      "fallbackOff": "La paie est bloquée jusqu’à ce que l’employé ait des coordonnées bancaires approuvées ou soit basculé au chèque."
+    },
+    "holidayCalendar": {
+      "title": "Calendrier des jours fériés",
+      "description": "Les jours que cette juridiction observe, avec vos propres choix appliqués. Les jours légaux viennent du pack national et ne peuvent pas être éteints; les jours optionnels et d’entreprise se configurent sous l’onglet Jours fériés.",
+      "jurisdiction": "Juridiction",
+      "year": "Année",
+      "citation": "Source",
+      "date": "Observé",
+      "holiday": "Jour férié",
+      "statutoryDate": "Tombe un",
+      "source": "Source",
+      "paid": "Payé",
+      "statutory": "Légal",
+      "elected": "Optionnel — choisi",
+      "company": "Entreprise",
+      "yes": "Oui",
+      "unpaid": "Fermeture non payée",
+      "empty": "Aucun jour férié n’est observé cette année.",
+      "noMandate": "Cette juridiction n’impose aucune indemnité de jour férié, donc le calendrier ne pilote que les fermetures et l’arithmétique des jours ouvrables. Les congés peuvent quand même être payés selon votre propre politique.",
+      "payRule": "Comment se calcule l’indemnité d’un jour férié",
+      "regularWages": "salaire régulier",
+      "overtime": "heures supplémentaires",
+      "vacationPay": "paie de vacances",
+      "priorHolidayPay": "indemnité de jour férié antérieure",
+      "workSchedules": "Horaires de travail",
+      "normalDay": "le salaire d’une journée normale de travail, d’après l’horaire de travail consigné de l’employé",
+      "normalDayStandardHours": "pour les employés travaillant au moins les heures normales de la juridiction, ",
+      "normalDayOtherwise": "Sinon",
+      "beforeTheDay": "avant le jour férié",
+      "beforeTheWeek": "avant la semaine du jour férié",
+      "daysWorked": "jours travaillés dedans",
+      "daysWorkedOrEarned": "jours travaillés ou où un salaire a été gagné",
+      "daysEntitledToPay": "jours où l’employé a été payé, ou avait droit de l’être, pour"
+    },
+    "statHolidayPay": {
+      "title": "Indemnité de jour férié",
+      "description": "Calculez l’indemnité de jour férié et les primes de jour férié travaillé à chaque paie, selon la formule que prévoit la juridiction de l’employé. Les employés d’une juridiction sans formule prévue sont refusés par leur nom quand un jour férié tombe dans la période.",
+      "enabled": "Calculer l’indemnité de jour férié"
+    },
+    "rates": {
+      "title": "Taux légaux",
+      "description": "Taux qu’aucune publication ne peut fournir, ou que les organismes publient par région ou par compte inscrit. Tout le reste — tranches d’impôt, maximums de cotisation, montants de crédit — vient du pack national et ne peut pas être modifié ici.",
+      "noPacks": "Aucun pack national installé ne prévoit de taux légal à saisie patronale. Installez un pack sous l’onglet Packs nationaux.",
+      "tablesLoaded": "Tables légales chargées pour",
+      "draftEdition": "ébauché, non transcrit",
+      "notLoaded": "non chargé",
+      "year": "Année d’imposition",
+      "yearHelp": "Les taux légaux sont attribués pour une année d’imposition — un avis de taux d’État, une décision de réduction de crédit, une exemption provinciale. Les taux saisis pour une année ne réinterprètent jamais la paie d’une autre année.",
+      "add": "Ajouter un taux",
+      "remove": "Retirer",
+      "empty": "Aucun taux légal n’est saisi pour cette année.",
+      "gapsTitle": "Non configuré pour cette année",
+      "allAccounts": "Tous les comptes",
+      "regionHelp": "La région où le taux s’applique. Un taux saisi pour une région n’est jamais appliqué à une autre.",
+      "accountHelp": "Ce taux est attribué à un compte inscrit, donc un employeur avec deux comptes dans une région a deux taux. Laissez Tous les comptes pour utiliser une seule valeur pour tous les comptes de la région.",
+      "scope": {
+        "org": "Tout l’employeur",
+        "region": "Par région",
+        "subRegion": "Par juridiction fiscale",
+        "account": "Par compte de déclaration"
+      },
+      "columns": {
+        "levy": "Taux",
+        "scope": "Portée",
+        "region": "Région",
+        "subRegion": "Juridiction fiscale",
+        "account": "Compte de déclaration",
+        "values": "Valeurs",
+        "country": "Pack national"
+      },
+      "subRegionHelp": "La juridiction fiscale à l’intérieur de la région — un code PSD de Pennsylvanie, une municipalité de l’Ohio, une ville du Michigan. Chacune fixe son propre taux, donc chacune se saisit séparément; une juridiction sans taux au dossier refuse la paie par son nom plutôt que de ne rien retenir."
+    },
+    "workSchedules": {
+      "title": "Horaires de travail",
+      "description": "Les heures et les jours que chaque employé travaille normalement. Plusieurs juridictions calculent l’indemnité de jour férié à partir de ceci — le salaire d’une journée normale de travail — et refuseront de calculer plutôt que de supposer une journée de huit heures pour quelqu’un dont l’horaire n’est pas consigné.",
+      "add": "Nouvel horaire",
+      "editTitle": "Horaire de travail",
+      "drawerDescription": "S’applique à partir de la date de début jusqu’à son remplacement ou sa fin. L’indemnité de jour férié d’une période passée se résout toujours selon l’horaire en vigueur alors, jamais celui d’aujourd’hui.",
+      "empty": "Aucun horaire de travail pour l’instant.",
+      "columns": {
+        "appliesTo": "S’applique à",
+        "pattern": "Horaire",
+        "effectiveFrom": "En vigueur",
+        "status": "Statut"
+      },
+      "scope": {
+        "organization": "Tout le monde",
+        "employee": "Un employé",
+        "jobTitle": "Titre d’emploi",
+        "trade": "Métier",
+        "department": "Département",
+        "subsidiary": "Filiale"
+      },
+      "pattern": {
+        "cycle": "Un horaire répétitif",
+        "cycleHint": "Un cycle de jours qui se répète — sept jours pour une semaine ordinaire, quatorze pour une quinzaine comprimée, huit pour une rotation de quatre jours de travail et quatre jours de congé.",
+        "varies": "Heures variables",
+        "variesHint": "Aucun horaire régulier; les heures sont fixées période par période. C’est une vraie réponse, pas un blanc — plusieurs juridictions paient un employé à heures variables selon une formule différente, et c’est de le consigner qui leur permet de calculer."
+      },
+      "summary": {
+        "cycle": "{hours} heures sur {days} jours par {cycle}",
+        "week": "semaine",
+        "cycleDays": "cycle de {count} jours",
+        "total": "{hours} heures sur {days} jours travaillés par cycle."
+      },
+      "fields": {
+        "name": "Nom",
+        "namePlaceholder": "Temps plein, du lundi au vendredi",
+        "appliesTo": "S’applique à",
+        "selectEmployee": "Choisir un employé",
+        "selectScope": "Choisir un",
+        "effectiveFrom": "En vigueur à partir du",
+        "effectiveTo": "En vigueur jusqu’au",
+        "pattern": "Horaire",
+        "cycleDays": "Durée du cycle (jours)",
+        "cycleAnchor": "Premier jour du cycle",
+        "hours": "Heures par jour"
+      },
+      "help": {
+        "scope": "L’horaire le plus précis l’emporte : un employé bat un titre d’emploi, qui bat un métier, puis un département, puis une filiale, puis tout le monde. Le même ordre dans lequel se résolvent les salaires et les plafonds des droits.",
+        "effectiveFrom": "Comparé à la DATE DE TRAVAIL, jamais à aujourd’hui. Quelqu’un qui passe de temps plein à temps partiel en mars garde son indemnité de jour férié de janvier calculée sur l’horaire à temps plein.",
+        "pattern": "Si l’employé suit un horaire répétitif, ou n’a aucun horaire régulier du tout. La différence décide de la formule qu’utilisent plusieurs juridictions.",
+        "cycleDays": "Le nombre de jours avant que l’horaire se répète. Sept, c’est la semaine ordinaire. Quatorze exprime une quinzaine comprimée de neuf jours; huit exprime une rotation de quatre jours de travail et quatre jours de congé qui ne s’aligne délibérément jamais sur la semaine.",
+        "cycleAnchor": "Le jour à partir duquel le cycle commence à compter. Pour un horaire hebdomadaire, c’est un dimanche, donc les cases ci-dessous sont étiquetées de dimanche à samedi.",
+        "hours": "Les heures normalement travaillées à chaque position du cycle. Laissez un jour vide pour un jour de congé. C’est à partir de ces heures que se calcule l’indemnité de jour férié d’une journée normale de travail : une semaine de quatre jours de dix heures vaut donc dix heures par jour férié, et non huit."
+      },
+      "grid": {
+        "sunday": "Dimanche",
+        "monday": "Lundi",
+        "tuesday": "Mardi",
+        "wednesday": "Mercredi",
+        "thursday": "Jeudi",
+        "friday": "Vendredi",
+        "saturday": "Samedi",
+        "day": "Jour {n}",
+        "weekDay": "Semaine {week} · {day}"
+      }
+    }
+  },
+  "remittances": {
+    "title": "Versements de paie",
+    "description": "Retenues accumulées et cotisations patronales par destinataire pour une période. Créer une facture débite les comptes de passif et confie le paiement aux comptes fournisseurs.",
+    "back": "Paie",
+    "from": "Du",
+    "to": "Au",
+    "apply": "Appliquer",
+    "empty": "Aucune paie comptabilisée avec des montants à verser sur cette période.",
+    "unassigned": "Aucun fournisseur de versement attribué",
+    "assignVendor": "Attribuez un fournisseur sur les composantes",
+    "context": "Masse salariale brute {gross} · {employees, plural, one {# employé} other {# employés}} sur la période",
+    "withheld": "Retenues",
+    "employer": "Employeur",
+    "noAccount": "Aucun compte de passif",
+    "total": "Total à verser",
+    "createBill": "Créer la facture de versement",
+    "createAnother": "Créer une autre facture",
+    "billCreated": "Brouillon de facture {number} créé. Vérifiez-le et affichez-le dans les comptes fournisseurs.",
+    "dueOn": "Échéance le {dueDate} · {authority}",
+    "apNote": "Les factures de versement sont des factures fournisseurs ordinaires :",
+    "apLink": "ouvrir les factures fournisseurs"
+  },
   "yearEnd": {
+    "title": "Fin d'année",
+    "description": "Chaque déclaration annuelle et trimestrielle prévue par les modules de paie installés, établie à partir des bulletins comptabilisés — chaque case est rapprochée des traces de bulletins.",
+    "noFilings": "Aucune déclaration de fin d'année de paie n'est prévue pour cette organisation.",
     "cadence": {
       "annual": "Déclarations annuelles",
       "annualHelp": "Produites une fois par année d'imposition (T4, W-2, RL-1). Le sélecteur d'année d'imposition ci-dessus choisit la population affichée.",
       "quarterly": "Déclarations trimestrielles",
       "quarterlyHelp": "Produites une fois par trimestre civil (formulaire 941) — le tableau de population affiche une ligne par trimestre de l'année d'imposition retenue."
+    }
+  },
+  "filings": {
+    "yearLabel": "Année d’imposition",
+    "rowCount": "{count, plural, =0 {Aucune ligne} one {# ligne} other {# lignes}}",
+    "notInstalled": "Pack non installé",
+    "emptyDefault": "Aucune ligne pour cette année.",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "Télécharger le PDF"
     },
-    "description": "Chaque déclaration annuelle et trimestrielle prévue par les modules de paie installés, établie à partir des bulletins comptabilisés — chaque case est rapprochée des traces de bulletins.",
-    "noFilings": "Aucune déclaration de fin d'année de paie n'est prévue pour cette organisation.",
-    "title": "Fin d'année"
+    "issue": {
+      "reason": "Motif d’émission",
+      "reasonHelp": "La case 16 est la déclaration de l’employeur sur la raison de l’arrêt de rémunération. Choisir un motif inclut cet employé dans le fichier du RE Web; le laisser vide l’en exclut.",
+      "comment": "Commentaire",
+      "notIncluded": "Non inclus dans le fichier",
+      "included": "Inclus dans le fichier — motif {code}",
+      "commentRequired": "Un commentaire est exigé pour ce code de motif."
+    },
+    "lifecycle": {
+      "title": "État de la déclaration",
+      "statusColumn": "État de la déclaration",
+      "help": "Une déclaration émise est la preuve de ce qui a été déclaré à l’organisme, donc elle n’est jamais écrasée : une correction est un nouvel artefact qui la remplace, et le fichier original reste téléchargeable. Les montants sont toujours recalculés à partir des bulletins comptabilisés — corrigez les données de paie, puis modifiez.",
+      "history": "Historique des déclarations",
+      "recordOriginal": "Consigner comme produit",
+      "note": "Note de déclaration",
+      "notePlaceholder": "Comment elle a été produite (facultatif)",
+      "notIssued": "Pas encore consigné comme produit.",
+      "issuedCount": "Artefacts émis",
+      "latest": "Le plus récent",
+      "changedCount": "Modifiés depuis la production",
+      "absentCount": "Plus au registre",
+      "resurrectedCount": "Annulé mais toujours au registre",
+      "slipsCovered": "Feuillets couverts",
+      "supersedes": "remplace",
+      "noArtifact": "Aucun fichier électronique — l’instantané du feuillet ci-dessous fait foi.",
+      "correction": "Correction",
+      "correctionForm": "Formulaire de correction",
+      "correctionHelp": "Modifier redresse un feuillet qui devrait exister; annuler déclare que le feuillet n’aurait jamais dû exister. Les chiffres sont recalculés à partir des bulletins comptabilisés — ils ne sont jamais saisis par-dessus — donc corrigez d’abord les données de paie et la modification suivra.",
+      "unfiledHelp": "Ce feuillet n’a pas été consigné comme produit, donc il n’y a rien à corriger.",
+      "addedHelp": "Ce feuillet est apparu après la production de la déclaration. Un feuillet découvert plus tard se produit comme un original supplémentaire, et non comme une correction, et cela ne se fait pas ici — produisez-le par le service de l’organisme lui-même.",
+      "absentHelp": "Le registre de paie ne produit plus ce feuillet, donc il n’y a rien à redresser. Annulez-le pour que l’organisme cesse de le détenir.",
+      "resurrectedHelp": "Ce feuillet a été annulé, mais le registre de paie le produit toujours. Annulez ou ajustez la paie sous-jacente, sinon la prochaine déclaration le produira de nouveau.",
+      "box": "Case",
+      "field": "Champ",
+      "asFiled": "Tel que produit",
+      "now": "Maintenant",
+      "redacted": "Modifié — valeur non affichée",
+      "previewAmended": "Aperçu de la correction",
+      "issueAmended": "Émettre la modification",
+      "previewCancelled": "Aperçu de l’annulation",
+      "issueCancelled": "Annuler ce feuillet",
+      "status": {
+        "unfiled": "Non produit",
+        "unchanged": "Produit",
+        "changed": "Modifié depuis la production",
+        "absent": "Plus au registre",
+        "withdrawn": "Annulé",
+        "resurrected": "Annulé mais toujours au registre"
+      }
+    },
+    "run": {
+      "title": "{label}",
+      "help": "Tous ceux que cette déclaration couvre, avec les chiffres qu’elle portera. Ne produisez le fichier qu’une fois les lignes exactes — une déclaration émise fait foi, et la corriger exige une modification plutôt qu’une retouche.",
+      "issue": "Consigner comme produit",
+      "viewAll": "Tout voir"
+    }
+  },
+  "separations": {
+    "title": "Départs",
+    "description": "Les déclarations de cessation d’emploi prévues par les packs de paie installés — dues dans les jours suivant une interruption de rémunération, par événement d’employé, et non en fin d’année.",
+    "noFilings": "Aucune déclaration de cessation d’emploi n’est prévue pour cette organisation.",
+    "run": {
+      "title": "Émettre {label}",
+      "help": "Une déclaration de cessation d’emploi est due dans les jours suivant l’interruption de rémunération — émettez-la depuis cette paie, par employé, plutôt que d’attendre la fin d’année.",
+      "issue": "Vérifier et émettre",
+      "viewAll": "Tous les départs"
+    }
+  },
+  "register": {
+    "title": "Registre de paie",
+    "print": "Imprimer",
+    "cppFica": "RPC / FICA",
+    "otherDeductions": "Autres retenues",
+    "totals": "Totaux ({count, plural, one {# employé} other {# employés}})"
+  },
+  "entitlements": {
+    "title": "Banques de paie",
+    "hint": "Temps mis en banque, vacances et tout solde que cet employé doit rembourser. Les soldes sont le registre des droits — ils bougent par la paie, jamais en modifiant un chiffre.",
+    "managePlans": "Gérer les régimes",
+    "noPlans": "Aucun régime de droits n’est encore configuré pour cette organisation.",
+    "noMovements": "Aucun mouvement pour l’instant.",
+    "overLimit": "Au-delà du plafond",
+    "nearLimit": "Près du plafond",
+    "hoursSuffix": "h",
+    "hoursAtWage": "{hours} heures au salaire actuel de {wage}/h",
+    "worthToday": "Vaut {amount} au salaire d’aujourd’hui",
+    "owedBack": "Dû à l’employeur — récupéré sur les paies futures.",
+    "limitLine": "Plafond de {limit} (fixé par {scope})",
+    "plan": "Régime",
+    "amount": "Montant",
+    "source": "Source",
+    "movementDate": "Date",
+    "movementKind": "Type",
+    "scope": {
+      "employee": "cet employé",
+      "job_title": "le titre d’emploi",
+      "trade": "le métier",
+      "department": "le département",
+      "subsidiary": "l’entité juridique",
+      "plan": "le défaut du régime"
+    },
+    "kind": {
+      "opening": "Ouverture",
+      "accrual": "Accumulation",
+      "bank_in": "Mise en banque",
+      "payout": "Paiement",
+      "repayment": "Remboursement",
+      "adjustment": "Ajustement"
+    }
+  },
+  "paymentMethod": {
+    "eft": "Dépôt direct",
+    "cheque": "Chèque",
+    "inherit": "Utiliser le défaut de l’employé",
+    "help": "Laissez le défaut pour suivre la fiche de l’employé : dépôt direct lorsque des coordonnées bancaires approuvées existent, sinon un chèque imprimé."
+  },
+  "openingBalances": {
+    "title": "Soldes d’ouverture",
+    "description": "Tout ce que chaque employé apporte de votre ancien système de paie : cumuls légaux de l’année, plafonds annuels déjà partiellement utilisés, et soldes de vacances et de temps mis en banque. Rien d’autre ne fournit ces données, donc sans elles chaque plafond et chaque banque repart de zéro.",
+    "hint": "Copiez-les depuis le rapport des cumuls annuels du fournisseur sortant, en date de la veille de votre première période de paie ici. Laissez un employé vide s’il n’a reçu aucune paie de votre part plus tôt dans l’année.",
+    "yearLabel": "Année d’imposition",
+    "employee": "Employé",
+    "onlyMissing": "Seulement les employés sans report",
+    "bulkImport": "Charger en masse depuis un fichier",
+    "export": "Exporter",
+    "entered": "Reporté",
+    "locked": "Verrouillé",
+    "lockedShort": "verrouillé",
+    "lockedBy": "Paie comptabilisée",
+    "none": "aucun",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Soldes d’ouverture enregistrés.",
+    "saveFailed": "Rien n’a été enregistré.",
+    "rejected": "Rien n’a été enregistré — corrigez d’abord ces erreurs.",
+    "empty": "Aucun employé n’a encore de dossier de paie actif.",
+    "fields": {
+      "pensionableYtd": "Salaires admissibles / FICA",
+      "insurableYtd": "Salaires assurables / chômage",
+      "cppYtd": "Cotisations RPC",
+      "cpp2Ytd": "Cotisations RPC2",
+      "eiYtd": "Cotisations AE",
+      "qpipYtd": "Cotisations QPIP",
+      "taxableYtd": "Gains imposables",
+      "taxYtd": "Impôt retenu",
+      "nonPeriodicYtd": "Primes / gains supplémentaires",
+      "cpp2BonusYtd": "Cotisations CPP2 sur primes",
+      "qcCsbYtd": "Cotisations QPP additionnelles sur primes",
+      "ficaWithheldYtd": "Impôt FICA retenu",
+      "qpipEmployerYtd": "Cotisations QPIP de l'employeur",
+      "wcbAssessableYtd": "Gains assurables WCB"
+    },
+    "componentHelp": "La part du plafond annuel de cette composante que l’employé a déjà utilisée cette année, dans votre ancien système de paie. Sans elle, le plafond repart de zéro et l’employé peut cotiser un deuxième plafond annuel complet.",
+    "componentCap": "Plafond annuel",
+    "componentInertHelp": "Cette composante n’a plus de plafond annuel, donc le montant ci-dessous ne change rien et ne peut pas être modifié. Il est conservé parce que quelqu’un l’a saisi et qu’un plafond pourrait être fixé de nouveau.",
+    "entitlements": {
+      "title": "Reports de banques (vacances, temps mis en banque)",
+      "employee": "Employé",
+      "asOf": "Reporté en date du",
+      "asOfHelp": "La date d’adoption du report. Une paie ne compte que les mouvements datés au plus tard à sa date de paie, donc cette date doit précéder votre première paie ici. Ce n’est pas une année d’imposition : une banque a un seul solde à vie.",
+      "entered": "Reporté",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Reports de banques enregistrés.",
+      "saveFailed": "Rien n’a été enregistré.",
+      "rejected": "Rien n’a été enregistré — corrigez d’abord ces erreurs.",
+      "bulkImport": "Charger en masse depuis un fichier",
+      "export": "Exporter",
+      "empty": "Aucun employé n’a encore de dossier de paie actif.",
+      "noPlans": "Aucun régime de droits n’est configuré, donc aucune banque ne peut recevoir de solde reporté.",
+      "configurePlans": "Configurer les régimes de droits",
+      "lockedBy": "Paie comptabilisée",
+      "blocked": "Payé le",
+      "blockedHint": "datez le report après cette date",
+      "legacyShort": "historique",
+      "legacyTitle": "Soldes de vacances non migrés trouvés",
+      "legacyBody": "Ces employés portent un solde de vacances sur l’ancienne colonne des soldes d’ouverture qu’aucune banque ne montre. C’est un passif que personne ne suit. Chargez-le ici, ou exécutez scripts/migrate-vacation-to-entitlements.ts pour rejouer tout l’historique.",
+      "legacyPrefill": "Copier dans la colonne Vacances",
+      "moneyHelp": "Le solde reporté, en dollars. Les banques sont stockées comme l’argent au taux où il a été gagné, et affichées en heures au salaire actuel de l’employé.",
+      "hoursHelp": "Le solde reporté, en heures.",
+      "oweHelp": "Un solde que L’EMPLOYÉ doit à l’employeur, donc négatif — saisissez −1200 pour un découvert de 1 200. Il est récupéré sur les paies futures jusqu’à atteindre exactement zéro."
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "L’entité juridique ne peut pas traiter de paie",
+    "jurisdictionEmployee": "La juridiction de l’employé ne correspond pas à l’entité payeuse"
+  },
+  "parallelRun": {
+    "title": "Paie parallèle",
+    "description": "Vérifiez une période de paie contre le système de paie que vous quittez, au cent près. Importez le registre de l’ancien fournisseur, choisissez la paie qui couvre la même période, et comparez.",
+    "compare": "Comparer",
+    "comparing": "Comparaison…",
+    "compareFailed": "La comparaison n’a pas pu s’exécuter.",
+    "cleanToast": "Chaque montant est rapproché exactement.",
+    "toleranceToast": "Rapproché, avec une tolérance appliquée.",
+    "differencesToast": "Écarts trouvés — ouvrez la comparaison.",
+    "importRegister": "Importer un registre",
+    "export": "Exporter",
+    "tolerances": "Tolérances",
+    "tolerancesDescription": "Chaque composante se compare exactement par défaut. N’ajoutez une marge que là où l’ancien système arrondit vraiment différemment — elle sera montrée sur chaque comparaison qui l’utilise.",
+    "addTolerance": "Ajouter une tolérance",
+    "toleranceSaved": "Tolérance enregistrée.",
+    "noTolerances": "Aucune tolérance n’est configurée — chaque composante se compare exactement.",
+    "comparisonsTitle": "Comparaisons",
+    "noComparisons": "Aucune comparaison n’a encore été exécutée.",
+    "registersTitle": "Registres importés",
+    "noRegisters": "Aucun registre antérieur n’a encore été importé. Commencez par Importer un registre.",
+    "noRegistersRow": "Rien d’importé pour l’instant.",
+    "registerDiscarded": "Le registre importé a été abandonné.",
+    "discard": "Abandonner",
+    "openReport": "Ouvrir le rapport de rapprochement",
+    "periodMismatch": "Ces deux côtés couvrent des dates de paie différentes. Les comparer rapportera des écarts qui sont vraiment un décalage de période.",
+    "emptyRegister": "Ce registre ne contient aucun employé. Une comparaison contre lui rapportera « Rien n’a été comparé », et non un résultat net.",
+    "unmappedWarning": "Des colonnes de ce registre n’ont jamais été mappées :",
+    "unmappedTitle": "Colonnes sources que personne n’a mappées",
+    "nothingCompared": "Rien n’a été comparé",
+    "toleranceTitle": "Tolérances en vigueur",
+    "showMatches": "Afficher les concordances exactes",
+    "clearEmployee": "Tous les employés",
+    "cleanNote": "Chaque montant comparé concordait au cent près, sans tolérance ni colonne non mappée.",
+    "noFindings": "Cette comparaison ne contient aucun constat du tout.",
+    "noExceptions": "Aucune exception — chaque cellule concordait exactement.",
+    "loading": "Chargement…",
+    "saving": "Enregistrement…",
+    "exact": "exact",
+    "notPresent": "absent",
+    "allMapped": "Tous mappés",
+    "matched": "concordent",
+    "differ": "diffèrent",
+    "oneSidedShort": "unilatéral",
+    "toleratedShort": "toléré",
+    "employeesShort": "employés",
+    "amountsShort": "montants",
+    "rowsShort": "ligne(s)",
+    "valuedRows": "portaient une valeur dans",
+    "comparedOf": "comparés sur",
+    "onRegister": "au registre",
+    "inRun": "dans la paie",
+    "fromColumn": "de",
+    "paid": "payé",
+    "vsOurs": "les nôtres",
+    "columns": {
+      "outcome": "Résultat",
+      "register": "Registre antérieur",
+      "payRun": "Paie",
+      "compared": "Comparés",
+      "differences": "Écarts",
+      "netDifference": "Écart net",
+      "comparedAt": "Comparé",
+      "loaded": "Chargé",
+      "stated": "Brut / net déclarés",
+      "unmapped": "Colonnes non mappées",
+      "employee": "Employé",
+      "component": "Composante",
+      "priorSystem": "Ancien système",
+      "thisSystem": "Ce système",
+      "difference": "Écart",
+      "tolerance": "Tolérance",
+      "result": "Résultat"
+    },
+    "fields": {
+      "register": "Registre antérieur",
+      "registerPlaceholder": "Choisir un registre…",
+      "payRun": "Notre paie",
+      "payRunPlaceholder": "Choisir une paie…",
+      "component": "Composante",
+      "componentPlaceholder": "Choisir…",
+      "tolerance": "Marge",
+      "reason": "Motif"
+    },
+    "kinds": {
+      "earning": "Gain",
+      "deduction": "Retenue",
+      "employer_contribution": "Cotisation patronale",
+      "total": "Total déclaré"
+    },
+    "statuses": {
+      "clean": "Rapproché exactement",
+      "clean_within_tolerance": "Rapproché dans la tolérance",
+      "differences": "Écarts à régler",
+      "no_comparable_data": "Rien n’a été comparé"
+    },
+    "classes": {
+      "match": "Concordance exacte",
+      "within_tolerance": "Dans la tolérance",
+      "difference": "Écart",
+      "prior_only": "Seulement dans l’ancien système",
+      "our_only": "Seulement ici",
+      "employee_prior_only": "Employé absent de notre paie",
+      "employee_our_only": "Employé absent du registre",
+      "unattributed": "Inexpliqué par aucune composante"
+    },
+    "tiles": {
+      "gross": "Brut",
+      "net": "Net",
+      "unattributed": "Net inexpliqué",
+      "cells": "Cellules"
+    },
+    "help": {
+      "register": "Un registre importé du système de paie que vous quittez — une période de paie, une ligne par employé. Chargez-le par Importation et exportation, ressource « Registre de paie antérieur », où vous mappez les noms de colonnes de l’ancien système sur les composantes de cette paie.",
+      "payRun": "La paie à vérifier. Les paies calculées comptent : le but d’une paie parallèle est de prouver les chiffres avant que l’argent sorte. Une paie à l’état de brouillon n’a pas de bulletins et ne peut pas être comparée.",
+      "compared": "Employés présents des DEUX côtés, sur le compte propre de chaque côté. Une comparaison qui n’a comparé personne est rapportée comme « Rien n’a été comparé », jamais comme une concordance.",
+      "unmapped": "Colonnes de votre fichier qu’aucune composante n’a réclamées. Rien de ce qu’elles contiennent n’est comparé, donc un montant pourrait y reposer sans comptabilisation. Réimportez avec elles mappées, ou confirmez qu’elles ne portent pas d’argent.",
+      "tolerance": "Chaque composante se compare exactement sauf si quelqu’un a configuré une marge pour elle. Toute marge en vigueur est montrée ici et sur la comparaison, parce qu’une tolérance que personne ne peut voir irait contre tout l’exercice.",
+      "unattributed": "La part de l’écart net que les composantes comparées n’expliquent pas. Tout autre que zéro signifie qu’un montant a bougé un total sans composante comparable derrière — le plus souvent une colonne source que personne n’a mappée.",
+      "toleranceSlot": "La composante, ou l’un des totaux déclarés du registre. Une tolérance est par employé, par période.",
+      "toleranceAmount": "Un montant absolu, jamais un pourcentage : un pourcentage d’une base mouvante, c’est comme ça qu’une tolérance grandit en silence. Zéro retire la marge.",
+      "toleranceReason": "Exigé. Accepter de cesser de regarder un écart est une décision qui doit être attribuable à quelqu’un et à un motif."
+    }
+  },
+  "workSchedules": {
+    "title": "Horaires de travail",
+    "description": "Les heures et les jours que chaque employé travaille normalement. Plusieurs juridictions calculent l’indemnité de jour férié à partir de ceci — le salaire d’une journée normale de travail — et refuseront de calculer plutôt que de supposer une journée de huit heures pour quelqu’un dont l’horaire n’est pas consigné.",
+    "add": "Nouvel horaire",
+    "editTitle": "Horaire de travail",
+    "drawerDescription": "S’applique à partir de la date de début jusqu’à son remplacement ou sa fin. L’indemnité de jour férié d’une période passée se résout toujours selon l’horaire en vigueur alors, jamais celui d’aujourd’hui.",
+    "empty": "Aucun horaire de travail pour l’instant.",
+    "columns": {
+      "appliesTo": "S’applique à",
+      "pattern": "Horaire",
+      "effectiveFrom": "En vigueur",
+      "status": "Statut"
+    },
+    "scope": {
+      "organization": "Tout le monde",
+      "employee": "Un employé",
+      "jobTitle": "Titre d’emploi",
+      "trade": "Métier",
+      "department": "Département",
+      "subsidiary": "Filiale"
+    },
+    "pattern": {
+      "cycle": "Un horaire répétitif",
+      "cycleHint": "Un cycle de jours qui se répète — sept jours pour une semaine ordinaire, quatorze pour une quinzaine comprimée, huit pour une rotation de quatre jours de travail et quatre jours de congé.",
+      "varies": "Heures variables",
+      "variesHint": "Aucun horaire régulier; les heures sont fixées période par période. C’est une vraie réponse, pas un blanc — plusieurs juridictions paient un employé à heures variables selon une formule différente, et c’est de le consigner qui leur permet de calculer."
+    },
+    "summary": {
+      "cycle": "{hours} heures sur {days} jours par {cycle}",
+      "week": "semaine",
+      "cycleDays": "cycle de {count} jours",
+      "total": "{hours} heures sur {days} jours travaillés par cycle."
+    },
+    "fields": {
+      "name": "Nom",
+      "namePlaceholder": "Temps plein, du lundi au vendredi",
+      "appliesTo": "S’applique à",
+      "selectEmployee": "Choisir un employé",
+      "selectScope": "Choisir un",
+      "effectiveFrom": "En vigueur à partir du",
+      "effectiveTo": "En vigueur jusqu’au",
+      "pattern": "Horaire",
+      "cycleDays": "Durée du cycle (jours)",
+      "cycleAnchor": "Premier jour du cycle",
+      "hours": "Heures par jour"
+    },
+    "help": {
+      "scope": "L’horaire le plus précis l’emporte : un employé bat un titre d’emploi, qui bat un métier, puis un département, puis une filiale, puis tout le monde. Le même ordre dans lequel se résolvent les salaires et les plafonds des droits.",
+      "effectiveFrom": "Comparé à la DATE DE TRAVAIL, jamais à aujourd’hui. Quelqu’un qui passe de temps plein à temps partiel en mars garde son indemnité de jour férié de janvier calculée sur l’horaire à temps plein.",
+      "pattern": "Si l’employé suit un horaire répétitif, ou n’a aucun horaire régulier du tout. La différence décide de la formule qu’utilisent plusieurs juridictions.",
+      "cycleDays": "Le nombre de jours avant que l’horaire se répète. Sept, c’est la semaine ordinaire. Quatorze exprime une quinzaine comprimée de neuf jours; huit exprime une rotation de quatre jours de travail et quatre jours de congé qui ne s’aligne délibérément jamais sur la semaine.",
+      "cycleAnchor": "Le jour à partir duquel le cycle commence à compter. Pour un horaire hebdomadaire, c’est un dimanche, donc les cases ci-dessous sont étiquetées de dimanche à samedi.",
+      "hours": "Les heures normalement travaillées à chaque position du cycle. Laissez un jour vide pour un jour de congé. C’est à partir de ces heures que se calcule l’indemnité de jour férié d’une journée normale de travail : une semaine de quatre jours de dix heures vaut donc dix heures par jour férié, et non huit."
+    },
+    "grid": {
+      "sunday": "Dimanche",
+      "monday": "Lundi",
+      "tuesday": "Mardi",
+      "wednesday": "Mercredi",
+      "thursday": "Jeudi",
+      "friday": "Vendredi",
+      "saturday": "Samedi",
+      "day": "Jour {n}",
+      "weekDay": "Semaine {week} · {day}"
+    }
+  },
+  "retro": {
+    "title": "Rappel de paie"
   }
 }
