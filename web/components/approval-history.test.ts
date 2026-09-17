@@ -59,3 +59,21 @@ test('bank-account dialog and expense approvals tab opt into empty bodies', () =
     'expense report Approvals tab must render loading/pending/empty, never a blank panel',
   )
 })
+
+// F-t04-004 residual: a record whose status claims it awaits approval, but
+// which no flow run ever fired for, is neither history nor genuinely empty —
+// the tab must name the stale state instead of "No approvals required".
+test('a pending record never sent to any flow resolves its own tab body', () => {
+  assert.equal(
+    approvalTabBody({
+      history: [],
+      approvalState: { pendingWith: [], status: 'pending' },
+      neverSubmitted: true,
+    }),
+    'unsubmitted',
+  )
+  assert.equal(
+    approvalTabBody({ history: [], approvalState: { pendingWith: [], status: 'pending' } }),
+    'empty',
+  )
+})

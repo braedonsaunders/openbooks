@@ -592,9 +592,11 @@ export type SeedAssignee =
   | { type: "supervisor" };
 
 /**
- * Seed an enabled on_submit approval flow: trigger → gate, with NO downstream
+ * Seed an enabled approval flow: trigger → gate, with NO downstream
  * change_status node — so tests prove the ENGINE releases the document
- * deterministically (not an authored side-effect).
+ * deterministically (not an authored side-effect). The trigger defaults to
+ * on_submit (documents); lifecycle subjects seed their own entry event
+ * (e.g. on_create for pre-flow bank details, F-t04-004 residual).
  */
 export async function seedApprovalFlow(
   orgId: string,
@@ -604,6 +606,7 @@ export async function seedApprovalFlow(
     mode: "any" | "all";
     preventSelfApproval?: boolean;
     gateTitle?: string;
+    trigger?: string;
   },
 ): Promise<{ flowId: string; gateNodeId: string }> {
   await assertFixtureDatabase();
@@ -612,7 +615,7 @@ export async function seedApprovalFlow(
   const graph = {
     schemaVersion: 1,
     nodes: [
-      { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: opts.trigger ?? "on_submit" } } },
       {
         id: gateNodeId,
         position: { x: 220, y: 0 },

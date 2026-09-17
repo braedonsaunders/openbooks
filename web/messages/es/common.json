@@ -269,8 +269,12 @@
     "waitingOthers": "Registrado — a la espera de los demás aprobadores",
     "alreadyDecided": "Esta aprobación ya fue decidida — actualizando",
     "decisionFailed": "La decisión falló",
+    "submitRun": "Enviar para aprobación",
+    "submitted": "Enviado al flujo de aprobación — la nueva aprobación está en la lista de trabajo",
+    "submitFailed": "Error al enviar",
     "historyTitle": "Aprobaciones",
     "historyEmpty": "No se requieren aprobaciones para este registro.",
+    "historyNeverSubmitted": "En espera de aprobación — este registro nunca se envió al flujo de aprobación.",
     "events": {
       "submitted": "Enviado para aprobación",
       "requested": "Aprobación solicitada",

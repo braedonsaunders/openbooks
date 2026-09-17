@@ -75,6 +75,14 @@ export interface RecordApprovalState {
    * offer a retry; null when the latest run did not fail.
    */
   failedRun: { id: string; error: string | null; at: string } | null
+  /**
+   * No flow run ever fired for this subject and no gate is live
+   * (F-t04-004 residual): a record born pending before its flow existed.
+   * The engine never saw it, so it can never appear in the approvals
+   * centre — the drawer must offer to submit it into the current flow
+   * instead of claiming no approvals are required.
+   */
+  neverSubmitted: boolean
   /** Whether the caller may retry a failed run (flows.manage). */
   canRetry: boolean
 }
@@ -245,6 +253,8 @@ export async function GET(req: Request) {
             at: iso(latestRun.finishedAt),
           }
         : null,
+    neverSubmitted:
+      runs.rows.length === 0 && pendingWith.length === 0,
     canRetry: can(authz, 'flows.manage'),
   }
   return NextResponse.json(body)

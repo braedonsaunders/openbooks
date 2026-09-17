@@ -62,21 +62,26 @@ function relativeTime(iso: string, locale: string): string {
   return rtf.format(Math.round(seconds), 'second')
 }
 
-export type ApprovalTabBodyKind = 'loading' | 'pending' | 'empty' | 'history'
+export type ApprovalTabBodyKind = 'loading' | 'pending' | 'empty' | 'history' | 'unsubmitted'
 
 /**
  * Which body the Approvals surface shows (F-t02-003: the tab rendered a
  * completely blank panel while loading and when no flow applied). History
  * wins over a concurrent pending gate; a pending flow with no events yet
- * still names who holds it.
+ * still names who holds it. A record whose status still claims it awaits
+ * approval, but which no flow run ever fired for (F-t04-004 residual:
+ * pre-flow bank details), is neither history nor genuinely empty — it gets
+ * its own body naming the stale state.
  */
 export function approvalTabBody(state: {
   history: unknown[]
-  approvalState: { pendingWith: unknown[] }
+  approvalState: { pendingWith: unknown[]; status?: string }
+  neverSubmitted?: boolean
 } | null): ApprovalTabBodyKind {
   if (!state) return 'loading'
   if (state.history.length > 0) return 'history'
   if (state.approvalState.pendingWith.length > 0) return 'pending'
+  if (state.neverSubmitted && state.approvalState.status === 'pending') return 'unsubmitted'
   return 'empty'
 }
 
@@ -119,6 +124,13 @@ export function ApprovalHistory({
       return (
         <p className="px-1 py-6 text-sm text-slate-600 dark:text-slate-300">
           {t('approvalFlow.pendingWith', { names: names || '—' })}
+        </p>
+      )
+    }
+    if (kind === 'unsubmitted') {
+      return (
+        <p className="px-1 py-6 text-sm text-slate-600 dark:text-slate-300">
+          {t('approvalFlow.historyNeverSubmitted')}
         </p>
       )
     }

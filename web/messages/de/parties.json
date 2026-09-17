@@ -171,6 +171,7 @@
     "bankAccountAdded": "Bankkonto zur Genehmigung hinzugefügt",
     "bankAccountUpdated": "Bankkonto aktualisiert und erneut zur Genehmigung eingereicht",
     "bankAccountSaveFailed": "Bankkonto konnte nicht gespeichert werden",
+    "bankAccountStaleRevision": "Diese Bankverbindung wurde geändert, nachdem Sie sie geöffnet haben. Die Liste wurde aktualisiert — öffnen Sie den Datensatz erneut und versuchen Sie es noch einmal.",
     "bankAccountValidation": {
       "bankName": "Geben Sie einen Namen der Bank ein",
       "accountNumber": "Geben Sie eine Kontonummer mit mindestens vier Zeichen ein",

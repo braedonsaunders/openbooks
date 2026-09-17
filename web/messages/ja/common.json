@@ -231,8 +231,12 @@
     "waitingOthers": "記録しました — 他の承認者を待っています",
     "alreadyDecided": "この承認はすでに決定されています — 更新しています",
     "decisionFailed": "決定に失敗しました",
+    "submitRun": "承認に送信",
+    "submitted": "承認フローに送信しました — 新しい承認が作業リストにあります",
+    "submitFailed": "送信に失敗しました",
     "historyTitle": "承認",
     "historyEmpty": "このレコードに必要な承認はありません。",
+    "historyNeverSubmitted": "承認待ち — このレコードは承認フローに送信されていません。",
     "events": {
       "submitted": "承認申請しました",
       "requested": "承認を依頼しました",

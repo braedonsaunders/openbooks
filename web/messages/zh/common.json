@@ -231,8 +231,12 @@
     "waitingOthers": "已记录——等待其他审批人",
     "alreadyDecided": "此审批已作出决定——正在刷新",
     "decisionFailed": "决定失败",
+    "submitRun": "提交审批",
+    "submitted": "已发送到审批流 — 新的审批已加入工作清单",
+    "submitFailed": "提交失败",
     "historyTitle": "审批",
     "historyEmpty": "此记录无需审批。",
+    "historyNeverSubmitted": "等待审批 — 此记录从未发送到审批流。",
     "events": {
       "submitted": "已提交审批",
       "requested": "已请求审批",

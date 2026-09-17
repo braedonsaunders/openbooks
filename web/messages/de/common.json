@@ -231,8 +231,12 @@
     "waitingOthers": "Erfasst — Warten auf die übrigen Genehmiger",
     "alreadyDecided": "Über diese Genehmigung wurde bereits entschieden — wird aktualisiert",
     "decisionFailed": "Entscheidung fehlgeschlagen",
+    "submitRun": "Zur Genehmigung einreichen",
+    "submitted": "An den Genehmigungsablauf gesendet — die neue Genehmigung steht auf der Arbeitsliste",
+    "submitFailed": "Einreichen fehlgeschlagen",
     "historyTitle": "Genehmigungen",
     "historyEmpty": "Für diesen Datensatz sind keine Genehmigungen erforderlich.",
+    "historyNeverSubmitted": "Wartet auf Genehmigung — dieser Datensatz wurde nie an den Genehmigungsablauf gesendet.",
     "events": {
       "submitted": "Zur Genehmigung eingereicht",
       "requested": "Genehmigung angefordert",

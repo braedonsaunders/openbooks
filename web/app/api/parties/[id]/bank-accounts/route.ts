@@ -65,7 +65,7 @@ function canonicalRevision(value: unknown): string | null {
 }
 
 /** Party record boundary shared by every verb here (null-subsidiary parties are org-wide). */
-async function denyOutsidePartyScope(gate: Authz, partyId: string): Promise<NextResponse | null> {
+export async function denyOutsidePartyScope(gate: Authz, partyId: string): Promise<NextResponse | null> {
   const row = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${gate.user.orgId}`,
   ))
