@@ -1164,7 +1164,8 @@
       },
       "tabs": {
         "billing": "Tarifas faturadas"
-      }
+      },
+      "navTitle": "Custo de mão de obra"
     },
     "taxLibrary": {
       "title": "Biblioteca de declarações fiscais",
@@ -1188,7 +1189,7 @@
       "usNotice": "Os Estados Unidos não têm declaração federal de imposto sobre vendas. Este papel de trabalho deve ser personalizado para cada jurisdição estadual e local de apuração."
     },
     "assetDepreciationSetup": {
-      "navTitle": "Book Depreciation",
+      "navTitle": "Depreciação contábil",
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
@@ -1321,7 +1322,10 @@
       "assets": "Ativos",
       "currency": "Moeda",
       "revenue": "Receita",
-      "inventory": "Estoque"
+      "inventory": "Estoque",
+      "projects": "Projetos",
+      "compliance": "Conformidade",
+      "agents": "Agentes"
     },
     "fxProvider": {
       "title": "Provedor de taxas de câmbio",
@@ -1728,6 +1732,77 @@
         "title": "Alíquotas de imposto de renda",
         "singularTitle": "Alíquota de IR",
         "description": "Alíquotas promulgadas por jurisdição, com vigência — alimentam a provisão ASC 740."
+      },
+      "tax-jurisdictions": {
+        "title": "Jurisdições de Imposto"
+      },
+      "tax-registrations": {
+        "title": "Nexo de Imposto"
+      },
+      "tax-regimes": {
+        "title": "Regimes de depreciação fiscal"
+      },
+      "tax-pool-classes": {
+        "title": "Classes de depreciação fiscal"
+      },
+      "tax-first-year-rules": {
+        "title": "Regras do primeiro ano"
+      },
+      "pay-schedules": {
+        "title": "Cronogramas de folha"
+      },
+      "pay-components": {
+        "title": "Verbas"
+      },
+      "union-agreements": {
+        "title": "Acordos sindicais"
+      },
+      "subsidiary-ownership-interests": {
+        "title": "Participações em subsidiárias"
+      },
+      "allocations": {
+        "title": "Rateios"
+      },
+      "overhead-model": {
+        "title": "Custos indiretos",
+        "application": {
+          "systemRule": {
+            "title": "Regra central de rateio"
+          }
+        }
+      },
+      "compliance-classes": {
+        "title": "Classes de contrapartes"
+      },
+      "compliance-requirements": {
+        "title": "Requisitos de conformidade"
+      },
+      "information-return-box-rules": {
+        "title": "Campos de declarações informativas"
+      },
+      "payroll-filing-accounts": {
+        "title": "Contas de recolhimento"
+      },
+      "entitlement-plans": {
+        "title": "Planos de direitos"
+      },
+      "entitlement-plan-limits": {
+        "title": "Limites dos bancos"
+      },
+      "entitlement-service-tiers": {
+        "title": "Cronogramas de tempo de serviço"
+      },
+      "pay-derived-rules": {
+        "title": "Proventos calculados"
+      },
+      "trades": {
+        "title": "Ofícios"
+      },
+      "payroll-holidays": {
+        "title": "Feriados"
+      },
+      "extension-settings": {
+        "title": "Configurações de aplicativos"
       }
     },
     "fields": {
@@ -2015,7 +2090,7 @@
       }
     },
     "bankFeeds": {
-      "navTitle": "Bank Feeds"
+      "navTitle": "Feeds bancários"
     },
     "paymentProviders": {
       "title": "Provedores de pagamento",
@@ -2058,12 +2133,34 @@
       "copy": "Copiar",
       "copied": "Copiado",
       "testConnection": "Testar conexão",
-      "testing": "Testando…"
+      "testing": "Testando…",
+      "navTitle": "Provedores de pagamento"
     },
     "agents": {
       "overview": {
         "scanAlreadyRunning": "Já há uma varredura em execução."
+      },
+      "nav": {
+        "overview": "Visão geral",
+        "library": "Biblioteca",
+        "activity": "Atividade"
       }
+    },
+    "readiness": {
+      "navTitle": "Guia de entrada em operação"
+    },
+    "features": {
+      "runWizard": "Executar o assistente de configuração",
+      "navTitle": "Funcionalidades"
+    },
+    "invoicing": {
+      "navTitle": "Faturamento"
+    },
+    "taxSetup": {
+      "navTitle": "Configuração fiscal"
+    },
+    "payroll": {
+      "navTitle": "Folha de pagamento"
     }
   },
   "flows": {

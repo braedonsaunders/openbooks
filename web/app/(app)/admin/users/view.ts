@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
@@ -75,6 +75,9 @@ export async function loadAdminUsers(
   const t = await getTranslations('admin.users')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
+  // Sign-in timestamps render in the viewer's locale (F-t01-014), not the
+  // en-CA formatter default.
+  const locale = await getLocale()
   const orgId = authz.user.orgId
   const listParams = parseListParams(sp, {
     sort: 'name',
@@ -180,7 +183,7 @@ export async function loadAdminUsers(
           ? t('statusActive')
           : t('statusInactive'),
       statusVariant: u.is_pending ? 'warning' : u.is_active ? 'success' : 'destructive',
-      lastSignIn: u.last_login_at ? dateTime(u.last_login_at) : '—',
+      lastSignIn: u.last_login_at ? dateTime(u.last_login_at, locale) : '—',
       assigned: rolesByUser.get(u.id) ?? [],
     })),
     allRoles: allRoles.map((r) => ({ id: r.id, name: r.name, isBuiltIn: r.is_built_in })),

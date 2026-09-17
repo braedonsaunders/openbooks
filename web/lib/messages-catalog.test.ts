@@ -717,6 +717,152 @@ test('cash cockpit and chart copy are present in every locale and translated', (
   }
 })
 
+test('setup sidebar and header copy are present in every locale and translated', () => {
+  // The Setup rail (F-t06-024, F-t11-013, F-t01-014) renders these keys;
+  // a missing key falls back to English and a pasted-English value reads
+  // as untranslated chrome. "CRM" is the correct label in all six locales
+  // (initialism, not a paste) and is pinned to that exact term.
+  const keys = [
+    'admin.setup.title',
+    'admin.setup.description',
+    'admin.setup.readiness.navTitle',
+    'admin.setup.features.runWizard',
+    'admin.setup.features.navTitle',
+    'admin.setup.bankFeeds.navTitle',
+    'admin.setup.paymentProviders.navTitle',
+    'admin.setup.invoicing.navTitle',
+    'admin.setup.taxSetup.navTitle',
+    'admin.setup.fxProvider.title',
+    'admin.setup.laborCosting.navTitle',
+    'admin.setup.payroll.navTitle',
+    'admin.setup.assetDepreciationSetup.navTitle',
+    'admin.setup.taxDepreciationSetup.navTitle',
+    'admin.setup.agents.nav.overview',
+    'admin.setup.agents.nav.library',
+    'admin.setup.agents.nav.activity',
+    'admin.setup.groups.company',
+    'admin.setup.groups.accounting',
+    'admin.setup.groups.taxes',
+    'admin.setup.groups.dimensions',
+    'admin.setup.groups.projects',
+    'admin.setup.groups.compliance',
+    'admin.setup.groups.billing',
+    'admin.setup.groups.revenue',
+    'admin.setup.groups.inventory',
+    'admin.setup.groups.workforce',
+    'admin.setup.groups.assets',
+    'admin.setup.groups.currency',
+    'admin.setup.groups.agents',
+    'admin.setup.entities.company.title',
+    'admin.setup.entities.tax-jurisdictions.title',
+    'admin.setup.entities.tax-registrations.title',
+    'admin.setup.entities.tax-codes.title',
+    'admin.setup.entities.tax-rates.title',
+    'admin.setup.entities.tax-groups.title',
+    'admin.setup.entities.tax-return-forms.title',
+    'admin.setup.entities.tax-report-lines.title',
+    'admin.setup.entities.tax-regimes.title',
+    'admin.setup.entities.tax-pool-classes.title',
+    'admin.setup.entities.tax-first-year-rules.title',
+    'admin.setup.entities.classes.title',
+    'admin.setup.entities.segment-definitions.title',
+    'admin.setup.entities.segment-values.title',
+    'admin.setup.entities.departments.title',
+    'admin.setup.entities.locations.title',
+    'admin.setup.entities.payment-terms.title',
+    'admin.setup.entities.number-sequences.title',
+    'admin.setup.entities.time-types.title',
+    'admin.setup.entities.pay-schedules.title',
+    'admin.setup.entities.pay-components.title',
+    'admin.setup.entities.union-agreements.title',
+    'admin.setup.entities.worker-comp-groups.title',
+    'admin.setup.entities.asset-categories.title',
+    'admin.setup.entities.depreciation-methods.title',
+    'admin.setup.entities.depreciation-book-policies.title',
+    'admin.setup.entities.currencies.title',
+    'admin.setup.entities.sftp.title',
+    'admin.setup.entities.payment-operations.title',
+    'admin.setup.entities.account-groups.title',
+    'admin.setup.entities.subsidiaries.title',
+    'admin.setup.entities.intercompany-pairs.title',
+    'admin.setup.entities.subsidiary-ownership-interests.title',
+    'admin.setup.entities.accounting-books.title',
+    'admin.setup.entities.allocations.title',
+    'admin.setup.entities.fx-rates.title',
+    'admin.setup.entities.consolidated-fx-rates.title',
+    'admin.setup.entities.item-rate-books.title',
+    'admin.setup.entities.item-rate-book-assignments.title',
+    'admin.setup.entities.recognition-rules.title',
+    'admin.setup.entities.fair-value-prices.title',
+    'admin.setup.entities.stock-locations.title',
+    'admin.setup.entities.item-inventory-profiles.title',
+    'admin.setup.entities.bom-components.title',
+    'admin.setup.entities.overhead-rates.title',
+    'admin.setup.entities.overhead-model.title',
+    'admin.setup.entities.overhead-model.application.systemRule.title',
+    'admin.setup.entities.compliance-classes.title',
+    'admin.setup.entities.compliance-requirements.title',
+    'admin.setup.entities.information-return-box-rules.title',
+    'admin.setup.entities.income-tax-rates.title',
+    'admin.setup.entities.payroll-filing-accounts.title',
+    'admin.setup.entities.entitlement-plans.title',
+    'admin.setup.entities.entitlement-plan-limits.title',
+    'admin.setup.entities.entitlement-service-tiers.title',
+    'admin.setup.entities.pay-derived-rules.title',
+    'admin.setup.entities.trades.title',
+    'admin.setup.entities.payroll-holidays.title',
+    'admin.setup.entities.extension-settings.title',
+    'data.nav.export',
+    'data.nav.import',
+    'data.nav.history',
+    'data.nav.group',
+    'crm.setup.title',
+    'projectTypes.title',
+    'labor-pricing.navTitle',
+    'close.setup.title',
+  ] as const
+  // Reviewed cognates: the correct term in that locale is spelled exactly
+  // like English, so the pin requires the paste instead of rejecting it.
+  // "CRM"/"SFTP" are initialisms; French Taxes/Dimensions/Agents/Classes/
+  // Segments and Portuguese Classes are ordinary nouns with identical
+  // spelling; German Import/Export/Compliance are the standard UI terms.
+  const COGNATES = new Set([
+    'de:admin.setup.entities.sftp.title',
+    'de:admin.setup.groups.compliance',
+    'de:data.nav.export',
+    'de:data.nav.group',
+    'de:data.nav.import',
+    'fr:admin.setup.entities.classes.title',
+    'fr:admin.setup.entities.segment-definitions.title',
+    'fr:admin.setup.groups.agents',
+    'fr:admin.setup.groups.dimensions',
+    'fr:admin.setup.groups.taxes',
+    'ja:admin.setup.entities.sftp.title',
+    'pt-BR:admin.setup.entities.classes.title',
+    'pt-BR:admin.setup.entities.sftp.title',
+    'zh:admin.setup.entities.sftp.title',
+  ])
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      if (key === 'crm.setup.title') {
+        assert.equal(value, 'CRM', `${locale}:crm.setup.title must stay the reviewed initialism`)
+      } else if (COGNATES.has(`${locale}:${key}`)) {
+        assert.equal(value, source.get(key), `${locale}:${key} must stay the reviewed cognate`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+  }
+})
+
 test('Portuguese fixed-asset tax pool uses the reviewed regime label', () => {
   const catalog = flattenCatalog('pt-BR')
 

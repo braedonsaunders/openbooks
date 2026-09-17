@@ -983,7 +983,6 @@
         "duplicateDays": "Fenêtre de doublons",
         "dueWithinDays": "Échéance sous",
         "unbilledDays": "Non facturé après",
-        "dueWithinDays": "Échéance sous",
         "forecastWeeks": "Horizon de prévision",
         "minimumVariancePercent": "Écart défavorable minimal",
         "criticalVariancePercent": "Écart défavorable critique",
@@ -1282,8 +1281,8 @@
     }
   },
   "setup": {
-    "title": "Setup",
-    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "title": "Configuration",
+    "description": "Configurez les taxes, les dimensions, les conditions et les données de référence sur lesquelles repose votre comptabilité.",
     "taxLibrary": {
       "title": "Bibliothèque de déclarations fiscales",
       "open": "Bibliothèque",
@@ -1306,7 +1305,7 @@
       "usNotice": "Les États-Unis n’ont pas de déclaration fédérale de taxe de vente. Cette feuille doit être adaptée à chaque juridiction étatique et locale."
     },
     "assetDepreciationSetup": {
-      "navTitle": "Book Depreciation",
+      "navTitle": "Amortissement comptable",
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
@@ -1430,14 +1429,14 @@
       "saveTimedOut": "L’enregistrement a expiré. Vérifiez le tableau avant de réessayer — l’enregistrement existe peut-être déjà."
     },
     "groups": {
-      "company": "Company",
+      "company": "Entreprise",
       "accounting": "Comptabilité",
       "taxes": "Taxes",
       "dimensions": "Dimensions",
-      "billing": "Billing & numbering",
-      "workforce": "Workforce",
-      "assets": "Assets",
-      "currency": "Currency",
+      "billing": "Facturation et numérotation",
+      "workforce": "Main-d'œuvre",
+      "assets": "Actifs",
+      "currency": "Devise",
       "revenue": "Revenus",
       "inventory": "Stocks",
       "projects": "Projets",
@@ -1899,7 +1898,7 @@
     },
     "entities": {
       "company": {
-        "title": "Company & Accounting",
+        "title": "Société et comptabilité",
         "description": "Organization identity, base currency, fiscal year, and control accounts."
       },
       "tax-codes": {
@@ -1913,7 +1912,7 @@
         "description": "Historique des taux avec dates d’effet pour chaque code de taxe."
       },
       "tax-groups": {
-        "title": "Tax Groups",
+        "title": "Groupes de taxes",
         "description": "Bundle several tax codes to apply together on a line."
       },
       "tax-return-forms": {
@@ -1938,31 +1937,31 @@
         "description": "Gérez les valeurs sélectionnables et les hiérarchies des segments personnalisés."
       },
       "departments": {
-        "title": "Departments",
+        "title": "Départements",
         "description": "A reporting dimension for slicing transactions."
       },
       "locations": {
-        "title": "Locations",
+        "title": "Sites",
         "description": "A reporting dimension for slicing transactions."
       },
       "payment-terms": {
-        "title": "Payment Terms",
+        "title": "Conditions de paiement",
         "description": "Net and early-payment discount terms for bills and invoices."
       },
       "number-sequences": {
-        "title": "Number Sequences",
+        "title": "Séquences de numéros",
         "description": "Contrôlez le préfixe, le prochain numéro et la longueur de chaque document ou enregistrement personnalisé. Les séquences personnalisées sont créées automatiquement lors de la première numérotation."
       },
       "time-types": {
-        "title": "Time Types",
+        "title": "Types d'heures",
         "description": "Cost multipliers and billable defaults for timesheets."
       },
       "worker-comp-groups": {
-        "title": "Worker Comp Groups",
+        "title": "Groupes accidents du travail",
         "description": "Workers' compensation rate groups for labor costing."
       },
       "asset-categories": {
-        "title": "Asset Categories",
+        "title": "Catégories d'actifs",
         "description": "Default depreciation method and accounts for fixed assets."
       },
       "depreciation-methods": {
@@ -1974,7 +1973,7 @@
         "description": "Méthode par livre et par catégorie pour l’amortissement multi-livres."
       },
       "currencies": {
-        "title": "Currencies",
+        "title": "Devises",
         "description": "Currency codes and their minor-unit precision."
       },
       "sftp": {
@@ -1985,7 +1984,7 @@
         "description": "Formats de paiement, profils bancaires, calendriers et mandats de prélèvement."
       },
       "subsidiaries": {
-        "title": "Subsidiaries",
+        "title": "Filiales",
         "description": "The legal entities inside your organization — a consolidation tree with one root."
       },
       "intercompany-pairs": {
@@ -2110,7 +2109,10 @@
           "autoHint": "Les frais généraux s'appliquent automatiquement : à l'approbation des heures, la part de chaque saisie (heures × le taux publié du département au jour travaillé) se comptabilise avec la même approbation — aucune étape de fin de mois, et sans attendre la paie.",
           "backfillPrompt": "{entries} saisies approuvées (~{hours} h) sont antérieures à ce mode et ne portent pas encore de frais généraux.",
           "backfill": "Appliquer aux heures passées",
-          "backfilled": "{entries} saisies passées portées : ${total} de frais généraux appliqués"
+          "backfilled": "{entries} saisies passées portées : ${total} de frais généraux appliqués",
+          "systemRule": {
+            "title": "Règle noyau de répartition"
+          }
         },
         "lifecycle": {
           "title": "Cycle de vie des taux",
@@ -2163,6 +2165,63 @@
         "title": "Taux d'impôt sur le résultat",
         "singularTitle": "Taux d'impôt",
         "description": "Taux d'impôt adoptés par juridiction, datés — ils pilotent la provision ASC 740."
+      },
+      "tax-jurisdictions": {
+        "title": "Juridictions de taxe"
+      },
+      "tax-registrations": {
+        "title": "Nexus de taxe"
+      },
+      "tax-regimes": {
+        "title": "Régimes d'amortissement fiscal"
+      },
+      "tax-pool-classes": {
+        "title": "Classes d'amortissement fiscal"
+      },
+      "tax-first-year-rules": {
+        "title": "Règles de première année"
+      },
+      "pay-schedules": {
+        "title": "Calendriers de paie"
+      },
+      "pay-components": {
+        "title": "Composantes de paie"
+      },
+      "union-agreements": {
+        "title": "Conventions collectives"
+      },
+      "account-groups": {
+        "title": "Groupes de comptes"
+      },
+      "subsidiary-ownership-interests": {
+        "title": "Participation dans les filiales"
+      },
+      "allocations": {
+        "title": "Répartitions"
+      },
+      "payroll-filing-accounts": {
+        "title": "Comptes de déclaration"
+      },
+      "entitlement-plans": {
+        "title": "Régimes de droits"
+      },
+      "entitlement-plan-limits": {
+        "title": "Plafonds des banques"
+      },
+      "entitlement-service-tiers": {
+        "title": "Barèmes d'ancienneté"
+      },
+      "pay-derived-rules": {
+        "title": "Gains calculés"
+      },
+      "trades": {
+        "title": "Métiers"
+      },
+      "payroll-holidays": {
+        "title": "Jours fériés"
+      },
+      "extension-settings": {
+        "title": "Paramètres des applications"
       }
     },
     "fields": {
@@ -2868,10 +2927,11 @@
         "openLienWaivers": "{count, plural, one {# renonciation en attente de signature} other {# renonciations en attente de signature}}",
         "draftInformationReturns": "{count, plural, one {# déclaration de renseignements en cours} other {# déclarations de renseignements en cours}}",
         "unfiledInformationReturns": "{count, plural, one {# déclaration finalisée non déposée} other {# déclarations finalisées non déposées}}"
-      }
+      },
+      "runWizard": "Lancer l'assistant de configuration"
     },
     "bankFeeds": {
-      "navTitle": "Bank Feeds"
+      "navTitle": "Flux bancaires"
     },
     "paymentProviders": {
       "title": "Fournisseurs de paiement",
@@ -2914,7 +2974,20 @@
       "copy": "Copier",
       "copied": "Copié",
       "testConnection": "Tester la connexion",
-      "testing": "Test…"
+      "testing": "Test…",
+      "navTitle": "Fournisseurs de paiement"
+    },
+    "readiness": {
+      "navTitle": "Guide de mise en service"
+    },
+    "invoicing": {
+      "navTitle": "Facturation"
+    },
+    "taxSetup": {
+      "navTitle": "Configuration fiscale"
+    },
+    "payroll": {
+      "navTitle": "Paie"
     }
   },
   "flows": {

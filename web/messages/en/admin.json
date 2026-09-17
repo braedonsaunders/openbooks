@@ -3406,6 +3406,7 @@
       "navTitle": "Bank Feeds"
     },
     "paymentProviders": {
+      "navTitle": "Payment Providers",
       "title": "Payment Providers",
       "description": "Hosted checkout providers for customer payment links on invoices. Payout and fee reconciliation stays under Banking → PSP settlements.",
       "saved": "Saved.",
