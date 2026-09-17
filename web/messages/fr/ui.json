@@ -42,6 +42,7 @@
     "attachFailed": "Impossible de joindre {name}",
     "removed": "{name} retiré",
     "removeFailed": "Impossible de retirer la pièce jointe",
+    "retainedNote": "Les pièces jointes des écritures comptabilisées sont conservées et ne peuvent pas être retirées.",
     "loadFailed": "Impossible de charger les pièces jointes",
     "empty": "Aucun fichier joint pour l’instant.",
     "noMatches": "Aucune pièce jointe ne correspond à ces filtres.",

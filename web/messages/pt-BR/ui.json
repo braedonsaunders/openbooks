@@ -42,6 +42,7 @@
     "attachFailed": "Não foi possível anexar {name}",
     "removed": "{name} removido",
     "removeFailed": "Não foi possível remover o anexo",
+    "retainedNote": "Os anexos de registros contabilizados são retidos e não podem ser removidos.",
     "loadFailed": "Não foi possível carregar os anexos",
     "empty": "Nenhum arquivo anexado ainda.",
     "noMatches": "Nenhum anexo corresponde a estes filtros.",

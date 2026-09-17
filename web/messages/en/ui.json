@@ -42,6 +42,7 @@
     "attachFailed": "Could not attach {name}",
     "removed": "Removed {name}",
     "removeFailed": "Could not remove attachment",
+    "retainedNote": "Attachments of posted records are retained and cannot be removed.",
     "loadFailed": "Could not load attachments",
     "empty": "No files attached yet.",
     "noMatches": "No attachments match these filters.",

@@ -25,6 +25,12 @@ interface TransactionDrawerProps {
   footer?: ReactNode
   children: ReactNode
   canEditAttachments?: boolean
+  /**
+   * Detach affordance independent of uploading. Records whose evidence the
+   * server retains (posted documents) hide Remove and name the retention;
+   * uploading stays available. Defaults to canEditAttachments.
+   */
+  canRemoveAttachments?: boolean
   /** Persistence table for attachments and audit rows. Defaults to documents. */
   targetTable?: 'documents' | 'parties' | 'item_rate_versions'
 }
@@ -52,6 +58,7 @@ export function TransactionDrawer({
   footer,
   children,
   canEditAttachments = false,
+  canRemoveAttachments,
   targetTable = 'documents',
 }: TransactionDrawerProps) {
   const t = useTranslations('common')
@@ -146,7 +153,7 @@ export function TransactionDrawer({
       footer={activeTab !== 'attachments' && activeTab !== 'audit' ? footer : undefined}
     >
       {activeTab === 'details' ? children : activeTab === 'attachments' ? (
-        <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} />
+        <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
       ) : activeTab === 'audit' ? (
         <AuditTrailPanel table={targetTable} recordId={recordId} />
       ) : (

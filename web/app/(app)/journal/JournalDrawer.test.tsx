@@ -17,6 +17,16 @@ test('journal voids carry the revision token required by the void API', () => {
 // same drawer session always 409s ("changed after you opened it"), and the
 // keyless widget never refires its mount read, so close/reopen cannot heal it
 // either. A successful post must re-pin the canonical revision.
+// F-t06-010: detaching from a posted record always 409s (evidence is
+// retained), so posted journals must not offer Remove — uploading stays on.
+test('posted journals lock attachment removal while keeping uploads', () => {
+  assert.match(
+    source,
+    /canRemoveAttachments=\{doc\.status !== 'posted'\}/,
+    'detach is impossible on posted records (409 retained): the journal must gate Remove on status, not offer it silently',
+  )
+})
+
 test('a stale-revision void reloads and says so instead of toasting kernel text', () => {
   assert.match(
     source,

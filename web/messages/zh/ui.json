@@ -42,6 +42,7 @@
     "attachFailed": "无法附加 {name}",
     "removed": "已移除 {name}",
     "removeFailed": "无法移除附件",
+    "retainedNote": "已过账记录的附件将被保留，无法移除。",
     "loadFailed": "无法加载附件",
     "empty": "尚未附加任何文件。",
     "noMatches": "没有符合这些筛选条件的附件。",

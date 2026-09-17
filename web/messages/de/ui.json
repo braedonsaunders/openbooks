@@ -42,6 +42,7 @@
     "attachFailed": "{name} konnte nicht angehängt werden",
     "removed": "{name} entfernt",
     "removeFailed": "Anhang konnte nicht entfernt werden",
+    "retainedNote": "Anhänge gebuchter Datensätze werden aufbewahrt und können nicht entfernt werden.",
     "loadFailed": "Anhänge konnten nicht geladen werden",
     "empty": "Noch keine Dateien angehängt.",
     "noMatches": "Keine Anhänge entsprechen diesen Filtern.",
