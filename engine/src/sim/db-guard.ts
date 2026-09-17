@@ -114,13 +114,6 @@ export function assertDedicatedSimDatabase(op: string): void {
   }
 }
 
-/** Strict provisioning gate: disposable databases must be loopback-only. */
-export function assertLoopbackDisposableDatabase(op: string): void {
-  const url = env.OPENBOOKS_DB_URL;
-  if (!url) throw new Error("OPENBOOKS_DB_URL is not set");
-  assertDisposableDatabaseUrl(url, op, { requireLoopback: true });
-}
-
 /** Gate every run: OPENBOOKS_SIM must be explicitly set. */
 export function assertSimEnabled(): void {
   if (env.OPENBOOKS_SIM !== "1") {

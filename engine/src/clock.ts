@@ -39,16 +39,6 @@ export function now(): Date {
   return store ? new Date(store.at.getTime()) : new Date();
 }
 
-/** Milliseconds since the epoch, honouring a pinned simulated clock. */
-export function nowMs(): number {
-  return now().getTime();
-}
-
-/** Is a simulated clock currently pinned? */
-export function isSimClockActive(): boolean {
-  return clockContext.getStore() !== undefined;
-}
-
 /**
  * Run `fn` with `now()` pinned to `at`. Accepts a Date or an ISO date/datetime
  * string (a bare `YYYY-MM-DD` is interpreted at UTC midnight).

@@ -127,14 +127,6 @@ export function isMonthEnd(isoDate: string): boolean {
   return addDays(isoDate, 1).slice(5, 7) !== isoDate.slice(5, 7);
 }
 
-export function isYearEnd(isoDate: string): boolean {
-  return isoDate.slice(5) === "12-31";
-}
-
-export function monthKey(isoDate: string): string {
-  return isoDate.slice(0, 7);
-}
-
 /** Generate the inclusive list of dates from start..end. */
 export function eachDay(start: string, end: string): string[] {
   const out: string[] = [];

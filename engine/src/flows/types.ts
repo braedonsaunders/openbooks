@@ -1,4 +1,4 @@
-import type { EvalContext, FlowSubjectProfile } from "@openbooks/forms-core";
+import type { FlowSubjectProfile } from "@openbooks/forms-core";
 
 /**
  * The FlowSubjectAdapter seam — everything record-specific the flows engine
@@ -91,9 +91,4 @@ export interface FlowSubjectAdapter {
    * without it don't support fan-out.
    */
   findCandidateIds?(limit: number): Promise<string[]>;
-}
-
-/** Build the EvalContext the planner/evaluator consume from a subject snapshot. */
-export function toEvalContext(subject: FlowSubjectContext): EvalContext {
-  return { values: subject.values, rows: subject.rows ?? {} };
 }

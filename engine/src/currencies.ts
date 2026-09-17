@@ -260,10 +260,6 @@ export const SUPPORTED_CURRENCIES: SupportedCurrency[] = [
   { code: "ZWG", name: "Zimbabwe Gold", minorUnits: 2 },
 ];
 
-export const SUPPORTED_CURRENCY_CODES = new Set(
-  SUPPORTED_CURRENCIES.map((currency) => currency.code),
-);
-
 /**
  * Active ISO 4217 entries with NO defined minor unit (supranational units,
  * bond-market units, test codes, XXX). No quantum exists to round them with,

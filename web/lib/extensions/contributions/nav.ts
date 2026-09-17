@@ -1,10 +1,6 @@
 import { navContributionSchema } from '@openbooks/engine/src/extensions/contribution-schemas.ts'
-import type { z } from 'zod'
-
 /** The installer and manifest use this same registry-validated schema. */
 export { navContributionSchema }
-export type NavContribution = z.infer<typeof navContributionSchema>
-export const NAV_PROJECTION_TARGET = 'org_nav_configs' as const
 
 export function parseNavContribution(raw: unknown) {
   const result = navContributionSchema.safeParse(raw)

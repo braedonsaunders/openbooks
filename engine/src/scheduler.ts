@@ -64,13 +64,6 @@ export function ensureScheduler(): void {
   tick();
 }
 
-export function stopScheduler(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
-}
-
 export interface DueScript {
   id: string;
   orgId: string;

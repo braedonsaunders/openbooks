@@ -44,13 +44,6 @@ export function startReportScheduler(): void {
   void tick();
 }
 
-export function stopReportScheduler(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
-}
-
 /**
  * Run `body` under the cross-replica tick claim for `lockKey`. Returns null
  * when another replica holds the claim (body never runs); otherwise resolves

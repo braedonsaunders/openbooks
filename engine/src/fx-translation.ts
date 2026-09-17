@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from './db.ts'
-import { add, mulDecimal } from './money.ts'
+import { mulDecimal } from './money.ts'
 
 /**
  * Presentation-currency translation for consolidated engine readers.
@@ -114,17 +114,4 @@ export function translateFlowAmount(
   rateAt: (func: string | null, date: string) => string,
 ): string {
   return Number(amountValue) === 0 ? '0' : mulDecimal(amountValue, rateAt(func, date))
-}
-
-/** Translate dated functional subtotal rows to presentation and sum. */
-export async function translateFlowTotal(
-  orgId: string,
-  rows: ReadonlyArray<{ func: string | null; date: string; amount: string }>,
-): Promise<string> {
-  const ctx = await flowTranslation(orgId, rows)
-  let total = '0'
-  for (const r of rows) {
-    total = add(total, translateFlowAmount(r.amount, r.func, r.date, ctx.rateAt))
-  }
-  return total
 }
