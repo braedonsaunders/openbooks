@@ -55,6 +55,7 @@
     "deletePostedBody": "Cela supprime définitivement le journal et son impact au grand livre. Cette action est irréversible.",
     "deleted": "Journal supprimé",
     "deleteFailed": "Échec de la suppression",
+    "voidStaleRevision": "Cette écriture a changé depuis son ouverture — la dernière version est chargée. Vérifiez-la puis annulez à nouveau.",
     "totals": "Débits <strong>{debits}</strong> · Crédits <strong>{credits}</strong>",
     "outOfBalance": "Non équilibré · {amount}",
     "balanced": "Équilibré",

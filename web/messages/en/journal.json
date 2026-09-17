@@ -62,6 +62,7 @@
     "deletePostedBody": "This permanently deletes the journal and removes its ledger impact. This cannot be undone.",
     "deleted": "Journal deleted",
     "deleteFailed": "Delete failed",
+    "voidStaleRevision": "This journal changed after you opened it — the latest version is loaded. Review it and void again.",
     "totals": "Debits <strong>{debits}</strong> · Credits <strong>{credits}</strong>",
     "outOfBalance": "Out of balance · {amount}",
     "balanced": "Balanced",

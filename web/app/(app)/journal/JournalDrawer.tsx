@@ -511,7 +511,17 @@ export function JournalDrawer({
       body: JSON.stringify({ reason, expectedUpdatedAt: voidRevision }),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t('postFailed'))
+    if (!res.ok) {
+      // A stale revision means the re-pin raced a concurrent write: reload
+      // the canonical revision and say so (F-t06-021), instead of toasting
+      // raw kernel text. Every other refusal already names its remedy.
+      if (data.code === 'stale-revision') {
+        await refreshFromServer(false).catch(() => {})
+        toast.error(t('voidStaleRevision'))
+      } else {
+        toast.error(data.error ?? t('postFailed'))
+      }
+    }
     else if (data.status === 'pending_approval') toast.success(tc('actions.submitForApproval'))
     else toast.success(tc('status.voided'))
     setBusy(false)

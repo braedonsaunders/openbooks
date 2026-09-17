@@ -55,6 +55,7 @@
     "deletePostedBody": "仕訳を完全に削除し、元帳への影響を取り消します。この操作は取り消せません。",
     "deleted": "仕訳を削除しました",
     "deleteFailed": "削除に失敗しました",
+    "voidStaleRevision": "この仕訳は開いた後に変更されました — 最新版を読み込みました。内容を確認して再度無効化してください。",
     "totals": "借方 <strong>{debits}</strong> · 貸方 <strong>{credits}</strong>",
     "outOfBalance": "貸借不一致 · {amount}",
     "balanced": "貸借一致",
