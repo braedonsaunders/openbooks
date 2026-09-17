@@ -68,8 +68,14 @@
     "configure": "请在管理中心 → AI 中进行配置。",
     "search": "搜索文件、供应商、发票号…",
     "status": {
-      "queued": "已排队", "extracting": "提取中", "needs_review": "需审阅", "ready": "就绪",
-      "duplicate": "可能重复", "failed": "失败", "materialized": "已创建草稿", "rejected": "已拒绝"
+      "queued": "已排队",
+      "extracting": "提取中",
+      "needs_review": "需审阅",
+      "ready": "就绪",
+      "duplicate": "可能重复",
+      "failed": "失败",
+      "materialized": "已创建草稿",
+      "rejected": "已拒绝"
     },
     "emptyTitle": "无已采集文档",
     "emptyDescription": "上传 PDF、JPEG、PNG 或 TIFF 格式的供应商文档以开始。",
@@ -88,7 +94,15 @@
     "openDraft": "打开应付草稿",
     "bill": "应付账单",
     "credit": "供应商贷记",
-    "columns": { "document": "文档", "vendor": "供应商", "invoice": "发票号", "date": "发票日期", "total": "合计", "status": "状态", "received": "收到" },
+    "columns": {
+      "document": "文档",
+      "vendor": "供应商",
+      "invoice": "发票号",
+      "date": "发票日期",
+      "total": "合计",
+      "status": "状态",
+      "received": "收到"
+    },
     "saving": "正在保存修正…",
     "unsaved": "有未保存的修正",
     "saved": "已保存所有修正",
@@ -100,14 +114,30 @@
     "confidencePercent": "{percent}%",
     "highlightEvidence": "在源文档中高亮此凭据",
     "fields": {
-      "kind": "文档类型", "vendor": "供应商", "vendorPlaceholder": "选择供应商…",
-      "invoiceNumber": "发票号", "invoiceDate": "发票日期", "dueDate": "到期日", "currency": "币种",
-      "purchaseOrder": "采购订单", "purchaseOrderPlaceholder": "选择采购订单…", "memo": "备注",
-      "subtotal": "小计", "taxTotal": "税", "total": "合计"
+      "kind": "文档类型",
+      "vendor": "供应商",
+      "vendorPlaceholder": "选择供应商…",
+      "invoiceNumber": "发票号",
+      "invoiceDate": "发票日期",
+      "dueDate": "到期日",
+      "currency": "币种",
+      "purchaseOrder": "采购订单",
+      "purchaseOrderPlaceholder": "选择采购订单…",
+      "memo": "备注",
+      "subtotal": "小计",
+      "taxTotal": "税",
+      "total": "合计"
     },
     "lines": {
-      "title": "提取的行", "add": "添加行", "description": "描述", "account": "科目",
-      "accountPlaceholder": "选择科目…", "quantity": "数量", "unitPrice": "单价", "amount": "金额", "tax": "税",
+      "title": "提取的行",
+      "add": "添加行",
+      "description": "描述",
+      "account": "科目",
+      "accountPlaceholder": "选择科目…",
+      "quantity": "数量",
+      "unitPrice": "单价",
+      "amount": "金额",
+      "tax": "税",
       "remove": "移除第 {line} 行"
     },
     "issues": {
@@ -139,5 +169,56 @@
     "createDraftFailed": "无法创建草稿",
     "deleted": "单据已删除",
     "deleteFailed": "删除失败"
+  },
+  "cockpit": {
+    "title": "应付账款",
+    "description": "应付款控制中心 — 欠款、逾期款项以及本周待付款项。",
+    "tabs": {
+      "overview": "概览",
+      "bills": "应付账单"
+    },
+    "current": "正常",
+    "vendor": "供应商",
+    "overdueCol": "逾期",
+    "openCol": "未结",
+    "noPayables": "没有未结应付款，已全部结清。",
+    "stats": {
+      "openPayables": "未结应付款",
+      "overdue": "逾期",
+      "overdueSub": "{count} 笔账单 · 占未结的 {pct}",
+      "dueThisWeek": "本周到期",
+      "next30": "未来30天",
+      "dpo": "应付账款周转天数(DPO)",
+      "dpoSub": "平均付款天数",
+      "days": "{n}天"
+    },
+    "panels": {
+      "payRun": "付款批次规划",
+      "payRunHint": "本周到期的账单（预测）— 选择并创建付款批次",
+      "payRunHintScheduled": "在每周额度内推荐 — 按到期先后排序",
+      "aging": "应付款账龄",
+      "schedule": "付款计划",
+      "scheduleHint": "{weeks} 周的预计付款",
+      "byVendor": "按供应商统计应付款"
+    },
+    "payRun": {
+      "noCap": "本周到期",
+      "weeklyCap": "每周上限",
+      "safeCapacity": "安全余量",
+      "startingCash": "手头现金 {amount}",
+      "overCap": "超出上限",
+      "deferred": "{amount} 推迟至后续周次",
+      "selected": "已选 {count} 项",
+      "build": "创建付款批次",
+      "empty": "本周暂无预测到期的账单。"
+    },
+    "deferralNote": "{amount} 的应付款在当前应付额度设置下无法在周期内支付 — 积压将超出最后一周。请在现金流预测配置中调整上限。",
+    "forecastLink": {
+      "pre": "想模拟未来几周的情况？",
+      "link": "打开现金流预测"
+    },
+    "configure": "配置",
+    "configTitle": "应付付款选择规则",
+    "configDescription": "本周付款批次的确定方式 — 每周上限、安全余量以及推荐背后的排程模型。"
   }
 }
