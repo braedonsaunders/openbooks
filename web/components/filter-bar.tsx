@@ -7,6 +7,7 @@ import { Check, ChevronDown } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn, Popover, SearchSelect } from '@openbooks/ui'
 import { mergeHref } from '@/lib/list-params'
+import { menuArrowKeys } from './menu-a11y'
 
 type FilterOption = { value: string; label: string; count?: number }
 
@@ -93,7 +94,7 @@ export function FilterChips({
       trigger={
         <button
           type="button"
-          aria-haspopup="listbox"
+          aria-haspopup="menu"
           aria-expanded={open}
           disabled={disabled}
           onClick={() => setOpen((v) => !v)}
@@ -125,7 +126,7 @@ export function FilterChips({
         </button>
       }
     >
-      <div className="max-h-72 overflow-auto" role="listbox">
+      <div className="max-h-72 overflow-auto" role="menu" aria-label={label} onKeyDown={menuArrowKeys}>
         {!hideAll ? (
           <FilterItem
             href={allHref}
@@ -256,13 +257,25 @@ function FilterItem({
   )
   if (controlled) {
     return (
-      <button type="button" onClick={onSelect} role="option" aria-selected={active} className={className}>
+      <button
+        type="button"
+        onClick={onSelect}
+        role="menuitem"
+        aria-current={active ? 'true' : undefined}
+        className={className}
+      >
         {body}
       </button>
     )
   }
   return (
-    <Link href={(href)} onClick={onSelect} role="option" aria-selected={active} className={className}>
+    <Link
+      href={(href)}
+      onClick={onSelect}
+      role="menuitem"
+      aria-current={active ? 'true' : undefined}
+      className={className}
+    >
       {body}
     </Link>
   )
