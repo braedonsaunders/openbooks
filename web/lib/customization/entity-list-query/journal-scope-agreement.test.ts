@@ -4,13 +4,13 @@ import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 
 // F-t11-010: the setup guide, the journal header, and the journal list each
-// counted "posted entries" with a different SQL scope, so Rassaun read
-// 85,322 / 25,943 / 47,625 on three surfaces at once. All three now read
-// the JOURNAL_ENTRY_TABLE union through journalScopeWhere. This pins the
-// agreement without a database: the header/guide scope must be exactly the
-// predicate the list total applies under the journal default view, carry no
-// status filter of its own, and keep the list's subsidiary fence. The
-// Rassaun-shaped row coverage (doc-linked migration postings in, pure
+// counted "posted entries" with a different SQL scope, so one tenant
+// read three different totals on three surfaces at once. All three now
+// read the JOURNAL_ENTRY_TABLE union through journalScopeWhere. This pins
+// the agreement without a database: the header/guide scope must be exactly
+// the predicate the list total applies under the journal default view,
+// carry no status filter of its own, and keep the list's subsidiary fence.
+// Row-shape coverage (doc-linked migration postings in, pure
 // subledger postings out, reversed entries in) lives in the companion
 // journal-scope-agreement.integration.test.ts, which needs a fixture
 // database. Only server-only is stubbed; query building is offline.

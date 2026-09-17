@@ -6,10 +6,10 @@ import { sql } from "drizzle-orm";
 // F-t11-010: the setup guide, the journal header, and the journal list each
 // counted "posted entries" with a different scope (guide: every posted or
 // reversed entry in the org; header: journalsOnly with no status filter;
-// list: the JOURNAL_ENTRY_TABLE union with no status filter), so Rassaun
-// read 85,322 / 25,943 / 47,625 on three surfaces at once. All three now
-// count one scope — the journal-list union — through journalScopeWhere.
-// The fixture is a Rassaun in miniature: a doc-linked migration posting
+// list: the JOURNAL_ENTRY_TABLE union with no status filter), so one
+// tenant read three different totals on three surfaces at once. All three
+// now count one scope — the journal-list union — through journalScopeWhere.
+// The fixture is a miniature of that tenant: a doc-linked migration posting
 // (the 21,770-class the old header dropped), a reversed journal-document
 // entry (the 42-class a posted-only unification would drop), and a pure
 // subledger posting (bills live in their module, never in the journal).

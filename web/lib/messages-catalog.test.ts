@@ -3520,3 +3520,145 @@ test('I8 apps copy ships translated in fr, es, de, ja, zh and pt-BR', () => {
     assert.deepEqual(I8_armsDrift, [], `${I8_locale} apps translations drop ICU plural/select arms`)
   }
 })
+
+
+const I11_IDENTICAL_BY_FACT = new Set([
+  'fr:close.actions.documentation|Documentation',
+  'fr:close.modules.gl|GL',
+  'fr:close.postingPeriods.document|Document',
+  'fr:close.postingPeriods.previewTitle|{count, plural, one {# document} other {# documents}}',
+  'fr:close.runDescription|{book} · {blueprint} v{version}',
+  'fr:close.setup.automationConfig.body|Message',
+  'fr:close.setup.conditions.readinessHint|0–100.',
+  'fr:close.setup.delivery.formats.both|PDF + Excel',
+  'fr:close.setup.delivery.formats.pdf|PDF',
+  'fr:close.setup.delivery.formats.xlsx|Excel',
+  'fr:close.setup.fields.action|Action',
+  'fr:close.setup.fields.cadence|Cadence',
+  'fr:close.setup.fields.conditions|Conditions',
+  'fr:close.setup.fields.configuration|Configuration',
+  'fr:close.setup.fields.description|Description',
+  'fr:close.setup.modules.gl|GL',
+  'fr:close.setup.policyTypes.exception|Exception',
+  'fr:close.setup.taskTypes.action|Action',
+  'fr:close.setup.taskTypes.journal|Journal',
+  'fr:close.setup.taskTypes.publish|Publication',
+  'fr:close.table.action|Action',
+  'fr:close.table.rangeValue|{start} → {end}',
+  'fr:continuous-close.agents.finance|Finance',
+  'fr:continuous-close.fields.budget|Budget',
+  'fr:continuous-close.fields.points|points',
+  'fr:continuous-close.filters.agent|Agent',
+  'fr:continuous-close.narrative.downloadPdf|PDF',
+  'fr:continuous-close.narrative.sourceLabel|Source',
+  'fr:continuous-close.severity.info|Information',
+  'fr:continuous-close.table.agent|Agent',
+  'es:close.runDescription|{book} · {blueprint} v{version}',
+  'es:close.setup.completionModes.manual|Manual',
+  'es:close.setup.conditions.readinessHint|0–100.',
+  'es:close.setup.delivery.formats.both|PDF + Excel',
+  'es:close.setup.delivery.formats.pdf|PDF',
+  'es:close.setup.delivery.formats.xlsx|Excel',
+  'es:close.severity.error|Error',
+  'es:close.table.rangeValue|{start} → {end}',
+  'es:continuous-close.narrative.downloadPdf|PDF',
+  'de:close.filters.status|Status',
+  'de:close.postingPeriods.status|Status',
+  'de:close.runDescription|{book} · {blueprint} v{version}',
+  'de:close.setup.automationConfig.gate|Gate',
+  'de:close.setup.conditions.readinessHint|0–100.',
+  'de:close.setup.delivery.formats.both|PDF + Excel',
+  'de:close.setup.delivery.formats.pdf|PDF',
+  'de:close.setup.delivery.formats.xlsx|Excel',
+  'de:close.setup.fields.gate|Gate',
+  'de:close.setup.fields.name|Name',
+  'de:close.setup.table.status|Status',
+  'de:close.setup.taskTypes.journal|Journal',
+  'de:close.severity.info|Info',
+  'de:close.table.rangeValue|{start} → {end}',
+  'de:close.table.status|Status',
+  'de:close.timeline.system|System',
+  'de:continuous-close.fields.budget|Budget',
+  'de:continuous-close.filters.agent|Agent',
+  'de:continuous-close.narrative.downloadPdf|PDF',
+  'de:continuous-close.severity.info|Information',
+  'de:continuous-close.table.agent|Agent',
+  'ja:close.runDescription|{book} · {blueprint} v{version}',
+  'ja:close.setup.delivery.formats.both|PDF + Excel',
+  'ja:close.setup.delivery.formats.pdf|PDF',
+  'ja:close.setup.delivery.formats.xlsx|Excel',
+  'ja:close.table.rangeValue|{start} → {end}',
+  'ja:continuous-close.narrative.downloadPdf|PDF',
+  'zh:close.filters.fyOption|FY {year}',
+  'zh:close.runDescription|{book} · {blueprint} v{version}',
+  'zh:close.setup.delivery.formats.both|PDF + Excel',
+  'zh:close.setup.delivery.formats.pdf|PDF',
+  'zh:close.setup.delivery.formats.xlsx|Excel',
+  'zh:close.table.rangeValue|{start} → {end}',
+  'zh:continuous-close.narrative.downloadPdf|PDF',
+  'pt-BR:close.filters.status|Status',
+  'pt-BR:close.postingPeriods.status|Status',
+  'pt-BR:close.runDescription|{book} · {blueprint} v{version}',
+  'pt-BR:close.scope.blueprint|Blueprint',
+  'pt-BR:close.setup.automationConfig.gate|Gate',
+  'pt-BR:close.setup.completionModes.manual|Manual',
+  'pt-BR:close.setup.conditions.readinessHint|0–100.',
+  'pt-BR:close.setup.delivery.formats.both|PDF + Excel',
+  'pt-BR:close.setup.delivery.formats.pdf|PDF',
+  'pt-BR:close.setup.delivery.formats.xlsx|Excel',
+  'pt-BR:close.setup.fields.gate|Gate',
+  'pt-BR:close.setup.table.status|Status',
+  'pt-BR:close.setup.tabs.blueprints|Blueprints',
+  'pt-BR:close.setup.workstreams.intercompany|Intercompany',
+  'pt-BR:close.table.rangeValue|{start} → {end}',
+  'pt-BR:close.table.status|Status',
+  'pt-BR:close.workstreams.intercompany|Intercompany',
+  'pt-BR:continuous-close.narrative.downloadPdf|PDF',
+])
+
+test('I11 close and continuous-close copy ships translated in every locale', () => {
+  // F-i11-001: 141 close leaves per locale in fr/es plus the setup tail
+  // (policyRules, conditions, automationConfig, subjectRefs, reportGroups,
+  // delivery, kv, reportParams), the postingPeriods section in
+  // de/ja/zh/pt-BR, and the continuous-close findings/evidence/agents/metrics
+  // tail in de/ja/zh/pt-BR existed only in en — those locales rendered
+  // English inside otherwise translated close screens. Every leaf must exist,
+  // keep its ICU placeholders and plural/select arms, and differ from English
+  // except for reviewed cognates, codes and placeholder-only skeletons,
+  // pinned to the exact term above.
+  const I11_source = flattenCatalog('en')
+  const I11_closeWanted = [...I11_source.keys()].filter((I11_key) => I11_key.startsWith('close.'))
+  const I11_ccWanted = [...I11_source.keys()].filter((I11_key) => I11_key.startsWith('continuous-close.'))
+  assert.equal(I11_closeWanted.length, 595, 'close source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I11_ccWanted.length, 222, 'continuous-close source inventory changed; translate the new keys in every locale and re-pin')
+  const I11_tokens = (I11_value: string): Set<string> =>
+    new Set(I11_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I11_arms = (I11_value: string): string[] => I11_value.match(/, +(plural|select)/g) ?? []
+  for (const I11_locale of ['fr', 'es', 'de', 'ja', 'zh', 'pt-BR']) {
+    const I11_catalog = flattenCatalog(I11_locale)
+    for (const I11_key of [...I11_closeWanted, ...I11_ccWanted]) {
+      const I11_value = I11_catalog.get(I11_key)
+      assert.ok(I11_value && I11_value.trim(), `${I11_locale} is missing ${I11_key}`)
+      const I11_identical = [...I11_IDENTICAL_BY_FACT].find((I11_entry) =>
+        I11_entry.startsWith(`${I11_locale}:${I11_key}|`),
+      )
+      if (I11_identical) {
+        assert.equal(I11_value, I11_identical.split('|')[1], `${I11_locale}:${I11_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I11_value, I11_source.get(I11_key), `${I11_locale} must not copy English ${I11_key}`)
+      }
+    }
+    const I11_drift = [...I11_closeWanted, ...I11_ccWanted].filter((I11_key) => {
+      const I11_expected = I11_tokens(I11_source.get(I11_key) ?? '')
+      const I11_actual = I11_tokens(I11_catalog.get(I11_key) ?? '')
+      return I11_expected.size !== I11_actual.size || [...I11_expected].some((I11_token) => !I11_actual.has(I11_token))
+    })
+    assert.deepEqual(I11_drift, [], `${I11_locale} close translations drop or rename ICU placeholders`)
+    const I11_armsDrift = [...I11_closeWanted, ...I11_ccWanted].filter((I11_key) => {
+      const I11_expected = I11_arms(I11_source.get(I11_key) ?? '').join(',')
+      const I11_actual = I11_arms(I11_catalog.get(I11_key) ?? '').join(',')
+      return I11_expected !== I11_actual
+    })
+    assert.deepEqual(I11_armsDrift, [], `${I11_locale} close translations drop ICU plural/select arms`)
+  }
+})
