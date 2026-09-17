@@ -18,6 +18,7 @@ import type { CustomFieldDefClient } from '../../../components/custom-field-inpu
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { RateBookAssignmentSection } from '../parties/RateBookAssignmentSection'
+import { shouldAutoActivateProject } from './project-activation'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { RecognitionCard, type RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
@@ -284,6 +285,13 @@ export function ProjectDrawer({
       setSaveState('saved')
       setDirty(false)
       setMode('view')
+      // F-t03-001: the draft placeholder is inactive by design, but the save
+      // that gives it a real name completes creation — leave it inactive and
+      // the user thinks the save failed (Inactive badge, hidden from the
+      // list). Later saves never touch the flag, so deactivation sticks.
+      if (shouldAutoActivateProject(pr.name, isActive, name)) {
+        await setActiveState(true)
+      }
       router.refresh()
     } else {
       setSaveState('error')
