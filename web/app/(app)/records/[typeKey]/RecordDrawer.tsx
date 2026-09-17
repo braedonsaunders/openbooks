@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { fetchAction, type ActionError } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { Badge, Button, Popover, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { runClientScripts } from '@/lib/client-scripts'
+import { useAppAction } from '@/lib/use-app-action'
 import { RecordFields, RecordPreviewOptions } from '../../../../components/record-fields'
 import type { RecordStatus } from '../../../../lib/record-schema'
 
@@ -18,7 +21,16 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   inactive: 'outline',
 }
 
-type ApiError = { fieldId: string; message: string }
+/** Field errors stay inline at the field: project the refusal's `issues` back to the filler's error map. */
+function mapIssues(error: ActionError): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const issue of error.issues) {
+    if (issue.path && typeof issue.message === 'string' && !out[issue.path]) {
+      out[issue.path] = issue.message
+    }
+  }
+  return out
+}
 
 /**
  * The custom-record flyout — source platform-style record model: ALWAYS opens
@@ -56,8 +68,14 @@ export function RecordDrawer({
   const [revision, setRevision] = useState(record.updatedAt)
   const [values, setValues] = useState<FieldValueMap>(record.data ?? {})
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
-  const [busy, setBusy] = useState(false)
+  // 'error' means a refusal is pinned above the form: the alert carries the
+  // reason, so the footer stays quiet. Field-only failures stay 'dirty' —
+  // their reasons already render inline at the field.
+  type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
+  const [saveState, setSaveState] = useState<SaveState>('saved')
+  // Saves, transitions and deletes run on the shared action path: a refusal
+  // pins until the next action AND toasts, and busy always releases.
+  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
   const [actionsOpen, setActionsOpen] = useState(false)
 
   const canEditStatus = canEdit && status !== 'inactive'
@@ -71,104 +89,123 @@ export function RecordDrawer({
       first.current = false
       return
     }
-    if (editable) setSaveState('dirty')
+    if (editable) {
+      setSaveState('dirty')
+      // A fresh edit supersedes the pinned refusal, like the next action does.
+      clearRefusal()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values])
 
+  /** Adopt the revision from a committed write so follow-up saves stay conflict-free. */
+  function adoptRevision(data: unknown) {
+    const updatedAt = (data as { record?: { updated_at?: unknown } } | null)?.record?.updated_at
+    if (typeof updatedAt === 'string') setRevision(updatedAt)
+  }
+
+  /**
+   * A conflict keeps the user's edits AND the stale token (never silently
+   * adopts the winner's): the next save still cannot overwrite unseen work.
+   * So a conflict refusal changes nothing here — the pin and toast carry it.
+   */
+  function onRefused(error: ActionError, fieldState: SaveState) {
+    const fieldErrors = mapIssues(error)
+    setErrors(fieldErrors)
+    setSaveState(Object.keys(fieldErrors).length > 0 ? 'dirty' : fieldState)
+  }
+
   async function save() {
     if (preview) return
-    setBusy(true)
     setSaveState('saving')
     // Client scripts scoped to this record type run in a sandboxed evaluator;
     // an explicit { abort } blocks the save, { warnings } toast and proceed.
     const gate = await runClientScripts(`custrec:${typeKey}`, { recordNumber: record.recordNumber, status, data: values })
     if (!gate.ok) {
-      toast.error(gate.reason ?? t('autosaveFailed'))
+      refuse(gate.reason, t('autosaveFailed'))
       setSaveState('dirty')
-      setBusy(false)
       return
     }
     for (const w of gate.warnings) toast.warning(w)
-    const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: values, expectedUpdatedAt: revision }),
-    })
-    const data = await res.json()
-    if (res.ok) {
-      setErrors({})
-      setSaveState('saved')
-      setMode('view')
-      if (typeof data.record?.updated_at === 'string') setRevision(data.record.updated_at)
-      router.refresh()
-    } else {
-      setSaveState('dirty')
-      setErrors(mapErrors(data.errors))
-      toast.error(data.error ?? t('autosaveFailed'))
-    }
-    setBusy(false)
+    const ok = await execute(
+      () =>
+        fetchAction(`/api/records/${typeKey}/${record.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: values, expectedUpdatedAt: revision }),
+        }),
+      {
+        fallbackMessage: t('autosaveFailed'),
+        onOk: (data) => {
+          setErrors({})
+          setSaveState('saved')
+          setMode('view')
+          adoptRevision(data)
+        },
+        onRefused: (error) => onRefused(error, 'error'),
+      },
+    )
+    if (ok) router.refresh()
   }
 
   function cancel() {
     setValues(record.data ?? {})
     setErrors({})
+    clearRefusal()
     setSaveState('saved')
     setMode('view')
   }
 
   async function transition(next: 'active' | 'inactive') {
     if (preview) return
-    setBusy(true)
     const withValues = next === 'active' && editable
-    const res = await fetch(`/api/records/${typeKey}/${record.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      // Send the latest values with an activation so a just-typed required
-      // field counts even if its debounce hadn't fired yet. A data-bearing
-      // activation carries the revision token like any other data save.
-      body: JSON.stringify(withValues ? { data: values, status: next, expectedUpdatedAt: revision } : { status: next }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      setErrors(mapErrors(data.errors))
-      toast.error(data.error ?? t('actionFailed'))
-    } else {
-      setErrors({})
-      setStatus(next)
-      // Every committed write advances the revision — including lifecycle-only
-      // transitions — so adopt it to keep follow-up data saves conflict-free.
-      if (typeof data.record?.updated_at === 'string') setRevision(data.record.updated_at)
-      setSaveState('saved')
-      toast.success(
-        next === 'active'
-          ? status === 'draft'
-            ? t('activatedToast', { number: record.recordNumber })
-            : t('reactivatedToast', { number: record.recordNumber })
-          : t('deactivatedToast', { number: record.recordNumber }),
-      )
-    }
-    setBusy(false)
+    const successMessage =
+      next === 'active'
+        ? status === 'draft'
+          ? t('activatedToast', { number: record.recordNumber })
+          : t('reactivatedToast', { number: record.recordNumber })
+        : t('deactivatedToast', { number: record.recordNumber })
+    await execute(
+      () =>
+        fetchAction(`/api/records/${typeKey}/${record.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          // Send the latest values with an activation so a just-typed required
+          // field counts even if its debounce hadn't fired yet. A data-bearing
+          // activation carries the revision token like any other data save.
+          body: JSON.stringify(withValues ? { data: values, status: next, expectedUpdatedAt: revision } : { status: next }),
+        }),
+      {
+        fallbackMessage: t('actionFailed'),
+        successMessage,
+        onOk: (data) => {
+          setErrors({})
+          setStatus(next)
+          // Every committed write advances the revision — including lifecycle-only
+          // transitions — so adopt it to keep follow-up data saves conflict-free.
+          adoptRevision(data)
+          setSaveState('saved')
+        },
+        onRefused: (error) => onRefused(error, saveState),
+      },
+    )
     router.refresh()
   }
 
   async function destroy() {
     if (preview) return
-    const ok = await confirmDialog({
+    const confirmed = await confirmDialog({
       message: t('deleteConfirm', { number: record.recordNumber }),
       tone: 'danger',
     })
-    if (!ok) return
-    setBusy(true)
-    const res = await fetch(`/api/records/${typeKey}/${record.id}`, { method: 'DELETE' })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? tc('feedback.deleteFailed'))
-      setBusy(false)
-      return
-    }
-    toast.success(t('draftDeleted'))
-    router.push(closeHref)
-    router.refresh()
+    if (!confirmed) return
+    const ok = await execute(() => fetchAction(`/api/records/${typeKey}/${record.id}`, { method: 'DELETE' }), {
+      fallbackMessage: tc('feedback.deleteFailed'),
+      successMessage: t('draftDeleted'),
+      onOk: () => {
+        router.push(closeHref)
+      },
+    })
+    if (ok) router.refresh()
   }
 
   const onChange = useMemo(
@@ -244,10 +281,14 @@ export function RecordDrawer({
                   : null
               : null}
           </span>
+          {saveState === 'error' ? <span className="text-xs text-red-600 dark:text-red-400">{t('autosaveFailed')}</span> : null}
         </div>
       }
     >
       <div className="p-1">
+        {/* A non-field refusal pins here until the next action or edit — the
+            toast catches the eye, this survives it. No dismiss. */}
+        <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
         <RecordPreviewOptions.Provider value={preview ? [{ value: 'preview-reference', label: tp('sampleReference') }] : null}>
         <RecordFields
           sections={sections}
@@ -260,15 +301,4 @@ export function RecordDrawer({
       </div>
     </UrlDrawer>
   )
-}
-
-function mapErrors(list: unknown): Record<string, string> {
-  if (!Array.isArray(list)) return {}
-  const out: Record<string, string> = {}
-  for (const e of list as ApiError[]) {
-    if (e && typeof e.fieldId === 'string' && typeof e.message === 'string' && !out[e.fieldId]) {
-      out[e.fieldId] = e.message
-    }
-  }
-  return out
 }

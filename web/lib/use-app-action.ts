@@ -1,5 +1,7 @@
 'use client'
 
+import { useCallback } from 'react'
+import { ActionError } from '@braedonsaunders/appkit-errors'
 import { useAction } from '@braedonsaunders/appkit-errors/react'
 import { toast } from 'sonner'
 
@@ -14,10 +16,23 @@ import { toast } from 'sonner'
  * (a catalog key through `t()`) at each `execute` site. The server's own
  * reason renders verbatim when it is usable; the fallback covers transport
  * failures and unusable bodies.
+ *
+ * Client-side blocks (script gates, up-front proofs) go through `refuse` so
+ * they pin and toast exactly like a server refusal instead of inventing a
+ * second, quieter presentation.
  */
 export function useAppAction() {
-  return useAction({
+  const { busy, refusal, execute, clearRefusal, setRefusal } = useAction({
     notifyError: (message) => toast.error(message),
     notifySuccess: (message) => toast.success(message),
   })
+  const refuse = useCallback(
+    (serverMessage: string | null | undefined, fallbackMessage: string) => {
+      const error = new ActionError({ kind: 'refused', serverMessage: serverMessage ?? null })
+      setRefusal(error)
+      toast.error(error.displayMessage(fallbackMessage))
+    },
+    [setRefusal],
+  )
+  return { busy, refusal, execute, clearRefusal, refuse }
 }

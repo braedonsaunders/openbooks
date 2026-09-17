@@ -114,7 +114,10 @@ export async function PATCH(
   // unauthorized caller. Lifecycle-only transitions stay on their status
   // machine (a conditional move the lock re-validates), not on a token.
   if (body.data !== undefined && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
-    return NextResponse.json({ error: 'A current record revision is required; reload the record and try again' }, { status: 409 })
+    return NextResponse.json(
+      { error: 'A current record revision is required; reload the record and try again', code: 'revision_conflict' },
+      { status: 409 },
+    )
   }
 
   // The lock, complete before-image, mutation, and immutable audit event all
@@ -139,7 +142,10 @@ export async function PATCH(
       return {
         kind: 'response' as const,
         response: NextResponse.json(
-          { error: 'This record changed after you opened it; reload the record and reapply your changes' },
+          {
+            error: 'This record changed after you opened it; reload the record and reapply your changes',
+            code: 'revision_conflict',
+          },
           { status: 409 },
         ),
       }
@@ -203,6 +209,10 @@ export async function PATCH(
                 ? 'Fill every required field before activating'
                 : errors[0]!.message,
             errors,
+            // Machine-readable twin of `errors` for the shared action path:
+            // the client branches on `code`/status and renders `issues`,
+            // never on message text.
+            issues: errors.map((e) => ({ path: e.fieldId, message: e.message })),
           },
           { status: 422 },
         ),
