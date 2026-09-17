@@ -12,6 +12,24 @@ import { type DimFilter, dimWhere } from "./filters";
 
 export type AgingSide = "ar" | "ap";
 
+/**
+ * The single as-of rule shared by the aging screen and its CSV export
+ * (F-t02-008, F-t07-011): an explicit as-of always wins; otherwise an
+ * explicit period preset resolves to its own end date; a bare call with
+ * neither defaults to today — the screen's default — never to the fiscal
+ * year end. The export once fell through to the fiscal year end, so every
+ * balance landed in 90+ (Rassaun) or the totals disagreed with the screen
+ * by the postings between the two dates (Summit Ridge).
+ */
+export function resolveAgingAsOf(args: {
+  asOf: string | null;
+  periodParam: string | null;
+  periodTo: string;
+  today: string;
+}): string {
+  return args.asOf ?? (args.periodParam ? args.periodTo : args.today);
+}
+
 /** The five aging buckets, oldest last. `age` is days past due (or since posting). */
 export interface AgingRow {
   partyId: string | null;

@@ -39,6 +39,7 @@ export {
   type AgingRow,
   type AgingSide,
   agingByParty,
+  resolveAgingAsOf,
 } from "./reports/aging";
 
 export {

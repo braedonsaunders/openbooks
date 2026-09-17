@@ -257,7 +257,10 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     periodPresets: AS_OF_PERIOD_PRESETS,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom({ ...sp, period: requestedPeriod }),
-    exportParams: stringParams(sp),
+    // The export must age as of the date on the screen it leaves from
+    // (F-t07-011): without the resolved as-of the endpoint falls back to the
+    // fiscal year end and every bucket is wrong.
+    exportParams: stringParams({ ...sp, asOf }),
   }
 }
 

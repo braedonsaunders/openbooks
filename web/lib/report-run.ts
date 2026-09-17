@@ -20,6 +20,7 @@ import {
   partnerStatement,
   partyRegister,
   projectProfitability,
+  resolveAgingAsOf,
   trialBalance,
   type AgingSide,
   type DimFilter,
@@ -54,6 +55,7 @@ import { isReportUuidParam, type ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
+import { resolvePeriod } from './periods'
 import { STATEMENT_KIND_FEATURE } from './report-authz'
 import { reportBookSelection } from './report-books'
 
@@ -313,8 +315,20 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       const s = (p.get('side') === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
       return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims), t) }
     }
-    case 'aging':
-      return { render: 'data', data: agingExportData(side, await agingByParty(side, asOf, dims, orgId), t) }
+    case 'aging': {
+      // Bare export hits default to the screen's as-of (today) through the
+      // shared rule — never the fiscal year end (F-t07-011). The today
+      // lookup runs only when neither as-of nor period was supplied.
+      const asOfParam = p.get('asOf')
+      const periodParam = p.get('period')
+      const agingAsOf = resolveAgingAsOf({
+        asOf: asOfParam,
+        periodParam,
+        periodTo: period.to,
+        today: asOfParam ?? periodParam ? period.to : (await resolvePeriod('today', { orgId })).to,
+      })
+      return { render: 'data', data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId), t) }
+    }
     case 'cash-flow':
       return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId), from, to, t) }
     case 'cash-flow-indirect':
