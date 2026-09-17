@@ -22,6 +22,7 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import { canonicalDecimal } from './exact-decimal'
+import { activeStockLocations, profiledItemIds } from './stock-locations'
 import { DOC_KINDS, DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
 import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
@@ -1158,6 +1159,28 @@ export async function applyDocumentEdit(
         `${current.kind} lines carry an immutable rate snapshot and cannot be edited here; ` +
           `change them on the source record`,
       )
+    }
+    // Silent single-warehouse default (F-t07-003 pickers): a stocked line
+    // with no explicit warehouse takes the org's only active location, so
+    // nobody answers a question with one possible answer. Several locations
+    // (or a non-stocked item) leave the line blank for the picker, and the
+    // stamped id flows through the same ownership checks below as an
+    // explicitly chosen one. This only ever fills blanks, matching what the
+    // posting reader would resolve the line to.
+    if (body.lines.some((l) => (l.stockLocationId ?? '') === '')) {
+      const active = await activeStockLocations(orgId)
+      const singleDefault = active.length === 1 ? active[0]!.id : null
+      if (singleDefault) {
+        const profiled = await profiledItemIds(
+          orgId,
+          body.lines.map((l) => l.itemId).filter((v): v is string => typeof v === 'string' && v.length > 0),
+        )
+        body.lines = body.lines.map((l) =>
+          (l.stockLocationId ?? '') === '' && l.itemId && profiled.has(l.itemId)
+            ? { ...l, stockLocationId: singleDefault }
+            : l,
+        )
+      }
     }
     // Line accounts are the tenant's chart of accounts. The lines FK is
     // tenant-coherent, so a foreign account dies at the re-insert as an
