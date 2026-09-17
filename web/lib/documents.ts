@@ -1088,6 +1088,36 @@ export async function applyDocumentEdit(
       }
     }
   }
+  // Structural funding-bank override (the drawer's fundingSource='bank'
+  // picker: deposit destination, check source). It is not a registered
+  // custom field, so validateCustomValues cannot see it — without an
+  // explicit carry the picker silently stops persisting (the save succeeds
+  // and the reopen shows '—'). Fence it like a reference: uuid-shaped and
+  // owned by this org's reconcilable bank accounts, the exact set the
+  // picker lists. An absent key leaves the stored bag untouched; an
+  // explicit null/'' clears back to the org default bank.
+  if (body.custom !== undefined && cfg?.fundingSource === 'bank') {
+    const override = (body.custom as Record<string, unknown>).controlAccountId
+    if (override !== undefined) {
+      if (override === null || override === '') {
+        if (headerCustom) delete headerCustom.controlAccountId
+      } else {
+        if (
+          typeof override !== 'string' ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(override)
+        ) {
+          throw new DocumentEditError(422, 'funding bank must be a valid record reference')
+        }
+        const owned = (await db.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${orgId} and is_active and not is_summary
+             and reconcilable and type = 'asset_bank' and id = ${override}::uuid
+        `))
+        if (!owned.rows[0]) throw new DocumentEditError(404, 'bank account not found in this organization')
+        headerCustom = { ...(headerCustom ?? current.custom ?? {}), controlAccountId: override }
+      }
+    }
+  }
 
   // Pre-validate + prepare lines before touching the DB, so a bad line fails
   // without a partial write.
