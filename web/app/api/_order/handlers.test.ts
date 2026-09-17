@@ -76,6 +76,7 @@ class OrderRouteHarness {
   convertCalls = 0
   deleted = false
   voidFailure: string | null = null
+  convertFailure: { message: string; status?: number; code?: string; details?: unknown } | null = null
 
   private readonly transactions = new AsyncLocalStorage<TransactionContext>()
   private lockHeld = false
@@ -117,6 +118,7 @@ class OrderRouteHarness {
     this.convertCalls = 0
     this.deleted = false
     this.voidFailure = null
+    this.convertFailure = null
     this.submitPause = null
     this.voidPause = null
   }
@@ -481,10 +483,14 @@ const mockSources = new Map<string, string>([
   ['mock:order-cycle', `
     const state = ${stateExpression}
     export class ConversionError extends Error {
-      constructor(message, status = 422) { super(message); this.status = status }
+      constructor(message, status = 422, code, details) { super(message); this.status = status; this.code = code; this.details = details }
     }
     export async function convertOrder() {
       state.convertCalls += 1
+      if (state.convertFailure) {
+        const failure = state.convertFailure
+        throw new ConversionError(failure.message, failure.status ?? 422, failure.code, failure.details)
+      }
       return { kind: 'sales_order', id: '60000000-0000-4000-8000-000000000001', documentNumber: 'SO-CVT-1' }
     }
   `],
@@ -1436,6 +1442,22 @@ test('void and convert honor the exact revision of their source', async () => {
   const converted = await convert({ targetKind: 'sales_order' })
   assert.equal(converted.status, 200)
   assert.equal(harness.convertCalls, 1)
+})
+
+test('a typed conversion failure serializes its code and details for the caller', async () => {
+  harness.reset('approved')
+  harness.convertFailure = {
+    message: 'no received-not-billed account',
+    code: 'ITEM_MISSING_RNB_ACCOUNT',
+    details: { lineNumber: 1, itemId: 'item-1', itemName: 'Widget' },
+  }
+  const refused = await convert({ targetKind: 'purchase_receipt' })
+  assert.equal(refused.status, 422)
+  assert.deepEqual(await refused.json(), {
+    error: 'no received-not-billed account',
+    code: 'ITEM_MISSING_RNB_ACCOUNT',
+    details: { lineNumber: 1, itemId: 'item-1', itemName: 'Widget' },
+  })
 })
 
 test('before_submit uses isolated governed capacity when duplicate issuers saturate the request pool', async () => {
