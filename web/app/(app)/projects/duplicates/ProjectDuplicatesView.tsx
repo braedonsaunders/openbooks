@@ -31,6 +31,7 @@ type DuplicateGroup = {
 }
 
 type Preview = {
+  groupKey: string
   survivorId: string
   duplicateId: string
   moved: { table: string; rows: number }[]
@@ -38,11 +39,32 @@ type Preview = {
   alreadyMerged: boolean
 }
 
+function withoutKey(current: Record<string, string>, key: string): Record<string, string> {
+  if (!(key in current)) return current
+  const next = { ...current }
+  delete next[key]
+  return next
+}
+
+function withoutPreview(current: Record<string, Preview>, key: string): Record<string, Preview> {
+  if (!(key in current)) return current
+  const next = { ...current }
+  delete next[key]
+  return next
+}
+
 export function ProjectDuplicatesView() {
   const t = useTranslations('projects')
   const [groups, setGroups] = useState<DuplicateGroup[] | null>(null)
   const [survivors, setSurvivors] = useState<Record<string, string>>({})
+  // One cached preview per group + duplicate row. The survivor direction is
+  // part of the identity: a count previewed for the other direction must
+  // never render as this direction's impact (F-t04-004).
   const [previews, setPreviews] = useState<Record<string, Preview>>({})
+  // A refused preview/merge pins here, per group, until the next action in
+  // that group — a toast alone left the previous direction's success on
+  // screen as if it were the answer (F-t04-004).
+  const [previewErrors, setPreviewErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
 
@@ -55,6 +77,7 @@ export function ProjectDuplicatesView() {
     const payload = (await response.json()) as { groups: DuplicateGroup[] }
     setGroups(payload.groups)
     setPreviews({})
+    setPreviewErrors({})
   }, [t])
 
   useEffect(() => {
@@ -79,17 +102,24 @@ export function ProjectDuplicatesView() {
   }, [])
 
   async function preview(groupKey: string, survivorId: string, duplicateId: string) {
+    const key = `${groupKey}:${duplicateId}`
     setBusy(duplicateId)
+    setPreviewErrors((current) => withoutKey(current, groupKey))
     try {
       const response = await fetch(
         `/api/projects/merge?survivorId=${encodeURIComponent(survivorId)}&duplicateId=${encodeURIComponent(duplicateId)}`,
       )
       const payload = (await response.json()) as (Preview & { error?: string })
       if (!response.ok) {
-        toast.error(payload.error ?? t('duplicates.previewFailed'))
+        const message = payload.error ?? t('duplicates.previewFailed')
+        toast.error(message)
+        // The refusal replaces the cached preview for this pair: the last
+        // good direction's counts must not survive as a stale success.
+        setPreviews((current) => withoutPreview(current, key))
+        setPreviewErrors((current) => ({ ...current, [groupKey]: message }))
         return
       }
-      setPreviews((current) => ({ ...current, [duplicateId]: payload }))
+      setPreviews((current) => ({ ...current, [key]: { ...payload, groupKey, survivorId, duplicateId } }))
     } finally {
       setBusy(null)
     }
@@ -97,6 +127,7 @@ export function ProjectDuplicatesView() {
 
   async function merge(groupKey: string, survivorId: string, duplicateId: string) {
     setBusy(duplicateId)
+    setPreviewErrors((current) => withoutKey(current, groupKey))
     try {
       const response = await fetch('/api/projects/merge', {
         method: 'POST',
@@ -105,15 +136,13 @@ export function ProjectDuplicatesView() {
       })
       const payload = (await response.json()) as (Preview & { error?: string })
       if (!response.ok) {
-        toast.error(payload.error ?? t('duplicates.mergeFailed'))
+        const message = payload.error ?? t('duplicates.mergeFailed')
+        toast.error(message)
+        setPreviewErrors((current) => ({ ...current, [groupKey]: message }))
         return
       }
       toast.success(t('duplicates.merged'))
-      setPreviews((current) => {
-        const next = { ...current }
-        delete next[duplicateId]
-        return next
-      })
+      setPreviews((current) => withoutPreview(current, `${groupKey}:${duplicateId}`))
       await load()
     } finally {
       setBusy(null)
@@ -142,6 +171,13 @@ export function ProjectDuplicatesView() {
                 <CardTitle>{t(`duplicates.kind.${group.kind}`, { key: group.key })}</CardTitle>
                 <CardDescription>{t('duplicates.chooseSurvivor')}</CardDescription>
               </CardHeader>
+              {previewErrors[groupKey] ? (
+                <div className="px-6 pb-2">
+                  <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+                    {previewErrors[groupKey]}
+                  </p>
+                </div>
+              ) : null}
               <CardContent>
                 <table className="w-full text-sm">
                   <thead>
@@ -155,7 +191,11 @@ export function ProjectDuplicatesView() {
                   </thead>
                   <tbody>
                     {group.projects.map((project) => {
-                      const previewResult = previews[project.id]
+                      // A cached preview only speaks for the survivor it was
+                      // computed for — and for this group. Anything else is a
+                      // stale direction, never rendered as impact.
+                      const cached = previews[`${groupKey}:${project.id}`]
+                      const previewResult = cached && cached.survivorId === survivorId ? cached : null
                       const movedTotal = previewResult
                         ? previewResult.moved.reduce((sum, item) => sum + item.rows, 0)
                         : null
@@ -166,9 +206,10 @@ export function ProjectDuplicatesView() {
                               type="radio"
                               name={groupKey}
                               checked={survivorId === project.id}
-                              onChange={() =>
+                              onChange={() => {
                                 setSurvivors((current) => ({ ...current, [groupKey]: project.id }))
-                              }
+                                setPreviewErrors((current) => withoutKey(current, groupKey))
+                              }}
                               aria-label={t('duplicates.survivor')}
                             />
                           </td>
