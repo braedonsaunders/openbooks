@@ -16,6 +16,7 @@ import {
   runDocumentVersionedTransaction,
 } from './documents'
 import { canonicalDecimal } from './exact-decimal'
+import { unpricedLaborHours as fieldTicketUnpricedHours } from './field-ticket-totals'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
@@ -1382,10 +1383,8 @@ export async function loadFieldTicket(
   )
   // Crew hours with no bill rate after the preview (no labor item, or no
   // rate-book match) price at $0: surface the unpriced hours so a $0 labor
-  // total is never mistaken for valued work.
-  const unpricedLaborHours = sum(
-    entries.rows.filter((e) => e.bill_rate == null).map((e) => String(e.hours ?? 0)),
-  )
+  // total is never mistaken for valued work (web/lib/field-ticket-totals.ts).
+  const unpricedLaborHours = fieldTicketUnpricedHours(entries.rows)
   const linesTotal = sum(lines.rows.map((l) => String(l.bill_amount ?? l.amount)))
   const signatures: { foreman?: TicketSignature; customer?: TicketSignature } = {}
   for (const signature of signatureRows.rows) {
