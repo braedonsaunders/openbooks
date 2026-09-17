@@ -11,6 +11,8 @@ const { DocumentDrawerTitle } = await import('./document-drawer')
 // item) was what shrank. The pill must keep its width (shrink-0) and the
 // row must wrap (flex-wrap) so the status stays readable.
 function titleHtml() {
+  // The provider's overloads only accept children inside the props object.
+  /* eslint-disable react/no-children-prop */
   return renderToString(
     React.createElement(NextIntlClientProvider, {
       locale: 'en',
@@ -23,6 +25,7 @@ function titleHtml() {
       }),
     }),
   )
+  /* eslint-enable react/no-children-prop */
 }
 
 test('F-t12-013: drawer title row wraps instead of clipping the status pill', () => {
