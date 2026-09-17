@@ -18,7 +18,7 @@
     "recentEntries": "最近的日记账分录",
     "recentEntryStatusPosted": "已过账",
     "recentEntryStatusReversed": "已冲销",
-    "recentEntryLines": "{count} 行",
+    "recentEntryLines": "{count, plural, one {# 行} other {# 行}}",
     "pendingApprovalsList": "待审批",
     "myApprovals": "我的审批",
     "inProgress": "进行中",
@@ -26,7 +26,8 @@
     "openReceivables": "未结应收",
     "overdueReceivables": "逾期应收",
     "openPayables": "未结应付",
-    "overduePayables": "逾期应付"
+    "overduePayables": "逾期应付",
+    "agentFindings": "智能体发现"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -34,7 +35,10 @@
     "baseCurrency": "本位币 · {currency}",
     "outstanding": "未结",
     "pastDue": "逾期",
-    "asOf": "截至 {date}"
+    "asOf": "截至 {date}",
+    "agentProposals": "{count} 个含建议",
+    "agentLastRun": "上次运行 {date}",
+    "agentClear": "一切正常"
   },
   "categories": {
     "kpi": "要点",
@@ -59,7 +63,8 @@
     "openReceivables": "以本位币计的未付客户发票。",
     "overdueReceivables": "以本位币计的已逾期客户发票。",
     "openPayables": "以本位币计的未付应付账单。",
-    "overduePayables": "以本位币计的已逾期应付账单。"
+    "overduePayables": "以本位币计的已逾期应付账单。",
+    "agentFindings": "打开后台智能体的发现——跳转到工作台。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",

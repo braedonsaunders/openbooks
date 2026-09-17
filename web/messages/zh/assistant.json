@@ -66,5 +66,14 @@
     "placeholder": "咨询关于您账务的任何问题……",
     "submit": "询问",
     "hint": "回车提问 · Esc 关闭 · 打开助手"
-  }
+  },
+  "context": {
+    "attached": "已附加发现上下文",
+    "remove": "移除发现上下文"
+  },
+  "responding": "助手正在回复",
+  "jumpToLatest": "跳转到最新",
+  "loadEarlier": "加载以前的消息",
+  "loadingEarlier": "正在加载以前的消息…",
+  "loadEarlierFailed": "无法加载以前的消息。"
 }

@@ -7,7 +7,10 @@
     "emptyTitle": "暂无物料",
     "emptyDescription": "添加第一个服务、人工或费用以创建目录。",
     "newButton": "新建物料",
-    "createDraftFailed": "无法创建草稿物料"
+    "createDraftFailed": "无法创建草稿物料",
+    "view": "视图",
+    "viewCatalog": "目录",
+    "viewRateBooks": "价格手册"
   },
   "labels": {
     "code": "编码",
@@ -102,7 +105,9 @@
     "saveFailed": "无法保存费率",
     "saved": "费率版本已保存",
     "empty": "尚无费率版本。",
-    "rates": "费率"
+    "rates": "费率",
+    "tierOverrides": "工时类型费率：",
+    "tierAuto": "自动"
   },
   "revrec": {
     "title": "收入确认",
@@ -125,5 +130,56 @@
       "exclude": "排除",
       "software": "软件（残值法）"
     }
+  },
+  "costing": {
+    "title": "存货计价",
+    "description": "该物料存货的计价与跟踪方式——方法、科目与再订货点。",
+    "configure": "配置计价",
+    "empty": "尚无成本档案——请在收货前先配置。",
+    "method": "计价方法",
+    "methods": {
+      "fifo": "先进先出法",
+      "moving_average": "移动平均法",
+      "standard": "标准成本法"
+    },
+    "tracking": "跟踪",
+    "trackingOptions": {
+      "none": "无",
+      "lot": "批次",
+      "serial": "序列号"
+    },
+    "baseUnit": "基本单位",
+    "assetAccount": "存货资产科目",
+    "cogsAccount": "销售成本科目",
+    "adjustmentAccount": "调整科目",
+    "varianceAccount": "差异科目",
+    "receivedNotBilledAccount": "货到未开票科目",
+    "standardCost": "标准成本",
+    "reorderPoint": "再订货点",
+    "preferredStockLevel": "期望库存水平",
+    "selectAccount": "选择科目",
+    "separationConflict": "必须与存货资产科目不同",
+    "separationBlocked": "保存前请修正高亮科目——对方科目必须与存货资产科目不同。",
+    "allowNegativeInventory": "允许负库存",
+    "negativeCostBasis": "暂定成本基础",
+    "provisionalUnitCost": "已配置的暂定单位成本",
+    "negativeCostBasisOptions": {
+      "last_receipt": "上次收货成本",
+      "standard": "标准成本",
+      "configured": "配置成本"
+    }
+  },
+  "fairValue": {
+    "title": "公允价值单价",
+    "description": "按币种区分的带日期独立售价（SSP），用于将组合收入分摊至各履约义务。",
+    "new": "新建单价",
+    "currency": "币种",
+    "unitPrice": "单价",
+    "lowValue": "下限",
+    "highValue": "上限",
+    "effectiveFrom": "生效自",
+    "effectiveTo": "有效至",
+    "empty": "尚无公允价值单价——将使用上方的单一SSP。",
+    "confirmDelete": "删除该公允价值单价？"
   }
 }

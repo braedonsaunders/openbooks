@@ -58,7 +58,8 @@
     "reasonLabel": "驳回原因（应用于每个所选项目）",
     "approvedCount": "已批准 {count} 项",
     "rejectedCount": "已驳回 {count} 项",
-    "failedCount": "失败 {count} 项（{error}）"
+    "failedCount": "失败 {count} 项（{error}）",
+    "signatureBlocked": "所选审批中有需要签名的——请逐个审批。"
   },
   "ooo": {
     "button": "外出",
@@ -84,7 +85,10 @@
     "badges": {
       "quorumAll": "所有审批人",
       "reminder": "提醒 {date}",
-      "escalates": "升级 {date}"
-    }
+      "escalates": "升级 {date}",
+      "signature": "需要签名"
+    },
+    "signTitle": "签名以审批",
+    "signLabel": "输入全名以签署该审批"
   }
 }

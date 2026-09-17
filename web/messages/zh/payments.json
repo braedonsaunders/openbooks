@@ -89,7 +89,12 @@
       "autosaveFailed": "自动保存失败",
       "postFailed": "过账失败",
       "posted": "{side, select, ap {付款已过账并核销} other {客户收款已过账并核销}}"
-    }
+    },
+    "deleteConfirmTitle": "删除该付款？",
+    "deleteConfirmBody": "这将永久删除草稿付款。此操作无法撤销。",
+    "deleteConfirmAction": "删除",
+    "deleted": "付款已删除",
+    "deleteFailed": "删除失败"
   },
   "eft": {
     "notConfiguredTitle": "尚未配置 EFT 发起",

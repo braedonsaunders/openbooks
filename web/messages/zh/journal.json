@@ -33,6 +33,13 @@
       "debit": "借方",
       "credit": "贷方",
       "openItem": "未清项"
+    },
+    "contributors": {
+      "standardLines": "标准分录行",
+      "locked": "已锁定",
+      "ruleGroup": "规则：{name}",
+      "scriptGroup": "脚本：{name}",
+      "otherGroup": "{kind}：{name}"
     }
   },
   "newButton": {

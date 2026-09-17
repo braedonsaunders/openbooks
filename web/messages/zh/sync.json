@@ -16,7 +16,18 @@
       "unconfigured": "未配置"
     },
     "mirrorBadge": "镜像：{schedule}",
-    "lastRun": "上次运行：{lastRun} · 已同步至：{cursor}"
+    "lastRun": "上次运行：{lastRun} · 已同步至：{cursor}",
+    "schedule": "镜像计划",
+    "mirrorHealth": "镜像",
+    "attachmentHealth": "附件",
+    "sourceDeletions": "源端已删除交易",
+    "sourceDeletionHint": "选择 OpenBooks 应保留已审计交易，还是将其冲销并作废。已记账且有付款核销的单据须先取消核销。",
+    "schedules": {
+      "hourly": "每小时",
+      "every_6_hours": "每 6 小时",
+      "daily": "每天",
+      "weekly": "每周"
+    }
   },
   "actions": {
     "connect": "连接",
@@ -30,7 +41,9 @@
     "pauseMirror": "暂停镜像",
     "enableMirror": "启用镜像",
     "edit": "编辑",
-    "downloadQwc": "下载 Web Connector"
+    "downloadQwc": "下载 Web Connector",
+    "retainDeletion": "留存并附证据",
+    "voidDeletion": "冲销并作废"
   },
   "runs": {
     "heading": "最近运行",
@@ -97,7 +110,8 @@
       "CONNECTION_UNCONFIGURED": "请先添加凭据，再运行此连接。",
       "INVALID_MODE": "请选择有效的迁移操作。",
       "ATTACHMENTS_UNSUPPORTED": "此连接不支持附件迁移。",
-      "PROJECT_FINANCIALS_UNSUPPORTED": "此连接不提供项目财务输入同步。"
+      "PROJECT_FINANCIALS_UNSUPPORTED": "此连接不提供项目财务输入同步。",
+      "RUN_ALREADY_ACTIVE": "该连接已有同类运行正在执行。"
     },
     "testing": "正在测试连接…",
     "connected": "已连接",
@@ -108,7 +122,9 @@
     "created": "连接已创建",
     "updated": "连接已更新",
     "copied": "重定向 URI 已复制",
-    "copyFailed": "无法复制——请手动选择并复制文本"
+    "copyFailed": "无法复制——请手动选择并复制文本",
+    "deletionRetained": "源端删除已留存并附管理层证据",
+    "deletionVoided": "源端删除的交易已冲销并作废"
   },
   "confirmDelete": "删除连接“{name}”？已迁移的数据将保留；仅移除此链接。",
   "drawer": {
@@ -124,7 +140,13 @@
     "name": "连接名称",
     "select": "选择…",
     "credentials": "凭据（静态存储时加密，不会再次显示）",
-    "keepCurrent": "留空以保留当前值"
+    "keepCurrent": "留空以保留当前值",
+    "postedChanges": {
+      "label": "已记账源端交易变更",
+      "review": "停止并要求复核",
+      "automatic": "自动追加冲销与替代",
+      "help": "自动更正从不改写已记账历史。OpenBooks 保留原文，记账关联的冲销与替代，结转符合条件的核销，但在对账、已结期间、库存、收入确认或下游单据处仍会停止。"
+    }
   },
   "oauth": {
     "title": "在 <link>{portal}</link> 中进行一次性应用设置",
@@ -192,5 +214,7 @@
         "复制客户端 ID，生成客户端密钥，将两者粘贴到此表单中，保存后点击“连接”。"
       ]
     }
-  }
+  },
+  "confirmRetainSourceDeletion": "在 OpenBooks 中保留源端删除的交易 {ref}，并记录为管理层决定？",
+  "confirmVoidSourceDeletion": "冲销并作废源端删除的交易 {ref}？这将记账一笔会计冲销，且无法在此页面撤销。"
 }

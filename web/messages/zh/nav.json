@@ -61,7 +61,18 @@
     "crm-forecasts": "预测与配额",
     "revenue": "收入确认",
     "inventory": "库存",
-    "docs": "文档"
+    "docs": "文档",
+    "payroll": "工资核算",
+    "wip-billing": "在制品与预开票",
+    "property-management": "物业管理",
+    "subcontracts": "分包合同",
+    "admin-page-layouts": "页面布局",
+    "admin-extensions": "应用",
+    "field-tickets": "现场工单",
+    "compliance": "合规",
+    "compliance-vendors": "分包商",
+    "lien-waivers": "留置权弃权书",
+    "information-returns": "信息申报表"
   },
   "groups": {
     "my-work": "我的工作",
@@ -93,6 +104,11 @@
     "customize": "自定义",
     "automate": "自动化",
     "extend": "扩展",
-    "records": "记录"
+    "records": "记录",
+    "compliance": "合规"
+  },
+  "modulesShort": {
+    "ap": "应付账款",
+    "ar": "应收账款"
   }
 }

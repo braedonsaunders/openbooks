@@ -31,7 +31,8 @@
       "ordersTitle": "订单管线",
       "ordersDescription": "未清报价单、销售订单与采购订单——数量、金额与转化情况",
       "cashFlowIndirectTitle": "现金流量（间接法）",
-      "cashFlowIndirectDescription": "间接法 — 净利润调节至经营现金流，附营运资本明细"
+      "cashFlowIndirectDescription": "间接法 — 净利润调节至经营现金流，附营运资本明细",
+      "payrollDescription": "基于工资条的内置工资报表——工资数据需要工资权限。"
     },
     "groups": {
       "financial": "财务报表",
@@ -40,7 +41,8 @@
       "budgeting": "预算编制",
       "custom": "自定义与已保存",
       "projects": "项目",
-      "orders": "销售与订单"
+      "orders": "销售与订单",
+      "payroll": "工资"
     },
     "customStudio": {
       "title": "自定义报表构建器",
@@ -514,7 +516,9 @@
         "fri": "星期五",
         "sat": "星期六"
       }
-    }
+    },
+    "drawerDescription": "按计划通过邮件发送此报表。计划将使用创建时保存的筛选条件运行。",
+    "loading": "正在加载计划…"
   },
   "catalog": {
     "entities": {
@@ -1113,7 +1117,22 @@
       "purchases": "采购",
       "both": "两者",
       "true": "是",
-      "false": "否"
+      "false": "否",
+      "earning": "应发",
+      "deduction": "扣除",
+      "employer_contribution": "雇主缴存",
+      "match": "完全匹配",
+      "within_tolerance": "容差范围内",
+      "difference": "差异",
+      "prior_only": "仅旧系统有",
+      "our_only": "仅本系统有",
+      "employee_prior_only": "本次核算缺失该员工",
+      "employee_our_only": "名册缺失该员工",
+      "unattributed": "任何组成部分均无法解释",
+      "clean": "已完全对平",
+      "clean_within_tolerance": "容差范围内已对平",
+      "differences": "待解决差异",
+      "no_comparable_data": "未比较任何数据"
     }
   },
   "operators": {
@@ -1172,7 +1191,9 @@
       "fiscal_year": "会计年度"
     },
     "csvSection": "分节",
-    "exportTruncated": "共 {total} 行，仅显示前 {shown} 行 — 缩小期间或添加筛选条件以查看全部。"
+    "exportTruncated": "共 {total} 行，仅显示前 {shown} 行 — 缩小期间或添加筛选条件以查看全部。",
+    "subtotal": "{level} — 小计",
+    "grandTotals": "总计"
   },
   "export": {
     "pdf": "PDF",
@@ -1211,6 +1232,30 @@
     "lot-recall": {
       "name": "批次召回",
       "description": "与批次关联的每笔库存变动，包括物料、到期日、数量、库位、源单据和往来方，用于召回和追溯。"
+    },
+    "payroll-journal": {
+      "name": "工资日记账",
+      "description": "工资期间的完整审计记录，按员工分节：每项应发、扣除与雇主缴存，含工时、费率、本期金额与本年累计。请从期间菜单选择单个工资期间以对应核算。需要工资权限。"
+    },
+    "payroll-deductions-register": {
+      "name": "扣款与缴存登记簿",
+      "description": "按组成部分列示每项代扣与雇主缴存：本期与本年累计各自为谁支付了多少。是汇缴与福利机构的支撑明细。需要工资权限。"
+    },
+    "payroll-cost-by-department": {
+      "name": "部门工资成本",
+      "description": "人工分布：按部门与组成部分类型（应发、代扣、雇主负担）列示工资金额。需要工资权限。"
+    },
+    "payroll-employee-totals": {
+      "name": "员工合计（本年累计）",
+      "description": "每员工一行：所选期间的应发总额、代扣所得税、实发与雇主成本合计及工资条计数。需要工资权限。"
+    },
+    "payroll-parallel-run": {
+      "name": "并行核算对账",
+      "description": "上线管控：针对一个工资期间，将每位员工与每个组成部分同原工资服务商比较，按结果分节，重大差异与单边员工优先阅读，完全一致最后阅读。已配置的容差显示在单独列中。"
+    },
+    "payroll-parallel-run-totals": {
+      "name": "并行核算组成部分合计",
+      "description": "同一对账的汇总版：按组成部分列示原服务商支付总额、本系统计算额与差异——以便将期间差异归因至产生差异的组成部分。"
     }
   },
   "generalLedger": {

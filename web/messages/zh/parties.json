@@ -220,6 +220,25 @@
     "noBooks": "请先创建费率表。",
     "rateBookRequired": "请选择费率表",
     "created": "已分配费率表",
-    "confirmDelete": "移除此分配？"
+    "confirmDelete": "移除此分配？",
+    "search": "搜索已分配价格手册…",
+    "statusFilter": "分配状态",
+    "status": {
+      "active": "活跃",
+      "inactive": "非活跃",
+      "all": "全部状态"
+    },
+    "openPricing": "打开定价",
+    "count": "{count, plural, one {# 个分配} other {# 个分配}}",
+    "errors": {
+      "invalidRecord": "选择有效记录。",
+      "scope": "恰好选择一个客户或项目。",
+      "dates": "选择有效日期。",
+      "dateOrder": "结束日期不得早于开始日期。",
+      "dateBasis": "选择有效的计划日期。",
+      "references": "选择本组织的记录。",
+      "overlap": "该记录在该日期范围的部分期间已有生效的人工定价。",
+      "save": "无法保存人工定价分配。"
+    }
   }
 }

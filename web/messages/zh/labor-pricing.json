@@ -130,5 +130,15 @@
     "term": "请完整填写每个条款并使用唯一代码。",
     "custom": "请填写必填自定义字段。",
     "save": "无法保存人工费率卡。"
+  },
+  "filters": {
+    "time": "有效期间",
+    "active": "当前有效",
+    "scheduled": "已计划",
+    "expired": "已过期",
+    "allTime": "全部期间",
+    "dimension": "维度",
+    "allDimensions": "全部维度",
+    "unscoped": "组织默认值"
   }
 }

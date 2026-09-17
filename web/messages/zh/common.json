@@ -51,7 +51,8 @@
     "submitForApproval": "提交审批",
     "glImpact": "总账影响",
     "done": "完成",
-    "sending": "发送中…"
+    "sending": "发送中…",
+    "retire": "停用"
   },
   "transactionTypes": {
     "vendorBill": "应付账单", "bill": "账单",
@@ -156,7 +157,10 @@
     "active": "启用",
     "inactive": "停用",
     "error": "错误",
-    "ok": "正常"
+    "ok": "正常",
+    "pending_approval": "已提交",
+    "calculated": "已计算",
+    "committed": "已提交"
   },
   "filters": {
     "showInactive": "显示已停用"
@@ -217,14 +221,18 @@
     "loadFailedTitle": "审计轨迹不可用",
     "loadFailedDescription": "无法加载审计轨迹。请稍后重试。",
     "retry": "重试",
-    "actions": { "insert": "已创建", "update": "已更新", "delete": "已删除", "post": "已过账", "void": "已作废", "approve": "已批准", "reject": "已驳回" }
+    "actions": { "insert": "已创建", "update": "已更新", "delete": "已删除", "post": "已过账", "void": "已作废", "approve": "已批准", "reject": "已驳回",
+      "retired": "已停用" }
   },
   "amendment": {
     "title": "说明已过账单据的修改",
     "deleteTitle": "说明删除已过账单据的原因",
     "reason": "修改原因",
     "placeholder": "说明修改了什么以及原因",
-    "deletePlaceholder": "说明为何必须删除已过账交易"
+    "deletePlaceholder": "说明为何必须删除已过账交易",
+    "voidTitle": "作废该交易？",
+    "correctionCreated": "已创建更正草稿",
+    "voidPlaceholder": "说明该交易必须冲销的原因"
   },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",
@@ -250,6 +258,11 @@
     "badges": {
       "delegated": "已委派",
       "escalated": "已升级"
-    }
+    },
+    "signTitle": "签署该审批",
+    "signLabel": "输入姓名作为审批证明",
+    "retryRun": "重试审批",
+    "retried": "审批已重新驱动——新环节已在工作清单中",
+    "retryFailed": "重试失败"
   }
 }

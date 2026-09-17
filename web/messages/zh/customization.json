@@ -36,7 +36,12 @@
     "bank_rule": "银行规则",
     "project_charge": "项目计费项",
     "fixed_asset": "固定资产",
-    "property": "物业"
+    "property": "物业",
+    "customer": "客户",
+    "vendor": "供应商",
+    "employee": "员工",
+    "pay_run": "工资核算",
+    "field_ticket": "现场工单"
   },
   "property": {
     "tabs": {
@@ -161,7 +166,12 @@
         "text": "文本"
       },
       "customFields": "自定义字段",
-      "noCustomFields": "此记录类型尚未定义自定义字段。"
+      "noCustomFields": "此记录类型尚未定义自定义字段。",
+      "tabsSection": "选项卡",
+      "tabsHelp": "该记录浮出面板显示的选项卡。可隐藏不用的选项卡，按工作方式排序，用自己的词汇重命名，或为自定义字段添加专属选项卡。",
+      "addTab": "添加选项卡",
+      "customTab": "自定义",
+      "tabLocked": "该选项卡显示记录自身字段，不可隐藏。"
     },
     "list": {
       "new": "新建视图",
@@ -195,7 +205,9 @@
       "sortDir": "方向",
       "asc": "升序",
       "desc": "降序",
-      "perPage": "每页行数"
-    }
+      "perPage": "每页行数",
+      "deleteConfirm": "删除该视图？使用它的列表将回退到默认视图。此操作无法撤销。"
+    },
+    "documentation": "文档"
   }
 }
