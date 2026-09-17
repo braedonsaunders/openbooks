@@ -42,6 +42,9 @@ const NATIVE_ORIGINS = [
   'revenue_recognition',
   'fx_settlement',
   'translation',
+  // Migration true-ups (TRUEUP-*) are standalone engine journals (F-t12-014):
+  // posted but invisible in /journal while Origin=All.
+  'migration',
 ]
 
 test('journal list shows every GL-native engine origin', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
