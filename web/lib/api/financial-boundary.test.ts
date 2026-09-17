@@ -58,6 +58,7 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/insights/dashboards/draft/route.ts": "bodyless draft factory",
   "web/app/api/items/draft/route.ts": "bodyless draft factory",
   "web/app/api/journals/draft/route.ts": "bodyless draft factory",
+  "web/app/api/parties/[id]/bank-accounts/submit/route.ts": "bodyless lifecycle action; party and account ids are path and query parameters",
   "web/app/api/pay/[token]/route.ts": "bodyless token-authenticated checkout action",
   "web/app/api/payments/runs/[id]/file/route.ts": "bodyless artifact-generation action; run id is a path parameter",
   "web/app/api/payments/runs/[id]/files/[fileId]/reprocess/route.ts": "bodyless artifact-reprocessing action; identifiers are path parameters",
