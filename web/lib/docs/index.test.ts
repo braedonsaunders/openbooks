@@ -62,6 +62,24 @@ test('documentation registry is complete and internally consistent', () => {
   }
 })
 
+test('period-close docs scope the Publish stage to the advanced close flow', () => {
+  // F-t06-013: the article presented the Publish stage / Publish package
+  // button unconditionally, but simple-mode runs only Scope, Readiness,
+  // Execute, Review, Lock — Publish is the sixth stage behind advanced close.
+  const article = getArticle('period-close')
+  assert.ok(article, 'period-close article must exist')
+  assert.match(
+    article.body,
+    /Publish[\s\S]{0,400}[Aa]dvanced/,
+    'the Publish stage must be qualified as advanced-close-only so simple-mode readers stop hunting for it',
+  )
+  assert.match(
+    article.body,
+    /Scope.*Readiness.*Execute.*Review.*Lock/s,
+    'the article must name the five simple-mode stages in order',
+  )
+})
+
 test('categories, sections, and articles have deterministic display order', () => {
   const groups = categoriesWithArticles()
   assert.deepEqual(
