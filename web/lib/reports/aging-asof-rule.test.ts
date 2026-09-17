@@ -10,11 +10,9 @@ registerHooks({
 })
 const { resolveAgingAsOf } = await import('./aging.ts')
 
-// F-t02-008 / F-t07-011: the aging CSV disagreed with its screen (Summit
-// Ridge: 454,775.39 vs 293,651.98; Rassaun: every balance in 90+) because
+// F-t02-008 / F-t07-011: the aging CSV disagreed with its screen because
 // the export fell through to the fiscal year end while the screen ages as
-// of today. Cluster measurement showed the as-of shift alone reproduces
-// both totals AND buckets exactly, so this single rule is the whole fix.
+// of today. The as-of shift alone reproduces both totals and buckets.
 test('an explicit as-of always wins', () => {
   assert.equal(
     resolveAgingAsOf({ asOf: '2026-09-17', periodParam: 'this_fiscal_year', periodTo: '2026-12-31', today: '2026-09-17' }),
