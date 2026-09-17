@@ -43,6 +43,34 @@
         "couldNotLoad": "Immobilien konnten nicht geladen werden",
         "actionFailed": "Aktion fehlgeschlagen"
       }
+    },
+    "propertyDrawer": {
+      "description": "Verknüpfen Sie die Immobilie mit Rechtsträger, Adresse und Buchungskonten.",
+      "code": "Objektcode",
+      "legalEntity": "Rechtsträger",
+      "propertyLocation": "Standort der Immobilie",
+      "fixedAsset": "Anlagegut",
+      "rentIncomeAccount": "Mieterlöskonto",
+      "camIncomeAccount": "Nebenkostenerlöskonto",
+      "depositLiability": "Kautionsschuld",
+      "defaultDepositBank": "Standard-Kautionsbank",
+      "street": "Straße",
+      "city": "Stadt",
+      "region": "Provinz / Bundesland",
+      "postalCode": "Postleitzahl",
+      "selectEntity": "Rechtsträger wählen",
+      "notMapped": "Nicht zugeordnet",
+      "notOwned": "Nicht im Eigentum / nicht verknüpft",
+      "selectAccount": "Konto wählen",
+      "selectLiability": "Schuld wählen",
+      "selectBank": "Bank wählen"
+    },
+    "propertyTypes": {
+      "residential": "Wohnen",
+      "commercial": "Gewerbe",
+      "mixedUse": "Mischnutzung",
+      "industrial": "Industrie",
+      "other": "Sonstiges"
     }
   },
   "roles": {

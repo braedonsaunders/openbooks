@@ -43,6 +43,34 @@
         "couldNotLoad": "Não foi possível carregar os imóveis",
         "actionFailed": "A ação falhou"
       }
+    },
+    "propertyDrawer": {
+      "description": "Vincule o imóvel operacional à sua pessoa jurídica, endereço e contas contábeis.",
+      "code": "Código",
+      "legalEntity": "Pessoa jurídica",
+      "propertyLocation": "Localização do imóvel",
+      "fixedAsset": "Ativo imobilizado",
+      "rentIncomeAccount": "Conta de receitas de aluguel",
+      "camIncomeAccount": "Conta de receitas de encargos comuns",
+      "depositLiability": "Passivo de cauções",
+      "defaultDepositBank": "Banco de cauções padrão",
+      "street": "Rua",
+      "city": "Cidade",
+      "region": "Província / estado",
+      "postalCode": "CEP",
+      "selectEntity": "Selecionar entidade",
+      "notMapped": "Não atribuído",
+      "notOwned": "Não próprio / não vinculado",
+      "selectAccount": "Selecionar conta",
+      "selectLiability": "Selecionar passivo",
+      "selectBank": "Selecionar banco"
+    },
+    "propertyTypes": {
+      "residential": "Residencial",
+      "commercial": "Comercial",
+      "mixedUse": "Misto",
+      "industrial": "Uso industrial",
+      "other": "Outro"
     }
   },
   "roles": {

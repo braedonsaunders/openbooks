@@ -43,6 +43,34 @@
         "couldNotLoad": "No se pudieron cargar las propiedades",
         "actionFailed": "La acción falló"
       }
+    },
+    "propertyDrawer": {
+      "description": "Vincule el inmueble operativo con su persona jurídica, su dirección y sus cuentas contables.",
+      "code": "Código",
+      "legalEntity": "Persona jurídica",
+      "propertyLocation": "Ubicación del inmueble",
+      "fixedAsset": "Activo fijo",
+      "rentIncomeAccount": "Cuenta de ingresos por alquiler",
+      "camIncomeAccount": "Cuenta de ingresos por gastos comunes",
+      "depositLiability": "Pasivo por fianzas",
+      "defaultDepositBank": "Banco de fianzas predeterminado",
+      "street": "Calle",
+      "city": "Ciudad",
+      "region": "Provincia / estado",
+      "postalCode": "Código postal",
+      "selectEntity": "Seleccionar entidad",
+      "notMapped": "Sin asignar",
+      "notOwned": "No propio / no vinculado",
+      "selectAccount": "Seleccionar cuenta",
+      "selectLiability": "Seleccionar pasivo",
+      "selectBank": "Seleccionar banco"
+    },
+    "propertyTypes": {
+      "residential": "Residencial",
+      "commercial": "Comercial",
+      "mixedUse": "Mixto",
+      "industrial": "Uso industrial",
+      "other": "Otro"
     }
   },
   "roles": {

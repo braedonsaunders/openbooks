@@ -542,7 +542,7 @@ test('the generated fallback manifest exactly identifies untranslated property-m
 
   assert.equal(manifest.sourceLocale, 'en')
   assert.deepEqual(Object.keys(manifest.fallbacks).sort(), translatedLocales)
-  assert.equal(propertyKeys.length, 200, 'the property-management source inventory changed')
+  assert.equal(propertyKeys.length, 224, 'the property-management source inventory changed')
   assert.deepEqual(manifest, generateFallbackManifest(), 'fallback manifest must be regenerated')
 
   for (const locale of translatedLocales) {
@@ -779,6 +779,51 @@ test('recent journal widget copy ships translated in every locale', () => {
     'dashboard.widgets.recentEntryStatusPosted',
     'dashboard.widgets.recentEntryStatusReversed',
     'dashboard.widgets.recentEntryLines',
+  ] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+    }
+  }
+})
+
+test('property creation drawer copy ships translated in every locale', () => {
+  // The New-property drawer (F-t09-013 residual) was fully hard-coded
+  // English; every string now resolves through these keys plus common
+  // labels/actions and the translated workspace CTA title.
+  const keys = [
+    'entities.propertyManagement.propertyDrawer.description',
+    'entities.propertyManagement.propertyDrawer.code',
+    'entities.propertyManagement.propertyDrawer.legalEntity',
+    'entities.propertyManagement.propertyDrawer.propertyLocation',
+    'entities.propertyManagement.propertyDrawer.fixedAsset',
+    'entities.propertyManagement.propertyDrawer.rentIncomeAccount',
+    'entities.propertyManagement.propertyDrawer.camIncomeAccount',
+    'entities.propertyManagement.propertyDrawer.depositLiability',
+    'entities.propertyManagement.propertyDrawer.defaultDepositBank',
+    'entities.propertyManagement.propertyDrawer.street',
+    'entities.propertyManagement.propertyDrawer.city',
+    'entities.propertyManagement.propertyDrawer.region',
+    'entities.propertyManagement.propertyDrawer.postalCode',
+    'entities.propertyManagement.propertyDrawer.selectEntity',
+    'entities.propertyManagement.propertyDrawer.notMapped',
+    'entities.propertyManagement.propertyDrawer.notOwned',
+    'entities.propertyManagement.propertyDrawer.selectAccount',
+    'entities.propertyManagement.propertyDrawer.selectLiability',
+    'entities.propertyManagement.propertyDrawer.selectBank',
+    'entities.propertyManagement.propertyTypes.residential',
+    'entities.propertyManagement.propertyTypes.commercial',
+    'entities.propertyManagement.propertyTypes.mixedUse',
+    'entities.propertyManagement.propertyTypes.industrial',
+    'entities.propertyManagement.propertyTypes.other',
   ] as const
   const source = flattenCatalog('en')
   for (const key of keys) {

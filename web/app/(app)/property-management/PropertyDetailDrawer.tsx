@@ -31,7 +31,7 @@ import { CustomFieldInput } from "../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import { HeaderFields } from "../../../components/transaction-form/header-fields";
 import type { Option } from "./workspace-ui";
-import { Empty, RecordTabs, Status } from "./workspace-ui";
+import { Empty, PROPERTY_TYPE_OPTIONS, RecordTabs, Status } from "./workspace-ui";
 import { CamTable } from "./CamTable";
 import { DepositTable, RentTable } from "./LeaseTables";
 import type { CamPool, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyRow, PropertyWorkspace, SaveAction, UnitRow, WorkspaceOptions } from "./types";
@@ -96,6 +96,7 @@ export function PropertyDetailDrawer({
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations("entities.propertyManagement.detail");
+  const tTypes = useTranslations("entities.propertyManagement.propertyTypes");
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [tab, setTab] = useState(initialTab ?? "overview");
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -243,20 +244,20 @@ export function PropertyDetailDrawer({
                 setForm({ ...form, propertyType: e.target.value })
               }
             >
-              {[
-                "residential",
-                "commercial",
-                "mixed_use",
-                "industrial",
-                "other",
-              ].map((value) => (
-                <option key={value} value={value}>
-                  {value.replaceAll("_", " ")}
+              {PROPERTY_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {tTypes(option.key)}
                 </option>
               ))}
             </Select>
           ) : (
-            read(form.propertyType.replaceAll("_", " "), "capitalize")
+            read(
+              tTypes(
+                PROPERTY_TYPE_OPTIONS.find((option) => option.value === form.propertyType)?.key
+                  ?? "other",
+              ),
+              "capitalize",
+            )
           ),
           true,
         );
