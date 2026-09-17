@@ -1,5 +1,27 @@
 {
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "操作に失敗しました",
+      "camPoolCreated": "共益費プールを作成しました",
+      "camPoolReopened": "共益費プールを修正のため再開しました",
+      "camPoolUpdated": "共益費プールを更新しました",
+      "chargeAdded": "請求を追加しました",
+      "couldNotLoad": "物件を読み込めませんでした",
+      "depositPosted": "敷金を記録しました",
+      "depositReversed": "敷金を取り消しました",
+      "escalationApplied": "エスカレーションを適用しました",
+      "escalationScheduled": "エスカレーションを予定しました",
+      "lateFeesAssessed": "遅延料金を適用しました",
+      "leaseCreated": "リースを作成しました",
+      "leaseUpdated": "リースを更新しました",
+      "propertyCreated": "物件を作成しました",
+      "propertyDeleted": "物件を削除しました",
+      "propertyUpdated": "物件を更新しました",
+      "rentBilled": "家賃を請求しました",
+      "unitAdded": "ユニットを追加しました",
+      "unitDeleted": "ユニットを削除しました",
+      "unitUpdated": "ユニットを更新しました"
+    },
     "workspace": {
       "title": "不動産管理",
       "description": "物件、リース、家賃、共益費精算、敷金を管理します。",
@@ -57,6 +79,201 @@
         "occupancy": "入居状況",
         "currency": "通貨",
         "status": "ステータス"
+      }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "charge": "請求",
+          "frequency": "頻度",
+          "effective": "適用日",
+          "amount": "金額",
+          "open": "未収"
+        },
+        "addTitle": "定期請求を追加",
+        "labels": {
+          "type": "種類",
+          "description": "説明",
+          "amount": "金額",
+          "frequency": "頻度",
+          "effectiveFrom": "適用開始日",
+          "effectiveTo": "適用終了日",
+          "incomeAccount": "収益勘定"
+        },
+        "types": {
+          "cam": "共益費",
+          "parking": "駐車場",
+          "storage": "倉庫",
+          "utility": "光熱費",
+          "other": "その他"
+        },
+        "frequencies": {
+          "monthly": "毎月",
+          "quarterly": "四半期ごと",
+          "annually": "毎年",
+          "one_time": "1回限り"
+        },
+        "propertyDefault": "物件の既定値",
+        "addCharge": "請求を追加"
+      },
+      "escalations": {
+        "table": {
+          "effective": "適用日",
+          "method": "方法",
+          "value": "値",
+          "result": "結果",
+          "status": "ステータス"
+        },
+        "apply": "適用",
+        "emptyTitle": "家賃エスカレーションはありません",
+        "emptyDetail": "契約に基づく定率・定額・更改家賃の変更を予定します。",
+        "scheduleTitle": "エスカレーションの予定",
+        "labels": {
+          "effectiveOn": "適用日",
+          "method": "方法",
+          "value": "値"
+        },
+        "methods": {
+          "percent": "定率増額",
+          "fixed": "定額増額",
+          "new_amount": "新しい月額"
+        },
+        "schedule": "予定"
+      },
+      "deposits": {
+        "required": "必須",
+        "held": "預かり",
+        "notice": "預り金の記帳は即時に行われ、編集・削除はできません。誤った記帳は取り消したうえで、下に正しい内容を記帳してください。",
+        "emptyTitle": "預り金の履歴がありません",
+        "emptyDetail": "受領を記録してテナントの敷金負債を計上します。",
+        "reverseTitle": "敷金取引の取消",
+        "reverseLabels": {
+          "reversalDate": "取消日",
+          "reason": "理由"
+        },
+        "cancel": "キャンセル",
+        "postReversal": "取消を記帳",
+        "recordTitle": "敷金取引の記録",
+        "labels": {
+          "transaction": "取引",
+          "date": "日付",
+          "amount": "金額",
+          "bankAccount": "銀行口座",
+          "tenantInvoice": "テナント請求書",
+          "offsetAccount": "相手勘定",
+          "memo": "摘要"
+        },
+        "kinds": {
+          "received": "受領",
+          "interest": "利息",
+          "applied": "テナント請求書へ充当",
+          "refunded": "返金",
+          "adjustment_increase": "調整（増額）",
+          "adjustment_decrease": "調整（減額）"
+        },
+        "propertyDefault": "物件の既定値",
+        "selectPostedInvoice": "記帳済み請求書を選択",
+        "selectAccount": "勘定を選択",
+        "postTransaction": "取引を記帳"
+      },
+      "toasts": {
+        "chargeAdded": "リース請求を追加しました",
+        "escalationApplied": "家賃エスカレーションを適用しました",
+        "escalationScheduled": "エスカレーションを予定しました",
+        "depositReversed": "敷金取引を取り消しました",
+        "depositPosted": "敷金取引を記帳しました"
+      }
+    },
+    "detail": {
+      "selectEmpty": "未関連付け",
+      "fields": {
+        "name": "名前",
+        "code": "コード",
+        "propertyType": "物件タイプ",
+        "status": "ステータス",
+        "subsidiary": "子会社",
+        "location": "所在地",
+        "fixedAsset": "固定資産",
+        "currency": "通貨",
+        "street": "番地",
+        "city": "市区町村",
+        "region": "都道府県",
+        "postalCode": "郵便番号",
+        "rentIncomeAccount": "賃料収益勘定",
+        "camIncomeAccount": "共益費収益勘定",
+        "depositLiabilityAccount": "預り保証金勘定",
+        "defaultBankAccount": "既定の銀行口座"
+      },
+      "selectSubsidiary": "子会社を選択",
+      "tabsLabelMap": {
+        "overview": "概要",
+        "units": "ユニット",
+        "leases": "リース",
+        "rent": "家賃",
+        "deposits": "敷金",
+        "cam": "共益費"
+      },
+      "tabsAria": "物件詳細",
+      "noLocation": "所在地なし",
+      "cancel": "キャンセル",
+      "saving": "保存中…",
+      "save": "保存",
+      "edit": "編集",
+      "actions": "操作",
+      "customForm": "カスタムフォーム",
+      "customizeForm": "フォームをカスタマイズ",
+      "deactivate": "物件を無効化",
+      "reactivate": "物件を有効化",
+      "deleteConfirm": "{name} を削除しますか？未使用の物件のみ完全に削除できます。",
+      "deleteProperty": "物件を削除",
+      "units": {
+        "title": "賃貸可能ユニット",
+        "description": "入居状況、賃貸可能面積、ユニットごとのリース可能数。",
+        "addUnit": "ユニットを追加",
+        "table": {
+          "unit": "ユニット",
+          "type": "種別",
+          "rentableArea": "賃貸可能面積",
+          "bedrooms": "寝室数",
+          "status": "ステータス"
+        },
+        "emptyTitle": "ユニットはまだありません",
+        "emptyDetail": "この物件レコードから最初の賃貸可能ユニットを追加してください。"
+      },
+      "leases": {
+        "title": "物件のリース",
+        "description": "この物件の現在および過去のテナント契約。",
+        "newLease": "新規リース",
+        "table": {
+          "lease": "リース",
+          "unit": "ユニット",
+          "tenant": "テナント",
+          "term": "期間",
+          "status": "ステータス"
+        },
+        "wholeProperty": "物件全体",
+        "openTerm": "無期限",
+        "emptyTitle": "リースはまだありません",
+        "emptyDetail": "作業スペースのリースタブからリースを作成してください。"
+      },
+      "rent": {
+        "title": "家賃スケジュール",
+        "description": "この物件のリースの予定家賃と請求済み家賃。",
+        "assessLateFees": "遅延料金を適用",
+        "billDueRent": "期限の家賃を請求"
+      },
+      "depositsTab": {
+        "title": "敷金",
+        "description": "この物件のテナント預り金履歴（追記のみ）。"
+      },
+      "cam": {
+        "title": "共益費精算",
+        "description": "この物件の運営費プール、配賦、テナント精算。",
+        "newPool": "新規共益費プール"
+      },
+      "toasts": {
+        "lateFeesAssessed": "物件の遅延料金を適用しました",
+        "rentBilled": "物件の家賃を請求しました"
       }
     },
     "propertyDrawer": {

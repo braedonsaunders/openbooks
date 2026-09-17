@@ -758,7 +758,7 @@ test('catalog completeness counts missing and declared fallback keys as untransl
       de: 8,
       es: 2,
       fr: 11,
-      ja: 164,
+      ja: 1,
       'pt-BR': 165,
       zh: 164,
     }

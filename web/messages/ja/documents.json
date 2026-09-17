@@ -15,7 +15,9 @@
     },
     "folderRow": "フォルダー"
   },
-  "systemFolders": { "apCapture": "AP取り込み" },
+  "systemFolders": {
+    "apCapture": "AP取り込み"
+  },
   "columns": {
     "name": "名前",
     "size": "サイズ",
@@ -48,6 +50,11 @@
       "parentLabel": "親フォルダー",
       "submit": "フォルダーを作成"
     },
+    "tabs": {
+      "details": "詳細",
+      "sharing": "共有",
+      "activity": "アクティビティ"
+    },
     "edit": {
       "title": "フォルダーを編集",
       "nameLabel": "フォルダー名",
@@ -62,6 +69,7 @@
       "title": "このフォルダーを削除しますか？",
       "body": "このフォルダー内のすべてのファイルが完全に削除されます。この操作は取り消せません。"
     },
+    "downloadZip": "ZIPとしてダウンロード",
     "systemNoDelete": "システムフォルダーは削除や名前の変更ができません。",
     "subfolderCount": "{count, plural, one {#個のフォルダー} other {#個のフォルダー}}",
     "fileCount": "{count, plural, one {#個のファイル} other {#個のファイル}}",
@@ -70,6 +78,12 @@
   "file": {
     "drawer": {
       "title": "ファイル詳細",
+      "tabs": {
+        "preview": "プレビュー",
+        "details": "詳細",
+        "sharing": "共有",
+        "activity": "アクティビティ"
+      },
       "name": "名前",
       "folder": "フォルダー",
       "type": "タイプ",
@@ -115,7 +129,82 @@
     "attachExisting": "既存のファイルを添付",
     "uploadNew": "新しいファイルをアップロード"
   },
+  "share": {
+    "title": "共有",
+    "subtitle": "既定では会社の全員がこの{kind}を閲覧できます。編集・管理などの追加アクセスを個人やロールに付与できます。閲覧者を制限するには、詳細でフォルダーをプライベートに設定してください。",
+    "kindFolder": "フォルダー",
+    "kindFile": "ファイル",
+    "noGrants": "会社の全員に公開されています。編集者・管理者のアクセスを付与するには、個人やロールを以下に追加してください。",
+    "addPrincipal": "個人またはロールを追加",
+    "selectPrincipal": "個人またはロールを選択…",
+    "usersGroup": "ユーザー",
+    "rolesGroup": "ロール",
+    "add": "追加",
+    "remove": "削除",
+    "you": "あなた",
+    "inheritedHint": "フォルダーのアクセス権は、その中のファイルとサブフォルダーに継承されます。",
+    "tiers": {
+      "viewer": "閲覧者",
+      "editor": "編集者",
+      "manager": "マネージャー",
+      "viewerHint": "表示とダウンロード",
+      "editorHint": "アップロード、名前の変更、移動、置き換え",
+      "managerHint": "削除と共有を含むすべての操作"
+    }
+  },
+  "bulk": {
+    "selected": "{count, plural, one {#件選択中} other {#件選択中}}",
+    "download": "ダウンロード",
+    "delete": "削除",
+    "clear": "クリア",
+    "selectAll": "すべて選択",
+    "deleteConfirm": {
+      "title": "選択した項目をごみ箱に移動しますか？",
+      "body": "選択したファイルとフォルダーはごみ箱に移動されます。後で元に戻すことができます。"
+    },
+    "deleted": "{count}件をごみ箱に移動しました",
+    "deleteFailed": "選択内容を削除できませんでした",
+    "downloadFailed": "選択内容をダウンロードできませんでした",
+    "nothingDownloadable": "ダウンロードするファイルを選択してください"
+  },
+  "trash": {
+    "title": "ごみ箱",
+    "link": "ごみ箱",
+    "description": "削除したファイルとフォルダー。元に戻すか、完全に削除できます。",
+    "empty": "ごみ箱は空です。",
+    "back": "ファイルキャビネットに戻る",
+    "restore": "元に戻す",
+    "deleteForever": "完全に削除",
+    "purgeConfirm": {
+      "title": "完全に削除しますか？",
+      "body": "この項目とその内容は完全に削除されます。元に戻すことはできません。"
+    },
+    "folderLabel": "フォルダー",
+    "inLocation": "{location}内",
+    "restored": "元に戻しました",
+    "restoreFailed": "元に戻せませんでした",
+    "purged": "完全に削除しました",
+    "purgeFailed": "削除できませんでした"
+  },
+  "activity": {
+    "title": "アクティビティ",
+    "empty": "まだアクティビティは記録されていません。",
+    "events": {
+      "create": "作成",
+      "upload": "アップロード",
+      "rename": "名前を変更",
+      "move": "移動",
+      "replace": "新しいバージョンをアップロード",
+      "delete": "削除",
+      "restore": "復元",
+      "share": "共有",
+      "unshare": "共有を解除"
+    }
+  },
   "toasts": {
+    "shareUpdated": "共有を更新しました",
+    "shareFailed": "共有を更新できませんでした",
+    "shareRemoved": "アクセスを削除しました",
     "folderCreated": "フォルダーを作成しました",
     "folderCreateFailed": "フォルダーを作成できませんでした",
     "folderRenamed": "フォルダー名を変更しました",
@@ -153,6 +242,8 @@
   "rowMenu": {
     "open": "開く",
     "openFolder": "フォルダーを開く",
+    "properties": "プロパティ",
+    "manageAccess": "アクセスを管理",
     "copyLink": "リンクをコピー"
   },
   "rename": {
