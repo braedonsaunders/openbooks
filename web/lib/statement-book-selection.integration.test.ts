@@ -39,7 +39,7 @@ registerHooks({
   },
 })
 
-const { db, withOrgTransaction } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/src/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { resolveReport } = await import('./report-run')
@@ -66,34 +66,40 @@ function matrixProps(node: unknown): MatrixProps | null {
   return null
 }
 async function fixture(action: (org: Fixture, book: string, authz: import('./authz').Authz) => Promise<void>) {
-  const org = await createScratchOrg()
+  // Fixture setup seeds under explicit bypass: importing the pages under test
+  // pulls in the web request-org resolver, which denies every unscoped query
+  // under pooled RLS (bare createScratchOrg dies with 42501).
+  const org = await withBypassContext(() => createScratchOrg())
+  const book = randomUUID()
   let unrelated: Fixture | undefined
   try {
-    unrelated = await createScratchOrg()
-    await db.execute(sql`update subsidiaries set name='000 unrelated statement tenant'
-      where org_id=${unrelated.orgId} and id=${unrelated.subsidiaryId}`)
-    const uid = await createScratchUser(org.orgId, 'Book reader', 'book_reader')
-    await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
-    state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: 'Book reader', email: 'reader@example.test',
-      roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid }
-    const book = randomUUID()
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
-      values(${book},${org.orgId},'TAX','Tax book',false,true,true)`)
-    for (const [id, amount, tag] of [[org.bookId, '100', 'PRIMARY'], [book, '700', 'SELECTED']] as const) {
-      const entry = randomUUID()
-      await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
-        values(${entry},${org.orgId},${id},${org.subsidiaryId},${tag},${org.date},${org.periodId},'draft','manual')`)
-      await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
-        values(${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},'CAD',${amount},1),
-        (${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},${'-' + amount},'CAD',${'-' + amount},1)`)
-      await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`)
-    }
+    unrelated = await withBypassContext(async () => {
+      const u = await createScratchOrg()
+      await db.execute(sql`update subsidiaries set name='000 unrelated statement tenant'
+        where org_id=${u.orgId} and id=${u.subsidiaryId}`)
+      const uid = await createScratchUser(org.orgId, 'Book reader', 'book_reader')
+      await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
+      state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: 'Book reader', email: 'reader@example.test',
+        roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid }
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+        values(${book},${org.orgId},'TAX','Tax book',false,true,true)`)
+      for (const [id, amount, tag] of [[org.bookId, '100', 'PRIMARY'], [book, '700', 'SELECTED']] as const) {
+        const entry = randomUUID()
+        await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+          values(${entry},${org.orgId},${id},${org.subsidiaryId},${tag},${org.date},${org.periodId},'draft','manual')`)
+        await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+          values(${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},'CAD',${amount},1),
+          (${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},${'-' + amount},'CAD',${'-' + amount},1)`)
+        await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`)
+      }
+      return u
+    })
     const authz = { user: state.user, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as import('./authz').Authz
     await withOrgTransaction(org.orgId, () => withReportAuthz(authz, () => action(org, book, authz)))
   } finally {
     state.user = null
-    try { await dropScratchOrgReporting(org.orgId) }
-    finally { if (unrelated) await dropScratchOrgReporting(unrelated.orgId) }
+    try { await withBypassContext(() => dropScratchOrgReporting(org.orgId)) }
+    finally { const u = unrelated; if (u) await withBypassContext(() => dropScratchOrgReporting(u.orgId)) }
   }
 }
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -151,7 +157,9 @@ test('statement drill URL and route return the selected book supporting rows', e
 }))
 
 test('explicit invalid or unavailable books never fall back to the primary book', enabled, async () => fixture(async (org, book) => {
-  const foreign = await createScratchOrg()
+  // A foreign org's book id must read as foreign: create it under bypass so
+  // it does not join the surrounding tenant transaction.
+  const foreign = await withBypassContext(() => createScratchOrg())
   try {
     await db.execute(sql`update accounting_books set is_active=false where id=${book} and org_id=${org.orgId}`)
     for (const selected of ['', 'invalid', randomUUID(), foreign.bookId, book]) {
@@ -165,7 +173,7 @@ test('explicit invalid or unavailable books never fall back to the primary book'
       const response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(JSON.stringify(target))))
       assert.equal(response.status, ['', 'invalid'].includes(selected) ? 400 : 422)
     }
-  } finally { await dropScratchOrgReporting(foreign.orgId) }
+  } finally { await withBypassContext(() => dropScratchOrgReporting(foreign.orgId)) }
 }))
 
 test('budget Actual drills use the scenario book even after that book is retired', enabled, async () => fixture(async (org, book) => {
