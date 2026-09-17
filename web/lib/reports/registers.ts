@@ -215,32 +215,70 @@ export async function partyRegister(
   const truncated = lines.rows.length > maxLines
   const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
 
-  const parties: RegisterParty[] = []
-  let current: RegisterParty | null = null
+  // Sections come from the union of the opening and activity populations,
+  // never from the capped detail rows alone: the line cap is
+  // presentation-only, so a party whose lines are capped out (or who has no
+  // window lines at all) still gets its section with the exact closing
+  // (F-t08-005 — capped-out vendors lost their sections and the closings
+  // summed CA$293,617.43 short of the AP control).
+  const lineGroups = new Map<string | null, typeof rows>()
   for (const x of rows) {
-    if (!current || current.partyId !== x.party_id) {
-      const open = openingByParty.get(x.party_id) ?? ZERO
-      current = { partyId: x.party_id, partyName: x.party_name, opening: open, closing: open, lines: [] }
-      parties.push(current)
+    const group = lineGroups.get(x.party_id) ?? []
+    group.push(x)
+    lineGroups.set(x.party_id, group)
+  }
+  const partyIds = new Set<string | null>([
+    ...openingByParty.keys(),
+    ...activityByParty.keys(),
+    ...lineGroups.keys(),
+  ])
+  const knownNames = new Map<string | null, string | null>(rows.map((x) => [x.party_id, x.party_name]))
+  const unnamed = [...partyIds].filter((id): id is string => id !== null && !knownNames.has(id))
+  if (unnamed.length > 0) {
+    const named = (await reportDb.execute<{ id: string; display_name: string | null }>(sql`
+      select ${reportDb.censusColumn}, p.id, p.display_name
+        from parties p
+       where p.org_id = ${resolvedOrgId} and p.id = any(${`{${unnamed.join(",")}}`}::uuid[])
+    `)).rows
+    for (const n of named) knownNames.set(n.id, n.display_name)
+    for (const id of unnamed) if (!knownNames.has(id)) knownNames.set(id, null)
+  }
+  const parties: RegisterParty[] = []
+  for (const partyId of partyIds) {
+    const opening = openingByParty.get(partyId) ?? ZERO
+    const activity = activityByParty.get(partyId) ?? ZERO
+    const current: RegisterParty = {
+      partyId,
+      partyName: partyId === null ? null : (knownNames.get(partyId) ?? null),
+      opening,
+      closing: decimalAdd(opening, activity),
+      lines: [],
     }
-    const amt = x.amount
-    current.closing = decimalAdd(current.closing, amt)
-    current.lines.push({
-      entryId: x.entry_id,
-      entryNumber: x.entry_number,
-      date: x.date,
-      memo: x.memo,
-      debit: decimalCmp(amt, ZERO) > 0 ? amt : ZERO,
-      credit: decimalCmp(amt, ZERO) < 0 ? decimalNeg(amt) : ZERO,
-      balance: current.closing,
-      docKind: x.doc_kind,
-      docId: x.doc_id,
-    })
+    let running = opening
+    for (const x of lineGroups.get(partyId) ?? []) {
+      if (current.partyName === null) current.partyName = x.party_name
+      running = decimalAdd(running, x.amount)
+      current.lines.push({
+        entryId: x.entry_id,
+        entryNumber: x.entry_number,
+        date: x.date,
+        memo: x.memo,
+        debit: decimalCmp(x.amount, ZERO) > 0 ? x.amount : ZERO,
+        credit: decimalCmp(x.amount, ZERO) < 0 ? decimalNeg(x.amount) : ZERO,
+        balance: running,
+        docKind: x.doc_kind,
+        docId: x.doc_id,
+      })
+    }
+    parties.push(current)
   }
-  for (const party of parties) {
-    const activity = activityByParty.get(party.partyId)
-    if (activity !== undefined) party.closing = decimalAdd(party.opening, activity)
-  }
+  // Display-name order with unassigned last, matching the old detail order.
+  parties.sort((a, b) => {
+    if (a.partyName === null && b.partyName === null) return 0
+    if (a.partyName === null) return 1
+    if (b.partyName === null) return -1
+    return a.partyName < b.partyName ? -1 : a.partyName > b.partyName ? 1 : 0
+  })
   return { parties, from: opts.from, to: opts.to, side, truncated }
 }
 
