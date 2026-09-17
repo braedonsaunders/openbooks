@@ -1,5 +1,27 @@
 {
   "propertyManagement": {
+    "toasts": {
+      "actionFailed": "Aktion fehlgeschlagen",
+      "camPoolCreated": "Nebenkostengruppe erstellt",
+      "camPoolReopened": "Nebenkostengruppe zur Korrektur wiedereröffnet",
+      "camPoolUpdated": "Nebenkostengruppe aktualisiert",
+      "chargeAdded": "Umlage hinzugefügt",
+      "couldNotLoad": "Immobilien konnten nicht geladen werden",
+      "depositPosted": "Kaution erfasst",
+      "depositReversed": "Kaution storniert",
+      "escalationApplied": "Mietanpassung angewendet",
+      "escalationScheduled": "Anpassung geplant",
+      "lateFeesAssessed": "Verzugsgebühren des Portfolios erhoben",
+      "leaseCreated": "Mietvertrag erstellt",
+      "leaseUpdated": "Mietvertrag aktualisiert",
+      "propertyCreated": "Immobilie erstellt",
+      "propertyDeleted": "Immobilie gelöscht",
+      "propertyUpdated": "Immobilie aktualisiert",
+      "rentBilled": "Mieten des Portfolios abgerechnet",
+      "unitAdded": "Einheit hinzugefügt",
+      "unitDeleted": "Einheit gelöscht",
+      "unitUpdated": "Einheit aktualisiert"
+    },
     "workspace": {
       "title": "Immobilienverwaltung",
       "description": "Verwalten Sie Immobilien, Mietverträge, Mieten, Nebenkostenabrechnungen und Mietkautionen.",
@@ -55,6 +77,196 @@
         "propertyType": "Typ",
         "occupancy": "Belegung",
         "currency": "Währung"
+      }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "charge": "Umlage",
+          "frequency": "Frequenz",
+          "effective": "Gültig",
+          "amount": "Betrag",
+          "open": "Offen"
+        },
+        "addTitle": "Wiederkehrende Umlage hinzufügen",
+        "labels": {
+          "type": "Typ",
+          "description": "Beschreibung",
+          "amount": "Betrag",
+          "frequency": "Frequenz",
+          "effectiveFrom": "Gültig ab",
+          "effectiveTo": "Gültig bis",
+          "incomeAccount": "Ertragskonto"
+        },
+        "types": {
+          "cam": "Nebenkosten",
+          "parking": "Stellplatz",
+          "storage": "Lager",
+          "utility": "Versorgung",
+          "other": "Sonstiges"
+        },
+        "frequencies": {
+          "monthly": "Monatlich",
+          "quarterly": "Vierteljährlich",
+          "annually": "Jährlich",
+          "one_time": "Einmalig"
+        },
+        "propertyDefault": "Standard der Immobilie",
+        "addCharge": "Umlage hinzufügen"
+      },
+      "escalations": {
+        "table": {
+          "effective": "Gültig",
+          "method": "Methode",
+          "value": "Wert",
+          "result": "Ergebnis"
+        },
+        "apply": "Anwenden",
+        "emptyTitle": "Keine Mietanpassungen",
+        "emptyDetail": "Planen Sie vertragliche prozentuale oder Festbetrags-Anpassungen sowie Neuvertragsmieten.",
+        "scheduleTitle": "Anpassung planen",
+        "labels": {
+          "effectiveOn": "Gültig am",
+          "method": "Methode",
+          "value": "Wert"
+        },
+        "methods": {
+          "percent": "Prozentuale Erhöhung",
+          "fixed": "Feste Erhöhung",
+          "new_amount": "Neuer Monatsbetrag"
+        },
+        "schedule": "Planen"
+      },
+      "deposits": {
+        "required": "Erforderlich",
+        "held": "Einbehalten",
+        "notice": "Kautionsbuchungen werden sofort gebucht und können nicht bearbeitet oder gelöscht werden. Stornieren Sie eine fehlerhafte Buchung und buchen Sie anschließend die korrigierte Ersatzbuchung.",
+        "emptyTitle": "Keine Kautionsbewegungen",
+        "emptyDetail": "Erfassen Sie den Eingang, um die Verbindlichkeit aus Mieterkautionen zu begründen.",
+        "reverseTitle": "Kautionsbuchung stornieren",
+        "reverseLabels": {
+          "reversalDate": "Stornodatum",
+          "reason": "Stornogrund"
+        },
+        "cancel": "Abbrechen",
+        "postReversal": "Storno buchen",
+        "recordTitle": "Kautionsbuchung erfassen",
+        "labels": {
+          "transaction": "Buchung",
+          "date": "Datum",
+          "amount": "Betrag",
+          "bankAccount": "Bankkonto",
+          "tenantInvoice": "Mieterrechnung",
+          "offsetAccount": "Gegenkonto",
+          "memo": "Notiz"
+        },
+        "kinds": {
+          "received": "Eingegangen",
+          "interest": "Zinsgutschrift",
+          "applied": "Auf Mieterrechnung anrechnen",
+          "refunded": "Erstattet",
+          "adjustment_increase": "Anpassung (Erhöhung)",
+          "adjustment_decrease": "Anpassung (Minderung)"
+        },
+        "propertyDefault": "Standard der Immobilie",
+        "selectPostedInvoice": "Gebuchte Rechnung auswählen",
+        "selectAccount": "Konto wählen",
+        "postTransaction": "Buchen"
+      },
+      "toasts": {
+        "chargeAdded": "Mietvertragsumlage hinzugefügt",
+        "escalationApplied": "Mietanpassung angewendet",
+        "escalationScheduled": "Anpassung geplant",
+        "depositReversed": "Kautionsbuchung storniert",
+        "depositPosted": "Kautionsbuchung gebucht"
+      }
+    },
+    "detail": {
+      "selectEmpty": "Nicht zugeordnet",
+      "fields": {
+        "code": "Objektcode",
+        "propertyType": "Objekttyp",
+        "subsidiary": "Tochtergesellschaft",
+        "location": "Standort",
+        "fixedAsset": "Anlagegut",
+        "currency": "Währung",
+        "street": "Straße",
+        "city": "Stadt",
+        "region": "Provinz / Bundesland",
+        "postalCode": "Postleitzahl",
+        "rentIncomeAccount": "Mieterlöskonto",
+        "camIncomeAccount": "Nebenkostenerlöskonto",
+        "depositLiabilityAccount": "Kautionsschuldkonto",
+        "defaultBankAccount": "Standard-Bankkonto"
+      },
+      "selectSubsidiary": "Tochtergesellschaft auswählen",
+      "tabsLabelMap": {
+        "overview": "Überblick",
+        "units": "Einheiten",
+        "leases": "Mietverträge",
+        "rent": "Mieten",
+        "deposits": "Kautionen",
+        "cam": "Nebenkosten"
+      },
+      "tabsAria": "Immobiliendetails",
+      "noLocation": "Kein Standort",
+      "cancel": "Abbrechen",
+      "saving": "Wird gespeichert…",
+      "save": "Speichern",
+      "edit": "Bearbeiten",
+      "actions": "Aktionen",
+      "customForm": "Benutzerdefiniertes Formular",
+      "customizeForm": "Formular anpassen",
+      "deactivate": "Immobilie deaktivieren",
+      "reactivate": "Immobilie reaktivieren",
+      "deleteConfirm": "{name} löschen? Nur ungenutzte Immobilien können endgültig gelöscht werden.",
+      "deleteProperty": "Immobilie löschen",
+      "units": {
+        "title": "Vermietbare Einheiten",
+        "description": "Belegung, vermietbare Fläche und Vermietungskapazität je Einheit.",
+        "addUnit": "Einheit hinzufügen",
+        "table": {
+          "unit": "Einheit",
+          "type": "Typ",
+          "rentableArea": "Vermietbare Fläche",
+          "bedrooms": "Schlafzimmer"
+        },
+        "emptyTitle": "Noch keine Einheiten",
+        "emptyDetail": "Fügen Sie die erste vermietbare Einheit aus diesem Immobiliendatensatz hinzu."
+      },
+      "leases": {
+        "title": "Mietverträge der Immobilie",
+        "description": "Aktuelle und frühere Mieterverträge dieser Immobilie.",
+        "newLease": "Neuer Mietvertrag",
+        "table": {
+          "lease": "Mietvertrag",
+          "unit": "Einheit",
+          "tenant": "Mieter",
+          "term": "Laufzeit"
+        },
+        "wholeProperty": "Gesamte Immobilie",
+        "openTerm": "Offen",
+        "emptyTitle": "Noch keine Mietverträge",
+        "emptyDetail": "Erstellen Sie einen Mietvertrag über die Registerkarte „Mietverträge“ des Arbeitsbereichs."
+      },
+      "rent": {
+        "title": "Mietplan",
+        "description": "Geplante und abgerechnete Mieten der Mietverträge dieser Immobilie.",
+        "assessLateFees": "Verzugsgebühren erheben",
+        "billDueRent": "Fällige Mieten abrechnen"
+      },
+      "depositsTab": {
+        "title": "Kautionen",
+        "description": "Ausschließlich anzufügende Kautionsbewegungen der Mieter dieser Immobilie."
+      },
+      "cam": {
+        "title": "Nebenkostenabrechnungen",
+        "description": "Betriebskostenpools, Umlagen und Mieterabrechnungen dieser Immobilie.",
+        "newPool": "Neue Nebenkostengruppe"
+      },
+      "toasts": {
+        "lateFeesAssessed": "Verzugsgebühren der Immobilie erhoben",
+        "rentBilled": "Mieten der Immobilie abgerechnet"
       }
     },
     "propertyDrawer": {
