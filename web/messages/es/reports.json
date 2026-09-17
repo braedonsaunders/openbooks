@@ -627,6 +627,8 @@
         "unit": "Unidad",
         "due_date": "Fecha de vencimiento",
         "is_open_item": "Partida abierta",
+        "open_amount": "Importe abierto (base)",
+        "has_open_balance": "Con saldo abierto",
         "reconciled_at": "Fecha de conciliación",
         "entry_id": "Asiento (id)",
         "account_id": "Cuenta (id)",

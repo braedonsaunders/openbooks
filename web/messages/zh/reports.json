@@ -627,6 +627,8 @@
         "unit": "单位",
         "due_date": "到期日",
         "is_open_item": "未清项目",
+        "open_amount": "未清金额（本位币）",
+        "has_open_balance": "有未清余额",
         "reconciled_at": "对账时间",
         "entry_id": "分录（ID）",
         "account_id": "科目（ID）",

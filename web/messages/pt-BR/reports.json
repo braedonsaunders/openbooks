@@ -627,6 +627,8 @@
         "unit": "Unidade",
         "due_date": "Data de vencimento",
         "is_open_item": "Item em aberto",
+        "open_amount": "Valor em aberto (base)",
+        "has_open_balance": "Com saldo em aberto",
         "reconciled_at": "Conciliado em",
         "entry_id": "Lançamento (id)",
         "account_id": "Conta (id)",
