@@ -700,7 +700,7 @@
     "navTitle": "Bank Feeds",
     "tabs": {
       "connections": "Conexiones",
-      "sftp-endpoint": "Punto SFTP",
+      "sftp-endpoint": "Endpoint SFTP",
       "sftp-servers": "Accesos de socios",
       "sftp-schedules": "Programas de importación"
     },
