@@ -256,6 +256,12 @@ export function TaxFilingsView({
                     <CardTitle>{result.formName}</CardTitle>
                     <CardDescription>{t('period', { from: result.from, to: result.to })}</CardDescription>
                   </div>
+                  {canSave ? (
+                    <Button size="sm" variant="outline" onClick={() => void saveSnapshot()} disabled={saving}>
+                      <FileCheck2 size={14} />
+                      {saving ? t('history.saving') : t('history.save')}
+                    </Button>
+                  ) : null}
                   <Popover
                     open={exportOpen}
                     onOpenChange={setExportOpen}
@@ -279,20 +285,6 @@ export function TaxFilingsView({
                     <ExportItem href={exportHref('xlsx')} onNavigate={() => setExportOpen(false)}>{t('export.xlsx')}</ExportItem>
                     <ExportItem href={exportHref('csv')} onNavigate={() => setExportOpen(false)}>{t('export.csv')}</ExportItem>
                     <ExportItem href={exportHref('json')} onNavigate={() => setExportOpen(false)}>{t('export.json')}</ExportItem>
-                    {canSave ? (
-                      <>
-                        <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
-                        <button
-                          type="button"
-                          onClick={() => { setExportOpen(false); void saveSnapshot() }}
-                          disabled={saving}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <FileCheck2 size={14} className="text-slate-400" />
-                          {saving ? t('history.saving') : t('history.save')}
-                        </button>
-                      </>
-                    ) : null}
                   </Popover>
                 </div>
               </CardHeader>
