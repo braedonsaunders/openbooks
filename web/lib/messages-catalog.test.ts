@@ -4057,3 +4057,183 @@ test('I13 projects schedule/WIP/duplicates and allocations wizard copy ships tra
     assert.deepEqual(I13_armsDrift, [], `${I13_locale} projects/allocations translations drop ICU plural/select arms`)
   }
 })
+
+// F-i10 entities + documents remediation (i10 slice): 1403 missing keys across
+// fr/es/de/ja/zh/pt-BR — the whole entities leaseSections/detail/toasts blocks
+// (164 source leaves) and 69 documents leaves (folder tabs, sharing, bulk,
+// trash, activity, share toasts, row menu). 1374 were translated; 29 genuine
+// cognates stay omitted into the declared fallback manifest (never copied as
+// fake translations): fr Code/Type/Charge/Transaction/Date/Description/Parking/
+// Actions, de Code/Name/Status, pt-BR Status, es Memo, and the
+// placeholder-only entities.propertyManagement.detail.description everywhere.
+// Seven documents cognates are written into the catalogs and pinned exact below.
+const I10_ENTITIES_PREFIXES = [
+  'entities.propertyManagement.toasts.',
+  'entities.propertyManagement.leaseSections.',
+  'entities.propertyManagement.detail.',
+] as const
+const I10_DOCUMENTS_KEYS = [
+  'activity.empty',
+  'activity.events.create',
+  'activity.events.delete',
+  'activity.events.move',
+  'activity.events.rename',
+  'activity.events.replace',
+  'activity.events.restore',
+  'activity.events.share',
+  'activity.events.unshare',
+  'activity.events.upload',
+  'activity.title',
+  'bulk.clear',
+  'bulk.delete',
+  'bulk.deleteConfirm.body',
+  'bulk.deleteConfirm.title',
+  'bulk.deleteFailed',
+  'bulk.deleted',
+  'bulk.download',
+  'bulk.downloadFailed',
+  'bulk.nothingDownloadable',
+  'bulk.selectAll',
+  'bulk.selected',
+  'file.drawer.tabs.activity',
+  'file.drawer.tabs.details',
+  'file.drawer.tabs.preview',
+  'file.drawer.tabs.sharing',
+  'folder.downloadZip',
+  'folder.tabs.activity',
+  'folder.tabs.details',
+  'folder.tabs.sharing',
+  'rowMenu.manageAccess',
+  'rowMenu.properties',
+  'share.add',
+  'share.addPrincipal',
+  'share.inheritedHint',
+  'share.kindFile',
+  'share.kindFolder',
+  'share.noGrants',
+  'share.remove',
+  'share.rolesGroup',
+  'share.selectPrincipal',
+  'share.subtitle',
+  'share.tiers.editor',
+  'share.tiers.editorHint',
+  'share.tiers.manager',
+  'share.tiers.managerHint',
+  'share.tiers.viewer',
+  'share.tiers.viewerHint',
+  'share.title',
+  'share.usersGroup',
+  'share.you',
+  'toasts.shareFailed',
+  'toasts.shareRemoved',
+  'toasts.shareUpdated',
+  'trash.back',
+  'trash.deleteForever',
+  'trash.description',
+  'trash.empty',
+  'trash.folderLabel',
+  'trash.inLocation',
+  'trash.link',
+  'trash.purgeConfirm.body',
+  'trash.purgeConfirm.title',
+  'trash.purgeFailed',
+  'trash.purged',
+  'trash.restore',
+  'trash.restoreFailed',
+  'trash.restored',
+  'trash.title',
+] as const
+const I10_DOCUMENTS_IDENTICAL_BY_FACT = new Set([
+  'es:documents.share.rolesGroup|Roles',
+  'es:documents.share.tiers.editor|Editor',
+  'de:documents.file.drawer.tabs.details|Details',
+  'de:documents.folder.tabs.details|Details',
+  'de:documents.share.tiers.manager|Manager',
+  'de:documents.trash.inLocation|in {location}',
+  'pt-BR:documents.share.tiers.editor|Editor',
+])
+
+test('I10 entities lease and deposit copy ships translated in every locale', () => {
+  // F-i10-001: the leaseSections/detail/toasts blocks existed only in en —
+  // fr/es/de/ja/zh/pt-BR rendered English inside otherwise translated
+  // property screens. Every leaf must exist (unless a manifest-declared
+  // reviewed identical), differ from English, and keep its ICU placeholders
+  // and plural/select arms.
+  const I10_source = flattenCatalog('en')
+  const I10_manifest = readFallbackManifest()
+  const I10_wanted = [...I10_source.keys()].filter((I10_key) =>
+    I10_ENTITIES_PREFIXES.some((I10_prefix) => I10_key.startsWith(I10_prefix)),
+  )
+  assert.equal(I10_wanted.length, 164, 'entities lease/deposit source inventory changed; translate the new keys in every locale and re-pin')
+  const I10_tokens = (I10_value: string): Set<string> =>
+    new Set(I10_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I10_arms = (I10_value: string): string[] => I10_value.match(/, +(plural|select)/g) ?? []
+  for (const I10_locale of ['fr', 'es', 'de', 'ja', 'zh', 'pt-BR']) {
+    const I10_declared = new Set(I10_manifest.fallbacks[I10_locale] ?? [])
+    const I10_catalog = flattenCatalog(I10_locale)
+    for (const I10_key of I10_wanted) {
+      if (I10_declared.has(I10_key)) continue
+      const I10_value = I10_catalog.get(I10_key)
+      assert.ok(I10_value && I10_value.trim(), `${I10_locale} is missing ${I10_key}`)
+      assert.notEqual(I10_value, I10_source.get(I10_key), `${I10_locale} must not copy English ${I10_key}`)
+    }
+    const I10_present = I10_wanted.filter((I10_key) => !I10_declared.has(I10_key))
+    const I10_drift = I10_present.filter((I10_key) => {
+      const I10_expected = I10_tokens(I10_source.get(I10_key) ?? '')
+      const I10_actual = I10_tokens(I10_catalog.get(I10_key) ?? '')
+      return I10_expected.size !== I10_actual.size || [...I10_expected].some((I10_token) => !I10_actual.has(I10_token))
+    })
+    assert.deepEqual(I10_drift, [], `${I10_locale} entities translations drop or rename ICU placeholders`)
+    const I10_armsDrift = I10_present.filter((I10_key) => {
+      const I10_expected = I10_arms(I10_source.get(I10_key) ?? '').join(',')
+      const I10_actual = I10_arms(I10_catalog.get(I10_key) ?? '').join(',')
+      return I10_expected !== I10_actual
+    })
+    assert.deepEqual(I10_armsDrift, [], `${I10_locale} entities translations drop ICU plural/select arms`)
+  }
+})
+
+test('I10 documents sharing trash and activity copy ships translated in every locale', () => {
+  // F-i10-002: the 69 documents sharing/bulk/trash/activity leaves existed
+  // only in en. Every leaf must exist and keep its ICU placeholders and
+  // plural/select arms, and differ from English except for reviewed cognates,
+  // pinned to the exact term.
+  const I10_docSource = flattenCatalog('en')
+  assert.equal(I10_DOCUMENTS_KEYS.length, 69, 'documents i10 source inventory changed; translate the new keys in every locale and re-pin')
+  for (const I10_docKey of I10_DOCUMENTS_KEYS) {
+    assert.ok(I10_docSource.get(`documents.${I10_docKey}`)?.trim(), `English source is missing documents.${I10_docKey}`)
+  }
+  const I10_docTokens = (I10_docValue: string): Set<string> =>
+    new Set(I10_docValue.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I10_docArms = (I10_docValue: string): string[] => I10_docValue.match(/, +(plural|select)/g) ?? []
+  for (const I10_docLocale of ['fr', 'es', 'de', 'ja', 'zh', 'pt-BR']) {
+    const I10_docCatalog = flattenCatalog(I10_docLocale)
+    for (const I10_docKey of I10_DOCUMENTS_KEYS) {
+      const I10_docFullKey = `documents.${I10_docKey}`
+      const I10_docValue = I10_docCatalog.get(I10_docFullKey)
+      assert.ok(I10_docValue && I10_docValue.trim(), `${I10_docLocale} is missing ${I10_docFullKey}`)
+      const I10_docIdentical = [...I10_DOCUMENTS_IDENTICAL_BY_FACT].find((I10_docEntry) =>
+        I10_docEntry.startsWith(`${I10_docLocale}:${I10_docFullKey}|`),
+      )
+      if (I10_docIdentical) {
+        assert.equal(I10_docValue, I10_docIdentical.split('|')[1], `${I10_docLocale}:${I10_docFullKey} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I10_docValue, I10_docSource.get(I10_docFullKey), `${I10_docLocale} must not copy English ${I10_docFullKey}`)
+      }
+    }
+    const I10_docDrift = I10_DOCUMENTS_KEYS.filter((I10_docKey) => {
+      const I10_docFullKey = `documents.${I10_docKey}`
+      const I10_docExpected = I10_docTokens(I10_docSource.get(I10_docFullKey) ?? '')
+      const I10_docActual = I10_docTokens(I10_docCatalog.get(I10_docFullKey) ?? '')
+      return I10_docExpected.size !== I10_docActual.size || [...I10_docExpected].some((I10_docToken) => !I10_docActual.has(I10_docToken))
+    })
+    assert.deepEqual(I10_docDrift, [], `${I10_docLocale} documents translations drop or rename ICU placeholders`)
+    const I10_docArmsDrift = I10_DOCUMENTS_KEYS.filter((I10_docKey) => {
+      const I10_docFullKey = `documents.${I10_docKey}`
+      const I10_docExpected = I10_docArms(I10_docSource.get(I10_docFullKey) ?? '').join(',')
+      const I10_docActual = I10_docArms(I10_docCatalog.get(I10_docFullKey) ?? '').join(',')
+      return I10_docExpected !== I10_docActual
+    })
+    assert.deepEqual(I10_docArmsDrift, [], `${I10_docLocale} documents translations drop ICU plural/select arms`)
+  }
+})
