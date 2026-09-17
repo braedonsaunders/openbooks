@@ -198,3 +198,37 @@ describe('period_preset compile contract', () => {
     assert.equal(params.values.length, 0)
   })
 })
+
+describe('open-aging built-ins count truly open lines', () => {
+  // F-t07-007: is_open_item marks AR/AP-tracked lines, not unpaid ones, so
+  // "Open AR by customer" counted paid invoices and their payment lines as
+  // open (28 vs the aging detail's 16) and min()ed over stale due dates.
+  // Both open-aging built-ins must filter on the application-aware
+  // has_open_balance flag instead.
+  for (const slug of ['open-ar-by-customer', 'ap-aging-by-vendor']) {
+    it(`${slug} filters on application-aware openness, not the tracked-line flag`, () => {
+      const def = BUILT_IN_REPORT_DEFINITION_MAP[slug]
+      assert.ok(def, `${slug} must exist`)
+      const leaves = leafRules(def)
+      assert.ok(
+        leaves.some((leaf) => leaf.field === 'has_open_balance' && leaf.op === 'is_true'),
+        `${slug} must filter has_open_balance is_true so paid lines and consumed payments are excluded`,
+      )
+      assert.ok(
+        leaves.every((leaf) => leaf.field !== 'is_open_item'),
+        `${slug} must not filter on is_open_item: tracked is not unpaid`,
+      )
+    })
+  }
+
+  it('the openness flag compiles to SQL on the ledger_lines entity', () => {
+    const entity = REPORT_ENTITY_MAP.ledger_lines
+    assert.ok(entity, 'ledger_lines entity must exist')
+    assert.ok(
+      entity.columns.some((column) => column.key === 'has_open_balance'),
+      'ledger_lines must expose the application-aware openness flag',
+    )
+    const sql = compileRule(entity, { column: 'has_open_balance', op: 'is_true' }, new SqlParams())
+    assert.ok(sql, 'the openness filter must compile')
+  })
+})

@@ -51,14 +51,14 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       columns: [],
       breakouts: [{ column: 'party_name' }, { column: 'due_date', bin: 'month' }],
       measures: [
-        { fn: 'sum', column: 'amount', label: 'Open amount (base)' },
+        { fn: 'sum', column: 'open_amount', label: 'Open amount (base)' },
         { fn: 'count', label: 'Open lines' },
       ],
       filters: {
         combinator: 'and',
         rules: [
           { field: 'account_type', op: 'eq', value: 'liability_payable' },
-          { field: 'is_open_item', op: 'is_true' },
+          { field: 'has_open_balance', op: 'is_true' },
           { field: 'entry_status', op: 'eq', value: 'posted' },
         ],
       },
@@ -77,7 +77,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       columns: [],
       breakouts: [{ column: 'party_name' }],
       measures: [
-        { fn: 'sum', column: 'amount', label: 'Open balance (base)' },
+        { fn: 'sum', column: 'open_amount', label: 'Open balance (base)' },
         { fn: 'count', label: 'Open lines' },
         { fn: 'min', column: 'due_date', label: 'Oldest due date' },
       ],
@@ -85,7 +85,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         combinator: 'and',
         rules: [
           { field: 'account_type', op: 'eq', value: 'asset_receivable' },
-          { field: 'is_open_item', op: 'is_true' },
+          { field: 'has_open_balance', op: 'is_true' },
           { field: 'entry_status', op: 'eq', value: 'posted' },
         ],
       },

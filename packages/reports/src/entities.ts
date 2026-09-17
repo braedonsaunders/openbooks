@@ -198,7 +198,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN equipment_units eq ON eq.id = jl.equipment_unit_id AND eq.org_id = jl.org_id
       LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = jl.org_id
       LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = jl.org_id
-      JOIN subsidiaries sub ON sub.id = jl.subsidiary_id AND sub.org_id = jl.org_id`,
+      JOIN subsidiaries sub ON sub.id = jl.subsidiary_id AND sub.org_id = jl.org_id
+      LEFT JOIN LATERAL (
+        SELECT sum(a.amount) AS applied
+          FROM applications a
+         WHERE (a.to_line_id = jl.id OR a.from_line_id = jl.id)
+           AND a.org_id = jl.org_id AND a.unapplied_at IS NULL
+      ) ap ON true`,
     orgColumn: 'jl.org_id',
     subsidiaryScope: { column: 'jl.subsidiary_id' },
     // Book boundary: every line inherits its entry's book. The executor
@@ -240,6 +246,20 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'jl.unit' },
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'jl.due_date' },
       { key: 'is_open_item', label: 'Open item', kind: 'boolean', expr: 'jl.is_open_item', options: BOOLEAN_OPTIONS },
+      {
+        key: 'open_amount',
+        label: 'Open amount (base)',
+        kind: 'money',
+        expr: 'jl.amount - sign(jl.amount) * coalesce(ap.applied, 0)',
+        baseMoney: true,
+      },
+      {
+        key: 'has_open_balance',
+        label: 'Has open balance',
+        kind: 'boolean',
+        expr: '(jl.amount - sign(jl.amount) * coalesce(ap.applied, 0)) <> 0',
+        options: BOOLEAN_OPTIONS,
+      },
       { key: 'reconciled_at', label: 'Reconciled at', kind: 'timestamp', expr: 'jl.reconciled_at' },
       { key: 'entry_id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
       { key: 'account_id', label: 'Account (id)', kind: 'uuid', expr: 'jl.account_id' },
