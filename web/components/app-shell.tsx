@@ -13,6 +13,7 @@ import { BrandHomeLink } from './brand-home-link'
 import { AppSidebar } from './app-sidebar'
 import { TopNav } from './top-nav'
 import { GlobalSearch } from './global-search'
+import { TopbarSearchToggle } from './topbar-search-toggle'
 import { AccountMenu } from './account-menu'
 import { OpenBooksPlatformMenu } from './platform-menu'
 import { NotificationsBell } from './notifications-bell'
@@ -73,7 +74,7 @@ export function AppShell({
 
       <MobileNavProvider>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden [padding-top:env(safe-area-inset-top)]">
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
+          <header className="relative flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900">
             <MobileNavToggle groups={navigationGroups} />
             {topbar ? (
               // The rail (and its logo) is gone — brand moves into the header
@@ -83,6 +84,7 @@ export function AppShell({
                 <TopNav groups={navigationGroups} />
                 <div className="flex-1 lg:hidden" />
                 <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" />
+                <TopbarSearchToggle />
               </>
             ) : (
               <GlobalSearch className="mx-auto w-full max-w-lg flex-1" />
