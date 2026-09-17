@@ -136,11 +136,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   let reason: unknown
-  // DELETE historically accepted an empty body; only invoke the strict JSON
-  // boundary when a body was actually supplied so that callers need not send
-  // an otherwise-useless `{}` just to retire a schedule.
-  if (req.body) {
-    const parsedBody = await parseJsonBody(req, jsonObject)
+  // DELETE historically accepted an empty body. req.body is still a (possibly
+  // empty) stream for a bodiless browser DELETE, so the old `if (req.body)`
+  // check invoked the strict JSON boundary on zero bytes and every UI delete
+  // failed closed with 400 (F-t07-006). Judge presence by content instead: an
+  // empty body deletes with the default reason, while non-empty content must
+  // still pass the shared JSON boundary so malformed payloads stay a 400.
+  const raw = await req.text().catch(() => '')
+  if (raw.trim().length > 0) {
+    const parsedBody = await parseJsonBody(
+      new Request('http://internal/schedule-delete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: raw,
+      }),
+      jsonObject,
+    )
     if (!parsedBody.ok) return parsedBody.response
     reason = (parsedBody.data as { reason?: unknown }).reason
   }

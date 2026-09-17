@@ -198,6 +198,17 @@ function remove(body: Record<string, unknown> = {}): Promise<Response> {
   )
 }
 
+function removeRaw(init: RequestInit): Promise<Response> {
+  return DELETE(
+    new Request(`http://openbooks.test/api/reports/schedules/${SCHEDULE_ID}`, {
+      method: 'DELETE',
+      headers: { 'X-Request-Id': 'req-schedule-3' },
+      ...init,
+    }),
+    { params: Promise.resolve({ id: SCHEDULE_ID }) },
+  )
+}
+
 test('PATCH locks the tenant schedule and commits complete reasoned before/after audit evidence', async () => {
   reset()
 
@@ -247,6 +258,39 @@ test('DELETE locks, retires, and audits the exact tenant schedule snapshot', asy
   assert.match(audit!, /"reason":"retire obsolete delivery"/)
   assert.match(audit!, /"before":/)
   assert.match(audit!, /"after":null/)
+})
+
+test('DELETE accepts a bodiless request (browser fetch sends no body)', async () => {
+  reset()
+
+  const response = await removeRaw({})
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true })
+  assert.ok(state.committed.some((text) => text.includes('delete from report_schedules')))
+  const audit = state.committed.find((text) => text.includes('insert into audit_log'))
+  assert.ok(audit, 'the retirement audit committed with the delete')
+  assert.match(audit!, /"reason":"report schedule deleted"/)
+})
+
+test('DELETE accepts an empty body stream (empty content is not JSON, and not an error)', async () => {
+  reset()
+
+  const response = await removeRaw({ body: '' })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true })
+  assert.ok(state.committed.some((text) => text.includes('delete from report_schedules')))
+})
+
+test('DELETE still rejects a malformed JSON body', async () => {
+  reset()
+
+  const response = await removeRaw({ body: '{oops' })
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'invalid request body' })
+  assert.equal(state.committed.some((text) => text.includes('delete from report_schedules')), false)
 })
 
 test('DELETE audit failure rolls back the retirement', async () => {
