@@ -121,6 +121,7 @@
       "items": "Equipos y materiales",
       "grand": "Total general",
       "previewNote": "La mano de obra usa tarifas de vista previa hasta que la aprobación las fija.",
+      "unpricedHours": "{hours} h sin tarifa se valoran a 0: elija un concepto de mano de obra o configure el tarifario.",
       "snappedNote": "Las tarifas están fijadas — el historial de este parte nunca cambia."
     },
     "signatures": {

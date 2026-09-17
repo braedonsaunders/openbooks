@@ -1380,6 +1380,12 @@ export async function loadFieldTicket(
   const laborTotal = sum(
     entries.rows.map((e) => (e.bill_rate != null ? mul(String(e.hours), String(e.bill_rate)) : '0')),
   )
+  // Crew hours with no bill rate after the preview (no labor item, or no
+  // rate-book match) price at $0: surface the unpriced hours so a $0 labor
+  // total is never mistaken for valued work.
+  const unpricedLaborHours = sum(
+    entries.rows.filter((e) => e.bill_rate == null).map((e) => String(e.hours ?? 0)),
+  )
   const linesTotal = sum(lines.rows.map((l) => String(l.bill_amount ?? l.amount)))
   const signatures: { foreman?: TicketSignature; customer?: TicketSignature } = {}
   for (const signature of signatureRows.rows) {
@@ -1430,6 +1436,7 @@ export async function loadFieldTicket(
     laborSnapshot,
     lines: lines.rows,
     laborTotal,
+    unpricedLaborHours,
     linesTotal,
     grandTotal: add(laborTotal, linesTotal),
     links: linkRows.rows,

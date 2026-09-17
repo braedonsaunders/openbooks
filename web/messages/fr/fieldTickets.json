@@ -121,6 +121,7 @@
       "items": "Équipement et matériaux",
       "grand": "Total général",
       "previewNote": "La main-d'œuvre utilise des taux d'aperçu jusqu'à ce que l'approbation les fige.",
+      "unpricedHours": "{hours} h sans taux de facturation sont valorisées à 0 — choisissez un article de main-d'œuvre ou configurez le barème.",
       "snappedNote": "Les taux sont figés — l'historique de ce bon ne change jamais."
     },
     "signatures": {
