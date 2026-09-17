@@ -713,7 +713,15 @@
     "inviteEmailRequired": "Escribe una dirección de correo electrónico",
     "inviteSend": "Enviar invitación",
     "inviteSent": "Invitación enviada a {email}",
-    "inviteCreatedWithoutEmail": "Usuario creado, pero no se pudo enviar el correo de invitación. Revisa la configuración del correo y pídele que restablezca su contraseña desde la página de inicio de sesión."
+    "inviteCreatedWithoutEmail": "Usuario creado, pero no se pudo enviar el correo de invitación. Copie el enlace de contraseña y envíeselo usted mismo.",
+    "inviteResend": "Reenviar la invitación",
+    "inviteResent": "Invitación reenviada a {email}",
+    "inviteLinkTitle": "Enlace de contraseña",
+    "inviteLinkOneTime": "El envío de correos no está configurado: copie este enlace y envíelo usted mismo. Se muestra una sola vez y caduca en 30 minutos.",
+    "inviteCopyLink": "Copiar enlace",
+    "inviteCopied": "Enlace copiado",
+    "inviteCopyFailed": "No se pudo copiar el enlace: selecciónelo manualmente",
+    "inviteTooManyAttempts": "Demasiadas invitaciones: inténtelo más tarde"
   },
   "permissions": {
     "groups": {

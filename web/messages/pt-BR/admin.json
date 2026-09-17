@@ -730,7 +730,15 @@
     "inviteEmailRequired": "Digite um endereço de e-mail",
     "inviteSend": "Enviar convite",
     "inviteSent": "Convite enviado para {email}",
-    "inviteCreatedWithoutEmail": "Usuário criado, mas o e-mail de convite não pôde ser enviado. Verifique as configurações de e-mail e peça para a pessoa redefinir a senha na página de login."
+    "inviteCreatedWithoutEmail": "Usuário criado, mas o e-mail de convite não pôde ser enviado. Copie o link de senha e envie você mesmo.",
+    "inviteResend": "Reenviar convite",
+    "inviteResent": "Convite reenviado para {email}",
+    "inviteLinkTitle": "Link de senha",
+    "inviteLinkOneTime": "O envio de e-mails não está configurado — copie este link e envie você mesmo. Ele é exibido uma única vez e expira em 30 minutos.",
+    "inviteCopyLink": "Copiar link",
+    "inviteCopied": "Link copiado",
+    "inviteCopyFailed": "Não foi possível copiar o link — selecione-o manualmente",
+    "inviteTooManyAttempts": "Convites demais — tente novamente mais tarde"
   },
   "permissions": {
     "groups": {

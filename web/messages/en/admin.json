@@ -798,7 +798,15 @@
     "inviteEmailRequired": "Enter an email address",
     "inviteSend": "Send invite",
     "inviteSent": "Invitation sent to {email}",
-    "inviteCreatedWithoutEmail": "User created, but the invite email could not be sent. Check email settings, then ask them to reset their password from the sign-in page."
+    "inviteCreatedWithoutEmail": "User created, but the invite email could not be sent. Copy the set-password link and send it to them yourself.",
+    "inviteResend": "Resend invite",
+    "inviteResent": "Invitation re-sent to {email}",
+    "inviteLinkTitle": "Set-password link",
+    "inviteLinkOneTime": "Email delivery is not configured, so copy this link and send it to them yourself. It is shown once and expires in 30 minutes.",
+    "inviteCopyLink": "Copy link",
+    "inviteCopied": "Link copied",
+    "inviteCopyFailed": "Could not copy the link — select it manually",
+    "inviteTooManyAttempts": "Too many invites — try again later"
   },
   "permissions": {
     "groups": {

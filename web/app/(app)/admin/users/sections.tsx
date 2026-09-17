@@ -1,6 +1,6 @@
 import { Badge } from '@openbooks/ui'
 import { SortTh } from '../../../../components/sortable-th'
-import { RoleAssignmentButton, ActiveToggle } from './UserActions'
+import { RoleAssignmentButton, ActiveToggle, ResendInviteButton } from './UserActions'
 
 export interface AdminUserRow {
   id: string
@@ -114,12 +114,19 @@ export function AdminUsersTable({
               </td>
               <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{u.lastSignIn}</td>
               <td className="px-3 py-2 text-right">
-                <ActiveToggle
-                  userId={u.id}
-                  userName={u.name}
-                  isActive={u.isActive}
-                  isSelf={u.isSelf}
-                />
+                <div className="flex items-center justify-end gap-2">
+                  <ResendInviteButton
+                    userId={u.id}
+                    userEmail={u.email}
+                    isPending={u.isPending}
+                  />
+                  <ActiveToggle
+                    userId={u.id}
+                    userName={u.name}
+                    isActive={u.isActive}
+                    isSelf={u.isSelf}
+                  />
+                </div>
               </td>
             </tr>
           ))}

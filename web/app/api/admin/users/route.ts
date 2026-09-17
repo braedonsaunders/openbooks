@@ -4,21 +4,21 @@ import { sql } from "drizzle-orm";
 import {
   db,
   type SqlExecutor,
-  withOrgContext,
   withOrgTransaction,
   withTransactionSavepoint,
 } from "@openbooks/engine/src/db.ts";
 import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
-import { requestPasswordReset } from "../../../../lib/auth-reset";
+import { issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
 /**
- * Admin user management: assign/unassign roles, toggle active.
+ * Admin user management: assign/unassign roles, toggle active, invite users
+ * and re-issue pending invite links.
  * Gated by admin.users.manage; every mutation is org-scoped and audited.
  *
  * Privilege ceiling: admin.users.manage is an ordinary permission, so an
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
-    action?: "assign" | "unassign" | "set-active" | "invite";
+    action?: "assign" | "unassign" | "set-active" | "invite" | "resend-invite";
     userId?: string;
     roleId?: string;
     isActive?: boolean;
@@ -316,17 +316,117 @@ export async function POST(req: Request) {
       // The set-password link travels the ordinary password-reset mail path,
       // so delivery, logging and expiry behave exactly like a self-service
       // reset. Mail trouble must not roll the user back: the invite stays
-      // pending and the mailbox owner can always request a fresh link.
+      // pending and the mailbox owner can always request a fresh link. When
+      // no email transport exists the raw link is handed to the admin
+      // one-time in this response instead — still pending, still single-use.
+      let issuance: { raw: string; emailQueued: boolean } | null = null;
       try {
-        await requestPasswordReset(email, authRequestContext(req));
+        issuance = await issueInviteSetPasswordLink({
+          user: { id: created.userId, org_id: actor.orgId, name, email },
+          context: authRequestContext(req),
+        });
       } catch (error) {
-        console.error("[admin-invite] set-password email failed", error);
+        console.error("[admin-invite] set-password issuance failed", error);
       }
-      const queued = await withOrgContext(actor.orgId, async () => (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from auth_password_resets
-         where user_id = ${created.userId} and used_at is null and expires_at > now()
-      `)).rows[0]!.n > 0);
-      return NextResponse.json({ ok: true, userId: created.userId, emailQueued: queued });
+      if (!issuance) {
+        return NextResponse.json(
+          { error: "too many invites — try again later" },
+          { status: 429 },
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        userId: created.userId,
+        emailQueued: issuance.emailQueued,
+        // One-time admin copy: present only when the mailbox could not carry
+        // it. Never persisted, never logged — the stored SHA-256 cannot
+        // reproduce it.
+        ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw) }),
+      });
+    }
+    case "resend-invite": {
+      // Re-issue the set-password link for a still-pending invite. Grants no
+      // role, so the ceiling check runs against the target's CURRENT roles:
+      // a resend must not become a takeover path for accounts another admin
+      // privileged above this actor's ceiling.
+      const target = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        const rows = (await db.execute<{
+          id: string;
+          email: string;
+          name: string | null;
+          is_active: boolean;
+          password_hash: string;
+        }>(sql`
+          select id, email, name, is_active, password_hash from users
+           where id = ${userId} and org_id = ${actor.orgId} for update`)).rows;
+        const found = rows[0];
+        if (!found) return NextResponse.json({ error: "user not found" }, { status: 404 });
+        if (!found.is_active) {
+          return NextResponse.json(
+            { error: "cannot resend an invite to a deactivated user" },
+            { status: 409 },
+          );
+        }
+        if (found.password_hash !== UNUSABLE_PASSWORD_HASH) {
+          return NextResponse.json(
+            { error: "user has already set a password" },
+            { status: 409 },
+          );
+        }
+        if (!actor.isSuperAdmin) {
+          const granted = (await db.execute<{ permissions: unknown }>(sql`
+            select r.permissions from role_assignments a
+              join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+             where a.org_id = ${actor.orgId} and a.user_id = ${found.id}`)).rows;
+          const grantedPermissions = granted.flatMap((row) =>
+            Array.isArray(row.permissions)
+              ? row.permissions.filter((p): p is string => typeof p === "string")
+              : []);
+          const missing = permissionsOutsideCeiling(gate.permissions, grantedPermissions);
+          if (missing.length > 0) {
+            return NextResponse.json(
+              {
+                error: `cannot re-issue an invite for permissions you do not hold: ${missing.join(", ")}`,
+                missing,
+              },
+              { status: 403 },
+            );
+          }
+        }
+        return { id: found.id, email: found.email, name: found.name };
+      }));
+      if (target instanceof NextResponse) return target;
+      let issuance: { raw: string; emailQueued: boolean } | null = null;
+      try {
+        issuance = await issueInviteSetPasswordLink({
+          user: { id: target.id, org_id: actor.orgId, name: target.name, email: target.email },
+          context: authRequestContext(req),
+        });
+      } catch (error) {
+        console.error("[admin-invite] resend issuance failed", error);
+      }
+      if (!issuance) {
+        return NextResponse.json(
+          { error: "too many invites — try again later" },
+          { status: 429 },
+        );
+      }
+      await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+        await audit(db, {
+          orgId: actor.orgId,
+          tableName: "users",
+          rowId: target.id,
+          action: "update",
+          changes: { inviteResent: [null, true] },
+          actorId: actor.id,
+        });
+      }));
+      return NextResponse.json({
+        ok: true,
+        userId: target.id,
+        emailQueued: issuance.emailQueued,
+        ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw) }),
+      });
     }
     default:
       return NextResponse.json({ error: "unknown action" }, { status: 400 });

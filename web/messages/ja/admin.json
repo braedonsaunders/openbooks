@@ -730,7 +730,15 @@
     "inviteEmailRequired": "メールアドレスを入力してください",
     "inviteSend": "招待を送信",
     "inviteSent": "{email} に招待を送信しました",
-    "inviteCreatedWithoutEmail": "ユーザーは作成されましたが、招待メールを送信できませんでした。メールの設定を確認し、サインインページからパスワードをリセットするようお伝えください。"
+    "inviteCreatedWithoutEmail": "ユーザーは作成されましたが、招待メールを送信できませんでした。パスワード設定リンクをコピーして本人に送ってください。",
+    "inviteResend": "招待を再送する",
+    "inviteResent": "{email} に招待を再送しました",
+    "inviteLinkTitle": "パスワード設定リンク",
+    "inviteLinkOneTime": "メール送信が設定されていないため、このリンクをコピーして本人に送ってください。一度だけ表示され、30分で有効期限が切れます。",
+    "inviteCopyLink": "リンクをコピー",
+    "inviteCopied": "リンクをコピーしました",
+    "inviteCopyFailed": "リンクをコピーできませんでした — 手動で選択してください",
+    "inviteTooManyAttempts": "招待が多すぎます — しばらくしてから試してください"
   },
   "permissions": {
     "groups": {
