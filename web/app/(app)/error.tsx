@@ -27,6 +27,7 @@ export default function AppError({
       icon={<AlertTriangle />}
       title={t('errorTitle')}
       description={t('errorDescription')}
+      footer={error.digest ? t('errorReference', { id: error.digest }) : undefined}
       action={
         <div className="flex flex-wrap items-center justify-center gap-2">
           <Button onClick={reset}>{tCommon('retry')}</Button>

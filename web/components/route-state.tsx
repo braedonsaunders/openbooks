@@ -8,11 +8,14 @@ export function RouteStateView({
   description,
   action,
   state,
+  footer,
 }: {
   icon?: React.ReactNode
   title: string
   description?: string
   action?: React.ReactNode
+  /** Optional line under the action (the error boundary quotes its request id here). */
+  footer?: React.ReactNode
   /**
    * Machine-readable name for WHY this boundary is showing.
    *
@@ -28,6 +31,9 @@ export function RouteStateView({
     <ListPageLayout header={<PageHeader title={title} description={description} />}>
       <div data-route-state={state}>
         <EmptyState icon={icon} title={title} description={description} action={action} />
+        {footer ? (
+          <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">{footer}</p>
+        ) : null}
       </div>
     </ListPageLayout>
   )
