@@ -25,3 +25,24 @@ export function displayOpportunityStatusName(
   const key = SEEDED_OPPORTUNITY_STATUS_NAMES[storedName]
   return key ? translatedByKey(key) : storedName
 }
+
+/** English account seed name → accounts.statuses catalog subkey. */
+export const SEEDED_ACCOUNT_STATUS_NAMES: Record<string, string> = {
+  New: 'new',
+  Working: 'working',
+  Qualified: 'qualified',
+  Disqualified: 'disqualified',
+  Open: 'open',
+  Nurturing: 'nurturing',
+  'Closed lost': 'closedLost',
+  Active: 'active',
+  Inactive: 'inactive',
+}
+
+export function displayAccountStatusName(
+  storedName: string,
+  translatedByKey: (key: string) => string,
+): string {
+  const key = SEEDED_ACCOUNT_STATUS_NAMES[storedName]
+  return key ? translatedByKey(key) : storedName
+}

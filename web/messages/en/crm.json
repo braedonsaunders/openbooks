@@ -69,6 +69,17 @@
       "new": "New prospect",
       "emptyTitle": "No prospects",
       "emptyDescription": "Qualified leads and opportunity accounts appear here."
+    },
+    "statuses": {
+      "new": "New",
+      "working": "Working",
+      "qualified": "Qualified",
+      "disqualified": "Disqualified",
+      "open": "Open",
+      "nurturing": "Nurturing",
+      "closedLost": "Closed lost",
+      "active": "Active",
+      "inactive": "Inactive"
     }
   },
   "activities": {
