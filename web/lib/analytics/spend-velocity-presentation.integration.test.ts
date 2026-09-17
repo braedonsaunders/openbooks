@@ -15,6 +15,13 @@ const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
 const { spendVelocityData } = await import('./spend-velocity-data')
+// The data layer pulls in web/lib/auth, whose request-org module registers
+// its Next request-store RLS resolver at import time — after the runner's
+// trusted test bypass. Outside a request that resolver denies everything,
+// so scratch reads come back empty. Re-assert the bypass here, after every
+// import, so this file sees its own fixtures.
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/test-database-bypass.ts')
+installTrustedTestDatabaseBypass()
 
 const D = '2026-07-14'
 const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
@@ -22,17 +29,24 @@ const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
 async function seedTwoCurrencySpend() {
   const org = await withBypass(() => createScratchOrg())
   const usSub = randomUUID()
+  // A genuine COGS-typed account: the scratch fixture types every P&L
+  // account 'expense', which would hide a COGS-vs-OpEx mix-up. F-t09-001.
+  const cogsAccountId = randomUUID()
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${cogsAccountId}, ${org.orgId}, '5001', 'True COGS', 'cogs', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
+    // CAD bill posts to an expense account; USD bill posts to the COGS
+    // account. Both belong to the spend-document universe (235 CAD total).
     const bills = [
-      ['BILL-CAD', org.subsidiaryId, org.vendorId, 'CAD', '100', '1'],
-      ['BILL-USD', usSub, org.vendorId, 'USD', '100', '1'],
+      ['BILL-CAD', org.subsidiaryId, org.vendorId, 'CAD', '100', '1', org.accounts.freight],
+      ['BILL-USD', usSub, org.vendorId, 'USD', '100', '1', cogsAccountId],
     ] as const
-    for (const [num, sub, party, cur, total, fx] of bills) {
+    for (const [num, sub, party, cur, total, fx, accountId] of bills) {
       const docId = randomUUID()
       const entryId = randomUUID()
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
@@ -41,10 +55,19 @@ async function seedTwoCurrencySpend() {
         values (${entryId}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${D}, ${org.periodId}, 'draft', 'manual', ${docId})`)
       await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
         values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${sub}, ${party}, true, ${'-' + total}, ${cur}, ${'-' + total}, ${fx}),
-               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${sub}, ${party}, false, ${total}, ${cur}, ${total}, ${fx})`)
+               (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${accountId}, ${sub}, ${party}, false, ${total}, ${cur}, ${total}, ${fx})`)
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
     }
+    // Genuine operating expense with NO spend document (e.g. depreciation):
+    // a manual GL journal the spend-document universe never sees. F-t09-001.
+    const opexEntry = randomUUID()
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${opexEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'OPEX-1', ${D}, ${org.periodId}, 'draft', 'manual')`)
+    await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+      values (${randomUUID()}, ${org.orgId}, ${opexEntry}, 1, ${org.accounts.freight}, ${org.subsidiaryId}, '50', 'CAD', '50', 1),
+             (${randomUUID()}, ${org.orgId}, ${opexEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-50', 'CAD', '-50', 1)`)
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${opexEntry}`)
     // Commitments (document totals, no postings): CAD PO 100 + USD PO 100.
     for (const [num, sub, cur, total] of [['PO-CAD', org.subsidiaryId, 'CAD', '100'], ['PO-USD', usSub, 'USD', '100']] as const) {
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total)
@@ -79,7 +102,10 @@ test('spend velocity translates every spend functional to presentation', { skip:
       assert.equal(data.monthlyTrends.find((m) => m.month === '2026-07')?.totalAmount, 235)
       assert.equal(data.commitmentCliff.summary.totalPO, 235)
       assert.equal(data.revenue.totalRevenue, 470)
-      assert.equal(data.revenue.opexRatio, 50)
+      // P&L operating expenses are the 100 CAD bill plus the 50 CAD manual
+      // journal; the 135 CAD of COGS spend must not feed the "Operating
+      // expenses … of revenue" ratio (F-t09-001).
+      assert.equal(data.revenue.opexRatio, 32)
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
