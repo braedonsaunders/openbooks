@@ -46,7 +46,8 @@
     "number": "编号",
     "projectedAmount": "预测金额",
     "periodStart": "期间开始",
-    "periodEnd": "期间结束"
+    "periodEnd": "期间结束",
+    "weightedAmount": "加权金额"
   },
   "accounts": {
     "newFallback": "新建客户",
@@ -68,6 +69,17 @@
       "new": "新建潜在客户",
       "emptyTitle": "无潜在客户",
       "emptyDescription": "已鉴定的线索和商机客户将显示在此处。"
+    },
+    "statuses": {
+      "new": "新建",
+      "working": "跟进中",
+      "qualified": "合格",
+      "disqualified": "不合格",
+      "open": "打开",
+      "nurturing": "培育中",
+      "closedLost": "已输单",
+      "active": "活跃",
+      "inactive": "非活跃"
     }
   },
   "activities": {
@@ -113,7 +125,15 @@
     "createEstimate": "创建报价单",
     "estimateCreated": "报价单已创建",
     "estimateFailed": "无法创建报价单。",
-    "estimateNeedsAccount": "创建估算前请先设置客户"
+    "estimateNeedsAccount": "创建估算前请先设置客户",
+    "statuses": {
+      "qualification": "资格确认",
+      "discovery": "需求发现",
+      "proposal": "方案报价",
+      "negotiation": "谈判",
+      "closedWon": "已赢单",
+      "closedLost": "已输单"
+    }
   },
   "forecastCategories": {
     "omitted": "已排除",

@@ -13,6 +13,25 @@
   "sso": "单点登录",
   "ssoFailed": "无法完成单点登录",
   "reset": {
-    "requestFailed": "无法请求密码重置链接 — 请检查网络连接后重试。"
-  }
+    "requestFailed": "无法请求密码重置链接 — 请检查网络连接后重试。",
+    "requestTitle": "重置密码",
+    "chooseTitle": "设置新密码",
+    "requestHelp": "输入账户邮箱，如与账户匹配，我们将发送重置链接。",
+    "sendLink": "发送重置链接",
+    "sending": "发送中…",
+    "sent": "如该邮箱与账户匹配，重置链接已在途中。链接仅可使用一次，30 分钟后过期。",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "passwordHelp": "至少 10 个字符。",
+    "mismatch": "两次输入的密码不一致",
+    "weakPassword": "密码至少需要 10 个字符",
+    "invalidToken": "该重置链接无效或已过期——请重新申请",
+    "setPassword": "设置新密码",
+    "saving": "保存中…",
+    "changed": "密码已修改。请立即使用新密码登录——其他会话均已退出。",
+    "backToSignIn": "返回登录"
+  },
+  "forgotPassword": "忘记密码？",
+  "tooManyAttempts": "尝试次数过多——请在 {seconds} 秒后重试",
+  "busyTryAgain": "登录服务繁忙——请稍后重试"
 }

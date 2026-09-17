@@ -20,7 +20,9 @@
     "organizationWorkspace": "组织工作区",
     "organizationWorkspaceDescription": "当前组织的模块",
     "platformDescription": "部署级运维工具",
-    "security": "登录安全"
+    "security": "登录安全",
+    "sandbox": "sandbox",
+    "sampleCompany": "示例企业"
   },
   "language": {
     "label": "语言",
@@ -141,6 +143,13 @@
     "askAdministrator": "如果您无法进行此更改，请联系您的管理员。",
     "deniedTitle": "您没有访问权限",
     "deniedDescription": "此区域需要{permission}权限。",
-    "operatorDescription": "平台控制台仅供平台运维人员使用。您组织的相关设置位于“管理”之下。"
+    "operatorDescription": "平台控制台仅供平台运维人员使用。您组织的相关设置位于“管理”之下。",
+    "errorTitle": "出了点问题",
+    "errorDescription": "该页面无法加载。请重试；如问题持续，请返回仪表板。",
+    "errorReference": "参考 {id}",
+    "notFoundTitle": "页面未找到",
+    "notFoundDescription": "所找页面不存在，或您无权访问。",
+    "backToDashboard": "前往仪表板",
+    "backToSignIn": "前往登录"
   }
 }

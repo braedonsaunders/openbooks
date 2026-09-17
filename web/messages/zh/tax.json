@@ -26,7 +26,12 @@
     "label": "工作副本导出",
     "pdf": "工作副本 PDF",
     "csv": "工作副本 CSV",
-    "xlsx": "工作副本 Excel"
+    "xlsx": "工作副本 Excel",
+    "menu": "导出",
+    "groupForm": "申报表",
+    "groupData": "工作底稿数据",
+    "facsimile": "表格 PDF",
+    "json": "结构化 JSON"
   },
   "official": {
     "download": "已填写的正式表格"
@@ -175,5 +180,9 @@
       "auto": "自动",
       "manual": "手工"
     }
+  },
+  "tabs": {
+    "prepare": "编制申报表",
+    "history": "历史申报"
   }
 }

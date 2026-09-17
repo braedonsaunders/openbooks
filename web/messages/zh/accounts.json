@@ -83,7 +83,8 @@
       "number_in_use": "该科目编号已被使用。",
       "account_changed": "您编辑期间该科目已发生变化。请重新打开后再试。",
       "invalid_idempotency_key": "无法安全地重试该科目请求。",
-      "save_failed": "无法保存该科目。"
+      "save_failed": "无法保存该科目。",
+      "reconcilable_currency_required": "可对账科目需要结算币种——请在保存前选择。"
     },
     "monetary": "外币重估（货币性项目）",
     "monetaryDefault": "按账户类型",

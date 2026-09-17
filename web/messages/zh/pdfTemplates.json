@@ -10,7 +10,13 @@
     "builtIn": "内置",
     "starterHint": "在没有自定义模板时打印使用——复制它即可自定义",
     "duplicate": "复制",
-    "isDefault": "默认"
+    "isDefault": "默认",
+    "type": "记录类型",
+    "allTypes": "全部记录类型",
+    "previewNote": "内置起始设计的只读预览，使用示例数据渲染。复制后可创建可编辑模板。",
+    "previewFailed": "无法呈现预览",
+    "empty": "没有匹配的模板。",
+    "starterNamed": "{type}起始模板"
   },
   "editor": {
     "back": "PDF 模板",

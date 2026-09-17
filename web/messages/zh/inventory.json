@@ -76,5 +76,65 @@
       "value": "按价值",
       "quantity": "按数量"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "失败"
+    },
+    "toasts": {
+      "saved": "已保存"
+    },
+    "transfers": {
+      "newOrder": "新建调拨单",
+      "from": "调出",
+      "to": "调入",
+      "item": "物料",
+      "qty": "数量",
+      "inTransitAccount": "在途科目（可选覆盖）",
+      "useControlAccount": "使用统制科目",
+      "createDraft": "创建草稿",
+      "help": "发出按借记在途 / 贷记存货记账。接收方收货后冲销在途。如不覆盖，请设置 controlAccounts.inventoryInTransit。",
+      "table": {
+        "number": "单号",
+        "fromTo": "调出 → 调入",
+        "status": "状态",
+        "ordered": "已下单"
+      },
+      "ship": "发出",
+      "receive": "接收",
+      "noneYet": "尚无调拨单。"
+    },
+    "landed": {
+      "newVoucher": "多收货到岸成本凭证",
+      "amount": "金额",
+      "basis": "基准",
+      "basisValue": "按金额",
+      "basisQuantity": "按数量",
+      "basisWeight": "按重量",
+      "freightAccount": "运费科目",
+      "targetItem": "目标物料",
+      "location": "地点",
+      "addTarget": "添加目标",
+      "remove": "移除",
+      "postVoucher": "记账凭证",
+      "table": {
+        "number": "单号",
+        "date": "日期",
+        "basis": "基准",
+        "amount": "金额",
+        "status": "状态"
+      },
+      "noneYet": "尚无到岸成本凭证。"
+    },
+    "lots": {
+      "lotNumber": "批号",
+      "openRecallReport": "打开召回报表",
+      "table": {
+        "lot": "批次",
+        "item": "物料",
+        "expiry": "有效期"
+      },
+      "noneYet": "尚无批次——请收货时填写批号。"
+    }
   }
 }
