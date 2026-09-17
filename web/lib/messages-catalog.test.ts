@@ -4369,6 +4369,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "de:reports.aging.buckets.b3|61–90",
   "de:reports.aging.buckets.b4|90+",
   "de:reports.aging.detail|Detail",
+  "de:reports.aging.inCurrency|in {currency}",
   "de:reports.budget.budget|Budget",
   "de:reports.cashFlow.dateRange|{from} → {to}",
   "de:reports.cashFlowIndirect.dateRange|{from} → {to}",
@@ -4928,7 +4929,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 159,
   "inventory": 104,
-  "reports": 1076,
+  "reports": 1085,
   "sync": 172,
   "login": 33,
   "accounts": 82,

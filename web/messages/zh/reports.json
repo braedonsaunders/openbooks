@@ -239,7 +239,9 @@
       "total": "合计",
       "due": "到期",
       "age": "账龄（天）",
-      "bucket": "分档"
+      "bucket": "分档",
+      "currency": "币种",
+      "txnOpen": "未清（交易币种）"
     },
     "buckets": {
       "current": "未逾期",
@@ -249,7 +251,14 @@
       "b4": "90+"
     },
     "summary": "汇总",
-    "detail": "明细"
+    "detail": "明细",
+    "fromBase": "从基准币种",
+    "fromTransaction": "从交易币种",
+    "inCurrency": "以{currency}计",
+    "currency": "币种",
+    "convertFrom": "换算来源",
+    "baseOption": "基准币种",
+    "transactionOption": "交易币种"
   },
   "cashFlow": {
     "title": "现金流量表",

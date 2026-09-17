@@ -239,7 +239,9 @@
       "total": "Gesamt",
       "due": "Fällig",
       "age": "Alter (Tage)",
-      "bucket": "Kategorie"
+      "bucket": "Kategorie",
+      "currency": "Währ.",
+      "txnOpen": "Offen (Transaktion)"
     },
     "buckets": {
       "current": "Aktuell",
@@ -249,7 +251,14 @@
       "b4": "90+"
     },
     "summary": "Zusammenfassung",
-    "detail": "Detail"
+    "detail": "Detail",
+    "fromBase": "aus Basiswährung",
+    "fromTransaction": "aus Transaktionswährung",
+    "inCurrency": "in {currency}",
+    "currency": "Währung",
+    "convertFrom": "Umrechnen aus",
+    "baseOption": "Basiswährung",
+    "transactionOption": "Transaktionswährung"
   },
   "cashFlow": {
     "title": "Kapitalflussrechnung",

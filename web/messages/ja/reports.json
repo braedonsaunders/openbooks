@@ -239,7 +239,9 @@
       "total": "合計",
       "due": "期日",
       "age": "経過日数",
-      "bucket": "区分"
+      "bucket": "区分",
+      "currency": "通貨",
+      "txnOpen": "未消込（取引通貨）"
     },
     "buckets": {
       "current": "期日内",
@@ -249,7 +251,14 @@
       "b4": "91以上"
     },
     "summary": "サマリー",
-    "detail": "明細"
+    "detail": "明細",
+    "fromBase": "基準通貨から",
+    "fromTransaction": "取引通貨から",
+    "inCurrency": "{currency}建て",
+    "currency": "通貨",
+    "convertFrom": "換算元",
+    "baseOption": "基準通貨",
+    "transactionOption": "取引通貨"
   },
   "cashFlow": {
     "title": "キャッシュフロー計算書",
