@@ -74,6 +74,10 @@
     "resource": "Table",
     "format": "Format",
     "status": "Statut",
+    "jobStatus": {
+      "committed": "Importé",
+      "failed": "Échoué"
+    },
     "rows": "Lignes",
     "by": "Par"
   }

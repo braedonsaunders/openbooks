@@ -91,6 +91,10 @@
     "resource": "Record type",
     "format": "Format",
     "status": "Status",
+    "jobStatus": {
+      "committed": "Committed",
+      "failed": "Failed"
+    },
     "rows": "Records",
     "by": "By"
   }
