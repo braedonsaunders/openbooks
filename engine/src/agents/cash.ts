@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money.ts";
+import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../open-item-kinds.ts";
 import { addCalendarDays, businessToday } from "../business-date.ts";
 import {
   effectiveDetectorMateriality,
@@ -200,10 +201,10 @@ async function sideOpenItems(
     side === "ap"
       ? sql`((d.kind = ${creditKind} and jl.amount > 0) or (d.kind <> ${creditKind} and jl.amount < 0))`
       : sql`((d.kind = ${creditKind} and jl.amount < 0) or (d.kind <> ${creditKind} and jl.amount > 0))`;
-  const kindFilter =
-    side === "ap"
-      ? sql`d.kind in ('vendor_bill', 'expense_report', ${creditKind})`
-      : sql`d.kind in ('customer_invoice', ${creditKind})`;
+  // Population is the shared open-item kinds const — the transcription must
+  // name the same doorway as the cockpit, never re-list it (P5.1).
+  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
+  const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
   const res = await db.execute<Record<string, unknown>>(sql`
     with oi as (
       select jl.id, jl.party_id, je.posting_date as tran_date, jl.due_date,

@@ -2,6 +2,10 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { mulDecimal } from "@openbooks/engine/src/money.ts";
+// Relative (not the bare workspace specifier): worktree node_modules resolves
+// bare @openbooks/* to the main checkout, so a new engine module would not
+// resolve until merge; a relative import binds this checkout everywhere.
+import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../../../engine/src/open-item-kinds.ts";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -146,7 +150,7 @@ async function openDocuments(
   dims: DimFilter | undefined,
   orgId: string,
   orgBase: string,
-  positiveKind: string,
+  kinds: readonly string[],
   creditKind: string,
 ): Promise<OpenDocument[]> {
   const r = (await db.execute<{
@@ -180,7 +184,7 @@ async function openDocuments(
         join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId}
-         and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+         and d.status = 'posted' and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     ),
@@ -282,12 +286,15 @@ export async function agingByParty(
   opts?: AgingOptions,
 ): Promise<AgingResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
+  // Population is the shared open-item kinds const — the same doorway as the
+  // tiles/cockpits, so an outstanding expense report ages here instead of
+  // reaching the total only through the control residual (F-u1-P5.1).
+  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, positiveKind, creditKind);
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind);
   const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase);
   // A document currency with no spot must never block the BASE report (it
   // converts nothing through it): only request the legs this basis reads,
@@ -515,7 +522,8 @@ export async function agingDetail(
   opts?: AgingOptions,
 ): Promise<AgingDetailResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice"
+  // Same shared population as the summary above — detail and summary always tie.
+  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
@@ -524,7 +532,7 @@ export async function agingDetail(
   // with the summary buckets per document. Deliberately documents-only:
   // control balances with no open item behind them (unapplied receipts,
   // direct control journals) surface on the summary residual row, never here.
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, positiveKind, creditKind);
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind);
   const needed = new Set<string>();
   for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
   needed.delete(target);
@@ -574,15 +582,17 @@ export async function agingCurrenciesInScope(
   orgId?: string,
 ): Promise<{ baseCurrency: string; currencies: string[] }> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
-  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  // Same shared population: an expense-report-only transaction currency must
+  // still be offered by the selector, or the report cannot be read in the
+  // currency the customer actually owes.
+  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
   const baseCurrency = await presentationCurrency(resolvedOrgId);
   const r = await db.execute<{ ccy: string }>(sql`
     select distinct d.currency as ccy
       from documents d
       join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
      where d.org_id = ${resolvedOrgId}
-       and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
+       and d.status = 'posted' and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
        and coalesce(d.posting_date, d.document_date) <= ${asOf}
        and ${dimWhere(dims, sql`d`)}
   `);
