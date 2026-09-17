@@ -1,7 +1,8 @@
 import { assertPayrollCountryKnown } from "./payroll-country.ts";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, neg, normalizeMoney } from "./money.ts";
+import { add, cmp, mulRate, neg, normalizeMoney } from "./money.ts";
+import { ratesForPayDate } from "./payroll/us/rates.ts";
 import {
   effectiveFilingAccountSql,
   assertPayrollFilingAccountKnown,
@@ -151,6 +152,8 @@ export interface OpeningYearEndYtd {
   taxableYtd: string;
   /** tax_ytd — income tax withheld before adoption (box 22 / W-2 box 2). */
   taxYtd: string;
+  /** fica_withheld_ytd — combined SS/Medicare tax withheld before adoption (W-2 boxes 4/6). */
+  ficaWithheldYtd: string;
 }
 
 /**
@@ -241,11 +244,11 @@ async function openingYearEndYtdByEmployee(
     employee_party_id: string;
     pensionable_ytd: unknown; insurable_ytd: unknown;
     cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
-    taxable_ytd: unknown; tax_ytd: unknown;
+    taxable_ytd: unknown; tax_ytd: unknown; fica_withheld_ytd: unknown;
   }>(sql`
     select b.employee_party_id,
            b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
-           b.taxable_ytd, b.tax_ytd
+           b.taxable_ytd, b.tax_ytd, b.fica_withheld_ytd
       from payroll_opening_balances b
       join employee_payroll_profiles prof
         on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
@@ -256,6 +259,7 @@ async function openingYearEndYtdByEmployee(
          or coalesce(b.cpp_ytd, 0) <> 0 or coalesce(b.cpp2_ytd, 0) <> 0
          or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
          or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
+         or coalesce(b.fica_withheld_ytd, 0) <> 0
        )
   `));
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
@@ -267,6 +271,7 @@ async function openingYearEndYtdByEmployee(
     qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
     taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
     taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+    ficaWithheldYtd: normalizeMoney(String(row.fica_withheld_ytd ?? "0")),
   }]));
 }
 
@@ -942,19 +947,75 @@ export interface W2Slip {
   box6MedicareTax: string;
 }
 
+/** FICA rates a W-2 box 4/6 split is computed from. */
+export interface UsFicaSplitRates {
+  ssRate: string;
+  ssWageBase: string;
+}
+
+/**
+ * Split combined prior-provider FICA withholding into W-2 boxes 4 and 6.
+ *
+ * Wage-implied: Social Security is the SS rate on FICA wages up to the wage
+ * base; Medicare is the withheld remainder (Box 6 includes Additional
+ * Medicare, so the remainder lands in the right box even when the prior
+ * employer withheld the 0.9%). Clamped so Box 4 never exceeds what was
+ * actually withheld — the two boxes always account for every withheld dollar
+ * exactly. Pure, exact-decimal, no floats.
+ */
+export function splitFicaWithheld(
+  ficaWithheldYtd: string,
+  pensionableYtd: string,
+  rates: UsFicaSplitRates,
+): { ssTax: string; medicareTax: string } {
+  const capped = cmp(pensionableYtd, rates.ssWageBase) > 0 ? rates.ssWageBase : pensionableYtd;
+  const implied = mulRate(capped, rates.ssRate);
+  const ssTax = cmp(implied, ficaWithheldYtd) > 0 ? ficaWithheldYtd : implied;
+  return { ssTax, medicareTax: add(ficaWithheldYtd, neg(ssTax)) };
+}
+
+/**
+ * The year's published US FICA rates for the box 4/6 split. REFUSES an
+ * untranscribed year rather than returning null — with no rates the split
+ * would be a guess, and a guessed split files wrong boxes silently (the
+ * caYearCaps doctrine: fail the same way, not the opposite way).
+ */
+function usFicaSplitRates(taxYear: number): UsFicaSplitRates {
+  try {
+    const { ssRate, ssWageBase } = ratesForPayDate(`${taxYear}-07-01`).fica;
+    return { ssRate, ssWageBase };
+  } catch (error) {
+    throw new PayrollError(
+      `no published US FICA rates for tax year ${taxYear} — W-2 boxes 4 and 6 cannot split `
+      + `the FICA tax withheld carry-in. ${(error as Error).message}`,
+    );
+  }
+}
+
 /**
  * W-2 boxes a carry-in lands in: 1 (wages), 2 (federal income tax), 3 (Social
- * Security wages) and 5 (Medicare wages). `pensionable_ytd` is the prior
- * provider's FICA wage base for both boxes; no opening tax field exists for
- * boxes 4/6, so those remain the committed FICA taxes.
+ * Security wages), 5 (Medicare wages), and — via the wage-implied split of
+ * the combined FICA carry-in — 4 (Social Security tax) and 6 (Medicare tax).
+ * `pensionable_ytd` is the prior provider's FICA wage base for the wage
+ * boxes. A null rate set leaves boxes 4/6 as the committed FICA taxes (the
+ * pre-split behavior for callers with no year to split under).
  */
-export function openingYtdIntoW2Slip(slip: W2Slip, opening: OpeningYearEndYtd): W2Slip {
+export function openingYtdIntoW2Slip(
+  slip: W2Slip,
+  opening: OpeningYearEndYtd,
+  ficaRates: UsFicaSplitRates | null = null,
+): W2Slip {
+  const split = ficaRates && cmp(opening.ficaWithheldYtd, "0") !== 0
+    ? splitFicaWithheld(opening.ficaWithheldYtd, opening.pensionableYtd, ficaRates)
+    : null;
   return {
     ...slip,
     box1Wages: add(slip.box1Wages, opening.taxableYtd),
     box2FederalIncomeTax: add(slip.box2FederalIncomeTax, opening.taxYtd),
     box3SsWages: add(slip.box3SsWages, opening.pensionableYtd),
+    box4SsTax: split ? add(slip.box4SsTax, split.ssTax) : slip.box4SsTax,
     box5MedicareWages: add(slip.box5MedicareWages, opening.pensionableYtd),
+    box6MedicareTax: split ? add(slip.box6MedicareTax, split.medicareTax) : slip.box6MedicareTax,
   };
 }
 
@@ -990,8 +1051,14 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
      order by p.display_name, min(s.pay_date)
    `));
   // The carry-in lands on boxes 1 / 2 / 3 / 5. The SS and Medicare wage bases
-  // are explicitly stored as `pensionable_ytd` for US openings.
+  // are explicitly stored as `pensionable_ytd` for US openings, and the
+  // combined FICA carry-in splits into boxes 4/6 under the year's published
+  // rates — resolved only when some opening actually carries FICA
+  // withholding, so years and orgs without one see zero behavior change.
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
+  const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0)
+    ? usFicaSplitRates(taxYear)
+    : null;
   const stubSlips = rows.rows.map((row) => {
     const states = ((row.states as string[] | null) ?? []).filter(Boolean);
     return {
@@ -1026,7 +1093,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       box6MedicareTax: "0",
     };
   });
-  return carryOpeningYearEndYtd(seeded, openings, openingYtdIntoW2Slip);
+  return carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
 }
 
 // ---------------------------------------------------------------------------
