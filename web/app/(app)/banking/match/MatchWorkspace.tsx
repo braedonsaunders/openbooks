@@ -105,6 +105,11 @@ export function MatchWorkspace({
   const [selectedGl, setSelectedGl] = useState<Set<string>>(new Set())
   const [addLine, setAddLine] = useState<{ id: string; label: string } | null>(null)
   const [offsetId, setOffsetId] = useState('')
+  // A refused add-journal that only fires a transient toast reads as
+  // "nothing happened" once it dismisses with the dialog left open
+  // (F-t05-019): the typed refusal also persists as a dialog-level alert,
+  // cleared on the next edit — the ImportStatementButton F-t05-012 pattern.
+  const [addError, setAddError] = useState<string | null>(null)
   // Suggest-mode rule proposals for the current account's unmatched lines,
   // keyed by statement line id. Computed live via the rules preview (no post).
   const accountId = account?.id
@@ -158,7 +163,7 @@ export function MatchWorkspace({
     [data, selectedGl],
   )
 
-  async function call(method: string, url: string, body?: unknown): Promise<MatchActionResult | null> {
+  async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void): Promise<MatchActionResult | null> {
     setBusy(true)
     try {
       const res = await fetch(url, {
@@ -169,9 +174,17 @@ export function MatchWorkspace({
       // Never let the read itself throw: an unreadable error body would
       // otherwise go silent with an unhandled rejection (F-t05-017/019).
       const d = await res.json().catch(() => null) as MatchActionResult | null
-      if (!res.ok) { toast.error(d?.error ?? tBanking('errors.requestFailed')); return null }
+      if (!res.ok) {
+        const message = typeof d?.error === 'string' && d.error ? d.error : tBanking('errors.requestFailed')
+        if (onError) onError(message); else toast.error(message)
+        return null
+      }
       return d
-    } catch { toast.error(tBanking('errors.requestFailed')); return null } finally { setBusy(false) }
+    } catch {
+      const message = tBanking('errors.requestFailed')
+      if (onError) onError(message); else toast.error(message)
+      return null
+    } finally { setBusy(false) }
   }
 
   function pickAccount(id: string) {
@@ -236,9 +249,13 @@ export function MatchWorkspace({
 
   async function confirmAddJournal() {
     if (!session || !addLine || !offsetId) return
-    const d = await call('POST', `/api/banking/statement-lines/${addLine.id}/create-match`, { reconciliationId: session.id, offsetAccountId: offsetId })
+    setAddError(null)
+    const d = await call('POST', `/api/banking/statement-lines/${addLine.id}/create-match`, { reconciliationId: session.id, offsetAccountId: offsetId }, (message) => {
+      setAddError(message)
+      toast.error(message)
+    })
     if (!d) return
-    toast.success(t('addedToast')); setAddLine(null); setOffsetId(''); router.refresh()
+    toast.success(t('addedToast')); setAddLine(null); setOffsetId(''); setAddError(null); router.refresh()
   }
 
   async function signOff() {
@@ -385,7 +402,7 @@ export function MatchWorkspace({
                             <Button variant="ghost" size="sm" disabled={busy} title={t('postAndMatch')} onClick={() => confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId)}><Link2 size={14} /></Button>
                           ) : null}
                           <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push((`/banking/rules?rule=new&fromLine=${l.id}`))}><Workflow size={14} /></Button>
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: `${l.posted_on} · ${money(l.amount)}` }); setOffsetId('') }}><FilePlus2 size={14} /></Button>
+                          <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: `${l.posted_on} · ${money(l.amount)}` }); setOffsetId(''); setAddError(null) }}><FilePlus2 size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
                         </div>
                       </TableCell>
@@ -495,14 +512,22 @@ export function MatchWorkspace({
       ) : null}
 
       {/* add-journal drawer */}
-      <Drawer open={!!addLine} onClose={() => setAddLine(null)} size="sm" title={t('addJournalTitle')} description={addLine?.label}
+      <Drawer open={!!addLine} onClose={() => { setAddLine(null); setAddError(null) }} size="sm" title={t('addJournalTitle')} description={addLine?.label}
         headerActions={<>
-          <Button variant="outline" onClick={() => setAddLine(null)}>{tCommon('actions.cancel')}</Button>
+          <Button variant="outline" onClick={() => { setAddLine(null); setAddError(null) }}>{tCommon('actions.cancel')}</Button>
           <Button disabled={busy || !offsetId} onClick={confirmAddJournal}>{busy ? tCommon('actions.saving') : t('addJournal')}</Button>
         </>}>
         <div className="space-y-1.5 p-1">
+          {addError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+            >
+              {addError}
+            </p>
+          ) : null}
           <Label>{t('offsetAccount')}</Label>
-          <SearchSelect options={offsetAccounts.map((a) => ({ value: a.id, label: a.label }))} value={offsetId} onChange={(v) => setOffsetId(v ?? '')} placeholder={tBanking('drawer.accountPlaceholder')} />
+          <SearchSelect options={offsetAccounts.map((a) => ({ value: a.id, label: a.label }))} value={offsetId} onChange={(v) => { setAddError(null); setOffsetId(v ?? '') }} placeholder={tBanking('drawer.accountPlaceholder')} />
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('addJournalHint')}</p>
         </div>
       </Drawer>

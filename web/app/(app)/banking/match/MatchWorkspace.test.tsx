@@ -252,3 +252,52 @@ test('a refused add-journal surfaces the server reason (F-t05-019)', async (t) =
     `the refusal must surface, got ${JSON.stringify(script.toasts)}`,
   )
 })
+
+test('a refused add-journal persists the reason inline and releases busy (F-t05-019)', async (t) => {
+  await mountWorkspace(t, scriptedFetch({
+    '/rules/preview': () => Response.json({ matches: [] }),
+    '/create-match': () => Response.json({ error: 'offset account is not postable' }, { status: 422 }),
+  }))
+  await act(async () => {
+    addJournalButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const dialogs = document.querySelectorAll('[role="dialog"]')
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement
+  assert.ok(dialog, 'the add-journal dialog must open')
+  const trigger = dialog.querySelector('button[aria-haspopup="listbox"]')
+  assert.ok(trigger, 'the dialog must offer the offset picker')
+  await act(async () => {
+    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+  const option = [...document.querySelectorAll('button[role="option"]')].find(
+    (b) => (b.textContent ?? '').includes('6800 Bank & Merchant Fees'),
+  )
+  assert.ok(option, 'the picker must list the offset account')
+  await act(async () => {
+    ;(option as HTMLElement).click()
+    await tick()
+    await tick()
+  })
+  const add = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
+  assert.ok(add, 'the dialog must offer Add journal once an offset is picked')
+  await act(async () => {
+    add.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+    await tick()
+  })
+  // The dialog stays open (nothing matched) — but the typed refusal must
+  // persist inline, not vanish with a transient toast (F-t05-019).
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the refused dialog must persist a role=alert')
+  assert.ok(
+    (alert.textContent ?? '').includes('not postable'),
+    `the alert must carry the typed reason, got ${JSON.stringify(alert.textContent)}`,
+  )
+  const addAfter = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
+  assert.ok(addAfter, 'the dialog must still offer Add journal after the refusal')
+  assert.equal(addAfter.disabled, false, 'busy must release after the refusal')
+})
