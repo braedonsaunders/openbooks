@@ -4300,11 +4300,35 @@ export async function assertBillReceiptsPostable(
 }
 
 /**
- * A standalone invoice may only post when its issue effects can relieve
- * stock: an inventory-kind line without a costing profile would otherwise
- * post revenue with no COGS and no stock movement. Governed invoices (sold
- * through fulfillment) already clear this at shipment; this is the backstop
- * for the legacy ship-and-bill path. Fail before posting, like the bill leg.
+ * One predicate for "the fulfilment path owns this invoice's stock", read by
+ * both the pre-post guard below and the post-commit issue hook. An invoice
+ * converted from a sales order must never move stock a second time.
+ */
+async function isFulfilmentGovernedInvoice(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<boolean> {
+  const governed = await runner.execute(sql`
+    select 1
+      from document_links link
+      join documents source
+        on source.id = link.from_document_id and source.org_id = link.org_id
+     where link.org_id = ${orgId} and link.to_document_id = ${documentId}
+       and link.link_type = 'bills' and source.kind = 'sales_order'
+     limit 1`);
+  return !!governed.rows[0];
+}
+
+/**
+ * A standalone invoice may only post into a state its issue effects can
+ * satisfy: an inventory-kind line without a costing profile — or with a
+ * profile but no resolvable stock location — would otherwise post revenue
+ * with no COGS and no stock movement, failing only inside the post-commit
+ * effects drain after the journal has committed (F-t07-003). Governed
+ * invoices (sold through fulfillment) already clear this at shipment; this
+ * is the backstop for the legacy ship-and-bill path. Fail before posting,
+ * like the bill leg.
  */
 export async function assertInvoiceIssuesPostable(
   runner: SqlExecutor,
@@ -4313,6 +4337,8 @@ export async function assertInvoiceIssuesPostable(
 ): Promise<void> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return;
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
+  if (await isFulfilmentGovernedInvoice(runner, orgId, documentId)) return;
+  await loadDocumentInventoryLines(runner, orgId, documentId);
 }
 
 /**
@@ -4978,15 +5004,7 @@ export async function applyInventoryIssuesForInvoice(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
-  const governed = (await db.execute(sql`
-    select 1
-      from document_links link
-      join documents source
-        on source.id = link.from_document_id and source.org_id = link.org_id
-     where link.org_id = ${orgId} and link.to_document_id = ${documentId}
-       and link.link_type = 'bills' and source.kind = 'sales_order'
-     limit 1`));
-  if (governed.rows[0]) return 0;
+  if (await isFulfilmentGovernedInvoice(db, orgId, documentId)) return 0;
   const lines = await loadDocumentInventoryLines(db, orgId, documentId);
   let count = 0;
   for (const l of lines) {
