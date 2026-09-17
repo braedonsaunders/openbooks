@@ -3,17 +3,43 @@
   "description": "Projektabrechnung über Leistungsverzeichnisse, kumulierte Anträge, Nachträge und Einbehalte.",
   "project": "Projekt",
   "loading": "Kontrollierte Abrechnungsdaten werden geladen…",
+  "workspace": {
+    "sectionsAria": "Abrechnungsabschnitte der Anträge"
+  },
   "errors": { "load": "Zahlungsanträge konnten nicht geladen werden", "action": "Aktion fehlgeschlagen" },
   "empty": { "title": "Keine geeigneten Projekte", "description": "Aktivieren Sie einen Projekttyp mit Zahlungsanträgen und weisen Sie ihn einem Projekt zu.", "manageProjectTypes": "Projekttypen verwalten" },
   "summary": { "contractSum": "Auftragssumme", "retainageHeld": "Einbehalt", "committedCost": "Gebundene Kosten (offene Bestellungen)" },
   "sov": {
-    "title": "Leistungsverzeichnis", "item": "Position", "itemPlaceholder": "Positionsnr.", "description": "Beschreibung", "scheduledValue": "Vertragswert", "retainagePercent": "Einbehalt %", "default": "Standard", "delete": "Löschen", "deleteConfirm": "Position „{description}“ löschen?", "empty": "Noch keine Positionen.", "defaultIncomeAccount": "Standarderlöskonto", "addLine": "Position hinzufügen", "editLine": "Position bearbeiten", "lockedValuesHint": "Sobald abgerechnet wird, sind die Wertfelder kontrolliert — hier kann nur noch das Erlöskonto geändert werden.", "lockedHint": "Die Abrechnung hat begonnen — der Auftragswert ändert sich jetzt nur noch über einen genehmigten Nachtrag."
+    "title": "Leistungsverzeichnis", "item": "Position", "itemPlaceholder": "Positionsnr.", "description": "Beschreibung", "scheduledValue": "Vertragswert", "retainagePercent": "Einbehalt %", "default": "Standard", "delete": "Löschen", "deleteConfirm": "Position „{description}“ löschen?", "empty": "Noch keine Positionen.", "defaultIncomeAccount": "Standarderlöskonto", "addLine": "Position hinzufügen", "editLine": "Position bearbeiten", "lockedValuesHint": "Sobald abgerechnet wird, sind die Wertfelder kontrolliert — hier kann nur noch das Erlöskonto geändert werden.", "lockedHint": "Die Abrechnung hat begonnen — der Auftragswert ändert sich jetzt nur noch über einen genehmigten Nachtrag.",
+    "incomeAccount": "Erlöskonto",
+    "workspaceHint": "Das Leistungsverzeichnis, das die kumulative Abrechnung für dieses Projekt steuert.",
+    "formHint": "Fügen Sie eine Vertragsposition hinzu, ohne den Projektabrechnungsbereich zu verlassen.",
+    "cancel": "Abbrechen"
   },
   "changeOrders": {
-    "title": "Nachträge", "number": "Nachtragsnr.", "description": "Beschreibung", "amount": "Betrag", "applyTo": "Anwenden auf", "incomeAccount": "Erlöskonto", "defaultIncomeAccount": "Standarderlöskonto", "newScheduleLine": "Neue Position (Erhöhung)", "deductiveHint": "Mindernde Nachträge müssen eine bestehende Position reduzieren.", "additiveHint": "Wählen Sie eine zu ändernde Position oder erstellen Sie eine neue.", "adjusts": "Ändert {description}", "approve": "Genehmigen", "approvalBlockedHint": "Schließen Sie zuerst den offenen Antrag ab oder stornieren Sie ihn", "void": "Stornieren", "voidConfirm": "Nachtrag {number} stornieren? Der Prüfpfad bleibt erhalten.", "add": "Nachtrag hinzufügen", "empty": "Keine Nachträge.", "status": { "draft": "Entwurf", "approved": "Genehmigt", "void": "Storniert" }
+    "title": "Nachträge", "number": "Nachtragsnr.", "description": "Beschreibung", "amount": "Betrag", "applyTo": "Anwenden auf", "incomeAccount": "Erlöskonto", "defaultIncomeAccount": "Standarderlöskonto", "newScheduleLine": "Neue Position (Erhöhung)", "deductiveHint": "Mindernde Nachträge müssen eine bestehende Position reduzieren.", "additiveHint": "Wählen Sie eine zu ändernde Position oder erstellen Sie eine neue.", "adjusts": "Ändert {description}", "approve": "Genehmigen", "approvalBlockedHint": "Schließen Sie zuerst den offenen Antrag ab oder stornieren Sie ihn", "void": "Stornieren", "voidConfirm": "Nachtrag {number} stornieren? Der Prüfpfad bleibt erhalten.", "add": "Nachtrag hinzufügen", "empty": "Keine Nachträge.", "status": { "draft": "Entwurf", "approved": "Genehmigt", "void": "Storniert" },
+    "statusLabel": "Status",
+    "workspaceHint": "Genehmigte Änderungen überarbeiten das Leistungsverzeichnis, ohne dessen Verlauf neu zu schreiben.",
+    "formHint": "Erfassen Sie eine additive oder deduktive Vertragsänderung zur unabhängigen Genehmigung.",
+    "cancel": "Abbrechen"
   },
   "payApplications": {
-    "title": "Zahlungsanträge", "applicationNumber": "Antrag Nr. {number}", "retainage": "Einbehalt", "enterDraws": "Leistung erfassen", "hideDraws": "Leistung ausblenden", "approve": "Genehmigen", "createInvoice": "Rechnung erstellen", "void": "Stornieren", "voidConfirm": "Antrag Nr. {number} stornieren? Leistungs- und Prüfdaten bleiben erhalten.", "item": "Position", "description": "Beschreibung", "workThisPeriod": "Leistung dieser Periode", "materialsStored": "Gelagerte Materialien", "submit": "Zur Genehmigung einreichen", "submittedMessage": "Antrag zur unabhängigen Genehmigung eingereicht", "billedMessage": "Rechnung {number} — aktuell fällig {currentDue}, Einbehalt {retainage}", "empty": "Keine Anträge.", "periodEnding": "Periodenende", "newApplication": "Neuer Antrag", "status": { "draft": "Entwurf", "submitted": "Eingereicht", "approved": "Genehmigt", "invoiced": "Fakturiert", "posted": "Fakturiert", "void": "Storniert" }
+    "title": "Zahlungsanträge", "applicationNumber": "Antrag Nr. {number}", "retainage": "Einbehalt", "enterDraws": "Leistung erfassen", "hideDraws": "Leistung ausblenden", "approve": "Genehmigen", "createInvoice": "Rechnung erstellen", "void": "Stornieren", "voidConfirm": "Antrag Nr. {number} stornieren? Leistungs- und Prüfdaten bleiben erhalten.", "item": "Position", "description": "Beschreibung", "workThisPeriod": "Leistung dieser Periode", "materialsStored": "Gelagerte Materialien", "submit": "Zur Genehmigung einreichen", "submittedMessage": "Antrag zur unabhängigen Genehmigung eingereicht", "billedMessage": "Rechnung {number} — aktuell fällig {currentDue}, Einbehalt {retainage}", "empty": "Keine Anträge.", "periodEnding": "Periodenende", "newApplication": "Neuer Antrag", "status": { "draft": "Entwurf", "submitted": "Eingereicht", "approved": "Genehmigt", "invoiced": "Fakturiert", "posted": "Fakturiert", "void": "Storniert" },
+    "application": "Antrag",
+    "workspaceHint": "Jeder Antrag läuft von der Leistungserfassung über die Genehmigung bis zur verknüpften Kundenrechnung.",
+    "newHint": "Starten Sie den nächsten kumulativen Antrag für die Abrechnungsperiode dieses Projekts.",
+    "drawHint": "Geben Sie die kumulative Abrechnungsaktivität für die Periode mit Ende {periodEnd} ein.",
+    "statusLabel": "Status",
+    "invoice": "Rechnung",
+    "openInvoice": "Offene Rechnung",
+    "amount": "Betrag",
+    "create": "Erstellen",
+    "cancel": "Abbrechen"
   },
-  "retainage": { "notConfigured": "Kein Forderungskonto für Einbehalte konfiguriert. Abrechnung mit Einbehalt bleibt bis zur Einrichtung in den Kontrollkonten gesperrt.", "title": "Einbehalt freigeben", "description": "Überführt den Einbehalt in eine einziehbare Forderung. Gehalten: {held}", "amount": "Betrag", "release": "Freigeben", "createdMessage": "Freigaberechnung {number} über {amount} erstellt" }
+  "retainage": { "notConfigured": "Kein Forderungskonto für Einbehalte konfiguriert. Abrechnung mit Einbehalt bleibt bis zur Einrichtung in den Kontrollkonten gesperrt.", "title": "Einbehalt freigeben", "description": "Überführt den Einbehalt in eine einziehbare Forderung. Gehalten: {held}", "amount": "Betrag", "release": "Freigeben", "createdMessage": "Freigaberechnung {number} über {amount} erstellt",
+    "periodEnding": "Periodenende",
+    "heldLabel": "Einbehalt",
+    "workspaceHint": "Geben Sie einbehaltene Beträge über eine kontrollierte Kundenrechnung frei, wenn der Vertrag dies zulässt.",
+    "cancel": "Abbrechen"
+  }
 }
