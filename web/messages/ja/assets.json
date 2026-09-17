@@ -196,6 +196,7 @@
     "postBook": "{book}を記帳",
     "posted": "{count} 件の仕訳を記帳しました（合計 {amount}）",
     "nothingDue": "減価償却の対象はありません",
+    "nextDue": "{date}時点で記帳対象がありません。次回: {asset} {period}（{amount}）、終了日 {endsOn}。",
     "someSkipped": "{count} 件スキップしました"
   }
 }

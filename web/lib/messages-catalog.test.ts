@@ -1120,6 +1120,32 @@ test('banking feed operational panel copy is present in every locale and transla
   }
 })
 
+test('depreciation next-due copy ships localized in every locale', () => {
+  // F-t07-005: the zero-post run explanation names its as-of date, next
+  // asset/period, amount, and period end. Every leaf must exist, be
+  // localized, and keep its interpolation placeholders.
+  // (F-t07-006 extends this test with the activation key in its own commit.)
+  const placeholders: Record<string, string[]> = {
+    'assets.run.nextDue': ['{date}', '{asset}', '{period}', '{amount}', '{endsOn}'],
+  }
+  const source = flattenCatalog('en')
+  for (const key of Object.keys(placeholders)) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const [key, parts] of Object.entries(placeholders)) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      for (const part of parts) {
+        assert.ok(value.includes(part), `${locale} ${key} must keep placeholder ${part}`)
+      }
+    }
+  }
+})
+
 test('feeds empty-state trail uses the sidebar translated labels in fr and es', () => {
   // F-t05-015 residual: the sentence body was translated but its navigation
   // tail stayed 'Company Settings → Bank Feeds' in fr/es. The trail must

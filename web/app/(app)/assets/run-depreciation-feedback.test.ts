@@ -29,3 +29,16 @@ test('the page-level run toasts transport and parse failures instead of dying si
   const run = button.slice(button.indexOf('async function run('))
   assert.match(run, /catch \{[^}]*toast\.error/s)
 })
+
+// F-t07-005: a mid-period run posts 0 with 0 skipped and an empty problems
+// list while a planned line waits in the open current period —
+// "Nothing due to depreciate" misreads the record. Both call sites must
+// render the engine's next-due explanation (as-of date, next asset/period,
+// amount, period end) when the run names one.
+test('both run call sites explain a zero-post run with its next due line', () => {
+  assert.match(runForAsset, /data\.nextDue/)
+  assert.match(runForAsset, /run\.nextDue/)
+  const run = button.slice(button.indexOf('async function run('))
+  assert.match(run, /data\.nextDue/)
+  assert.match(run, /run\.nextDue/)
+})

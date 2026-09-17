@@ -196,6 +196,7 @@
     "postBook": "{book} buchen",
     "posted": "{count} Buchungen in Höhe von {amount} gebucht",
     "nothingDue": "Nichts zur Abschreibung fällig",
+    "nextDue": "Zum {date} nichts zu buchen. Nächste Position: {asset} {period} ({amount}), Ende {endsOn}.",
     "someSkipped": "{count} übersprungen"
   }
 }
