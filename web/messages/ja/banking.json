@@ -523,11 +523,12 @@
       "sftp-schedules": "Import schedules"
     },
     "operational": {
-      "title": "Bank feed connections",
-      "manage": "Manage feeds",
-      "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
-      "lastSync": "Last sync",
-      "never": "Never"
+      "title": "銀行フィード接続",
+      "manage": "フィードを管理",
+      "none": "有効な銀行フィード接続がありません。Company Settings → Bank Feeds で設定してください。",
+      "lastSync": "最終同期",
+      "lastAttempt": "最終試行",
+      "never": "なし"
     }
   },
   "pspSettlements": {

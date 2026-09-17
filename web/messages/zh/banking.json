@@ -523,11 +523,12 @@
       "sftp-schedules": "Import schedules"
     },
     "operational": {
-      "title": "Bank feed connections",
-      "manage": "Manage feeds",
-      "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
-      "lastSync": "Last sync",
-      "never": "Never"
+      "title": "银行数据连接",
+      "manage": "管理推送",
+      "none": "没有启用的银行数据连接。请前往 Company Settings → Bank Feeds 配置。",
+      "lastSync": "上次同步",
+      "lastAttempt": "上次尝试",
+      "never": "从未"
     }
   },
   "pspSettlements": {
