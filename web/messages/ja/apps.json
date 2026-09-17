@@ -8,7 +8,8 @@
     "library": "アプリライブラリ",
     "documentation": "ドキュメント",
     "open": "アプリを開く",
-    "openAria": "{name} を開く"
+    "openAria": "{name} を開く",
+    "manage": "アプリを管理"
   },
   "empty": {
     "title": "インストール済みのアプリはありません",
@@ -20,6 +21,10 @@
     "description": "別の名前、キー、または説明で検索してください。"
   },
   "library": {
+    "draftReady": "{name}はレビュー可能です。",
+    "preparing": "準備中…",
+    "reviewUpdate": "更新をレビュー",
+    "reviewInstall": "アプリをレビュー",
     "title": "アプリライブラリ",
     "description": "組織向けの拡張機能を見つけてインストールします。",
     "searchPlaceholder": "アプリライブラリを検索…",
@@ -37,7 +42,8 @@
     "noResults": {
       "title": "アプリが見つかりません",
       "description": "別の名前、キー、または説明で検索してください。"
-    }
+    },
+    "approvalPending": "{name}は署名付き承認を待っています。"
   },
   "frame": {
     "loading": "読み込み中…",
@@ -49,7 +55,10 @@
     "description": "アプリごとに分離されたサンドボックスのフロントエンドと管理されたバックエンドを持つパッケージを構築、インストールします。",
     "searchPlaceholder": "アプリを検索…",
     "status": "ステータス",
-    "statuses": { "installed": "インストール済み", "disabled": "無効" },
+    "statuses": {
+      "installed": "インストール済み",
+      "disabled": "無効"
+    },
     "columns": {
       "name": "名前",
       "key": "キー",
@@ -60,5 +69,379 @@
       "updated": "更新日時"
     },
     "empty": "アプリはまだありません。すぐに開けるスターターを作成するか、.zip パッケージをインポートしてください。"
+  },
+  "drawer": {
+    "toolbar": {
+      "newApp": "新しいアプリ",
+      "newAppPromptTitle": "新しいアプリ",
+      "newAppPromptLabel": "アプリ名",
+      "newAppPromptPlaceholder": "Expense Insights",
+      "importZip": ".zipをインポート"
+    },
+    "toasts": {
+      "createdApp": "「{name}」を作成しました",
+      "importedApp": "「{key}」をインポートしました",
+      "settingsSaved": "アプリ設定を保存しました",
+      "appDisabled": "アプリを無効にしました",
+      "appEnabled": "アプリを有効にしました",
+      "published": "マーケットプレイスに公開しました",
+      "uninstalled": "アンインストールしました",
+      "fileSaved": "{path}を保存しました",
+      "fileCreated": "{path}を作成しました",
+      "fileUploaded": "{path}をアップロードしました",
+      "deleted": "削除しました"
+    },
+    "errors": {
+      "saveFailed": "保存に失敗しました",
+      "updateFailed": "更新に失敗しました",
+      "publishFailed": "公開に失敗しました",
+      "uninstallFailed": "アンインストールに失敗しました",
+      "createFailed": "作成に失敗しました",
+      "uploadFailed": "アップロードに失敗しました",
+      "deleteFailed": "削除に失敗しました"
+    },
+    "confirm": {
+      "uninstallTitle": "「{name}」をアンインストールしますか？",
+      "uninstallMessage": "このアプリをアンインストールしますか？プロビジョニングされたレコードとフィールドは保持されます。コードと実行証跡は監査履歴に保存され、プラットフォーム貢献履歴のあるパッケージは参照が壊れないよう無効化されます。",
+      "deleteFileMessage": "{path}を削除しますか？"
+    },
+    "prompt": {
+      "newFileTitle": "新しいファイル",
+      "pathLabel": "パス"
+    },
+    "tabs": {
+      "overview": "概要",
+      "files": "ファイル",
+      "runs": "実行"
+    },
+    "actions": {
+      "open": "開く",
+      "saving": "保存中…",
+      "saveSettings": "設定を保存",
+      "saveFile": "ファイルを保存",
+      "saved": "保存済み",
+      "republish": "マーケットプレイスに再公開",
+      "publish": "マーケットプレイスに公開",
+      "disable": "無効にする",
+      "enable": "有効にする",
+      "uninstall": "アンインストール",
+      "addEndpoint": "エンドポイントを追加",
+      "manageNavigation": "ナビゲーションショートカットを管理",
+      "newFileTitleAttr": "新しいファイル",
+      "uploadFileTitleAttr": "ファイルをアップロード",
+      "deleteFileTitleAttr": "ファイルを削除"
+    },
+    "labels": {
+      "name": "名前",
+      "status": "ステータス",
+      "description": "説明",
+      "capabilities": "権限",
+      "navigation": "ナビゲーション",
+      "endpoints": "バックエンドエンドポイント"
+    },
+    "onMarketplace": "マーケットプレイス掲載中",
+    "capabilitiesHelp": "それ以外はすべて既定で拒否されます。アプリのバックエンドとブリッジ呼び出しは、これらの権限に照らして検査されます（呼び出し元ユーザー自身の権限との共通部分のみ）。",
+    "navigationHelp": "このアプリはメニューのショートカットとは独立にインストールされたままです。ショートカットの追加、削除、名前変更、移動はナビゲーション設定で行ってください。",
+    "endpointsHelp": "フロントエンドは<call>openbooks.callBackend(name, payload)</call>でこれらを呼び出します。各呼び出しはファイルの<handler>handler(request)</handler>をサンドボックス内で実行します。",
+    "noEndpoints": "エンドポイントなし — このアプリはフロントエンドのみです。",
+    "endpointNamePlaceholder": "name",
+    "capabilities": {
+      "allowFallback": "{permission}を許可",
+      "copy": {
+        "records": {
+          "read": {
+            "label": "カスタムレコードを読み取り",
+            "help": "公開済みカスタムレコードタイプを読み取り"
+          },
+          "create": {
+            "label": "カスタムレコードを管理",
+            "help": "カスタムレコードの作成、更新、削除"
+          }
+        },
+        "gl": {
+          "read": {
+            "label": "総勘定元帳を読み取り",
+            "help": "勘定と転記済み仕訳を読み取り"
+          },
+          "post": {
+            "label": "仕訳を作成・転記",
+            "help": "統制された貸借一致仕訳を作成"
+          }
+        },
+        "ap": {
+          "read": {
+            "label": "買掛金を読み取り",
+            "help": "仕入先請求書を読み取り"
+          },
+          "create": {
+            "label": "仕入先請求書を管理",
+            "help": "請求書の作成、更新、提出、削除"
+          },
+          "post": {
+            "label": "仕入先請求書を転記",
+            "help": "統制された仕入先請求書を元帳に転記"
+          },
+          "pay": {
+            "label": "支払を読み取り",
+            "help": "支払書類を読み取り"
+          }
+        },
+        "ar": {
+          "read": {
+            "label": "売掛金を読み取り",
+            "help": "得意先請求書を読み取り"
+          },
+          "create": {
+            "label": "得意先請求書を管理",
+            "help": "請求書の作成、更新、提出、削除"
+          },
+          "post": {
+            "label": "得意先請求書を転記",
+            "help": "統制された得意先請求書を元帳に転記"
+          }
+        },
+        "parties": {
+          "read": {
+            "label": "取引先を読み取り",
+            "help": "得意先、仕入先、従業員を読み取り"
+          },
+          "manage": {
+            "label": "取引先を管理",
+            "help": "取引先の作成、更新、削除"
+          }
+        },
+        "items": {
+          "read": {
+            "label": "品目とサービスを読み取り",
+            "help": "品目カタログを読み取り"
+          },
+          "manage": {
+            "label": "品目とサービスを管理",
+            "help": "カタログ品目の作成、更新、削除"
+          }
+        },
+        "projects": {
+          "read": {
+            "label": "プロジェクトを読み取り",
+            "help": "プロジェクトとジョブを読み取り"
+          },
+          "manage": {
+            "label": "プロジェクトを管理",
+            "help": "プロジェクトの作成、更新、削除"
+          }
+        },
+        "assets": {
+          "read": {
+            "label": "固定資産を読み取り",
+            "help": "固定資産を読み取り"
+          },
+          "manage": {
+            "label": "固定資産を管理",
+            "help": "固定資産の作成、更新、削除"
+          }
+        }
+      }
+    },
+    "files": {
+      "selectToEdit": "編集するファイルを選択してください。",
+      "loading": "読み込み中…",
+      "binaryInfo": "バイナリファイル · {contentType} · {size}バイト"
+    },
+    "runs": {
+      "empty": "実行履歴はまだありません — バックエンドは一度も呼ばれていません。",
+      "units": "{units}ユニット"
+    }
+  },
+  "editor": {
+    "tabsLabel": "パッケージエディタ",
+    "overview": "構成",
+    "sections": {
+      "general": "一般",
+      "screens": "画面",
+      "data": "データと貢献",
+      "actions": "アクション",
+      "access": "アクセス"
+    },
+    "files": "ファイル",
+    "download": "パッケージをエクスポート",
+    "draftHelp": "未公開のパッケージを編集します。保存すると検証、プレビュー、有効化用の下書きが準備されます。実行中のアプリは変わりません。",
+    "name": "アプリ名",
+    "key": "アプリキー",
+    "version": "バージョン",
+    "icon": "アイコンキー",
+    "description": "説明",
+    "renderer": "インターフェース",
+    "native": "ネイティブOpenBooks画面（ViewSpec）",
+    "sandbox": "HTML、CSS、JavaScript",
+    "entry": "フロントエンドエントリファイル",
+    "navLabel": "ランチャーラベル",
+    "navIcon": "ランチャーアイコン",
+    "endpoints": "バックエンドアクション",
+    "endpointsHelp": "各アクションは統制されたアプリランタイムを通じてJavaScriptハンドラを実行します。実装はファイルで編集してください。",
+    "endpointName": "アクション名",
+    "endpointFile": "JavaScriptファイル",
+    "method": "HTTPメソッド",
+    "removeEndpoint": "アクションを外す",
+    "addEndpoint": "アクションを追加",
+    "permissions": "要求された権限",
+    "permissionsHelp": "このパッケージが必要とする権限を宣言します。呼び出しは現在のユーザーの権限によっても制限されます。",
+    "grants": "付与された権限",
+    "grantsHelp": "このバージョンが実際に使用できる要求権限を選んでください。新しい権限は有効化時にあなたの権限に照らして検査されます。",
+    "definitions": "ネイティブ画面とソース",
+    "definitionsHelp": "ネイティブ画面定義とすべてのパッケージソースはファイルで編集します。カスタムレコードとフィールドは、レビュー済みバージョンの有効化時に既存のOpenBooksオブジェクトシステムを通じてプロビジョニングされます。",
+    "editDefinitions": "インターフェース定義を開く",
+    "newFile": "新しいファイル",
+    "path": "パッケージ相対パス",
+    "renameFile": "ファイル名を変更または移動",
+    "deleteFile": "ファイルを削除",
+    "deleteConfirm": "この下書きから{path}を外しますか？有効なバージョンは変わりません。",
+    "invalidPath": "ファイル名を含む一意の相対パスを、トラバーサルなしで入力してください。",
+    "uploadFiles": "ファイルをアップロード",
+    "fileTooLarge": "各ファイルは2 MB未満にしてください。",
+    "replaceConfirm": "これらの下書きファイルを置換しますか：{paths}？",
+    "searchFiles": "ファイルを検索…",
+    "binaryHelp": "バイナリアセットです。内容を確認するにはこのファイルをダウンロードするか、フォルダに置換ファイルをアップロードしてください。",
+    "invalidManifest": "マニフェストが無効です。ファイルを開いて修正してください。",
+    "reason": "このバージョンの理由",
+    "reasonPlaceholder": "変更内容と理由を記入してください。",
+    "saveDraft": "レビュー用に下書きを保存",
+    "saving": "下書きを準備中…",
+    "unsaved": "パッケージの未保存の変更",
+    "notLive": "変更は有効化後に反映されます。",
+    "failed": "パッケージを保存できませんでした。",
+    "pendingDefinition": "タブの切り替えやパッケージの保存の前に、開いている定義エディタを適用またはキャンセルしてください。",
+    "uploadFolder": "フォルダをアップロード",
+    "downloadFile": "ファイルをダウンロード"
+  },
+  "create": {
+    "title": "新しいアプリ",
+    "ownPackage": "自分のパッケージから始める",
+    "help": "ネイティブ画面を作成するか、HTML、CSS、JavaScript、その他のアセットを直接使って開発します。既存のパッケージをインポートして有効化前に編集することもできます。",
+    "native": "ネイティブアプリ",
+    "files": "HTML / CSS / JSアプリ",
+    "import": "パッケージをインポート",
+    "importing": "インポート中…",
+    "tooLarge": "10 MB未満のZIPまたはJSONパッケージを選んでください。",
+    "importReason": "レビュー用にアプリパッケージをインポート",
+    "failed": "パッケージをインポートできませんでした。",
+    "discardEdits": "パッケージの未保存の変更を破棄しますか？"
+  },
+  "definitions": {
+    "title": "レコード、フィールド、プラットフォーム貢献",
+    "help": "このアプリが出荷する定義を管理します。各定義は既存のプラットフォームサービスを使用し、有効化前にパッケージとともに検証されます。定義を外しても履歴レコードは削除されません。",
+    "edit": "定義を編集",
+    "remove": "定義を外す",
+    "removeConfirm": "この貢献を下書きから外しますか？有効化前のレビューに変更内容が表示されます。",
+    "type": "定義タイプ",
+    "key": "新しい定義キー",
+    "add": "定義を追加",
+    "apply": "下書きに適用",
+    "cancel": "キャンセル",
+    "record_type": "カスタムレコードタイプ",
+    "custom_field": "カスタムフィールド",
+    "page": "ページカスタマイズ",
+    "nav": "ナビゲーション項目",
+    "setting": "アプリ設定",
+    "permission": "ロール権限",
+    "invalidKey": "英小文字で始まる、英数字とハイフンの小文字キーを入力してください。",
+    "duplicate": "その定義ファイルは既に存在します。",
+    "invalid": "定義が無効です。",
+    "route": "カスタマイズする登録済みページ",
+    "chooseRoute": "登録済みページを選択",
+    "pageHelp": "ページ貢献は既存の登録済みページをカスタマイズします。スタンドアロンのアプリ画面はネイティブインターフェースファイルに追加してください。"
+  },
+  "management": {
+    "workspace": "アプリワークスペース",
+    "overview": "概要",
+    "package": "パッケージ",
+    "versions": "バージョン",
+    "runs": "実行",
+    "audit": "監査履歴",
+    "storage": "アプリストレージ",
+    "installed": "有効",
+    "disabled": "無効",
+    "open": "アプリを開く",
+    "editPackage": "パッケージを編集",
+    "download": "ZIPをエクスポート",
+    "assistant": "アシスタントで改訂",
+    "contents": "パッケージ内容",
+    "summary": "{files}ファイル · {actions}バックエンドアクション · {definitions}プラットフォーム貢献",
+    "permissions": "有効な権限",
+    "permissionsHelp": "これらの権限は実行中のバージョンに適用されます。レビュー済みの権限変更はパッケージを編集して準備してください。",
+    "noPermissions": "プラットフォーム権限は付与されていません。",
+    "configuration": "組織の構成",
+    "navigation": "ナビゲーション設定",
+    "settings": "アプリ設定",
+    "roles": "ロールと権限",
+    "lifecycle": "提供と配布",
+    "lifecycleHelp": "組織向けにこのアプリを有効または無効にします。公開すると、有効なパッケージのコピーがアプリライブラリを通じて共有されます。",
+    "publish": "アプリライブラリに公開",
+    "updateListing": "掲載を更新",
+    "unpublish": "掲載の公開を取り消す",
+    "disable": "アプリを無効にする",
+    "enable": "アプリを有効にする",
+    "uninstall": "アプリをアンインストール",
+    "publishConfirm": "有効なパッケージをソースファイルごと、他の組織向けにアプリライブラリに公開しますか？共有前にファイルに非公開情報がないか確認してください。",
+    "unpublishConfirm": "この掲載をアプリライブラリから外しますか？既存のインストールはコピーを保持します。",
+    "disableConfirm": "このアプリとその提供ページ・ナビゲーションを無効にしますか？既存のレコードと監査履歴は保持されます。",
+    "enableConfirm": "このアプリと承認済みの貢献を組織向けに有効にしますか？",
+    "uninstallConfirm": "このアプリをアンインストールしますか？プロビジョニングされたレコードとフィールドは保持されます。コードと実行証跡は監査履歴に保存され、プラットフォーム貢献履歴のあるパッケージは参照が壊れないよう無効化されます。",
+    "discardEdits": "パッケージの未保存の変更を破棄しますか？",
+    "failed": "操作を完了できませんでした。",
+    "loading": "読み込み中…",
+    "refresh": "更新",
+    "versionsHelp": "インストール済みの任意のバージョンを確認・エクスポートします。過去バージョンの改訂は、現在の有効バージョンに対する新しい下書きを作成します。",
+    "runsHelp": "エラー、ログ、リソース使用量、所要時間、実行者を含むバックエンド実行履歴です。",
+    "auditHelp": "実行者と変更前後の証跡付きで記録された構成とライフサイクルの変更です。",
+    "storageHelp": "アプリ所有の状態を確認します。業務データの変更は、検証と監査ルールを保つアプリの統制アクションで行ってください。",
+    "when": "日時",
+    "version": "バージョン",
+    "key": "ストレージキー",
+    "activity": "アクティビティ",
+    "status": "ステータス",
+    "actions": "アクション",
+    "active": "アクティブ",
+    "details": "詳細を表示",
+    "reviseVersion": "改訂を準備",
+    "empty": "まだエントリがありません。",
+    "previous": "前へ",
+    "next": "次へ",
+    "page": "{page}ページ",
+    "fields": {
+      "id": "レコード（ID）",
+      "at": "日時",
+      "actor_id": "実行者（ID）",
+      "version_id": "バージョン（ID）",
+      "version": "バージョン",
+      "status": "ステータス",
+      "endpoint": "アクション",
+      "units": "消費ユニット数",
+      "duration_ms": "所要時間（ms）",
+      "logs": "実行ログ",
+      "error_message": "エラー",
+      "changes": "変更前後の証跡",
+      "action": "操作",
+      "namespace": "名前空間",
+      "key": "キー",
+      "value": "保存値"
+    }
+  },
+  "screens": {
+    "title": "ネイティブアプリ画面",
+    "help": "ページ、レコードワークスペース、アクションフォームを管理します。画面定義はネイティブのViewSpecとフォームスキーマを使用し、レコード画面とアクション画面は統制されたレコードタイプとバックエンドアクションに接続します。",
+    "page": "ページ",
+    "records": "レコードワークスペース",
+    "action": "アクションフォーム",
+    "type": "画面タイプ",
+    "key": "新しい画面キー",
+    "add": "画面を追加",
+    "edit": "画面を編集",
+    "remove": "画面を外す",
+    "removeConfirm": "この画面を下書きから外しますか？",
+    "apply": "下書きに適用",
+    "cancel": "キャンセル",
+    "invalid": "ネイティブ画面定義を修正する必要があります。",
+    "invalidKey": "英小文字で始まる、英数字とハイフンの小文字キーを入力してください。",
+    "openSource": "画面ソースを開く"
   }
 }
