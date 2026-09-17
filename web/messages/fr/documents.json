@@ -15,7 +15,9 @@
     },
     "folderRow": "Dossier"
   },
-  "systemFolders": { "apCapture": "Capture fournisseurs" },
+  "systemFolders": {
+    "apCapture": "Capture fournisseurs"
+  },
   "columns": {
     "name": "Nom",
     "size": "Taille",
@@ -48,6 +50,11 @@
       "parentLabel": "Dossier parent",
       "submit": "Créer le dossier"
     },
+    "tabs": {
+      "details": "Détails",
+      "sharing": "Partage",
+      "activity": "Activité"
+    },
     "edit": {
       "title": "Modifier le dossier",
       "nameLabel": "Nom du dossier",
@@ -62,6 +69,7 @@
       "title": "Supprimer ce dossier?",
       "body": "Tous les fichiers de ce dossier seront définitivement supprimés. Cette action est irréversible."
     },
+    "downloadZip": "Télécharger en ZIP",
     "systemNoDelete": "Les dossiers système ne peuvent pas être supprimés ou renommés.",
     "subfolderCount": "{count, plural, one {# dossier} other {# dossiers}}",
     "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
@@ -70,6 +78,12 @@
   "file": {
     "drawer": {
       "title": "Détails du fichier",
+      "tabs": {
+        "preview": "Aperçu",
+        "details": "Détails",
+        "sharing": "Partage",
+        "activity": "Activité"
+      },
       "name": "Nom",
       "folder": "Dossier",
       "type": "Type",
@@ -115,7 +129,82 @@
     "attachExisting": "Joindre un fichier existant",
     "uploadNew": "Téléverser un nouveau fichier"
   },
+  "share": {
+    "title": "Partage",
+    "subtitle": "Tout le monde dans votre organisation peut voir ce {kind} par défaut. Accordez ici aux personnes ou aux rôles un accès supplémentaire (modification ou gestion) ; rendez un dossier privé dans Détails pour restreindre qui peut le voir.",
+    "kindFolder": "dossier",
+    "kindFile": "fichier",
+    "noGrants": "Visible par tout le monde dans votre organisation. Ajoutez des personnes ou des rôles ci-dessous pour accorder un accès Éditeur ou Gestionnaire.",
+    "addPrincipal": "Ajouter une personne ou un rôle",
+    "selectPrincipal": "Choisir une personne ou un rôle…",
+    "usersGroup": "Personnes",
+    "rolesGroup": "Rôles",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "you": "vous",
+    "inheritedHint": "L'accès au dossier est hérité par les fichiers et les sous-dossiers qu'il contient.",
+    "tiers": {
+      "viewer": "Lecteur",
+      "editor": "Éditeur",
+      "manager": "Gestionnaire",
+      "viewerHint": "Voir et télécharger",
+      "editorHint": "Téléverser, renommer, déplacer, remplacer",
+      "managerHint": "Contrôle total, y compris la suppression et le partage"
+    }
+  },
+  "bulk": {
+    "selected": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+    "download": "Télécharger",
+    "delete": "Supprimer",
+    "clear": "Effacer",
+    "selectAll": "Tout sélectionner",
+    "deleteConfirm": {
+      "title": "Déplacer les éléments sélectionnés dans la Corbeille ?",
+      "body": "Les fichiers et dossiers sélectionnés seront déplacés dans la Corbeille. Vous pourrez les restaurer ultérieurement."
+    },
+    "deleted": "{count} déplacés dans la Corbeille",
+    "deleteFailed": "Impossible de supprimer la sélection",
+    "downloadFailed": "Impossible de télécharger la sélection",
+    "nothingDownloadable": "Sélectionnez des fichiers à télécharger"
+  },
+  "trash": {
+    "title": "Corbeille",
+    "link": "Corbeille",
+    "description": "Fichiers et dossiers supprimés. Restaurez-les ou supprimez-les définitivement.",
+    "empty": "La Corbeille est vide.",
+    "back": "Retour au gestionnaire de documents",
+    "restore": "Restaurer",
+    "deleteForever": "Supprimer définitivement",
+    "purgeConfirm": {
+      "title": "Supprimer définitivement ?",
+      "body": "Cet élément et son contenu seront définitivement supprimés. Cette action est irréversible."
+    },
+    "folderLabel": "Dossier",
+    "inLocation": "dans {location}",
+    "restored": "Restauré",
+    "restoreFailed": "Impossible de restaurer",
+    "purged": "Supprimé définitivement",
+    "purgeFailed": "Impossible de supprimer"
+  },
+  "activity": {
+    "title": "Activité",
+    "empty": "Aucune activité enregistrée pour le moment.",
+    "events": {
+      "create": "créé",
+      "upload": "téléversé",
+      "rename": "renommé",
+      "move": "déplacé",
+      "replace": "a téléversé une nouvelle version",
+      "delete": "supprimé",
+      "restore": "restauré",
+      "share": "partagé",
+      "unshare": "partage retiré"
+    }
+  },
   "toasts": {
+    "shareUpdated": "Partage mis à jour",
+    "shareFailed": "Impossible de mettre à jour le partage",
+    "shareRemoved": "Accès retiré",
     "folderCreated": "Dossier créé",
     "folderCreateFailed": "Impossible de créer le dossier",
     "folderRenamed": "Dossier renommé",
@@ -153,6 +242,8 @@
   "rowMenu": {
     "open": "Ouvrir",
     "openFolder": "Ouvrir le dossier",
+    "properties": "Propriétés",
+    "manageAccess": "Gérer l'accès",
     "copyLink": "Copier le lien"
   },
   "rename": {

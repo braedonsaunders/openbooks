@@ -752,11 +752,12 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     // Per-locale pins: cognates spelled as in English (de/fr Code, de/pt-BR
     // Status, fr Type) are omitted into declared fallbacks instead of copied
     // as fake translations, so locales with more cognates report more
-    // fallbacks (F-t09-017).
+    // fallbacks (F-t09-017). i10 remediated entities leaseSections/detail
+    // (F-i10): remaining fallbacks are reviewed identicals only.
     const expectedPmFallbacks: Record<string, number> = {
       de: 166,
       es: 164,
-      fr: 166,
+      fr: 11,
       ja: 164,
       'pt-BR': 165,
       zh: 164,
