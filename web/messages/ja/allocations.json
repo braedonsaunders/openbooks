@@ -47,6 +47,7 @@
     "list": {
       "heading": "配賦ルール",
       "new": "新規ルール",
+      "emptyTitle": "配賦ルールはまだありません",
       "empty": "配賦ルールはまだありません。最初のルールを作成して費用配賦を開始します。",
       "columns": {
         "name": "名称",
@@ -60,7 +61,9 @@
       "noVersion": "公開バージョンなし",
       "inactive": "無効",
       "active": "有効",
-      "searchPlaceholder": "ルールを検索…"
+      "searchPlaceholder": "ルールを検索…",
+      "emptyDescription": "最初のルールを作成して原価配分を始めます。",
+      "blurb": "計上時・転記時・期間配賦のいずれかで発動する版管理ルールです。新規ルールはガイド付きセットアップで開きます。"
     },
     "modes": {
       "entry": "計上時",
@@ -114,6 +117,8 @@
       },
       "applicabilityHeading": "ルールが対象とする明細",
       "documentKinds": "伝票種別 (空欄はすべて)",
+      "documentKindAdd": "追加",
+      "noOptions": "まだ何もありません。",
       "accountScope": "科目範囲",
       "accountScopes": {
         "any": "すべての科目",
@@ -179,6 +184,7 @@
       "lineDescriptionTemplate": "明細説明テンプレート",
       "approvalFlow": "承認フロー",
       "approvalFlowHint": "実行の転記前に必須の任意ワークフローUUID。",
+      "approvalFlowNone": "承認フローなし",
       "driverAsOfs": {
         "period": "期間",
         "document_date": "伝票日付",
@@ -283,6 +289,7 @@
       "basisNote": "割合は実行時に基準ベクトルから解決されます。",
       "periodHeading": "期間配賦をプレビュー",
       "period": "期間",
+      "book": "帳簿",
       "openRuns": "実行で開く",
       "noVersion": "このルールにはテスト可能なバージョンがありません。",
       "version": "バージョン",
@@ -316,12 +323,15 @@
     "key": "キー",
     "keyHint": "組織内で一意の小文字スラッグ",
     "name": "名称",
+    "fieldDescription": "内容",
     "dimension": "ディメンション",
     "sourceKind": "ソース",
     "unit": "単位",
     "active": "有効",
+    "inactive": "無効",
     "showInactive": "無効を表示",
     "empty": "基準はまだありません。",
+    "emptyTitle": "基準はまだありません",
     "deleteConfirm": "基準{name}を削除しますか。手入力値も削除されます。",
     "sourceKinds": {
       "statistical_journal": "統計仕訳帳",
@@ -372,6 +382,7 @@
     "note": "メモ",
     "addValue": "値を追加",
     "noValues": "この基準の値はまだありません。",
+    "noDimensionValues": "有効な{dimension}値がまだありません — 基準値を追加する前に作成してください。",
     "endValue": "終了日を設定",
     "deleteValueConfirm": "この値を削除しますか?",
     "preview": "ベクトルをプレビュー",
@@ -385,7 +396,10 @@
     "loadFailed": "基準を読み込めませんでした。",
     "saveFailed": "基準を保存できませんでした。",
     "deleteFailed": "基準を削除できませんでした。",
-    "previewFailed": "ベクトルをプレビューできませんでした。"
+    "previewFailed": "ベクトルをプレビューできませんでした。",
+    "manualCreateHint": "先に基準を保存してください — 発効日付きの値は直後にここで編集できます。",
+    "valuesAfterSave": "基準を保存しました。下に発効日付きの値を追加してください。",
+    "emptyDescription": "最初の基準を作成して原価配分を始めます。"
   },
   "runs": {
     "title": "実行",
@@ -395,6 +409,7 @@
     "filterStatus": "ステータス",
     "all": "すべて",
     "empty": "実行はまだありません。ルールをプレビューして計算します。",
+    "emptyTitle": "実行はまだありません",
     "columns": {
       "rule": "ルール",
       "period": "期間",
@@ -419,6 +434,7 @@
     },
     "previewRun": "実行をプレビュー",
     "runDetail": "実行詳細",
+    "summary": "概要",
     "sources": "ソース",
     "driverVector": "基準ベクトル",
     "targets": "配賦先",
@@ -450,7 +466,125 @@
     "journalEntry": "仕訳",
     "reversalEntry": "取消仕訳",
     "loadFailed": "実行を読み込めませんでした。",
-    "detailFailed": "実行を読み込めませんでした。"
+    "detailFailed": "実行を読み込めませんでした。",
+    "pendingApprovalNotice": "この実行は承認待ちのため、ここからは転記できません。",
+    "viewApproval": "承認を開く",
+    "emptyDescription": "ルールをプレビューして計算します。"
+  },
+  "wizard": {
+    "untitled": "無題の配賦",
+    "loadFailed": "セットアップガイド用の部門と基準を読み込めませんでした。",
+    "createFailed": "配賦ルールを作成できませんでした。",
+    "publishFailed": "ルールは下書きとして保存されました — 定義を終えたら公開してください。",
+    "created": "配賦ルールを下書きとして保存しました。準備ができたらバージョンから公開してください。",
+    "published": "配賦ルールは公開され有効です。",
+    "creating": "作成中…",
+    "finish": "ルールを作成",
+    "skipGuide": "ガイドをスキップ — 空のルールを開く",
+    "publishNow": "ルールが発動できるよう今すぐ公開",
+    "publishNowHint": "下書きは明細にも期間実行にも一致しません。定義を先に見直す場合を除き、オンのままにしてください。",
+    "advancedAfter": "作成後も、帳簿・カスタムセグメント・相殺・テストなど高度な項目はすべてルールに残ります。",
+    "when": {
+      "title": "いつ発動しますか？",
+      "description": "同じルールモデル、3つの時点。分割すべき時に合うものを選びます。",
+      "advanced": "高度",
+      "entry": {
+        "title": "明細の計上時",
+        "description": "一致した請求書・経費・仕訳明細を保存すると、分割後の子明細に置き換わります。",
+        "example": "間接費請求書1,000.00が1：2：3：4の比率で4つの部門明細になります。"
+      },
+      "period": {
+        "title": "月末",
+        "description": "期間スイープがプールを読み取り、按分して配賦仕訳を独自に転記します。",
+        "example": "未付番のIT支出は期末後に人員数で全部門へ振り替えられます。"
+      },
+      "post": {
+        "title": "証憑の転記時",
+        "description": "追加の仕訳明細が同じ伝票に載り、このルールが寄与者として刻印されます。",
+        "example": "ソース証憑を一体のままにし、配賦を総勘定元帳のみにする場合に使います。"
+      }
+    },
+    "source": {
+      "title": "どの明細を対象にしますか？",
+      "description": "ルールに名前を付け、取引種別と一致ディメンションで絞り込みます。取引種別が空なら全種別です。",
+      "kinds": "取引種別",
+      "kindsHint": "証憑種別です。すべての種別に一致させるにはオフのままにします。",
+      "anyKind": "未選択はすべての取引種別を意味します。",
+      "filters": "ソースディメンション",
+      "filtersHint": "取引種別とAND条件です。無視するディメンションは「すべて」のままにします。期間スイープは未付番プールの回収が一般的です。",
+      "filtersAny": "各ディメンションは最初「すべて」です。一致を絞る分類子のみ「指定」に切り替えます。",
+      "modeAny": "すべて",
+      "modeUntagged": "未付番",
+      "modeSpecific": "指定",
+      "pickValue": "値を追加…",
+      "noValues": "このディメンションの有効な値はまだありません。"
+    },
+    "split": {
+      "title": "金額をどう分割しますか？",
+      "description": "固定比は名前付き分割（1、2、3、4）です。基準はここに付ける再利用可能な指標で、基準はルールではありません。",
+      "ratio": {
+        "title": "固定比",
+        "description": "1：2：3：4のような相対ウェイト。合計が常に100になるパーセントで保存されます。",
+        "example": "1＋2＋3＋4＝10等分なので、割合は10％・20％・30％・40％です。"
+      },
+      "percent": {
+        "title": "固定パーセント",
+        "description": "パーセントを直接入力します。合計100が必須です。"
+      },
+      "driver": {
+        "title": "既存の基準",
+        "description": "人員数・時間・手入力テーブル・保存済みレポート。基準タブで基準を作成してここで選択します。"
+      },
+      "driverEmpty": "基準はまだありません。固定比に基準は不要です。重みを期ごとに変える場合のみ基準を作成します。",
+      "driverHint": "基準は1つのディメンションを測定します。動的な配賦先は実行時にそのディメンションに従います。"
+    },
+    "targets": {
+      "title": "お金はどこへ行きますか？",
+      "description": "配賦先ディメンションを選び、各値に割合を与えます。勘定が空ならソース勘定を維持します。",
+      "dimension": "分割先",
+      "value": "配賦先",
+      "weight": "比率",
+      "percent": "パーセント",
+      "pickValue": "値を選択…",
+      "add": "配賦先を追加",
+      "noValues": "そのディメンションの有効な値はまだありません。",
+      "needOne": "正の割合を持つ配賦先を2つ以上選んでください。",
+      "example": "金額1,000.00の明細は{amounts}になります。",
+      "driverDynamic": "{driver}は重みのあるすべての{dimension}に分割します。",
+      "driverDynamicHint": "配賦先の列挙は不要です — 基準ベクトルが対象集合です。"
+    },
+    "policy": {
+      "title": "帳簿をどう処理しますか？",
+      "description": "分割を自動にするか、原価を移動するか次元付与のみかを決めます。",
+      "applyAutomatic": "自動",
+      "applyAutomaticHint": "一致した明細は保存時に分割されます。",
+      "applySuggest": "提案",
+      "applySuggestHint": "明細グリッドにチップが表示され、クリックで分割が適用されます。",
+      "applyManual": "手動",
+      "applyManualHint": "分割は明細の配分選択にのみ表示されます。",
+      "impactReclass": "原価を移動",
+      "impactReclassHint": "ソース座標に貸方、各配賦先に借方を記帳します。試算表合計は一致します。",
+      "impactNetZero": "損益を動かさず付与",
+      "impactNetZeroHint": "ネットゼロペア：会社利益は変わらず、ディメンションのみ変わります。",
+      "periodActivityHint": "このルール自身の明細を除く、当期の転記済み取引を配賦します。",
+      "periodBalanceHint": "ソースプールの期末残高を配賦します。",
+      "runManualHint": "実行タブでプレビューと転記を行います。",
+      "runAutoPreviewHint": "期末後にプレビューを自動計算します。転記は手動のままです。"
+    },
+    "review": {
+      "title": "このルールを作成しますか？",
+      "description": "ドロワーで編集する版管理ルールと同じものを書き込みます。後から何でも変更できます。",
+      "when": "{mode}に発動",
+      "sourceAnyKind": "すべての取引種別に一致",
+      "sourceKinds": "{kinds}に一致",
+      "sourceAnyDims": "追加のソース次元フィルターなし",
+      "sourceUntagged": "未付番の{dimension}のみ",
+      "sourceValues": "{dimension}：{values}",
+      "splitRatio": "{weights} → {percents}で分割",
+      "splitPercent": "{percents}で分割",
+      "splitDriver": "基準{driver}で分割",
+      "targets": "{dimension}へ：{names}"
+    }
   },
   "lineage": {
     "title": "配賦の追跡",

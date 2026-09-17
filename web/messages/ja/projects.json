@@ -36,6 +36,7 @@
     "unbilledDetail": "{entries} 件の勤怠 · {hours} 時間 · {lines} 件の原価明細",
     "requestCreated": "請求依頼を作成しました",
     "requestFailed": "請求依頼を作成できませんでした",
+    "applicationsPermissionRequired": "このプロジェクトの支払申請を表示するには売掛金管理へのアクセスが必要です。",
     "invoiceCreated": "請求書 {number} を作成しました",
     "invoiceFailed": "請求書を作成できませんでした",
     "invoiceType": "請求段階",
@@ -253,7 +254,10 @@
     "billedYes": "請求済み",
     "created": "チャージを記帳しました",
     "failed": "チャージを記帳できませんでした",
-    "pickItem": "先に品目を選択してください"
+    "pickItem": "先に品目を選択してください",
+    "operator": "オペレーター",
+    "selectOperator": "オペレーターを選択…",
+    "operatorNeedsEquipment": "設備明細のみ"
   },
   "recognition": {
     "title": "収益認識",
@@ -285,7 +289,6 @@
     "margin_pct": "マージン",
     "revenue_posted": "記帳済み収益",
     "labor_cost": "労務原価",
-    "overhead": "間接費",
     "billable_value": "請求可能額",
     "unbilled_billable": "未請求の請求可能額",
     "hints": {
@@ -297,7 +300,8 @@
       "gross_profit": "計上済み原価ベースの利益 — 見積原価を含みません。",
       "overhead": "案件総原価に含まれており、粗利益からすでに差し引かれています。",
       "overhead_informational": "案件総原価には含まれず、粗利益からも差し引かれていません。"
-    }
+    },
+    "overhead": "間接費"
   },
   "invoicingPref": {
     "heading": "請求設定",
@@ -311,9 +315,176 @@
     "customerHint": "この得意先についてプロジェクトタイプを上書きします。",
     "projectHint": "このプロジェクトについてタイプ/得意先を上書きします。"
   },
+  "schedule": {
+    "status": {
+      "not_started": "未開始",
+      "in_progress": "進行中",
+      "complete": "完了",
+      "on_hold": "保留中"
+    },
+    "view": {
+      "gantt": "ガント",
+      "list": "リスト",
+      "board": "ボード"
+    },
+    "empty": {
+      "title": "予定作業はまだありません",
+      "description": "最初の作業を追加して、このプロジェクトのスケジュールを作成します。",
+      "action": "作業を追加"
+    },
+    "leveling": {
+      "heading": "資源平準化",
+      "description": "作業員・機械・外注先が日次能力を超えて予約されないよう、作業を遅らせます。適用前に提案内容を確認してください。"
+    }
+  },
   "invoicing": {
     "rateCardLapse": "料金表が失効している場合",
     "block": "請求を停止する",
     "carry_forward": "直近の料金表で請求する"
+  },
+  "wipBilling": {
+    "wipHealthAria": "仕掛品の状態",
+    "tiles": {
+      "availableWip": "利用可能な仕掛品",
+      "availableWipSub": "対象かつ保留なし",
+      "over90": "90日超",
+      "over90Sub": "61～90日が{amount}",
+      "realization": "実現",
+      "realizationSub": "請求済みが{amount}",
+      "leakage": "漏れ",
+      "leakageSub": "90日超の保留が{amount}"
+    },
+    "list": {
+      "title": "前請求ワークシート",
+      "description": "請求可能なプロジェクト作業、請求調整、承認状況を確認します。",
+      "newPrebill": "新規前請求"
+    },
+    "empty": {
+      "noProjectsTitle": "先にプロジェクトを作成",
+      "noPrebillsTitle": "前請求ワークシートはまだありません",
+      "noProjectsDescription": "仕掛品の確認は、請求可能な工数または原価のある有効なプロジェクトから始めます。",
+      "noPrebillsDescription": "ワークシートを作成し、締切日時点の請求可能な未請求プロジェクト作業を確定します。",
+      "createPrebill": "前請求を作成",
+      "goToProjects": "プロジェクトへ"
+    },
+    "table": {
+      "worksheet": "ワークシート",
+      "project": "プロジェクト",
+      "status": "ステータス",
+      "proposed": "予定",
+      "through": "{periodEnd}まで",
+      "noCustomer": "顧客なし"
+    },
+    "createDrawer": {
+      "title": "新規前請求ワークシート",
+      "description": "締切日時点の請求可能な未請求作業を確定します。",
+      "cancel": "キャンセル",
+      "creating": "作成中…",
+      "submit": "前請求を作成",
+      "projectLabel": "プロジェクト",
+      "projectHelp": "標準の実費精算またはコストプラス方式の請求元を使う有効なプロジェクト種別のみ表示されます。",
+      "configureProjectTypes": "プロジェクト種別を設定",
+      "startLabel": "開始（任意）",
+      "cutoffLabel": "締切日",
+      "notesLabel": "確認メモ",
+      "notesPlaceholder": "スコープ、請求指示、確認者向け情報"
+    },
+    "detail": {
+      "description": "{projectName}・{periodEnd}まで",
+      "sendForReview": "確認に送る",
+      "return": "差し戻し",
+      "approve": "承認",
+      "converting": "変換中…",
+      "createInvoice": "請求書を作成",
+      "void": "無効化",
+      "openInvoice": "{invoiceNumber}を開く"
+    },
+    "workflow": {
+      "returnTitle": "ワークシートをドラフトに差し戻す",
+      "voidTitle": "ワークシートを無効化",
+      "returnDescription": "作成者が修正すべき内容を説明してください。確認履歴の一部になります。",
+      "voidDescription": "このワークシートを進めない理由を説明してください。ソース仕掛品は今後のワークシートで利用できます。",
+      "reasonLabel": "理由",
+      "saving": "保存中…",
+      "returnSubmit": "ドラフトに差し戻す",
+      "voidSubmit": "ワークシートを無効化",
+      "cancel": "キャンセル"
+    },
+    "metrics": {
+      "original": "当初",
+      "proposed": "予定",
+      "adjustment": "調整",
+      "cost": "原価"
+    },
+    "lockedAlert": "この承認スナップショットはロックされています。承認内容のまま変換するか、無効化して新しいワークシートを作成してください。",
+    "linesTable": {
+      "source": "ソース",
+      "date": "日付",
+      "description": "内容",
+      "cost": "原価",
+      "original": "当初",
+      "proposedSupport": "予定 / 根拠"
+    },
+    "trail": {
+      "title": "確認履歴",
+      "system": "システム"
+    },
+    "toasts": {
+      "created": "{worksheetNumber}をソース明細{sourceCount}件で作成しました",
+      "sentForReview": "確認に送りました",
+      "approved": "前請求を承認しました",
+      "returnedToDraft": "ドラフトに差し戻しました",
+      "voided": "前請求を無効化しました",
+      "converted": "{documentNumber}を請求書ドラフトとして作成しました"
+    },
+    "lineToasts": {
+      "saved": "請求金額を保存しました",
+      "holdApplied": "請求保留を適用しました",
+      "holdReleased": "請求保留を解除しました"
+    },
+    "line": {
+      "held": "保留中",
+      "time": "工数",
+      "cost": "原価",
+      "amountAria": "請求予定金額",
+      "reasonAria": "調整理由",
+      "evidencePlaceholder": "証跡参照（カンマ区切り）",
+      "saving": "保存中…",
+      "save": "保存",
+      "hold": "保留",
+      "holdReason": "保留理由",
+      "evidenceReferences": "証跡参照",
+      "applyHold": "保留を適用",
+      "releaseHold": "保留を解除",
+      "releaseReason": "解除理由",
+      "release": "解除"
+    }
+  },
+  "duplicates": {
+    "title": "重複プロジェクト",
+    "description": "ソース参照、名前と顧客、またはジョブ番号が重複するプロジェクトです。グループごとに残すプロジェクトを選び、影響をプレビューして統合してください。",
+    "loading": "重複を読み込み中…",
+    "empty": "重複するプロジェクトはありません。",
+    "kind": {
+      "source_ref": "同じソース参照（{key}）",
+      "name_customer": "同じ名前と顧客（{key}）",
+      "job_number": "同じジョブ番号（{key}）"
+    },
+    "chooseSurvivor": "残すプロジェクトを選択してください。他のプロジェクトの参照はすべて1件のトランザクションで移行します。",
+    "survivor": "残すプロジェクト",
+    "code": "コード",
+    "name": "名前",
+    "status": "ステータス",
+    "action": "操作",
+    "preview": "プレビュー",
+    "merge": "統合（{count, plural, one {# 件の参照} other {# 件の参照}}）",
+    "alreadyMerged": "統合済みです。",
+    "moveCount": "{count, plural, one {# 件の参照} other {# 件の参照}}が移行します。",
+    "kept": "維持",
+    "impactNote": "ドラフト以外の証憑にある明細、変更注文番号、予算セルが競合する場合、統合は拒否されます。統合されたプロジェクトは残したプロジェクトへのポインター付きで無効化されます。",
+    "loadFailed": "重複を読み込めませんでした。",
+    "previewFailed": "統合をプレビューできませんでした。",
+    "mergeFailed": "プロジェクトを統合できませんでした。",
+    "merged": "プロジェクトを統合しました。"
   }
 }
