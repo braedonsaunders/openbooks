@@ -1,13 +1,18 @@
 import 'server-only'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import type { Authz } from './authz'
 import { guardPermission } from './authz'
 import { isFeatureEnabled } from './features'
+import { featureRequiredHref } from './gate-targets'
 
-/** Page boundary for an organization-owned optional capability. */
+/**
+ * Page boundary for an organization-owned optional capability. A disabled
+ * feature explains itself on the feature-required page (which feature, where
+ * to turn it on) instead of 404ing as if the route were a typo.
+ */
 export async function requireFeatureEnabled(orgId: string, featureKey: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, featureKey))) notFound()
+  if (!(await isFeatureEnabled(orgId, featureKey))) redirect(featureRequiredHref(featureKey))
 }
 
 /**

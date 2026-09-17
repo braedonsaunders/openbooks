@@ -131,5 +131,16 @@
     "title": "Notificaciones",
     "empty": "Estás al día",
     "markAllRead": "Marcar todo como leído"
+  },
+  "routeState": {
+    "featureOffTitle": "La función {name} está desactivada",
+    "featureOffDescription": "Esta área necesita la función {name}. Al activarla se conservan todos los datos existentes.",
+    "featureOnTitle": "La función {name} ya está activada",
+    "featureOnDescription": "Se activó después de tu llegada aquí. Vuelve e inténtalo de nuevo.",
+    "turnOnFeature": "Abrir Funciones",
+    "askAdministrator": "Si no puedes hacer este cambio, pide a tu administrador.",
+    "deniedTitle": "No tienes acceso",
+    "deniedDescription": "Esta área requiere el permiso {permission}.",
+    "operatorDescription": "La consola de plataforma está reservada a los operadores de plataforma. Los ajustes de tu organización están en Administración."
   }
 }

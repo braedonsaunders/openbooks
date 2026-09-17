@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { currentUser, type SessionUser } from "./auth";
+import { accessDeniedHref } from "./gate-targets";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";
 import { allowedSubsidiaryIds } from "./subsidiaries";
 
@@ -89,14 +90,16 @@ export function assertCan(authz: Authz, perm: string): void {
 
 /**
  * Page gate. Resolves authz or navigates away: signed out → /login,
- * missing the permission → home. Use at the top of server components:
+ * missing the permission → the access-denied explanation (which permission,
+ * who can grant it) instead of a silent bounce home. Use at the top of
+ * server components:
  *
  *   const authz = await requirePermission("admin.users.manage");
  */
 export async function requirePermission(perm: string): Promise<Authz> {
   const authz = await getAuthz();
   if (!authz) redirect("/login");
-  if (!can(authz, perm)) redirect("/");
+  if (!can(authz, perm)) redirect(accessDeniedHref({ permission: perm }));
   return authz;
 }
 

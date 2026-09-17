@@ -205,6 +205,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'matrix-filters': { props: ['classId', 'classes', 'state'] },
   'metric-tile': { props: ['label', 'locale', 'tone', 'value'] },
   'module-home-tabs': { props: ['tabs'] },
+  'moved-notice': { props: ['description', 'dismissLabel', 'title'] },
   'narrative-drawer': { props: ['drawer'] },
   'narrative-entry': { props: ['href', 'labels', 'narrative'] },
   'native-extension': { props: ['appKey', 'sp'] },

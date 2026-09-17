@@ -3,6 +3,11 @@
   "title": "Agents",
   "description": "Tous les constats des agents dans une boîte classée — trier, appliquer les propositions et bien commencer la journée.",
   "configure": "Configurer les agents",
+  "movedNotice": {
+    "title": "La clôture continue se trouve désormais ici",
+    "description": "La page de la clôture continue fait désormais partie des Agents. Vos favoris et liens continuent de fonctionner ; l'onglet des rapports reste où il était.",
+    "dismiss": "Écarter"
+  },
   "search": "Rechercher des constats…",
   "facets": {
     "pack": "Agent",

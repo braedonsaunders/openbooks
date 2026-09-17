@@ -2,12 +2,16 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { getAuthz, type Authz } from "./authz";
+import { accessDeniedHref } from "./gate-targets";
 
-/** Gate a super-admin surface. Redirects non-super-admins away. */
+/**
+ * Gate a super-admin surface. Signed out → /login; any other visitor gets
+ * the operator-only explanation instead of a silent bounce home.
+ */
 export async function requireSuperAdmin(): Promise<Authz> {
   const authz = await getAuthz();
   if (!authz) redirect("/login");
-  if (!authz.user.isSuperAdmin) redirect("/");
+  if (!authz.user.isSuperAdmin) redirect(accessDeniedHref({ scope: "platform" }));
   return authz;
 }
 

@@ -117,6 +117,7 @@ import { AgentsPackCard } from '../../app/(app)/admin/setup/agents/library/Agent
 import { AgentPolicyForm } from '../../app/(app)/admin/setup/agents/[agentKey]/AgentPolicyForm'
 import { AgentsRunActions } from '../../app/(app)/admin/setup/agents/activity/AgentsRunActions'
 import { AgentsTriageKeys } from '../../app/(app)/agents/AgentsTriageKeys'
+import { MovedNotice } from '../../app/(app)/agents/MovedNotice'
 import { AgentsBriefingActions } from '../../app/(app)/agents/AgentsBriefingActions'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
@@ -1443,6 +1444,19 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   'agents-kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
+  /** Retired-route landing notice (?from=continuous-close): loader-resolved
+   *  strings, session-local dismiss. Renders nothing without a title. */
+  'moved-notice': (props) => {
+    const title = str(props, 'title')
+    if (!title) return null
+    return (
+      <MovedNotice
+        title={title}
+        description={str(props, 'description') ?? ''}
+        dismissLabel={str(props, 'dismissLabel') ?? ''}
+      />
+    )
+  },
   /** The cached narrative's markdown. A widget, not a block, because no spec
    *  block renders markdown — the loader computed the text, this only binds
    *  the renderer. Null text renders nothing. */

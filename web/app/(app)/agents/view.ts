@@ -161,6 +161,13 @@ export interface AgentsData {
   inboxEmpty: boolean
   /** Localized keyboard-helper sentence for the paging row. */
   triageHint: string
+  /**
+   * Retired-route landing notice: /continuous-close redirects here with
+   * ?from=continuous-close, and the move is explained once, on the record,
+   * instead of silently bouncing the visitor (F-t13-007). Null on every
+   * other arrival — the `when` below is presence-gated.
+   */
+  movedNotice: { title: string; description: string; dismissLabel: string } | null
   proposalsEmpty: boolean
   proposalsEmptyTitle: string
   proposalsEmptyDescription: string
@@ -446,6 +453,14 @@ export async function loadAgents(
     },
     inboxEmpty: !proposalsOnly && !briefingMode && inbox.total === 0,
     triageHint: t('triage.hint'),
+    movedNotice:
+      singleParam(sp, 'from') === 'continuous-close'
+        ? {
+            title: t('movedNotice.title'),
+            description: t('movedNotice.description'),
+            dismissLabel: t('movedNotice.dismiss'),
+          }
+        : null,
     proposalsEmpty: proposalsOnly && !briefingMode && inbox.total === 0,
     proposalsEmptyTitle: t('lane.emptyTitle'),
     proposalsEmptyDescription: t('lane.emptyDescription'),
@@ -504,6 +519,14 @@ export function agentsSpec(data: AgentsData): PageSpec {
       }),
     ],
     body: [
+      {
+        ...widgetBlock('moved-notice', {
+          title: data.movedNotice?.title ?? '',
+          description: data.movedNotice?.description ?? '',
+          dismissLabel: data.movedNotice?.dismissLabel ?? '',
+        }),
+        when: f('movedNotice'),
+      },
       {
         ...widgetBlock('agents-triage-keys', {
           rows: data.triage.rows,

@@ -14,7 +14,9 @@ export async function generateMetadata() {
  * The Agent Workbench home moved to /agents (all packs, ranked). This route
  * redirects there — except its reports tab, which stays until the morning
  * briefing moves it. ?item= deep links (tools, chat citations, bookmarks)
- * map onto the workbench drawer, so nothing breaks.
+ * map onto the workbench drawer, so nothing breaks. ?from= tells /agents to
+ * explain the move once, on the record, instead of silently bouncing the
+ * visitor (F-t13-007).
  */
 export default async function ContinuousClosePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams
@@ -22,6 +24,7 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
   const tabValue = Array.isArray(tab) ? tab[0] : tab
   if (tabValue !== 'reports') {
     const params = new URLSearchParams()
+    params.set('from', 'continuous-close')
     const item = sp.item
     const itemValue = Array.isArray(item) ? item[0] : item
     if (typeof itemValue === 'string' && itemValue) params.set('item', itemValue)

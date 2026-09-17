@@ -18,6 +18,7 @@ import {
   type WaiverRecord
 } from '@openbooks/engine/src/compliance.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { featureRequiredHref } from './gate-targets'
 import {
   GENERAL_THRESHOLD_CHANGE_YEAR,
   INFORMATION_RETURN_FORMS,
@@ -64,9 +65,14 @@ export function complianceSubsidiaryFilter(
 // Feature gates
 // ---------------------------------------------------------------------------
 
-/** Page-boundary gate. Navigation hiding is presentation; this is the control. */
+/**
+ * Page-boundary gate. Navigation hiding is presentation; this is the control.
+ * A disabled feature explains itself on the feature-required page instead of
+ * silently landing on the Features switchboard (F-t03-012).
+ */
 export async function requireComplianceFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'subcontractorCompliance'))) redirect('/admin/setup/features')
+  if (!(await isFeatureEnabled(orgId, 'subcontractorCompliance')))
+    redirect(featureRequiredHref('subcontractorCompliance'))
 }
 
 /** API-boundary gate — a disabled module is indistinguishable from no API. */
@@ -88,7 +94,8 @@ export async function guardLienWaiverFeature(orgId: string): Promise<NextRespons
 
 export async function requireLienWaiverFeature(orgId: string): Promise<void> {
   await requireComplianceFeature(orgId)
-  if (!(await isFeatureEnabled(orgId, 'projects'))) redirect('/admin/setup/features')
+  // Name the feature that is actually off — compliance first, then projects.
+  if (!(await isFeatureEnabled(orgId, 'projects'))) redirect(featureRequiredHref('projects'))
 }
 
 // ---------------------------------------------------------------------------

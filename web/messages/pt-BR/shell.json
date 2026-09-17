@@ -131,5 +131,16 @@
     "title": "Notificações",
     "empty": "Você está em dia",
     "markAllRead": "Marcar tudo como lido"
+  },
+  "routeState": {
+    "featureOffTitle": "O recurso {name} está desativado",
+    "featureOffDescription": "Esta área precisa do recurso {name}. Ativá-lo mantém todos os dados existentes.",
+    "featureOnTitle": "O recurso {name} já está ativado",
+    "featureOnDescription": "Ele foi ativado depois da sua chegada aqui. Volte e tente novamente.",
+    "turnOnFeature": "Abrir Funcionalidades",
+    "askAdministrator": "Se você não puder fazer essa alteração, peça ao seu administrador.",
+    "deniedTitle": "Você não tem acesso",
+    "deniedDescription": "Esta área requer a permissão {permission}.",
+    "operatorDescription": "O console da plataforma é reservado aos operadores da plataforma. As configurações da sua organização estão em Administração."
   }
 }

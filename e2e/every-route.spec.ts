@@ -43,7 +43,13 @@ const DYNAMIC_SAMPLES: Record<string, string> = {
  * quietly shrinks. Dynamic routes with no seeded sample are skipped rather
  * than guessed at, because a 404 from a made-up id would prove nothing.
  */
-const SKIP: Record<string, string> = {}
+const SKIP: Record<string, string> = {
+  // Gate explanation pages need their redirect context: a bare visit names
+  // no feature or permission, so it honestly 404s. Covered with context by
+  // web/lib/gate-explanations.test.ts and web/app/(app)/gate-pages.test.ts.
+  '/feature-required': 'needs ?feature=<key> from a gate redirect',
+  '/access-denied': 'needs ?permission=<key> or ?scope=platform from a gate redirect',
+}
 
 function discoverRoutes(dir: string, prefix = ''): string[] {
   const routes: string[] = []

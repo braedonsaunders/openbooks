@@ -3,6 +3,11 @@
   "title": "Agentes",
   "description": "Todos los hallazgos de los agentes en una bandeja clasificada: clasifica, aplica propuestas y empieza el día informado.",
   "configure": "Configurar agentes",
+  "movedNotice": {
+    "title": "El cierre continuo ahora está aquí",
+    "description": "La página del cierre continuo ahora forma parte de los Agentes. Tus marcadores y enlaces siguen funcionando; la pestaña de informes permanece donde estaba.",
+    "dismiss": "Descartar"
+  },
   "search": "Buscar hallazgos…",
   "facets": {
     "pack": "Agente",

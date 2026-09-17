@@ -23,9 +23,11 @@ export function RouteStateView({
    * crashed into this boundary, and both answer HTTP 200 with text in
    * `<main>`. Matching the visible copy would work today and break the first
    * time someone runs the suite in another locale, so the signal is an
-   * attribute rather than a sentence.
+   * attribute rather than a sentence. `forbidden` (permission refused) and
+   * `feature-disabled` (existing route, switch off) keep those two honest
+   * refusals distinct from a genuine `not-found`.
    */
-  state?: 'error' | 'not-found'
+  state?: 'error' | 'not-found' | 'forbidden' | 'feature-disabled'
 }) {
   // One heading + one message: the PageHeader owns the copy; the body keeps
   // icon + recovery action so the boundary never reads twice (F-t05-005).

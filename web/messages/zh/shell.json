@@ -131,5 +131,16 @@
     "title": "通知",
     "empty": "您已处理完所有事项",
     "markAllRead": "全部标为已读"
+  },
+  "routeState": {
+    "featureOffTitle": "{name}尚未启用",
+    "featureOffDescription": "此区域需要{name}功能。启用后将保留所有现有数据。",
+    "featureOnTitle": "{name}已启用",
+    "featureOnDescription": "该功能在您到达后已启用。请返回并重试。",
+    "turnOnFeature": "打开功能",
+    "askAdministrator": "如果您无法进行此更改，请联系您的管理员。",
+    "deniedTitle": "您没有访问权限",
+    "deniedDescription": "此区域需要{permission}权限。",
+    "operatorDescription": "平台控制台仅供平台运维人员使用。您组织的相关设置位于“管理”之下。"
   }
 }
