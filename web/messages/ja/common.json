@@ -136,7 +136,8 @@
     "finalInvoice": "最終請求書",
     "paymentHold": "支払保留",
     "expectedPayDate": "支払予定日",
-    "openBalance": "未決済残高"
+    "openBalance": "未決済残高",
+    "defaultForm": "既定のフォーム"
   },
   "status": {
     "draft": "下書き",

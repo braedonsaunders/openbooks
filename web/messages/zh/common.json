@@ -136,7 +136,8 @@
     "finalInvoice": "最终发票",
     "paymentHold": "付款暂挂",
     "expectedPayDate": "预计付款日期",
-    "openBalance": "未结余额"
+    "openBalance": "未结余额",
+    "defaultForm": "默认表单"
   },
   "status": {
     "draft": "草稿",

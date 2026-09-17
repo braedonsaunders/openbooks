@@ -19,3 +19,24 @@ export function displayDocumentNumber(documentNumber: unknown, referenceNumber: 
   if (!isSourceHandle(documentNumber)) return typeof documentNumber === 'string' ? documentNumber : ''
   return typeof referenceNumber === 'string' && referenceNumber !== '' ? referenceNumber : documentNumber
 }
+
+/**
+ * Seeded built-in form name (F-t02-013).
+ *
+ * New orgs get one record form layout per record type named exactly this
+ * (engine/src/customization-defaults.ts DEFAULT_FORM_NAME). The name is
+ * data, not chrome — but while it still carries the seed name AND is the
+ * default, drawers show the translated "Default form" instead of leaking
+ * English into localized chrome. Either condition alone shows the stored
+ * name: a renamed default is custom copy, and a non-default layout that
+ * happens to share the seed name is a user record.
+ */
+export const SEEDED_DEFAULT_FORM_NAME = 'Default form'
+
+export function displayFormName(
+  name: string,
+  isDefault: boolean | undefined,
+  translatedDefault: string,
+): string {
+  return isDefault === true && name === SEEDED_DEFAULT_FORM_NAME ? translatedDefault : name
+}

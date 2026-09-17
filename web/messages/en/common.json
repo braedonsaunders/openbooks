@@ -155,7 +155,8 @@
     "finalInvoice": "Final invoice",
     "paymentHold": "Payment hold",
     "expectedPayDate": "Expected pay date",
-    "openBalance": "Open balance"
+    "openBalance": "Open balance",
+    "defaultForm": "Default form"
   },
   "status": {
     "draft": "Draft",

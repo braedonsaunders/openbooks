@@ -136,7 +136,8 @@
     "finalInvoice": "Schlussrechnung",
     "paymentHold": "Zahlungssperre",
     "expectedPayDate": "Voraussichtliches Zahlungsdatum",
-    "openBalance": "Offener Saldo"
+    "openBalance": "Offener Saldo",
+    "defaultForm": "Standardformular"
   },
   "status": {
     "draft": "Entwurf",

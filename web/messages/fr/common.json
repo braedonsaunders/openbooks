@@ -155,7 +155,8 @@
     "finalInvoice": "Facture finale",
     "paymentHold": "Blocage du paiement",
     "expectedPayDate": "Date de paiement prévue",
-    "openBalance": "Solde impayé"
+    "openBalance": "Solde impayé",
+    "defaultForm": "Formulaire par défaut"
   },
   "status": {
     "draft": "Brouillon",

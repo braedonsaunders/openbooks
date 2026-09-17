@@ -24,3 +24,14 @@ test('display falls back to the reference on handles, keeps numbers', () => {
   assert.equal(displayDocumentNumber('salesInvoice:cf83a37e-8376-f111-a5be-7ced8d265cbd', ''), 'salesInvoice:cf83a37e-8376-f111-a5be-7ced8d265cbd')
   assert.equal(displayDocumentNumber(null, 'PS-INV103296'), '')
 })
+
+test('the seeded default form name translates only while default and unrenamed', async () => {
+  const { displayFormName, SEEDED_DEFAULT_FORM_NAME } = await import('./document-display')
+  assert.equal(SEEDED_DEFAULT_FORM_NAME, 'Default form')
+  assert.equal(displayFormName('Default form', true, 'Formulaire par défaut'), 'Formulaire par défaut')
+  // A renamed default is custom copy: the stored name renders.
+  assert.equal(displayFormName('Facture standard', true, 'Formulaire par défaut'), 'Facture standard')
+  // A non-default layout that shares the seed name is a user record.
+  assert.equal(displayFormName('Default form', false, 'Formulaire par défaut'), 'Default form')
+  assert.equal(displayFormName('Default form', undefined, 'Formulaire par défaut'), 'Default form')
+})

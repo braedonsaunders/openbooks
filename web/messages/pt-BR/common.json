@@ -136,7 +136,8 @@
     "finalInvoice": "Fatura final",
     "paymentHold": "Retenção de pagamento",
     "expectedPayDate": "Data prevista de pagamento",
-    "openBalance": "Saldo em aberto"
+    "openBalance": "Saldo em aberto",
+    "defaultForm": "Formulário padrão"
   },
   "status": {
     "draft": "Rascunho",

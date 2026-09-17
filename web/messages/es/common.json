@@ -155,26 +155,27 @@
     "finalInvoice": "Factura final",
     "paymentHold": "Retención de pago",
     "expectedPayDate": "Fecha de pago prevista",
-    "openBalance": "Saldo pendiente"
+    "openBalance": "Saldo pendiente",
+    "defaultForm": "Formulario predeterminado"
   },
   "status": {
     "draft": "Borrador",
     "pendingApproval": "Pendiente de aprobación",
-    "approved": "Aprobado",
-    "rejected": "Rechazado",
-    "posted": "Contabilizado",
-    "paid": "Pagado",
-    "partiallyPaid": "Pagado parcialmente",
-    "open": "Abierto",
-    "closed": "Cerrado",
-    "voided": "Anulado",
-    "reversed": "Revertido",
-    "cancelled": "Cancelado",
-    "active": "Activo",
-    "inactive": "Inactivo",
+    "approved": "Aprobado/a",
+    "rejected": "Rechazado/a",
+    "posted": "Contabilizado/a",
+    "paid": "Pagado/a",
+    "partiallyPaid": "Pagado/a parcialmente",
+    "open": "Abierto/a",
+    "closed": "Cerrado/a",
+    "voided": "Anulado/a",
+    "reversed": "Revertido/a",
+    "cancelled": "Cancelado/a",
+    "active": "Activo/a",
+    "inactive": "Inactivo/a",
     "error": "Error",
     "ok": "OK",
-    "pending_approval": "Enviado"
+    "pending_approval": "Enviado/a"
   },
   "filters": {
     "showInactive": "Mostrar inactivos"

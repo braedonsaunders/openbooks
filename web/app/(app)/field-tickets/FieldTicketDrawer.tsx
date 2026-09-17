@@ -17,6 +17,7 @@ import {
   type FencedSaveResult,
   type RevisionFencedRequest,
 } from '../../../components/document-drawer'
+import { displayFormName } from '../../../lib/document-display'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
@@ -252,7 +253,7 @@ export interface FieldTicketDrawerProps {
   equipmentUnits: EquipmentOpt[]
   equipmentEnabled: boolean
   layout?: FormLayoutConfig
-  availableLayouts?: { id: string; name: string }[]
+  availableLayouts?: { id: string; name: string; isDefault?: boolean }[]
   currentLayoutId?: string | null
   canCustomize?: boolean
   canManage: boolean
@@ -836,7 +837,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
             triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
           >
             {props.availableLayouts!.map((availableLayout) => (
-              <option key={availableLayout.id} value={availableLayout.id}>{availableLayout.name}</option>
+              <option key={availableLayout.id} value={availableLayout.id}>{displayFormName(availableLayout.name, availableLayout.isDefault, tCommon('labels.defaultForm'))}</option>
             ))}
           </Select>
           <Button
