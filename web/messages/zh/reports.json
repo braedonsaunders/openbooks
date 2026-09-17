@@ -54,7 +54,9 @@
     "other": "其他",
     "otherTotal": "其他合计",
     "accumulatedEarnings": "累计收益（计算得出）",
-    "translationAdjustment": "累计外币折算调整"
+    "translationAdjustment": "累计外币折算调整",
+    "ratesBlockedTitle": "合并汇率尚未推导",
+    "ratesBlockedAction": "在期间结账中推导汇率"
   },
   "saveView": {
     "namePrompt": "为此视图命名：",

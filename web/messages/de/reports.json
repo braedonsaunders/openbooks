@@ -54,7 +54,9 @@
     "other": "Sonstige",
     "otherTotal": "Summe Sonstige",
     "accumulatedEarnings": "Kumulierter Gewinnvortrag (berechnet)",
-    "translationAdjustment": "Kumulierte Währungsumrechnungsdifferenz"
+    "translationAdjustment": "Kumulierte Währungsumrechnungsdifferenz",
+    "ratesBlockedTitle": "Konsolidierte Wechselkurse sind noch nicht abgeleitet",
+    "ratesBlockedAction": "Kurse im Periodenabschluss ableiten"
   },
   "saveView": {
     "namePrompt": "Diese Ansicht benennen:",
