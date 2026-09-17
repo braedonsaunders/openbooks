@@ -341,21 +341,21 @@ function RecurringPanel() {
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr>
-              <th className="py-2">{t("table.template")}</th><th>{t("table.customer")}</th><th>{t("table.cadence")}</th><th>{t("table.nextRun")}</th>
-              <th>{t("table.runs")}</th><th>{t("table.autoPost")}</th><th>{t("table.status")}</th><th></th>
+              <th className="whitespace-nowrap px-3 py-2">{t("table.template")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.customer")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.cadence")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.nextRun")}</th>
+              <th className="whitespace-nowrap px-3 py-2">{t("table.runs")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.autoPost")}</th><th className="whitespace-nowrap px-3 py-2">{t("table.status")}</th><th className="whitespace-nowrap px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((s) => (
               <tr key={s.id} className="border-t">
-                <td className="py-2 font-medium">{s.templateNumber}</td>
-                <td>{s.partyName ?? "—"}</td>
-                <td>{s.cadence}{s.cron ? ` (${s.cron})` : ""}</td>
-                <td>{s.nextRunOn}</td>
-                <td>{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</td>
-                <td>{s.autoPost ? t("yes") : t("no")}</td>
-                <td>{s.isActive ? <Badge>{t("active")}</Badge> : <Badge variant="secondary">{t("paused")}</Badge>}</td>
-                <td className="whitespace-nowrap text-right">
+                <td className="whitespace-nowrap px-3 py-2 font-medium">{s.templateNumber}</td>
+                <td className="whitespace-nowrap px-3 py-2">{s.partyName ?? "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2">{s.cadence}{s.cron ? ` (${s.cron})` : ""}</td>
+                <td className="whitespace-nowrap px-3 py-2">{s.nextRunOn}</td>
+                <td className="whitespace-nowrap px-3 py-2">{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</td>
+                <td className="whitespace-nowrap px-3 py-2">{s.autoPost ? t("yes") : t("no")}</td>
+                <td className="whitespace-nowrap px-3 py-2">{s.isActive ? <Badge>{t("active")}</Badge> : <Badge variant="secondary">{t("paused")}</Badge>}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right">
                   <Button size="sm" variant="ghost" onClick={() => act(s.id, "POST")}>{t("runNow")}</Button>
                   <Button size="sm" variant="ghost" onClick={() => act(s.id, "PATCH", { isActive: !s.isActive })}>
                     {s.isActive ? t("pause") : t("resume")}
