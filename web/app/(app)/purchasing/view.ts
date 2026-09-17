@@ -15,9 +15,9 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz, can, assertCan } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
-import { reportSubsidiaryView } from '../../../lib/consolidation'
+import { reportSubsidiaryScope, reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { purchasingHome, type PurchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
+import { purchasingHome, type VendorExposureRow } from '../../../lib/module-home/purchasing'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
@@ -44,32 +44,16 @@ type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker
 type Tabs = Awaited<ReturnType<typeof groupTabs>>
 
 /**
- * Fail-closed home figures for a rates-blocked workspace (F-t06-027): every
- * vital reads empty/zero and feature tiles hide, so nothing presents a
- * scoped number beside the banner. Navigation keeps working — switching to
- * a single-subsidiary view loads real figures.
+ * Lean scope recovery for a rates-blocked workspace (F-t03-009): the refusal
+ * carries no scope, so resolve it leniently like the banking overview — same
+ * visibility, same picker rows, figures included. The home translates at
+ * dated spot rates rather than period consolidated rates, so a dormant
+ * foreign subsidiary with no derived rates must not zero a workspace whose
+ * every figure is computable (SIM Meridian read 0 vendors / $0 spend / $0
+ * payables beside an 'All clear' while holding 7 vendors and ~$125K of open
+ * posted bills). The banner still pins beside live numbers; switching to a
+ * single-subsidiary view clears it.
  */
-const BLOCKED_HOME: PurchasingHome = {
-  apOutstanding: 0,
-  apOverdue: 0,
-  openBills: 0,
-  dueNext7: 0,
-  openPoValue: 0,
-  openPos: 0,
-  spend30d: 0,
-  topExposure: [],
-  trend: [],
-  badges: {
-    openPos: 0,
-    openBills: 0,
-    payments7d: 0,
-    paid7dValue: 0,
-    unpostedExpenses: 0,
-    vendors: 0,
-  },
-  ordersEnabled: false,
-  expensesEnabled: false,
-}
 
 export interface PurchasingData {
   title: string
@@ -133,9 +117,10 @@ export async function loadPurchasing(
   const tr = await getTranslations('reports')
 
   // Underived consolidated rates must not throw out of SSR (F-t06-027):
-  // the page renders a typed banner with a derive link above empty vitals.
-  // Anything else is a real defect and still throws. Home figures load only
-  // with a resolved subsidiary scope — BLOCKED_HOME otherwise (fail-closed).
+  // the page renders a typed banner with a derive link above live vitals.
+  // Anything else is a real defect and still throws. The home translates at
+  // dated spot rates, so figures load through the lenient scope even while
+  // the banner pins (F-t03-009, same recovery as the banking overview).
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let ratesBlocked: RatesBlockedNotice | null = null
   try {
@@ -149,15 +134,25 @@ export async function loadPurchasing(
       deriveLabel: tr('statement.ratesBlockedAction'),
       deriveHref: '/close',
     }
+    // The refusal carries no scope, so resolve it leniently: same
+    // visibility, same picker rows (the switcher stays an escape to a
+    // single-entity view), figures included.
+    const scoped = await reportSubsidiaryScope(sp.sub, await resolveAsOf(authz.user.orgId))
+    subView = {
+      subsidiary: scoped.subsidiary,
+      currency: scoped.currency,
+      label: scoped.label,
+      consolidated: scoped.consolidated,
+      options: scoped.options,
+      picker: scoped.picker,
+    }
   }
   const [data, navGroups] = await Promise.all([
-    subView
-      ? purchasingHome(
-          authz.user.orgId,
-          subView.subsidiary?.ids,
-          subView.subsidiary?.includeNullSubsidiary,
-        )
-      : BLOCKED_HOME,
+    purchasingHome(
+      authz.user.orgId,
+      subView?.subsidiary?.ids,
+      subView?.subsidiary?.includeNullSubsidiary,
+    ),
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),

@@ -146,6 +146,21 @@ test('payment pulse open ties to AP open payables across time boundaries', { ski
         )
         assert.equal(home.apOutstanding, 4000, 'open = overdue bill + future-paid bill; future-posted excluded')
         assert.equal(home.apOverdue, 1000, 'only the past-due bill is overdue')
+        // F-t03-009: the hero roster groups the SAME as-of item set as the
+        // pulse — one page, one Talent figure. The old live aggregate gated
+        // on the cached open_balance (which the seed never decrements), so
+        // it showed the future-posted bill and dropped the future-paid one.
+        assert.equal(home.topExposure.length, 1, 'single vendor row for the single seeded vendor')
+        const hero = home.topExposure[0]!
+        assert.equal(hero.billedOpen, 4000, 'hero billed-open ties the pulse open')
+        assert.equal(hero.overdue, 1000, 'hero overdue ties the pulse overdue')
+        assert.equal(hero.openBills, 2, 'hero counts the two as-of-open bills, not the future-posted one')
+        assert.equal(hero.oldestDue, '2026-09-01', 'hero oldest-due is the overdue bill')
+        assert.equal(
+          home.topExposure.reduce((sum, row) => sum + row.billedOpen, 0),
+          home.apOutstanding,
+          'hero billed-open foots to the pulse outstanding',
+        )
       })
     })
   } finally {

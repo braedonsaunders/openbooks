@@ -5,7 +5,8 @@ import test from 'node:test'
 // F-t06-027: enabling Multi-subsidiary crashed the purchasing workspace with
 // React error 441 — the same MissingRatesError out of SSR as the statements.
 // The loader must convert the typed rates refusal into a banner with a derive
-// link and never throw it; the workspace grid renders empty vitals below it.
+// link and never throw it. Since F-t03-009 the grid below the banner renders
+// live vitals (lenient scope), not fail-closed zeros.
 const source = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
 
 test('a rates refusal becomes a typed banner, never an SSR throw (F-t06-027)', () => {
@@ -31,7 +32,30 @@ test('a rates refusal becomes a typed banner, never an SSR throw (F-t06-027)', (
   )
 })
 
-test('the blocked workspace shows the banner above empty vitals (F-t06-027)', () => {
+// F-t03-009: a dormant foreign subsidiary with no derived consolidated rates
+// zeroed the whole workspace (SIM Meridian: 0 vendors / $0 spend / $0
+// payables beside 'All clear' with 7 vendors and ~$125K of open posted
+// bills). The loader recovers like the banking overview — same visibility
+// and picker through the lenient scope, banner pinned beside LIVE figures.
+test('a rates refusal recovers through the lenient scope with live figures (F-t03-009)', () => {
+  assert.match(
+    source,
+    /reportSubsidiaryScope/,
+    'the loader must fall back to the lenient scope on a rates refusal',
+  )
+  assert.match(
+    source,
+    /subsidiary: scoped\.subsidiary/,
+    'the fallback must carry the resolved scope (figures keep loading)',
+  )
+  assert.doesNotMatch(
+    source,
+    /BLOCKED_HOME/,
+    'no fail-closed zeros path: every computable figure renders beside the banner',
+  )
+})
+
+test('the rates banner pins above live vitals with a derive link (F-t06-027)', () => {
   assert.match(
     source,
     /widgetBlock\('empty-state'/,
