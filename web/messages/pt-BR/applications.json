@@ -3,17 +3,43 @@
   "description": "Faturamento de projetos por planilhas de valores, solicitações cumulativas, ordens de alteração e retenções.",
   "project": "Projeto",
   "loading": "Carregando dados controlados de faturamento…",
+  "workspace": {
+    "sectionsAria": "Seções de faturamento de solicitações"
+  },
   "errors": { "load": "Não foi possível carregar as solicitações de pagamento", "action": "A ação falhou" },
   "empty": { "title": "Nenhum projeto elegível", "description": "Ative um tipo de projeto que use solicitações de pagamento e atribua-o a um projeto.", "manageProjectTypes": "Gerenciar tipos de projeto" },
   "summary": { "contractSum": "Valor do contrato", "retainageHeld": "Retenção mantida", "committedCost": "Custo comprometido (pedidos abertos)" },
   "sov": {
-    "title": "Planilha de valores", "item": "Item", "itemPlaceholder": "Nº do item", "description": "Descrição", "scheduledValue": "Valor programado", "retainagePercent": "Retenção %", "default": "padrão", "delete": "Excluir", "deleteConfirm": "Excluir a linha “{description}”?", "empty": "Ainda não há linhas na planilha de valores.", "defaultIncomeAccount": "Conta de receita padrão", "addLine": "Adicionar linha", "editLine": "Editar linha", "lockedValuesHint": "Após o início do faturamento, os campos de valor ficam controlados — somente a conta de receita pode ser alterada aqui.", "lockedHint": "O faturamento começou — o valor do contrato agora só muda por meio de uma ordem de alteração aprovada."
+    "title": "Planilha de valores", "item": "Item", "itemPlaceholder": "Nº do item", "description": "Descrição", "scheduledValue": "Valor programado", "retainagePercent": "Retenção %", "default": "padrão", "delete": "Excluir", "deleteConfirm": "Excluir a linha “{description}”?", "empty": "Ainda não há linhas na planilha de valores.", "defaultIncomeAccount": "Conta de receita padrão", "addLine": "Adicionar linha", "editLine": "Editar linha", "lockedValuesHint": "Após o início do faturamento, os campos de valor ficam controlados — somente a conta de receita pode ser alterada aqui.", "lockedHint": "O faturamento começou — o valor do contrato agora só muda por meio de uma ordem de alteração aprovada.",
+    "incomeAccount": "Conta de receita",
+    "workspaceHint": "A planilha de valores que controla o faturamento acumulado deste projeto.",
+    "formHint": "Adicione uma linha de contrato sem sair do espaço de faturamento do projeto.",
+    "cancel": "Cancelar"
   },
   "changeOrders": {
-    "title": "Ordens de alteração", "number": "Nº da ordem", "description": "Descrição", "amount": "Valor", "applyTo": "Aplicar a", "incomeAccount": "Conta de receita", "defaultIncomeAccount": "Conta de receita padrão", "newScheduleLine": "Nova linha (alteração aditiva)", "deductiveHint": "Alterações dedutivas devem reduzir uma linha existente.", "additiveHint": "Escolha uma linha para revisar ou crie uma nova linha aditiva.", "adjusts": "Ajusta {description}", "approve": "Aprovar", "approvalBlockedHint": "Conclua ou anule a medição em aberto primeiro", "void": "Anular", "voidConfirm": "Anular a ordem {number}? O histórico de auditoria será preservado.", "add": "Adicionar ordem", "empty": "Nenhuma ordem de alteração.", "status": { "draft": "Rascunho", "approved": "Aprovada", "void": "Anulada" }
+    "title": "Ordens de alteração", "number": "Nº da ordem", "description": "Descrição", "amount": "Valor", "applyTo": "Aplicar a", "incomeAccount": "Conta de receita", "defaultIncomeAccount": "Conta de receita padrão", "newScheduleLine": "Nova linha (alteração aditiva)", "deductiveHint": "Alterações dedutivas devem reduzir uma linha existente.", "additiveHint": "Escolha uma linha para revisar ou crie uma nova linha aditiva.", "adjusts": "Ajusta {description}", "approve": "Aprovar", "approvalBlockedHint": "Conclua ou anule a medição em aberto primeiro", "void": "Anular", "voidConfirm": "Anular a ordem {number}? O histórico de auditoria será preservado.", "add": "Adicionar ordem", "empty": "Nenhuma ordem de alteração.", "status": { "draft": "Rascunho", "approved": "Aprovada", "void": "Anulada" },
+    "statusLabel": "Status",
+    "workspaceHint": "Alterações aprovadas revisam a planilha de valores sem reescrever seu histórico.",
+    "formHint": "Registre uma alteração de contrato aditiva ou dedutiva para aprovação independente.",
+    "cancel": "Cancelar"
   },
   "payApplications": {
-    "title": "Solicitações de pagamento", "applicationNumber": "Solicitação nº {number}", "retainage": "Retenção", "enterDraws": "Informar medição", "hideDraws": "Ocultar medição", "approve": "Aprovar", "createInvoice": "Criar fatura", "void": "Anular", "voidConfirm": "Anular a solicitação nº {number}? A medição e o histórico de auditoria serão preservados.", "item": "Item", "description": "Descrição", "workThisPeriod": "Trabalho do período", "materialsStored": "Materiais armazenados", "submit": "Enviar para aprovação", "submittedMessage": "Solicitação enviada para aprovação independente", "billedMessage": "Faturada {number} — valor atual {currentDue}, retenção {retainage}", "empty": "Nenhuma solicitação.", "periodEnding": "Fim do período", "newApplication": "Nova solicitação", "status": { "draft": "Rascunho", "submitted": "Enviada", "approved": "Aprovada", "invoiced": "Faturada", "posted": "Faturada", "void": "Anulada" }
+    "title": "Solicitações de pagamento", "applicationNumber": "Solicitação nº {number}", "retainage": "Retenção", "enterDraws": "Informar medição", "hideDraws": "Ocultar medição", "approve": "Aprovar", "createInvoice": "Criar fatura", "void": "Anular", "voidConfirm": "Anular a solicitação nº {number}? A medição e o histórico de auditoria serão preservados.", "item": "Item", "description": "Descrição", "workThisPeriod": "Trabalho do período", "materialsStored": "Materiais armazenados", "submit": "Enviar para aprovação", "submittedMessage": "Solicitação enviada para aprovação independente", "billedMessage": "Faturada {number} — valor atual {currentDue}, retenção {retainage}", "empty": "Nenhuma solicitação.", "periodEnding": "Fim do período", "newApplication": "Nova solicitação", "status": { "draft": "Rascunho", "submitted": "Enviada", "approved": "Aprovada", "invoiced": "Faturada", "posted": "Faturada", "void": "Anulada" },
+    "application": "Solicitação",
+    "workspaceHint": "Cada solicitação avança da entrada de medição pela aprovação até a fatura de cliente vinculada.",
+    "newHint": "Inicie a próxima solicitação acumulada para o período de faturamento deste projeto.",
+    "drawHint": "Informe a atividade de faturamento acumulada para o período encerrado em {periodEnd}.",
+    "statusLabel": "Status",
+    "invoice": "Fatura",
+    "openInvoice": "Fatura em aberto",
+    "amount": "Valor",
+    "create": "Criar",
+    "cancel": "Cancelar"
   },
-  "retainage": { "notConfigured": "Nenhuma conta de retenções a receber está configurada; o faturamento com retenção ficará bloqueado até sua configuração nas contas de controle.", "title": "Liberar retenção", "description": "Fatura a retenção mantida como contas a receber. Mantida: {held}", "amount": "Valor", "release": "Liberar", "createdMessage": "Fatura de liberação {number} no valor de {amount} criada" }
+  "retainage": { "notConfigured": "Nenhuma conta de retenções a receber está configurada; o faturamento com retenção ficará bloqueado até sua configuração nas contas de controle.", "title": "Liberar retenção", "description": "Fatura a retenção mantida como contas a receber. Mantida: {held}", "amount": "Valor", "release": "Liberar", "createdMessage": "Fatura de liberação {number} no valor de {amount} criada",
+    "periodEnding": "Fim do período",
+    "heldLabel": "Retenção mantida",
+    "workspaceHint": "Libere os valores retidos por meio de uma fatura de cliente controlada quando o contrato permitir.",
+    "cancel": "Cancelar"
+  }
 }

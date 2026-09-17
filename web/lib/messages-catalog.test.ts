@@ -594,6 +594,61 @@ test('admin user invite copy is present in every locale and translated', () => {
   }
 })
 
+test('project billing (applications) copy is present in every locale and translated', () => {
+  // The project Billing tabs (F-t03-012) render these keys; a missing key
+  // falls back to English on screen.
+  const keys = [
+    'applications.changeOrders.cancel',
+    'applications.changeOrders.formHint',
+    'applications.changeOrders.statusLabel',
+    'applications.changeOrders.workspaceHint',
+    'applications.payApplications.amount',
+    'applications.payApplications.application',
+    'applications.payApplications.cancel',
+    'applications.payApplications.create',
+    'applications.payApplications.drawHint',
+    'applications.payApplications.invoice',
+    'applications.payApplications.newHint',
+    'applications.payApplications.openInvoice',
+    'applications.payApplications.statusLabel',
+    'applications.payApplications.workspaceHint',
+    'applications.retainage.cancel',
+    'applications.retainage.heldLabel',
+    'applications.retainage.periodEnding',
+    'applications.retainage.workspaceHint',
+    'applications.sov.cancel',
+    'applications.sov.formHint',
+    'applications.sov.incomeAccount',
+    'applications.sov.workspaceHint',
+    'applications.workspace.sectionsAria',
+  ] as const
+  // "Status" is the correct table header in German and Portuguese too —
+  // identical to English by linguistic fact, not by paste.
+  const identicalByFact = new Set([
+    'de:applications.changeOrders.statusLabel',
+    'de:applications.payApplications.statusLabel',
+    'pt-BR:applications.changeOrders.statusLabel',
+    'pt-BR:applications.payApplications.statusLabel',
+  ])
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      if (identicalByFact.has(`${locale}:${key}`)) {
+        assert.equal(value, 'Status', `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+  }
+})
+
 test('Portuguese fixed-asset tax pool uses the reviewed regime label', () => {
   const catalog = flattenCatalog('pt-BR')
 
