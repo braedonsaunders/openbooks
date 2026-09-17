@@ -1221,6 +1221,7 @@
     "empty": "Aucune activité de projet sur cette période.",
     "searchPlaceholder": "Rechercher des clients ou des projets…",
     "noCustomer": "Client non attribué",
+    "unassignedProject": "Non attribué",
     "expandCustomer": "Développer {customer}",
     "collapseCustomer": "Réduire {customer}",
     "projectScope": "Projets",

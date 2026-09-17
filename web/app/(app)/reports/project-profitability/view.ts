@@ -11,6 +11,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { dimensionOptions, projectProfitability, projectProfitabilityCustomerOptions } from '../../../../lib/reports'
+import { isUnassignedProjectGroup } from '../../../../lib/reports/projects'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, REPORT_PARAM_KEYS, toSearchParams } from '../../../../lib/report-filters'
@@ -141,7 +142,37 @@ export async function loadProjectProfitability(
     }
   }
 
+  // Metric cells with no drill target render as plain text (see ValueCells).
+  // The Unassigned tie-out row cannot drill or link: a project-is-null scope
+  // is expressible in neither the drill URL nor the P&L project filter.
+  const noDrills: ProjectProfitabilityGroup['drills'] = {
+    revenue: null,
+    cogs: null,
+    grossProfit: null,
+    expenses: null,
+    net: null,
+    margin: null,
+    hours: null,
+  }
   const groups: ProjectProfitabilityGroup[] = result.customers.map((customer) => {
+    if (isUnassignedProjectGroup(customer)) {
+      const name = t('projectProfitability.unassignedProject')
+      return {
+        key: 'unassigned-project',
+        name,
+        expandLabel: t('projectProfitability.expandCustomer', { customer: name }),
+        collapseLabel: t('projectProfitability.collapseCustomer', { customer: name }),
+        values: customer.totals,
+        drills: noDrills,
+        projects: customer.rows.map((project) => ({
+          id: project.projectId,
+          name,
+          pnlHref: null,
+          values: project,
+          drills: noDrills,
+        })),
+      }
+    }
     const name = customer.customerName ?? t('projectProfitability.noCustomer')
     const scope = customer.customerId
       ? { customerId: customer.customerId }

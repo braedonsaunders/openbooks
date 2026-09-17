@@ -93,7 +93,9 @@ export {
 } from "./reports/transaction-detail";
 
 export {
+  UNASSIGNED_PROJECT_ID,
   groupProjectProfitabilityRows,
+  isUnassignedProjectGroup,
   projectProfitability,
   projectProfitabilityCustomerOptions,
   type ProjectProfitCustomerGroup,
