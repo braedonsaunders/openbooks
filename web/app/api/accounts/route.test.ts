@@ -152,7 +152,8 @@ const mockSources = new Map<string, string>([
        state.loadAccountCalls += 1
        if (!state.account || state.account.id !== id || state.account.org_id !== orgId) return null
        return { id: state.account.id, name: state.account.name, type: state.account.type }
-     }`,
+     }
+     export async function orgBaseCurrency() { return 'USD' }`,
   ],
   [
     "mock:schema",
