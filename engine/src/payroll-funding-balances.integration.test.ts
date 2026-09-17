@@ -24,17 +24,19 @@ async function postFundingJournal(
   bankAmount: string,
   label: string,
   bookId?: string,
+  reversesEntryId?: string,
 ): Promise<string> {
   const entryId = randomUUID();
   const offsetAmount = bankAmount.startsWith("-") ? bankAmount.slice(1) : `-${bankAmount}`;
   await db.execute(sql`
     insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-       period_id, memo, status, origin, created_by, updated_by)
+       period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
     values
       (${entryId}, ${org.orgId}, ${bookId ?? org.bookId}, ${org.subsidiaryId},
        ${`FUND-${label}-${entryId.slice(0, 8)}`}, ${org.date}, ${org.periodId},
-       ${`Funding balance ${label}`}, 'draft', 'manual', ${actorId}, ${actorId})
+       ${`Funding balance ${label}`}, 'draft', 'manual', ${reversesEntryId ?? null},
+       ${actorId}, ${actorId})
   `);
   await db.execute(sql`
     insert into journal_lines
@@ -80,8 +82,10 @@ test("funding nets a voided transfer instead of counting only its reversal (F-t0
   try {
     const actor = await createScratchUser(org.orgId, "Payroll controller", "admin");
     const original = await postFundingJournal(org, actor, "5000", "transfer");
+    // 0166/0168 require a posted mirror in the same book before the original
+    // may flip to reversed. Post the void first, then retire the original.
+    await postFundingJournal(org, actor, "-5000", "transfer-void", undefined, original);
     await db.execute(sql`update journal_entries set status = 'reversed' where id = ${original} and org_id = ${org.orgId}`);
-    await postFundingJournal(org, actor, "-5000", "transfer-void");
 
     // The ledger nets the void pair to zero; funding must read the same.
     assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
