@@ -61,7 +61,7 @@
     "customerSigned": "顧客署名済み",
     "customerUnsigned": "顧客署名なし",
     "selectAll": "すべて選択",
-    "ticketCount": "{count} 件",
+    "ticketCount": "{count, plural, one {# 件} other {# 件}}",
     "type": {
       "progress": "進捗",
       "final": "最終"
