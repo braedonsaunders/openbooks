@@ -3121,3 +3121,80 @@ test('admin copy ships translated in de and ja (i2)', () => {
     )
   }
 })
+
+test('payroll copy ships translated in ja, zh and pt-BR', () => {
+  // i7: the payroll namespace (1074 keys) rendered English in ja/zh/pt-BR
+  // (only 226 keys translated each). Every leaf must exist, keep its ICU
+  // placeholders and plural/select arms, and differ from English except for
+  // reviewed identicals — placeholder-only templates, statutory codes and
+  // genuine cognates — pinned to the exact term.
+  const I7_IDENTICAL_BY_FACT = new Set([
+    'ja:payroll.filings.run.title|{label}',
+    'ja:payroll.filings.slip.description|{label} · {year}',
+    'ja:payroll.profiles.fields.sin|SIN / SSN',
+    'ja:payroll.register.cppFica|CPP / FICA',
+    'ja:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
+    'ja:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
+    'ja:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
+    'ja:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+    'zh:payroll.filings.run.title|{label}',
+    'zh:payroll.filings.slip.description|{label} · {year}',
+    'zh:payroll.profiles.fields.sin|SIN / SSN',
+    'zh:payroll.register.cppFica|CPP / FICA',
+    'zh:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
+    'zh:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
+    'zh:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
+    'zh:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+    'pt-BR:payroll.columns.status|Status',
+    'pt-BR:payroll.entitlements.hoursSuffix|h',
+    'pt-BR:payroll.filings.run.title|{label}',
+    'pt-BR:payroll.filings.slip.description|{label} · {year}',
+    'pt-BR:payroll.paymentMethod.cheque|Cheque',
+    'pt-BR:payroll.profiles.columns.status|Status',
+    'pt-BR:payroll.profiles.fields.sin|SIN / SSN',
+    'pt-BR:payroll.profiles.paymentMethod.cheque|Cheque',
+    'pt-BR:payroll.register.cppFica|CPP / FICA',
+    'pt-BR:payroll.settingsPage.derivedPreview.total|Total',
+    'pt-BR:payroll.settingsPage.workSchedules.columns.status|Status',
+    'pt-BR:payroll.wizard.readiness.codes.setup.statutoryRate|{detail}',
+    'pt-BR:payroll.wizard.readiness.codes.setup.taxYear|{detail}',
+    'pt-BR:payroll.wizard.readiness.codes.statutory.rateUnconfigured|{detail}',
+    'pt-BR:payroll.wizard.readiness.codes.statutory.taxYear|{detail}',
+    'pt-BR:payroll.workSchedules.columns.status|Status',
+  ])
+  const I7_SOURCE = flattenCatalog('en')
+  const I7_WANTED = [...I7_SOURCE.keys()].filter((key) => key.startsWith('payroll.'))
+  assert.equal(I7_WANTED.length, 1074, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  for (const key of I7_WANTED) {
+    const english = I7_SOURCE.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  const I7_tokens = (value: string): Set<string> =>
+    new Set(value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
+  const I7_arms = (value: string): string[] => value.match(/, +(plural|select)/g) ?? []
+  for (const locale of ['ja', 'zh', 'pt-BR']) {
+    const I7_catalog = flattenCatalog(locale)
+    for (const key of I7_WANTED) {
+      const value = I7_catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...I7_IDENTICAL_BY_FACT].find((entry) => entry.startsWith(`${locale}:${key}|`))
+      if (identical) {
+        assert.equal(value, identical.split('|')[1], `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, I7_SOURCE.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const I7_drift = I7_WANTED.filter((key) => {
+      const expected = I7_tokens(I7_SOURCE.get(key) ?? '')
+      const actual = I7_tokens(I7_catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(I7_drift, [], `${locale} payroll translations drop or rename ICU placeholders`)
+    const I7_armsDrift = I7_WANTED.filter((key) => {
+      const expected = I7_arms(I7_SOURCE.get(key) ?? '').join(',')
+      const actual = I7_arms(I7_catalog.get(key) ?? '').join(',')
+      return expected !== actual
+    })
+    assert.deepEqual(I7_armsDrift, [], `${locale} payroll translations drop ICU plural/select arms`)
+  }
+})
