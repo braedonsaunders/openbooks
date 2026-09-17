@@ -18,7 +18,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/test-fixtures.ts"
 );
@@ -50,6 +50,9 @@ interface Fixture {
   versionId: string;
 }
 
+// Callers run fixture() under withBypassContext: importing ./documents.ts
+// pulls in the web request-org resolver, which denies every unscoped query
+// under pooled RLS (bare setup dies with 42501).
 async function fixture(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actor = await createScratchUser(org.orgId, "Entry allocation keeper", "entry_alloc_keeper");
@@ -98,26 +101,33 @@ async function fixture(): Promise<Fixture> {
   return { org, actor, expenseAccount, deptSource, deptA, deptB, ruleId, versionId };
 }
 
+// These helpers run in the scratch org's scope: the edit service and its
+// readers issue bare queries with explicit org predicates, which pooled RLS
+// denies outside an explicit scope (reads see zero rows).
 async function draftBill(f: Fixture, number: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
-    values (${id},${f.org.orgId},'vendor_bill','draft',${number},${f.org.subsidiaryId},${f.org.vendorId},${f.org.date},'CAD','0','0','0',${f.actor})`);
-  return id;
+  return withOrgContext(f.org.orgId, async () => {
+    const id = randomUUID();
+    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+      values (${id},${f.org.orgId},'vendor_bill','draft',${number},${f.org.subsidiaryId},${f.org.vendorId},${f.org.date},'CAD','0','0','0',${f.actor})`);
+    return id;
+  });
 }
 
 async function edit(f: Fixture, id: string, patch: Parameters<typeof applyDocumentEdit>[2]): Promise<void> {
-  const current = await loadDocumentEditCurrent(id, f.org.orgId);
-  assert.ok(current);
-  await applyDocumentEdit(
-    id,
-    current,
-    { ...patch, expectedUpdatedAt: current.updatedAt },
-    { orgId: f.org.orgId, userId: f.actor, source: "api" },
-  );
+  await withOrgContext(f.org.orgId, async () => {
+    const current = await loadDocumentEditCurrent(id, f.org.orgId);
+    assert.ok(current);
+    await applyDocumentEdit(
+      id,
+      current,
+      { ...patch, expectedUpdatedAt: current.updatedAt },
+      { orgId: f.org.orgId, userId: f.actor, source: "api" },
+    );
+  });
 }
 
 async function storedLines(f: Fixture, id: string) {
-  return (
+  return withOrgContext(f.org.orgId, async () => (
     await db.execute<{
       id: string;
       lineNumber: number;
@@ -136,7 +146,7 @@ async function storedLines(f: Fixture, id: string) {
         from document_lines where document_id = ${id} and org_id = ${f.org.orgId}
        order by line_number
     `)
-  ).rows;
+  ).rows);
 }
 
 function sumAmounts(amounts: string[]): bigint {
@@ -151,7 +161,7 @@ function sumAmounts(amounts: string[]): bigint {
 }
 
 test("a bill line coded to a matching department explodes on save with exact children", { skip: !DB }, async () => {
-  const f = await fixture();
+  const f = await withBypassContext(() => fixture());
   try {
     const id = await draftBill(f, "ENTRY-AUTO-1");
     await edit(f, id, {
@@ -181,17 +191,20 @@ test("a bill line coded to a matching department explodes on save with exact chi
     }
     const plain = lines.find((l) => l.groupId === null)!;
     assert.equal(plain.amount, "25.0000");
-    const doc = await db.execute<{ total: string }>(
-      sql`select total::text as total from documents where id = ${id} and org_id = ${f.org.orgId}`,
-    );
+    const { doc, lineage } = await withOrgContext(f.org.orgId, async () => {
+      const doc = await db.execute<{ total: string }>(
+        sql`select total::text as total from documents where id = ${id} and org_id = ${f.org.orgId}`,
+      );
+      const lineage = (
+        await db.execute<{ ruleId: string; amount: string; targetId: string | null; sourceId: string | null }>(sql`
+          select rule_id as "ruleId", amount::text as amount,
+                 target_document_line_id as "targetId", source_document_line_id as "sourceId"
+            from allocation_lineage where org_id = ${f.org.orgId} and document_id = ${id}
+        `)
+      ).rows;
+      return { doc, lineage };
+    });
     assert.equal(doc.rows[0]?.total, "125.0000");
-    const lineage = (
-      await db.execute<{ ruleId: string; amount: string; targetId: string | null; sourceId: string | null }>(sql`
-        select rule_id as "ruleId", amount::text as amount,
-               target_document_line_id as "targetId", source_document_line_id as "sourceId"
-          from allocation_lineage where org_id = ${f.org.orgId} and document_id = ${id}
-      `)
-    ).rows;
     assert.equal(lineage.length, 2);
     for (const row of lineage) {
       assert.equal(row.ruleId, f.ruleId);
@@ -199,7 +212,7 @@ test("a bill line coded to a matching department explodes on save with exact chi
       assert.equal(row.sourceId, null);
     }
     // The drawer payload round-trips the stamps plus the rule name.
-    const loaded = await loadDocument(id, f.org.orgId);
+    const loaded = await withOrgContext(f.org.orgId, () => loadDocument(id, f.org.orgId));
     const childRows = (loaded?.lines as Record<string, unknown>[]).filter((l) => l.distribution_group_id !== null);
     assert.equal(childRows.length, 2);
     for (const row of childRows) {
@@ -207,12 +220,12 @@ test("a bill line coded to a matching department explodes on save with exact chi
       assert.equal(row.distribution_locked, false);
     }
   } finally {
-    await dropScratchOrg(f.org.orgId);
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
 
 test("header-default dims drive the automatic match when the line leaves them blank", { skip: !DB }, async () => {
-  const f = await fixture();
+  const f = await withBypassContext(() => fixture());
   try {
     const id = await draftBill(f, "ENTRY-HEADER-1");
     await edit(f, id, {
@@ -224,12 +237,12 @@ test("header-default dims drive the automatic match when the line leaves them bl
     assert.ok(lines.every((l) => l.groupId !== null));
     assert.equal(sumAmounts(lines.map((l) => l.amount)), sumAmounts(["80.0000"]));
   } finally {
-    await dropScratchOrg(f.org.orgId);
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
 
 test("re-save regenerates an unlocked group on sum change but keeps a locked one", { skip: !DB }, async () => {
-  const f = await fixture();
+  const f = await withBypassContext(() => fixture());
   try {
     const id = await draftBill(f, "ENTRY-REGEN-1");
     await edit(f, id, {
@@ -268,12 +281,12 @@ test("re-save regenerates an unlocked group on sum change but keeps a locked one
     assert.ok(locked.every((l) => l.locked));
     assert.ok(locked.every((l) => l.groupId === groupId));
   } finally {
-    await dropScratchOrg(f.org.orgId);
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
 
 test("un-split collapses a group to one line at the first child's coordinates", { skip: !DB }, async () => {
-  const f = await fixture();
+  const f = await withBypassContext(() => fixture());
   try {
     const id = await draftBill(f, "ENTRY-UNSPLIT-1");
     await edit(f, id, {
@@ -298,33 +311,35 @@ test("un-split collapses a group to one line at the first child's coordinates", 
     assert.equal(collapsed[0]!.groupId, null);
     assert.equal(collapsed[0]!.ruleId, null);
   } finally {
-    await dropScratchOrg(f.org.orgId);
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
 
 test("an explicit distributionKey explodes a manual rule and bad keys fail closed", { skip: !DB }, async () => {
-  const f = await fixture();
+  const f = await withBypassContext(() => fixture());
   const manualRuleId = randomUUID();
   const manualVersionId = randomUUID();
-  await db.execute(sql`insert into allocation_rules
-    (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
-    values (${manualRuleId}, ${f.org.orgId}, 'manual-pick', 'Manual pick', 'entry', 10, true, false, '{}'::jsonb)`);
-  await db.execute(sql`insert into allocation_rule_versions
-    (id, org_id, rule_id, version_no, status, effective_from, effective_to, book_scope, book_ids,
-     document_kinds, account_scope, dimension_filters, apply_policy, source_measure, basis_kind,
-     basis_config, target_kind, dynamic_target, impact, residual_policy, solve_method, run_policy,
-     run_offset_days, custom)
-    values (${manualVersionId}, ${f.org.orgId}, ${manualRuleId}, 1, 'draft', '2026-01-01', null, 'primary', '[]'::jsonb,
-     null, '{"kind":"any"}'::jsonb, '{}'::jsonb, 'manual', 'period_activity', 'fixed_percent',
-     '{}'::jsonb, 'explicit', '{}'::jsonb, 'reclass', 'largest_share', 'sequential', 'manual',
-     0, '{}'::jsonb)`);
-  await db.execute(sql`insert into allocation_rule_targets
-    (id, org_id, version_id, sequence, department_id, fixed_percent, extra_dims, is_remainder, custom)
-    values (${randomUUID()}, ${f.org.orgId}, ${manualVersionId}, 0, ${f.deptA}, '100', '{}'::jsonb, false, '{}'::jsonb)`);
-  await db.execute(sql`update allocation_rule_versions set status = 'published', definition_hash = 'entry-test-hash-manual'
-    where id = ${manualVersionId} and org_id = ${f.org.orgId}`);
-  await db.execute(sql`update allocation_rules set current_version_id = ${manualVersionId}
-    where id = ${manualRuleId} and org_id = ${f.org.orgId}`);
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into allocation_rules
+      (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
+      values (${manualRuleId}, ${f.org.orgId}, 'manual-pick', 'Manual pick', 'entry', 10, true, false, '{}'::jsonb)`);
+    await db.execute(sql`insert into allocation_rule_versions
+      (id, org_id, rule_id, version_no, status, effective_from, effective_to, book_scope, book_ids,
+       document_kinds, account_scope, dimension_filters, apply_policy, source_measure, basis_kind,
+       basis_config, target_kind, dynamic_target, impact, residual_policy, solve_method, run_policy,
+       run_offset_days, custom)
+      values (${manualVersionId}, ${f.org.orgId}, ${manualRuleId}, 1, 'draft', '2026-01-01', null, 'primary', '[]'::jsonb,
+       null, '{"kind":"any"}'::jsonb, '{}'::jsonb, 'manual', 'period_activity', 'fixed_percent',
+       '{}'::jsonb, 'explicit', '{}'::jsonb, 'reclass', 'largest_share', 'sequential', 'manual',
+       0, '{}'::jsonb)`);
+    await db.execute(sql`insert into allocation_rule_targets
+      (id, org_id, version_id, sequence, department_id, fixed_percent, extra_dims, is_remainder, custom)
+      values (${randomUUID()}, ${f.org.orgId}, ${manualVersionId}, 0, ${f.deptA}, '100', '{}'::jsonb, false, '{}'::jsonb)`);
+    await db.execute(sql`update allocation_rule_versions set status = 'published', definition_hash = 'entry-test-hash-manual'
+      where id = ${manualVersionId} and org_id = ${f.org.orgId}`);
+    await db.execute(sql`update allocation_rules set current_version_id = ${manualVersionId}
+      where id = ${manualRuleId} and org_id = ${f.org.orgId}`);
+  });
   try {
     const id = await draftBill(f, "ENTRY-KEY-1");
     await edit(f, id, {
@@ -349,9 +364,11 @@ test("an explicit distributionKey explodes a manual rule and bad keys fail close
     assert.equal((await storedLines(f, badId)).length, 0);
 
     const inactiveRuleId = randomUUID();
-    await db.execute(sql`insert into allocation_rules
-      (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
-      values (${inactiveRuleId}, ${f.org.orgId}, 'retired-pick', 'Retired pick', 'entry', 10, false, false, '{}'::jsonb)`);
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into allocation_rules
+        (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
+        values (${inactiveRuleId}, ${f.org.orgId}, 'retired-pick', 'Retired pick', 'entry', 10, false, false, '{}'::jsonb)`);
+    });
     await assert.rejects(
       edit(f, badId, {
         lines: [{ accountId: f.expenseAccount, amount: "30.0000", distributionKey: "retired-pick" }],
@@ -363,9 +380,11 @@ test("an explicit distributionKey explodes a manual rule and bad keys fail close
     );
 
     const postRuleId = randomUUID();
-    await db.execute(sql`insert into allocation_rules
-      (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
-      values (${postRuleId}, ${f.org.orgId}, 'post-pick', 'Post pick', 'post', 10, true, false, '{}'::jsonb)`);
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into allocation_rules
+        (id, org_id, key, name, mode, sort_order, is_active, is_system, custom)
+        values (${postRuleId}, ${f.org.orgId}, 'post-pick', 'Post pick', 'post', 10, true, false, '{}'::jsonb)`);
+    });
     await assert.rejects(
       edit(f, badId, {
         lines: [{ accountId: f.expenseAccount, amount: "30.0000", distributionKey: "post-pick" }],
@@ -376,31 +395,34 @@ test("an explicit distributionKey explodes a manual rule and bad keys fail close
         /only entry rules can split document lines/.test(error.message),
     );
   } finally {
-    await dropScratchOrg(f.org.orgId);
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
 
 test("posting a bill with exploded children writes journal lines per child", { skip: !DB }, async () => {
-  const f = await fixture();
+  const f = await withBypassContext(() => fixture());
   try {
     const id = await draftBill(f, "ENTRY-POST-1");
     await edit(f, id, {
       lines: [{ accountId: f.expenseAccount, amount: "100.0000", departmentId: f.deptSource }],
     });
-    assert.equal((await submitAndReleaseIfUngated("vendor_bill", id, f.actor)).autoApproved, true);
-    await postDocument(
-      id,
-      { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } },
-      { audit: { actorId: f.actor, source: "test" } },
-    );
-    const legs = (
-      await db.execute<{ accountId: string; departmentId: string | null; amount: string }>(sql`
-        select l.account_id as "accountId", l.department_id as "departmentId", l.amount::text as amount
-          from journal_lines l
-          join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
-         where d.org_id = ${f.org.orgId} and d.id = ${id}
-      `)
-    ).rows;
+    // Submit, posting, and the journal read run in the scratch org's scope.
+    const legs = await withOrgContext(f.org.orgId, async () => {
+      assert.equal((await submitAndReleaseIfUngated("vendor_bill", id, f.actor)).autoApproved, true);
+      await postDocument(
+        id,
+        { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } },
+        { audit: { actorId: f.actor, source: "test" } },
+      );
+      return (
+        await db.execute<{ accountId: string; departmentId: string | null; amount: string }>(sql`
+          select l.account_id as "accountId", l.department_id as "departmentId", l.amount::text as amount
+            from journal_lines l
+            join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
+           where d.org_id = ${f.org.orgId} and d.id = ${id}
+        `)
+      ).rows;
+    });
     const children = legs.filter((l) => l.accountId === f.expenseAccount);
     assert.equal(children.length, 2);
     assert.deepEqual(
@@ -409,51 +431,58 @@ test("posting a bill with exploded children writes journal lines per child", { s
     );
     assert.equal(sumAmounts(children.map((l) => l.amount)), sumAmounts(["100.0000"]));
   } finally {
-    await dropScratchOrg(f.org.orgId);
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
 
 test("feature off leaves distribution lines untouched", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await createScratchUser(org.orgId, "Entry allocation off keeper", "entry_alloc_off_keeper");
-    // No feature flags: the registry defaults (off) govern.
-    const id = randomUUID();
-    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
-      values (${id},${org.orgId},'vendor_bill','draft','ENTRY-OFF-1',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','0','0','0',${actor})`);
-    const current = await loadDocumentEditCurrent(id, org.orgId);
-    assert.ok(current);
-    await applyDocumentEdit(
-      id,
-      current,
-      {
-        expectedUpdatedAt: current.updatedAt,
-        lines: [
-          {
-            accountId: org.accounts.cogs,
-            amount: "100.0000",
-            description: "untouched",
-            distributionKey: "whatever",
-          },
-        ],
-      },
-      { orgId: org.orgId, userId: actor, source: "api" },
-    );
-    const lines = (
-      await db.execute<{ groupId: string | null; amount: string }>(sql`
-        select distribution_group_id as "groupId", amount::text as amount
-          from document_lines where document_id = ${id} and org_id = ${org.orgId}
-      `)
-    ).rows;
+    const { actor, id } = await withBypassContext(async () => {
+      const actor = await createScratchUser(org.orgId, "Entry allocation off keeper", "entry_alloc_off_keeper");
+      // No feature flags: the registry defaults (off) govern.
+      const id = randomUUID();
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+        values (${id},${org.orgId},'vendor_bill','draft','ENTRY-OFF-1',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','0','0','0',${actor})`);
+      return { actor, id };
+    });
+    // The edit and its verification reads run in the scratch org's scope.
+    const lines = await withOrgContext(org.orgId, async () => {
+      const current = await loadDocumentEditCurrent(id, org.orgId);
+      assert.ok(current);
+      await applyDocumentEdit(
+        id,
+        current,
+        {
+          expectedUpdatedAt: current.updatedAt,
+          lines: [
+            {
+              accountId: org.accounts.cogs,
+              amount: "100.0000",
+              description: "untouched",
+              distributionKey: "whatever",
+            },
+          ],
+        },
+        { orgId: org.orgId, userId: actor, source: "api" },
+      );
+      const lines = (
+        await db.execute<{ groupId: string | null; amount: string }>(sql`
+          select distribution_group_id as "groupId", amount::text as amount
+            from document_lines where document_id = ${id} and org_id = ${org.orgId}
+        `)
+      ).rows;
+      assert.equal(
+        (await db.execute<{ n: number }>(sql`select count(*)::int as n from allocation_lineage where org_id = ${org.orgId}`))
+          .rows[0]?.n,
+        0,
+      );
+      return lines;
+    });
     assert.equal(lines.length, 1);
     assert.equal(lines[0]!.groupId, null);
     assert.equal(lines[0]!.amount, "100.0000");
-    assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from allocation_lineage where org_id = ${org.orgId}`))
-        .rows[0]?.n,
-      0,
-    );
   } finally {
-    await dropScratchOrg(org.orgId);
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
