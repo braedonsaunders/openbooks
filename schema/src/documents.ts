@@ -125,7 +125,9 @@ export const documents = pgTable(
     classId: uuid("class_id"),
     /** Custom segment assignments keyed by segment_definitions.key. */
     extraDims: jsonb("extra_dims").notNull().default({}),
-    paymentCardId: uuid("payment_card_id"), // card_charge/refund docs
+    // Funding card: the card_charge/refund instrument, or the single corporate
+    // card backing the company_paid/personal lines of an expense_report (0171).
+    paymentCardId: uuid("payment_card_id"),
 
     // Operational document metadata promoted to typed columns:
     billingMethod: text("billing_method", { enum: ["time_and_materials", "fixed_price"] }),
@@ -264,6 +266,26 @@ export const documentLines = pgTable(
      * uses tax_amount as-is. Kept transparent so an override is auditable.
      */
     taxOverridden: boolean("tax_overridden").notNull().default(false),
+
+    /**
+     * Who fronted the money for this line (0171). Only expense_report lines
+     * read it today; every other kind posts legacy math and ignores it.
+     * out_of_pocket = the employee paid with their own funds, so the company
+     * owes a person (employee payable, AP aging). company_paid = a
+     * company-liability card paid, so the company owes the card issuer (card
+     * liability, never an employee payable, never AP aging). personal = a
+     * non-business charge on the company card: not an expense at all, the
+     * employee owes the company (employee receivable). NULL = settlement not
+     * recorded (all pre-0171 history — the columns never captured intent, so
+     * the migration refuses to guess); the repost path treats NULL as
+     * out_of_pocket. New expense-report lines must carry an explicit value
+     * (edit-API enforced). The card itself is the header payment_card_id —
+     * one card per report, by decision; a per-line override column may be
+     * added later without disturbing this one.
+     */
+    settlementType: text("settlement_type", {
+      enum: ["out_of_pocket", "company_paid", "personal"],
+    }),
 
     /**
      * Line-level subledger entity — the customer/vendor/employee this specific

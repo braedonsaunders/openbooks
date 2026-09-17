@@ -64,6 +64,7 @@ test(
         taxCollected: undefined,
         taxPaid: undefined,
         employeePayable: undefined,
+        employeeReceivable: undefined,
       });
     } finally {
       await dropScratchOrg(org.orgId);

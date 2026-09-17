@@ -21,6 +21,11 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
     "liability_current_other",
   ],
   employeePayable: ["liability_payable", "liability_current_other"],
+  // Personal charges on a company card are not an expense: the employee owes
+  // the company. This is the debit side of that receivable (0171). A plain
+  // asset_receivable account keeps the balance inside the AR control family;
+  // asset_current_other keeps it visible without entering AR aging.
+  employeeReceivable: ["asset_receivable", "asset_current_other"],
   fxUnrealizedGainLoss: ["income", "income_other", "expense", "expense_other"],
   fxRealizedGainLoss: ["income", "income_other", "expense", "expense_other"],
   retainagePayable: [
@@ -190,7 +195,7 @@ export async function loadRequiredControlAccounts(
   orgId: string,
 ): Promise<
   Required<Pick<OrgControlAccounts, "ar" | "ap" | "bank">> &
-    Pick<OrgControlAccounts, "taxCollected" | "taxPaid" | "employeePayable">
+    Pick<OrgControlAccounts, "taxCollected" | "taxPaid" | "employeePayable" | "employeeReceivable">
 > {
   const c = await loadControlAccounts(orgId);
   if (!c.ar || !c.ap || !c.bank) {
@@ -205,5 +210,6 @@ export async function loadRequiredControlAccounts(
     taxCollected: c.taxCollected,
     taxPaid: c.taxPaid,
     employeePayable: c.employeePayable,
+    employeeReceivable: c.employeeReceivable,
   };
 }
