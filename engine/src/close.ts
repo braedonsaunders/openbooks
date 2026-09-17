@@ -851,61 +851,81 @@ export async function generateAccountingPeriods(
   if (!calendar) throw new CloseError("active fiscal calendar not found");
   const periods = generatedPeriods(calendar, fiscalYear);
 
+  type ExistingPeriod = {
+    id: string;
+    name: string;
+    starts_on: string;
+    ends_on: string;
+    is_adjustment: boolean;
+    has_entries: boolean;
+  };
+  const loadExisting = (runner: { execute: typeof db.execute }, number: number) =>
+    runner.execute<ExistingPeriod>(sql`
+      select p.id, p.name, p.starts_on, p.ends_on, p.is_adjustment,
+             exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
+        from accounting_periods p
+       where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
+         and p.fiscal_year = ${fiscalYear} and p.period_number = ${number}`)
+      .then((found) => found.rows[0]);
+
+  // Phase 1 — extend forward: missing months are created (with open locks)
+  // in their own transaction so a blocked re-date below can never roll them
+  // back. Extending the calendar must not depend on regenerating history.
   let created = 0;
+  await db.transaction(async (tx) => {
+    for (const period of periods) {
+      if (await loadExisting(tx, period.number)) continue;
+      const inserted = (await tx.execute<{ id: string }>(sql`
+        insert into accounting_periods
+          (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on,
+           is_adjustment, created_by, updated_by)
+        values (${orgId}, ${calendarId}, ${fiscalYear}, ${period.number}, ${period.name},
+                ${period.startsOn}, ${period.endsOn}, ${period.adjustment}, ${actorId}, ${actorId})
+        returning id`));
+      const books = (await tx.execute<{ id: string }>(sql`
+        select id from accounting_books where org_id = ${orgId} and is_active`));
+      for (const book of books.rows) {
+        for (const module of CLOSE_MODULES) {
+          await tx.execute(sql`
+            insert into period_locks (org_id, period_id, book_id, module, state, created_by, updated_by)
+            values (${orgId}, ${inserted.rows[0]!.id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
+            on conflict (org_id, period_id, book_id, subsidiary_id, module) do nothing`);
+        }
+      }
+      created++;
+    }
+  });
+
+  // Phase 2 — reconcile drift on existing months. Only a boundary change
+  // (dates/adjustment-ness, what posted activity was booked against) is a
+  // regeneration, and it stays refused while entries exist. A bare name
+  // drift (seeded `2026-05` vs canonical `P05 FY2026`) renames freely when
+  // nothing posted, and is left alone — never an error — once it has.
   let updated = 0;
   await db.transaction(async (tx) => {
     for (const period of periods) {
-      const existing = (await tx.execute<{
-          id: string;
-          name: string;
-          starts_on: string;
-          ends_on: string;
-          is_adjustment: boolean;
-          has_entries: boolean;
-        }>(sql`
-        select p.id, p.name, p.starts_on, p.ends_on, p.is_adjustment,
-               exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
-          from accounting_periods p
-         where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
-           and p.fiscal_year = ${fiscalYear} and p.period_number = ${period.number}`));
-      const row = existing.rows[0];
-      if (!row) {
-        const inserted = (await tx.execute<{ id: string }>(sql`
-          insert into accounting_periods
-            (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on,
-             is_adjustment, created_by, updated_by)
-          values (${orgId}, ${calendarId}, ${fiscalYear}, ${period.number}, ${period.name},
-                  ${period.startsOn}, ${period.endsOn}, ${period.adjustment}, ${actorId}, ${actorId})
-          returning id`));
-        const books = (await tx.execute<{ id: string }>(sql`
-          select id from accounting_books where org_id = ${orgId} and is_active`));
-        for (const book of books.rows) {
-          for (const module of CLOSE_MODULES) {
-            await tx.execute(sql`
-              insert into period_locks (org_id, period_id, book_id, module, state, created_by, updated_by)
-              values (${orgId}, ${inserted.rows[0]!.id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
-              on conflict (org_id, period_id, book_id, subsidiary_id, module) do nothing`);
-          }
-        }
-        created++;
-        continue;
-      }
-      const changed =
-        row.name !== period.name ||
+      const row = await loadExisting(tx, period.number);
+      if (!row) continue;
+      const datesChanged =
         row.starts_on !== period.startsOn ||
         row.ends_on !== period.endsOn ||
         row.is_adjustment !== period.adjustment;
-      if (!changed) continue;
-      if (row.has_entries)
+      const renamed = row.name !== period.name;
+      if (!datesChanged && !renamed) continue;
+      if (datesChanged && row.has_entries)
         throw new CloseError(
           `${row.name} has ledger activity and its dates cannot be regenerated`,
         );
-      await tx.execute(sql`
-        update accounting_periods
-           set name = ${period.name}, starts_on = ${period.startsOn}, ends_on = ${period.endsOn},
-               is_adjustment = ${period.adjustment}, updated_at = now(), updated_by = ${actorId}
-         where id = ${row.id} and org_id = ${orgId}`);
-      updated++;
+      if (datesChanged || !row.has_entries) {
+        await tx.execute(sql`
+          update accounting_periods
+             set name = ${period.name}, starts_on = ${period.startsOn}, ends_on = ${period.endsOn},
+                 is_adjustment = ${period.adjustment}, updated_at = now(), updated_by = ${actorId}
+           where id = ${row.id} and org_id = ${orgId}`);
+        updated++;
+      }
+      // Otherwise: cosmetic name drift on a period with postings — the
+      // posted label stands, and generation still succeeds.
     }
   });
   return { created, updated, periods };
