@@ -15,6 +15,7 @@ import {
   cardOptions,
   dimensionOptions,
   loadDocument,
+  partyOptions,
   taxCodeOptions,
   taxGroupOptions,
 } from '../../../../lib/documents'
@@ -71,6 +72,7 @@ export interface BankingTransactionsDrawer {
   items: Record<string, unknown>[]
   cards: DocumentDrawerProps['cards']
   bankAccounts: DocumentDrawerProps['bankAccounts']
+  parties: DocumentDrawerProps['parties']
   subsidiaries: DocumentDrawerProps['subsidiaries']
   headerDefs: DocumentDrawerProps['headerDefs']
   lineDefs: DocumentDrawerProps['lineDefs']
@@ -153,6 +155,9 @@ export async function loadBankingTransactions(
             ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
             : options
         }),
+        // Payee options for the optional check payee (checks only — appended
+        // last so the indices above never shift).
+        openKind === 'check' ? partyOptions('vendor') : Promise.resolve([]),
       ])
     : null
   const resolvedForm = drawerOpen && pickers
@@ -195,6 +200,7 @@ export async function loadBankingTransactions(
           items: pickers[4],
           cards: pickers[5],
           bankAccounts: pickers[6],
+          parties: pickers[10] as DocumentDrawerProps['parties'],
           subsidiaries: pickers[9] ?? undefined,
           headerDefs: pickers[7] as DocumentDrawerProps['headerDefs'],
           lineDefs: pickers[8] as DocumentDrawerProps['lineDefs'],

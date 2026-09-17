@@ -1552,8 +1552,12 @@ export function DocumentDrawer({
     const a = (bankAccounts ?? accounts).find((x) => x.id === id) ?? accounts.find((x) => x.id === id)
     return a ? `${a.number ?? ''} ${a.name ?? ''}`.trim() : String(id)
   }
-  const partyLabel = config.partyRole === 'customer' ? tCommon('labels.customer') : tCommon('labels.vendor')
-  const partyPlaceholder = config.partyRole === 'customer' ? t('drawer.selectCustomerPlaceholder') : t('drawer.selectVendorPlaceholder')
+  // Header party picker role: a mandatory partyRole, else an opt-in payee
+  // (optionalPartyRole) that never blocks save/submit/post or the server edit
+  // guard — both key off config.partyRole alone.
+  const pickerPartyRole = config.partyRole ?? config.optionalPartyRole ?? null
+  const partyLabel = pickerPartyRole === 'customer' ? tCommon('labels.customer') : tCommon('labels.vendor')
+  const partyPlaceholder = pickerPartyRole === 'customer' ? t('drawer.selectCustomerPlaceholder') : t('drawer.selectVendorPlaceholder')
 
   // -- layout-driven path: header via <HeaderFields> + line columns from the
   //    resolved FormLayoutConfig. The hardcoded path is a defensive fallback
@@ -2114,10 +2118,10 @@ export function DocumentDrawer({
           </div>
         ) : null}
 
-        {config.kind === 'deposit' ? (
+        {config.fundingSource === 'bank' ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
-              <FieldLabel fieldName={t('drawer.depositTo')}>{t('drawer.depositTo')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
+              <FieldLabel fieldName={config.kind === 'deposit' ? t('drawer.depositTo') : t('drawer.fromAccount')}>{config.kind === 'deposit' ? t('drawer.depositTo') : t('drawer.fromAccount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
               {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={(customValues.controlAccountId as string) ?? ''} onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>}
             </div>
           </div>
@@ -2135,9 +2139,9 @@ export function DocumentDrawer({
         ) : (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {config.partyRole ? (
+              {pickerPartyRole ? (
                 <div className={`${field} lg:col-span-2`}>
-                  <FieldLabel fieldName={partyLabel}>{partyLabel}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
+                  <FieldLabel fieldName={partyLabel}>{partyLabel}{editable && config.partyRole ? <span className="text-red-500"> *</span> : null}</FieldLabel>
                   {editable ? (
                     <SearchSelect
                       options={(parties ?? []).map((p) => ({ value: p.id, label: p.display_name ?? '' }))}

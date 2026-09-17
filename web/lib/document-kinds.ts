@@ -31,6 +31,12 @@ export interface DocKindConfig {
   /** Party role for the header picker; null = no party field. */
   partyRole: 'vendor' | 'customer' | null
   /**
+   * Optional party role for the header picker (fallback form path). Unlike
+   * partyRole it never mandates a party: the submit gate and the server edit
+   * guard key off partyRole only, so anonymous documents stay valid.
+   */
+  optionalPartyRole?: 'vendor' | 'customer' | null
+  /**
    * Account-type filter for the line account picker; null = any active
    * non-summary account (preserves the original bill behaviour).
    */
@@ -85,15 +91,20 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
   },
+  // Check: optional vendor payee (partyRole stays null so anonymous expense
+  // checks stay valid — the engine settles AP open items via doc.partyId when
+  // present) and a 'bank' funding source. The drawer renders the payee picker
+  // from optionalPartyRole and the funding bank from fundingSource.
   check: {
     kind: 'check', closeModule: 'ap', family: 'bank', numberPrefix: 'CHK-', permNamespace: 'ap', i18n: 'banking',
-    partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
+    partyRole: null, optionalPartyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
   // Deposit (source platform "Make Deposits"): money IN to a chosen bank account,
   // crediting one or more source accounts (income, undeposited funds, clearing).
   // The destination bank is stored on doc.custom.controlAccountId and read by
   // the posting rule's controlOverride; falls back to the org default bank.
+  // Checks share the same fundingSource/bag contract for the funding bank.
   deposit: {
     kind: 'deposit', closeModule: 'banking', family: 'bank', numberPrefix: 'DEP-', permNamespace: 'gl', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
