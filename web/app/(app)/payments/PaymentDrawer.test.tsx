@@ -87,21 +87,55 @@ test('save and void share the surfaced-refusal pattern (no bare res.json, no wed
   }
 })
 
-test('the delete-payment confirm is fully localized (F-t04-011)', () => {
-  // The es delete dialog rendered hardcoded English copy with a mixed
-  // Cancelar/Delete button pair. Every user-facing string in remove()
-  // must come through the drawer catalog.
-  assert.match(source, /title: t\('drawer\.deleteConfirmTitle'\)/)
-  assert.match(source, /message: t\('drawer\.deleteConfirmBody'\)/)
-  assert.match(source, /confirmLabel: t\('drawer\.deleteConfirmAction'\)/)
-  assert.match(source, /toast\.success\(t\('drawer\.deleted'\)\)/)
+test('the delete-payment confirm resolves through the real catalogs in every locale (F-t04-011)', async () => {
+  // 57cba0006 passed t('drawer.deleteConfirmTitle') while t is already
+  // scoped to payments.drawer, so es rendered the raw doubled key
+  // payments.drawer.drawer.* plus MISSING_MESSAGE. This test composes the
+  // exact full key path the component resolves and walks it through the
+  // real per-locale catalogs (the same modules web/i18n/request.ts loads)
+  // with the same English overlay, so a reintroduced prefix fails here.
+  const scope = source.match(/const t = useTranslations\('([^']+)'\)/)?.[1]
+  assert.equal(scope, 'payments.drawer')
+  const removeBody = source.match(/async function remove\(\) \{([\s\S]*?)\n  \}/)?.[1]
+  assert.ok(removeBody, 'remove() must exist')
+  const keys = [...removeBody.matchAll(/\bt\(['"]([^'"]+)['"]/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]))
+  for (const key of ['deleteConfirmTitle', 'deleteConfirmBody', 'deleteConfirmAction', 'deleted', 'deleteFailed']) {
+    assert.ok(keys.includes(key), `remove() must resolve ${key} through the drawer scope`)
+  }
+  for (const key of keys) {
+    assert.ok(!key.includes('.'), `remove() must not nest a namespace under the drawer scope (got t('${key}'))`)
+  }
   assert.ok(!source.includes("'Delete this payment?'"), 'no hardcoded English confirm copy may remain')
-  for (const locale of ['en', 'es']) {
-    const catalog = JSON.parse(
-      readFileSync(new URL(`../../../messages/${locale}/payments.json`, import.meta.url), 'utf8'),
-    ) as { drawer: Record<string, string> }
-    for (const key of ['deleteConfirmTitle', 'deleteConfirmBody', 'deleteConfirmAction', 'deleted', 'deleteFailed']) {
-      assert.ok(catalog.drawer[key], `${locale} payments.drawer.${key} must exist`)
+  const { LOCALES } = await import('../../../i18n/config.ts')
+  const en = (await import('../../../messages/en/index.ts')).default as Messages
+  for (const { code: locale } of LOCALES) {
+    const overlay = (await import(`../../../messages/${locale}/index.ts`)).default as Messages
+    const messages = mergeOverEn(en, overlay)
+    for (const key of keys) {
+      const value = (messages.payments as Messages | undefined)?.drawer
+      const text = (value as Record<string, unknown> | undefined)?.[key]
+      assert.equal(
+        typeof text,
+        'string',
+        `${locale} must resolve payments.drawer.${key} (component calls t('${key}') under the drawer scope)`,
+      )
+      assert.ok((text as string).length > 0, `${locale} payments.drawer.${key} must not be empty`)
     }
   }
 })
+
+// Same Messages shape and overlay web/i18n/request.ts applies: a locale's
+// catalogs over the English source, so a lagging translation renders
+// English instead of a raw key. Kept local because request.ts itself pulls
+// next/headers via lib/locale and cannot load under node:test.
+type Messages = Record<string, unknown>
+
+function mergeOverEn(base: Messages, overlay: Messages): Messages {
+  const out: Messages = { ...base }
+  for (const [k, v] of Object.entries(overlay)) {
+    const cur = out[k]
+    out[k] =
+      v && typeof v === 'object' && cur && typeof cur === 'object' ? mergeOverEn(cur as Messages, v as Messages) : v
+  }
+  return out
+}
