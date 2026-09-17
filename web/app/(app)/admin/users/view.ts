@@ -22,11 +22,16 @@ import type { AdminUserRow } from './sections'
  */
 
 const BASE = '/admin/users'
-const SORTS = ['name', 'email', 'last_login'] as const
+const SORTS = ['name', 'email', 'last_login', 'last_sign_in'] as const
 const ORDER: Record<(typeof SORTS)[number], string> = {
   name: 'lower(u.name)',
   email: 'lower(u.email)',
   last_login: 'u.last_login_at',
+  // Alias: the column is labeled "Last sign-in", so sort=last_sign_in must
+  // order exactly like last_login. Unknown keys silently fall back to name
+  // ordering, which reads as nulls interleaved around sorted dates
+  // (F-t01-012) — never let a label-plausible key fall through.
+  last_sign_in: 'u.last_login_at',
 }
 
 export interface AdminUsersData {
