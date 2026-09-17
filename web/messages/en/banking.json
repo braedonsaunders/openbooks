@@ -878,6 +878,7 @@
     "uuidPlaceholder": "UUID",
     "stripePayloadLabel": "Balance transactions JSON array",
     "genericPayloadLabel": "Settlement JSON object",
+    "payloadShapeHint": "Each row needs id, type, amount in minor units, fee, net and currency — e.g. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Without a type the row cannot be classified.",
     "importDraft": "Import draft",
     "recentBatches": "Recent batches",
     "reversalDate": "Reversal date",

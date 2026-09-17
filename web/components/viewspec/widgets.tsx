@@ -2222,6 +2222,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       initialRows={
         (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>['initialRows']) ?? null
       }
+      initialSubsidiaries={
+        (props.initialSubsidiaries as ComponentProps<typeof PspSettlementsWorkspace>['initialSubsidiaries']) ?? null
+      }
     />
   ),
 

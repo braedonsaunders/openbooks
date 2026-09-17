@@ -46,7 +46,7 @@ registerHooks({
     if (specifier.endsWith("/lib/features") && context.parentURL?.includes("/api/psp/")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export async function isFeatureEnabled(){ return true; }",
+        url: "data:text/javascript,export async function isFeatureEnabled(){ return true; } export async function subsidiaryFeatureEnabled(){ return true; }",
       };
     }
     return next(specifier, context);
