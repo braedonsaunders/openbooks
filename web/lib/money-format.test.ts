@@ -69,6 +69,19 @@ test('decimal formatting preserves exact values without a currency symbol', () =
   )
 })
 
+// F-x6-001 item 5: ICU emits U+202F (narrow no-break space) as the fr
+// grouping separator, and Chromium renders it zero-width in the app's
+// system-ui stack (proven: identical pixel widths with and without it) —
+// so fr amounts read ungrouped ("110699,26") while the DOM stays correct.
+// The formatter must emit the universally rendered U+00A0 instead.
+test('fr grouping uses a visibly rendered separator, never U+202F', () => {
+  const fr = createMoneyFormatter('fr', 'CAD')
+  assert.equal(fr.money(110699.26), '110\u00a0699,26\u00a0$CA')
+  assert.ok(!fr.money(110699.26).includes('\u202f'), 'no narrow no-break space in money output')
+  assert.ok(!formatDecimal('fr', '110699.26').includes('\u202f'), 'no narrow no-break space in decimal output')
+  assert.equal(formatDecimal('fr', '110699.26'), '110\u00a0699,26')
+})
+
 test('repository money formatters never receive Number-coerced exact decimals', () => {
   const coercion = /\b(?:money|moneyCompact|m|fmt)\s*\(\s*Number\s*\(/g
   const violations = globSync('{app,components,lib}/**/*.{ts,tsx}', { cwd: webRoot })
