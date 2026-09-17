@@ -23,7 +23,7 @@
   "lastVisit": "Nouveautés depuis le {date}",
   "markSeen": "Marquer comme vu",
   "triage": {
-    "hint": "j/k naviguer · Entrée ouvrir · x sélectionner · a appliquer · d rejeter · s classer à examiner",
+    "hint": "j/k naviguer · Entrée ouvrir · x sélectionner · a appliquer (tiroir) · d rejeter (tiroir) · s classer à examiner",
     "selected": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
     "review": "Commencer l'examen",
     "resolve": "Résoudre",

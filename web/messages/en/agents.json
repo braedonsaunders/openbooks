@@ -23,7 +23,7 @@
   "lastVisit": "New since {date}",
   "markSeen": "Mark seen",
   "triage": {
-    "hint": "j/k move · Enter opens · x selects · a applies · d dismisses · s parks in review",
+    "hint": "j/k move · Enter opens · x selects · a applies (drawer) · d dismisses (drawer) · s parks in review",
     "selected": "{count, plural, one {# selected} other {# selected}}",
     "review": "Start review",
     "resolve": "Resolve",
