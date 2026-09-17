@@ -266,3 +266,173 @@ test("a statutory zero rate calculates exact zero tax", () => {
   assert.equal(result.components[0]!.ratePercent, "0.0000");
   assert.equal(result.components[0]!.taxAmount, "0.0000");
 });
+
+test("recoverable bounds reject below-zero and above-100 ratios, accept the edges", () => {
+  // The range guard is a strict < 0 / > 100 pair: a fully nonrecoverable
+  // "0" is legitimate input, while even one unit outside refuses.
+  assert.throws(
+    () => computeLineTaxes("100.0000", [code({ recoverablePercent: "-0.0001" })]),
+    TaxCalculationError,
+  );
+  assert.throws(
+    () => computeLineTaxes("100.0000", [code({ recoverablePercent: "100.0001" })]),
+    TaxCalculationError,
+  );
+  const zero = computeLineTaxes("100.0000", [code({ recoverablePercent: "0" })]);
+  assert.equal(zero.components[0]!.recoverableAmount, "0.0000");
+  assert.equal(zero.components[0]!.nonrecoverableAmount, "13.0000");
+});
+
+test("rounding scale accepts the full 0..4 range and refuses anything else", () => {
+  const r0 = computeLineTaxes("100.0000", [code({ roundingScale: 0 })]);
+  assert.equal(r0.components[0]!.taxAmount, "13.0000");
+  const r4 = computeLineTaxes("100.0000", [code({ roundingScale: 4 })]);
+  assert.equal(r4.components[0]!.taxAmount, "13.0000");
+  assert.throws(() => computeLineTaxes("100.0000", [code({ roundingScale: 5 })]), TaxCalculationError);
+  assert.throws(() => computeLineTaxes("100.0000", [code({ roundingScale: -1 })]), TaxCalculationError);
+});
+
+test("a zero-amount inclusive line extracts a zero net instead of refusing", () => {
+  const r = computeLineTaxes("0.0000", [code({ priceIncludesTax: true })]);
+  assert.equal(r.netAmount, "0.0000");
+  assert.equal(r.taxTotal, "0.0000");
+  assert.equal(r.total, "0.0000");
+});
+
+test("negative taxable amounts calculate the magnitude and reapply the sign", () => {
+  const r = computeLineTaxes("-100.0000", [code({ ratePercent: "10" })]);
+  assert.equal(r.inputAmount, "-100.0000");
+  assert.equal(r.netAmount, "-100.0000");
+  assert.equal(r.taxTotal, "-10.0000");
+  assert.equal(r.total, "-110.0000");
+  assert.equal(r.components[0]!.taxAmount, "-10.0000");
+  const negatedOverride = computeLineTaxes("-100.0000", [code({ ratePercent: "10" })], {
+    overridden: true,
+    taxAmount: "-12.0000",
+  });
+  assert.equal(negatedOverride.taxTotal, "-12.0000");
+  // A one-unit negative amount with a positive override is still a mismatch —
+  // the sign path is decided by strict negativity, not magnitude.
+  assert.throws(
+    () =>
+      computeLineTaxes("-0.0001", [code({ ratePercent: "10" })], {
+        overridden: true,
+        taxAmount: "5.0000",
+      }),
+    /same sign/,
+  );
+});
+
+test("a zero override on a negative line is not a sign mismatch", () => {
+  // The sign guard refuses strictly positive overrides; an exact zero carries
+  // no sign and flows into the magnitude path.
+  const r = computeLineTaxes("-100.0000", [code({ ratePercent: "10" })], {
+    overridden: true,
+    taxAmount: "0.0000",
+  });
+  assert.equal(r.taxTotal, "0.0000");
+});
+
+test("a zero-amount line takes the positive path, never the magnitude recursion", () => {
+  const z = computeLineTaxes("0.0000", [code({ ratePercent: "10" })]);
+  assert.equal(z.taxTotal, "0.0000");
+  assert.equal(z.total, "0.0000");
+});
+
+test("a manual override preserves the configured recovery ratio on zero-tax lines", () => {
+  // With no explicit ratio and equal zero amounts, the evidence heuristic is
+  // full recovery — not the zero-recovery guess the old equality check made.
+  const r = computeLineTaxes(
+    "100.0000",
+    [{ taxCodeId: "t", sequence: 1, ratePercent: "0" }],
+    { overridden: true, taxAmount: "5.0000" },
+  );
+  assert.equal(r.components[0]!.taxAmount, "5.0000");
+  assert.equal(r.components[0]!.recoverablePercent, "100.0000");
+  assert.equal(r.components[0]!.recoverableAmount, "5.0000");
+});
+
+test("a manual override scales partial recovery proportionally", () => {
+  const r = computeLineTaxes("100.0000", [code({ ratePercent: "10", recoverablePercent: "50" })], {
+    overridden: true,
+    taxAmount: "12.0000",
+  });
+  assert.equal(r.components[0]!.taxAmount, "12.0000");
+  assert.equal(r.components[0]!.recoverableAmount, "6.0000");
+  assert.equal(r.components[0]!.nonrecoverableAmount, "6.0000");
+});
+
+test("a manual override cannot drive a component negative, even by one unit", () => {
+  assert.throws(
+    () =>
+      computeLineTaxes("100.0000", [code({ ratePercent: "10" })], {
+        overridden: true,
+        taxAmount: "-0.0001",
+      }),
+    /cannot make a component negative/,
+  );
+  const zeroed = computeLineTaxes("100.0000", [code({ ratePercent: "10" })], {
+    overridden: true,
+    taxAmount: "0.0000",
+  });
+  assert.equal(zeroed.components[0]!.taxAmount, "0.0000");
+  assert.equal(zeroed.components[0]!.recoverableAmount, "0.0000");
+});
+
+test("price-inclusive extraction inverts an exclusive calculation with no residue flag", () => {
+  // An exact inversion leaves no rounding residue, so no component is marked
+  // overridden. Running the reconciler unconditionally would flag it.
+  const r = computeLineTaxes("110.0000", [code({ ratePercent: "10", priceIncludesTax: true })]);
+  assert.equal(r.netAmount, "100.0000");
+  assert.equal(r.taxTotal, "10.0000");
+  assert.equal(r.total, "110.0000");
+  assert.equal(r.overridden, false);
+});
+
+test("an unreachable inclusive gross parks a positive residue on the final component", () => {
+  // 104.0000 is unreachable at 10%-rounded-to-whole (nets 94/95 gross to
+  // 103/105). The search settles deterministically and the reconciler books
+  // the one-unit residue to the final included component, flagged overridden.
+  const r = computeLineTaxes("104.0000", [code({ ratePercent: "10", roundingScale: 0, priceIncludesTax: true })]);
+  assert.equal(r.netAmount, "94.9999");
+  assert.equal(r.taxTotal, "9.0001");
+  assert.equal(r.total, "104.0000");
+  assert.equal(r.overridden, true);
+});
+
+test("an unreachable inclusive gross parks a negative residue on the final component", () => {
+  // Mirror image: 104.9999 settles on net 95.0000 whose statutory whole-unit
+  // tax (10.0000) overshoots by one unit, so the residue adjusts downward.
+  const r = computeLineTaxes("104.9999", [code({ ratePercent: "10", roundingScale: 0, priceIncludesTax: true })]);
+  assert.equal(r.netAmount, "95.0000");
+  assert.equal(r.taxTotal, "9.9999");
+  assert.equal(r.total, "104.9999");
+  assert.equal(r.overridden, true);
+});
+
+test("the search never skips candidates when narrowing the inclusive net", () => {
+  // 148.0000 is unreachable at 10%-rounded-to-whole. Stepping the low bound
+  // by two instead of one converges past the closest net (134.9999, one unit
+  // away) onto 135.0000 (a full unit away) — same cross-foot, wrong split
+  // between income and tax. The search must advance one unit at a time.
+  const r = computeLineTaxes("148.0000", [code({ ratePercent: "10", roundingScale: 0, priceIncludesTax: true })]);
+  assert.equal(r.netAmount, "134.9999");
+  assert.equal(r.taxTotal, "13.0001");
+  assert.equal(r.total, "148.0000");
+  assert.equal(r.overridden, true);
+});
+
+test("the half-cent variance tolerance is exact at fifty units", () => {
+  assert.equal(taxVaries({ computed: "10.0000", overridden: true, taxAmount: "10.0050" }), false);
+  assert.equal(taxVaries({ computed: "10.0000", overridden: true, taxAmount: "10.0051" }), true);
+  assert.equal(taxVaries({ computed: "10.0000", overridden: false, taxAmount: "99.0000" }), false);
+});
+
+test("a line with no tax profile passes its amount through untouched", () => {
+  const r = computeLineTaxes("100.0000", []);
+  assert.equal(r.netAmount, "100.0000");
+  assert.equal(r.taxTotal, "0.0000");
+  assert.equal(r.total, "100.0000");
+  assert.deepEqual(r.components, []);
+  assert.equal(r.overridden, false);
+});
