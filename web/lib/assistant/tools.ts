@@ -23,7 +23,7 @@ import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/continuous-cl
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
-import { documentRevisionSql, isDocKindEnabled } from "../documents";
+import { documentRevisionCounterSql, isDocKindEnabled } from "../documents";
 import { isFeatureEnabled } from "../features";
 
 /**
@@ -399,7 +399,7 @@ const findDocuments: AssistantToolDef = {
     const rows = (await db.execute<any>(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
              d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
-             ${documentRevisionSql(sql.raw("d.updated_at"))} as "documentRevision",
+             ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
              p.id as party_id, p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -461,7 +461,7 @@ const getDocument: AssistantToolDef = {
     // A document outside the caller's legal-entity scope reads as missing —
     // the same indistinguishability the UI single-record routes give.
     const doc = (await db.execute<any>(sql`
-      select d.*, ${documentRevisionSql(sql.raw("d.updated_at"))} as "documentRevision",
+      select d.*, ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
              p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id

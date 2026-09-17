@@ -30,3 +30,11 @@ test('assistant financial tools keep canonical money strings', () => {
   assert.doesNotMatch(tools, /openingCash: num\(r\.openingCash\)/)
   assert.doesNotMatch(tools, /totalDebits: num\(r\.total_debits\)/)
 })
+
+test('assistant document reads project the revision counter the writers compare against', () => {
+  // 0167 made revision_seq the optimistic-concurrency token; a read that still
+  // projected the timestamp form would hand agents a token every write rejects.
+  const counterProjections = tools.match(/documentRevisionCounterSql\(sql\.raw\("d\.revision_seq"\)\)\} as "documentRevision"/g) ?? []
+  assert.equal(counterProjections.length, 2, 'find_documents and get_document both project revision_seq')
+  assert.doesNotMatch(tools, /documentRevisionSql\(sql\.raw\("d\.updated_at"\)\)/)
+})
