@@ -43,6 +43,34 @@
         "couldNotLoad": "Impossible de charger les immeubles",
         "actionFailed": "L'action a échoué"
       }
+    },
+    "propertyDrawer": {
+      "description": "Associez l’immeuble à sa personne morale, à son adresse et à ses comptes comptables.",
+      "code": "Code du bien",
+      "legalEntity": "Personne morale",
+      "propertyLocation": "Emplacement de l’immeuble",
+      "fixedAsset": "Immobilisation",
+      "rentIncomeAccount": "Compte de produits locatifs",
+      "camIncomeAccount": "Compte de produits de charges communes",
+      "depositLiability": "Dette de garantie",
+      "defaultDepositBank": "Banque de dépôt par défaut",
+      "street": "Rue",
+      "city": "Ville",
+      "region": "Province / État",
+      "postalCode": "Code postal",
+      "selectEntity": "Sélectionner une personne morale",
+      "notMapped": "Non associé",
+      "notOwned": "Non détenu / non lié",
+      "selectAccount": "Sélectionner un compte",
+      "selectLiability": "Sélectionner une dette",
+      "selectBank": "Sélectionner une banque"
+    },
+    "propertyTypes": {
+      "residential": "Résidentiel",
+      "commercial": "Commerce",
+      "mixedUse": "Mixte",
+      "industrial": "Industriel",
+      "other": "Autre"
     }
   },
   "roles": {

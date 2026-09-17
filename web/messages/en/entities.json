@@ -293,6 +293,34 @@
         "lateFeesAssessed": "Property late fees assessed",
         "rentBilled": "Property rent billed"
       }
+    },
+    "propertyDrawer": {
+      "description": "Connect the operational property to its legal entity, address, and posting accounts.",
+      "code": "Code",
+      "legalEntity": "Legal entity",
+      "propertyLocation": "Property location",
+      "fixedAsset": "Fixed asset",
+      "rentIncomeAccount": "Rent income account",
+      "camIncomeAccount": "CAM income account",
+      "depositLiability": "Deposit liability",
+      "defaultDepositBank": "Default deposit bank",
+      "street": "Street",
+      "city": "City",
+      "region": "Province / state",
+      "postalCode": "Postal code",
+      "selectEntity": "Select entity",
+      "notMapped": "Not mapped",
+      "notOwned": "Not owned / not linked",
+      "selectAccount": "Select account",
+      "selectLiability": "Select liability",
+      "selectBank": "Select bank"
+    },
+    "propertyTypes": {
+      "residential": "Residential",
+      "commercial": "Commercial",
+      "mixedUse": "Mixed use",
+      "industrial": "Industrial",
+      "other": "Other"
     }
   }
 }

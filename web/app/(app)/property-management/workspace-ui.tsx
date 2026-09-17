@@ -13,6 +13,19 @@ export type Option = {
   openBalance?: string;
 };
 
+/**
+ * Stored property-type codes with their catalog keys under
+ * `entities.propertyManagement.propertyTypes`. Shared by the create and
+ * detail drawers so both name types identically in every locale.
+ */
+export const PROPERTY_TYPE_OPTIONS = [
+  { value: "residential", key: "residential" },
+  { value: "commercial", key: "commercial" },
+  { value: "mixed_use", key: "mixedUse" },
+  { value: "industrial", key: "industrial" },
+  { value: "other", key: "other" },
+] as const;
+
 export function Metric({
   label,
   value,

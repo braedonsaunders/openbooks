@@ -43,6 +43,34 @@
         "couldNotLoad": "物件を読み込めませんでした",
         "actionFailed": "操作に失敗しました"
       }
+    },
+    "propertyDrawer": {
+      "description": "物件を法人、住所、転記勘定に結び付けます。",
+      "code": "コード",
+      "legalEntity": "法人",
+      "propertyLocation": "物件所在地",
+      "fixedAsset": "固定資産",
+      "rentIncomeAccount": "賃料収益勘定",
+      "camIncomeAccount": "共益費収益勘定",
+      "depositLiability": "預り保証金",
+      "defaultDepositBank": "既定の保証金預入銀行",
+      "street": "番地",
+      "city": "市区町村",
+      "region": "都道府県",
+      "postalCode": "郵便番号",
+      "selectEntity": "法人を選択",
+      "notMapped": "未割当",
+      "notOwned": "未所有 / 未連携",
+      "selectAccount": "勘定を選択",
+      "selectLiability": "負債を選択",
+      "selectBank": "銀行を選択"
+    },
+    "propertyTypes": {
+      "residential": "居住用",
+      "commercial": "商業用",
+      "mixedUse": "複合用途",
+      "industrial": "工業用",
+      "other": "その他"
     }
   },
   "roles": {

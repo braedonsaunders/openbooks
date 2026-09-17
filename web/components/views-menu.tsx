@@ -10,6 +10,7 @@ import { Button, Popover, cn } from '@openbooks/ui'
 import { buildHref, pickString } from '../lib/list-params'
 import { menuArrowKeys } from './menu-a11y'
 import type { ListViewRow } from '../lib/customization/resolve'
+import { displayListViewName } from '../lib/customization/display'
 
 /**
  * Saved-list-view picker for a record list page. Lists the views available to
@@ -90,7 +91,7 @@ export function ViewsMenu({
                 v.id === currentId && 'text-teal-700 dark:text-teal-300',
               )}
             >
-              <span className="flex-1 truncate">{v.name}</span>
+              <span className="flex-1 truncate">{displayListViewName(v.name, t('defaultName'))}</span>
               {v.scope === 'org' ? (
                 <span className="text-[10px] uppercase tracking-wide text-slate-400">{t('orgBadge')}</span>
               ) : null}

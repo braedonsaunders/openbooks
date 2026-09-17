@@ -43,6 +43,34 @@
         "couldNotLoad": "无法加载物业",
         "actionFailed": "操作失败"
       }
+    },
+    "propertyDrawer": {
+      "description": "将运营物业关联到法人、地址和记账科目。",
+      "code": "编码",
+      "legalEntity": "法人实体",
+      "propertyLocation": "物业位置",
+      "fixedAsset": "固定资产",
+      "rentIncomeAccount": "租金收入科目",
+      "camIncomeAccount": "公共区域维护费收入科目",
+      "depositLiability": "押金负债",
+      "defaultDepositBank": "默认押金银行",
+      "street": "街道",
+      "city": "城市",
+      "region": "省 / 州",
+      "postalCode": "邮政编码",
+      "selectEntity": "选择实体",
+      "notMapped": "未映射",
+      "notOwned": "非自有 / 未关联",
+      "selectAccount": "选择科目",
+      "selectLiability": "选择负债",
+      "selectBank": "选择银行"
+    },
+    "propertyTypes": {
+      "residential": "住宅",
+      "commercial": "商业",
+      "mixedUse": "混合用途",
+      "industrial": "工业",
+      "other": "其他"
     }
   },
   "roles": {
