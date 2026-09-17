@@ -832,6 +832,29 @@ export const NAV_SUBGROUPS: Record<string, { href: string; iconKey?: string }> =
 
 export const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
 
+/**
+ * Module roots that agent packs hand-built before resolving through this
+ * registry (e.g. "/ar/cockpit" shipped in collections findings and 404d).
+ * Findings persist their evidence hrefs, so old rows carry these paths
+ * forever — they resolve at render time instead of via a backfill.
+ */
+export const LEGACY_MODULE_HREFS: Record<string, string> = {
+  "/ar/cockpit": "ar",
+};
+
+/**
+ * Resolve a STORED evidence href through the registry. Legacy module roots
+ * map to the module's live href; every other string passes through
+ * untouched (deep links included); non-hrefs resolve to null.
+ */
+export function resolveStoredHref(stored: unknown): string | null {
+  if (typeof stored !== "string" || !stored.startsWith("/")) return null;
+  const path = stored.split("?")[0]!;
+  const legacyKey = LEGACY_MODULE_HREFS[stored] ?? LEGACY_MODULE_HREFS[path];
+  if (!legacyKey) return stored;
+  return MODULE_BY_KEY.get(legacyKey)?.href ?? stored;
+}
+
 /** Canonical scan order inside each workspace. Kept separate from the module
  * declarations so the information architecture is reviewable in one place. */
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {

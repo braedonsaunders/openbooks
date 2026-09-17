@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { resolveStoredHref } from "@openbooks/engine/src/modules/nav-registry.ts";
 import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
 import type { ContinuousCloseWorkItem } from "../../app/(app)/continuous-close/WorkItemDrawer";
 
@@ -26,6 +27,40 @@ type EvidenceRow = {
   source_id: string;
   data: Record<string, unknown> | null;
 };
+
+/**
+ * Findings persist their evidence hrefs, so rows written before a pack
+ * learned the nav registry carry dead module roots ("/ar/cockpit") forever.
+ * Resolve the summary href and any analysis citation hrefs through the
+ * registry at load — every consumer (both screens, the item endpoint, the
+ * assistant) renders what this returns, so old findings heal with no
+ * backfill. Live hrefs, deep links included, pass through untouched.
+ */
+function resolveStoredSummary(stored: Record<string, unknown>): Record<string, unknown> {
+  const summary = { ...stored };
+  if ("href" in summary) {
+    const href = resolveStoredHref(summary.href);
+    if (href) summary.href = href;
+    else delete summary.href;
+  }
+  const analysis = summary.aiAnalysis;
+  if (analysis && typeof analysis === "object" && !Array.isArray(analysis)) {
+    const citations = (analysis as Record<string, unknown>).citations;
+    if (Array.isArray(citations)) {
+      summary.aiAnalysis = {
+        ...(analysis as Record<string, unknown>),
+        citations: citations.map((citation) => {
+          if (!citation || typeof citation !== "object" || Array.isArray(citation)) return citation;
+          const row = citation as Record<string, unknown>;
+          if (typeof row.href !== "string" || typeof row.label !== "string") return citation;
+          const href = resolveStoredHref(row.href);
+          return href ? { ...row, href } : citation;
+        }),
+      };
+    }
+  }
+  return summary;
+}
 
 /**
  * One finding with its evidence packet and the viewer's feedback, scoped to
@@ -63,7 +98,7 @@ export async function loadWorkItemDetail(
     status: row.status,
     confidence: row.confidence,
     materiality: row.materiality,
-    summary: row.summary ?? {},
+    summary: resolveStoredSummary(row.summary ?? {}),
     firstDetectedAt: new Date(row.first_detected_at).toISOString(),
     lastDetectedAt: new Date(row.last_detected_at).toISOString(),
     dismissalReason: row.dismissal_reason,
