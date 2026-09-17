@@ -48,6 +48,7 @@ interface ChangeOrder {
   approvedOn: string | null;
   targetSovLineId: string | null;
   targetSovLineDescription: string | null;
+  incomeAccountId: string | null;
   independentApprovalAllowed: boolean;
 }
 
@@ -68,6 +69,7 @@ interface PayApp {
 interface Data {
   sovLines: SovLine[];
   changeOrders: ChangeOrder[];
+  defaultIncomeAccountId: string | null;
   payApplications: PayApp[];
   contractSum: string;
   retainageHeld: string;
@@ -232,6 +234,8 @@ export function ApplicationsBillingWorkspace({
               projectId={projectId}
               orders={data.changeOrders}
               sov={data.sovLines}
+              incomeAccounts={incomeAccounts}
+              defaultIncomeAccountId={data.defaultIncomeAccountId}
               onChange={post}
               canCreate={canCreate}
               canApprove={canApprove}
@@ -475,6 +479,8 @@ function ChangeOrdersSection({
   projectId,
   orders,
   sov,
+  incomeAccounts,
+  defaultIncomeAccountId,
   onChange,
   canCreate,
   canApprove,
@@ -484,6 +490,8 @@ function ChangeOrdersSection({
   projectId: string;
   orders: ChangeOrder[];
   sov: SovLine[];
+  incomeAccounts: ApplicationIncomeAccount[];
+  defaultIncomeAccountId: string | null;
   onChange: (payload: Record<string, unknown>) => Promise<unknown>;
   canCreate: boolean;
   canApprove: boolean;
@@ -494,7 +502,12 @@ function ChangeOrdersSection({
   const { money } = useMoney();
   const t = useTranslations("applications.changeOrders");
   const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState({ number: "", description: "", amount: "", targetSovLineId: "" });
+  // Unallocated COs bill through the carried income account: preselect the
+  // org project-revenue default so the created SOV line needs no manual edit
+  // (F-t03-002 residual). The empty option keeps the SOV dialog's "default"
+  // meaning — the approval then falls back to the same default server-side.
+  const freshForm = (accountId: string | null) => ({ number: "", description: "", amount: "", targetSovLineId: "", incomeAccountId: accountId ?? "" });
+  const [form, setForm] = useState(() => freshForm(defaultIncomeAccountId));
   const deductive = form.amount.trim().startsWith("-");
 
   async function addOrder() {
@@ -503,9 +516,11 @@ function ChangeOrdersSection({
       projectId,
       ...form,
       targetSovLineId: form.targetSovLineId || null,
+      // A targeted order reprices its line's own account: carry none.
+      incomeAccountId: form.targetSovLineId ? null : (form.incomeAccountId || null),
     });
     if (result) {
-      setForm({ number: "", description: "", amount: "", targetSovLineId: "" });
+      setForm(freshForm(defaultIncomeAccountId));
       setFormOpen(false);
     }
   }
@@ -515,7 +530,7 @@ function ChangeOrdersSection({
       <SectionHeader
         title={t("title")}
         description={t("workspaceHint")}
-        action={canCreate ? <Button size="sm" onClick={() => setFormOpen(true)}>{t("add")}</Button> : undefined}
+        action={canCreate ? <Button size="sm" onClick={() => { setForm(freshForm(defaultIncomeAccountId)); setFormOpen(true); }}>{t("add")}</Button> : undefined}
       />
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
         <Table>
@@ -598,6 +613,14 @@ function ChangeOrdersSection({
               {sov.map((line) => <option key={line.id} value={line.id}>{line.itemNo ? `${line.itemNo} · ` : ""}{line.description}</option>)}
             </Select>
           </Field>
+          {form.targetSovLineId ? null : (
+            <Field label={t("incomeAccount")}>
+              <Select value={form.incomeAccountId} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
+                <option value="">{t("defaultIncomeAccount")}</option>
+                {incomeAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
+              </Select>
+            </Field>
+          )}
           <p className="text-xs text-slate-500 dark:text-slate-400">{deductive ? t("deductiveHint") : t("additiveHint")}</p>
         </div>
       </Drawer>

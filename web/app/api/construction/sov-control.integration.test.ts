@@ -224,3 +224,114 @@ test('SOV values and change-order amounts wider than numeric(19,4) fail closed',
     assert.equal(okCo.status, 201, await okCo.clone().text())
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
+
+/**
+ * F-t03-002 residual: an unallocated change order must carry its pinned
+ * income account onto the SOV line its approval creates, so the line bills
+ * without a manual edit. A malformed account id fails closed as a domain
+ * error, mirroring the SOV pin above.
+ */
+test('approving an unallocated change order carries the pinned income account', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const preparer = await createScratchUser(org.orgId, 'CO preparer', 'reviewer')
+    const approver = await createScratchUser(org.orgId, 'CO approver', 'reviewer')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    const user = (id: string, name: string, email: string) => ({
+      id, orgId: org.orgId, name, email, roles: [], isSuperAdmin: false,
+      envKind: 'production' as const, productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: id,
+    })
+
+    const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
+    const typeId = randomUUID(), project = randomUUID()
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
+    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'co carry fixture')`)
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
+      values (${project},${org.orgId},${org.subsidiaryId},'CO-CARRY','CO carry job',${org.customerId},${typeId},'active',true)`)
+    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`)).rows[0]!.id
+
+    session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
+    const malformed = await post(construction.POST, org.orgId, {
+      action: 'addChangeOrder', projectId: project, number: 'CO-BAD', amount: '100', incomeAccountId: 'not-a-uuid',
+    })
+    assert.equal(malformed.status, 422)
+    assert.match((await malformed.json()).error, /Income account/)
+
+    const created = await post(construction.POST, org.orgId, {
+      action: 'addChangeOrder', projectId: project, number: 'CO-1', description: 'Extra scope', amount: '500', incomeAccountId: revenue,
+    })
+    assert.equal(created.status, 201, await created.clone().text())
+    const coId = (await created.json()).id as string
+    assert.equal((await db.execute<{ income_account_id: string | null }>(sql`
+      select income_account_id from change_orders where org_id=${org.orgId} and id=${coId}
+    `)).rows[0]!.income_account_id, revenue)
+
+    session.user = user(approver, 'CO approver', 'approver@scratch.test')
+    const approved = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: coId, approvedOn: org.date })
+    assert.equal(approved.status, 200, await approved.clone().text())
+    assert.deepEqual((await db.execute<{ income_account_id: string | null; scheduled_value: string }>(sql`
+      select income_account_id, scheduled_value::text from sov_lines where org_id=${org.orgId} and change_order_id=${coId}
+    `)).rows[0], { income_account_id: revenue, scheduled_value: '500.0000' })
+  } finally { session.user = null; await dropScratchOrg(org.orgId) }
+})
+
+/**
+ * A change order saved without an account (including rows predating the
+ * income column) resolves through the org project-revenue default at
+ * approval time, so the created line still bills. With no default
+ * configured the line keeps NULL, exactly like a hand-added SOV line.
+ */
+test('approving an account-less change order falls back to the org default', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const preparer = await createScratchUser(org.orgId, 'CO preparer', 'reviewer')
+    const approver = await createScratchUser(org.orgId, 'CO approver', 'reviewer')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    const user = (id: string, name: string, email: string) => ({
+      id, orgId: org.orgId, name, email, roles: [], isSuperAdmin: false,
+      envKind: 'production' as const, productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: id,
+    })
+
+    const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
+    const typeId = randomUUID(), project = randomUUID()
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
+    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'co fallback fixture')`)
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
+      values (${project},${org.orgId},${org.subsidiaryId},'CO-FALLBACK','CO fallback job',${org.customerId},${typeId},'active',true)`)
+    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`)).rows[0]!.id
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', ${JSON.stringify(revenue)}::jsonb) where id=${org.orgId}`)
+
+    session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
+    const created = await post(construction.POST, org.orgId, {
+      action: 'addChangeOrder', projectId: project, number: 'CO-1', description: 'Extra scope', amount: '500',
+    })
+    assert.equal(created.status, 201, await created.clone().text())
+    const coId = (await created.json()).id as string
+
+    session.user = user(approver, 'CO approver', 'approver@scratch.test')
+    const approved = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: coId, approvedOn: org.date })
+    assert.equal(approved.status, 200, await approved.clone().text())
+    assert.equal((await db.execute<{ income_account_id: string | null }>(sql`
+      select income_account_id from sov_lines where org_id=${org.orgId} and change_order_id=${coId}
+    `)).rows[0]!.income_account_id, revenue)
+
+    // No default configured: the line keeps NULL, like a hand-added SOV line.
+    await db.execute(sql`update orgs set settings = settings #- '{controlAccounts,projectRevenue}' where id=${org.orgId}`)
+    session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
+    const createdBare = await post(construction.POST, org.orgId, {
+      action: 'addChangeOrder', projectId: project, number: 'CO-2', description: 'Bare scope', amount: '250',
+    })
+    assert.equal(createdBare.status, 201, await createdBare.clone().text())
+    const bareId = (await createdBare.json()).id as string
+    session.user = user(approver, 'CO approver', 'approver@scratch.test')
+    const approvedBare = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: bareId, approvedOn: org.date })
+    assert.equal(approvedBare.status, 200, await approvedBare.clone().text())
+    assert.equal((await db.execute<{ income_account_id: string | null }>(sql`
+      select income_account_id from sov_lines where org_id=${org.orgId} and change_order_id=${bareId}
+    `)).rows[0]!.income_account_id, null)
+  } finally { session.user = null; await dropScratchOrg(org.orgId) }
+})

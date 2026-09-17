@@ -46,6 +46,8 @@
     "amount": "Amount",
     "statusLabel": "Status",
     "applyTo": "Apply to",
+    "incomeAccount": "Income account",
+    "defaultIncomeAccount": "Default income account",
     "newScheduleLine": "New schedule line (additive change)",
     "deductiveHint": "Deductive changes must reduce an existing schedule line.",
     "additiveHint": "Choose a line to revise it, or create a new additive line.",
