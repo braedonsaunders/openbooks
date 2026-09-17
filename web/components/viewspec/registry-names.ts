@@ -111,6 +111,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'crm-account-drawer',
   'crm-new-button',
   'crm-setup-workspace',
+  'currency-basis',
   'custom-field-drawer',
   'custom-report-actions',
   'customer-ar-pulse',

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
+import { WIDGET_NAMES } from '../../../../components/viewspec/registry-names'
 
 // P1 (fleet 8): the aging screen gains an Intacct-style reporting-currency
 // selector plus a convert-from basis toggle. The loader must parse both
@@ -60,4 +61,21 @@ test('detail rows always show the document currency and txn open', () => {
 test('drill-downs reproduce the screen selection, not the defaults', () => {
   assert.match(source, /currencyBasis,/, 'bucket drill targets carry the basis')
   assert.match(source, /currency: target/, 'bucket drill targets carry the reporting currency')
+})
+
+test('the selector renders through the registry, not a direct import', () => {
+  // The page reaches the control only as widget('currency-basis', …) in the
+  // spec, resolved via WIDGET_REGISTRY at render. A direct import anywhere
+  // outside the registry would make the registry entry a lie.
+  assert.ok(WIDGET_NAMES.has('currency-basis'), 'currency-basis must be a renderable registry name')
+  assert.match(
+    readFileSync(new URL('../../../../components/viewspec/widgets.tsx', import.meta.url), 'utf8'),
+    /'currency-basis': \(props\)/,
+    'the registry must own the currency-basis entry',
+  )
+  assert.doesNotMatch(
+    source,
+    /import .*currency-basis/,
+    'the aging view must not import the control directly — the spec names it by string key',
+  )
 })
