@@ -6,7 +6,6 @@ import { Button, Input, Select } from '@openbooks/ui'
 import {
   operatorsForKind,
   PERIOD_PRESETS,
-  PERIOD_PRESET_GROUP_LABELS,
   reportEntityForFeatureState,
   type PeriodPresetGroup,
   type ReportEntity,
@@ -204,10 +203,10 @@ function RuleRow({
           onChange={(e) => onChange({ ...rule, value: e.target.value })}
         >
           {PRESET_GROUP_ORDER.map((g) => (
-            <optgroup key={g} label={PERIOD_PRESET_GROUP_LABELS[g]}>
+            <optgroup key={g} label={tReports(`filterBar.periodPresetGroups.${g}`)}>
               {PERIOD_PRESETS.filter((pp) => pp.group === g).map((pp) => (
                 <option key={pp.id} value={pp.id}>
-                  {pp.label}
+                  {tReports(`filterBar.periodPresets.${pp.id}`)}
                 </option>
               ))}
             </optgroup>
